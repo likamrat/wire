@@ -447,6 +447,30 @@ Back to comparison, including the accepted scope and reading position.
 
 ## Settings, collection and consequential actions
 
+### First connection
+
+A fresh Copilot-only instance offers a short welcome after access, source status
+and retained activity are known. **Review and connect** opens the existing source
+review in Settings. It does not approve the source. **Not now**, Close and Escape
+dismiss the welcome and leave one **Not connected** prompt in Analyze. Remember
+dismissal as a browser-local preference, not source permission.
+
+The welcome sentence fits one line at ordinary desktop width and wraps naturally
+with narrow or enlarged text. Keep returning users, retained activity, Pause and
+explicit sign-out out of the welcome path. A missing profile does not block setup.
+
+Guided review shows the suggested paths, **Change paths**, and the existing
+history/frequency choices in one draft. Cancel returns to the originating
+Analyze entry; ordinary Settings review keeps its existing return behavior.
+An uncertain approval stays in Settings for read-current recovery.
+
+Place brief waiting guidance beside first approval and while the initial read
+is pending. Show available activity without waiting for older history to finish.
+Use actual source status for pending, missing, unreadable and empty history;
+do not replace those distinctions with zero charts or filter-reset advice.
+Settings remains the configuration owner, with an explicit **View activity**
+action after confirmed first approval.
+
 ### Categories and setting search
 
 The four categories are Connection & updates, Privacy & saved data, Display

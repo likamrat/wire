@@ -7,6 +7,10 @@ export const settingsStyles = `
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
 .settings-view {--pill-border:var(--control);max-width:70rem;container:settings / inline-size}
 .settings-status-link {margin:8px 0 0;color:var(--muted)}
+#sourceReviewSummary .settings-paths dd {overflow-wrap:anywhere}
+#sourceReviewSummary {margin-block:16px}
+#firstCollectionActivity {margin-bottom:20px}
+#sourceEditorTitle:not(.visually-hidden) {font-size:var(--type-section);margin-bottom:12px}
 .settings-status-link a {display:inline-flex;align-items:center;min-height:44px}
 #workspace>#collectionStatusView {max-width:64rem}
 .collection-status-view {min-width:0;container:collection-status / inline-size}

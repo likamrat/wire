@@ -85,8 +85,9 @@ while you use WIRE.
 
 ### Connect your history
 
-In **Settings > Connection & updates**, choose **Review source & connect**,
-check the paths and history window, then approve collection.
+Choose **Review and connect** in the welcome or Analyze, check the local paths
+and history window, then approve collection. Connection settings remain in
+**Settings > Connection & updates**.
 Follow the [first-run guide](docs/user-guide.md#connect-local-history) for details.
 
 ### Your data

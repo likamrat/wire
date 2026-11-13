@@ -582,7 +582,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const requestContext = createRequestContext();
     const callInvestigation = createCallInvestigation(requestContext.compare);
     let detailOwner = "page";
-    let collection, collectionSettings, sourceSettings, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
+    let collection, collectionSettings, sourceSettings, firstConnection, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const privateObjectUrls = new Set();
     function privateObjectUrl(bytes) {
         const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
@@ -1691,6 +1691,46 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (entry) target.classList.add("settings-target");
         ux.restoreFocus(target);
         target.scrollIntoView({ block: "nearest" });
+    }
+    async function reviewFirstConnection() {
+        const publication = api.publicationToken(), origin = { ...route };
+        if (!publication || !sourceCollection.copilotOnly) return;
+        const update = navigate({ view: "settings", section: "connection", setting: "source" });
+        const navigation = navigationGeneration, intent = readingIntent;
+        const destinationCurrent = () => api.isCurrent(publication) && navigation === navigationGeneration
+            && route.view === "settings" && route.section === "connection" && route.setting === "source";
+        const current = () => destinationCurrent() && intent === readingIntent;
+        try {
+            if (await Promise.resolve(update) === false || !current()) return;
+            const opened = collectionSettings.openSourceReview({ onCancel: () => {
+                if (!destinationCurrent()) return;
+                const returning = navigate(origin, false, { restorePosition: true }), destination = navigationGeneration;
+                Promise.resolve(returning).then(loaded => {
+                    if (loaded !== false && api.isCurrent(publication) && destination === navigationGeneration
+                        && $("firstConnectionReview").checkVisibility()) ux.restoreFocus($("firstConnectionReview"));
+                });
+            } });
+            if (!opened && current()) announce("Read the current connection in Settings before reviewing the source.", "stale");
+        } catch (error) {
+            if (current()) announce("Source review could not open. " + error.message, "error");
+        }
+    }
+    function renderFirstConnection() {
+        if (!firstConnection || !state) return;
+        const source = sourceCollection.copilotOnly ? sourceCollection.view(api.accessState()) : null;
+        firstConnection.update({
+            status: collection,
+            enabled: sourceCollection.copilotOnly,
+            analyze: route.view === "analyze" && route.compare !== "periods" && semanticQuery === null && !search.trim(),
+            hasActivity: state.scenarios.length > 0,
+            hasReports: state.exports?.length > 0,
+            stale: isStale && !isLoading || Boolean(collectionReadError) || !source?.current,
+            busy: isLoading || exportWriting || collectionBusy || collectionSettings?.hasDraft(),
+            snapshotCurrent: collection?.revision === state.revision,
+            paused: collection?.config?.enabled === false || source?.status?.global.state === "committed" && source.status.global.paused,
+            canConfigure: source?.actions.github.includes("configure") === true && !$("reviewSource").disabled,
+            allowWelcome: !document.hidden && !pageInactive && !collectionSettings?.hasDraft(),
+        });
     }
     function revealCollectionStatus() {
         document.querySelector(".settings-target")?.classList.remove("settings-target");
@@ -7785,6 +7825,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         refreshChartReference();
         liveSearchUI?.changed();
+        renderFirstConnection();
     }
 
     function setPageHeading(text) {
@@ -8091,6 +8132,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderSettingsRefresh(connection, model);
         renderAnalyzeScope();
         refreshChartReference();
+        renderFirstConnection();
     }
     function clearSourceCheckMarker() {
         if (githubRecoveryPending) return;
@@ -9931,6 +9973,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     const githubHasDraft = collectionSettings.hasDraft;
     collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
+    firstConnection = assessmentFactories.mountFirstConnection({ api, ux, reviewSource: reviewFirstConnection, collectionStatus: historyStatus });
     const privateContentIds = [
         "activityList", "activityListSummary", "activityListScope", "activityPager", "sessionAnalysis", "homeInsights", "homeFindings",
         "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
@@ -9948,7 +9991,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         "recollectionUpdateStatus", "newDataNotice",
     ];
     function accessOwners() {
-        return [liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
+        return [firstConnection, liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
             draft, reportJourney, reportExperience, reportSaveWarning, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }

@@ -8,13 +8,21 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Connect local history
 
-1. Open **Settings > Connection & updates** and choose **Review source & connect**.
+1. Choose **Review and connect** in the welcome. **Not now** closes it and leaves
+   the connection prompt in Analyze. You can also use **Settings > Connection &
+   updates > Review source & connect**.
 2. Check **Copilot metadata database** and **Chat history folder**. These must
    point to the supported local Copilot installation whose history you want to read.
 3. Choose **History to include** and **Check frequency**, then select
    **Approve source and start collection**.
-4. Open **Analyze** to read the collected activity. If expected calls are missing,
-   open **Collection status** in Settings to see known history gaps.
+4. Choose **View activity** to open Analyze. The first read may take a few
+   minutes; activity appears as it is saved. If expected calls are missing,
+   open **Collection status** to see known history gaps.
+
+The welcome stays dismissed in this browser at this WIRE address. Dismissing it
+does not connect a source. Configured instances open normally, and Pause stays
+paused. A missing source or failed read shows its own explanation instead of
+asking you to keep waiting.
 
 Repeat source approval in each independent instance. They keep separate
 collection progress, settings, consent and saved reports. Collection can be on

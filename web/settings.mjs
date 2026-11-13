@@ -17,6 +17,7 @@ export const settingsMarkup = `
   </aside>
   <div class="settings-content">
   <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
+  <a id="firstCollectionActivity" class="button-link" href="#analyze" data-settings-link hidden>View activity</a>
   <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
@@ -71,12 +72,16 @@ export const settingsMarkup = `
         <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help" role="status"></p>
         <p id="sourceSuggestion" class="settings-help" hidden></p>
+        <div id="sourceReviewSummary" hidden><dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="reviewDatabase"></dd><dt>Chat history folder</dt><dd id="reviewSessions"></dd></dl><button id="changeReviewedPaths" type="button" class="quiet">Change paths</button></div>
+        <div id="sourcePathFields">
         <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
+        </div>
         <div id="sourcePreferenceSlot"></div>
         <p id="approvalScope"></p>
         <div id="sourceDraftStatusSlot"></div>
         <div class="settings-actions"><button id="connectCollection" type="button" class="primary">Approve source and start collection</button><button id="cancelSource" type="button" class="quiet">Cancel</button></div>
+        <p id="firstCollectionWait" class="settings-help" hidden>The first read may take a few minutes.</p>
       </div>
       </section>
       <div id="microsoftConnectionHost" hidden></div>
@@ -242,6 +247,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     const explanations = new Map();
     let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, readError = "", pendingAction = "", checking = false, visibleSection, visibleSetting;
     let sharedRecovery = false, recoveryHidden = true;
+    let guidedReview = false, editingPaths = false, reviewReturn = null, firstApprovalConfirmed = false;
     const publicationCurrent = token => token !== null && token !== undefined
         && typeof token.then !== "function" && api.isCurrent(token) === true;
     let withdrawn = !publicationCurrent(api.publicationToken()), epoch = 0, safeDraft = null, pendingOperation = null, revokedWrite = false;
@@ -317,6 +323,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     }
     function reset() {
         baseline = latest;
+        guidedReview = editingPaths = false;
         if (native()) {
             nativeConfiguration?.cancel(); syncNativeValues();
             initialized = true; editing = false; stale = false;
@@ -458,6 +465,14 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
         $("sourceEditAction").hidden = editing;
         $("sourceEditor").hidden = !editing;
+        const pathSummary = editing && guidedReview && !editingPaths;
+        $("sourceReviewSummary").hidden = !pathSummary;
+        $("sourcePathFields").hidden = pathSummary;
+        setText("reviewDatabase", pathSummary ? values().appDbPath : "");
+        setText("reviewSessions", pathSummary ? values().sessionRoot : "");
+        $("changeReviewedPaths").disabled = working;
+        $("firstCollectionWait").hidden = !editing || approved || uncertain || Boolean(readError);
+        $("firstCollectionActivity").hidden = visibleSection !== "connection" || !firstApprovalConfirmed || !approved || editing || uncertain || Boolean(readError);
         $("connectionPreferences").hidden = editing || sourceCollection?.active && !approved;
         const preferenceHome = editing ? $("sourcePreferenceSlot") : $("connectionPreferences");
         if ($("collectionPreferenceFields").parentElement !== preferenceHome) {
@@ -474,18 +489,19 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
-        setText("sourceEditorTitle", approved ? "Change source paths" : "Review this source");
+        setText("sourceEditorTitle", approved ? "Change source paths" : guidedReview ? "Review local history" : "Review this source");
+        $("sourceEditorTitle").classList.toggle("visually-hidden", !guidedReview);
         setText("sourceChangeImpact", approved
             ? stale ? "Source settings changed. Cancel edits to reload."
                 : uncertain ? "Source change unconfirmed."
                 : pendingAction === "/api/collection/configure" ? "Saving source..."
                 : ""
-            : "");
+            : busy && pendingAction === "/api/collection/configure" ? "Checking the source and starting collection..." : "");
         $("sourceChangeImpact").hidden = !$("sourceChangeImpact").textContent;
         setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "");
         $("sourceSuggestion").hidden = !$("sourceSuggestion").textContent;
         setText("approvalScope", approved && !sourceChanged ? ""
-            : "Read these paths and save original prompts on this device." + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
+            : "Read these paths and save original prompts on this device." + (!approved ? " Copilot replies stay off." : "") + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
         $("approvalScope").hidden = !$("approvalScope").textContent;
         setText("connectCollection", approved ? sourceChanged ? "Approve and switch source" : "Save preferences" : "Approve source and start collection");
         $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
@@ -582,6 +598,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
     function cancel() {
         const stamp = capture();
         if (!current(stamp) || busy) return;
+        const returnToOrigin = reviewReturn;
+        reviewReturn = null;
         reset();
         message(uncertain ? "Earlier change unconfirmed. Read current connection." : "");
         paint();
@@ -590,6 +608,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             ? $(nativeView()?.present ? "nativeCollectionSurfaces" : latest?.config?.approved ? "editSource" : "reviewSource")
             : document.querySelector("[data-settings-section]:not([hidden]) h2");
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
+        if (current(stamp) && !uncertain) returnToOrigin?.();
     }
     async function act(endpoint, input, success) {
         const stamp = capture();
@@ -674,8 +693,12 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         if (!sourceApproval && (next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot)) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }
-        act("/api/collection/configure", { ...next, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() },
-            sourceApproval ? "Source approved." : "Preferences saved.");
+        const firstApproval = baseline.config?.approved !== true;
+        act("/api/collection/configure", { ...next, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() }, () => {
+            firstApprovalConfirmed = firstApproval;
+            reviewReturn = null;
+            return sourceApproval ? "Source approved." : "Preferences saved.";
+        });
     }
     $("collectionForm").addEventListener("submit", event => event.preventDefault());
     for (const id of [...fields, "nativeCollectionSurfaces"]) $(id).addEventListener("input", () => {
@@ -686,11 +709,28 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         }
         message(""); paint();
     });
-    for (const id of ["reviewSource", "editSource"]) $(id).addEventListener("click", () => {
+    function openSourceReview({ onCancel } = {}) {
         const stamp = capture();
-        if (!current(stamp) || $(id).disabled || editing) return;
+        const id = latest?.config?.approved ? "editSource" : "reviewSource";
+        if (!current(stamp) || $(id).disabled || editing) return false;
         $("approvedSourceTitle").classList.remove("settings-target");
+        guidedReview = typeof onCancel === "function";
+        editingPaths = Boolean(latest?.suggestedSource?.error);
+        reviewReturn = onCancel ?? null;
+        firstApprovalConfirmed = false;
         editing = true; message(""); paint();
+        if (current(stamp)) {
+            const target = guidedReview && !editingPaths ? $("sourceEditorTitle") : $("sourceDatabase");
+            if (target === $("sourceEditorTitle")) target.tabIndex = -1;
+            target.focus();
+        }
+        return current(stamp);
+    }
+    for (const id of ["reviewSource", "editSource"]) $(id).addEventListener("click", () => openSourceReview());
+    $("changeReviewedPaths").addEventListener("click", () => {
+        const stamp = capture();
+        if (!current(stamp) || busy || !editing) return;
+        editingPaths = true; paint();
         if (current(stamp)) $("sourceDatabase").focus();
     });
     $("cancelSource").addEventListener("click", cancel);
@@ -769,6 +809,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             epoch++;
         }
         withdrawn = true;
+        reviewReturn = null;
+        guidedReview = editingPaths = firstApprovalConfirmed = false;
         sharedRecovery = false; recoveryHidden = true;
         nativeConfiguration?.withdraw();
         $("nativeCollectionSurfaces").value = "";
@@ -784,14 +826,14 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             $(id).value = "";
             clearAttribute($(id), "value"); clearAttribute($(id), "title");
         }
-        for (const id of ["approvedDatabase", "approvedSessions", "settingsMessage", "settingsConnectionError",
+        for (const id of ["approvedDatabase", "approvedSessions", "reviewDatabase", "reviewSessions", "settingsMessage", "settingsConnectionError",
             "sourceChangeImpact", "sourceSuggestion", "approvalScope", "settingsDraftStatus", "connectionStatus",
             "connectionSourceTitle", "connectionSourceHelp", "pauseCollection"]) {
             clearText($(id)); $(id).replaceChildren();
         }
         for (const id of ["approvedConnection", "unapprovedConnection", "approvedSourceDetails", "sourceEditor",
             "settingsMessage", "settingsConnectionError", "sourceChangeImpact", "sourceSuggestion", "approvalScope",
-            "settingsDraftStatus", "reloadSettings"]) $(id).hidden = true;
+            "settingsDraftStatus", "reloadSettings", "sourceReviewSummary", "firstCollectionWait", "firstCollectionActivity"]) $(id).hidden = true;
         for (const id of [...fields, "nativeCollectionSurfaces", "collectNow", "pauseCollection", "editSource", "reviewSource", "connectCollection",
             "saveCollection", "cancelPreferences", "cancelSource", "reloadSettings"]) {
             $(id).disabled = true;
@@ -814,7 +856,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         if (!dirty() && !busy && !safeDraft?.changed) return;
         event.preventDefault(); event.returnValue = "";
     });
-    return { receive, withdrawAccess, resumeAccess,
+    return { receive, withdrawAccess, resumeAccess, openSourceReview,
         setSharedRecovery(value) {
             sharedRecovery = value;
             if (current(capture())) hideRecovery(recoveryHidden);
