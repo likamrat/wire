@@ -6,6 +6,7 @@ Start with [installation](../README.md), then choose the task you need.
 | --- | --- |
 | Connect local Copilot history for the first time | [Connect local history](user-guide.md#connect-local-history) |
 | Understand recorded activity, inspect a call or find saved text | [Use WIRE](user-guide.md) |
+| Follow daily tool use, services, errors or timing back to recorded calls | [Trends](user-guide.md#trends) |
 | Open a report, adjust its copies, save, reopen or compare | [Create and compare reports](reporting.md) |
 | Understand how recorded Work IQ activity reaches WIRE and where it lives | [Architecture](architecture.md) |
 | Work on the source or troubleshoot a local installation | [Development](development.md) |

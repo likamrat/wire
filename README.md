@@ -43,6 +43,21 @@ rerunning its calls, then keeps local evidence for inspection and reports.
 
 See [Architecture](docs/architecture.md) for the local runtime and storage boundaries.
 
+## Trends
+
+See which Work IQ tools appear in your recorded activity and how their use
+varies by day. **Trends** opens seven charts together, with tool usage beside
+prompt authors and daily activity, followed by services, errors, response
+models and call duration.
+
+[![Trends with tool reach, prompt authors, daily calls and four supporting charts.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+
+*Invented activity; Today has no calls, while the period still has data.*
+
+Choose 7, 14, 30 or custom days, filter the activity, then maximize a chart
+and open the calls behind a dated point. The [Trends guide](docs/user-guide.md#trends)
+explains reach versus call share, overlapping services and evidence gaps.
+
 ## Start
 
 ### Platforms
@@ -109,6 +124,7 @@ to your agents and investigate possible regressions.
 ## Guides
 
 - [Use WIRE](docs/user-guide.md)
+- [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
 - [Create and compare reports](docs/reporting.md)
 - [Develop and troubleshoot](docs/development.md)
 - [Technical documentation](docs/README.md)

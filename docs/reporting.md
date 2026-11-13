@@ -37,8 +37,10 @@ zone. **Last 14 days**, **Last 30 days** and **Custom dates** are also available
 Custom dates opens the calendar directly; Cancel leaves the accepted dates
 unchanged. Undated activity is not assigned to a dated period.
 
-A fresh report is independent of Analyze filters. To narrow an open report,
-use **Change what's included > Change activity selection**:
+A fresh report is independent of Analyze and Trends filters. After
+[inspecting a dated Trends point](user-guide.md#inspect-a-change), choose the
+report's period and activity explicitly. To narrow an open report, use
+**Change what's included > Change activity selection**:
 
 | Scope | Includes |
 | --- | --- |
