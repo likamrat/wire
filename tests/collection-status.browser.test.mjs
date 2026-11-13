@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { DatabaseSync } from "node:sqlite";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { startServer } from "../lib/server.mjs";
@@ -14,7 +14,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain } from "./helpers.mjs";
 import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
-for (const late of ["failure", "success", "transport-error", "composite-failure"]) test(`a late pre-return collection ${late} cannot replace newer status`, { timeout: 20000 }, async t => {
+async function statusFixture(t) {
     const sourceSessionId = randomUUID(), retained = fixture(), timestamp = new Date(Date.now() - 1000).toISOString();
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         [{ ...retained, sourceSessionId, capturedAt: timestamp, userPrompt: { ...retained.userPrompt, sourceTimestamp: timestamp },
@@ -68,8 +68,7 @@ for (const late of ["failure", "success", "transport-error", "composite-failure"
     browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(5000);
-    const errors = [], writes = [], reads = [], prepares = [], release = Promise.withResolvers(), held = Promise.withResolvers();
-    let compositeReads = 0, serverRuntime;
+    const errors = [], writes = [], prepares = [];
     await page.addInitScript(() => {
         const original = window.fetch.bind(window);
         window.collectionReads = { pending: 0, decoded: 0, watches: [] };
@@ -102,6 +101,13 @@ for (const late of ["failure", "success", "transport-error", "composite-failure"
             sourceAware: { ...payload.collection.sourceAware, github: { ...payload.collection.sourceAware.github, status: recovered } },
         } } });
     });
+    return { page, runtime, context, failed, recovered, diagnostics, errors, writes, prepares };
+}
+
+for (const late of ["failure", "success", "transport-error", "composite-failure"]) test(`a late pre-return collection ${late} cannot replace newer status`, { timeout: 20000 }, async t => {
+    const { page, runtime, failed, recovered, diagnostics, errors, writes, prepares } = await statusFixture(t);
+    const reads = [], release = Promise.withResolvers(), held = Promise.withResolvers();
+    let compositeReads = 0, serverRuntime;
     await page.route("**/api/collection/status", async route => {
         const response = await route.fetch(), payload = await response.json();
         serverRuntime = response.headers()["x-wire-runtime"];
@@ -163,6 +169,8 @@ for (const late of ["failure", "success", "transport-error", "composite-failure"
         assert.equal(firstFrame.checking, false);
         assert.equal(firstFrame.watch.runtimeId, serverRuntime);
         assert.ok(firstFrame.at - firstFrame.watch.startedAt < 5000, "Return uses genuinely fresh authority.");
+        // Release the retired poll well into the newer poll's five-second schedule.
+        if (late === "failure") await page.waitForTimeout(3000);
         release.resolve();
         await page.waitForFunction(() => window.collectionReads.pending === 0 && window.collectionReads.decoded >= 3);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -174,13 +182,90 @@ for (const late of ["failure", "success", "transport-error", "composite-failure"
         assert.deepEqual(await page.evaluate(() => ({ x: scrollX, y: scrollY })), position);
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), selection);
         if (late === "failure") {
+            await expect.poll(() => reads.length, { timeout: 3000 }).toBeGreaterThan(2);
             assert.equal(prepares.length, 1, "Status recovery must not reprepare a frozen report.");
             await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
         }
         assert.deepEqual(writes, []);
         assert.deepEqual(errors, []);
         t.diagnostic(JSON.stringify({ diagnostic: diagnostics[0][1], firstFrame, statusReads: reads.length,
-            retainedRevision: recovered.revision, serverRuntime }));
+            retainedRevision: recovered.revision, serverRuntime,
+            ...(late === "failure" ? { nextPoll: "kept the newer poll's schedule after late finalization" } : {}) }));
+    } finally { release.resolve(); }
+});
+
+test("a failed Settings write restores ordinary polling after retiring a held poll without replaying the write", { timeout: 20000 }, async t => {
+    const { page, runtime, context, recovered, errors, writes } = await statusFixture(t);
+    const held = Promise.withResolvers(), release = Promise.withResolvers();
+    let summaryReads = 0;
+    await page.route("**/api/collection/status", async route => {
+        const response = await route.fetch(), payload = await response.json();
+        if (++summaryReads === 1) { held.resolve(); await release.promise; }
+        await route.fulfill({ response, json: { ...payload, ...recovered } });
+    });
+    await page.route("**/api/collection/enabled", route => route.fulfill({ status: 503,
+        json: { error: "Invented Settings write failure." } }));
+    await page.goto(runtime.url + "#settings?section=connection");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#pauseCollection")).toBeEnabled();
+    const configFile = path.join(context.dataDir, "collector", "config.json"), before = await readFile(configFile);
+    try {
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await held.promise;
+        await page.locator("#pauseCollection").click();
+        await expect(page.locator("#settingsMessage")).toContainText("Change unconfirmed.");
+        release.resolve();
+        await page.waitForFunction(() => window.collectionReads.pending === 0);
+        assert.equal(summaryReads, 1, "The original poll was already pending when the write failed.");
+        await expect.poll(() => summaryReads, { timeout: 6500 }).toBeGreaterThan(1);
+        await expect(page.locator("#collectionStatus")).toHaveText("Collection active");
+        await expect(page.locator("#settingsMessage")).toContainText("Change unconfirmed.");
+        const automaticReads = summaryReads;
+        await page.locator("#reloadSettings").click();
+        await expect(page.locator("#settingsMessage")).toHaveText("Current settings shown; earlier change unconfirmed.");
+        assert.ok(summaryReads > automaticReads, "The original read-current recovery remains usable.");
+        assert.deepEqual(writes.map(url => new URL(url).pathname), ["/api/collection/enabled"]);
+        assert.deepEqual(await readFile(configFile), before);
+        assert.deepEqual(errors, []);
+        t.diagnostic(JSON.stringify({ automaticReads, summaryReads, writes: writes.length,
+            recovery: "ordinary polling resumed without visibility or Refresh; later explicit read-current kept the write unconfirmed" }));
+    } finally { release.resolve(); }
+});
+
+for (const oldFailure of [true, false]) test(`a late route-entry detail ${oldFailure ? "failure" : "success"} cannot replace a newer poll`, { timeout: 20000 }, async t => {
+    const { page, runtime, failed, recovered, errors, writes } = await statusFixture(t);
+    const held = Promise.withResolvers(), release = Promise.withResolvers();
+    let summaryReads = 0, detailedReads = 0;
+    await page.route("**/api/collection/status", async route => {
+        const response = await route.fetch(), payload = await response.json();
+        const detail = route.request().postDataJSON().details === true;
+        const firstDetail = detail && ++detailedReads === 1;
+        if (!detail) summaryReads++;
+        if (firstDetail) { held.resolve(); await release.promise; }
+        const status = (firstDetail ? oldFailure : !oldFailure) ? failed : recovered;
+        await route.fulfill({ response, json: { ...payload, ...status, ...(detail ? { historyIssues: [] } : {}) } });
+    });
+    await page.goto(runtime.url + "#analyze");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    try {
+        await navigateMain(page, "collection-status");
+        await held.promise;
+        assert.equal(summaryReads, 0, "This detailed read belongs to route entry, not a poll.");
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        const label = oldFailure ? "Collection active" : "Collection cannot check history";
+        await expect.poll(() => summaryReads).toBe(1);
+        await page.waitForFunction(() => window.collectionReads.decoded >= 2 && window.collectionReads.pending === 1);
+        await expect(page.locator("#collectionStatus")).toHaveText(label);
+        release.resolve();
+        await page.waitForFunction(() => window.collectionReads.pending === 0);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator("#collectionStatus").textContent(), label,
+            "An old route-entry detail response must not restore an error or hide a current one.");
+        await expect.poll(() => detailedReads, { timeout: 6500 }).toBeGreaterThan(1);
+        await expect(page.locator("#collectionIssuesMessage")).toBeHidden();
+        assert.deepEqual(writes, []);
+        assert.deepEqual(errors, []);
+        t.diagnostic(JSON.stringify({ summaryReads, detailedReads, oldFailure, writes: 0 }));
     } finally { release.resolve(); }
 });
 

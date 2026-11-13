@@ -7908,17 +7908,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!publication) return;
         if (route.view !== "collection-status" || issuesLoading) return;
         issuesLoading = true;
-        const readGeneration = collectionReadGeneration;
+        const readGeneration = collectionReadGeneration, pollGeneration = collectionPollGeneration;
+        const current = () => pollGeneration === collectionPollGeneration && isCurrent();
         const message = $("collectionIssuesMessage");
         if (issuesSignature === undefined) { setText(message, "Reading current local history issues..."); message.hidden = false; ux.pending(message, true); }
         try {
-            const detailed = await readCollectionStatus({ details: true }, isCurrent);
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !isCurrent() || collectionBusy) return;
+            const detailed = await readCollectionStatus({ details: true }, current);
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !current() || collectionBusy) return;
             if (!Array.isArray(detailed.historyIssues)) throw new Error("Affected Copilot chats are unavailable. Collection status still shows the last known counts.");
             renderCollection(detailed, publication);
             message.hidden = true;
         } catch (error) {
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !isCurrent() || collectionBusy) return;
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !current() || collectionBusy) return;
             setText(message, "Current issue details could not be loaded. Any displayed list is from the previous check. " + error.message);
             message.hidden = false;
         } finally { if (api.isCurrent(publication)) { issuesLoading = false; ux.pending(message, false); } }
@@ -8660,6 +8661,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 collectionBusy = false;
                 collectionSettings?.setChecking(false, publication);
                 sourceSettings?.setChecking(false);
+                // This operation retired any pending poll, including its scheduling finalizer.
+                clearTimeout(pollTimer);
+                if (!pageInactive) pollTimer = setTimeout(pollCollection, 5000);
             }
         }
     }

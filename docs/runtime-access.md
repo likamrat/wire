@@ -109,6 +109,10 @@ Returning to a visible tab also requests current collection status. That read
 can overtake an earlier poll. Only the newest poll in the current operation
 generation may publish status or errors, accept source-control status, or
 schedule the next poll. This also fences its pending detailed issue read.
+Detail reads started by entering Collection status capture the same poll
+generation. A Settings write takes over responsibility for restarting ordinary
+polling when it completes, including failure; fresh status neither retries
+that write nor settles an unconfirmed outcome.
 Collector failures and recovery can leave the evidence revision unchanged;
 that revision alone cannot order these responses. A retired response must
 neither bring back an old warning nor hide a newer failure.
