@@ -12,16 +12,16 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports**, choose a period, check **Report text**, then choose a report.
+Open **Reports**, choose a period and check **Report text** before opening a report.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
-Saved reports are directly below the five choices. Choosing a tile opens the report in the main
-reading area. **Save report** saves its current files locally; there is no
-required setup or text-review checklist.
-Each choice has a help icon available by pointer, keyboard or touch.
+Choose a tile to open the report in the main reading area. **Save report** saves
+its current files locally without a required setup or text-review checklist.
+Saved reports sit below the five choices. Each choice has a help icon available
+by pointer, keyboard or touch.
 
-![Reports with five report choices, period controls and saved reports below.](images/report-choices.png)
+![Report text is available before the five report choices; saved reports appear below.](images/report-choices.png)
 
 | Report | Includes |
 | --- | --- |
@@ -117,6 +117,7 @@ The text control stays blue for masking, gray when prompts and replies are
 left out, and red with a warning icon when chat details are kept. Labels and
 icons identify each state without relying on color. Masking can miss names
 or sensitive wording.
+
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **View > Report text** opens optional text inspection.
 It shows one **Report copy** at a time, with its interaction and recorded author.
@@ -126,14 +127,18 @@ copy**, changes only that report copy. The original stays unchanged.
 Return to **Report** or a file through **View**.
 
 ![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
-To hide a name WIRE missed, open **Report text > Hide specific words** in the
-report and enter one name or phrase per line. Adding `Avery Chen`, for example,
+
+To hide a name WIRE missed, open the **Report text** control in the toolbar,
+expand **Hide specific words**, and enter one name or phrase per line.
+Adding `Avery Chen`, for example,
 hides that text throughout the report copies, including notes. Matching ignores
 case; other spellings stay. This optional step does not change original chats.
 
+![Report text choices and the optional Hide specific words field with Avery Chen entered.](images/report-privacy.png)
+
 | Choice | Effect |
 | --- | --- |
-| Leave out prompts and replies | Omits originating request, follow-up, tool-question and linked reply text. Authored notes still have detected personal details hidden. |
+| Leave out prompts and replies | Omits originating request, follow-up, tool-question and linked reply text. Notes and selected error messages remain, with detected personal details hidden. |
 | Mask detected details | Uses retained wording with local masking. This is the default; WIRE may miss names or sensitive context. |
 | Keep chat details | Retains recorded wording in the report and saved files. Detected credentials are still removed. |
 | Include linked requests and replies | Adds available, authorized context up to one linked request before and after each included interaction. It is not the whole chat or a reply-saving permission. |

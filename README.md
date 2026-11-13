@@ -104,8 +104,8 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 Reports give you a shareable view of working patterns, backed by recorded
 prompts, Work IQ calls and results. Ready-made templates preserve those
 findings for review and for building eval cases.
-Choose **Report text** before opening a template; the same control stays
-available in the reader.
+**Report text** starts at **Mask detected details**. Change it before opening
+a template or while reading the report.
 The [reporting guide](docs/reporting.md) explains which template fits your
 purpose and what the saved copy includes.
 

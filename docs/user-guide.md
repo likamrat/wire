@@ -15,6 +15,7 @@ WIRE prompts you to connect when you first open an unconfigured instance.
    updates > Review source & connect**.
 2. Check **Copilot metadata database** and **Chat history folder**. These must
    point to the supported local Copilot installation whose history you want to read.
+   Choose **Change paths** if either location is wrong.
 3. Choose **History to include** and **Check frequency**, then select
    **Approve source and start collection**.
 4. Choose **View activity** to open Analyze. The first read may take a few
@@ -41,8 +42,8 @@ in this release. Saving Copilot reply text is a separate choice under
 ## Read the overview
 
 **Analyze** shows recorded outcomes, activity over time, tools, services and
-available response-model names, plus prompt authors. The interaction list below follows the same
-filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
+available response-model names, plus prompt authors. The interaction list below
+follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
 
 ![Analyze with call outcomes, activity over time, recorded models, tools, services and prompt authors in compact panels.](images/analyze.png)
@@ -125,12 +126,11 @@ which dates are affected. Limits specific to the chart remain beside its values.
 
 ### Inspect a change
 
-To investigate a rise in errors or a change in service use, maximize that chart,
-then hover or focus a dated mark for its values. Arrow keys move between dates
-and series. Select the mark and choose **View evidence** to see the calls for
-that exact date and series. Other series' calls are not added to this list.
-Selecting a point in the overview keeps the chart in place. Use its maximize
-button when you want the evidence breakdown; your selected point is retained.
+Hover or focus a dated mark to read its values. Arrow keys move between dates
+and series. Select a point in the overview, then maximize its chart and choose
+**View evidence** to see the calls for that exact date and series. Selection
+keeps the chart in place; maximizing retains the selected point. Other series'
+calls are not added to this list.
 Hover a legend entry to emphasize its line without filtering the activity.
 
 Open a call to read its result and full parent interaction. That parent context
@@ -219,8 +219,9 @@ Open **Reports**, check **Report text**, then choose a ready-made report.
 The default, **Mask detected details**, keeps the wording with local masking.
 Change it before opening the report or while reading it. Keeping chat details
 shows a red warning; masking can still miss names or sensitive wording.
-The visible period starts
-at Last 7 days, independently of your Analyze filters.
+Choose **Leave out prompts and replies** to omit chat wording. Notes and selected
+error messages remain. The period starts at **Last 7 days**, independently of
+your Analyze filters.
 
 Read its patterns and supporting interactions, then optionally add a note or
 edit a report copy. **Save as** chooses HTML, PDF, JSON or Markdown files;
@@ -288,6 +289,9 @@ check frequency and Pause. **Refresh** checks approved local history;
 **Read stored activity** only rereads WIRE's retained view. Paused collection
 stays paused after a deliberate local-history check. **Collection status**
 explains missing files, bounded reads and other known coverage gaps.
+
+If **Collection cannot check history** appears, open **Collection status** for
+the failing operation and reason. Retained activity stays available.
 
 Collector updates improve supported reads; they do not automatically repair
 older retained activity or rewrite saved reports.

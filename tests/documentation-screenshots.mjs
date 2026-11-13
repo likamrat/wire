@@ -21,7 +21,7 @@ const at = (days, seconds = 0) => new Date(Date.parse(day + "T12:00:00Z") - days
 
 function documentationRecords() {
     const prompts = [
-        "Find the release review messages from jordan@example.invalid and list the open questions.",
+        "Find the release review messages from jordan@example.invalid about Avery Chen and list the open questions.",
         "Read the rollout checklist and identify the remaining tasks.",
         "Prepare a PowerPoint outline for the Northstar launch review.",
         "List unresolved decisions from the mailbox review.",
@@ -250,6 +250,13 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(report.locator("h1")).toHaveText("Errors & failures");
     await expect(report.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
     await capture("report-preview");
+    await expect(report.locator("body")).toContainText("Avery Chen");
+    await page.locator("#reportPrivacyChoice").click();
+    await page.locator("#additionalMasking summary").click();
+    prepared = await preparedChange(() => page.locator("#manualTerms").fill("Avery Chen"));
+    await expect(report.locator("body")).not.toContainText("Avery Chen");
+    await capture("report-privacy");
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     await selectActivityOption(page, "preparedReportView", "text");
     await expect(page.locator("#reportTextInspection .prompt-report")).toBeVisible();
     await capture("report-text");
