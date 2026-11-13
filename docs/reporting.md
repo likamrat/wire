@@ -12,8 +12,11 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports**, choose a period, then choose a report. Saved reports are
-directly below the five choices. Choosing a tile opens the report in the main
+Open **Reports**, choose a period, check **Report text**, then choose a report.
+The default, **Mask detected details**, keeps the wording with local masking.
+You can leave out prompts and replies or keep chat details instead.
+This choice applies to the readable report and its saved files.
+Saved reports are directly below the five choices. Choosing a tile opens the report in the main
 reading area. **Save report** saves its current files locally; there is no
 required setup or text-review checklist.
 Each choice has a help icon available by pointer, keyboard or touch.
@@ -109,7 +112,11 @@ metrics. Select **Update note** or **Update prompt copy** to apply an edit.
 
 ![An interaction's optional note and editable prompt copy, with separate update controls.](images/report-example.png)
 
-The toolbar changes the report name, personal-detail treatment and files to save.
+The toolbar changes the report name, **Report text** and files to save.
+The text control stays blue for masking, gray when prompts and replies are
+left out, and red with a warning icon when chat details are kept. Labels and
+icons identify each state without relying on color. Masking can miss names
+or sensitive wording.
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **View > Report text** opens optional text inspection.
 It shows one **Report copy** at a time, with its interaction and recorded author.
@@ -119,14 +126,16 @@ copy**, changes only that report copy. The original stays unchanged.
 Return to **Report** or a file through **View**.
 
 ![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
-To hide a specific name or phrase throughout the copies, open the personal-detail
-control, expand **Additional masking**, and enter one exact term per line.
+To hide a name WIRE missed, open **Report text > Hide specific words** in the
+report and enter one name or phrase per line. Adding `Avery Chen`, for example,
+hides that text throughout the report copies, including notes. Matching ignores
+case; other spellings stay. This optional step does not change original chats.
 
 | Choice | Effect |
 | --- | --- |
 | Leave out prompts and replies | Omits originating request, follow-up, tool-question and linked reply text. Authored notes still have detected personal details hidden. |
-| Hide personal details | Uses retained wording with local masking. This is the default; WIRE may miss names or sensitive context. |
-| Keep chat details | Includes recorded wording in local files. Detected credentials are still removed. |
+| Mask detected details | Uses retained wording with local masking. This is the default; WIRE may miss names or sensitive context. |
+| Keep chat details | Retains recorded wording in the report and saved files. Detected credentials are still removed. |
 | Include linked requests and replies | Adds available, authorized context up to one linked request before and after each included interaction. It is not the whole chat or a reply-saving permission. |
 | Include error messages from the calls | Adds already-retained error details, always masked. Error reports start with it on. It does not add raw response bodies or unrelated source descriptions. |
 
@@ -158,6 +167,10 @@ from **Save as** returns to **Report**. Save is unavailable until the update fin
 
 Additional masking terms, edits and omissions affect report copies only.
 Missing or partial text stays qualified; editing does not recover source text.
+Changing Report text keeps edits and omissions for included copies. Leaving out
+prompts also turns off linked context; edits to that excluded context are retired.
+Changing the choice on Reports does not prepare a report until you open a tile.
+Reopening the same unfinished report keeps its frozen activity.
 
 <a id="approve-save-and-reopen"></a>
 

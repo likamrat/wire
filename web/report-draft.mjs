@@ -215,7 +215,20 @@ export function createReportDraft({ contextSelector } = {}) {
                     || next.revision === contextStatus.revision && (contextStatus.pending || differentBasis(next.basis, contextStatus.basis))
                     || contextStatus.pending || contextStatus.basis && next.basis && keys.some(key => next.basis[key] < contextStatus.basis[key]))) return false;
             if (!stableSource) contextStatus = structuredClone(next);
-            context = { ...structuredClone(next), native: Boolean(native), collected, copyKeys: new Set([
+            const promptKeys = new Map();
+            for (const record of preview.records ?? preview.snapshot.records ?? []) {
+                let followup = 0;
+                for (const copy of record.prompts ?? []) {
+                    const key = copy.kind === "origin" ? `${record.scenarioId}:origin`
+                        : copy.kind === "followup" ? `${record.scenarioId}:followup:${followup++}` : copy.key;
+                    if (!promptKeys.has(copy.key)) promptKeys.set(copy.key, []);
+                    promptKeys.get(copy.key).push(key);
+                }
+            }
+            context = { ...structuredClone(next), native: Boolean(native), collected, promptKeys,
+                contextKeys: new Set([...(preview.snapshot.recordedContext?.entries ?? []),
+                    ...(native?.disclosure.copies ?? []).filter(entry => entry.purpose === "context")].map(entry => entry.key)),
+                copyKeys: new Set([
                 ...(preview.snapshot.recordedContext?.entries ?? []).filter(entry => entry.kind === "response").map(entry => entry.key),
                 ...(native?.disclosure.copies ?? []).filter(entry => entry.purpose === "context").map(entry => entry.key),
                 ...(preview.snapshot.resultText?.copies ?? []).map(entry => entry.key),
@@ -311,6 +324,19 @@ export function createReportDraft({ contextSelector } = {}) {
         change(patch) {
             if (withdrawn) return;
             options = { ...options, ...structuredClone(patch) };
+            version++;
+        },
+        changePromptMode(mode) {
+            if (withdrawn) return;
+            if (!["none", "masked", "original"].includes(mode)) throw new TypeError("Choose a supported report text mode.");
+            if (mode === "none" && options.recordedContext) {
+                options.overrides = options.overrides.flatMap(edit => {
+                    const keys = context?.promptKeys.get(edit.key);
+                    if (keys) return [...new Set(keys)].map(key => ({ ...edit, key }));
+                    return context?.contextKeys.has(edit.key) ? [] : [edit];
+                });
+            }
+            options = { ...options, promptMode: mode, ...(mode === "none" ? { recordedContext: false } : {}) };
             version++;
         },
     };

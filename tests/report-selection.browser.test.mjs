@@ -102,7 +102,7 @@ test("reader Continue connects canonical selection to report Activity and exact 
     await reportContents(page);
     await page.locator("[name=promptMode][value=original]").check();
     await page.locator("#formatOptions input[value=json]").check();
-    await page.getByText("Additional masking", { exact: true }).click();
+    await page.getByText("Hide specific words", { exact: true }).click();
     await page.locator("#manualTerms").fill("Keep this synthetic masking choice");
     await chooseReportScope(page, "all");
     await navigateMain(page, "activity"); await ready(page);
@@ -212,7 +212,7 @@ test("explicit reader Continue reveals a distant selected target despite prior p
     await reportContents(page);
     await page.locator("[name=promptMode][value=original]").check();
     await page.locator("#formatOptions input[value=json]").check();
-    await page.getByText("Additional masking", { exact: true }).click();
+    await page.getByText("Hide specific words", { exact: true }).click();
     await page.locator("#manualTerms").fill("Keep the invented masking choice");
     await chooseReportScope(page, "selected");
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
@@ -450,7 +450,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await reportContents(page);
     await page.locator("[name=promptMode][value=original]").check();
     await page.locator("#formatOptions input[value=json]").check();
-    await page.getByText("Additional masking", { exact: true }).click();
+    await page.getByText("Hide specific words", { exact: true }).click();
     await page.locator("#manualTerms").fill("Deliberate synthetic masking term");
     await chooseReportScope(page, "selected");
     await navigateMain(page, "activity");

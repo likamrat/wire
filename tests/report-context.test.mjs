@@ -6,6 +6,7 @@ import { reportContextFixture } from "./report-context-fixture.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { privateFixture } from "./helpers.mjs";
+import { createReportDraft } from "../web/report-draft.mjs";
 
 test("report context uses the reader's exact links without enlarging analytical membership", () => {
     const { records } = retainedContextFixture();
@@ -112,6 +113,28 @@ test("multiple selected anchors share one edit key for the same recorded message
         .every(copy => copy.text === "One edited correction"), true);
     assert.equal(rebuilt.snapshot.recordedContext.entries.filter(copy => copy.key === copies[0].key).length, 1);
     assert.equal(rebuilt.snapshot.selectionScope.requestGroups, 2);
+});
+
+test("leaving out linked text preserves selected shared-message edits through real report projection", async t => {
+    const { context, records } = await reportContextFixture(t), controller = createExportController(context);
+    const state = await loadBoardState(context), selection = { kind: "selected", revision: state.revision,
+        scenarioIds: records.map(record => record.scenarioId), promptAuthors: ["user"] };
+    const draft = createReportDraft();
+    draft.change({ recordedContext: true, formats: ["json"] });
+    const preview = await controller.preview("privacy-switch", undefined, draft.options(), selection);
+    assert.equal(draft.bindContext(preview), true);
+    const shared = preview.promptReview.find(copy => copy.original === records[1].userPrompt.text);
+    assert.ok(shared);
+    draft.change({ overrides: [{ key: shared.key, text: "Kept correction" }] });
+    draft.changePromptMode("none");
+    const omitted = await controller.preview("privacy-switch", undefined, draft.options(), selection);
+    assert.ok(omitted.records.every(record => record.prompts.every(copy => copy.text === null)));
+    assert.equal(omitted.snapshot.recordedContext, undefined);
+    assert.equal(draft.bindContext(omitted), true);
+    draft.changePromptMode("masked");
+    const restored = await controller.preview("privacy-switch", undefined, draft.options(), selection);
+    assert.equal(restored.records.flatMap(record => record.prompts).filter(copy => copy.text === "Kept correction").length, 2);
+    assert.deepEqual(restored.snapshot.selectionScope, preview.snapshot.selectionScope);
 });
 
 test("unsupported message identity and missing time remain gaps rather than invented source references", async t => {

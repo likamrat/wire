@@ -37,7 +37,7 @@ test("synthetic full report journey: choices, comparisons, current review, all f
     await page.waitForFunction(() => !document.querySelector("#exportBtn").disabled);
     assert.equal(await page.locator('[name=promptMode][value=masked]').isChecked(), true);
     for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
-    await page.getByText("Additional masking", { exact: true }).click();
+    await page.getByText("Hide specific words", { exact: true }).click();
     await page.locator("#manualTerms").fill("Leila Navarro");
 
     const proof = process.env.WORKIQ_REPORT_PROOFS;

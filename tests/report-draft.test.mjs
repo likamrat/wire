@@ -4,6 +4,43 @@ import { createReportDraft } from "../web/report-draft.mjs";
 import { createRequestContext } from "../web/request-context.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
 
+test("privacy changes preserve edits and omissions while retiring only excluded linked copies", () => {
+    const draft = createReportDraft();
+    draft.change({ recordedContext: true, overrides: [
+        { key: "shared-origin", text: "Edited origin" }, { key: "shared-followup", omit: true },
+        { key: "linked-reply", text: "Edited linked reply" }, { key: "result-copy-one", omit: true },
+    ] });
+    const basis = { sourceRevision: 1, membershipRevision: 1, consentRevision: 1, overrideRevision: 0, deletionEpoch: 0 };
+    draft.bindContext({ revision: 1, records: [{ scenarioId: "scenario-one", prompts: [
+        { key: "shared-origin", kind: "origin" }, { key: "shared-followup", kind: "followup" },
+    ] }], snapshot: { evaluationFacts: { basis }, recordedContext: { entries: [
+        { key: "shared-origin", kind: "origin" }, { key: "shared-followup", kind: "followup" },
+        { key: "linked-reply", kind: "response" },
+    ] } } });
+    const original = draft.options().overrides;
+    draft.changePromptMode("original");
+    assert.deepEqual(draft.options().overrides, original);
+    draft.changePromptMode("none");
+    assert.equal(draft.options().recordedContext, false);
+    assert.deepEqual(draft.options().overrides, [
+        { key: "scenario-one:origin", text: "Edited origin" },
+        { key: "scenario-one:followup:0", omit: true }, { key: "result-copy-one", omit: true },
+    ]);
+    draft.changePromptMode("masked");
+    assert.equal(draft.options().overrides[1].omit, true);
+    draft.withdrawAccess(); draft.resumeAccess();
+    assert.deepEqual(draft.options().overrides, []);
+    const native = createReportDraft();
+    native.change({ recordedContext: true, overrides: [
+        { key: "native-origin", omit: true }, { key: "native-context", text: "Excluded reply" },
+    ] });
+    native.bindContext({ revision: 1, snapshot: { nativeEvidence: { disclosure: { copies: [
+        { key: "native-origin", purpose: "prompt" }, { key: "native-context", purpose: "context" },
+    ] } } } });
+    native.changePromptMode("none");
+    assert.deepEqual(native.options().overrides, [{ key: "native-origin", omit: true }]);
+});
+
 test("native report drafts bind distinct original Current/All receipts and independent GitHub IDs across content edits", () => {
     const draft = createReportDraft();
     const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),

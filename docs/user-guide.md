@@ -215,8 +215,11 @@ of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
-Open **Reports** and choose a ready-made report. WIRE prepares it
-with detected personal details hidden. The visible period starts
+Open **Reports**, check **Report text**, then choose a ready-made report.
+The default, **Mask detected details**, keeps the wording with local masking.
+Change it before opening the report or while reading it. Keeping chat details
+shows a red warning; masking can still miss names or sensitive wording.
+The visible period starts
 at Last 7 days, independently of your Analyze filters.
 
 Read its patterns and supporting interactions, then optionally add a note or

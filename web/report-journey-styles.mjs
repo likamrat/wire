@@ -446,11 +446,23 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-first .report-title-field>p{display:none}
 .report-save-slot{align-self:end}
 .report-save-slot button{min-height:48px}
-.report-toolbar-choices{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}
+.report-toolbar-choices{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-top:18px}
 .report-toolbar-group{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0}
 .report-toolbar-group>.report-toolbar-choice{flex:1;min-width:0;text-align:left}
 .report-toolbar-choice{display:inline-flex;align-items:center;gap:10px;min-height:44px;white-space:normal}
 .report-toolbar-choice:last-child{margin-left:auto}
+.report-privacy-control{max-width:28rem;min-width:0}
+.report-gallery>.report-privacy-control{margin:18px 0}
+.report-privacy-control .report-toolbar-group{gap:10px;flex-wrap:wrap}
+.report-privacy-control label{font-size:var(--type-control)}
+.report-privacy-control .report-toolbar-choice{flex:none;margin-left:0}
+.report-privacy-control .report-toolbar-choice>svg{width:18px;height:18px;flex:none}
+.report-privacy-control .report-toolbar-choice>svg:last-child{width:16px;height:16px}
+.report-privacy-hint{margin:6px 0 0;font-size:var(--type-small);line-height:1.5;color:var(--muted)}
+#reportPrivacyChoice[data-prompt-mode=masked]{--pill-border:var(--search-interaction);--pill-hover-border:var(--search-interaction);color:var(--search-interaction);border-color:var(--search-interaction)}
+#reportPrivacyChoice[data-prompt-mode=none]{color:var(--muted)}
+.report-privacy-control:has([data-prompt-mode=original]) .report-privacy-hint{color:var(--danger)}
+@media(forced-colors:active){#reportPrivacyChoice[data-prompt-mode]{color:ButtonText;border-color:ButtonText}}
 .report-options-popover{width:min(28rem,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border:1px solid var(--rule);border-radius:12px;background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow)}
 .report-options-popover h2{font-size:1.3125rem;font-weight:500;line-height:1.35;margin:0 0 20px}
 .report-options-popover :is(fieldset,.report-author-choice){margin:0 0 20px;border:0;padding:0;min-width:0}
@@ -511,6 +523,10 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .saved-report-title:active:not(:disabled){background:var(--control)}
 .saved-report-privacy{display:flex;align-items:start;gap:8px;min-width:0;color:var(--muted);font-size:var(--type-control);font-weight:400;line-height:1.5}
 .saved-report-privacy>.wire-icon{flex:none;width:1rem;height:1rem;margin-top:.15em}
+.saved-report-privacy[data-prompt-mode=masked]{color:var(--search-interaction)}
+.saved-report-privacy[data-prompt-mode=original]{color:var(--danger)}
+.saved-reader-title>.saved-report-privacy{margin-top:8px}
+@media(forced-colors:active){.saved-report-privacy[data-prompt-mode]{color:CanvasText}}
 .saved-report-files{display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .saved-report-files>.wire-icon{width:18px;height:18px;flex:none}
 #reportsView .saved-library-row>button{margin:0;align-self:center}

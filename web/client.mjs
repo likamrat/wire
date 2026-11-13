@@ -7006,11 +7006,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }).join(" "));
             ux.tooltip(summary, "View report");
             const identity = el("span", "saved-report-identity");
-            const privacyLabel = ({ masked: "Detected personal details hidden", original: "Chat details kept",
-                none: "Prompts and replies left out" })[bundle.promptMode] ?? "Text treatment not recorded";
-            const privacy = el("span", "saved-report-privacy");
-            const privacyIcon = ux.icon(({ masked: "report-masked", original: "report-original", none: "report-no-text" })[bundle.promptMode] ?? "unobserved");
-            privacy.append(privacyIcon, el("span", "", privacyLabel));
+            const privacy = savedPrivacyStatus(bundle);
             identity.append(summary);
             const files = viewKey(button("Files", () => {}, "quiet saved-report-files"), "files-bundle:" + bundle.bundleId);
             files.prepend(ux.icon("report-files")); files.setAttribute("aria-label", "Files for " + title);
@@ -7328,6 +7324,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return navigate({ ...routeFor("reports"), bundle: bundle.bundleId, savedEntry: key });
     }
+    function savedPrivacyStatus(bundle) {
+        const label = ({ masked: "Detected personal details hidden", original: "Chat details kept",
+            none: "Prompts and replies left out" })[bundle?.promptMode] ?? "Text treatment not recorded";
+        const node = el("span", "saved-report-privacy");
+        node.dataset.promptMode = bundle?.promptMode ?? "unknown";
+        node.append(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[bundle?.promptMode] ?? "unobserved"),
+            el("span", "", label));
+        return node;
+    }
     async function renderSavedReader() {
         const publication = api.publicationToken();
         if (!publication || !state) return;
@@ -7355,6 +7360,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? time.formatDate(artifact.preparedAt, artifact.timeContext || viewerTime, true) : artifact.preparedAtDisplay));
             titleBlock.append(meta);
         }
+        titleBlock.append(savedPrivacyStatus(artifact));
         identity.append(titleBlock, actions); header.append(back, identity);
         const stage = el("section", "document-stage"), toolbar = el("div", "document-file-toolbar");
         stage.append(toolbar, body); host.replaceChildren(header, stage);
@@ -8833,6 +8839,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             reportJourney.go(3);
             return;
         }
+        if (reportPreset === preset && reportRebuildFrom) {
+            await previewExport({ contentOnly: true });
+            return;
+        }
         reportPreset = preset;
         const dates = time.preset(reportDates.range, viewerTime.timeZone);
         if (dates) reportDates = { range: reportDates.range, ...dates };
@@ -8840,7 +8850,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
         invalidatePreview();
         draft.change({
-            saveMode: "local", title: undefined, promptMode: "masked", formats: ["html"], overrides: [], manualTerms: [],
+            saveMode: "local", title: undefined, formats: ["html"], overrides: [], manualTerms: [],
             reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
             reportFocus: { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
         });
@@ -8848,7 +8858,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         acceptNativeReportScope(); updateSelection();
         await previewExport();
     }
-    function updateReportContent({ hide = false, delay = 350 } = {}) {
+    function updateReportContent({ hide = false, delay = 350, prepare = true } = {}) {
         if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
         const selectedView = $("preparedReportView");
         if (selectedView) pendingReportReading = { view: selectedView.value, file: preparedFileInspection?.selection(),
@@ -8862,6 +8872,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportJourney.invalidate("");
         $("reportSaveActions").querySelectorAll("button").forEach(control => { control.disabled = true; });
         if (hide) { clearPreparedReaders(); clearPreviewPayload?.(); $("reportReviewBody").replaceChildren(); }
+        if (!prepare) { reportExperience?.sync(); return; }
         if (reportPreparing) { reportUpdateAgain = true; return; }
         reportUpdateTimer = setTimeout(() => { void previewExport({ contentOnly: true }); }, delay);
         reportExperience?.sync();
@@ -9712,8 +9723,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         updateReportContent();
     });
     document.querySelectorAll("[name=promptMode]").forEach((control) => control.addEventListener("change", () => {
-        draft.change({ promptMode: control.value, overrides: [], ...(control.value === "none" ? { recordedContext: false } : {}) });
-        updateReportContent({ hide: true }); updateSelection();
+        if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
+        draft.changePromptMode(control.value);
+        const prepared = assessmentFactories.reportWorkspacePresentation(route, reportJourney.snapshot()).prepared;
+        if (prepared || activePreview || reportRebuildFrom) updateReportContent({ hide: true, prepare: prepared });
+        updateSelection();
     }));
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
@@ -9837,6 +9851,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             saved: ["saved", "unavailable"].includes(reportJourney.snapshot().phase),
             paired: Boolean(periodReport), locked: exportWriting || reportJourney.snapshot().saveUnconfirmed,
             loading: isLoading || isStale || reportPreparing,
+            preparing: reportJourney.snapshot().phase === "scanning",
+            unavailable: isLoading || isStale,
             scopeLabel: !reportBaseExplicit ? "All retained activity in this period"
                 : reportScope === "current" ? reportDatesReplaced ? "Based on Analyze filters" : "Current Analyze view"
                     : reportScope === "selected" ? "Selected interactions" : "All retained activity",

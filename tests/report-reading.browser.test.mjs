@@ -230,7 +230,7 @@ test("late regeneration retains the selected file mode and never publishes super
     await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await selectActivityOption(page, "preparedReportView", "product-report.json");
-    await page.getByRole("button", { name: "Hide personal details", exact: true }).click();
+    await page.locator("#reportPrivacyChoice").click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("[name=promptMode][value=none]").check();
     prepared = await (await response).json();

@@ -328,6 +328,9 @@ Errors & failures, Completed calls, My prompts and Agent prompts. Compare period
 has its own primary destination. The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar
 directly. A fresh report ignores old Analyze restrictions.
+Report text is visible before the choices and defaults to Mask detected details.
+Changing it updates the draft without preparing or saving. The same control moves
+into the report toolbar; its choice reaches the initial preparation unchanged.
 Selected and Current remain available through inclusion
 controls and their original context-qualified entries.
 
@@ -400,7 +403,17 @@ dates unchanged. Leaving the workspace closes its remaining option panels.
 
 ### Privacy and Save
 
-Hide personal details and HTML are defaults. Errors & failures visibly includes
+Mask detected details and HTML are defaults. The compact Report text control
+uses blue with an eye-off icon for masking, gray with a crossed-message icon for
+omitted prompts/replies, and the existing red warning cue for Keep chat details.
+Color always has a label and icon; masking is not a safety certification.
+One short line states the effect or limit. Keep Hide specific words in the open
+report's optional text controls, not on the creation screen.
+Privacy changes preserve included-copy edits and omissions. Turning off linked
+context retires excluded context copies; it cannot reintroduce them later.
+An unfinished report resumed after a privacy change rebuilds its copies against
+its frozen activity. Pending updates keep Save unavailable.
+Errors & failures visibly includes
 retained masked error details. Notes are authored context, never recorded facts.
 Keep chat details invokes one warning at Save, with equal-sized Hide details
 and save / Save with chat details actions. Go back has a small arrow and safe

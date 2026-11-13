@@ -49,6 +49,116 @@ async function prepare(page, preset = "errors") {
     return body;
 }
 
+test("creation text choice applies to the first report without a setup or preview request", { timeout: 60000 }, async t => {
+    const { page, context, requests, errors } = await setup(t);
+    const choice = page.locator("#reportPrivacyChoice");
+    await expect(choice).toHaveAttribute("data-prompt-mode", "masked");
+    await expect(choice).toHaveAccessibleName("Report text: Mask detected details");
+    await choice.click();
+    await expect(page.locator("#additionalMasking")).toBeHidden();
+    await page.locator('[name=promptMode][value=none]').check();
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
+    await expect(page.locator("#reportStage1")).toBeVisible();
+    const initial = await prepare(page);
+    assert.equal(initial.promptMode, "none");
+    assert.ok(initial.records.every(record => record.prompts.every(copy => copy.text === null)));
+    assert.equal(initial.snapshot.reportPopulation.reference.length, 8);
+    assert.equal(initial.records.length, 2);
+    await expect(choice).toHaveAttribute("data-prompt-mode", "none");
+    await choice.click();
+    await expect(page.locator("#additionalMasking")).toBeVisible();
+    await expect(page.locator("#additionalMasking summary")).toHaveText("Hide specific words");
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const saved = await loadBoardState(context);
+    assert.equal(saved.exports[0].promptMode, "none");
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
+    assert.deepEqual(errors, []);
+});
+
+test("privacy choices have distinct readable state colors and labels in both themes", { timeout: 30000 }, async t => {
+    const { page, requests, errors } = await setup(t);
+    const luminance = channels => channels.map(value => {
+        const channel = value / 255;
+        return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index], 0);
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        const colors = new Set();
+        await page.locator("#reportPrivacyChoice").click();
+        for (const [mode, glyph, label] of [["original", "triangle-alert", "Keep chat details"],
+            ["none", "message-square-off", "Leave out prompts and replies"], ["masked", "eye-off", "Mask detected details"]]) {
+            await page.locator(`[name=promptMode][value=${mode}]`).check();
+            const choice = page.locator("#reportPrivacyChoice");
+            await expect(choice).toHaveAccessibleName("Report text: " + label);
+            await expect(choice.locator(`[data-lucide-icon=${glyph}]`)).toHaveCount(1);
+            const { ink, paper } = await choice.evaluate((node, variable) => {
+                const sample = document.createElement("span");
+                sample.style.color = "var(--paper)"; node.append(sample);
+                const paper = getComputedStyle(sample).color;
+                sample.style.color = `var(${variable})`;
+                const ink = getComputedStyle(sample).color; sample.remove();
+                return { ink, paper };
+            }, ({ masked: "--search-interaction", original: "--danger", none: "--muted" })[mode]);
+            await expect(choice).toHaveCSS("color", ink);
+            colors.add(ink);
+            const values = [ink, paper].map(color => luminance(color.match(/\d+/g).slice(0, 3).map(Number))).sort((a, b) => a - b);
+            assert.ok((values[1] + .05) / (values[0] + .05) >= 4.5, `${theme}/${mode}: ${ink} on ${paper}`);
+        }
+        assert.equal(colors.size, 3);
+        await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    }
+    await page.emulateMedia({ forcedColors: "active" });
+    await expect(page.locator("#reportPrivacyChoice")).toHaveAccessibleName("Report text: Mask detected details");
+    await expect(page.locator("#reportPrivacyChoice [data-lucide-icon=eye-off]")).toBeVisible();
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
+    assert.deepEqual(errors, []);
+});
+
+test("changing privacy on the landing resumes frozen facts and keeps edited copies", { timeout: 60000 }, async t => {
+    const { page, context, source, requests, errors } = await setup(t);
+    const initial = await prepare(page);
+    const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
+    await frame.locator(".wire-example-editor summary").first().click();
+    await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Edited wording for Avery Chen.");
+    const editedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await frame.getByRole("button", { name: "Update prompt copy", exact: true }).first().click();
+    const edited = await (await editedResponse).json();
+    const editedCopy = edited.records.flatMap(record => record.prompts).find(copy => copy.text === "Edited wording for Avery Chen.");
+    assert.ok(editedCopy);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    const preparedCount = requests.filter(request => request.path === "/api/preview").length;
+    await page.locator("#reportPrivacyChoice").click();
+    await page.locator('[name=promptMode][value=none]').check();
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, preparedCount);
+    const state = await loadBoardState(context), added = fixture("later-private-report");
+    added.capturedAt = new Date().toISOString(); added.toolCalls[0].startedAt = added.capturedAt;
+    await replaceEvidence(context, () => ({ records: [...source, added], importCoverage: state.importCoverage }));
+    const omitted = await prepare(page);
+    assert.deepEqual(omitted.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    assert.equal(omitted.promptMode, "none");
+    await page.locator("#reportPrivacyChoice").click();
+    const unmaskedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator('[name=promptMode][value=original]').check();
+    const unmasked = await (await unmaskedResponse).json();
+    assert.deepEqual(unmasked.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    assert.equal(unmasked.records.flatMap(record => record.prompts).find(copy => copy.key === editedCopy.key).text, editedCopy.text);
+    await expect(page.locator("#reportPrivacyChoice")).toHaveClass(/chat-details-kept/);
+    await expect(page.locator("#reportPrivacyChoice [data-lucide-icon=triangle-alert]")).toHaveCount(1);
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save with chat details", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    assert.deepEqual(errors, []);
+});
+
 test("gallery opens a real report and direct Save preserves the frozen failure cohort", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
     await expect(page.locator("[data-report-preset]")).toHaveCount(5);
@@ -444,7 +554,7 @@ test("keep-details warning can cancel or regenerate masked notes and copies befo
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await frame.getByRole("button", { name: "Update note", exact: true }).first().click();
     assert.equal((await response).status(), 200);
-    await page.getByRole("button", { name: "Hide personal details", exact: true }).click();
+    await page.locator("#reportPrivacyChoice").click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator('[name=promptMode][value=original]').check();
     assert.equal((await response).status(), 200);
@@ -707,7 +817,7 @@ test("report-first controls retain equal geometry, readable themes and narrow en
         await capture(`report-${theme}-${width}-${size}`);
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    await page.getByRole("button", { name: "Hide personal details", exact: true }).click();
+    await page.locator("#reportPrivacyChoice").click();
     const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator('[name=promptMode][value=original]').check(); await ready;
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();

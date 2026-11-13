@@ -167,7 +167,7 @@ test("capture documentation through the normal renderer with isolated light-them
     });
     const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false } = {}) {
-        if (reportsOnly && !["report-choices", "report-preview", "report-text", "report-file-preview"].includes(name)) return;
+        if (reportsOnly && !name.startsWith("report-") && name !== "saved-report") return;
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "light");
         assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), true);
         await page.evaluate(() => document.fonts.ready);
@@ -293,7 +293,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.locator("#reportFileInspection").getByRole("button", { name: "Tree", exact: true }).click();
     await capture("report-manifest", { privateOnly: true });
     await selectActivityOption(page, "preparedReportView", "report");
-    await page.getByRole("button", { name: "Hide personal details", exact: true }).click();
+    await page.locator("#reportPrivacyChoice").click();
     prepared = await preparedChange(() => page.locator('[name=promptMode][value=original]').check());
     await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();

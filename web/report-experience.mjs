@@ -21,7 +21,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         completed: "The calls finished without a recorded error. The answer can still be wrong or incomplete.",
         mine: "Interactions whose starting prompt is recorded as yours. Calls made by an agent while handling your request stay included.",
         agent: "Interactions whose starting prompt is recorded as agent-written. Prompts with an unknown author are not included.",
-        privacy: "WIRE hides details it recognizes in prompts, included replies and notes, such as email addresses and phone numbers. It may miss names or sensitive context. Your saved chats stay unchanged.",
         formats: "Choose which files Save report writes. Use View to preview a format.",
     };
     function el(tag, cls, text) {
@@ -100,9 +99,16 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const periodPanel = popover("reportPeriodChoices", "Report period"), periodHost = el("div");
     periodPanel.append(periodHost);
     const dateButton = opener("Last 7 days", periodPanel);
-    const privacy = popover("reportPrivacyOptions", "Prompts and replies");
+    const privacy = popover("reportPrivacyOptions", "Report text");
     privacy.append(byId("promptOptions"), byId("additionalMasking")); done(privacy);
-    const privacyButton = opener("Hide personal details", privacy);
+    const privacyButton = opener("Mask detected details", privacy);
+    privacyButton.id = "reportPrivacyChoice";
+    privacyButton.setAttribute("aria-describedby", "reportPrivacyHint");
+    const privacyGroup = el("div", "report-privacy-control"), privacyRow = el("div", "report-toolbar-group");
+    const privacyLabel = el("label", "", "Report text"); privacyLabel.htmlFor = privacyButton.id;
+    const privacyHint = el("p", "report-privacy-hint"); privacyHint.id = "reportPrivacyHint";
+    privacyRow.append(privacyLabel, privacyButton); privacyGroup.append(privacyRow, privacyHint);
+    let privacyMode;
     const formats = popover("reportFileOptions", "Save as"); formats.append(byId("formatOptions")); done(formats);
     const formatButton = opener("Save as: HTML", formats);
     const refine = popover("reportIncludeOptions", "Choose what to include");
@@ -124,8 +130,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const scope = button("Change activity selection", () => { refine.hidePopover(); showSelection(); });
     refine.append(scope); done(refine);
     const refineButton = opener("Change what's included", refine);
-    const privacyGroup = el("div", "report-toolbar-group"), formatGroup = el("div", "report-toolbar-group");
-    privacyGroup.append(privacyButton, helpButton("privacy", "About hiding personal details"));
+    const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton, helpButton("formats", "About report file formats"));
     choices.append(dateButton, privacyGroup, formatGroup, refineButton);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
@@ -161,6 +166,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const value = read();
         toolbar.hidden = !value.prepared;
         gallery.hidden = value.paired && value.prepared;
+        const privacyHost = value.prepared ? choices : gallery;
+        if (privacyGroup.parentElement !== privacyHost) privacyHost.insertBefore(privacyGroup, value.prepared ? formatGroup : tiles);
+        byId("additionalMasking").hidden = !value.prepared;
+        if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
         if (value.prepared && period.parentElement !== periodHost) periodHost.append(period);
         else if (!value.prepared && period.parentElement !== galleryHeading) galleryHeading.append(period);
         periodCaption.textContent = labelDates(value.dates);
@@ -172,7 +181,19 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
         setLabel(dateButton, value.dates.range === "capture" ? "All retained dates" : value.dates.range === "custom" ? "Custom dates" : `Last ${value.dates.range} days`);
         dateButton.hidden = value.paired;
-        setLabel(privacyButton, ({ masked: "Hide personal details", original: "Keep chat details", none: "Prompts left out" })[value.options.promptMode]);
+        const mode = value.options.promptMode;
+        if (privacyMode !== mode) {
+            privacyMode = mode;
+            privacyButton.replaceChildren(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[mode]),
+                doc.createTextNode(({ masked: "Mask detected details", original: "Keep chat details", none: "Leave out prompts and replies" })[mode]),
+                ux.icon("chevron"));
+        }
+        privacyButton.dataset.promptMode = mode;
+        privacyButton.setAttribute("aria-label", "Report text: " + privacyButton.textContent);
+        privacyHint.textContent = value.preparing ? "Updating the report. Save is unavailable."
+            : ({ masked: "Applies to the report and saved files. WIRE can miss names and sensitive wording.",
+                original: "Personal details may be included. Detected credentials are still removed.",
+                none: "Calls and counts stay. Notes and error messages may still contain personal details." })[mode];
         setLabel(formatButton, "Save as: " + (value.options.formats.length > 1 ? `${value.options.formats.length} formats`
             : value.options.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join("") || "Choose a format"));
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
@@ -181,6 +202,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         scopeCaption.textContent = value.paired ? "Two periods with the same filters."
             : `${labelDates(value.dates)} · ${value.scopeLabel}`;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
+        privacyButton.disabled = value.locked || value.unavailable;
         const save = byId("reportSaveActions");
         if (save && save.parentElement !== saveSlot) saveSlot.append(save);
         for (const input of doc.querySelectorAll("[name=promptMode]")) input.checked = input.value === value.options.promptMode;
