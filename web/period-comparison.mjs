@@ -1088,8 +1088,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             outcomeObserver.observe(outcomeTrigger, { attributes: true, attributeFilter: ["aria-expanded"] });
         }
         const context = getContext(), active = context.route.view === "analyze" && context.route.compare === "periods";
-        const pageTitle = doc.getElementById("pageTitle");
-        if (active && pageTitle) pageTitle.textContent = "Compare periods";
         shown = active; root.hidden = !active; setup.hidden = !active; toggle.hidden = false;
         toggle.setAttribute("aria-expanded", String(active));
         doc.body.classList.toggle("period-comparing", active);

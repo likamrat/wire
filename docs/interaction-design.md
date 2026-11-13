@@ -9,7 +9,7 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 | --- | --- |
 | [Navigation](#navigation-and-return) | Accepted destinations, loading and return state |
 | [Analyze](#analyze-and-filters) | Filters, scope and chart reading |
-| [Trends](#trends) | Daily patterns, highlighted changes and exact supporting evidence |
+| [Trends](#trends) | Chart-first daily patterns, sizing and exact supporting evidence |
 | [Interaction reader](#interaction-cards-and-reading) | Cards, call results, disclosures, Copy and selection |
 | [Search](#search) | Typed results, excerpts and exact Open |
 | [Reports](#reports) | Choices, prepared copies, saving and saved reading |
@@ -87,20 +87,30 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 
 ## Trends
 
-Trends is a peer destination, not another Analyze widget. Its landing follows
-the Reports marketplace: a short overview and compact full-width choices.
-Selecting a trend opens focused reading; Back to Trends restores the activating
-choice and reading position. Default suggestions use local deterministic rules.
-Each suggested card names its measured author, tool, service or model, not just
-the trend family. Opening it selects its supporting series and date, including
-the correct daily page for a long range. Marketplace rows and highlight cards own their
-surface; they do not inherit an extra inset text-button frame.
-One chooser can replace them with a stable set; no threshold or chart-builder UI.
+Trends is a peer destination, not another Analyze widget. Opening it immediately
+shows the chosen period's charts, not a marketplace or a supported-change gate.
+Tool usage is dominant, with period totals and per-tool percentages/counts in
+its left column. A compact side column holds the exclusive prompt-author
+composition and daily call activity. Services, errors, models and duration
+support them below. Empty Today does not discard useful earlier data or turn
+the screen into unavailable rows. Unknown and incomplete evidence stays explicit.
+
+Maximize uses the same chart and shared controls, with a selected-date breakdown
+and exact evidence. Back to overview restores the activating control and reading
+position. Collapse/expand and Collapse all/Restore all preserve each chart's
+measure, series choices and date reading. Filters and dates remain available
+while maximized. Do not introduce a generic chart builder or a new analytics layer.
 
 Keep the 7/14/30/custom date family, defaulting to seven days. Every civil day
-remains separate in the selected IANA zone. Calendar rows organize daily cells;
-they do not aggregate a week into one observation. Long ranges page exact days
-after establishing complete membership. Date filtering never approves collection.
+remains separate in the selected IANA zone. Every daily axis label remains
+visible in its scrollable plot, including all 30 dates in a 30-day range.
+Use month and day for past dates, Today for the current day and an exact date
+in hover. Measured label widths set minimum day spacing at a stable screen
+font size; maximization never magnifies SVG text. New ranges open at their
+latest dates; measure/size changes preserve horizontal reading position.
+Gap days keep labels without invented bars. Long ranges still page at 90 days
+after establishing complete membership, without a new range limit.
+Date filtering never approves collection.
 
 Use prominent period counts, appropriate percentages with supporting counts and
 one measure label. Avoid repeated source captions, explanatory subtitles and
@@ -122,7 +132,7 @@ unchanged parent renders do not remount a chart or dismiss its hover value.
 Chart type scales with text size, and long recorded names wrap without truncation
 in legends, selected values and hover cards.
 
-Hover/focus belongs to a bar segment, nearby line sample or exact calendar cell,
+Hover/focus belongs to a bar segment or nearby line sample,
 not a full-column invisible target. Use one compact, hoverable, dismissible card.
 Tool reach pairs interactions with call counts; service/model cards preserve
 overlap; errors separate tool failures and result signals; timing names available

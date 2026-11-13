@@ -28,7 +28,7 @@ Evidence definitions and frozen-file requirements remain in the
 | Sliding left sidebar | Analyze, Trends, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
-| Trends | Visual highlights and a marketplace of daily patterns; focused charts lead to exact evidence |
+| Trends | Chart-first period overview; dominant tool usage, compact authors and daily activity, then services, errors, models and duration |
 | Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
 
@@ -91,6 +91,11 @@ name and state.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established 44px targets, focus indications and wrapping labels.
 
+The main Analyze, Trends, Reports and Compare periods headings use their existing
+navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node mounted
+and update its text separately. These icons are decorative, not extra controls.
+Settings, contextual readers and saved report headings do not acquire one.
+
 Toolbar buttons, selects and numeric fields use a compact painted face inside
 their full target. Keep text/icon baselines aligned and let targets grow with
 enlarged text. Number fields size to their page digits rather than taking a
@@ -133,6 +138,16 @@ Do not apply current branding globally to historical report snapshots.
 
 The [Chart guide behavior](interaction-design.md#chart-guide) connects each
 visualization to its definitions and exact values.
+
+Trends uses the same chart owner in overview and maximized reading. Every daily
+date is labeled with month and day, except Today; hover supplies the exact date.
+Measure label widths at the screen's 14px axis role and scroll locally instead
+of thinning dates, shrinking text or scaling an old SVG. Series use stable color,
+line patterns and markers with matching legend and hover samples; hiding or
+filtering a series must not change another series' identity. Author and service
+colors retain their existing meaning. Author legends use aligned full-width
+rows. Keep "Search and retrieval" on one line; move its value/bar below when
+needed. Sizing glyphs are optically grouped inside distinct 44px targets.
 
 Count/share widget rows show the percentage first, then the count in parentheses.
 Use the complete qualifying population, never the visible rows or largest bar.

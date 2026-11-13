@@ -131,6 +131,10 @@ button.danger:not(:disabled) {color:var(--danger)}
 main {max-width:1200px;margin:0 auto;padding:var(--space-2xl) var(--space-xl) var(--space-3xl)}
 .page-heading {display:flex;justify-content:space-between;align-items:center;gap:var(--space-xl);margin-bottom:var(--space-xl)}
 .page-heading p {color:var(--muted);margin-top:8px}
+#pageTitle{display:flex;align-items:center;gap:10px}
+.page-title-text{min-width:0}
+.page-title-icon{display:inline-flex;flex:none;align-items:center}
+.page-title-icon>.wire-icon{width:24px;height:24px}
 .page-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:end;gap:8px;flex-shrink:0}
 #accessShell .page-actions {flex-shrink:1;max-width:100%;justify-content:start}
 #pageHeadingActions:not(:has(> :not([hidden]))) {display:none}

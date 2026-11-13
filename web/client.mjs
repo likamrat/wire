@@ -4069,7 +4069,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
         const selectedRequest = state.scenarios.find(scenario => scenario.scenarioId === route.request);
         const titles = {
-            analyze: ["Analyze", ""],
+            analyze: [route.compare === "periods" ? "Compare periods" : "Analyze", ""],
             trends: ["Trends", ""],
             request: [selectedRequest ? route.call ? "Call in context" : "Interaction" : "Interaction unavailable", ""],
             reports: [route.bundle ? savedReportView?.bundleId === route.bundle && savedReportView.entryKey === route.savedEntry
@@ -4078,7 +4078,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             settings: ["Settings", ""],
             "collection-status": ["Collection status", ""],
         };
-        $("pageTitle").textContent = titles[route.view][0];
+        setPageHeading(titles[route.view][0]);
         $("pageTitle").tabIndex = -1;
         $("pageIntro").textContent = titles[route.view][1];
         $("pageIntro").hidden = !titles[route.view][1];
@@ -7786,7 +7786,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         liveSearchUI?.changed();
     }
 
+    function setPageHeading(text) {
+        const heading = $("pageTitle");
+        let label = heading.querySelector(".page-title-text"), icon = heading.querySelector(".page-title-icon");
+        if (!label || !icon) {
+            icon = el("span", "page-title-icon"); icon.setAttribute("aria-hidden", "true");
+            label = el("span", "page-title-text");
+            heading.replaceChildren(icon, label);
+        }
+        const destination = route.view === "analyze" ? route.compare === "periods" ? "compare" : "analyze"
+            : route.view === "trends" ? "trends" : route.view === "reports" && !route.task && !route.bundle ? "reports" : null;
+        if (icon.dataset.destination !== (destination ?? "")) {
+            icon.replaceChildren(...(destination ? [ux.icon(`navigation-${destination}`)] : []));
+            icon.dataset.destination = destination ?? "";
+        }
+        icon.hidden = !destination;
+        setText(label, text);
+    }
     function setText(node, text) {
+        if (node.id === "pageTitle") { setPageHeading(text); return; }
         if (node.textContent !== text) {
             const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             while (walker.nextNode()) walker.currentNode.data = "";

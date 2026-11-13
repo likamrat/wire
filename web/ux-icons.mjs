@@ -44,6 +44,7 @@ export const uxIconSources = Object.freeze({
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download", code: "file-code",
     "zoom-in": "plus", "zoom-out": "minus",
     "reader-maximize": "maximize-2", "reader-restore": "minimize-2",
+    "chart-collapse": "chevron-up",
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",

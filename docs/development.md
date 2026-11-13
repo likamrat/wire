@@ -173,6 +173,12 @@ the normal runtime on an ephemeral port with invented Cedar activity and source
 paths, disables collection timers, rejects action requests and checks that
 retained data and collection configuration stay unchanged.
 
+For Trends, `tests/trends.browser.test.mjs` uses invented requests and the normal
+renderer, with collection timers and provider work disabled. Set
+`WIRE_TRENDS_PROOFS` to an owned private capture directory. The overview, daily
+axes, exact-evidence reading, filters, sizing and heading-icon journeys share
+that fixture; screenshots are not evidence of live collection or deployment.
+
 ## Troubleshoot a local run
 
 | What you see | What to check |
