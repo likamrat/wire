@@ -94,6 +94,10 @@ its left column. A compact side column holds the exclusive prompt-author
 composition and daily call activity. Services, errors, models and duration
 support them below. Empty Today does not discard useful earlier data or turn
 the screen into unavailable rows. Unknown and incomplete evidence stays explicit.
+Use the full workspace at wide CSS viewports without scaling text. Supporting
+columns flow independently instead of leaving empty rows beneath shorter charts.
+The date-range button shows the accepted dates beside the presets and opens
+the existing calendar. Today is labeled as still in progress, not as a history gap.
 
 Maximize uses the same chart and shared controls, with a selected-date breakdown
 and exact evidence. Back to overview restores the activating control and reading
@@ -116,6 +120,10 @@ Use prominent period counts, appropriate percentages with supporting counts and
 one measure label. Avoid repeated source captions, explanatory subtitles and
 prose narrating values already drawn. Keep necessary coverage qualifications;
 definitions belong in Chart guide. Differences in shares are percentage points.
+History warnings describe the saved-chat read/import problem using retained
+coverage facts. Those facts cover the source, not a particular analytical
+period: explicitly say when the affected dates are unknown. Do not equate an
+unreadable file, an unfinished import or missing prompt links with a failed call.
 Selected-date bars use the same measure and zero-based scale as the chart:
 reach is not call share, and count views use the count axis rather than percent
 widths. Hiding series does not rescale that axis.
@@ -134,6 +142,8 @@ in legends, selected values and hover cards.
 
 Hover/focus belongs to a bar segment or nearby line sample,
 not a full-column invisible target. Use one compact, hoverable, dismissible card.
+Use plain solid lines and bars, with stable labeled colors. A hovered legend
+or sample can emphasize its series; it does not select or filter evidence.
 Tool reach pairs interactions with call counts; service/model cards preserve
 overlap; errors separate tool failures and result signals; timing names available
 samples. Blank space cannot activate another mark. Escape, departure, scrolling,

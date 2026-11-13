@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onInspect, formatDate, formatAxisDate, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, formatDate, formatAxisDate, canInspect }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false;
     const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
@@ -33,7 +33,16 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
         }
         root.querySelectorAll("[aria-describedby]").forEach(node => node.removeAttribute("aria-describedby"));
         root.querySelector(".trends-mark-focus")?.replaceChildren();
+        emphasize(null);
         if (!preserveDismissed) dismissed = null;
+    }
+    function emphasize(id) {
+        const nodes = [...root.querySelectorAll("[data-trend-line],[data-trend-bar],[data-isolated-sample]")];
+        if (!canInspect() || !nodes.some(node => node.dataset.series === id)) id = null;
+        for (const node of nodes) {
+            node.style.opacity = id && node.dataset.series !== id ? ".22" : "1";
+            if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3" : "2";
+        }
     }
     function target(point) { return root.querySelector(`[data-trend-mark="${scene.points.indexOf(point)}"]`); }
     function facts(parent, rows) {
@@ -53,10 +62,9 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
         tooltip.dataset.chart = root.id;
         erase(tooltip);
         const heading = element("div", "trends-tip-heading");
-        const label = element("span", "trends-tip-series", value.label), style = identity(point.id, scene.family);
+        const label = element("span", "trends-tip-series", value.label);
         const sample = svgNode("svg", { class: "trends-sample", viewBox: "0 0 36 16", "aria-hidden": "true" });
-        sample.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(point.id, scene.family), "stroke-width": 2, "stroke-dasharray": style.dash }),
-            svgNode("path", { d: style.marker, transform: "translate(18 8)", fill: "var(--paper)", stroke: color(point.id, scene.family), "stroke-width": 1.5 }));
+        sample.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(point.id, scene.family), "stroke-width": 3 }));
         label.prepend(sample); heading.append(label, element("span", "muted", formatDate(day.date)));
         tooltip.append(heading);
         const current = metric(value, scene.family, scene.mode);
@@ -94,8 +102,9 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
         const overlay = root.querySelector(".trends-mark-focus");
         overlay?.replaceChildren(point.rect
             ? svgNode("rect", { ...point.rect, fill: "none", stroke: "var(--ink)", "stroke-width": 1.5 })
-            : svgNode("path", { d: style.marker, transform: `translate(${point.x} ${point.y}) scale(1.4)`,
+            : svgNode("circle", { cx: point.x, cy: point.y, r: 5,
                 fill: "var(--paper)", stroke: color(point.id, scene.family), "stroke-width": 2 }));
+        emphasize(point.id);
         const left = Math.max(8, doc.getElementById("main").getBoundingClientRect().left + 8);
         const scale = parseFloat(getComputedStyle(doc.documentElement).fontSize) / 16;
         const top = doc.querySelector(".app-header").getBoundingClientRect().bottom + 8;
@@ -157,38 +166,27 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
         const maximum = Math.max(1, ...data.days.map(day => stacked
             ? day.values[family].reduce((sum, value) => sum + (metric(value, family, mode) ?? 0), 0)
             : Math.max(0, ...day.values[family].map(value => metric(value, family, mode) ?? 0))));
-        const shares = family !== "timing" && mode !== "count", step = maximum <= 4 ? 1 : maximum <= 20 ? 5 : maximum <= 200 ? 50 : 500;
+        const shares = family !== "timing" && mode !== "count";
+        const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
+        const step = family === "timing" ? [1, 2, 5, 10].find(value => value * magnitude >= maximum / 4) * magnitude
+            : maximum <= 4 ? 1 : maximum <= 20 ? 5 : maximum <= 200 ? 50 : 500;
         const max = shares ? 100 : Math.ceil(maximum / step) * step;
         scene.maximum = max;
         const x = index => left + pitch * (index + .5), y = value => bottom - value * (bottom - top) / max;
         const svg = svgNode("svg", { viewBox: `0 0 ${width} ${height}`, width, height, role: "group", "aria-label": "Daily trend", "data-time-axis": family });
         svg.style.width = `${width}px`; svg.style.height = `${height}px`;
-        const definitions = svgNode("defs");
-        for (const definition of series) {
-            const style = identity(definition.id, family), id = `${root.id}-pattern-${style.slot}`;
-            const pattern = svgNode("pattern", { id, width: 8, height: 8, patternUnits: "userSpaceOnUse",
-                patternTransform: `rotate(${style.slot % 2 ? 45 : -45})` });
-            pattern.append(svgNode("rect", { width: 8, height: 8, fill: color(definition.id, family) }));
-            if (style.slot % 4) pattern.append(style.slot % 4 === 2
-                ? svgNode("circle", { cx: 4, cy: 4, r: 1.4, fill: "var(--paper)", opacity: .8 })
-                : svgNode("line", { x1: 0, x2: 0, y1: 0, y2: 8, stroke: "var(--paper)", "stroke-width": style.slot % 4 === 3 ? 3 : 1.5, opacity: .8 }));
-            if (style.slot > 3) pattern.append(svgNode("path", { d: style.marker, transform: "translate(4 4) scale(.5)",
-                fill: "var(--paper)", stroke: color(definition.id, family), "stroke-width": .6 }));
-            definitions.append(pattern);
-        }
-        svg.append(definitions);
         const axis = svgNode("g", { class: "trends-y-axis", "pointer-events": "none" });
         axis.append(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, height: bottom - top + 24 * scale, fill: "var(--paper)" }));
-        for (let index = 0; index <= 4; index++) {
-            const value = max * index / 4;
+        const ticks = family === "timing" ? Math.round(max / step) : 4;
+        for (let index = 0; index <= ticks; index++) {
+            const value = max * index / ticks;
             if (!shares && !Number.isInteger(value)) continue;
             svg.append(svgNode("line", { x1: left, x2: width - 16 * scale, y1: y(value), y2: y(value), class: "trends-grid" }));
             axis.append(svgNode("text", { x: left - 14 * scale, y: y(value) + 4 * scale, "text-anchor": "end" }, `${number(value)}${shares ? "%" : ""}`));
         }
         function mark(point, value) {
             const index = scene.points.push(point) - 1;
-            const style = identity(point.id, family);
-            const node = point.rect ? svgNode("rect", { ...point.rect, fill: `url(#${root.id}-pattern-${style.slot})` })
+            const node = point.rect ? svgNode("rect", { ...point.rect, fill: color(point.id, family), "data-trend-bar": "" })
                 : svgNode("circle", { cx: point.x, cy: point.y, r: 8, fill: "transparent", stroke: "transparent", "pointer-events": "none" });
             node.setAttribute("data-series", point.id);
             node.dataset.trendMark = String(index); node.setAttribute("tabindex", index ? "-1" : "0"); node.setAttribute("role", "button");
@@ -210,7 +208,7 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
                 shares ? family === "authors" ? day.interactions : day.calls : sum));
         });
         else for (const definition of series) {
-            const style = identity(definition.id, family);
+            if (!data.days.some(day => day.values[family].find(value => value.id === definition.id).count > 0)) continue;
             let previous = null;
             for (const [index, day] of data.days.entries()) {
                 const value = day.values[family].find(value => value.id === definition.id), amount = metric(value, family, mode);
@@ -221,13 +219,13 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
                 const point = { index, id: definition.id, x: x(index), y: y(amount) };
                 if (previous) {
                     svg.append(svgNode("line", { x1: previous.x, y1: previous.y, x2: point.x, y2: point.y,
-                        stroke: color(point.id, family), "stroke-width": 2, "stroke-dasharray": style.dash, "data-series": point.id }));
+                        stroke: color(point.id, family), "stroke-width": 2, "stroke-linecap": "round", "data-series": point.id, "data-trend-line": "" }));
                     scene.segments.push({ from: previous, to: point });
                 }
-                const marker = svgNode("path", { d: style.marker, transform: `translate(${point.x} ${point.y})`,
-                    fill: "var(--paper)", stroke: color(point.id, family), "stroke-width": 1.6, "pointer-events": "none",
-                    "data-series-marker": point.id });
-                svg.append(marker);
+                const next = data.days[index + 1], nextValue = next?.values[family].find(value => value.id === definition.id);
+                if (!previous && (!next?.calls || metric(nextValue, family, mode) === null))
+                    svg.append(svgNode("circle", { cx: point.x, cy: point.y, r: 3, fill: color(point.id, family),
+                        "pointer-events": "none", "data-isolated-sample": "", "data-series": point.id }));
                 mark(point, value); previous = point;
             }
         }
@@ -321,5 +319,5 @@ export function mountTrendsChart({ root, tooltip, color, identity, onSelect, onI
         const amount = metric(value, scene.family, scene.mode);
         return amount === null ? 0 : amount * 100 / scene.maximum;
     }
-    return { render, metric, barPercent, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
+    return { render, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
 }

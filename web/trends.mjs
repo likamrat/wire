@@ -3,13 +3,13 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const families = {
         authors: { label: "Prompt authors", modes: [["share", "Share"], ["count", "Interactions"]],
             help: "Each originating interaction counts once per day with a matching call. Unverified authors remain in the denominator. This is not a count of messages sent that day or who executed each call." },
-        tools: { label: "Tool usage", modes: [["reach", "Interaction reach"], ["share", "Call share"], ["count", "Calls"]],
+        tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
             help: "Reach counts an interaction once per tool. Tools overlap. Call share uses all matching calls; a multi-target call is one call. Hiding a series never changes either denominator." },
         services: { label: "Services", modes: [["share", "Call share"], ["count", "Calls"]],
             help: "Each share uses all matching calls. A call may involve several services. Discovery is preparation, not service execution. Missing targets do not establish which backend services ran." },
         problems: { label: "Errors & failures", modes: [["share", "Interaction share"], ["count", "Interactions"]],
             help: "Interactions with a failed tool or explicit application/API error, divided by all matching interactions. Tool completion can coexist with an API error. Unknown results are not failures; completion is not answer correctness." },
-        timing: { label: "Call duration", modes: [["both", "Median + P95"], ["median", "Median"], ["p95", "P95"]],
+        timing: { label: "Call duration", modes: [["both", "Both"], ["median", "Median"], ["p95", "95th percentile"]],
             help: "Qualified tool-start-to-completion intervals only, using nearest-rank median or P95. Missing samples are not zero. Concurrent calls are not added into a task duration; prompt-to-final-response timing is a different clock." },
         models: { label: "Response models", modes: [["share", "Interaction share"], ["count", "Interactions"]],
             help: "Each recorded model divided by all matching originating interactions, including missing model names. Models can overlap. Tool hints and the current model cannot fill historical provenance gaps." },
@@ -39,50 +39,45 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const rate = value => value === null ? "Unavailable" : `${number(value)}%`;
     const axisDate = date => date === time.day(new Date().toISOString(), data.timeContext.timeZone) ? "Today" : time.formatDate(date, data.timeContext);
     const fullDate = date => `${axisDate(date) === "Today" ? "Today · " : ""}${time.formatDate(date, data.timeContext, true)}`;
-    const fixedColors = { user: "var(--screen-prompt-user)", agent: "var(--screen-prompt-agent)", unknown: "var(--muted)",
-        Files: "var(--screen-service-files)", Mail: "var(--trends-mail)", Calendar: "var(--trends-calendar)",
-        Teams: "var(--trends-teams)", Search: "var(--screen-activity-assistance)", problems: "var(--danger)" };
-    const identities = new Map(), markers = [
-        "M-3.5 0a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0",
-        "M-3.5-3.5h7v7h-7Z", "M0-4.5 4 3.5h-8Z", "M0-4.5 4.5 0 0 4.5-4.5 0Z",
-        "M-4-1.3h2.7V-4h2.6v2.7H4v2.6H1.3V4h-2.6V1.3H-4Z",
-    ], dashes = ["", "8 4", "2 4", "8 3 2 3", "12 4", "3 3 3 7"];
-    function identity(id, family) {
+    const authorColors = { user: "var(--screen-prompt-user)", agent: "var(--screen-prompt-agent)", unknown: "var(--muted)" };
+    const colors = new Map(), tools = ["fetch", "retrieve", "ask", "get_schema", "call_function", "do_action",
+        "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
+    function color(id, family) {
+        if (family === "authors") return authorColors[id];
+        if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
+        if (family === "problems") return "var(--danger)";
+        if (family === "rhythm") return "var(--trends-series-1)";
+        if (family === "timing") return id === "timing" ? "var(--trends-series-1)" : "var(--trends-series-3)";
         const key = `${family}:${id}`;
-        if (!identities.has(key)) {
-            const known = family === "tools" ? ["workiq-fetch", "workiq-retrieve", "workiq-ask", "workiq-get_schema"].indexOf(id)
-                : family === "timing" ? id === "timing" ? 1 : 0 : -1;
-            let slot = known >= 0 ? known : family === "authors" ? ["user", "agent", "unknown"].indexOf(id)
-                : [...id].reduce((hash, char) => (hash * 31 + char.codePointAt(0)) >>> 0, 7) % 60;
-            if (known < 0 && family !== "authors") {
-                const used = new Set([...identities].filter(([key]) => key.startsWith(family + ":")).map(([, style]) => style.slot));
-                if (family === "tools") [0, 1, 2, 3].forEach(value => used.add(value));
-                while (used.has(slot)) slot++;
+        if (!colors.has(key)) {
+            const known = family === "tools" ? tools.indexOf(id.replace(/^workiq-/, "")) : -1;
+            let slot = known >= 0 ? known : [...id].reduce((hash, char) => (hash * 31 + char.codePointAt(0)) >>> 0, 7) % 12;
+            if (known < 0) {
+                const used = new Set([...colors].filter(([key]) => key.startsWith(family + ":")).map(([, slot]) => slot));
+                if (used.size < 12) while (used.has(slot)) slot = (slot + 1) % 12;
             }
-            identities.set(key, { slot, marker: markers[slot % markers.length],
-                dash: slot < 60 ? dashes[slot % dashes.length] : `${5 + (slot - 60) * 2} 3 2 3` });
+            colors.set(key, slot);
         }
-        return identities.get(key);
+        return `var(--trends-series-${colors.get(key) + 1})`;
     }
-    const color = (id, family) => fixedColors[id] ?? `var(--trends-series-${identity(id, family).slot % 4 + 1})`;
     function sample(id, family) {
-        const style = identity(id, family), svg = svgNode("svg", { viewBox: "0 0 36 16", class: "trends-sample", "aria-hidden": "true" });
-        svg.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(id, family), "stroke-width": 2, "stroke-dasharray": style.dash }),
-            svgNode("path", { d: style.marker, transform: "translate(18 8)", fill: "var(--paper)", stroke: color(id, family), "stroke-width": 1.5 }));
+        const svg = svgNode("svg", { viewBox: "0 0 36 16", class: "trends-sample", "aria-hidden": "true" });
+        svg.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(id, family), "stroke-width": 3 }));
         return svg;
     }
     let data = null, timingData = null, family = null, period = "7", filters = {}, range = null, offset = 0;
     let pending = 0, requestedKey = "", acceptedKey = "", enabled = false, bound = null, lastRevision = null;
     let overviewScroll = 0, dialogOrigin = null, inspecting = null, allCollapsed = null, inspectionKey = "";
     const cards = new Map();
-    const toolbar = el("div", "trends-toolbar"), periods = el("div", "trends-periods"), caption = el("p", "trends-caption");
+    const toolbar = el("div", "trends-toolbar"), periods = el("div", "trends-periods"), caption = el("span", "trends-caption");
     const status = el("p", "notice"), qualification = el("p", "trends-qualification"), restrictions = el("div", "trends-restrictions");
     status.setAttribute("role", "status"); status.hidden = true;
     for (const days of ["7", "14", "30"]) {
         const control = button(`Last ${days} days`, () => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters }));
         control.dataset.trendPeriod = days; periods.append(control);
     }
-    const custom = button("Custom dates", openDates); custom.dataset.trendPeriod = "custom"; periods.append(custom);
+    const custom = button("", openDates, "quiet trends-date-range"); custom.dataset.trendPeriod = "custom";
+    custom.setAttribute("aria-label", "Custom dates"); custom.append(ux.icon("calendar"), caption); periods.append(custom);
     const guide = button("Chart guide", openGuide), filtersButton = button("Filters", openFilters);
     guide.prepend(ux.icon("info")); filtersButton.prepend(ux.icon("filter"));
     const collapseAll = button("Collapse all", () => {
@@ -106,7 +101,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const chooser = select("Trend", Object.entries(families).map(([id, spec]) => [id, spec.label]), maximize);
     detailBar.append(back, chooser.label); detailBar.hidden = true;
     const overview = el("div", "trends-overview"), top = el("div", "trends-top"), side = el("div", "trends-side"), support = el("div", "trends-support");
-    top.append(side); overview.append(top, support);
+    const supportLeft = el("div", "trends-support-column"), supportRight = el("div", "trends-support-column");
+    support.append(supportLeft, supportRight); top.append(side); overview.append(top, support);
     const tooltip = el("aside", "trends-tooltip"); tooltip.id = "trendsTooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
     const paging = el("div", "trends-paging"), inspection = el("section", "trends-inspection");
     const inspectionHeader = el("div", "trends-inspection-heading"), selectedDate = el("h3"), selectedScope = el("span", "muted");
@@ -119,7 +115,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div"), dialogHeader = el("div", "trends-dialog-heading");
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
-    root.append(toolbar, caption, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
+    root.append(toolbar, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
     dialog.addEventListener("close", () => { scrub(dialogBody); dialogOrigin?.focus({ preventScroll: true }); dialogOrigin = null; });
 
     for (const id of ["authors", "rhythm", "tools", "services", "problems", "models", "timing"]) {
@@ -146,12 +142,14 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         plot.id = `trendsPlot-${id}`; plot.tabIndex = 0; plot.setAttribute("role", "region");
         plot.setAttribute("aria-label", `${spec.label} by day. Arrow keys move between dates and series.`);
         const unit = el("p", "trends-unit"), limits = el("p", "trends-limits");
-        summary.append(totals, composition, legend); body.append(summary, plot); content.append(modes, unit, body, limits); panel.append(heading, content);
-        (["authors", "rhythm"].includes(id) ? side : id === "tools" ? top : support).append(panel);
+        summary.append(totals, composition, legend); body.append(summary, plot);
+        if (id === "tools") heading.insertBefore(modes, sizing); else content.append(modes);
+        content.append(unit, body, limits); panel.append(heading, content);
+        (["authors", "rhythm"].includes(id) ? side : id === "tools" ? top : ["services", "models"].includes(id) ? supportLeft : supportRight).append(panel);
         const card = { id, panel, title, expand, collapse, content, modes, summary, totals, composition, legend, plot, unit, limits,
             mode: spec.modes[0][0], hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         cards.set(id, card);
-        card.chart = mountChart({ root: plot, tooltip, color, identity, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate,
+        card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate,
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
             onSelect(date, series) { card.selection = { date, id: series }; if (family !== id) maximize(id); else paintInspection(); } });
         const observer = new ResizeObserver(() => {
@@ -183,13 +181,17 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     }
     function notice(message) { status.textContent = message; status.hidden = !message; }
     function validate(value, request) {
+        const history = value?.coverage?.historySummary;
         if (value?.kind !== "retained-trends" || value.schemaVersion !== 1 || value.revision !== request.expectedRevision
             || value.from !== request.from || value.to !== request.to || JSON.stringify(value.filters) !== JSON.stringify(request.filters)
             || value.timeContext?.timeZone !== request.timeContext.timeZone || !Array.isArray(value.days)
             || value.days.length !== value.window?.count || value.days.length > 90 || !value.totals || !value.definitions
             || value.window.offset !== request.offset || value.days.some(day => !day.date || !Number.isSafeInteger(day.calls)
                 || !Number.isSafeInteger(day.interactions) || Object.keys(families).some(id => !Array.isArray(day.values?.[id])))
-            || !Array.isArray(value.members) || Object.keys(families).some(id => !Array.isArray(value.definitions[id]))) {
+            || !Array.isArray(value.members) || Object.keys(families).some(id => !Array.isArray(value.definitions[id]))
+            || history && (history.scope !== "saved-chats" || history.affectedDates !== "unknown"
+                || ["unreadableChats", "limitedChats", "pendingChats"].some(key => !Number.isSafeInteger(history[key]) || history[key] < 0)
+                || !history.reasons || Object.values(history.reasons).some(count => !Number.isSafeInteger(count) || count < 0))) {
             throw new Error("Trends returned an invalid or mismatched population. No values were inferred.");
         }
     }
@@ -215,15 +217,15 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             data = value; bound = token; range = next.range; period = next.period; filters = { ...next.filters }; offset = request.offset;
             // These are two encodings of server-qualified samples, not browser-side aggregation.
             const durationValues = values => ({ ...values, timing: [
-                { ...values.timing[0], label: "Median" }, { ...values.timing[0], id: "p95", label: "P95" },
+                { ...values.timing[0], label: "Median" }, { ...values.timing[0], id: "p95", label: "95th percentile" },
             ] });
-            timingData = { ...data, definitions: { ...data.definitions, timing: [{ id: "timing", label: "Median" }, { id: "p95", label: "P95" }] },
+            timingData = { ...data, definitions: { ...data.definitions, timing: [{ id: "timing", label: "Median" }, { id: "p95", label: "95th percentile" }] },
                 totals: { ...data.totals, values: durationValues(data.totals.values) },
                 days: data.days.map(day => ({ ...day, values: durationValues(day.values) })) };
             acceptedKey = requestedKey; lastRevision = context.revision; notice("");
             for (const [id, card] of cards) {
                 if (changedRange) card.selection = null;
-                for (const definition of data.definitions[id]) identity(definition.id, id);
+                for (const definition of data.definitions[id]) color(definition.id, id);
             }
             if (replacing) paintStable(family ? cards.get(family) : null);
             else paint();
@@ -301,18 +303,23 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         card.collapse.setAttribute("aria-expanded", String(!card.collapsed));
         card.collapse.replaceChildren(ux.icon(card.collapsed ? "chevron" : "chart-collapse"));
         for (const control of card.modes.children) control.setAttribute("aria-pressed", String(control.dataset.trendMode === mode));
-        const unit = id === "timing" ? "Qualified calls · milliseconds" : id === "rhythm" && mode === "share" ? "Calls within each calendar week"
-            : `${["authors", "models", "problems"].includes(id) || mode === "reach" ? "Interactions" : "Calls"}${["services", "models"].includes(id) || mode === "reach" ? " · overlapping" : ""}`;
+        const unit = id === "timing" || id === "tools" || id === "authors" || id === "rhythm" && mode === "count" ? ""
+            : id === "rhythm" ? "Share of calls within each week" : id === "problems" ? ""
+                : mode === "count" ? id === "models" ? "Interactions" : "Calls" : id === "models" ? "Share of interactions" : "Share of calls";
         card.unit.textContent = unit;
+        card.unit.hidden = !unit;
         scrub(card.totals);
         if (id === "tools") card.totals.append(metricStat(number(mode === "reach" ? totals.interactions : totals.calls), mode === "reach" ? "interactions" : "tool calls"));
         else if (id === "authors") card.totals.append(metricStat(number(totals.interactions), "interactions"));
         else if (id === "rhythm") card.totals.append(metricStat(number(totals.calls), "tool calls"));
-        else if (id === "problems" || id === "timing") card.totals.append(metricStat(valueText(totals.values[id][id === "timing" && mode === "p95" ? 1 : 0], card), id === "timing" ? mode === "p95" ? "P95" : "median" : "interactions"));
-        const key = JSON.stringify(source.definitions[id]);
+        else if (id === "problems") card.totals.append(metricStat(valueText(totals.values[id][0], card), "interactions with errors"));
+        const amount = definition => card.chart.metric(totals.values[id].find(value => value.id === definition.id), id, mode) ?? -1;
+        const definitions = id === "tools" || id === "services" || id === "models" ? [...source.definitions[id]].sort((a, b) =>
+            amount(b) - amount(a) || a.label.localeCompare(b.label)) : source.definitions[id];
+        const key = JSON.stringify(definitions);
         if (card.key !== key) {
             scrub(card.legend); card.key = key;
-            if (["tools", "authors", "services", "models", "timing"].includes(id)) for (const definition of source.definitions[id]) {
+            if (["tools", "authors", "services", "models", "timing"].includes(id)) for (const definition of definitions) {
                 const row = el("div", "trends-legend-row"), label = el("label", "trends-series"), check = el("input");
                 check.type = "checkbox"; check.dataset.series = definition.id; check.setAttribute("aria-label", `Show ${definition.label}`);
                 check.addEventListener("change", () => {
@@ -322,6 +329,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 label.append(check, sample(definition.id, id), el("span", "trends-series-label", definition.label));
                 const value = el("span", "trends-legend-value"), track = el("span", "trends-value-track"), fill = el("span", "trends-value-fill");
                 fill.style.background = color(definition.id, id); track.append(fill); row.append(label, value, track);
+                row.addEventListener("pointerenter", () => card.chart.emphasize(definition.id));
+                row.addEventListener("pointerleave", () => card.chart.emphasize(null));
+                check.addEventListener("focus", () => card.chart.emphasize(definition.id));
+                check.addEventListener("blur", () => card.chart.emphasize(null));
                 card.legend.append(row);
             }
         }
@@ -335,13 +346,14 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         }
         scrub(card.composition);
         if (id === "authors") {
-            const ring = svgNode("svg", { viewBox: "0 0 220 124", "aria-hidden": "true" });
-            ring.append(svgNode("path", { d: "M20 110a90 90 0 0 1 180 0", fill: "none", stroke: "var(--canvas)", "stroke-width": 22 }));
+            const ring = svgNode("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" });
+            const arc = { cx: 60, cy: 60, r: 49, fill: "none", "stroke-width": 14, pathLength: 100, transform: "rotate(-90 60 60)" };
+            ring.append(svgNode("circle", { ...arc, stroke: "var(--canvas)" }));
             let start = 0;
             for (const value of totals.values.authors) {
-                const length = (value.percent ?? 0) * Math.PI * .9;
-                if (!hidden.has(value.id) && length) ring.append(svgNode("path", { d: "M20 110a90 90 0 0 1 180 0", fill: "none",
-                    stroke: color(value.id, id), "stroke-width": 22, "stroke-dasharray": `${length} ${Math.PI * 90}`,
+                const length = value.percent ?? 0;
+                if (!hidden.has(value.id) && length) ring.append(svgNode("circle", { ...arc,
+                    stroke: color(value.id, id), "stroke-dasharray": `${length} ${100 - length}`,
                     "stroke-dashoffset": -start }));
                 start += length;
             }
@@ -353,10 +365,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             if (totals.preparationCalls) limits.push(`${number(totals.preparationCalls)} preparation calls`);
         } else if (id === "models") {
             if (totals.missingModels) limits.push(`Model not recorded: ${rate(totals.modelMissingShare)} (${number(totals.missingModels)})`);
-            for (const status of ["partial", "unverified", "conflicting"])
-                if (totals.modelCoverage[status]) limits.push(`${number(totals.modelCoverage[status])} ${status} model records`);
+            for (const [status, description] of [["partial", "Partly recorded model names"], ["unverified", "Unverified model names"], ["conflicting", "Conflicting model names"]])
+                if (totals.modelCoverage[status]) limits.push(`${description}: ${number(totals.modelCoverage[status])} interactions`);
         } else if (id === "timing") limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
-        else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`${number(totals.values.problems[0].unknownCalls)} calls with unknown outcomes`);
+        else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         card.plot.hidden = id === "authors" && family !== id;
         if (!panel.hidden && !card.collapsed && !card.plot.hidden) {
@@ -428,6 +440,28 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         }
         exact.append(table);
     }
+    function historyNotice() {
+        if (data.coverage.history !== "partial") return "";
+        const history = data.coverage.historySummary;
+        if (!history) return "Saved-chat coverage is unconfirmed; the affected dates are not known.";
+        const reasons = Object.entries(history.reasons).filter(([, count]) => count > 0);
+        const phrases = {
+            missing: count => `${number(count)} saved chat ${count === 1 ? "file could" : "files could"} not be found`,
+            permission: count => `Access was denied to ${number(count)} saved chat ${count === 1 ? "file" : "files"}`,
+            read: count => `${number(count)} saved chat ${count === 1 ? "file could" : "files could"} not be read`,
+            unsupported: count => `${number(count)} saved chat ${count === 1 ? "file could" : "files could"} not be verified`,
+            unknown: count => `${number(count)} saved chat ${count === 1 ? "file could" : "files could"} not be read`,
+            truncated: count => `${number(count)} saved ${count === 1 ? "chat was" : "chats were"} only partly read`,
+            malformed: count => `${number(count)} saved ${count === 1 ? "chat has" : "chats have"} unreadable entries`,
+            oversized: count => `${number(count)} saved ${count === 1 ? "chat has" : "chats have"} entries too large to retain`,
+            context: count => `${number(count)} saved ${count === 1 ? "chat has" : "chats have"} missing links between prompts and calls`,
+        };
+        const parts = [];
+        if (reasons.length === 1 && phrases[reasons[0][0]]) parts.push(phrases[reasons[0][0]](reasons[0][1]));
+        else if (history.unreadableChats || history.limitedChats) parts.push("Some saved chats could not be fully read");
+        if (history.pendingChats) parts.push(`${number(history.pendingChats)} ${history.pendingChats === 1 ? "chat still has" : "chats still have"} history to import`);
+        return `${parts.join("; ")}; the affected dates are not known.`;
+    }
     function paint() {
         if (!current()) return;
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
@@ -438,16 +472,17 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         collapseAll.textContent = allCollapsed ? "Restore all" : "Collapse all";
         if (family) chooser.field.value = family;
         for (const node of periods.children) node.setAttribute("aria-pressed", String(node.dataset.trendPeriod === period));
-        caption.textContent = `${time.formatDate(range.from, data.timeContext, true)} – ${axisDate(range.to) === "Today" ? "Today" : time.formatDate(range.to, data.timeContext, true)}`;
+        const end = axisDate(range.to) === "Today" ? "Today so far" : time.formatDate(range.to, data.timeContext, true);
+        caption.textContent = range.from === range.to ? end : `${time.formatDate(range.from, data.timeContext, true)} – ${end}`;
+        custom.setAttribute("aria-label", `Custom dates: ${caption.textContent}`);
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · "); restrictions.hidden = !Object.keys(filters).length;
         const limits = [];
-        if (data.coverage.history === "partial") limits.push("Incomplete history");
-        if (data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} undated calls excluded`);
-        if (data.days.some(day => !day.complete && day.calls)) limits.push("Current day incomplete");
+        const history = historyNotice(); if (history) limits.push(history);
+        if (data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} calls have no start date and are left out.`);
         if (!data.totals.calls) limits.push("No matching calls in this period. Change the dates or clear filters.");
-        qualification.textContent = limits.join(" · "); qualification.hidden = !limits.length;
+        qualification.textContent = limits.join(" "); qualification.hidden = !limits.length;
         for (const card of cards.values()) paintCard(card);
         paging.replaceChildren(); paging.hidden = data.window.totalDays <= 90;
         if (!paging.hidden) {
@@ -460,7 +495,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     }
     function withdrawAccess() {
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
-        range = null; filters = {}; family = null; offset = 0; period = "7"; identities.clear(); allCollapsed = null; inspecting = null;
+        range = null; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
+        const rangeLabel = custom.getAttributeNode("aria-label");
+        if (rangeLabel) { rangeLabel.value = ""; custom.removeAttributeNode(rangeLabel); }
+        custom.setAttribute("aria-label", "Custom dates");
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
             card.mode = families[card.id].modes[0][0];
@@ -491,79 +529,82 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
 }
 
 export const trendsStyles = `
-:root{--trends-mail:#91460e;--trends-calendar:#215bd1;--trends-teams:#6842ba;--trends-series-1:#b94d0c;--trends-series-2:#365f7a;--trends-series-3:#8949b2;--trends-series-4:#00766d}
-:root[data-evidence-theme=dark]{--trends-mail:#e98d4a;--trends-calendar:#5792fa;--trends-teams:#ad88f0;--trends-series-1:#f6975e;--trends-series-2:#95b9d2;--trends-series-3:#c494e7;--trends-series-4:#5bc5b9}
+:root{--trends-series-1:#315fad;--trends-series-2:#007a78;--trends-series-3:#7957a0;--trends-series-4:#967000;--trends-series-5:#b14767;--trends-series-6:#467435;--trends-series-7:#006b97;--trends-series-8:#4d56ab;--trends-series-9:#ab6029;--trends-series-10:#8e3f91;--trends-series-11:#b04435;--trends-series-12:#526c80}
+:root[data-evidence-theme=dark]{--trends-series-1:#8fb6f2;--trends-series-2:#65c8c0;--trends-series-3:#b99add;--trends-series-4:#d9b866;--trends-series-5:#ed8aa3;--trends-series-6:#9ac58c;--trends-series-7:#63bee4;--trends-series-8:#9da4ec;--trends-series-9:#e5a377;--trends-series-10:#d899d9;--trends-series-11:#e8998b;--trends-series-12:#9eb8ce}
 #trendsView{min-width:0;container-type:inline-size}
 .trends-toolbar,.trends-periods,.trends-detail-bar,.trends-heading,.trends-inspection-heading,.trends-dialog-heading,.trends-dialog-actions,.trends-restrictions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.trends-toolbar{margin-bottom:8px;gap:8px}.trends-periods{gap:4px;margin-right:auto}
+.trends-toolbar{margin-bottom:16px;gap:8px}.trends-periods{gap:4px;margin-right:auto}
 .trends-toolbar>button,.trends-detail-bar>button{display:inline-flex;align-items:center;gap:8px}
 .trends-periods button[aria-pressed=true],.trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
-.trends-caption{color:var(--muted);margin:8px 0 20px}.trends-restrictions{margin-bottom:12px}
+.trends-date-range{display:inline-flex;align-items:center;gap:8px;max-width:100%;white-space:normal}.trends-date-range>.wire-icon{width:16px;height:16px;flex:none}
+.trends-caption{color:inherit;margin:0}.trends-restrictions{margin-bottom:12px}
 .trends-detail-bar{justify-content:space-between;margin-bottom:16px}
 .trends-control{display:flex;align-items:center;gap:8px;max-width:100%;min-width:0;flex-wrap:wrap}.trends-control select{min-width:0;max-width:100%;width:13rem}
 .trends-control .select-control{min-width:0;max-width:100%}
-.trends-overview,.trends-side{display:grid;gap:20px;min-width:0}
-.trends-top{display:grid;grid-template-columns:minmax(15rem,1fr) minmax(0,3fr);gap:20px;align-items:stretch;min-width:0}
-.trends-support{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;align-items:start;min-width:0}
-.trends-panel{background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:20px;min-width:0;container-type:inline-size}
+.trends-overview,.trends-side,.trends-support-column{display:grid;gap:16px;min-width:0;align-content:start}
+.trends-top{display:grid;grid-template-columns:minmax(20rem,24rem) minmax(0,1fr);gap:16px;align-items:start;min-width:0}
+.trends-support{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;min-width:0}
+.trends-panel{background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:16px 20px;min-width:0;container-type:inline-size}
 .trends-heading{justify-content:space-between;gap:4px 12px;flex-wrap:nowrap}
 .trends-heading h2{flex:1;min-width:0;font-size:var(--type-section);font-weight:500;margin:0}
 .trends-sizing{display:flex;flex:none;gap:0}
 .trends-sizing>button{width:44px;height:44px;min-width:44px;padding:0}
 .trends-sizing>button svg{width:18px;height:18px}.trends-sizing>button:first-child svg{transform:translateX(8px)}.trends-sizing>button:last-child svg{transform:translateX(-8px)}
-.trends-modes{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:2px;margin:6px 0 8px;min-height:44px}
+.trends-modes{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:2px;margin:0;min-height:44px}
 .trends-modes>button{font-size:var(--type-small);white-space:normal}
 .trends-panel:not([data-family=tools]):not([data-maximized=true]) .trends-modes{display:none}
-.trends-unit{color:var(--muted);font-size:var(--type-small);margin:8px 0 12px}
+.trends-unit{color:var(--muted);font-size:var(--type-small);margin:4px 0 12px}
 .trends-chart-body{min-width:0}.trends-summary{min-width:0}
-.trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 18px}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 16px}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .trends-stat-value{font-size:1.75rem;line-height:1.2;font-variant-numeric:tabular-nums}
-.trends-panel[data-family=tools] .trends-chart-body{display:grid;grid-template-columns:minmax(9rem,11rem) minmax(0,1fr);gap:24px}
-.trends-top>.trends-panel[data-family=tools]{display:flex;flex-direction:column}
-.trends-panel[data-family=tools] .trends-content{display:flex;flex-direction:column;flex:1}
-.trends-panel[data-family=tools] .trends-chart-body{flex:1}
-.trends-panel[data-family=tools] .trends-totals .trends-stat{display:grid;gap:6px}
-.trends-panel[data-family=tools] .trends-stat-value{font-size:2.5rem}
-.trends-panel[data-family=tools][data-many-series=true] .trends-summary{max-height:30rem;overflow:auto;scrollbar-gutter:stable}
-.trends-panel[data-family=tools] .trends-plot{--trends-plot-height:30rem;min-height:var(--trends-plot-height);height:auto}
+.trends-panel[data-family=tools] .trends-heading{display:grid;grid-template-columns:minmax(0,1fr) auto}
+.trends-panel[data-family=tools] .trends-heading>.trends-sizing{grid-column:2;grid-row:1}
+.trends-panel[data-family=tools] .trends-heading>.trends-modes{grid-column:1/-1;grid-row:2}
+.trends-panel[data-family=tools] .trends-chart-body{display:grid;grid-template-columns:minmax(15rem,18rem) minmax(0,1fr);gap:24px;margin-top:12px}
+.trends-panel[data-family=tools] .trends-stat-value{font-size:2rem}
+.trends-panel[data-family=tools] .trends-summary{max-height:24rem;overflow:auto;scrollbar-gutter:stable}
+.trends-panel[data-family=tools] .trends-plot{--trends-plot-height:24rem}
 .trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height,15rem);overflow:auto;overflow-anchor:none;overscroll-behavior-x:contain}
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
 .trends-grid{stroke:var(--surface-divider);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
-.trends-legend{display:grid;gap:8px;min-width:0;margin:8px 0 12px}
+.trends-legend{display:grid;gap:0;min-width:0;margin:0}
 .trends-legend-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;min-width:0}
 .trends-series{display:flex;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;cursor:pointer}
 .trends-series input{accent-color:var(--toggle-on);flex:none}.trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
-.trends-sample{display:inline-block;width:36px;height:16px;flex:none}
-.trends-legend-value{font-size:1.125rem;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.trends-value-track{display:block;height:6px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
+.trends-sample{display:inline-block;width:20px;height:12px;flex:none}
+.trends-legend-value{font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.trends-value-track{display:block;height:4px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
 .trends-legend-row>.trends-value-track{grid-column:1/-1}
 .trends-legend-row[data-hidden=true]>.trends-value-track{visibility:hidden}
-.trends-panel[data-family=tools] .trends-legend-row{grid-template-columns:minmax(0,1fr);border-top:1px solid var(--surface-divider);padding:2px 0 8px;gap:4px}
-.trends-panel[data-family=tools] .trends-legend-value{text-align:left;font-size:1.5rem}
+.trends-panel[data-family=tools] .trends-legend-row{grid-template-columns:minmax(0,1fr) auto;padding-bottom:8px}
+.trends-panel[data-family=tools] .trends-legend-value{white-space:nowrap}
 .trends-panel[data-family=authors] .trends-series{gap:8px}.trends-panel[data-family=authors] .trends-sample{width:20px}
 .trends-panel[data-family=authors] .trends-legend-row>.trends-value-track{display:none}
 .trends-panel[data-family=authors]:not([data-maximized=true]) .trends-unit,.trends-panel[data-family=rhythm]:not([data-maximized=true]) .trends-unit{display:none}
-.trends-panel[data-family=authors] .trends-summary{position:relative}
-.trends-panel[data-family=authors] .trends-totals{position:absolute;top:3.5rem;left:0;right:0;justify-content:center;margin:0}
+.trends-panel[data-family=authors] .trends-summary{position:relative;display:grid;grid-template-columns:7rem minmax(0,1fr);gap:12px;align-items:center;margin-top:4px}
+.trends-panel[data-family=authors] .trends-composition{grid-column:1;grid-row:1}
+.trends-panel[data-family=authors] .trends-legend{grid-column:2;grid-row:1}
+.trends-panel[data-family=authors] .trends-totals{position:absolute;top:50%;transform:translateY(-50%);left:0;width:7rem;justify-content:center;margin:0}
 .trends-panel[data-family=authors] .trends-stat{display:grid;text-align:center;gap:2px}
-.trends-composition>svg{display:block;width:100%;height:9rem;margin:14px 0}
+.trends-panel[data-family=authors] .trends-stat>.muted{font-size:var(--type-caption)}
+.trends-composition>svg{display:block;width:7rem;height:7rem;margin:0}
 .trends-panel[data-family=services] .trends-series-label{white-space:nowrap;overflow-wrap:normal}
 .trends-panel[data-family=services] .trends-legend-row{grid-template-columns:minmax(max-content,1fr) auto}
 .trends-panel[data-family=services] .trends-legend-value{white-space:nowrap;overflow-wrap:normal}
-.trends-panel[data-family=services] .trends-plot{--trends-plot-height:11rem}
-.trends-panel[data-family=rhythm] .trends-plot{--trends-plot-height:11rem}
-.trends-panel[data-family=models] .trends-legend{max-height:12rem;overflow:auto}
+.trends-panel[data-family=services] .trends-plot{--trends-plot-height:14rem}
+.trends-panel[data-family=rhythm] .trends-plot{--trends-plot-height:10rem}
+.trends-panel[data-family=models] .trends-legend{max-height:16rem;overflow:auto}
 .trends-panel[data-family=models] .trends-legend-row>.trends-value-track{display:none}
 .trends-panel[data-family=timing] .trends-legend-row>.trends-value-track{display:none}
 .trends-limits,.trends-qualification{font-size:var(--type-small);color:var(--muted);margin:12px 0 0}
 .trends-qualification{margin:0 0 16px}.trends-limits:empty{display:none}
 .trends-maximized .trends-top,.trends-maximized .trends-side,.trends-maximized .trends-support{display:block}
+.trends-maximized .trends-support-column{display:contents}
 .trends-panel[data-maximized=true] .trends-plot{--trends-plot-height:clamp(20rem,48vh,32rem)}
 .trends-panel[data-maximized=true]:not([data-family=tools]) .trends-chart-body{display:grid;grid-template-columns:minmax(13rem,18rem) minmax(0,1fr);gap:24px}
 .trends-panel[data-maximized=true] .trends-summary{max-height:32rem;overflow:auto;scrollbar-gutter:stable}
-.trends-panel[data-maximized=true][data-family=authors] .trends-totals{top:3.5rem}
 .trends-inspection{margin-top:20px;padding:20px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .trends-inspection-heading{margin-bottom:12px}.trends-inspection-heading h3{margin:0;font-size:1.0625rem;font-weight:500}
 .trends-inspection-heading>button:first-of-type{margin-left:auto}.trends-inspection-heading .muted{min-width:0;max-width:100%;overflow-wrap:anywhere}
@@ -585,9 +626,11 @@ export const trendsStyles = `
 .trends-tip-series{display:flex;align-items:center;gap:6px}
 .trends-tip-caption{color:var(--muted);margin-top:4px}.trends-tip-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 20px;margin:10px 0 0}.trends-tip-facts dt{color:var(--muted);overflow-wrap:anywhere}.trends-tip-facts dd{margin:0;text-align:right}
 .trends-tip-table{border-collapse:collapse}.trends-tip-table th,.trends-tip-table td{font-weight:400;text-align:right;padding:5px 8px}.trends-tip-table th:first-child,.trends-tip-table td:first-child{text-align:left;padding-left:0}
+@container(min-width:44rem){.trends-panel[data-family=tools] .trends-heading{grid-template-columns:minmax(0,1fr) auto auto}.trends-panel[data-family=tools] .trends-heading>.trends-modes{grid-column:2;grid-row:1}.trends-panel[data-family=tools] .trends-heading>.trends-sizing{grid-column:3}.trends-panel:is([data-family=services],[data-family=models],[data-family=timing],[data-family=problems]) .trends-chart-body{display:grid;grid-template-columns:minmax(12rem,18rem) minmax(0,1fr);gap:24px}.trends-panel:is([data-family=services],[data-family=models]) .trends-summary{max-height:20rem;overflow:auto;scrollbar-gutter:stable}.trends-panel:is([data-family=services],[data-family=models]) .trends-plot{--trends-plot-height:20rem}}
 @container(max-width:850px){.trends-top{grid-template-columns:minmax(0,1fr)}.trends-side{grid-template-columns:repeat(2,minmax(0,1fr))}.trends-top>.trends-panel[data-family=tools]{grid-row:1}.trends-support{grid-template-columns:minmax(0,1fr)}}
 @container(max-width:550px){.trends-panel[data-family=tools] .trends-chart-body,.trends-panel[data-maximized=true]:not([data-family=tools]) .trends-chart-body{display:flex;flex-direction:column}.trends-panel[data-family=tools] .trends-summary{display:contents}.trends-panel[data-family=tools] .trends-legend{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;order:2}.trends-panel[data-family=tools][data-many-series=true] .trends-legend{max-height:20rem;overflow:auto}.trends-panel[data-family=tools] .trends-composition{display:none}.trends-panel[data-family=tools] .trends-stat{display:flex}.trends-side{grid-template-columns:minmax(0,1fr)}.trends-panel[data-family=tools] .trends-plot{--trends-plot-height:20rem;order:1}}
-@container(max-width:28rem){.trends-panel[data-family=services] .trends-legend-row{grid-template-columns:minmax(0,1fr)}.trends-panel[data-family=services] .trends-legend-value{text-align:left}}
+@container(max-width:28rem){.trends-panel[data-family=services] .trends-legend-row{grid-template-columns:minmax(0,1fr)}.trends-panel[data-family=services] .trends-legend-value{text-align:left}.trends-panel[data-family=tools] .trends-legend{grid-template-columns:minmax(0,1fr)}}
+@container(max-width:18rem){.trends-panel[data-family=authors] .trends-summary{grid-template-columns:minmax(0,1fr);justify-items:center}.trends-panel[data-family=authors] .trends-legend{grid-row:2;grid-column:1;width:100%}.trends-panel[data-family=authors] .trends-totals{top:3.5rem;left:calc(50% - 3.5rem)}}
 @container(max-width:330px){.trends-panel[data-family=tools] .trends-legend{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}.trends-toolbar{gap:4px}.trends-sizing{margin-right:-8px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}

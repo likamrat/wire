@@ -114,3 +114,21 @@ test("model provenance, missing names and overlapping models reuse the existing 
     assert.equal(result.totals.missingModels, 5);
     assert.doesNotMatch(JSON.stringify(result.definitions.models), /not-an-original-model|current-default|conflicting-model/);
 });
+
+test("saved-chat coverage stays source-wide and does not invent affected dates or leak diagnostics", () => {
+    const completeRows = run();
+    assert.equal(completeRows.coverage.historySummary, null);
+    const roster = [{ sessionId: "outside-selected-population", eligible: true, error: "PRIVATE_ERROR", errorCode: "ENOENT",
+        lastAttemptAt: "2025-01-01T00:00:00Z" }];
+    const result = run(data(), {}, { importCoverage: { roster } });
+    assert.deepEqual(result.totals, completeRows.totals);
+    assert.deepEqual(result.days, completeRows.days);
+    assert.deepEqual(result.coverage.historySummary, { scope: "saved-chats", affectedDates: "unknown",
+        unreadableChats: 1, limitedChats: 0, pendingChats: 0, reasons: { missing: 1 } });
+    const filtered = run(data(), { filters: { author: "agent" } }, { importCoverage: { roster } });
+    assert.deepEqual(filtered.coverage.historySummary, result.coverage.historySummary);
+    const pending = run(data(), {}, { importCoverage: { roster: [{ sessionId: "unread", eligible: true }] } });
+    assert.equal(pending.coverage.historySummary.pendingChats, 1);
+    assert.equal(pending.coverage.historySummary.unreadableChats, 0);
+    assert.doesNotMatch(JSON.stringify(result.coverage), /PRIVATE_ERROR|outside-selected-population/);
+});

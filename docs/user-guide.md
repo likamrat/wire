@@ -73,7 +73,8 @@ when there are no calls today.
 
 ### Choose the period and activity
 
-Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
+Use **Last 7 days**, **Last 14 days** or **Last 30 days**. Select the displayed
+date range beside them to choose custom dates.
 Every date is labeled, including all 30 days: past dates show month and day,
 and the current day says **Today**. Scroll inside a chart to read earlier dates;
 new ranges open at the latest dates. Custom ranges over 90 days page through
@@ -93,19 +94,22 @@ measures and exact values.
 
 | Chart | Measure |
 | --- | --- |
-| Tool usage | **Interaction reach** is the share of matching interactions that used a tool at least once. **Call share** is the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
+| Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
 | Prompt authors | Matching originating interactions, split into My prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
 | Activity rhythm | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
-| Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and P95 (95th percentile). The coverage note identifies how many matching calls have qualified timing. |
+| Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and 95th percentile. The coverage note identifies how many matching calls have qualified timing. |
 
 Prompt authors counts interactions with activity that day, not every message
 sent in Copilot. One interaction can appear on several days but counts once in
-the whole period. Call duration shows Median and P95 together; hiding either
+the whole period. Call duration shows Median and 95th percentile together; hiding either
 series leaves the timing sample and coverage unchanged. Missing or partial
 history, undated calls and unavailable measurements remain distinct from zero.
+If saved-chat history could not be fully read, the notice explains the read or
+import problem. Its affected dates may be unknown; it is not proof of a gap in
+the period you selected.
 
 ### Inspect a change
 
@@ -113,6 +117,7 @@ To investigate a rise in errors or a change in service use, maximize that chart,
 then hover or focus a dated mark for its values. Arrow keys move between dates
 and series. Select the mark and choose **View evidence** to see the calls for
 that exact date and series. Other series' calls are not added to this list.
+Hover a legend entry to emphasize its line without filtering the activity.
 
 Open a call to read its result and full parent interaction. That parent context
 can contain calls outside the chart selection. Closing the reader returns to

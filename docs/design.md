@@ -139,15 +139,21 @@ Do not apply current branding globally to historical report snapshots.
 The [Chart guide behavior](interaction-design.md#chart-guide) connects each
 visualization to its definitions and exact values.
 
-Trends uses the same chart owner in overview and maximized reading. Every daily
-date is labeled with month and day, except Today; hover supplies the exact date.
+Trends uses the available workspace width, like Analyze, with bounded summary
+columns rather than a fixed-width page. Keep the chosen range inside its date
+control beside the presets. Compact period rows and ordinary solid lines lead
+the reading; do not make people decode dashes, shapes or hatched bars.
+Series keep stable colors and named legends through filters and visibility
+changes. Author and service colors use the existing WIRE roles. Hover or focus
+can emphasize one series without changing its values or the other series.
+
+The same chart owner serves overview and maximized reading. Every daily date
+is labeled with month and day, except Today; hover supplies the exact date.
 Measure label widths at the screen's 14px axis role and scroll locally instead
-of thinning dates, shrinking text or scaling an old SVG. Series use stable color,
-line patterns and markers with matching legend and hover samples; hiding or
-filtering a series must not change another series' identity. Author and service
-colors retain their existing meaning. Author legends use aligned full-width
-rows. Keep "Search and retrieval" on one line; move its value/bar below when
-needed. Sizing glyphs are optically grouped inside distinct 44px targets.
+of thinning dates, shrinking text or scaling an old SVG. Isolated observations
+may use a small dot; never connect across an unknown day. Author rows remain
+aligned. Keep "Search and retrieval" whole, moving its value/bar below when
+needed. Sizing glyphs remain inside distinct 44px targets.
 
 Count/share widget rows show the percentage first, then the count in parentheses.
 Use the complete qualifying population, never the visible rows or largest bar.
