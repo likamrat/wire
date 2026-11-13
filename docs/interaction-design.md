@@ -13,7 +13,7 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 | [Interaction reader](#interaction-cards-and-reading) | Cards, call results, disclosures, Copy and selection |
 | [Search](#search) | Typed results, excerpts and exact Open |
 | [Reports](#reports) | Choices, prepared copies, saving and saved reading |
-| [Compare periods](#compare-periods) | Accepted ranges, refinements and chart actions |
+| [Compare](#compare) | Accepted ranges, refinements and chart actions |
 | [Settings](#settings-collection-and-consequential-actions) | Setting search, account presentation and consequential actions |
 
 ## Navigation and return
@@ -324,7 +324,7 @@ name replaces the landing with full-area reading. Reports-origin reading has one
 Back to Reports action; context-qualified entries retain their own origin.
 
 The landing has five compact, equal-sized full-width tile rows: All activity,
-Errors & failures, Completed calls, My prompts and Agent prompts. Compare periods
+Errors & failures, Completed calls, My prompts and Agent prompts. Compare
 has its own primary destination. The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar
 directly. A fresh report ignores old Analyze restrictions.
@@ -438,7 +438,9 @@ The [reporting guide](reporting.md) explains the user workflow; for
 membership, frozen facts and privacy, use the [report contract](report-contract.md).
 Screen paint changes do not restyle saved documents.
 
-## Compare periods
+<a id="compare-periods"></a>
+
+## Compare
 
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with

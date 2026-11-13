@@ -27,36 +27,9 @@ that evidence to test the behaviors people rely on and improve their agents.
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
 
-## How WIRE fits
+<a id="start"></a>
 
-WIRE reads recorded Work IQ activity from the **GitHub Copilot app** without
-rerunning its calls, then keeps local evidence for inspection and reports.
-
-<a href="docs/images/wire-evidence-flow.png">
-  <picture>
-    <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
-    <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-dark.png">
-    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved app history into its own local evidence store for Analyze, literal Search and locally saved reports." width="800">
-  </picture>
-</a>
-
-See [Architecture](docs/architecture.md) for the local runtime and storage boundaries.
-
-## Trends
-
-See which Work IQ tools appear in your recorded activity and how their use
-varies by day. **Trends** gives each daily chart the full workspace width:
-tool usage, prompt authors, tool calls, services, errors, response models
-and call duration. Every widget has its own measure controls.
-
-[![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
-
-Choose 7, 14, 30 or custom days and select a dated point in place. Maximize its
-chart to open the supporting calls. The [Trends guide](docs/user-guide.md#trends)
-explains reach versus call share, overlapping services and evidence gaps.
-
-## Start
+## Getting started
 
 ### Platforms
 
@@ -71,7 +44,27 @@ Collection also needs accessible, supported GitHub Copilot app history.
 See [platform setup](docs/development.md#windows-wsl-and-linux) for source
 requirements and running separate instances.
 
-### Install and run
+### Coding agent
+
+Copy this prompt into your coding agent:
+
+```text
+Set up and run WIRE locally from the main branch of
+https://github.com/likamrat/wire.
+
+Follow README.md and docs/development.md for this machine. Check for
+Node.js 24+ and a running WIRE instance before installing or starting
+anything. Preserve existing work and data.
+
+Use npm ci and npm start for a new installation. Open the printed local
+URL and verify that WIRE loads. Leave it running and tell me how to
+reopen it. Ask me when setup choices need my input. Leave source
+approval and reply-saving consent to me in WIRE.
+```
+
+<a id="install-and-run"></a>
+
+### Manual setup
 
 ```sh
 git clone https://github.com/likamrat/wire.git
@@ -99,6 +92,35 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 - Saving Copilot replies needs separate approval. Review report copies before
   sharing; local masking can miss confidential information.
 
+## How WIRE fits
+
+WIRE reads recorded Work IQ activity from the **GitHub Copilot app** without
+rerunning its calls, then keeps local evidence for inspection and reports.
+
+<a href="docs/images/wire-evidence-flow.png">
+  <picture>
+    <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
+    <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-dark.png">
+    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+  </picture>
+</a>
+
+See [Architecture](docs/architecture.md) for the local runtime and storage boundaries.
+
+## Trends
+
+See which Work IQ tools appear in your recorded activity and how their use
+varies by day. **Trends** gives each daily chart the full workspace width:
+tool usage, prompt authors, tool calls, services, errors, response models
+and call duration. Every widget has its own measure controls.
+
+[![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+
+Choose 7, 14, 30 or custom days and select a dated point in place. Maximize its
+chart to open the supporting calls. The [Trends guide](docs/user-guide.md#trends)
+explains reach versus call share, overlapping services and evidence gaps.
+
 ## Reports
 
 Reports give you a shareable view of working patterns, backed by recorded
@@ -113,14 +135,16 @@ purpose and what the saved copy includes.
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
-## Comparisons
+<a id="comparisons"></a>
 
-Comparisons show how Work IQ activity, call outcomes and timing differ
+## Compare
+
+Compare shows how Work IQ activity, call outcomes and timing differ
 [between periods or saved reports](docs/reporting.md#compare).
 That evidence helps you assess changes
 to your agents and investigate possible regressions.
 
-[![Compare periods with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Guides
 

@@ -5,6 +5,23 @@ Capture each SVG at 2x its viewBox dimensions after document.fonts.ready.
 Use #light or #dark, display only .wide or .narrow, and release clipping on
 ancestors. Capture the SVG only: wide 1600x912, narrow 704x1568 pixels.
 Keep mirrored branch paths, clear boundary labels, and the embedded font license.
+WIRE lockup: assets/wire-lockup.svg and assets/wire-lockup-dark.svg.
+
+Navigation icons: lucide-static v1.52.0, as mapped in web/ux-icons.mjs.
+ISC License
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 -->
 <html lang="en">
 <head>
@@ -124,6 +141,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       --surface: #f4f5f8;
       --accent: #365f7a;
       --accent-tint: #f1f3f7;
+      --brand-low: #8f2966;
+      --brand-high: #c6398d;
+      --brand-ink: #141519;
       font-family: "Asta Sans","Segoe UI",sans-serif;
     }
     :root:has(#dark:target) {
@@ -136,6 +156,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       --surface: #192330;
       --accent: #95b9d2;
       --accent-tint: #14212f;
+      --brand-low: #c6398d;
+      --brand-high: #d97cb4;
+      --brand-ink: #f2f4f8;
     }
     body { margin: 0; padding: 32px 24px; background: var(--paper); color: var(--ink); }
     main { width: 800px; max-width: 100%; margin: 0 auto; min-width: 0; container-type: inline-size; }
@@ -185,15 +208,34 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="diagram-container" tabindex="0" aria-label="Evidence-flow diagram; scroll horizontally on a narrow screen">
         <svg class="wide" viewBox="0 0 800 456" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="wire-evidence-flow-title wire-evidence-flow-desc">
           <title id="wire-evidence-flow-title">From recorded activity to useful evidence</title>
-          <desc id="wire-evidence-flow-desc">The GitHub Copilot app calls Work IQ and records the results; WIRE reads approved app history into its own local evidence store for analysis, literal Search and locally saved reports.</desc>
+          <desc id="wire-evidence-flow-desc">The GitHub Copilot app calls Work IQ remotely and records the results; WIRE collects approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports.</desc>
           <defs>
             <marker id="wire-flow-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--line)"/></marker>
             <marker id="wire-flow-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--accent)"/></marker>
             <marker id="wire-flow-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--line)"/></marker>
+            <symbol id="wire-flow-analyze" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+            </symbol>
+            <symbol id="wire-flow-trends" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 16v5"/><path d="M16 14.639V21"/><path d="M20 10.656V21"/><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/><path d="M4 18.463V21"/><path d="M8 14.656V21"/>
+            </symbol>
+            <symbol id="wire-flow-reports" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>
+            </symbol>
+            <linearGradient id="wire-flow-brand-upper" gradientUnits="userSpaceOnUse" x1="2301.16955" y1="-361.5106" x2="-104.23405" y2="16.375025"><stop stop-color="var(--brand-low)"/><stop offset="1" stop-color="var(--brand-high)"/></linearGradient>
+            <linearGradient id="wire-flow-brand-lower" gradientUnits="userSpaceOnUse" x1="47.52265" y1="-106.886225" x2="-2859.970475" y2="6432.5408"><stop stop-color="var(--brand-low)"/><stop offset="1" stop-color="var(--brand-high)"/></linearGradient>
+            <clipPath id="wire-flow-brand-boundary"><path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" clip-rule="evenodd"/></clipPath>
+            <symbol id="wire-flow-brand" viewBox="0 0 402 82">
+              <g transform="translate(0 0.61654135) scale(0.61654135)">
+                <path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" fill="url(#wire-flow-brand-upper)" fill-rule="evenodd"/>
+                <path d="M109 24 C115 37 128 44 133 60 V131 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 Z" fill="url(#wire-flow-brand-lower)" clip-path="url(#wire-flow-brand-boundary)" fill-rule="evenodd"/>
+              </g>
+              <path transform="translate(110 1.7761194) scale(1.08955224)" d="M1.1 1 H20.1 Q21.3 1 21.7 2.4 L32.8 41.6 L44.6 4 Q45.5 1 48 1 H59.4 Q61.9 1 62.8 3.8 L74.5 41.6 L85.6 2.4 Q86 1 87.6 1 H106.7 Q107.6 1 107.3 2 L85.5 69.6 Q85 71 83.5 71 H67 Q65.6 71 65.1 69.4 L53.6 33.3 L42 69.4 Q41.5 71 40 71 H23.5 Q22 71 21.5 69.5 L0.3 2.2 Q0 1 1.1 1 Z M114.2 0.6 H131.8 Q133 0.6 133 1.8 V70.2 Q133 71.4 131.8 71.4 H114.2 Q113 71.4 113 70.2 V1.8 Q113 0.6 114.2 0.6 Z M145 0.5 H177.5 C194.7 0.5 205 8.5 205 23.2 C205 34.5 199.7 41.8 190 45.3 L207 70.1 Q207.8 71.5 205.8 71.5 H187 Q185 71.5 184 70.2 L168.5 48.5 H163 V70 Q163 71.5 161.5 71.5 H145 Q143.5 71.5 143.5 70 V2 Q143.5 0.5 145 0.5 Z M164 17 H176 C182 17 185.5 19.5 185.5 24.6 C185.5 29.3 182 32 176 32 H164 Q163 32 163 31 V18 Q163 17 164 17 Z M214.2 0.5 H266.3 Q267.5 0.5 267.5 1.7 V16.2 Q267.5 17.4 266.3 17.4 H233 V27 H260.8 Q262 27 262 28.2 V41.8 Q262 43 260.8 43 H233 V55 H266.8 Q268 55 268 56.2 V70.3 Q268 71.5 266.8 71.5 H214.2 Q213 71.5 213 70.3 V1.7 Q213 0.5 214.2 0.5 Z" fill="var(--brand-ink)" fill-rule="evenodd"/>
+            </symbol>
           </defs>
           <rect class="paper" width="800" height="456"/>
           <rect x="344" y="152" width="448" height="244" rx="8" fill="none" stroke="var(--rule)" stroke-dasharray="4 4"/>
-          <text x="364" y="172" class="eyebrow">WIRE INSTANCE</text>
+          <use href="#wire-flow-brand" x="364" y="156" width="100" height="24" aria-hidden="true"/>
 
           <path class="edge" d="M256 68H392"/>
           <path class="edge" d="M392 92H256"/>
@@ -201,7 +243,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="324" y="56" class="edge-label" text-anchor="middle">CALLS</text>
           <rect x="284" y="100" width="80" height="16" class="paper"/>
           <text x="324" y="112" class="edge-label" text-anchor="middle">RESULTS</text>
-          <path class="edge" d="M132 120V228"/>
+          <path class="edge" d="M132 120V236"/>
           <rect x="56" y="164" width="68" height="16" class="paper"/>
           <text x="90" y="176" class="edge-label" text-anchor="middle">RECORDS</text>
           <path class="edge" d="M240 276H360"/>
@@ -219,23 +261,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="24" y="96" class="body">Human + agent prompts</text>
           <rect x="392" y="40" width="184" height="80" rx="6" fill="var(--surface)" stroke="var(--line)"/>
           <text x="408" y="68" class="name">Work IQ</text>
-          <text x="408" y="96" class="body">Tool calls + results</text>
-          <path d="M24 228H220L240 248V324H24Z" fill="var(--surface)" stroke="var(--line)"/>
-          <path d="M220 228V248H240" fill="none" stroke="var(--line)"/>
-          <text x="40" y="260" class="name">Recorded history</text>
-          <text x="40" y="288" class="body">Metadata + history files</text>
-          <text x="40" y="312" class="small">Approved source</text>
+          <text x="408" y="96" class="body">Remote tool execution</text>
+          <path d="M24 236H220L240 256V316H24Z" fill="var(--surface)" stroke="var(--line)"/>
+          <path d="M220 236V256H240" fill="none" stroke="var(--line)"/>
+          <text x="40" y="264" class="name">Approved history</text>
+          <text x="40" y="292" class="body">Metadata + history files</text>
 
-          <rect x="360" y="228" width="208" height="96" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.5"/>
-          <text x="380" y="260" class="name" style="fill:var(--accent)">Local evidence store</text>
-          <text x="380" y="284" class="body">Prompts / calls / results</text>
-          <text x="380" y="308" class="small">Provenance + timing</text>
-          <rect x="640" y="192" width="144" height="72" rx="6" fill="var(--paper)" stroke="var(--line)"/>
-          <text x="712" y="220" class="name" text-anchor="middle">Analyze + Search</text>
-          <text x="712" y="244" class="small" text-anchor="middle">Inspect local activity</text>
-          <rect x="640" y="288" width="144" height="72" rx="6" fill="var(--paper)" stroke="var(--line)"/>
-          <text x="712" y="316" class="name" text-anchor="middle">Reports</text>
-          <text x="712" y="340" class="small" text-anchor="middle">Choose / adjust / Save</text>
+          <rect x="360" y="236" width="208" height="80" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="380" y="264" class="name" style="fill:var(--accent)">Local evidence store</text>
+          <text x="380" y="292" class="body">Prompts / calls / results</text>
+          <rect x="640" y="188" width="144" height="80" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+          <use href="#wire-flow-analyze" x="686" y="204" width="18" height="18" aria-hidden="true"/>
+          <use href="#wire-flow-trends" x="720" y="204" width="18" height="18" aria-hidden="true"/>
+          <text x="712" y="244" class="name" text-anchor="middle">Analyze + Trends</text>
+          <rect x="640" y="284" width="144" height="80" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+          <use href="#wire-flow-reports" x="703" y="300" width="18" height="18" aria-hidden="true"/>
+          <text x="712" y="340" class="name" text-anchor="middle">Reports</text>
 
           <line x1="8" y1="420" x2="792" y2="420" stroke="var(--rule)"/>
           <path class="edge" d="M8 440H36"/>
@@ -245,15 +286,34 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </svg>
         <svg class="narrow" viewBox="0 0 352 784" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="wire-evidence-flow-narrow-title wire-evidence-flow-narrow-desc">
           <title id="wire-evidence-flow-narrow-title">From recorded activity to useful evidence</title>
-          <desc id="wire-evidence-flow-narrow-desc">The GitHub Copilot app calls Work IQ and records the results; WIRE reads approved app history into its own local evidence store for analysis, literal Search and locally saved reports.</desc>
+          <desc id="wire-evidence-flow-narrow-desc">The GitHub Copilot app calls Work IQ remotely and records the results; WIRE collects approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports.</desc>
           <defs>
             <marker id="wire-narrow-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--line)"/></marker>
             <marker id="wire-narrow-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--accent)"/></marker>
             <marker id="wire-narrow-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 8 3 0 6Z" fill="var(--line)"/></marker>
+            <symbol id="wire-narrow-analyze" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+            </symbol>
+            <symbol id="wire-narrow-trends" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 16v5"/><path d="M16 14.639V21"/><path d="M20 10.656V21"/><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/><path d="M4 18.463V21"/><path d="M8 14.656V21"/>
+            </symbol>
+            <symbol id="wire-narrow-reports" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>
+            </symbol>
+            <linearGradient id="wire-narrow-brand-upper" gradientUnits="userSpaceOnUse" x1="2301.16955" y1="-361.5106" x2="-104.23405" y2="16.375025"><stop stop-color="var(--brand-low)"/><stop offset="1" stop-color="var(--brand-high)"/></linearGradient>
+            <linearGradient id="wire-narrow-brand-lower" gradientUnits="userSpaceOnUse" x1="47.52265" y1="-106.886225" x2="-2859.970475" y2="6432.5408"><stop stop-color="var(--brand-low)"/><stop offset="1" stop-color="var(--brand-high)"/></linearGradient>
+            <clipPath id="wire-narrow-brand-boundary"><path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" clip-rule="evenodd"/></clipPath>
+            <symbol id="wire-narrow-brand" viewBox="0 0 402 82">
+              <g transform="translate(0 0.61654135) scale(0.61654135)">
+                <path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" fill="url(#wire-narrow-brand-upper)" fill-rule="evenodd"/>
+                <path d="M109 24 C115 37 128 44 133 60 V131 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 Z" fill="url(#wire-narrow-brand-lower)" clip-path="url(#wire-narrow-brand-boundary)" fill-rule="evenodd"/>
+              </g>
+              <path transform="translate(110 1.7761194) scale(1.08955224)" d="M1.1 1 H20.1 Q21.3 1 21.7 2.4 L32.8 41.6 L44.6 4 Q45.5 1 48 1 H59.4 Q61.9 1 62.8 3.8 L74.5 41.6 L85.6 2.4 Q86 1 87.6 1 H106.7 Q107.6 1 107.3 2 L85.5 69.6 Q85 71 83.5 71 H67 Q65.6 71 65.1 69.4 L53.6 33.3 L42 69.4 Q41.5 71 40 71 H23.5 Q22 71 21.5 69.5 L0.3 2.2 Q0 1 1.1 1 Z M114.2 0.6 H131.8 Q133 0.6 133 1.8 V70.2 Q133 71.4 131.8 71.4 H114.2 Q113 71.4 113 70.2 V1.8 Q113 0.6 114.2 0.6 Z M145 0.5 H177.5 C194.7 0.5 205 8.5 205 23.2 C205 34.5 199.7 41.8 190 45.3 L207 70.1 Q207.8 71.5 205.8 71.5 H187 Q185 71.5 184 70.2 L168.5 48.5 H163 V70 Q163 71.5 161.5 71.5 H145 Q143.5 71.5 143.5 70 V2 Q143.5 0.5 145 0.5 Z M164 17 H176 C182 17 185.5 19.5 185.5 24.6 C185.5 29.3 182 32 176 32 H164 Q163 32 163 31 V18 Q163 17 164 17 Z M214.2 0.5 H266.3 Q267.5 0.5 267.5 1.7 V16.2 Q267.5 17.4 266.3 17.4 H233 V27 H260.8 Q262 27 262 28.2 V41.8 Q262 43 260.8 43 H233 V55 H266.8 Q268 55 268 56.2 V70.3 Q268 71.5 266.8 71.5 H214.2 Q213 71.5 213 70.3 V1.7 Q213 0.5 214.2 0.5 Z" fill="var(--brand-ink)" fill-rule="evenodd"/>
+            </symbol>
           </defs>
           <rect class="paper" width="352" height="784"/>
           <rect x="8" y="376" width="336" height="348" rx="8" fill="none" stroke="var(--rule)" stroke-dasharray="4 4"/>
-          <text x="32" y="396" class="eyebrow">WIRE INSTANCE</text>
+          <use href="#wire-narrow-brand" x="32" y="384" width="100" height="24" aria-hidden="true"/>
           <path class="edge" d="M176 96V144"/>
           <path class="edge" d="M252 144V96"/>
           <rect x="112" y="112" width="56" height="16" class="paper"/>
@@ -263,11 +323,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <path class="edge" d="M100 96V112Q100 120 92 120H80Q72 120 72 128V248"/>
           <rect x="4" y="172" width="60" height="16" class="paper"/>
           <text x="34" y="184" class="edge-label" text-anchor="middle">RECORDS</text>
-          <path class="edge" d="M176 328V416"/>
+          <path class="edge" d="M176 328V424"/>
           <rect x="184" y="344" width="80" height="16" class="paper"/>
           <text x="192" y="356" class="edge-label">READ-ONLY</text>
-          <path class="edge" data-branch="narrow-explore" d="M124 520V552Q124 560 116 560H96Q88 560 88 568V616"/>
-          <path class="edge" data-branch="narrow-select" d="M228 520V552Q228 560 236 560H256Q264 560 264 568V616"/>
+          <path class="edge" data-branch="narrow-explore" d="M124 512V552Q124 560 116 560H96Q88 560 88 568V616"/>
+          <path class="edge" data-branch="narrow-select" d="M228 512V552Q228 560 236 560H256Q264 560 264 568V616"/>
           <rect x="8" y="580" width="72" height="16" class="paper"/>
           <text x="44" y="592" class="edge-label" text-anchor="middle">EXPLORE</text>
           <rect x="272" y="580" width="72" height="16" class="paper"/>
@@ -278,22 +338,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="40" y="80" class="body">Human + agent prompts</text>
           <rect x="100" y="144" width="228" height="64" rx="6" fill="var(--surface)" stroke="var(--line)"/>
           <text x="214" y="172" class="name" text-anchor="middle">Work IQ</text>
-          <text x="214" y="192" class="small" text-anchor="middle">Tool calls + results</text>
+          <text x="214" y="192" class="small" text-anchor="middle">Remote tool execution</text>
           <path d="M24 248H308L328 268V328H24Z" fill="var(--surface)" stroke="var(--line)"/>
           <path d="M308 248V268H328" fill="none" stroke="var(--line)"/>
-          <text x="40" y="280" class="name">Recorded history</text>
-          <text x="40" y="304" class="body">Approved metadata + history files</text>
+          <text x="40" y="280" class="name">Approved history</text>
+          <text x="40" y="304" class="body">Metadata + history files</text>
 
-          <rect x="24" y="416" width="304" height="104" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.5"/>
-          <text x="176" y="448" class="name" style="fill:var(--accent)" text-anchor="middle">Local evidence store</text>
-          <text x="176" y="476" class="body" text-anchor="middle">Prompts / calls / results</text>
-          <text x="176" y="500" class="body" text-anchor="middle">Provenance + timing</text>
-          <rect x="16" y="616" width="144" height="80" rx="6" fill="var(--paper)" stroke="var(--line)"/>
-          <text x="88" y="648" class="name" text-anchor="middle">Analyze + Search</text>
-          <text x="88" y="672" class="small" text-anchor="middle">Inspect local activity</text>
-          <rect x="192" y="616" width="144" height="80" rx="6" fill="var(--paper)" stroke="var(--line)"/>
-          <text x="264" y="648" class="name" text-anchor="middle">Reports</text>
-          <text x="264" y="672" class="small" text-anchor="middle">Choose / adjust / Save</text>
+          <rect x="24" y="424" width="304" height="88" rx="6" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="176" y="456" class="name" style="fill:var(--accent)" text-anchor="middle">Local evidence store</text>
+          <text x="176" y="484" class="body" text-anchor="middle">Prompts / calls / results</text>
+          <rect x="16" y="616" width="144" height="88" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+          <use href="#wire-narrow-analyze" x="62" y="632" width="18" height="18" aria-hidden="true"/>
+          <use href="#wire-narrow-trends" x="96" y="632" width="18" height="18" aria-hidden="true"/>
+          <text x="88" y="684" class="name" text-anchor="middle">Analyze + Trends</text>
+          <rect x="192" y="616" width="144" height="88" rx="6" fill="var(--paper)" stroke="var(--line)"/>
+          <use href="#wire-narrow-reports" x="255" y="632" width="18" height="18" aria-hidden="true"/>
+          <text x="264" y="684" class="name" text-anchor="middle">Reports</text>
 
           <line x1="8" y1="748" x2="344" y2="748" stroke="var(--rule)"/>
           <path class="edge" d="M8 768H32"/>
@@ -302,7 +362,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="188" y="772" class="small">Instance boundary</text>
         </svg>
       </div>
-      <figcaption class="note">WIRE reads recorded Work IQ activity from the GitHub Copilot app; it does not rerun those calls. Microsoft Copilot and Microsoft 365 source integration are not supported.</figcaption>
+      <figcaption class="note">Analyze, Trends, Compare and literal Search read retained evidence locally. Reports freeze selected evidence into local files. WIRE does not rerun Work IQ calls. Microsoft Copilot and Microsoft 365 source integration are not supported.</figcaption>
     </figure>
   </main>
 </body>

@@ -3,7 +3,7 @@
 Use WIRE to inspect recorded Work IQ activity, find saved text and prepare
 reports from your local GitHub Copilot app history.
 
-Follow [setup](../README.md#start) first. For WSL or a second instance beside
+Follow [setup](../README.md#getting-started) first. For WSL or a second instance beside
 Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Connect local history
@@ -148,11 +148,13 @@ with Enter or Space; the other controls keep their own actions.
 These are retained Work IQ patterns, not a census of Copilot prompts,
 answer-quality judgments, productivity scores or evidence of causation.
 For a two-period comparison or a saved copy, use
-[Compare periods](#compare-periods) or [Reports](reporting.md).
+[Compare](#compare) or [Reports](reporting.md).
 
-## Compare periods
+<a id="compare-periods"></a>
 
-Choose **Compare periods** in the sliding left sidebar. A fresh comparison
+## Compare
+
+Choose **Compare** in the sliding left sidebar. A fresh comparison
 shows all eligible retained activity for the last seven complete days versus the
 preceding seven. Analyze keeps its own filters and reading state.
 

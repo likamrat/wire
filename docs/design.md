@@ -18,14 +18,14 @@ Evidence definitions and frozen-file requirements remain in the
 | <a id="interaction-cards-and-reading"></a>Interaction cards and reading | [Cards, results, disclosures and Copy](interaction-design.md#interaction-cards-and-reading) |
 | <a id="search"></a>Search | [Typed results and exact Open](interaction-design.md#search) |
 | <a id="reports"></a>Reports | [Preparation, saving and saved reading](interaction-design.md#reports) |
-| <a id="compare-periods"></a>Compare periods | [Ranges and chart actions](interaction-design.md#compare-periods) |
+| <a id="compare-periods"></a>Compare | [Ranges and chart actions](interaction-design.md#compare) |
 | <a id="settings-collection-and-consequential-actions"></a>Settings, collection and consequential actions | [Setting search, account and confirmation behavior](interaction-design.md#settings-collection-and-consequential-actions) |
 
 ## One coherent workspace
 
 | Surface | Reading and navigation role |
 | --- | --- |
-| Sliding left sidebar | Analyze, Trends, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
+| Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
 | Trends | Full-width daily charts in one vertical stack, each with its own visible measure controls |
@@ -93,7 +93,7 @@ empty navigation row.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established 44px targets, focus indications and wrapping labels.
 
-The main Analyze, Trends, Reports and Compare periods headings use their existing
+The main Analyze, Trends, Reports and Compare headings use their existing
 navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node mounted
 and update its text separately. These icons are decorative, not extra controls.
 Settings, contextual readers and saved report headings do not acquire one.

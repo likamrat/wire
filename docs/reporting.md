@@ -236,12 +236,12 @@ masking cannot recognize every confidential detail.
 
 ## Compare
 
-Open **Compare periods** in the left sidebar. It starts with all eligible
+Open **Compare** in the left sidebar. It starts with all eligible
 retained activity, independently of Analyze filters. The
 first result compares the last seven complete days, ending yesterday, with
 the preceding seven days in the display time zone.
 
-![Compare periods with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
+![Compare with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
 
 **Last 14 days** and **Last 30 days** use the same complete-day rule.
 **Custom dates** opens both calendars; each range includes its start and end

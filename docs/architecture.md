@@ -28,6 +28,9 @@ directory has one writer. Concurrent instances need distinct data directories
 and reachable ports; each instance's writable state and saved reports remain separate.
 See [store ownership](collection.md#store-ownership).
 
+Trends and Compare, like Analyze, read WIRE's retained evidence without
+starting collection or calling Work IQ.
+
 When WSL reads Windows-owned live metadata, a bounded, short-lived Windows
 Node process runs the same fixed read-only metadata projection. History files
 still use the bounded file reader. This helper is not a second WIRE server

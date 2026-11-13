@@ -1,7 +1,7 @@
 # Development
 
 WIRE runs as a local Node server with a browser interface. Start with the
-[README](../README.md#start) to clone and install it. This guide covers working
+[README](../README.md#getting-started) to clone and install it. This guide covers working
 on the source, checking a change and troubleshooting a local installation.
 
 ## Run locally
