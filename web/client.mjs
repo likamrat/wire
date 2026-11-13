@@ -317,13 +317,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : view?.readback ? "Saved time unavailable."
             : "";
     }
-    async function readCollectionStatus(input = {}) {
-        const publication = api.publicationToken();
+    async function readCollectionStatus(input = {}, isCurrent = () => true) {
+        const publication = api.publicationToken(), readGeneration = collectionReadGeneration;
+        const current = () => api.isCurrent(publication) && readGeneration === collectionReadGeneration && isCurrent();
         const status = await api("/api/collection/status", input);
-        if (!api.isCurrent(publication)) throw new Error("This collection read was retired when WIRE access changed.");
+        if (!current()) throw new Error("This collection read was superseded or WIRE access changed.");
         if (!sourceCollection.controlsActive) return status;
         const composite = await api("/api/collection/sources/status", {});
-        if (!api.isCurrent(publication)) throw new Error("This source status read was retired when WIRE access changed.");
+        if (!current()) throw new Error("This source status read was superseded or WIRE access changed.");
         return acceptSourceCollection({ ...status, sourceAware: composite });
     }
     let nativeCollectIntent = null;
@@ -448,7 +449,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             clearSourceCheckMarker();
         }
     }
-    let collectionReadGeneration = 0;
+    let collectionReadGeneration = 0, collectionPollGeneration = 0;
     function nativeIntentCurrent(intent = nativeCollectIntent) {
         return Boolean(intent?.owner) && typeof intent.owner.then !== "function" && api.isControlCurrent(intent.owner) === true;
     }
@@ -7902,7 +7903,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             setText(node, `Last attempted: ${attempt ? timestamp(attempt) : "Not recorded"}`);
         }
     }
-    async function refreshCollectionIssues() {
+    async function refreshCollectionIssues(isCurrent = () => true) {
         const publication = api.publicationToken();
         if (!publication) return;
         if (route.view !== "collection-status" || issuesLoading) return;
@@ -7911,13 +7912,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const message = $("collectionIssuesMessage");
         if (issuesSignature === undefined) { setText(message, "Reading current local history issues..."); message.hidden = false; ux.pending(message, true); }
         try {
-            const detailed = await readCollectionStatus({ details: true });
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
+            const detailed = await readCollectionStatus({ details: true }, isCurrent);
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !isCurrent() || collectionBusy) return;
             if (!Array.isArray(detailed.historyIssues)) throw new Error("Affected Copilot chats are unavailable. Collection status still shows the last known counts.");
             renderCollection(detailed, publication);
             message.hidden = true;
         } catch (error) {
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || !isCurrent() || collectionBusy) return;
             setText(message, "Current issue details could not be loaded. Any displayed list is from the previous check. " + error.message);
             message.hidden = false;
         } finally { if (api.isCurrent(publication)) { issuesLoading = false; ux.pending(message, false); } }
@@ -8536,11 +8537,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (!publication || clearingAccess || pageInactive || document.hidden || !state?.collection) return;
         const readGeneration = collectionReadGeneration;
+        let pollGeneration = collectionPollGeneration;
+        const current = () => readGeneration === collectionReadGeneration && pollGeneration === collectionPollGeneration;
         try {
             if (collectionBusy || refreshWorking()) return;
             if (exportWriting ? !Number.isSafeInteger(draft.contextRevision()) : !ensureCurrentTime()) return;
-            const status = await readCollectionStatus();
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy || refreshWorking()) return;
+            // A visibility-triggered read can overtake a pending poll without changing evidence revision.
+            pollGeneration = ++collectionPollGeneration;
+            const status = await readCollectionStatus({}, current);
+            if (!api.isCurrent(publication) || !current() || collectionBusy || refreshWorking()) return;
             observeNativeReaderStatus(status);
             updateRequestReportActions();
             savedArtifactUI?.observeEligibility(status.revision);
@@ -8593,8 +8598,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 return;
             }
             renderCollection(status, publication);
-            await refreshCollectionIssues();
-            if (!api.isCurrent(publication)) return;
+            await refreshCollectionIssues(current);
+            if (!api.isCurrent(publication) || !current()) return;
             const action = live.observe(status.revision, state?.revision, {
                 reviewing: $("overlay").open || deletionUI.isOpen() || recollectionUI.isOpen() || Boolean(activePreview) || reportJourney?.isReviewOpen(), loading: isLoading || collectionBusy || fresh.snapshot().phase === "error",
                 editing: collectionSettings.hasDraft() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || Boolean(document.querySelector(".select-popup:not([hidden])")),
@@ -8608,12 +8613,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && !document.querySelector(".select-popup:not([hidden])");
             if ((action === "refresh" || (connectionNeedsSnapshot || ["applying", "waiting"].includes(fresh.snapshot().phase)) && canApply) && state) await load({ background: true });
         } catch (error) {
-            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
+            if (!api.isCurrent(publication) || !current() || collectionBusy) return;
             assessmentUI.clearPrivateText();
             collectionUnavailable(error.message, error.reason, publication);
         } finally {
-            clearTimeout(pollTimer);
-            if (api.isCurrent(publication) && !pageInactive) pollTimer = setTimeout(pollCollection, 5000);
+            if (api.isCurrent(publication) && current() && !pageInactive) {
+                clearTimeout(pollTimer);
+                pollTimer = setTimeout(pollCollection, 5000);
+            }
         }
     }
     async function writeCollection(endpoint, input) {

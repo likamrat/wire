@@ -22,6 +22,7 @@ import { BACKFILL_DIRECTORY, validateBackfillCheckpoint } from "../lib/collector
 import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
+import { setImmediate } from "node:timers/promises";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -678,6 +679,55 @@ test("compatible version changes do not interpret unfamiliar workspace types as 
     const discovered = await discoverSources(app.config);
     assert.equal(discovered.roster[0].eligible, false);
     assert.equal(discovered.roster[0].disposition, "unmapped-workspace-type");
+});
+
+test("a metadata-read refusal recovers on the next ordinary interval without changing approval or retained facts", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
+    const app = await installation(t), id = app.session();
+    app.db.exec("PRAGMA journal_mode=WAL; UPDATE sessions SET title='Invented interval recovery'");
+    await logFor(app, id, [event("user.message", { content: "Invented retained request" }), call()]);
+    let committed;
+    const collector = await createCollector(app.context, { onCommitted: check => committed?.(check) });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 });
+    const before = await loadBoardState(app.context), statusBefore = await collector.status();
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    const failed = Promise.withResolvers(), prepare = DatabaseSync.prototype.prepare;
+    const log = t.mock.method(console, "error", (...args) => failed.resolve(args));
+    const metadataChange = t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+        const statement = prepare.call(this, sql);
+        if (sql === "PRAGMA user_version") {
+            const get = statement.get.bind(statement);
+            statement.get = () => {
+                const result = get();
+                app.db.exec("INSERT INTO projects VALUES('unrelated-project','Invented concurrent metadata')");
+                return result;
+            };
+        }
+        return statement;
+    });
+    let diagnostic;
+    try { t.mock.timers.tick(31000); diagnostic = (await failed.promise)[1]; }
+    finally { metadataChange.mock.restore(); log.mock.restore(); }
+    await setImmediate();
+    assert.deepEqual(diagnostic, { code: "COLLECTION_SOURCE_CHANGED", stage: "source-read", sourceChange: "metadata-read" });
+    const refused = await collector.status();
+    assert.equal(refused.state, "error");
+    assert.deepEqual(refused.cursors, statusBefore.cursors);
+    assert.deepEqual(await loadBoardState(app.context), before);
+    const next = new Promise(resolve => { committed = resolve; });
+    t.mock.timers.tick(5000);
+    await next;
+    const recovered = await collector.status();
+    assert.equal(recovered.state, "collecting-on-interval");
+    assert.equal(recovered.error, null);
+    assert.equal(recovered.connected, true);
+    assert.equal(recovered.lastCheck, null, "Automatic recovery must not fabricate a manual check.");
+    assert.equal(recovered.revision, statusBefore.revision);
+    assert.equal(recovered.metrics.lastBytesRead, 0);
+    assert.deepEqual(await readFile(configFile), configBefore);
+    assert.deepEqual(await loadBoardState(app.context), before);
+    t.diagnostic(JSON.stringify({ diagnostic, recovery: "next scheduled interval", unchangedRevision: recovered.revision }));
 });
 
 test("incompatible required metadata fails before histories, retaining evidence, cursor, receipt and approval", async t => {

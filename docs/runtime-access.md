@@ -105,6 +105,22 @@ eventual restoration alone does not establish a fix. Check whether fresh
 authority was available at return before treating either retained content or
 clearance as a defect.
 
+Returning to a visible tab also requests current collection status. That read
+can overtake an earlier poll. Only the newest poll in the current operation
+generation may publish status or errors, accept source-control status, or
+schedule the next poll. This also fences its pending detailed issue read.
+Collector failures and recovery can leave the evidence revision unchanged;
+that revision alone cannot order these responses. A retired response must
+neither bring back an old warning nor hide a newer failure.
+
+`Collection cannot check history` reports a collector failure, not a recorded
+tool failure or proof of sign-out. For example, `COLLECTION_SOURCE_CHANGED`
+at `source-read` / `metadata-read` means approved metadata changed during its
+bounded read and was refused. An enabled collector can recover on its next
+ordinary interval without Refresh or reapproval. Persistent failures still
+need their actual source error investigated; retained evidence and frozen
+report facts are not rewritten to clear a warning.
+
 ## Client publication and withdrawal
 
 The callable transport owns `publicationToken`, `isCurrent`, `accessState`,
