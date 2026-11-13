@@ -71,8 +71,6 @@ when there are no calls today.
 
 ![Trends with tool reach, prompt authors, daily calls and four supporting charts.](images/trends-overview.png)
 
-*Invented activity; Today has no calls, while the period still has data.*
-
 ### Choose the period and activity
 
 Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
@@ -90,8 +88,8 @@ show or hide lines; they do not recalculate percentage denominators.
 ### Read the measures
 
 Period breakdowns summarize the whole chosen range. A dated point uses that
-day's matching population. Changes in shares use percentage points, not relative
-growth. **Chart guide** and **View numbers** explain the measures and exact values.
+day's matching population. **Chart guide** and **View numbers** explain the
+measures and exact values.
 
 | Chart | Measure |
 | --- | --- |
@@ -101,7 +99,7 @@ growth. **Chart guide** and **View numbers** explain the measures and exact valu
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
-| Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and P95. The coverage note identifies how many matching calls have qualified timing. |
+| Call duration | Recorded tool-call intervals in milliseconds, summarized as Median and P95 (95th percentile). The coverage note identifies how many matching calls have qualified timing. |
 
 Prompt authors counts interactions with activity that day, not every message
 sent in Copilot. One interaction can appear on several days but counts once in

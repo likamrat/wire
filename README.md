@@ -52,8 +52,6 @@ models and call duration.
 
 [![Trends with tool reach, prompt authors, daily calls and four supporting charts.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
-*Invented activity; Today has no calls, while the period still has data.*
-
 Choose 7, 14, 30 or custom days, filter the activity, then maximize a chart
 and open the calls behind a dated point. The [Trends guide](docs/user-guide.md#trends)
 explains reach versus call share, overlapping services and evidence gaps.
