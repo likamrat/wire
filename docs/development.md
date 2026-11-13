@@ -186,6 +186,10 @@ The control matrix also exercises every measure and series toggle, sizing,
 exact evidence, numbers and guide controls for all seven widgets over
 7/14/30/custom periods. Separate hover captures verify centered, nonoverlapping
 targets and uniform collapsed rows in both themes and enlarged text.
+Date-context cases verify every widget header after presets and custom Apply,
+including month/year boundaries, one-day ranges, Cancel, held/failed reads and
+access withdrawal. Source-wide coverage metadata remains separate from the
+chart-specific limits shown in Trends.
 
 ## Troubleshoot a local run
 

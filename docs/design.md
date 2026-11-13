@@ -145,7 +145,9 @@ legend beside the plot, and the same measure controls in every header.
 On narrower surfaces the legend moves below the plot instead of squeezing its
 names. Do not nest the author legend beside a ring or clamp short names to two
 lines. Single-measure plots do not reserve an empty legend column.
-Keep the chosen range inside its date control beside the presets. Ordinary
+Name the calendar control **Custom dates**. Show the accepted range in
+parentheses beside every widget title, including collapsed and maximized views.
+Do not relabel an accepted chart with calendar drafts or pending read dates. Ordinary
 solid lines lead the reading; do not make people decode dashes, shapes or hatches.
 Series keep stable colors and named legends through filters and visibility
 changes. Author and service colors use the existing WIRE roles. Hover or focus
@@ -159,8 +161,8 @@ may use a small dot; never connect across an unknown day. Author rows remain
 aligned. Keep "Search and retrieval" whole, moving its value/bar below when
 needed. Avoid explanatory subheaders: titles, named measure controls and units
 carry the meaning; consequential uncertainty stays visible. Use "Tool calls"
-for the daily-call widget. Collapsed widgets show only their title and sizing
-controls, never figures or explanatory labels. Keep their row heights consistent.
+for the daily-call widget. Collapsed widgets show their title, applied range and
+sizing controls, never metric figures or explanatory labels. Keep row heights consistent.
 Center sizing glyphs in separate targets of at least 44px, with an 8px gap;
 do not offset the glyph independently of its hover or focus surface.
 

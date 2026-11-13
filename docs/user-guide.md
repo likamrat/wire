@@ -73,8 +73,8 @@ The whole chosen period stays useful even when there are no calls today.
 
 ### Choose the period and activity
 
-Use **Last 7 days**, **Last 14 days** or **Last 30 days**. Select the displayed
-date range beside them to choose custom dates.
+Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
+The applied range appears in parentheses beside every widget title.
 Every date is labeled, including all 30 days: past dates show month and day,
 and the current day says **Today**. Scroll inside a chart to read earlier dates;
 new ranges open at the latest dates. Custom ranges over 90 days page through
@@ -108,9 +108,8 @@ sent in Copilot. One interaction can appear on several days but counts once in
 the whole period. Call duration shows Median and 95th percentile together; hiding either
 series leaves the timing sample and coverage unchanged. Missing or partial
 history, undated calls and unavailable measurements remain distinct from zero.
-If saved-chat history could not be fully read, the notice explains the read or
-import problem. Its affected dates may be unknown; it is not proof of a gap in
-the period you selected.
+Collection status covers source-wide read/import problems; those do not establish
+which dates are affected. Limits specific to the chart remain beside its values.
 
 ### Inspect a change
 
@@ -126,11 +125,11 @@ the same selected trend; hiding the selected series does not change its evidence
 
 **Back to overview** returns to the same place. Collapse or restore charts
 without losing their measure, series choices or horizontal reading position.
-Collapsed widgets show only their names. Click anywhere on a collapsed row to
+Collapsed widgets show their names and applied dates. Click anywhere on a collapsed row to
 open it, or the open widget's header to close it. The arrow button does the same
 with Enter or Space; the other controls keep their own actions.
 
-![Collapsed Trends rows with separate maximize and expand controls.](images/trends-collapsed.png)
+![Collapsed Trends rows with their applied date range and sizing controls.](images/trends-collapsed.png)
 
 These are retained Work IQ patterns, not a census of Copilot prompts,
 answer-quality judgments, productivity scores or evidence of causation.

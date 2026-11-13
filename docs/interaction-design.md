@@ -97,8 +97,10 @@ Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
 Use the full workspace in both orientations without scaling text. Narrow
 layouts move the legend below the chart; the plot scrolls only horizontally.
-The date-range button shows the accepted dates beside the presets and opens
-the existing calendar. Today is labeled as still in progress, not as a history gap.
+The **Custom dates** button opens the existing calendar. Each widget title
+shows its accepted range in parentheses. Presets and Apply update all seven
+headers together; drafts, Cancel, pending reads and failed reads retain the
+accepted range. Today remains a current-day label, not a claim of full-day coverage.
 
 Maximize uses the same chart and shared controls, with a selected-date breakdown
 and exact evidence. Back to overview restores the activating control and reading
@@ -109,7 +111,8 @@ Measure controls use the same header position for every widget, not just Tools.
 Counts, percentages and timing keep their distinct units; these controls do not
 redefine the underlying evidence. Omit redundant subheaders and the repeated
 "tool calls" caption beneath the Tool calls total.
-Collapsed rows contain only the title and sizing controls. Clicking anywhere
+Collapsed rows contain the title, applied date range and sizing controls, not
+metric totals or explanatory labels. Clicking anywhere
 on the collapsed row expands it; clicking an expanded header's non-control
 area collapses it. Measure, sizing, series and evidence controls keep their own
 actions. The named expand/collapse button provides the same action by keyboard
@@ -131,12 +134,11 @@ Use prominent period counts, appropriate percentages with supporting counts and
 one measure label. Avoid repeated source captions, explanatory subtitles and
 prose narrating values already drawn. Keep necessary coverage qualifications;
 definitions belong in Chart guide. Differences in shares are percentage points.
-History warnings describe the saved-chat read/import problem using retained
-coverage facts. Those facts cover the source, not a particular analytical
-period: explicitly say when the affected dates are unknown. Do not equate an
-unreadable file, an unfinished import or missing prompt links with a failed call.
-Use a short factual notice, such as "1 saved chat file missing · dates unknown";
-do not repeat a paragraph explaining that same limit above every chart.
+Source-wide saved-chat read/import issues belong in Collection status, not
+in a generic Trends toolbar warning: their affected dates are not established.
+Keep the retained coverage metadata without implying a complete selected period.
+Chart-specific missing models, timing, outcomes and service details remain
+visible, as do calls excluded because they have no start date.
 Selected-date bars use the same measure and zero-based scale as the chart:
 reach is not call share, and count views use the count axis rather than percent
 widths. Hiding series does not rescale that axis.

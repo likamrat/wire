@@ -17,7 +17,7 @@ async function capture(page, name) {
     if (name === "overview-light") await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, "widgets-overview-light.png"),
     });
-    if (name.startsWith("responsive-")) await page.screenshot({
+    if (name.startsWith("responsive-") || name.startsWith("dates-")) await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, name + "-viewport.png"),
     });
     if (name === "responsive-enlarged") await page.locator('[data-family=tools]').screenshot({
@@ -100,7 +100,7 @@ async function setup(t, withBoundary = false, options = {}) {
     return { page, reads };
 }
 async function dates(page, from = "2026-08-01", to = "2026-08-30") {
-    await page.locator("#trendsView").getByRole("button", { name: /^Custom dates:/ }).click();
+    await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Trends from", { exact: true }).fill(from);
     await page.getByLabel("Trends to", { exact: true }).fill(to);
     const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
@@ -272,7 +272,7 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
     await expect(page).toHaveURL(/#trends$/);
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-    await expect(page.locator(".trends-caption")).toContainText("Aug 1, 2026");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
     assert.ok(reads.every(read => !("scenarioIds" in read) && read.timeContext.timeZone === "UTC"));
 });
 
@@ -377,9 +377,9 @@ test("leaving a pending range read returns to the last accepted trend without a 
     await navigateMain(page, "analyze");
     await navigateMain(page, "trends");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator(".trends-caption")).toContainText("Aug 1, 2026");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
     await page.evaluate(() => window.trendsBoundary.release());
-    await expect(page.locator(".trends-caption")).toContainText("Aug 1, 2026");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
 });
 
@@ -491,7 +491,7 @@ test("the left sidebar opens every peer and preserves Trends through collapse, e
             if (destination === "compare") await expect(page.locator("#periodComparison")).toBeVisible();
             await navigateMain(page, "trends"); await settle(page);
             await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-            await expect(page.locator(".trends-caption")).toContainText("Aug 1, 2026");
+            await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
             await expect(page.locator('[data-trend-period="custom"]')).toHaveAttribute("aria-pressed", "true");
             await expect(page.locator('[data-trend-period="7"]')).toHaveAttribute("aria-pressed", "false");
             await page.mouse.move(8, 8);
@@ -513,7 +513,7 @@ test("the left sidebar opens every peer and preserves Trends through collapse, e
         await settle(page);
         await expect(page.locator("#contextSidebar")).not.toBeVisible();
         await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-        await expect(page.locator(".trends-caption")).toContainText("Aug 1, 2026");
+        await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
         await capture(page, `qualified-sidebar-${mode}`);
     }
 });
@@ -915,18 +915,22 @@ test("Trends charts use ordinary solid lines and solid activity bars rather than
     assert.deepEqual(marks, { dashed: 0, shapes: 0, hatch: false });
 });
 
-test("Trends explains retained chat-file gaps without assigning them to the selected dates", { timeout: 30000 }, async t => {
+test("source-wide read metadata remains separate from the selected Trends period", { timeout: 30000 }, async t => {
     const { page } = await setup(t, false, { records: currentRecords(), roster: [
         { sessionId: "older-chat-outside-selected-members", eligible: true, error: "PRIVATE_RETAINED_ERROR", errorCode: "ENOENT",
             lastAttemptAt: "2025-01-01T12:00:00Z" },
     ] });
     const qualification = page.locator(".trends-qualification");
-    await expect(qualification).toHaveText("1 saved chat file missing · dates unknown");
-    await expect(qualification).not.toContainText("Incomplete history");
+    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("Model not recorded");
+    await expect(qualification).toBeHidden();
     await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_RETAINED_ERROR");
     await capture(page, "responsive-history");
-    await dates(page, "2026-03-01", "2026-03-02");
-    await expect(qualification).toContainText("dates unknown");
+    const data = await dates(page, "2026-03-01", "2026-03-02");
+    assert.equal(data.coverage.historySummary.scope, "saved-chats");
+    assert.equal(data.coverage.historySummary.affectedDates, "unknown");
+    assert.equal(data.coverage.historySummary.unreadableChats, 1);
+    await expect(qualification).toContainText("No matching calls");
+    await expect(qualification).not.toContainText("dates unknown");
 });
 
 test("wide populated Trends stays readable through resizing, zoom, chart sizing and filtering", { timeout: 60000 }, async t => {
@@ -938,17 +942,16 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
             const view = document.getElementById("trendsView").getBoundingClientRect();
             const main = document.getElementById("main"), bounds = main.getBoundingClientRect(), style = getComputedStyle(main);
             const zoom = Number(getComputedStyle(document.documentElement).zoom);
-            const range = document.querySelector(".trends-caption").getBoundingClientRect();
-            const control = document.querySelector(".trends-date-range").getBoundingClientRect();
+            const control = document.querySelector(".trends-date-range");
             return { width: innerWidth, dpr: devicePixelRatio, zoom, view: { left: view.left, right: view.right },
                 expected: { left: bounds.left + parseFloat(style.paddingLeft) * zoom, right: bounds.right - parseFloat(style.paddingRight) * zoom },
-                rangeInsideControl: range.left >= control.left && range.right <= control.right && range.top >= control.top && range.bottom <= control.bottom,
+                namedCustomControl: control.textContent.trim() === "Custom dates",
                 overflow: document.documentElement.scrollWidth > innerWidth };
         });
 
         assert.ok(Math.abs(layout.view.left - layout.expected.left) < 2 && Math.abs(layout.view.right - layout.expected.right) < 2,
             `Whole workspace at actual CSS viewport: ${JSON.stringify(layout)}`);
-        assert.equal(layout.rangeInsideControl, true, "The accepted range belongs to its date control, not a detached caption");
+        assert.equal(layout.namedCustomControl, true, "The calendar entry is visibly named, not just a date string");
         assert.equal(layout.overflow, false);
         const values = await page.locator('[data-family=tools] .trends-legend-value').allTextContents();
         assert.ok(values.every((value, index) => !index || parseFloat(values[index - 1]) >= parseFloat(value)),
@@ -1128,14 +1131,15 @@ test("all seven full-width widgets retain readable labels and measures across si
     assert.equal(reads.length, readCount, "Overview measure, sizing and orientation changes do not request new populations");
 });
 
-test("collapsed Trends rows are uniform title-only summaries", { timeout: 30000 }, async t => {
+test("collapsed Trends rows contain only their title and applied range", { timeout: 30000 }, async t => {
     const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await page.getByRole("button", { name: "Collapse all", exact: true }).click(); await settle(page);
     await capture(page, "collapsed-title-only");
     const rows = await page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => ({
-        title: node.querySelector("h2").textContent, text: node.innerText.trim(), height: node.getBoundingClientRect().height,
+        title: node.querySelector("h2").textContent, range: node.querySelector(".trends-period-label").textContent,
+        text: node.innerText.trim().replace(/\s+/g, " "), height: node.getBoundingClientRect().height,
     })));
-    assert.ok(rows.every(row => row.text === row.title), `Collapsed rows should contain only their title: ${JSON.stringify(rows)}`);
+    assert.ok(rows.every(row => row.text === `${row.title} ${row.range}`), `Collapsed rows should contain only their title and range: ${JSON.stringify(rows)}`);
     assert.ok(Math.max(...rows.map(row => row.height)) - Math.min(...rows.map(row => row.height)) < 1);
 });
 
@@ -1220,7 +1224,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
         await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
         evidence.periods++;
         const readCount = reads.length;
-        await page.getByRole("button", { name: /^Custom dates:/ }).click();
+        await page.getByRole("button", { name: "Custom dates", exact: true }).click();
         await page.getByRole("button", { name: "Cancel", exact: true }).click();
         assert.equal(reads.length, readCount, "Cancel dates preserves the accepted period");
         await page.getByRole("button", { name: "Collapse all", exact: true }).click();
@@ -1287,7 +1291,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             await page.keyboard.press("Space");
             await expect(panel).toHaveAttribute("data-collapsed", "true");
             const collapsedText = await panel.innerText();
-            assert.equal(collapsedText.trim(), await panel.locator("h2").textContent());
+            assert.equal(collapsedText.trim().replace(/\s+/g, " "), (await panel.locator(".trends-title-group").innerText()).trim().replace(/\s+/g, " "));
             evidence.sizingActions += 6; evidence.widgets++;
         }
         assert.equal(reads.length, readCount, `${period}: chart controls must not change the population`);
@@ -1310,11 +1314,78 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
     assert.equal(evidence.exactSelections, 28);
 });
 
-test("mixed saved-chat read gaps use a short source-wide notice", { timeout: 30000 }, async t => {
+test("mixed saved-chat read gaps do not become a Trends scope warning", { timeout: 30000 }, async t => {
     const { page } = await setup(t, false, { records: currentRecords(), roster: [
         { sessionId: "missing", eligible: true, error: "PRIVATE_MISSING", errorCode: "ENOENT" },
         { sessionId: "permission", eligible: true, error: "PRIVATE_PERMISSION", errorCode: "EACCES" },
     ] });
-    await expect(page.locator(".trends-qualification")).toHaveText("Saved-chat history gaps · dates unknown");
+    await expect(page.locator('[data-family=models] .trends-limits')).toContainText("Model not recorded");
+    await expect(page.locator(".trends-qualification")).toBeHidden();
+    await expect(page.locator("#trendsView")).not.toContainText("Saved-chat history gaps");
     await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_");
+});
+
+test("Custom dates is visibly named and every widget names its applied range", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    await expect(page.locator(".trends-date-range")).toHaveText("Custom dates");
+    const expectRange = async text => {
+        await expect(page.locator(".trends-period-label")).toHaveCount(7);
+        for (const label of await page.locator(".trends-period-label").all()) await expect(label).toHaveText(text);
+    };
+    for (const period of ["7", "14", "30"]) {
+        const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
+        await page.locator(`[data-trend-period="${period}"]`).click();
+        const value = await (await response).json();
+        const first = new Date(value.from + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        await expectRange(`(${first} – Today)`);
+    }
+    const data = await dates(page, "2026-10-28", "2026-11-04");
+    await expectRange("(Oct 28 – Nov 4, 2026)");
+    assert.equal(data.from, "2026-10-28");
+    assert.equal(data.to, "2026-11-04");
+    await capture(page, "dates-overview");
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    await expect(page.locator(".trends-period-label:visible")).toHaveCount(7);
+    await capture(page, "dates-collapsed");
+    await page.getByRole("button", { name: "Maximize Services", exact: true }).click();
+    await expect(page.locator('[data-family=services] .trends-period-label')).toHaveText("(Oct 28 – Nov 4, 2026)");
+    await capture(page, "dates-maximized");
+    for (const [from, to, text] of [
+        ["2025-12-29", "2026-01-03", "(Dec 29, 2025 – Jan 3, 2026)"],
+        ["2026-11-04", "2026-11-04", "(Nov 4, 2026)"],
+    ]) {
+        await dates(page, from, to); await expectRange(text);
+    }
+});
+
+test("widget dates retain the accepted range during drafts, pending reads and failed reads, and clear on withdrawal", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, true, { records: currentRecords() });
+    await dates(page, "2026-10-28", "2026-11-04");
+    const accepted = await page.locator(".trends-period-label").allTextContents();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.getByLabel("Trends from", { exact: true }).fill("2026-01-01");
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
+    await page.evaluate(() => window.trendsBoundary.hold());
+    await page.locator('[data-trend-period="14"]').click();
+    await page.waitForFunction(() => typeof window.trendsBoundary.release === "function");
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
+    await page.evaluate(() => window.trendsBoundary.release());
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    const applied = await page.locator(".trends-period-label").allTextContents();
+    assert.notDeepEqual(applied, accepted);
+    assert.equal(new Set(applied).size, 1);
+    await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
+    await page.locator('[data-trend-period="30"]').click();
+    await expect(page.locator("#trendsView > .notice")).toBeVisible();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
+    const cleared = await page.evaluate(() => {
+        const text = document.querySelector(".trends-period-label").firstChild;
+        window.trendsBoundary.withdraw();
+        return { held: text.data, labels: [...document.querySelectorAll(".trends-period-label")].map(node => node.textContent) };
+    });
+    assert.deepEqual(cleared, { held: "", labels: ["", "", "", "", "", "", ""] });
 });
