@@ -46,11 +46,11 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 ## Trends
 
 See which Work IQ tools appear in your recorded activity and how their use
-varies by day. **Trends** opens seven charts together, with tool usage beside
-prompt authors and daily activity, followed by services, errors, response
-models and call duration.
+varies by day. **Trends** gives each daily chart the full workspace width:
+tool usage, prompt authors, tool calls, services, errors, response models
+and call duration. Every widget has its own measure controls.
 
-[![Trends with tool reach, prompt authors, daily calls and four supporting charts.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+[![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
 Choose 7, 14, 30 or custom days, filter the activity, then maximize a chart
 and open the calls behind a dated point. The [Trends guide](docs/user-guide.md#trends)

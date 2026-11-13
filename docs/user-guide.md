@@ -64,12 +64,12 @@ clears browsing restrictions, not collected activity or report selections.
 
 ## Trends
 
-Choose **Trends** in the sidebar to see tool usage immediately, alongside
-prompt authors and daily activity. Services, errors & failures, response models
-and call duration follow below. The whole chosen period stays useful even
-when there are no calls today.
+Choose **Trends** in the sidebar for full-width daily charts: tool usage,
+prompt authors, tool calls, services, errors & failures, response models and
+call duration. They use the available width in either monitor orientation.
+The whole chosen period stays useful even when there are no calls today.
 
-![Trends with tool reach, prompt authors, daily calls and four supporting charts.](images/trends-overview.png)
+![Full-width Trends charts with measure controls in every header.](images/trends-overview.png)
 
 ### Choose the period and activity
 
@@ -89,14 +89,15 @@ show or hide lines; they do not recalculate percentage denominators.
 ### Read the measures
 
 Period breakdowns summarize the whole chosen range. A dated point uses that
-day's matching population. **Chart guide** and **View numbers** explain the
-measures and exact values.
+day's matching population. Every chart's header lets you switch its measure
+without maximizing it. **Chart guide** and **View numbers** explain the measures
+and exact values.
 
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
 | Prompt authors | Matching originating interactions, split into My prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
-| Activity rhythm | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. |
+| Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |

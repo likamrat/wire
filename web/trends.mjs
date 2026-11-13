@@ -1,19 +1,19 @@
 export function mountTrends({ root, api, time, ux, createCalendar, mountChart, getContext, recordLink, reload }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const families = {
-        authors: { label: "Prompt authors", modes: [["share", "Share"], ["count", "Interactions"]],
+        authors: { label: "Prompt authors", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each originating interaction counts once per day with a matching call. Unverified authors remain in the denominator. This is not a count of messages sent that day or who executed each call." },
         tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
             help: "Reach counts an interaction once per tool. Tools overlap. Call share uses all matching calls; a multi-target call is one call. Hiding a series never changes either denominator." },
-        services: { label: "Services", modes: [["share", "Call share"], ["count", "Calls"]],
+        services: { label: "Services", modes: [["share", "Calls %"], ["count", "Calls"]],
             help: "Each share uses all matching calls. A call may involve several services. Discovery is preparation, not service execution. Missing targets do not establish which backend services ran." },
-        problems: { label: "Errors & failures", modes: [["share", "Interaction share"], ["count", "Interactions"]],
+        problems: { label: "Errors & failures", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Interactions with a failed tool or explicit application/API error, divided by all matching interactions. Tool completion can coexist with an API error. Unknown results are not failures; completion is not answer correctness." },
         timing: { label: "Call duration", modes: [["both", "Both"], ["median", "Median"], ["p95", "95th percentile"]],
             help: "Qualified tool-start-to-completion intervals only, using nearest-rank median or P95. Missing samples are not zero. Concurrent calls are not added into a task duration; prompt-to-final-response timing is a different clock." },
-        models: { label: "Response models", modes: [["share", "Interaction share"], ["count", "Interactions"]],
+        models: { label: "Response models", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each recorded model divided by all matching originating interactions, including missing model names. Models can overlap. Tool hints and the current model cannot fill historical provenance gaps." },
-        rhythm: { label: "Activity rhythm", modes: [["count", "Calls"], ["share", "Share within week"]],
+        rhythm: { label: "Tool calls", modes: [["count", "Calls"], ["share", "Share within week"]],
             help: "Each day remains separate. Its share uses matching calls within that calendar week and the selected dates. This describes recorded call activity, not hours worked or productivity." },
     };
     const el = (tag, cls, text) => {
@@ -100,9 +100,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     back.prepend(ux.icon("back"));
     const chooser = select("Trend", Object.entries(families).map(([id, spec]) => [id, spec.label]), maximize);
     detailBar.append(back, chooser.label); detailBar.hidden = true;
-    const overview = el("div", "trends-overview"), top = el("div", "trends-top"), side = el("div", "trends-side"), support = el("div", "trends-support");
-    const supportLeft = el("div", "trends-support-column"), supportRight = el("div", "trends-support-column");
-    support.append(supportLeft, supportRight); top.append(side); overview.append(top, support);
+    const overview = el("div", "trends-overview");
     const tooltip = el("aside", "trends-tooltip"); tooltip.id = "trendsTooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
     const paging = el("div", "trends-paging"), inspection = el("section", "trends-inspection");
     const inspectionHeader = el("div", "trends-inspection-heading"), selectedDate = el("h3"), selectedScope = el("span", "muted");
@@ -118,7 +116,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     root.append(toolbar, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
     dialog.addEventListener("close", () => { scrub(dialogBody); dialogOrigin?.focus({ preventScroll: true }); dialogOrigin = null; });
 
-    for (const id of ["authors", "rhythm", "tools", "services", "problems", "models", "timing"]) {
+    for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
         const spec = families[id], panel = el("section", "trends-panel"), heading = el("div", "trends-heading"), title = el("h2", "", spec.label);
         panel.dataset.family = id; title.id = `trendsHeading-${id}`; title.tabIndex = -1; panel.setAttribute("aria-labelledby", title.id);
         const sizing = el("div", "trends-sizing"), expand = button("", () => family === id ? restore() : maximize(id), "quiet icon-only");
@@ -127,7 +125,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             if (family === id) restore();
             const card = cards.get(id); card.collapsed = !card.collapsed; paint(); collapse.focus({ preventScroll: true });
         }, "quiet icon-only");
-        sizing.append(expand, collapse); heading.append(title, sizing);
+        const identity = el("div", "trends-identity");
+        identity.append(title); sizing.append(expand, collapse); heading.append(identity, sizing);
         const content = el("div", "trends-content"), modes = el("div", "trends-modes");
         modes.setAttribute("role", "group"); modes.setAttribute("aria-label", `${spec.label} measure`);
         for (const [value, label] of spec.modes) {
@@ -138,15 +137,14 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             control.dataset.trendMode = value; modes.append(control);
         }
         const body = el("div", "trends-chart-body"), summary = el("div", "trends-summary"), totals = el("div", "trends-totals");
-        const composition = el("div", "trends-composition"), legend = el("div", "trends-legend"), plot = el("div", "trends-plot");
+        const legend = el("div", "trends-legend"), plot = el("div", "trends-plot");
         plot.id = `trendsPlot-${id}`; plot.tabIndex = 0; plot.setAttribute("role", "region");
         plot.setAttribute("aria-label", `${spec.label} by day. Arrow keys move between dates and series.`);
-        const unit = el("p", "trends-unit"), limits = el("p", "trends-limits");
-        summary.append(totals, composition, legend); body.append(summary, plot);
-        if (id === "tools") heading.insertBefore(modes, sizing); else content.append(modes);
-        content.append(unit, body, limits); panel.append(heading, content);
-        (["authors", "rhythm"].includes(id) ? side : id === "tools" ? top : ["services", "models"].includes(id) ? supportLeft : supportRight).append(panel);
-        const card = { id, panel, title, expand, collapse, content, modes, summary, totals, composition, legend, plot, unit, limits,
+        const limits = el("p", "trends-limits");
+        identity.append(totals); summary.append(legend); body.append(summary, plot);
+        heading.insertBefore(modes, sizing);
+        content.append(body, limits); panel.append(heading, content); overview.append(panel);
+        const card = { id, panel, title, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
             mode: spec.modes[0][0], hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         cards.set(id, card);
         card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate,
@@ -289,7 +287,9 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             : card.mode === "count" ? number(amount) : `${rate(amount)} (${number(card.id === "tools" && card.mode === "reach" ? value.interactions : value.count)})`;
     }
     function metricStat(value, label) {
-        const stat = el("div", "trends-stat"); stat.append(el("span", "trends-stat-value", value), el("span", "muted", label)); return stat;
+        const stat = el("div", "trends-stat"); stat.append(el("span", "trends-stat-value", value));
+        if (label) stat.append(el("span", "muted", label));
+        return stat;
     }
     function viewData(card) { return card.id === "timing" ? timingData : data; }
     function paintCard(card) {
@@ -297,21 +297,17 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         panel.hidden = Boolean(family && family !== id); panel.dataset.maximized = String(family === id); panel.dataset.collapsed = String(card.collapsed);
         panel.dataset.manySeries = String(source.definitions[id].length > 6);
         card.content.hidden = card.collapsed;
+        card.modes.hidden = card.collapsed;
         card.expand.setAttribute("aria-label", `${family === id ? "Restore" : "Maximize"} ${spec.label}`);
         card.expand.replaceChildren(ux.icon(family === id ? "reader-restore" : "reader-maximize"));
         card.collapse.setAttribute("aria-label", `${card.collapsed ? "Expand" : "Collapse"} ${spec.label}`);
         card.collapse.setAttribute("aria-expanded", String(!card.collapsed));
         card.collapse.replaceChildren(ux.icon(card.collapsed ? "chevron" : "chart-collapse"));
         for (const control of card.modes.children) control.setAttribute("aria-pressed", String(control.dataset.trendMode === mode));
-        const unit = id === "timing" || id === "tools" || id === "authors" || id === "rhythm" && mode === "count" ? ""
-            : id === "rhythm" ? "Share of calls within each week" : id === "problems" ? ""
-                : mode === "count" ? id === "models" ? "Interactions" : "Calls" : id === "models" ? "Share of interactions" : "Share of calls";
-        card.unit.textContent = unit;
-        card.unit.hidden = !unit;
         scrub(card.totals);
         if (id === "tools") card.totals.append(metricStat(number(mode === "reach" ? totals.interactions : totals.calls), mode === "reach" ? "interactions" : "tool calls"));
         else if (id === "authors") card.totals.append(metricStat(number(totals.interactions), "interactions"));
-        else if (id === "rhythm") card.totals.append(metricStat(number(totals.calls), "tool calls"));
+        else if (id === "rhythm") card.totals.append(metricStat(number(totals.calls), ""));
         else if (id === "problems") card.totals.append(metricStat(valueText(totals.values[id][0], card), "interactions with errors"));
         const amount = definition => card.chart.metric(totals.values[id].find(value => value.id === definition.id), id, mode) ?? -1;
         const definitions = id === "tools" || id === "services" || id === "models" ? [...source.definitions[id]].sort((a, b) =>
@@ -344,21 +340,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             const maximum = mode === "count" ? Math.max(1, totals.calls) : id === "timing" ? Math.max(1, ...totals.values.timing.map(value => card.chart.metric(value, id, mode) ?? 0)) : 100;
             row.querySelector(".trends-value-fill").style.width = `${(amount ?? 0) * 100 / maximum}%`;
         }
-        scrub(card.composition);
-        if (id === "authors") {
-            const ring = svgNode("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" });
-            const arc = { cx: 60, cy: 60, r: 49, fill: "none", "stroke-width": 14, pathLength: 100, transform: "rotate(-90 60 60)" };
-            ring.append(svgNode("circle", { ...arc, stroke: "var(--canvas)" }));
-            let start = 0;
-            for (const value of totals.values.authors) {
-                const length = value.percent ?? 0;
-                if (!hidden.has(value.id) && length) ring.append(svgNode("circle", { ...arc,
-                    stroke: color(value.id, id), "stroke-dasharray": `${length} ${100 - length}`,
-                    "stroke-dashoffset": -start }));
-                start += length;
-            }
-            card.composition.append(ring);
-        }
+        card.summary.hidden = !card.legend.childElementCount;
+        card.body.dataset.summary = String(!card.summary.hidden);
         const limits = [];
         if (id === "services") {
             if (totals.missingServices) limits.push(`No service detail: ${rate(totals.serviceMissingShare)} (${number(totals.missingServices)})`);
@@ -370,8 +353,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         } else if (id === "timing") limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
-        card.plot.hidden = id === "authors" && family !== id;
-        if (!panel.hidden && !card.collapsed && !card.plot.hidden) {
+        if (!panel.hidden && !card.collapsed) {
             card.chart.render(source, id, mode, hidden);
             card.width = Math.round(card.plot.clientWidth); card.height = Math.round(card.plot.clientHeight);
         }
@@ -465,9 +447,6 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     function paint() {
         if (!current()) return;
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
-        top.hidden = Boolean(family && !["tools", "authors", "rhythm"].includes(family));
-        side.hidden = Boolean(family && !["authors", "rhythm"].includes(family));
-        support.hidden = Boolean(family && ["tools", "authors", "rhythm"].includes(family));
         detailBar.hidden = !family; inspection.hidden = !family; collapseAll.hidden = Boolean(family);
         collapseAll.textContent = allCollapsed ? "Restore all" : "Collapse all";
         if (family) chooser.field.value = family;
@@ -502,7 +481,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
             card.mode = families[card.id].modes[0][0];
-            for (const node of [card.totals, card.legend, card.composition, card.unit, card.limits]) scrub(node);
+            for (const node of [card.totals, card.legend, card.limits]) scrub(node);
         }
         const selectedText = doc.getSelection();
         if (selectedText && (root.contains(selectedText.anchorNode) || root.contains(selectedText.focusNode))) selectedText.removeAllRanges();
@@ -541,70 +520,42 @@ export const trendsStyles = `
 .trends-detail-bar{justify-content:space-between;margin-bottom:16px}
 .trends-control{display:flex;align-items:center;gap:8px;max-width:100%;min-width:0;flex-wrap:wrap}.trends-control select{min-width:0;max-width:100%;width:13rem}
 .trends-control .select-control{min-width:0;max-width:100%}
-.trends-overview,.trends-side,.trends-support-column{display:grid;gap:16px;min-width:0;align-content:start}
-.trends-top{display:grid;grid-template-columns:minmax(20rem,24rem) minmax(0,1fr);gap:16px;align-items:start;min-width:0}
-.trends-support{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;min-width:0}
-.trends-panel{background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:16px 20px;min-width:0;container-type:inline-size}
-.trends-heading{justify-content:space-between;gap:4px 12px;flex-wrap:nowrap}
-.trends-heading h2{flex:1;min-width:0;font-size:var(--type-section);font-weight:500;margin:0}
+.trends-overview{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;align-content:start}
+.trends-panel{--trends-plot-height:18rem;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:16px 20px;min-width:0;container:trend-card / inline-size}
+.trends-heading{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 12px;align-items:center}
+.trends-heading h2{min-width:0;font-size:var(--type-section);font-weight:var(--weight-medium);margin:0}
+.trends-heading>.trends-sizing{grid-column:3;grid-row:1}
+.trends-heading>.trends-modes{grid-column:2;grid-row:1}
+.trends-identity{display:flex;align-items:baseline;gap:8px 20px;flex-wrap:wrap;min-width:0}
 .trends-sizing{display:flex;flex:none;gap:0}
 .trends-sizing>button{width:44px;height:44px;min-width:44px;padding:0}
 .trends-sizing>button svg{width:18px;height:18px}.trends-sizing>button:first-child svg{transform:translateX(8px)}.trends-sizing>button:last-child svg{transform:translateX(-8px)}
 .trends-modes{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:2px;margin:0;min-height:44px}
-.trends-modes>button{font-size:var(--type-small);white-space:normal}
-.trends-panel:not([data-family=tools]):not([data-maximized=true]) .trends-modes{display:none}
-.trends-unit{color:var(--muted);font-size:var(--type-small);margin:4px 0 12px}
-.trends-chart-body{min-width:0}.trends-summary{min-width:0}
-.trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 16px}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.trends-stat-value{font-size:1.75rem;line-height:1.2;font-variant-numeric:tabular-nums}
-.trends-panel[data-family=tools] .trends-heading{display:grid;grid-template-columns:minmax(0,1fr) auto}
-.trends-panel[data-family=tools] .trends-heading>.trends-sizing{grid-column:2;grid-row:1}
-.trends-panel[data-family=tools] .trends-heading>.trends-modes{grid-column:1/-1;grid-row:2}
-.trends-panel[data-family=tools] .trends-chart-body{display:grid;grid-template-columns:minmax(15rem,18rem) minmax(0,1fr);gap:24px;margin-top:12px}
-.trends-panel[data-family=tools] .trends-stat-value{font-size:2rem}
-.trends-panel[data-family=tools] .trends-summary{max-height:24rem;overflow:auto;scrollbar-gutter:stable}
-.trends-panel[data-family=tools] .trends-plot{--trends-plot-height:24rem}
-.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height,15rem);overflow:auto;overflow-anchor:none;overscroll-behavior-x:contain}
+.trends-modes>button{font-size:var(--type-control);white-space:normal}
+.trends-chart-body{display:grid;grid-template-columns:22rem minmax(0,1fr);gap:24px;min-width:0;margin-top:12px}
+.trends-chart-body[data-summary=false]{grid-template-columns:minmax(0,1fr)}
+.trends-summary{min-width:0;container:trend-summary / inline-size;max-height:var(--trends-plot-height);overflow:auto;scrollbar-gutter:stable}
+.trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:0}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.trends-stat-value{font-size:1.25rem;line-height:var(--leading-heading);font-weight:var(--weight-regular);font-variant-numeric:tabular-nums}
+.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
 .trends-grid{stroke:var(--surface-divider);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}
-.trends-legend-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;min-width:0}
+.trends-legend-row{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:center;gap:2px 12px;min-width:0;padding-bottom:6px}
 .trends-series{display:flex;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;cursor:pointer}
 .trends-series input{accent-color:var(--toggle-on);flex:none}.trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .trends-sample{display:inline-block;width:20px;height:12px;flex:none}
-.trends-legend-value{font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.trends-legend-value{font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trends-value-track{display:block;height:4px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
 .trends-legend-row>.trends-value-track{grid-column:1/-1}
 .trends-legend-row[data-hidden=true]>.trends-value-track{visibility:hidden}
-.trends-panel[data-family=tools] .trends-legend-row{grid-template-columns:minmax(0,1fr) auto;padding-bottom:8px}
-.trends-panel[data-family=tools] .trends-legend-value{white-space:nowrap}
-.trends-panel[data-family=authors] .trends-series{gap:8px}.trends-panel[data-family=authors] .trends-sample{width:20px}
-.trends-panel[data-family=authors] .trends-legend-row>.trends-value-track{display:none}
-.trends-panel[data-family=authors]:not([data-maximized=true]) .trends-unit,.trends-panel[data-family=rhythm]:not([data-maximized=true]) .trends-unit{display:none}
-.trends-panel[data-family=authors] .trends-summary{position:relative;display:grid;grid-template-columns:7rem minmax(0,1fr);gap:12px;align-items:center;margin-top:4px}
-.trends-panel[data-family=authors] .trends-composition{grid-column:1;grid-row:1}
-.trends-panel[data-family=authors] .trends-legend{grid-column:2;grid-row:1}
-.trends-panel[data-family=authors] .trends-totals{position:absolute;top:50%;transform:translateY(-50%);left:0;width:7rem;justify-content:center;margin:0}
-.trends-panel[data-family=authors] .trends-stat{display:grid;text-align:center;gap:2px}
-.trends-panel[data-family=authors] .trends-stat>.muted{font-size:var(--type-caption)}
-.trends-composition>svg{display:block;width:7rem;height:7rem;margin:0}
-.trends-panel[data-family=services] .trends-series-label{white-space:nowrap;overflow-wrap:normal}
-.trends-panel[data-family=services] .trends-legend-row{grid-template-columns:minmax(max-content,1fr) auto}
-.trends-panel[data-family=services] .trends-legend-value{white-space:nowrap;overflow-wrap:normal}
-.trends-panel[data-family=services] .trends-plot{--trends-plot-height:14rem}
-.trends-panel[data-family=rhythm] .trends-plot{--trends-plot-height:10rem}
-.trends-panel[data-family=models] .trends-legend{max-height:16rem;overflow:auto}
-.trends-panel[data-family=models] .trends-legend-row>.trends-value-track{display:none}
-.trends-panel[data-family=timing] .trends-legend-row>.trends-value-track{display:none}
+.trends-panel:is([data-family=authors],[data-family=services]) .trends-series-label{white-space:nowrap;overflow-wrap:normal}
+.trends-panel:is([data-family=authors],[data-family=models],[data-family=timing]) .trends-legend-row>.trends-value-track{display:none}
 .trends-limits,.trends-qualification{font-size:var(--type-small);color:var(--muted);margin:12px 0 0}
 .trends-qualification{margin:0 0 16px}.trends-limits:empty{display:none}
-.trends-maximized .trends-top,.trends-maximized .trends-side,.trends-maximized .trends-support{display:block}
-.trends-maximized .trends-support-column{display:contents}
-.trends-panel[data-maximized=true] .trends-plot{--trends-plot-height:clamp(20rem,48vh,32rem)}
-.trends-panel[data-maximized=true]:not([data-family=tools]) .trends-chart-body{display:grid;grid-template-columns:minmax(13rem,18rem) minmax(0,1fr);gap:24px}
-.trends-panel[data-maximized=true] .trends-summary{max-height:32rem;overflow:auto;scrollbar-gutter:stable}
+.trends-panel[data-maximized=true]{--trends-plot-height:clamp(22rem,48vh,34rem)}
 .trends-inspection{margin-top:20px;padding:20px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .trends-inspection-heading{margin-bottom:12px}.trends-inspection-heading h3{margin:0;font-size:1.0625rem;font-weight:500}
 .trends-inspection-heading>button:first-of-type{margin-left:auto}.trends-inspection-heading .muted{min-width:0;max-width:100%;overflow-wrap:anywhere}
@@ -626,12 +577,21 @@ export const trendsStyles = `
 .trends-tip-series{display:flex;align-items:center;gap:6px}
 .trends-tip-caption{color:var(--muted);margin-top:4px}.trends-tip-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 20px;margin:10px 0 0}.trends-tip-facts dt{color:var(--muted);overflow-wrap:anywhere}.trends-tip-facts dd{margin:0;text-align:right}
 .trends-tip-table{border-collapse:collapse}.trends-tip-table th,.trends-tip-table td{font-weight:400;text-align:right;padding:5px 8px}.trends-tip-table th:first-child,.trends-tip-table td:first-child{text-align:left;padding-left:0}
-@container(min-width:44rem){.trends-panel[data-family=tools] .trends-heading{grid-template-columns:minmax(0,1fr) auto auto}.trends-panel[data-family=tools] .trends-heading>.trends-modes{grid-column:2;grid-row:1}.trends-panel[data-family=tools] .trends-heading>.trends-sizing{grid-column:3}.trends-panel:is([data-family=services],[data-family=models],[data-family=timing],[data-family=problems]) .trends-chart-body{display:grid;grid-template-columns:minmax(12rem,18rem) minmax(0,1fr);gap:24px}.trends-panel:is([data-family=services],[data-family=models]) .trends-summary{max-height:20rem;overflow:auto;scrollbar-gutter:stable}.trends-panel:is([data-family=services],[data-family=models]) .trends-plot{--trends-plot-height:20rem}}
-@container(max-width:850px){.trends-top{grid-template-columns:minmax(0,1fr)}.trends-side{grid-template-columns:repeat(2,minmax(0,1fr))}.trends-top>.trends-panel[data-family=tools]{grid-row:1}.trends-support{grid-template-columns:minmax(0,1fr)}}
-@container(max-width:550px){.trends-panel[data-family=tools] .trends-chart-body,.trends-panel[data-maximized=true]:not([data-family=tools]) .trends-chart-body{display:flex;flex-direction:column}.trends-panel[data-family=tools] .trends-summary{display:contents}.trends-panel[data-family=tools] .trends-legend{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;order:2}.trends-panel[data-family=tools][data-many-series=true] .trends-legend{max-height:20rem;overflow:auto}.trends-panel[data-family=tools] .trends-composition{display:none}.trends-panel[data-family=tools] .trends-stat{display:flex}.trends-side{grid-template-columns:minmax(0,1fr)}.trends-panel[data-family=tools] .trends-plot{--trends-plot-height:20rem;order:1}}
-@container(max-width:28rem){.trends-panel[data-family=services] .trends-legend-row{grid-template-columns:minmax(0,1fr)}.trends-panel[data-family=services] .trends-legend-value{text-align:left}.trends-panel[data-family=tools] .trends-legend{grid-template-columns:minmax(0,1fr)}}
-@container(max-width:18rem){.trends-panel[data-family=authors] .trends-summary{grid-template-columns:minmax(0,1fr);justify-items:center}.trends-panel[data-family=authors] .trends-legend{grid-row:2;grid-column:1;width:100%}.trends-panel[data-family=authors] .trends-totals{top:3.5rem;left:calc(50% - 3.5rem)}}
-@container(max-width:330px){.trends-panel[data-family=tools] .trends-legend{grid-template-columns:minmax(0,1fr)}}
+@container trend-card (max-width:52rem){
+ .trends-chart-body{grid-template-columns:minmax(0,1fr);gap:12px}
+ .trends-plot{grid-row:1}
+ .trends-summary{grid-row:2;max-height:none;overflow:visible}
+ .trends-panel[data-many-series=true] .trends-legend{max-height:18rem;overflow:auto;scrollbar-gutter:stable}
+}
+@container trend-card (max-width:40rem){
+ .trends-heading{grid-template-columns:minmax(0,1fr) auto}
+ .trends-heading>.trends-sizing{grid-column:2}
+ .trends-heading>.trends-modes{grid-column:1/-1;grid-row:2;justify-content:flex-start}
+}
+@container trend-summary (max-width:21rem){
+ .trends-legend-row{grid-template-columns:minmax(0,1fr)}
+ .trends-legend-value{text-align:left;padding-inline-start:48px}
+}
 @media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}.trends-toolbar{gap:4px}.trends-sizing{margin-right:-8px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}
 @media(prefers-reduced-motion:reduce){.trends-tooltip{transition:none}}

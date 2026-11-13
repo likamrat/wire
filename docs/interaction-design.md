@@ -89,13 +89,14 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 
 Trends is a peer destination, not another Analyze widget. Opening it immediately
 shows the chosen period's charts, not a marketplace or a supported-change gate.
-Tool usage is dominant, with period totals and per-tool percentages/counts in
-its left column. A compact side column holds the exclusive prompt-author
-composition and daily call activity. Services, errors, models and duration
-support them below. Empty Today does not discard useful earlier data or turn
-the screen into unavailable rows. Unknown and incomplete evidence stays explicit.
-Use the full workspace at wide CSS viewports without scaling text. Supporting
-columns flow independently instead of leaving empty rows beneath shorter charts.
+Tool usage, prompt authors, tool calls, services, errors, models and duration
+each occupy a full-width row. All seven show their daily chart and measure
+controls immediately. The same layout serves overview and maximized reading;
+short author/service labels stay whole rather than being squeezed beside a ring.
+Empty Today does not discard useful earlier data or turn the screen into
+unavailable rows. Unknown and incomplete evidence stays explicit.
+Use the full workspace in both orientations without scaling text. Narrow
+layouts move the legend below the chart; the plot scrolls only horizontally.
 The date-range button shows the accepted dates beside the presets and opens
 the existing calendar. Today is labeled as still in progress, not as a history gap.
 
@@ -104,6 +105,10 @@ and exact evidence. Back to overview restores the activating control and reading
 position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.
+Measure controls use the same header position for every widget, not just Tools.
+Counts, percentages and timing keep their distinct units; these controls do not
+redefine the underlying evidence. Omit redundant subheaders and the repeated
+"tool calls" caption beneath the Tool calls total.
 
 Keep the 7/14/30/custom date family, defaulting to seven days. Every civil day
 remains separate in the selected IANA zone. Every daily axis label remains

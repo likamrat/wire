@@ -157,7 +157,7 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         const dayWidth = Math.max(...labels.map(label => context.measureText(label).width)) + 16 * scale;
         const left = (family === "timing" ? 78 : 56) * scale;
         const width = Math.max(root.clientWidth, data.days.length * dayWidth + left + 12 * scale);
-        const height = Math.max(150 * scale, root.clientHeight - 18), top = 26 * scale, bottom = height - 42 * scale;
+        const height = Math.max(1, root.clientHeight - 18), top = 26 * scale, bottom = height - 42 * scale;
         const pitch = (width - left - 12 * scale) / data.days.length;
         scene = { data, family, mode, hidden, left, key, pitch, viewportWidth: root.clientWidth, points: [], segments: [] };
         const series = data.definitions[family].filter(row => !hidden.has(row.id)
@@ -204,7 +204,7 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
                 mark({ index, id: definition.id, x: x(index), y: rect ? rect.y + rect.height / 2 : top - 16 * scale, rect, keyboardOnly: !rect }, value);
                 sum += amount;
             }
-            if (sum) svg.append(svgNode("text", { x: x(index), y: shares ? top - 10 * scale : y(sum) - 8 * scale, "text-anchor": "middle" },
+            if (sum) svg.append(svgNode("text", { x: x(index), y: y(sum) - 8 * scale, "text-anchor": "middle" },
                 shares ? family === "authors" ? day.interactions : day.calls : sum));
         });
         else for (const definition of series) {

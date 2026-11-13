@@ -28,7 +28,7 @@ Evidence definitions and frozen-file requirements remain in the
 | Sliding left sidebar | Analyze, Trends, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
-| Trends | Chart-first period overview; dominant tool usage, compact authors and daily activity, then services, errors, models and duration |
+| Trends | Full-width daily charts in one vertical stack, each with its own visible measure controls |
 | Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
 
@@ -139,10 +139,14 @@ Do not apply current branding globally to historical report snapshots.
 The [Chart guide behavior](interaction-design.md#chart-guide) connects each
 visualization to its definitions and exact values.
 
-Trends uses the available workspace width, like Analyze, with bounded summary
-columns rather than a fixed-width page. Keep the chosen range inside its date
-control beside the presets. Compact period rows and ordinary solid lines lead
-the reading; do not make people decode dashes, shapes or hatched bars.
+Every Trends widget occupies the full workspace width in landscape and portrait.
+One shared chart layout places period figures beside the title, a readable
+legend beside the plot, and the same measure controls in every header.
+On narrower surfaces the legend moves below the plot instead of squeezing its
+names. Do not nest the author legend beside a ring or clamp short names to two
+lines. Single-measure plots do not reserve an empty legend column.
+Keep the chosen range inside its date control beside the presets. Ordinary
+solid lines lead the reading; do not make people decode dashes, shapes or hatches.
 Series keep stable colors and named legends through filters and visibility
 changes. Author and service colors use the existing WIRE roles. Hover or focus
 can emphasize one series without changing its values or the other series.
@@ -153,7 +157,9 @@ Measure label widths at the screen's 14px axis role and scroll locally instead
 of thinning dates, shrinking text or scaling an old SVG. Isolated observations
 may use a small dot; never connect across an unknown day. Author rows remain
 aligned. Keep "Search and retrieval" whole, moving its value/bar below when
-needed. Sizing glyphs remain inside distinct 44px targets.
+needed. Avoid explanatory subheaders: titles, named measure controls and units
+carry the meaning; consequential uncertainty stays visible. Use "Tool calls"
+for the daily-call widget. Sizing glyphs remain inside distinct 44px targets.
 
 Count/share widget rows show the percentage first, then the count in parentheses.
 Use the complete qualifying population, never the visible rows or largest bar.

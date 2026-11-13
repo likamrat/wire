@@ -178,6 +178,10 @@ renderer, with collection timers and provider work disabled. Set
 `WIRE_TRENDS_PROOFS` to an owned private capture directory. The overview, daily
 axes, exact-evidence reading, filters, sizing and heading-icon journeys share
 that fixture; screenshots are not evidence of live collection or deployment.
+The widget-layout regression operates every chart in overview, maximized,
+collapsed and restored states at 3440px landscape, 1080px portrait and enlarged
+narrow text. It checks full-width rows, visible measure controls, whole labels
+and the absence of accidental vertical chart scrolling.
 
 ## Troubleshoot a local run
 

@@ -14,6 +14,9 @@ async function capture(page, name) {
     await mkdir(process.env.WIRE_TRENDS_PROOFS, { recursive: true });
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: path.join(process.env.WIRE_TRENDS_PROOFS, name + ".png"), fullPage: true });
+    if (name === "overview-light") await page.screenshot({
+        path: path.join(process.env.WIRE_TRENDS_PROOFS, "widgets-overview-light.png"),
+    });
     if (name.startsWith("responsive-")) await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, name + "-viewport.png"),
     });
@@ -247,7 +250,7 @@ test("author, overlapping service/model, error, timing and calendar marks open o
 test("Trends opens normally, keeps 30 daily points and connects exact selected evidence to the existing reader", { timeout: 45000 }, async t => {
     const { page, reads } = await setup(t);
     await expect(page.locator(".trends-panel")).toHaveCount(7);
-    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(6);
+    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(7);
     const data = await dates(page);
     assert.equal(data.days.length, 30);
     assert.equal(data.totals.calls, 60);
@@ -943,6 +946,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
                 rangeInsideControl: range.left >= control.left && range.right <= control.right && range.top >= control.top && range.bottom <= control.bottom,
                 overflow: document.documentElement.scrollWidth > innerWidth };
         });
+
         assert.ok(Math.abs(layout.view.left - layout.expected.left) < 2 && Math.abs(layout.view.right - layout.expected.right) < 2,
             `Whole workspace at actual CSS viewport: ${JSON.stringify(layout)}`);
         assert.equal(layout.rangeInsideControl, true, "The accepted range belongs to its date control, not a detached caption");
@@ -1001,4 +1005,126 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
     await capture(page, "responsive-enlarged");
     assert.ok(toolLabels.every(label => label.height <= label.lineHeight * 2 + 1),
         `Enlarged tool names must not collapse into vertical letters: ${JSON.stringify(toolLabels)}`);
+});
+
+test("every trend widget spans the workspace in landscape and portrait", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 }, direct: true });
+    for (const viewport of [{ width: 3440, height: 1440 }, { width: 1080, height: 1920 }]) {
+        await page.setViewportSize(viewport); await settle(page);
+        const layout = await page.locator(".trends-panel:visible").evaluateAll(nodes => {
+            const workspace = document.getElementById("trendsView").getBoundingClientRect();
+            return nodes.map(node => {
+                const box = node.getBoundingClientRect();
+                return { family: node.dataset.family, width: box.width, available: workspace.width, left: box.left, edge: workspace.left };
+            });
+        });
+        assert.equal(layout.length, 7);
+        assert.ok(layout.every(row => Math.abs(row.width - row.available) < 2 && Math.abs(row.left - row.edge) < 2),
+            `Each widget needs the full ${viewport.width}px CSS workspace: ${JSON.stringify(layout)}`);
+    }
+});
+
+test("every overview chart exposes its measures without redundant subheaders", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    await settle(page);
+    await expect(page.locator(".trends-modes:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-unit:visible")).toHaveCount(0);
+    await expect(page.locator('[data-family=rhythm] h2')).toHaveText("Tool calls");
+    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(7);
+});
+
+test("author names stay whole in overview and maximized reading without a vertical label column", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 } });
+    const check = async state => {
+        await settle(page);
+        const labels = await page.locator('[data-family=authors] .trends-series-label').evaluateAll(nodes => nodes.map(node => ({
+            text: node.textContent, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height,
+            lineHeight: parseFloat(getComputedStyle(node).lineHeight), clipped: node.scrollWidth > node.clientWidth + 1,
+        })));
+        assert.ok(labels.every(label => label.height <= label.lineHeight + 1 && !label.clipped),
+            `${state} author labels must be complete single lines: ${JSON.stringify(labels)}`);
+    };
+    await page.getByRole("button", { name: "Maximize Prompt authors", exact: true }).click();
+    await capture(page, "authors-maximized-repro");
+    await check("maximized");
+    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await check("overview");
+});
+
+test("all seven full-width widgets retain readable labels and measures across sizing and orientation", { timeout: 90000 }, async t => {
+    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true, emptyToday: true }),
+        viewport: { width: 3440, height: 1440 }, motion: "no-preference", direct: true });
+    await page.locator('[data-trend-period="30"]').click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    const readCount = reads.length;
+    const measure = async (panel, state) => {
+        await settle(page);
+        const layout = await panel.evaluate(node => {
+            const box = node.getBoundingClientRect(), workspace = document.getElementById("trendsView").getBoundingClientRect();
+            const plot = node.querySelector(".trends-plot");
+            return { family: node.dataset.family, width: box.width, available: workspace.width,
+                plotOverflowY: plot.scrollHeight - plot.clientHeight,
+                plotWidth: plot.clientWidth, bodyWidth: node.querySelector(".trends-chart-body").clientWidth,
+                labels: [...node.querySelectorAll(".trends-series-label")].map(label => ({
+                    text: label.textContent, height: label.getBoundingClientRect().height,
+                    line: parseFloat(getComputedStyle(label).lineHeight), clipped: label.scrollWidth > label.clientWidth + 1,
+                })),
+                values: [...node.querySelectorAll(".trends-legend-value")].map(label => ({
+                    text: label.textContent, height: label.getBoundingClientRect().height,
+                    line: parseFloat(getComputedStyle(label).lineHeight), clipped: label.scrollWidth > label.clientWidth + 1,
+                })) };
+        });
+        assert.ok(Math.abs(layout.width - layout.available) < 2, state + " uses the full width");
+        assert.ok(layout.plotOverflowY <= 1, `${state}/${layout.family}: unintended vertical chart scroll ${layout.plotOverflowY}px`);
+        if (["rhythm", "problems"].includes(layout.family))
+            assert.equal(layout.plotWidth, layout.bodyWidth, `${state}: a chart without a legend must not reserve an empty summary column`);
+        assert.ok(layout.labels.every(label => !label.clipped && label.height <= label.line *
+            (["authors", "services"].includes(layout.family) ? 1 : 2) + 1), `${state}: cramped label ${JSON.stringify(layout)}`);
+        assert.ok(layout.values.every(label => !label.clipped && label.height <= label.line + 1), `${state}: cramped value ${JSON.stringify(layout)}`);
+        await expect(panel.locator(".trends-modes")).toBeVisible();
+        await expect(panel.locator("[data-date-tick]")).toHaveCount(30);
+    };
+    const captureWidget = async (panel, name) => {
+        if (!process.env.WIRE_TRENDS_PROOFS) return;
+        await panel.evaluate(node => window.scrollTo({ top: scrollY + node.getBoundingClientRect().top -
+            document.querySelector(".app-header").getBoundingClientRect().bottom - 12, behavior: "instant" }));
+        await settle(page);
+        await page.screenshot({ path: path.join(process.env.WIRE_TRENDS_PROOFS, `widgets-${name}.png`) });
+        if (name === "enlarged-authors-maximized") await panel.locator(".trends-summary").screenshot({
+            path: path.join(process.env.WIRE_TRENDS_PROOFS, "widgets-enlarged-authors-legend.png"),
+        });
+    };
+    for (const [orientation, viewport, theme, scale] of [
+        ["landscape", { width: 3440, height: 1440 }, "light", 1],
+        ["portrait", { width: 1080, height: 1920 }, "dark", 1],
+        ["enlarged", { width: 440, height: 1000 }, "light", 2],
+    ]) {
+        await page.setViewportSize(viewport); await chooseTheme(page, theme);
+        await page.evaluate(value => document.documentElement.style.fontSize = `${value * 100}%`, scale);
+        await settle(page);
+        await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+        for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
+            const panel = page.locator(`.trends-panel[data-family="${id}"]`);
+            await measure(panel, `${orientation}/overview`);
+            const modes = await panel.locator("[data-trend-mode]").evaluateAll(nodes => nodes.map(node => node.dataset.trendMode));
+            const selected = modes.at(-1);
+            await panel.locator(`[data-trend-mode="${selected}"]`).click();
+            await expect(panel.locator(`[data-trend-mode="${selected}"]`)).toHaveAttribute("aria-pressed", "true");
+            await captureWidget(panel, `${orientation}-${id}-overview`);
+            await panel.locator(".trends-sizing button").first().click();
+            await measure(panel, `${orientation}/maximized`);
+            await captureWidget(panel, `${orientation}-${id}-maximized`);
+            await panel.locator(`[data-trend-mode="${modes[0]}"]`).click();
+            await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+            await measure(panel, `${orientation}/restored`);
+            await expect(panel.locator(`[data-trend-mode="${modes[0]}"]`)).toHaveAttribute("aria-pressed", "true");
+            await panel.locator(".trends-sizing button").last().click();
+            await expect(panel.locator(".trends-content")).toBeHidden();
+            await panel.locator(".trends-sizing button").last().click();
+            await measure(panel, `${orientation}/expanded`);
+        }
+        await assertDailyAxes(page, 30, scale);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    }
+    assert.equal(reads.length, readCount, "Overview measure, sizing and orientation changes do not request new populations");
 });
