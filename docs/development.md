@@ -164,6 +164,12 @@ formats in the private evidence directory. Inspect the captures before copying
 the applicable PNGs into `docs/images`; keep receipts and extra proof images out
 of source.
 
+For first-use connection, run `tests/first-connection.browser.test.mjs` with
+`WIRE_FIRST_CONNECTION_PROOFS` set to an owned private directory. It exercises
+the welcome, deliberate source approval and first retained activity using
+invented Copilot metadata and history. Only the welcome image is used in the
+guide; source-review captures include temporary local paths and stay private.
+
 Shared-control proofs use `tests/appwide-controls.browser.test.mjs` with
 `WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
 and saved reports also exercise keyboard paging and frozen-file preservation.
@@ -209,6 +215,7 @@ requests are blocked; its disposable runtime and store are closed afterward.
 | --- | --- |
 | WIRE cannot start because the port is owned | Use the existing WIRE window, or stop the WIRE process you started before restarting. |
 | The page opens but no activity appears | Review the source paths and history window in Settings. Open Collection status for missing or unsupported history. See [Connect local history](user-guide.md#connect-local-history). |
+| "Collection cannot check history" appears | Open Collection status for the failing source operation and reason. Retained activity stays available. A transient metadata change can recover on the next ordinary collection interval; investigate persistent failures using the [status diagnostic guidance](runtime-access.md#check-a-background-return). |
 | Returning to a tab briefly shows "Checking WIRE access" | A current access watch should keep the accepted view. If the watch can no longer establish fresh authority, WIRE must confirm access again. For recurring interruptions, use the [access-watch diagnostic guidance](runtime-access.md#check-a-background-return). |
 | WSL reports that the Windows source reader is unavailable | Make an existing Windows Node 24+ executable available as `node.exe` through WSL interop, and check access to the selected Windows paths. Do not copy the live database or share WIRE stores as a workaround. |
 | PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare the report again. Other formats do not need that browser. |

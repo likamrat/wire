@@ -52,8 +52,8 @@ and call duration. Every widget has its own measure controls.
 
 [![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
-Choose 7, 14, 30 or custom days, filter the activity, then maximize a chart
-and open the calls behind a dated point. The [Trends guide](docs/user-guide.md#trends)
+Choose 7, 14, 30 or custom days and select a dated point in place. Maximize its
+chart to open the supporting calls. The [Trends guide](docs/user-guide.md#trends)
 explains reach versus call share, overlapping services and evidence gaps.
 
 ## Start
@@ -85,9 +85,9 @@ while you use WIRE.
 
 ### Connect your history
 
-Choose **Review and connect** in the welcome or Analyze, check the local paths
-and history window, then approve collection. Connection settings remain in
-**Settings > Connection & updates**.
+WIRE prompts you to connect on first use. Choose **Review and connect**, check
+the local paths and history window, then approve collection. **Not now** leaves
+the connection prompt in Analyze; settings remain in **Settings > Connection & updates**.
 Follow the [first-run guide](docs/user-guide.md#connect-local-history) for details.
 
 ### Your data

@@ -8,6 +8,8 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Connect local history
 
+WIRE prompts you to connect when you first open an unconfigured instance.
+
 1. Choose **Review and connect** in the welcome. **Not now** closes it and leaves
    the connection prompt in Analyze. You can also use **Settings > Connection &
    updates > Review source & connect**.
@@ -18,6 +20,8 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 4. Choose **View activity** to open Analyze. The first read may take a few
    minutes; activity appears as it is saved. If expected calls are missing,
    open **Collection status** to see known history gaps.
+
+![The first-use welcome offers Review and connect or Not now.](images/first-connection.png)
 
 The welcome stays dismissed in this browser at this WIRE address. Dismissing it
 does not connect a source. Configured instances open normally, and Pause stays
