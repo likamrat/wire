@@ -921,13 +921,12 @@ test("Trends explains retained chat-file gaps without assigning them to the sele
             lastAttemptAt: "2025-01-01T12:00:00Z" },
     ] });
     const qualification = page.locator(".trends-qualification");
-    await expect(qualification).toContainText("1 saved chat file could not be found");
-    await expect(qualification).toContainText("affected dates are not known");
+    await expect(qualification).toHaveText("1 saved chat file missing · dates unknown");
     await expect(qualification).not.toContainText("Incomplete history");
     await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_RETAINED_ERROR");
     await capture(page, "responsive-history");
     await dates(page, "2026-03-01", "2026-03-02");
-    await expect(qualification).toContainText("affected dates are not known");
+    await expect(qualification).toContainText("dates unknown");
 });
 
 test("wide populated Trends stays readable through resizing, zoom, chart sizing and filtering", { timeout: 60000 }, async t => {
@@ -1127,4 +1126,195 @@ test("all seven full-width widgets retain readable labels and measures across si
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     assert.equal(reads.length, readCount, "Overview measure, sizing and orientation changes do not request new populations");
+});
+
+test("collapsed Trends rows are uniform title-only summaries", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click(); await settle(page);
+    await capture(page, "collapsed-title-only");
+    const rows = await page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => ({
+        title: node.querySelector("h2").textContent, text: node.innerText.trim(), height: node.getBoundingClientRect().height,
+    })));
+    assert.ok(rows.every(row => row.text === row.title), `Collapsed rows should contain only their title: ${JSON.stringify(rows)}`);
+    assert.ok(Math.max(...rows.map(row => row.height)) - Math.min(...rows.map(row => row.height)) < 1);
+});
+
+test("sizing glyphs are centered in separated hover targets", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1440, height: 1000 } });
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click(); await settle(page);
+    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1080, 1], ["light", 440, 2]]) {
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: width === 1080 ? 1920 : 1000 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await settle(page);
+        const heights = await page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+        assert.ok(Math.max(...heights) - Math.min(...heights) < 1, `${theme}/${width}: collapsed rows keep the same height`);
+        for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
+            const panel = page.locator(`[data-family="${id}"]`);
+            const controls = panel.locator(".trends-sizing button");
+            for (const [index, control] of (await controls.all()).entries()) {
+                await control.hover();
+                const box = await control.evaluate(node => {
+                    const target = node.getBoundingClientRect(), glyph = node.querySelector("svg").getBoundingClientRect();
+                    return { dx: glyph.x + glyph.width / 2 - target.x - target.width / 2,
+                        dy: glyph.y + glyph.height / 2 - target.y - target.height / 2,
+                        width: target.width, height: target.height };
+                });
+                assert.ok(Math.abs(box.dx) < 1 && Math.abs(box.dy) < 1, `${id}: glyph is off-center ${JSON.stringify(box)}`);
+                assert.ok(box.width >= 44 && box.height >= 44);
+                if (process.env.WIRE_TRENDS_PROOFS) {
+                    await mkdir(process.env.WIRE_TRENDS_PROOFS, { recursive: true });
+                    await panel.screenshot({ path: path.join(process.env.WIRE_TRENDS_PROOFS, `collapse-hover-${theme}-${width}-${id}-${index}.png`) });
+                    if (id === "authors") await panel.locator(".trends-sizing").screenshot({
+                        path: path.join(process.env.WIRE_TRENDS_PROOFS, `collapse-controls-${theme}-${width}-${index}.png`),
+                    });
+                }
+            }
+            const gap = await controls.evaluateAll(nodes => nodes[1].getBoundingClientRect().left - nodes[0].getBoundingClientRect().right);
+            assert.ok(gap >= 8, `${id}: adjacent hover targets need a clear gap, got ${gap}`);
+        }
+        await page.mouse.move(0, 0);
+        await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
+        await settle(page);
+        await capture(page, `collapsed-rows-${theme}-${width}`);
+    }
+});
+
+test("the entire collapsed row expands and the expanded header collapses without hijacking controls", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    const panel = page.locator('[data-family=services]');
+    await panel.click({ position: { x: 600, y: 20 } });
+    await expect(panel).toHaveAttribute("data-collapsed", "false");
+    await expect(panel.locator(".trends-content")).toBeVisible();
+    await panel.locator('[data-trend-mode=count]').click();
+    await expect(panel).toHaveAttribute("data-collapsed", "false");
+    await panel.locator(".trends-heading").click({ position: { x: 600, y: 20 } });
+    await expect(panel).toHaveAttribute("data-collapsed", "true");
+    await panel.getByRole("button", { name: "Expand Services", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toHaveAttribute("data-collapsed", "false");
+    await expect(panel.locator('[data-trend-mode=count]')).toHaveAttribute("aria-pressed", "true");
+    await panel.locator(".trends-sizing button").last().locator("svg").click();
+    await expect(panel).toHaveAttribute("data-collapsed", "true");
+    await panel.locator(".trends-sizing button").last().locator("svg").click();
+    await expect(panel).toHaveAttribute("data-collapsed", "false");
+});
+
+test("every widget control works for 7, 14, 30 and custom days through the normal renderer", { timeout: 180000 }, async t => {
+    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true, emptyToday: true }),
+        viewport: { width: 1920, height: 1080 }, motion: "no-preference", direct: true });
+    const ids = ["tools", "authors", "rhythm", "services", "problems", "models", "timing"];
+    const evidence = { periods: 0, widgets: 0, measures: 0, seriesToggles: 0, exactSelections: 0, sizingActions: 0 };
+    const waitRead = () => page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
+    for (const [periodIndex, period] of ["7", "14", "30", "custom"].entries()) {
+        await chooseTheme(page, periodIndex % 2 ? "dark" : "light");
+        let data;
+        if (period === "custom") {
+            const day = offset => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10);
+            data = await dates(page, day(10), day(2));
+        } else {
+            const response = waitRead();
+            await page.locator(`[data-trend-period="${period}"]`).click();
+            data = await (await response).json();
+        }
+        await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+        evidence.periods++;
+        const readCount = reads.length;
+        await page.getByRole("button", { name: /^Custom dates:/ }).click();
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        assert.equal(reads.length, readCount, "Cancel dates preserves the accepted period");
+        await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+        await expect(page.locator(".trends-content:visible")).toHaveCount(0);
+        for (const id of ids) {
+            const panel = page.locator(`.trends-panel[data-family="${id}"]`);
+            await panel.click({ position: { x: 200, y: 8 } });
+            await expect(panel).toHaveAttribute("data-collapsed", "false");
+            const originalMode = await panel.locator('[data-trend-mode][aria-pressed=true]').getAttribute("data-trend-mode");
+            for (const control of await panel.locator("[data-trend-mode]").all()) {
+                await control.click();
+                await expect(control).toHaveAttribute("aria-pressed", "true");
+                await expect(panel).toHaveAttribute("data-collapsed", "false");
+                await expect(page.locator("#trendsTooltip")).toBeHidden();
+                evidence.measures++;
+            }
+            await panel.locator(`[data-trend-mode="${originalMode}"]`).click();
+            for (const control of await panel.getByRole("checkbox").all()) {
+                const row = control.locator("xpath=../.."), value = await row.locator(".trends-legend-value").textContent();
+                await control.uncheck(); await expect(control).not.toBeChecked();
+                await expect(row.locator(".trends-legend-value")).toHaveText(value);
+                await control.check(); await expect(control).toBeChecked();
+                evidence.seriesToggles += 2;
+            }
+            const controls = panel.locator(".trends-sizing button");
+            await controls.first().hover();
+            await controls.first().click();
+            await expect(panel).toHaveAttribute("data-maximized", "true");
+            await settle(page);
+            const marks = panel.locator(".trends-plot [data-trend-mark]");
+            const index = await marks.evaluateAll(nodes => nodes.findIndex(node =>
+                !/unavailable|, 0(?:%| |$)/i.test(node.getAttribute("aria-label"))));
+            assert.ok(index >= 0, `${period}/${id}: fixture needs an actual supported point`);
+            const mark = marks.nth(index);
+            await mark.focus(); await expect(page.locator("#trendsTooltip")).toBeVisible();
+            const label = await mark.getAttribute("aria-label"), series = await mark.getAttribute("data-series");
+            const date = new Date(label.split(":")[0].replace(/^Today · /, "")).toISOString().slice(0, 10);
+            await page.keyboard.press("Enter");
+            const expected = data.days.find(day => day.date === date).values[id].find(value => value.id === (id === "timing" ? "timing" : series));
+            await page.getByRole("button", { name: "View evidence", exact: true }).click();
+            const actual = await page.locator(".trends-evidence-row a").evaluateAll(nodes =>
+                nodes.map(node => new URLSearchParams(node.hash.split("?")[1]).get("call")));
+            assert.deepEqual(actual.sort(), [...expected.rowIds].sort(), `${period}/${id}: exact selected calls`);
+            await page.locator(".trends-evidence-row a").first().click();
+            await expect(page.locator("#requestContent")).toContainText("Cedar");
+            await page.getByRole("button", { name: "Close interaction", exact: true }).click();
+            await expect(panel).toHaveAttribute("data-maximized", "true");
+            evidence.exactSelections++;
+            await page.getByRole("button", { name: "View numbers", exact: true }).click();
+            await expect(page.locator(".trends-exact tr")).toHaveCount(data.days.length + 1);
+            await page.getByRole("button", { name: "Hide numbers", exact: true }).click();
+            await page.getByRole("button", { name: "Chart guide", exact: true }).click();
+            await expect(page.locator(".trends-dialog")).toContainText(await panel.locator("h2").textContent());
+            await page.getByRole("button", { name: "Close", exact: true }).click();
+            await page.getByRole("button", { name: "Filters", exact: true }).click();
+            await selectActivityOption(page, "trendsPromptauthors", "agent");
+            await page.getByRole("button", { name: "Cancel", exact: true }).click();
+            await controls.first().hover(); await controls.first().click();
+            await expect(panel).toHaveAttribute("data-maximized", "false");
+            await panel.locator("h2").click();
+            await expect(panel).toHaveAttribute("data-collapsed", "true");
+            await controls.last().focus(); await page.keyboard.press("Enter");
+            await expect(panel).toHaveAttribute("data-collapsed", "false");
+            await page.keyboard.press("Space");
+            await expect(panel).toHaveAttribute("data-collapsed", "true");
+            const collapsedText = await panel.innerText();
+            assert.equal(collapsedText.trim(), await panel.locator("h2").textContent());
+            evidence.sizingActions += 6; evidence.widgets++;
+        }
+        assert.equal(reads.length, readCount, `${period}: chart controls must not change the population`);
+        await capture(page, `all-controls-${period}-collapsed`);
+        await page.getByRole("button", { name: "Restore all", exact: true }).click();
+        await expect(page.locator(".trends-content:visible")).toHaveCount(7);
+        await page.getByRole("button", { name: "Filters", exact: true }).click();
+        await selectActivityOption(page, "trendsPromptauthors", "agent");
+        let response = waitRead();
+        await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+        const filtered = await (await response).json();
+        assert.ok(filtered.totals.calls > 0 && filtered.totals.calls < data.totals.calls);
+        response = waitRead();
+        await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+        assert.deepEqual((await (await response).json()).totals, data.totals);
+        await expect(page.locator(".trends-restrictions")).toBeHidden();
+    }
+    console.log("Every-control matrix", evidence);
+    assert.equal(evidence.widgets, 28);
+    assert.equal(evidence.exactSelections, 28);
+});
+
+test("mixed saved-chat read gaps use a short source-wide notice", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords(), roster: [
+        { sessionId: "missing", eligible: true, error: "PRIVATE_MISSING", errorCode: "ENOENT" },
+        { sessionId: "permission", eligible: true, error: "PRIVATE_PERMISSION", errorCode: "EACCES" },
+    ] });
+    await expect(page.locator(".trends-qualification")).toHaveText("Saved-chat history gaps · dates unknown");
+    await expect(page.locator("#trendsView")).not.toContainText("PRIVATE_");
 });

@@ -182,6 +182,10 @@ The widget-layout regression operates every chart in overview, maximized,
 collapsed and restored states at 3440px landscape, 1080px portrait and enlarged
 narrow text. It checks full-width rows, visible measure controls, whole labels
 and the absence of accidental vertical chart scrolling.
+The control matrix also exercises every measure and series toggle, sizing,
+exact evidence, numbers and guide controls for all seven widgets over
+7/14/30/custom periods. Separate hover captures verify centered, nonoverlapping
+targets and uniform collapsed rows in both themes and enlarged text.
 
 ## Troubleshoot a local run
 

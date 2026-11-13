@@ -109,6 +109,12 @@ Measure controls use the same header position for every widget, not just Tools.
 Counts, percentages and timing keep their distinct units; these controls do not
 redefine the underlying evidence. Omit redundant subheaders and the repeated
 "tool calls" caption beneath the Tool calls total.
+Collapsed rows contain only the title and sizing controls. Clicking anywhere
+on the collapsed row expands it; clicking an expanded header's non-control
+area collapses it. Measure, sizing, series and evidence controls keep their own
+actions. The named expand/collapse button provides the same action by keyboard
+and exposes its expanded state and content relationship.
+Restore all also works after the widgets have been collapsed individually.
 
 Keep the 7/14/30/custom date family, defaulting to seven days. Every civil day
 remains separate in the selected IANA zone. Every daily axis label remains
@@ -129,6 +135,8 @@ History warnings describe the saved-chat read/import problem using retained
 coverage facts. Those facts cover the source, not a particular analytical
 period: explicitly say when the affected dates are unknown. Do not equate an
 unreadable file, an unfinished import or missing prompt links with a failed call.
+Use a short factual notice, such as "1 saved chat file missing · dates unknown";
+do not repeat a paragraph explaining that same limit above every chart.
 Selected-date bars use the same measure and zero-based scale as the chart:
 reach is not call share, and count views use the count axis rather than percent
 widths. Hiding series does not rescale that axis.

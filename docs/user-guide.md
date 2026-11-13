@@ -126,6 +126,12 @@ the same selected trend; hiding the selected series does not change its evidence
 
 **Back to overview** returns to the same place. Collapse or restore charts
 without losing their measure, series choices or horizontal reading position.
+Collapsed widgets show only their names. Click anywhere on a collapsed row to
+open it, or the open widget's header to close it. The arrow button does the same
+with Enter or Space; the other controls keep their own actions.
+
+![Collapsed Trends rows with separate maximize and expand controls.](images/trends-collapsed.png)
+
 These are retained Work IQ patterns, not a census of Copilot prompts,
 answer-quality judgments, productivity scores or evidence of causation.
 For a two-period comparison or a saved copy, use

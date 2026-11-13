@@ -159,7 +159,10 @@ may use a small dot; never connect across an unknown day. Author rows remain
 aligned. Keep "Search and retrieval" whole, moving its value/bar below when
 needed. Avoid explanatory subheaders: titles, named measure controls and units
 carry the meaning; consequential uncertainty stays visible. Use "Tool calls"
-for the daily-call widget. Sizing glyphs remain inside distinct 44px targets.
+for the daily-call widget. Collapsed widgets show only their title and sizing
+controls, never figures or explanatory labels. Keep their row heights consistent.
+Center sizing glyphs in separate targets of at least 44px, with an 8px gap;
+do not offset the glyph independently of its hover or focus surface.
 
 Count/share widget rows show the percentage first, then the count in parentheses.
 Use the complete qualifying population, never the visible rows or largest bar.
