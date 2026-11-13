@@ -78,7 +78,7 @@ for (const mode of ["expanded", "collapsed", "drawer"]) test(`sidebar destinatio
     const nodes = await page.evaluateHandle(() => ["comparePeriods", "pageAction"].map(id => document.getElementById(id)));
     for (const origin of ["#analyze", "#analyze?compare=periods", "#request?request=sidebar-destinations", "#reports", "#reports?task=create", "#reports?task=compare",
         `#reports?bundle=${bundle.bundleId}`, "#settings?section=connection", "#collection-status"]) {
-        for (const [id, label] of [["comparePeriods", "Compare periods"], ["pageAction", "Create report"],
+        for (const [id, label] of [["comparePeriods", "Compare"], ["pageAction", "Create report"],
             ["analyze", "Analyze"], ["reports", "Reports"], ["settings", "Settings"]]) {
             await page.evaluate(hash => { location.hash = hash; }, origin);
             await expect.poll(() => new URL(page.url()).hash).toBe(origin);

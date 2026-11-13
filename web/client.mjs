@@ -3605,7 +3605,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!analytics || queryChanged || isLoading) {
             if (analytics && (route.view !== previousRoute.view || route.compare !== previousRoute.compare)) {
                 const destination = browseName(route) === "compare" ? "compare" : route.view;
-                const name = { analyze: "Analyze", trends: "Trends", compare: "Compare periods", reports: "Reports", settings: "Settings",
+                const name = { analyze: "Analyze", trends: "Trends", compare: "Compare", reports: "Reports", settings: "Settings",
                     request: "Interaction", "collection-status": "Collection status" }[destination];
                 const active = destination === "request" ? "analyze" : destination === "collection-status" ? "settings" : destination;
                 for (const node of document.querySelectorAll("nav [data-nav]")) {
@@ -4110,7 +4110,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
         const selectedRequest = state.scenarios.find(scenario => scenario.scenarioId === route.request);
         const titles = {
-            analyze: [route.compare === "periods" ? "Compare periods" : "Analyze", ""],
+            analyze: [route.compare === "periods" ? "Compare" : "Analyze", ""],
             trends: ["Trends", ""],
             request: [selectedRequest ? route.call ? "Call in context" : "Interaction" : "Interaction unavailable", ""],
             reports: [route.bundle ? savedReportView?.bundleId === route.bundle && savedReportView.entryKey === route.savedEntry
@@ -6216,7 +6216,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
         next.disabled = reportOrigin ? exportWriting : Boolean(readingBlock) || membership.disabled || fixedScope || !membership.selected;
         next.hidden = !reportOrigin && !membership.selected;
-        setText(title, readingBlock || (periodReport ? "This report uses fixed paired periods. Return to Compare periods to change its activity."
+        setText(title, readingBlock || (periodReport ? "This report uses fixed paired periods. Return to Compare to change its activity."
             : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity."
                 : "Not included with this report's scope and author choices. Change them in Activity."
             : membership.selected && !membership.included ? "Selected; not included with current report choices."
@@ -6573,7 +6573,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const expected = [...new Set(Object.values(periodReport.value.periods).flatMap(side => side.scenarioIds))].sort();
             if (JSON.stringify([...selected].sort()) !== JSON.stringify(expected)) {
                 periodReportInvalid = true;
-                invalidatePreview("The comparison selection changed. Return to Compare periods and create a new report.");
+                invalidatePreview("The comparison selection changed. Return to Compare and create a new report.");
             }
         }
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
@@ -6783,7 +6783,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             resolveReportView: reportDatesReplaced && reportScope === "current",
             authorLabel: authorship.selectionLabel(activeAuthors), authorFiltered: activeAuthors.length !== authorship.actors.length,
             scopeReady: !nativeBlock && !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
-            scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Compare periods and create a new report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
+            scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Compare and create a new report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
             promptMode: draft.options().promptMode, formats: draft.options().formats,
             prepareIssue,
             timeLabel: time.label(applied?.timeContext || viewerTime), entry: reportEntry,
@@ -10176,7 +10176,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("loading").hidden = true;
         $("accessShell").hidden = false;
         const active = browseName(route) === "compare" ? "compare" : route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
-        setText($("accessPageTitle"), { analyze: "Analyze", compare: "Compare periods", settings: "Settings", reports: "Reports" }[active] || "Analyze");
+        setText($("accessPageTitle"), { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports" }[active] || "Analyze");
         $("accessSettings").hidden = active === "settings";
         $("accessAccount").disabled = value.mode !== "enforced";
         $("accessRetry").hidden = !["freshness-expired", "watch-timeout", "watch-unavailable", "connection-unavailable", "invalid-bootstrap"].includes(value.reason);

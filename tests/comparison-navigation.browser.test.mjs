@@ -48,7 +48,20 @@ async function dates(page, a, b) {
 }
 test("primary comparison opens complete days independently, keeps chart membership and restores Analyze", { timeout: 60000 }, async t => {
     const { page, comparisons } = await setup(t);
-    await page.locator("#comparePeriods").click(); await ready(page);
+    const compare = page.getByRole("link", { name: "Compare", exact: true });
+    await expect(compare).toHaveAttribute("id", "comparePeriods");
+    await expect(compare).toHaveAttribute("href", /^#analyze\?compare=periods(?:&|$)/);
+    await expect(compare).toHaveText("Compare");
+    await compare.click(); await ready(page);
+    await expect(page.locator("#pageTitle")).toHaveText("Compare");
+    await expect(page.locator("#pageTitle")).toHaveAccessibleName("Compare");
+    await expect(page.locator("#periodComparisonSetup")).toHaveAccessibleName("Compare");
+    await page.locator("#navigationCollapse").click();
+    await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
+    await compare.focus();
+    await expect(page.locator('[role=tooltip]:visible')).toHaveText("Compare");
+    await page.locator("#navigationCollapse").click();
+    await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.deepEqual(comparisons.at(-1).periods.later.range, { from: "2026-03-03", to: "2026-03-09" });
     assert.deepEqual(comparisons.at(-1).periods.baseline.range, { from: "2026-02-24", to: "2026-03-02" });
     assert.equal(comparisons.at(-1).options.filters.tools, undefined);
@@ -84,7 +97,7 @@ test("primary comparison opens complete days independently, keeps chart membersh
     assert.deepEqual(comparisons.at(-1).periods.later.range, pair.periods.later.range);
     assert.equal(comparisons.at(-1).options.filters.tools, undefined);
     await page.locator("#comparePeriods").click(); await ready(page);
-    await expect(page.locator("#pageTitle")).toHaveText("Compare periods");
+    await expect(page.locator("#pageTitle")).toHaveText("Compare");
     await page.locator("nav [data-nav=settings]").click();
     await expect(page.locator("#breadcrumbs")).toBeHidden();
 });
@@ -205,6 +218,7 @@ test("access withdrawal scrubs comparison marks, inspection and held links witho
     await controller.locator("#wireAccountTrigger").click();
     await controller.locator("#wireAccountGate").click();
     await expect(page.locator("#workspace")).toBeHidden();
+    await expect(page.locator("#accessPageTitle")).toHaveText("Compare");
     assert.deepEqual(await page.evaluate(() => [window.heldComparisonText.data, window.heldComparisonHref.value,
         window.heldComparisonLink.textContent, window.heldComparisonLink.getAttribute("href")]), ["", "", "", null]);
     const url = page.url();
@@ -231,10 +245,11 @@ test("narrow keyboard entry and enlarged text keep the same navigation and chart
     await page.setViewportSize({ width: 390, height: 900 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await page.locator("#navigationToggle").click();
-    await page.locator("#comparePeriods").focus();
+    await page.getByRole("link", { name: "Compare", exact: true }).focus();
     await page.keyboard.press("Enter");
     await ready(page);
     await expect(page.locator("#navigationDrawer")).toBeHidden();
+    await expect(page.locator("#pageTitle")).toHaveAccessibleName("Compare");
     await expect(page.getByRole("button", { name: "Outcomes", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "View numbers", exact: true })).toBeVisible();
     const overflow = await page.evaluate(() => [...document.querySelectorAll("#workspace *")].filter(node => node.checkVisibility()

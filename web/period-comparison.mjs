@@ -294,7 +294,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const button = (label, action) => {
         const node = el("button", label, "quiet"); node.type = "button"; node.addEventListener("click", action); return node;
     };
-    const title = el("h2", "Compare periods", "visually-hidden");
+    const title = el("h2", "Compare", "visually-hidden");
     title.id = "periodComparisonTitle"; title.tabIndex = -1;
     function stop() { navigate({ compare: undefined }); toggle.focus(); }
     const form = el("form", undefined, "period-comparison-controls");

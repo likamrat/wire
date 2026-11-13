@@ -225,6 +225,7 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     assert.equal(corpus.status().state, "uninitialized");
     const { items, ticket } = await indexed(corpus);
     const comparisonView = items.find(item => item.id === corpusId("view", "compare-periods"));
+    assert.equal(comparisonView.title, "Compare");
     assert.deepEqual(comparisonView.target, { kind: "route", href: "#analyze?compare=periods" });
     assert.equal(comparisonView.source.kind, "fixed-navigation");
     assert.deepEqual(new Set(items.map(item => item.type)), new Set(["interaction", "context", "reply", "action", "tool", "service", "report", "comparison", "view", "setting"]));

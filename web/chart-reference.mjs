@@ -405,7 +405,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             button.dataset.referenceTopic = key; button.setAttribute("aria-pressed", String(key === topic));
             button.setAttribute("aria-controls", "chartReferenceExplanation"); navigation.append(button);
         }
-        $("chartReferenceIndexTitle").textContent = context.mode === "comparison" ? "Compare periods" : "Choose a chart";
+        $("chartReferenceIndexTitle").textContent = context.mode === "comparison" ? "Compare" : "Choose a chart";
         $("chartReferenceAllTopics").replaceChildren(ux.icon("back"), doc.createTextNode(context.mode === "comparison" ? "All topics" : "All charts"));
     }
     function renderGuide() {

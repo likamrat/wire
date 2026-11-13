@@ -873,7 +873,7 @@ test("shared main headings keep the same focus node, use navigation icons and le
     const { page } = await setup(t, false, { records: currentRecords(), motion: "no-preference" });
     await page.evaluate(() => window.originalPageHeading = document.getElementById("pageTitle"));
     for (const [destination, label, icon] of [["analyze", "Analyze", "chart-column"], ["trends", "Trends", "chart-no-axes-combined"],
-        ["reports", "Reports", "clipboard-list"], ["compare", "Compare periods", "scale"], ["settings", "Settings", null]]) {
+        ["reports", "Reports", "clipboard-list"], ["compare", "Compare", "scale"], ["settings", "Settings", null]]) {
         await navigateMain(page, destination); await settle(page);
         await expect(page.locator("#pageTitle")).toHaveText(label);
         if (icon) {

@@ -144,7 +144,7 @@ test("destination feedback precedes its snapshot without presenting an unaccepte
     assert.equal(pending.selected, "page");
     assert.equal(pending.busy, "true");
     assert.equal(pending.home, false);
-    assert.match(pending.notice, /Compare periods/);
+    assert.equal(pending.notice, "Opening Compare...");
     release.resolve();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#navigationPending")).toBeHidden();

@@ -78,7 +78,7 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await expect(page.locator("#settingsDraftNotice")).toBeVisible();
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "display");
-    await shortcut("comparePeriods", "Compare periods");
+    await shortcut("comparePeriods", "Compare");
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
     await expect(page.locator("#comparisonAPreset-control")).toBeFocused();
     await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-expanded", "true");
