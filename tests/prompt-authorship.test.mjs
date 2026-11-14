@@ -72,6 +72,7 @@ test("unsupported or ambiguous direct-message reference suffixes remain unverifi
     const reference = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }, suffix = directMessageReference(reference);
     for (const invalid of [
         directMessageReference({ ...reference, id: "not-an-id" }),
+        ...[[reference.id], [[reference.id]], [], {}, null, true, 42].map(id => directMessageReference({ ...reference, id })),
         ...[0, -1, 1.5, "1", null, Number.MAX_SAFE_INTEGER + 1].map(revision => directMessageReference({ ...reference, revision })),
         directMessageReference({ ...reference, author: "user" }), directMessageReference({ id: reference.id }),
         directMessageReference(null), directMessageReference([reference]),
