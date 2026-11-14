@@ -265,6 +265,15 @@ the image-envelope classifier does not trigger that repair automatically.
 Literal image-reference examples in the original prompt or a supported canvas
 attachment remain content, not host provenance.
 
+The host can append a direct-message source reference after the original text.
+WIRE recognizes the supported UUID/revision envelope and fixed footer only at
+that exact outer boundary. The reference is neutral framing: source, timestamp,
+sender and agent-created kickoff checks still determine authorship. Typed
+imitations, altered or duplicate references and unsupported layouts do not
+establish a human author. Classifier version 9 covers newly consumed originals;
+it does not reopen or relabel already-qualified records or compact checkpoints.
+Those retained copies still require separately approved, source-qualified repair.
+
 New author qualification can retain a closed `issue` code with the existing
 actor/basis pair: `body-boundary-v1` means the original prompt did not match a
 supported transformed-message boundary; `host-wrapper-v1` means the host-added

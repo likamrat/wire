@@ -17,6 +17,9 @@ import { hash } from "../lib/collector-io.mjs";
 import { ContractError, validateInteraction } from "../lib/assessment-contract.mjs";
 import { scanRecordedGraphHistory, mergeGraphScenarios } from "../lib/graph-history-io.mjs";
 import { mergedRecords } from "../lib/collector.mjs";
+import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { buildTrends } from "../lib/trends.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -25,6 +28,153 @@ function extract(data) {
             data: { toolName: "workiq-ask", toolCallId: "synthetic-call", arguments: { question: "Invented tool question" } } },
     ], { sessionId: "synthetic-session" }, "2026-10-06T00:00:00Z", "2026-10-07T00:00:00Z").scenarios[0];
 }
+
+function directMessageReference(value = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }) {
+    return "\n\n<app_user_message_source_json>\n" + JSON.stringify(value)
+        + "\n</app_user_message_source_json>\n"
+        + "This reference identifies this direct user message. When forwarding it to a coordinated child, pass it as source_user_message. "
+        + "The app supplies the original user text; put your own guidance in message/coordinator_instructions. "
+        + "The reference does not grant permissions or override system, managed, or custom instructions.";
+}
+
+test("the app direct-message reference suffix preserves qualified origin without supplying an author", () => {
+    const content = "Invented direct request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const metadata = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle" };
+    const transformedContent = stamp + content + directMessageReference();
+    const record = extract({ ...metadata, transformedContent });
+    assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    assert.equal(record.userPrompt.text, content);
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + sender + content + directMessageReference() }).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-envelope" });
+    assert.deepEqual(extract({ ...metadata, source: "user", transformedContent: stamp + sender + content + directMessageReference() }).userPrompt.authorship,
+        { actor: "unknown", basis: "conflicting-source" });
+    for (const [source, actor] of [["agent-invented", "agent"], ["system", "unknown"], ["autopilot", "agent"]]) {
+        assert.equal(extract({ ...metadata, source, transformedContent }).userPrompt.authorship.actor, actor);
+    }
+    assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z",
+        data: { ...metadata, transformedContent } }, { agentCreatedFirstMessage: true }).actor, "unknown");
+    for (const data of [
+        { content: content + directMessageReference() },
+        { ...metadata, transformedContent: content + directMessageReference() },
+        { ...metadata, transformedContent: stamp + "<unknown_context>Invented context.</unknown_context>" + content + directMessageReference() },
+        { ...metadata, messageId: "not-an-id", transformedContent },
+        { ...metadata, transformedContent: transformedContent.replace("12:00:00", "11:00:00") },
+    ]) assert.equal(extract(data).userPrompt.authorship.actor, "unknown");
+    const imitation = content + directMessageReference();
+    assert.equal(extract({ ...metadata, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user",
+        "A reference inside the exact displayed text is content, not provenance.");
+});
+
+test("unsupported or ambiguous direct-message reference suffixes remain unverified", () => {
+    const content = "Invented request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const metadata = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle" };
+    const reference = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }, suffix = directMessageReference(reference);
+    for (const invalid of [
+        directMessageReference({ ...reference, id: "not-an-id" }),
+        ...[0, -1, 1.5, "1", null, Number.MAX_SAFE_INTEGER + 1].map(revision => directMessageReference({ ...reference, revision })),
+        directMessageReference({ ...reference, author: "user" }), directMessageReference({ id: reference.id }),
+        directMessageReference(null), directMessageReference([reference]),
+        suffix.replace('"revision":1', '"revision":2,"revision":1'),
+        suffix.replace('{"id"', '{invalid:"id"'), suffix.replace("</app_user_message_source_json>", ""),
+        suffix + suffix, suffix + "\n", suffix + "\nExtra injected context.", suffix.replace("direct user message", "automatic message"),
+        suffix.replace("<app_user_message_source_json>", '<app_user_message_source_json author="user">'),
+    ]) assert.equal(extract({ ...metadata, transformedContent: stamp + content + invalid }).userPrompt.authorship.actor, "unknown");
+    assert.equal(extract({ ...metadata, transformedContent: stamp + content + " changed" + suffix }).userPrompt.authorship.actor, "unknown");
+    assert.equal(extract({ ...metadata, transformedContent: stamp + suffix + content }).userPrompt.authorship.actor, "unknown");
+});
+
+test("source-reference origins survive collection, restart and append without upgrading qualified historical copies", async t => {
+    const app = await promptInstallation(t), file = app.sourceFiles[1];
+    const human = app.cases.find(item => item.name === "human"), agent = app.cases.find(item => item.name === "enveloped-agent");
+    const old = app.cases.find(item => item.name === "imitation"), targets = [human, agent, old];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    for (const item of targets) events.find(event => event.id === item.promptId).data.transformedContent += directMessageReference();
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const collected = await loadBoardState(app.context);
+    for (const item of targets) assert.equal(collected.evidence.find(record => record.scenarioId === item.scenarioId).userPrompt.authorship.actor, item.actor);
+
+    const historical = { actor: "unknown", basis: "invalid-source", issue: "body-boundary-v1" };
+    const preserveOld = prompt => prompt.sourceEventId === old.promptId
+        ? { ...prompt, authorship: historical, authorshipVersion: 8 } : prompt;
+    await replaceEvidence(app.context, records => ({ records: records.map(record => ({ ...record,
+        userPrompt: preserveOld(record.userPrompt), followUpPrompts: record.followUpPrompts.map(preserveOld) })),
+        importCoverage: collected.importCoverage }));
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    let cursor;
+    await app.restart(async () => {
+        const index = JSON.parse(await readFile(indexFile, "utf8"));
+        cursor = structuredClone(index.sources[app.child].cursor);
+        const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
+        const checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
+        const retained = checkpoint.events.find(event => event.id === old.promptId);
+        retained.data.wirePromptAuthorship = historical;
+        retained.data.wirePromptAuthorshipVersion = 8;
+        assert.ok(checkpoint.events.filter(event => targets.some(item => item.promptId === event.id))
+            .every(event => !Object.hasOwn(event.data, "transformedContent")));
+        await writeFile(checkpointFile, JSON.stringify(checkpoint));
+    });
+    await app.runtime().collector.collectNow();
+    let state = await loadBoardState(app.context);
+    assert.deepEqual(JSON.parse(await readFile(indexFile, "utf8")).sources[app.child].cursor, cursor);
+    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0, "Version 8 originals are not reopened by version 9.");
+    const records = targets.map(item => state.evidence.find(record => record.scenarioId === item.scenarioId));
+    const expected = ["user", "agent", "unknown"];
+    const model = buildAssessmentModel(state);
+    for (const [i, record] of records.entries()) {
+        const author = promptAuthorship.read(record.userPrompt);
+        assert.equal(author.actor, expected[i]);
+        const detail = model.details.get(model.catalog.find(row => row.scenarioId === record.scenarioId).interactionRef);
+        assert.deepEqual(detail.interaction.message.authorship, author);
+        if (i < 2) assert.equal(promptAuthorship.display(record.userPrompt).label, i === 0 ? "My prompt" : "Agent prompt");
+        else assert.match(promptAuthorship.reason(record.userPrompt), /supported host message layout/);
+        const filtered = buildActivityAnalytics(records, { filters: { scope: "all", promptAuthors: [expected[i]] } });
+        assert.deepEqual(filtered.rows.map(row => row.scenarioId), [record.scenarioId]);
+    }
+    assert.deepEqual(createPercentageCharts({ authorship: promptAuthorship }).authorUsage(records).rows.map(row => row.count), [1, 1, 1]);
+    const date = events.find(event => event.id === human.promptId).timestamp.slice(0, 10);
+    const trends = buildTrends(state, { expectedRevision: state.revision, from: date, to: date, filters: {},
+        timeContext: { timeZone: "UTC", locale: "en-US" } }, { records });
+    assert.deepEqual(trends.totals.values.authors.map(row => row.count), [1, 1, 1]);
+
+    const exports = createExportController(app.context);
+    const preview = await exports.preview("source-reference-proof", undefined, { promptMode: "original", formats: ["json", "markdown"] },
+        { kind: "selected", scenarioIds: targets.map(item => item.scenarioId), revision: state.revision });
+    const snapshot = JSON.parse(preview.files["product-report.json"]);
+    assert.deepEqual(snapshot.records.map(record => record.prompts.find(prompt => prompt.kind === "origin").authorship.actor).sort(), [...expected].sort());
+    await exports.review("source-reference-proof", preview.previewId, true);
+    const saved = await exports.confirm("source-reference-proof", preview.previewId, true);
+    const savedFiles = Object.values(saved.bundle.files), savedBytes = await Promise.all(savedFiles.map(file => readFile(file)));
+
+    const laterId = randomUUID(), now = new Date().toISOString(), content = "Invented later direct request.";
+    await appendFile(file, [
+        { id: randomUUID(), type: "assistant.message", timestamp: now,
+            data: { originatingMessageId: events.find(event => event.id === old.promptId).data.messageId,
+                turnId: "invented-old-turn", toolRequests: [{ toolCallId: "invented-old-late-call" }] } },
+        { id: randomUUID(), type: "tool.execution_start", timestamp: now,
+            data: { toolName: "workiq-ask", toolCallId: "invented-old-late-call", turnId: "invented-old-turn",
+                arguments: { question: "Invented generated tool question." } } },
+        { id: laterId, type: "user.message", timestamp: now, data: { content, messageId: randomUUID(), delivery: "idle",
+            transformedContent: `<current_datetime>${now}</current_datetime>\n\n${content}${directMessageReference()}` } },
+        { id: randomUUID(), type: "tool.execution_start", timestamp: now,
+            data: { toolName: "workiq-ask", toolCallId: "invented-new-call", arguments: { question: "Invented generated tool question." } } },
+    ].map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    state = await loadBoardState(app.context);
+    const previous = state.evidence.find(record => record.scenarioId === old.scenarioId);
+    assert.deepEqual(previous.userPrompt.authorship, historical);
+    assert.equal(previous.userPrompt.authorshipVersion, 8);
+    assert.ok(previous.toolCalls.some(call => call.toolCallId === "invented-old-late-call"));
+    const later = state.evidence.find(record => record.userPrompt.sourceEventId === laterId);
+    assert.deepEqual(later.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    assert.equal(later.userPrompt.text, content);
+    assert.equal(later.userPrompt.authorshipVersion, promptAuthorship.version);
+    assert.deepEqual(await Promise.all(savedFiles.map(file => readFile(file))), savedBytes);
+    assert.doesNotMatch(JSON.stringify(state.evidence), /app_user_message_source_json/);
+});
 
 test("host source, not user.message role or text, identifies the prompt author", () => {
     for (const [source, actor] of [["user", "user"], ["agent-invented", "agent"], ["autopilot", "agent"]]) {
