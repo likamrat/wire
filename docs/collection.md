@@ -329,6 +329,27 @@ creating a retained interaction. They are counted separately, preserve all tool
 and repaired error carriers, and bind honest before/after checkpoint hashes.
 Already-known origins remain outside the unknown-only repair population.
 
+For a complete correction batch, `inspectPromptOriginRepair` also accepts
+`origins`: exact source/event identities, pinned original regions and the
+explicit `olderRetained` choice. It uses the same classifier as collection,
+derives every retained alias and checkpoint hash, and returns bound targets
+alongside explicit unresolved or already-known exclusions. It does not infer
+missing identities from matching text. One operation can include up to 32
+origins within the existing 32 MiB original-read budget; the inspection accounts
+for both derivation and verification reads.
+
+Legacy copies with genuinely absent author metadata can be corrected without
+treating missing versions on known authors as permission to overwrite them.
+`includeArchived: true` permits review of exact retained originals from a
+currently verified local archived source, not source restoration or collection.
+The resulting target seals that source mapping and the legacy exception.
+Current metadata must establish local provenance independently of the archive
+flag; nonlocal, ambiguous and unavailable mappings refuse. A compatible metadata
+reader is required for that proof. Source mappings are checked again before
+publication, and drift requires the same operation's original scope to be
+restored or resolved explicitly. None of this changes the automatic legacy
+qualification threshold, collection window, source eligibility or saved reports.
+
 ## Optional replies
 
 **Settings > Privacy & saved data > Recorded replies** has a draft switch and
