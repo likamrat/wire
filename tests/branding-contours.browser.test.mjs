@@ -1,7 +1,95 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
+import { marked } from "marked";
+
+// GitHub's global.css uses page theme for these links, with OS preference only in auto mode.
+const githubImageThemes = `
+:root[data-color-mode=dark] .readme [href$="#gh-light-mode-only"],
+:root[data-color-mode=light] .readme [href$="#gh-dark-mode-only"] { display: none; }
+@media (prefers-color-scheme: dark) {
+    :root[data-color-mode=auto] .readme [href$="#gh-light-mode-only"] { display: none; }
+}
+@media (prefers-color-scheme: light) {
+    :root[data-color-mode=auto] .readme [href$="#gh-dark-mode-only"] { display: none; }
+}`;
+
+test("GitHub page themes select one legible README logo and matching responsive diagrams independently of OS theme", async () => {
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        await page.route("**/*", async route => {
+            const url = new URL(route.request().url());
+            assert.equal(url.origin, "http://wire-docs.test", "Documentation proof must not fetch external assets");
+            const file = new URL(".." + url.pathname, import.meta.url);
+            const body = await readFile(file);
+            await route.fulfill({ contentType: url.pathname.endsWith(".svg") ? "image/svg+xml" : "image/png", body });
+        });
+        const themes = [
+            { mode: "dark", os: "light", expected: "dark" },
+            { mode: "light", os: "dark", expected: "light" },
+            { mode: "dark", os: "dark", expected: "dark" },
+            { mode: "light", os: "light", expected: "light" },
+            { mode: "auto", os: "dark", expected: "dark" },
+            { mode: "auto", os: "light", expected: "light" },
+        ];
+        for (const file of ["README.md", "docs/architecture.md"]) {
+            const markdown = await readFile(new URL("../" + file, import.meta.url), "utf8");
+            await page.setContent(`<base href="http://wire-docs.test/${file}"><style>${githubImageThemes}</style>
+                <article class="readme">${marked.parse(markdown)}</article>`);
+            for (const width of [1280, 440]) {
+                await page.setViewportSize({ width, height: 900 });
+                for (const { mode, os, expected } of themes) {
+                    await page.emulateMedia({ colorScheme: os });
+                    await page.evaluate(mode => document.documentElement.dataset.colorMode = mode, mode);
+                    const dark = expected === "dark" ? "-dark" : "";
+                    if (file === "README.md") {
+                        const logo = page.locator('img[alt="WIRE"]:visible');
+                        await expect(logo).toHaveCount(1);
+                        await expect.poll(() => logo.evaluate(image => new URL(image.currentSrc).pathname))
+                            .toBe(`/docs/images/wire-readme-logo${dark}.svg`);
+                        await expect.poll(() => logo.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+                        if (width === 1280) {
+                            const source = await readFile(new URL(`../docs/images/wire-readme-logo${dark}.svg`, import.meta.url));
+                            const color = await page.evaluate(async svg => {
+                                const image = new Image();
+                                image.src = `data:image/svg+xml;base64,${svg}`;
+                                await image.decode();
+                                const canvas = document.createElement("canvas");
+                                canvas.width = 402; canvas.height = 82;
+                                const context = canvas.getContext("2d");
+                                context.drawImage(image, 0, 0, 402, 82);
+                                return [...context.getImageData(244, 41, 1, 1).data];
+                            }, source.toString("base64"));
+                            assert.equal(color[3], 255, "Measure an opaque pixel inside the WIRE lettering");
+                            const luminance = rgb => rgb.slice(0, 3).reduce((sum, value, index) => {
+                                const channel = value / 255;
+                                return sum + (channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+                                    * [.2126, .7152, .0722][index];
+                            }, 0);
+                            for (const background of expected === "dark" ? [[13, 17, 23], [34, 39, 46]] : [[255, 255, 255]]) {
+                                const a = luminance(color), b = luminance(background);
+                                assert.ok((Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 4.5,
+                                    "The selected wordmark must be readable on GitHub Light, Dark and Dark dimmed");
+                            }
+                        }
+                    }
+                    const name = file === "README.md" ? "wire-evidence-flow" : "wire-runtime";
+                    const diagram = page.locator(`img[src*="${name}"]:visible`);
+                    await expect(diagram).toHaveCount(1);
+                    await expect.poll(() => diagram.evaluate(image => new URL(image.currentSrc).pathname))
+                        .toBe(`/docs/images/${name}${width < 768 ? "-narrow" : ""}${dark}.png`);
+                    const href = await diagram.evaluate(image => image.closest("a").href);
+                    assert.equal(new URL(href).pathname, `/docs/images/${name}${dark}.png`);
+                    await expect.poll(() => diagram.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+                }
+            }
+        }
+    } finally {
+        await browser.close();
+    }
+});
 
 test("README-scale brand strokes have clean contours rather than traced pixel teeth", async () => {
     const source = await readFile(new URL("../assets/wire-lockup-dark.svg", import.meta.url));

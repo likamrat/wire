@@ -58,13 +58,15 @@ ${gradient("human-path-lower", artwork.symbol.lowerGradient, palette)}
 }
 
 // Historical wire-wordmark and wire-report-brand-v1 assets are never generator outputs.
-for (const [file, theme, options] of [
+for (const [file, theme, options, directory = "assets"] of [
     ["wire-lockup.svg", "light", {}],
     ["wire-lockup-dark.svg", "dark", {}],
     ["wire-icon.svg", "light", { icon: true, adaptive: true }],
     ["wire-icon-dark.svg", "dark", { icon: true }],
+    ["wire-readme-logo.svg", "light", {}, "docs/images"],
+    ["wire-readme-logo-dark.svg", "dark", {}, "docs/images"],
 ]) {
-    const target = new URL(`../assets/${file}`, import.meta.url), expected = svg(theme, options);
+    const target = new URL(`../${directory}/${file}`, import.meta.url), expected = svg(theme, options);
     if (check) {
         const actual = (await readFile(target, "utf8")).replaceAll("\r\n", "\n");
         if (actual !== expected) throw new Error(`${file} is out of date; regenerate the current brand assets.`);

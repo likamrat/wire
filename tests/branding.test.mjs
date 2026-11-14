@@ -92,11 +92,18 @@ test("frozen presentation, not global screen branding, chooses the report identi
     assert.throws(() => reportBrandHeader("Unknown", { presentation: { brandVersion: 999 } }), /Unsupported frozen report brand/);
 });
 
-test("README and application use the current identity without a painted descriptor", () => {
+test("README-specific assets use the current identity without a painted descriptor", () => {
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-    assert.match(readme, /srcset="assets\/wire-lockup-dark.svg\?v=human-path-2"/);
-    assert.match(readme, /src="assets\/wire-lockup.svg\?v=human-path-2" alt="WIRE" width="560"/);
+    for (const [suffix, svg] of [["", lockupSvg], ["-dark", darkLockupSvg]]) {
+        const file = `docs/images/wire-readme-logo${suffix}.svg`;
+        assert.ok(readme.includes(`src="${file}" alt="WIRE" width="560"`));
+        assert.equal(readFileSync(new URL("../" + file, import.meta.url), "utf8").replaceAll("\r\n", "\n"),
+            svg.replaceAll("\r\n", "\n"), "README copies preserve the current artwork and theme palette");
+    }
     assert.match(readme, /<\/p>\s+# Work IQ Request Explorer(?:\r?\n){2}/);
+});
+
+test("application assets use the current identity without a painted descriptor", () => {
     const html = renderHtmlShell("a".repeat(64), "synthetic-branding");
     assert.ok(html.includes(`<link rel="icon" type="image/svg+xml" href="${FAVICON_PATH}">`));
     assert.ok(html.includes(`${brandLockup}${brandDarkLockup}${brandCompactMark}</a></div>`));

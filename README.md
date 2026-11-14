@@ -1,8 +1,10 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wire-lockup-dark.svg?v=human-path-2">
-    <img src="assets/wire-lockup.svg?v=human-path-2" alt="WIRE" width="560">
-  </picture>
+  <a href="docs/images/wire-readme-logo-dark.svg#gh-dark-mode-only">
+    <img src="docs/images/wire-readme-logo-dark.svg" alt="WIRE" width="560">
+  </a>
+  <a href="docs/images/wire-readme-logo.svg#gh-light-mode-only">
+    <img src="docs/images/wire-readme-logo.svg" alt="WIRE" width="560">
+  </a>
 </p>
 
 # Work IQ Request Explorer
@@ -97,11 +99,15 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 WIRE reads recorded Work IQ activity from the **GitHub Copilot app** without
 rerunning its calls, then keeps local evidence for inspection and reports.
 
-<a href="docs/images/wire-evidence-flow.png">
+<a href="docs/images/wire-evidence-flow-dark.png#gh-dark-mode-only">
   <picture>
-    <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
+    <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
+    <img src="docs/images/wire-evidence-flow-dark.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+  </picture>
+</a>
+<a href="docs/images/wire-evidence-flow.png#gh-light-mode-only">
+  <picture>
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-dark.png">
     <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
   </picture>
 </a>

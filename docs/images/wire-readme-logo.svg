@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 402 82" role="img" aria-labelledby="title desc" style="--wire-brand-low:#8f2966;--wire-brand-high:#c6398d;--wire-brand-dark-low:#c6398d;--wire-brand-dark-high:#d97cb4">
+  <title id="title">WIRE</title>
+  <desc id="desc">Magenta Human Path symbol and custom WIRE lettering.</desc>
+  <defs>
+    <linearGradient id="human-path-upper" gradientUnits="userSpaceOnUse" x1="2301.16955" y1="-361.5106" x2="-104.23405" y2="16.375025">
+      <stop class="brand-low" stop-color="#8f2966"/>
+      <stop class="brand-high" offset="1" stop-color="#c6398d"/>
+    </linearGradient>
+    <linearGradient id="human-path-lower" gradientUnits="userSpaceOnUse" x1="47.52265" y1="-106.886225" x2="-2859.970475" y2="6432.5408">
+      <stop class="brand-low" stop-color="#8f2966"/>
+      <stop class="brand-high" offset="1" stop-color="#c6398d"/>
+    </linearGradient>
+    <clipPath id="human-path-boundary"><path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" clip-rule="evenodd"/></clipPath>
+  </defs>
+  <g transform="translate(0 0.61654135) scale(0.61654135)">
+    <path d="M32 0 H101 C118.673 0 133 14.327 133 32 V98.5 C133 116.173 118.673 130.5 101 130.5 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 C85 31 57 44 43 55 C31 63 31 73 36 83 C42 94 46 103 46 110 C46 120 38 131 28 129.5 C12 127.5 0 114 0 97 V32 C0 14.327 14.327 0 32 0 Z" fill="url(#human-path-upper)" fill-rule="evenodd"/>
+    <path d="M109 24 C115 37 128 44 133 60 V131 H68.5 V113 C68.5 100 55 91 55 78 C55 68 62 62 74 55 C88 45 101 33 109 24 Z" fill="url(#human-path-lower)" clip-path="url(#human-path-boundary)" fill-rule="evenodd"/>
+  </g>
+  <path id="wire-lettering" transform="translate(110 1.7761194) scale(1.08955224)" d="M1.1 1 H20.1 Q21.3 1 21.7 2.4 L32.8 41.6 L44.6 4 Q45.5 1 48 1 H59.4 Q61.9 1 62.8 3.8 L74.5 41.6 L85.6 2.4 Q86 1 87.6 1 H106.7 Q107.6 1 107.3 2 L85.5 69.6 Q85 71 83.5 71 H67 Q65.6 71 65.1 69.4 L53.6 33.3 L42 69.4 Q41.5 71 40 71 H23.5 Q22 71 21.5 69.5 L0.3 2.2 Q0 1 1.1 1 Z M114.2 0.6 H131.8 Q133 0.6 133 1.8 V70.2 Q133 71.4 131.8 71.4 H114.2 Q113 71.4 113 70.2 V1.8 Q113 0.6 114.2 0.6 Z M145 0.5 H177.5 C194.7 0.5 205 8.5 205 23.2 C205 34.5 199.7 41.8 190 45.3 L207 70.1 Q207.8 71.5 205.8 71.5 H187 Q185 71.5 184 70.2 L168.5 48.5 H163 V70 Q163 71.5 161.5 71.5 H145 Q143.5 71.5 143.5 70 V2 Q143.5 0.5 145 0.5 Z M164 17 H176 C182 17 185.5 19.5 185.5 24.6 C185.5 29.3 182 32 176 32 H164 Q163 32 163 31 V18 Q163 17 164 17 Z M214.2 0.5 H266.3 Q267.5 0.5 267.5 1.7 V16.2 Q267.5 17.4 266.3 17.4 H233 V27 H260.8 Q262 27 262 28.2 V41.8 Q262 43 260.8 43 H233 V55 H266.8 Q268 55 268 56.2 V70.3 Q268 71.5 266.8 71.5 H214.2 Q213 71.5 213 70.3 V1.7 Q213 0.5 214.2 0.5 Z" fill="#141519" fill-rule="evenodd"/>
+</svg>

@@ -11,11 +11,15 @@ The browser talks to one local Node server. Collection, analysis, literal
 Search and report preparation are modules in that server, not independently
 deployed services. Arrows point from each component to the resource it accesses.
 
-<a href="images/wire-runtime.png">
+<a href="images/wire-runtime-dark.png#gh-dark-mode-only">
   <picture>
-    <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="images/wire-runtime-narrow-dark.png">
+    <source media="(max-width: 767px)" srcset="images/wire-runtime-narrow-dark.png">
+    <img src="images/wire-runtime-dark.png" alt="The browser accesses one local Node server. That server reads approved GitHub Copilot app metadata and history, commits instance-owned evidence and state, and saves or opens separate report files." width="800">
+  </picture>
+</a>
+<a href="images/wire-runtime.png#gh-light-mode-only">
+  <picture>
     <source media="(max-width: 767px)" srcset="images/wire-runtime-narrow.png">
-    <source media="(prefers-color-scheme: dark)" srcset="images/wire-runtime-dark.png">
     <img src="images/wire-runtime.png" alt="The browser accesses one local Node server. That server reads approved GitHub Copilot app metadata and history, commits instance-owned evidence and state, and saves or opens separate report files." width="800">
   </picture>
 </a>
@@ -63,3 +67,9 @@ The PNGs come from editable, self-contained HTML with inline SVG:
 [local runtime](diagrams/wire-runtime.html). Each source includes light/dark
 and narrow layouts, bundled Asta Sans with its license, and capture instructions.
 Edit those sources and regenerate the PNGs together.
+
+GitHub's theme-specific links select light or dark artwork using the page's
+theme, including a manual override of the OS preference. The nested picture
+only chooses the wide or narrow layout. The README logo has separate generated
+files in `docs/images`; regenerate them with
+`node scripts/build-brand-lockups.mjs`. App and saved-report artwork stays separate.
