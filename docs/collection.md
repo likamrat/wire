@@ -290,6 +290,16 @@ evidence. WIRE recognizes it only after the qualified timestamp and outside the
 exact displayed message; the existing sender and attachment checks still apply.
 The historical plan-mode notice and app branch context are also neutral; their
 prose cannot establish a sender.
+Classifier version 10 also recognizes an autopilot-mode transition notice when
+the recorded mode is autopilot, without a plan marker or mixed mode blocks.
+This keeps a supported sender envelope visible to the same author checks;
+autopilot mode alone never means an agent authored the prompt or that an
+automatic continuation occurred.
+The supported steering path can omit the timestamp wrapper around a
+cross-session sender envelope. WIRE accepts only that complete, isolated sender
+frame with a valid logical message ID and recorded steering delivery. It still
+validates the sender fields and source contradictions. Timestamp-free direct
+input, extra context and other delivery paths do not gain a guessed human author.
 The supported runtime can remove trailing spaces and line endings from model
 input while keeping them in the timeline. WIRE recognizes that exact trailing
 transform without changing retained text or normalizing leading/internal text.

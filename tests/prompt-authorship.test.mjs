@@ -261,6 +261,26 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
         "Tags inside the exact displayed body cannot establish Agent provenance");
 });
 
+test("a timestamp-free steering sender frame identifies only the recorded agent, never an unmarked human", () => {
+    const content = "Invented steering request.";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "steering", agentMode: "autopilot" };
+    const transformedContent = sender + content;
+    assert.deepEqual(extract({ ...data, transformedContent }).userPrompt.authorship, { actor: "agent", basis: "host-agent-envelope" });
+    assert.deepEqual(extract({ ...data, source: "user", transformedContent }).userPrompt.authorship,
+        { actor: "unknown", basis: "conflicting-source" });
+    for (const invalid of [
+        content, sender + sender + content, sender.replace("00000000-0000-4000-8000-000000000002", "not-an-id") + content,
+        "<unknown_context>Invented.</unknown_context>" + transformedContent,
+        sender + "<copilot_working_context>Invented.</copilot_working_context>" + content,
+        "<current_datetime>2026-10-06T11:00:00Z</current_datetime>\n\n" + transformedContent,
+    ]) assert.equal(extract({ ...data, transformedContent: invalid }).userPrompt.authorship.actor, "unknown");
+    for (const delivery of ["idle", "queued"]) assert.equal(extract({ ...data, delivery, transformedContent }).userPrompt.authorship.actor, "unknown");
+    for (const messageId of [undefined, [data.messageId], "not-an-id"]) assert.equal(extract({ ...data, messageId, transformedContent }).userPrompt.authorship.actor, "unknown");
+    assert.equal(extract({ ...data, content: transformedContent, transformedContent }).userPrompt.authorship.actor, "unknown",
+        "Typed sender text without a separately established host frame supplies no author.");
+});
+
 test("the runtime plan marker is neutral only at the independently observed host boundary", () => {
     const content = "Invented plan request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
@@ -325,6 +345,70 @@ test("the historical runtime mode notice and app branch context preserve qualifi
     ]) assert.equal(extract({ ...metadata, transformedContent: stamp + prefix + content }).userPrompt.authorship.actor, "unknown");
     const imitation = notice + "[[PLAN]] " + sender + context + content;
     assert.equal(extract({ ...metadata, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user");
+});
+
+test("an autopilot mode transition does not hide the recorded agent sender or turn a direct request into automation", () => {
+    const content = "Invented delegated request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const notice = "<mode_changed_notice>\n\n<autopilot_mode>Invented runtime mode instructions.</autopilot_mode>\n\n</mode_changed_notice>\n\n";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle", agentMode: "autopilot" };
+    const transformedContent = stamp + notice + sender + content;
+    assert.deepEqual(extract({ ...data, transformedContent }).userPrompt.authorship, { actor: "agent", basis: "host-agent-envelope" });
+    assert.deepEqual(extract({ ...data, source: "user", transformedContent }).userPrompt.authorship,
+        { actor: "unknown", basis: "conflicting-source" });
+    assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z",
+        data: { ...data, transformedContent } }, { agentCreatedFirstMessage: true }).actor, "agent");
+    assert.deepEqual(extract({ ...data, transformedContent: stamp + notice + content }).userPrompt.authorship,
+        { actor: "user", basis: "host-direct-input" }, "Autopilot mode is not an automatic-continuation claim.");
+    for (const invalid of [
+        notice + notice, notice + "[[PLAN]] ", notice.replace("</autopilot_mode>", ""),
+        notice.replace("</autopilot_mode>", "</autopilot_mode><plan_mode>Invented.</plan_mode>"),
+        notice.replace("<autopilot_mode>", '<autopilot_mode author="user">'),
+        notice.replace("Invented runtime mode instructions.", "<mode_changed_notice>Invented nesting.</mode_changed_notice>"),
+    ]) assert.equal(extract({ ...data, transformedContent: stamp + invalid + sender + content }).userPrompt.authorship.actor, "unknown");
+    for (const agentMode of [undefined, "plan", "interactive"]) {
+        assert.equal(extract({ ...data, agentMode, transformedContent }).userPrompt.authorship.actor, "unknown");
+    }
+    for (const messageId of [undefined, [data.messageId], "not-an-id"]) {
+        assert.equal(extract({ ...data, messageId, transformedContent }).userPrompt.authorship.actor, "unknown");
+    }
+    const imitation = notice + sender + content;
+    assert.equal(extract({ ...data, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user");
+});
+
+test("mode-transition and steering agents retain their originating authors through collection, restart and late calls", async t => {
+    const app = await promptInstallation(t), file = app.sourceFiles[1];
+    const items = ["human", "enveloped-agent"].map(name => app.cases.find(item => item.name === name));
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const [mode, steering] = items.map(item => events.find(event => event.id === item.promptId));
+    const sender = `<cross_session_message>\nfrom_session_id: ${app.parent}\n</cross_session_message>\n\n`;
+    mode.data.agentMode = "autopilot";
+    mode.data.transformedContent = `<current_datetime>${mode.timestamp}</current_datetime>\n\n`
+        + "<mode_changed_notice>\n\n<autopilot_mode>Invented mode context.</autopilot_mode>\n\n</mode_changed_notice>\n\n"
+        + sender + mode.data.content;
+    steering.data.delivery = "steering";
+    steering.data.transformedContent = sender + steering.data.content;
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    for (const item of items) assert.deepEqual(before.evidence.find(record => record.scenarioId === item.scenarioId).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-envelope" });
+    await app.restart();
+    const now = new Date().toISOString();
+    await appendFile(file, [
+        { id: randomUUID(), type: "assistant.message", timestamp: now,
+            data: { originatingMessageId: mode.data.messageId, turnId: "mode-later", toolRequests: [{ toolCallId: "mode-later-call" }] } },
+        { id: randomUUID(), type: "tool.execution_start", timestamp: now,
+            data: { toolName: "workiq-ask", toolCallId: "mode-later-call", turnId: "mode-later", arguments: { question: "Invented tool question." } } },
+    ].map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    for (const item of items) {
+        const record = after.evidence.find(record => record.scenarioId === item.scenarioId);
+        assert.deepEqual(record.userPrompt.authorship, { actor: "agent", basis: "host-agent-envelope" });
+        assert.equal(record.userPrompt.text, item.data.content);
+    }
+    assert.ok(after.evidence.find(record => record.scenarioId === items[0].scenarioId).toolCalls.some(call => call.toolCallId === "mode-later-call"));
 });
 
 test("the app's one-file rich-node projection is matched exactly against its recorded attachment metadata", () => {
