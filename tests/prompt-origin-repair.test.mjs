@@ -8,7 +8,7 @@ import path from "node:path";
 import { promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { hash, atomicJson } from "../lib/collector-io.mjs";
+import { hash, atomicJson, TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
 import { maintenanceStateGuard } from "../lib/historical-maintenance.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
@@ -33,7 +33,7 @@ async function manifest(root) {
 async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1 } = {}) {
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
     const legacy = ["legacy-agent", "archived-agent"].includes(variant);
-    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy ? "agent" : plan ? "enveloped-agent" : "human"));
+    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
     const repairItems = [item];
     let companion;
     if (plan || mode || attachment || checkpointCompanion) {
@@ -273,6 +273,83 @@ test("a legacy exception cannot overwrite a known checkpoint author whose versio
     await atomicJson(f.checkpointFile, checkpoint);
     await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins }), /not the reviewed older unqualified origin/);
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const variant of ["legacy-agent", "explicit-agent"]) test(`new repair authority cannot fall back to cached mappings (${variant})`, async t => {
+    const f = await setup(t, variant);
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    const targets = structuredClone(inspection.targets);
+    delete targets[0].sourceMapping;
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /require a fresh source mapping guard/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("both inspection entries reserve all original revalidation passes before reading", async t => {
+    const f = await setup(t);
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    const origins = ids.map(sourceEventId => ({ ...f.origins[0], sourceEventId,
+        sourceEvent: { ...f.origins[0].sourceEvent, bytes: TAIL_LIMITS.maxLineBytes } }));
+    const targets = ids.map(sourceEventId => ({ ...f.target, prompt: { ...f.target.prompt, sourceEventId },
+        sourceEvent: { ...f.target.sourceEvent, bytes: TAIL_LIMITS.maxLineBytes } }));
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins }), /reads exceed the existing cycle budget/);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /reads exceed the existing cycle budget/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const boundary of ["applying", "snapshot-staged"]) test(`pinned original drift blocks effects and preserves same-journal recovery (${boundary})`, async t => {
+    const f = await setup(t, "legacy-agent");
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    await assert.rejects(runPromptOriginRepair(options, { async onStep(phase) {
+        if (phase !== boundary) return;
+        const events = (await readFile(f.app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        const changed = events.find(event => event.id === f.origins[0].sourceEventId);
+        const padding = " ".repeat(changed.data.source.length - "system".length);
+        changed.data.source = "system";
+        const text = events.map(event => {
+            const line = JSON.stringify(event);
+            return (event === changed ? line.replace('"source":"system"', `"source":${padding}"system"`) : line) + "\n";
+        }).join("");
+        assert.equal(Buffer.byteLength(text), f.sourceBytes[1].length, "Provenance drift must be caught even when file size is unchanged.");
+        await writeFile(f.app.sourceFiles[1], text);
+    } }), /Original prompt region changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    if (boundary === "snapshot-staged") {
+        await assert.rejects(createCollector(f.app.context, { timers: false }), error => error.code === "RETAINED_REPAIR_PENDING");
+    } else assert.equal(JSON.parse(await readFile(f.indexFile, "utf8")).completionReferenceMaintenance, undefined);
+    await writeFile(f.app.sourceFiles[1], f.sourceBytes[1]);
+    await runPromptOriginRepair(options);
+    assert.equal((await loadBoardState(f.app.context)).revision, f.state.revision + 1);
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
+});
+
+test("a committed bound legacy repair finalizes without replaying unavailable original sources", async t => {
+    const f = await setup(t, "legacy-agent");
+    const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    await assert.rejects(runPromptOriginRepair(options, { onStep(phase) {
+        if (phase === "board-saved") throw new Error("Invented interruption after committed board.");
+    } }), /Invented interruption/);
+    const committed = await loadBoardState(f.app.context);
+    await rename(f.app.sourceFiles[1], f.app.sourceFiles[1] + ".moved");
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
+    finally { db.close(); }
+    const resumed = await runPromptOriginRepair(options);
+    assert.equal(resumed.alreadyCommitted, true);
+    assert.deepEqual(await loadBoardState(f.app.context), committed);
+    assert.equal(JSON.parse(await readFile(f.indexFile, "utf8")).completionReferenceMaintenance, undefined);
 });
 
 test("source mapping drift after preparation refuses the write and the same journal resumes only with its original scope", async t => {

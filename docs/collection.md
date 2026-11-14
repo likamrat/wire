@@ -335,8 +335,10 @@ explicit `olderRetained` choice. It uses the same classifier as collection,
 derives every retained alias and checkpoint hash, and returns bound targets
 alongside explicit unresolved or already-known exclusions. It does not infer
 missing identities from matching text. One operation can include up to 32
-origins within the existing 32 MiB original-read budget; the inspection accounts
-for both derivation and verification reads.
+origins. Each inspection, preparation or apply invocation stays within the
+existing 32 MiB original-read budget. Both input paths reserve up to three complete
+original-verification passes, including their repeated event and startup reads;
+a larger batch refuses before reading.
 
 Legacy copies with genuinely absent author metadata can be corrected without
 treating missing versions on known authors as permission to overwrite them.
@@ -345,9 +347,12 @@ currently verified local archived source, not source restoration or collection.
 The resulting target seals that source mapping and the legacy exception.
 Current metadata must establish local provenance independently of the archive
 flag; nonlocal, ambiguous and unavailable mappings refuse. A compatible metadata
-reader is required for that proof. Source mappings are checked again before
-publication, and drift requires the same operation's original scope to be
-restored or resolved explicitly. None of this changes the automatic legacy
+reader is required for that proof. Explicit-source and legacy targets cannot
+omit the fresh source mapping guard through the lower-level target interface.
+Source mappings and pinned originals are checked again before first effects and
+before board publication. Drift leaves the same journal and any pending fence
+in place; completing an already committed postimage does not replay old source
+reads. None of this changes the automatic legacy
 qualification threshold, collection window, source eligibility or saved reports.
 
 ## Optional replies
