@@ -275,7 +275,7 @@ test("a legacy exception cannot overwrite a known checkpoint author whose versio
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
 
-for (const variant of ["legacy-agent", "explicit-agent"]) test(`new repair authority cannot fall back to cached mappings (${variant})`, async t => {
+for (const variant of ["legacy-agent", "explicit-agent", "direct"]) test(`repair authority cannot fall back to cached mappings (${variant})`, async t => {
     const f = await setup(t, variant);
     const inspection = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
     const targets = structuredClone(inspection.targets);
@@ -283,7 +283,22 @@ for (const variant of ["legacy-agent", "explicit-agent"]) test(`new repair autho
     const db = new DatabaseSync(f.app.config.appDbPath);
     try { db.prepare("UPDATE sessions SET execution_location='cloud' WHERE id=?").run(f.app.child); }
     finally { db.close(); }
-    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /require a fresh source mapping guard/);
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets }), /source mapping guard|local source disposition changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+test("the older host-target format remains usable only with the same freshly verified source identity", async t => {
+    const f = await setup(t);
+    const coverage = structuredClone(f.state.importCoverage);
+    for (const row of coverage.roster) delete row.localSourceVerified;
+    await replaceEvidence(f.app.context, () => ({ records: f.state.evidence, importCoverage: coverage }));
+    const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: [f.target] });
+    assert.equal(inspected.targets.length, 1);
+    assert.deepEqual(inspected.targets[0].prompt.authorship, f.target.prompt.authorship);
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE workspaces SET project_id=? WHERE session_id=?").run(randomUUID(), f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: [f.target] }), /compatible target's source mapping changed/);
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
 

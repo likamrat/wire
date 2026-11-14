@@ -349,6 +349,9 @@ Current metadata must establish local provenance independently of the archive
 flag; nonlocal, ambiguous and unavailable mappings refuse. A compatible metadata
 reader is required for that proof. Explicit-source and legacy targets cannot
 omit the fresh source mapping guard through the lower-level target interface.
+The older nonlegacy host-target format remains readable only when fresh metadata
+still matches its retained source identity; cached eligibility alone never
+authorizes the correction.
 Source mappings and pinned originals are checked again before first effects and
 before board publication. Drift leaves the same journal and any pending fence
 in place; completing an already committed postimage does not replay old source
