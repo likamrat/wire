@@ -37,8 +37,10 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         if (!preserveDismissed) dismissed = null;
     }
     function emphasize(id) {
+        if (scene?.emphasized === id) return;
         const nodes = [...root.querySelectorAll("[data-trend-line],[data-trend-bar],[data-isolated-sample]")];
         if (!canInspect() || !nodes.some(node => node.dataset.series === id)) id = null;
+        if (scene) scene.emphasized = id;
         for (const node of nodes) {
             node.style.opacity = id && node.dataset.series !== id ? ".22" : "1";
             if (node.hasAttribute("data-trend-line")) node.style.strokeWidth = id && node.dataset.series === id ? "3" : "2";
@@ -170,10 +172,17 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         context.font = `${14 * scale}px ${getComputedStyle(root).fontFamily}`;
         const dayWidth = Math.max(...labels.map(label => context.measureText(label).width)) + 16 * scale;
         const left = (family === "timing" ? 78 : 56) * scale;
-        const width = Math.max(root.clientWidth, data.days.length * dayWidth + left + 12 * scale);
-        const height = Math.max(1, root.clientHeight - 18), top = 26 * scale, bottom = height - 42 * scale;
-        const pitch = (width - left - 12 * scale) / data.days.length;
-        scene = { data, family, mode, hidden, left, key, pitch, viewportWidth: root.clientWidth, points: [], segments: [] };
+        const minimumWidth = data.days.length * dayWidth + left + 12 * scale, top = 26 * scale;
+        let width = Math.max(root.clientWidth, minimumWidth), height = Math.max(1, root.clientHeight - 18);
+        let bottom = height - 42 * scale, pitch = (width - left - 12 * scale) / data.days.length;
+        scene = { data, family, mode, hidden, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null };
+        const placements = [];
+        function place(node, geometry) {
+            const update = () => {
+                for (const [name, value] of Object.entries(geometry())) node.setAttribute(name, value);
+            };
+            placements.push(update); update(); return node;
+        }
         const series = data.definitions[family].filter(row => !hidden.has(row.id)
             && (family !== "timing" || mode === "both" || row.id === (mode === "p95" ? "p95" : "timing")));
         const stacked = family === "authors" || family === "tools" && mode !== "reach", bars = stacked || family === "rhythm";
@@ -187,21 +196,37 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         const max = shares ? 100 : Math.ceil(maximum / step) * step;
         scene.maximum = max;
         const x = index => left + pitch * (index + .5), y = value => bottom - value * (bottom - top) / max;
-        const svg = svgNode("svg", { viewBox: `0 0 ${width} ${height}`, width, height, role: "group", "aria-label": "Daily trend", "data-time-axis": family });
+        const svg = place(svgNode("svg", { role: "group", "aria-label": "Daily trend", "data-time-axis": family }),
+            () => ({ viewBox: `0 0 ${width} ${height}`, width, height }));
         svg.style.width = `${width}px`; svg.style.height = `${height}px`;
         const axis = svgNode("g", { class: "trends-y-axis", "pointer-events": "none" });
-        axis.append(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, height: bottom - top + 24 * scale, fill: "var(--paper)" }));
+        axis.append(place(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, fill: "var(--paper)" }),
+            () => ({ height: bottom - top + 24 * scale })));
         const ticks = family === "timing" ? Math.round(max / step) : 4;
         for (let index = 0; index <= ticks; index++) {
             const value = max * index / ticks;
             if (!shares && !Number.isInteger(value)) continue;
-            svg.append(svgNode("line", { x1: left, x2: width - 16 * scale, y1: y(value), y2: y(value), class: "trends-grid" }));
-            axis.append(svgNode("text", { x: left - 14 * scale, y: y(value) + 4 * scale, "text-anchor": "end" }, `${number(value)}${shares ? "%" : ""}`));
+            svg.append(place(svgNode("line", { x1: left, class: "trends-grid" }),
+                () => ({ x2: width - 16 * scale, y1: y(value), y2: y(value) })));
+            axis.append(place(svgNode("text", { x: left - 14 * scale, "text-anchor": "end" }, `${number(value)}${shares ? "%" : ""}`),
+                () => ({ y: y(value) + 4 * scale })));
+        }
+        function position(point) {
+            point.x = x(point.index);
+            point.y = point.keyboardOnly ? top - 16 * scale : y(point.amount);
+            if (point.rect) {
+                const barWidth = Math.min(56 * scale, pitch * .55);
+                Object.assign(point.rect, { x: point.x - barWidth / 2, y: y(point.base + point.amount),
+                    width: barWidth, height: point.amount * (bottom - top) / max });
+                point.y = point.rect.y + point.rect.height / 2;
+            }
         }
         function mark(point, value) {
+            position(point);
             const index = scene.points.push(point) - 1;
-            const node = point.rect ? svgNode("rect", { ...point.rect, fill: color(point.id, family), "data-trend-bar": "" })
-                : svgNode("circle", { cx: point.x, cy: point.y, r: 8, fill: "transparent", stroke: "transparent", "pointer-events": "none" });
+            const node = point.rect ? place(svgNode("rect", { fill: color(point.id, family), "data-trend-bar": "" }), () => point.rect)
+                : place(svgNode("circle", { r: 8, fill: "transparent", stroke: "transparent", "pointer-events": "none" }),
+                    () => ({ cx: point.x, cy: point.y }));
             node.setAttribute("data-series", point.id);
             node.dataset.trendMark = String(index); node.setAttribute("tabindex", index ? "-1" : "0"); node.setAttribute("role", "button");
             node.setAttribute("aria-pressed", "false");
@@ -215,12 +240,12 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
             let sum = 0;
             for (const definition of series) {
                 const value = day.values[family].find(value => value.id === definition.id), amount = metric(value, family, mode) ?? 0;
-                const rect = amount ? { x: x(index) - Math.min(56 * scale, pitch * .55) / 2, y: y(sum + amount), width: Math.min(56 * scale, pitch * .55), height: amount * (bottom - top) / max } : null;
-                mark({ index, id: definition.id, x: x(index), y: rect ? rect.y + rect.height / 2 : top - 16 * scale, rect, keyboardOnly: !rect }, value);
+                const rect = amount ? {} : null;
+                mark({ index, id: definition.id, amount, base: sum, rect, keyboardOnly: !rect }, value);
                 sum += amount;
             }
-            if (sum) svg.append(svgNode("text", { x: x(index), y: y(sum) - 8 * scale, "text-anchor": "middle" },
-                shares ? family === "authors" ? day.interactions : day.calls : sum));
+            if (sum) svg.append(place(svgNode("text", { "text-anchor": "middle" },
+                shares ? family === "authors" ? day.interactions : day.calls : sum), () => ({ x: x(index), y: y(sum) - 8 * scale })));
         });
         else for (const definition of series) {
             if (!data.days.some(day => day.values[family].find(value => value.id === definition.id).count > 0)) continue;
@@ -229,23 +254,28 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
                 const value = day.values[family].find(value => value.id === definition.id), amount = metric(value, family, mode);
                 if (amount === null || !day.calls) {
                     previous = null;
-                    mark({ index, id: definition.id, x: x(index), y: top - 16 * scale, keyboardOnly: true }, value); continue;
+                    mark({ index, id: definition.id, amount, keyboardOnly: true }, value); continue;
                 }
-                const point = { index, id: definition.id, x: x(index), y: y(amount) };
+                const point = { index, id: definition.id, amount };
+                position(point);
                 if (previous) {
-                    svg.append(svgNode("line", { x1: previous.x, y1: previous.y, x2: point.x, y2: point.y,
-                        stroke: color(point.id, family), "stroke-width": 2, "stroke-linecap": "round", "data-series": point.id, "data-trend-line": "" }));
+                    const from = previous;
+                    svg.append(place(svgNode("line", { stroke: color(point.id, family), "stroke-width": 2,
+                        "stroke-linecap": "round", "data-series": point.id, "data-trend-line": "" }),
+                        () => ({ x1: from.x, y1: from.y, x2: point.x, y2: point.y })));
                     scene.segments.push({ from: previous, to: point });
                 }
                 const next = data.days[index + 1], nextValue = next?.values[family].find(value => value.id === definition.id);
                 if (!previous && (!next?.calls || metric(nextValue, family, mode) === null))
-                    svg.append(svgNode("circle", { cx: point.x, cy: point.y, r: 3, fill: color(point.id, family),
-                        "pointer-events": "none", "data-isolated-sample": "", "data-series": point.id }));
+                    svg.append(place(svgNode("circle", { r: 3, fill: color(point.id, family),
+                        "pointer-events": "none", "data-isolated-sample": "", "data-series": point.id }),
+                        () => ({ cx: point.x, cy: point.y })));
                 mark(point, value); previous = point;
             }
         }
         for (const [index, day] of data.days.entries())
-            svg.append(svgNode("text", { x: x(index), y: bottom + 27 * scale, "text-anchor": "middle", "data-date-tick": day.date }, labels[index]));
+            svg.append(place(svgNode("text", { "text-anchor": "middle", "data-date-tick": day.date }, labels[index]),
+                () => ({ x: x(index), y: bottom + 27 * scale })));
         svg.append(svgNode("g", { class: "trends-mark-selection", "pointer-events": "none" }),
             axis, svgNode("g", { class: "trends-mark-focus", "pointer-events": "none" }));
         erase(root); root.append(svg);
@@ -255,6 +285,22 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         root.scrollLeft = !reading || reading.end ? root.scrollWidth : reading.day * pitch;
         rememberReading();
         axis.setAttribute("transform", `translate(${root.scrollLeft} 0)`);
+        // Width-only reflow repositions this scene; evidence and formatted text do not change.
+        scene.resize = size => {
+            const reading = scene.reading, nextWidth = Math.max(size.width, minimumWidth), nextHeight = Math.max(1, size.height - 18);
+            hide(); scene.viewportWidth = size.width;
+            if (width !== nextWidth || height !== nextHeight) {
+                width = nextWidth; height = nextHeight; bottom = height - 42 * scale;
+                pitch = (width - left - 12 * scale) / data.days.length; scene.pitch = pitch;
+                for (const point of scene.points) position(point);
+                for (const update of placements) update();
+                svg.style.width = `${width}px`; svg.style.height = `${height}px`;
+                select(scene.selection);
+            }
+            root.scrollLeft = reading.end ? root.scrollWidth : reading.day * pitch;
+            rememberReading();
+            axis.setAttribute("transform", `translate(${root.scrollLeft} 0)`);
+        };
         if (focused && previous.key === key) {
             const point = scene.points.find(point => point.id === focused.id && point.index === focused.index);
             if (point) {
@@ -336,5 +382,11 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         const amount = metric(value, scene.family, scene.mode);
         return amount === null ? 0 : amount * 100 / scene.maximum;
     }
-    return { render, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
+    function resize(size) {
+        if (!scene || !canInspect()) return;
+        const scale = parseFloat(getComputedStyle(doc.documentElement).fontSize) / 16;
+        if (scale !== scene.scale) render(scene.data, scene.family, scene.mode, scene.hidden, scene.selection);
+        else scene.resize(size);
+    }
+    return { render, resize, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
 }

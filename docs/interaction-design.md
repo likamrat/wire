@@ -164,6 +164,10 @@ the plot rather than shrinking labels, smoothing values or combining days.
 Measure selectors reserve their longest option's intrinsic width. Responsive
 layout updates settle the selected-date geometry before the next interaction;
 unchanged parent renders do not remount a chart or dismiss its hover value.
+During sidebar motion, width changes update only mounted chart geometry.
+Reuse formatted labels, values and exact point membership; do not recreate all
+seven SVGs on every frame. Keep hit targets and selected outlines aligned with
+their marks, preserve horizontal reading, and retire stale hover during reflow.
 Chart type scales with text size, and long recorded names wrap without truncation
 in legends, selected values and hover cards.
 

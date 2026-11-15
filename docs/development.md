@@ -201,6 +201,17 @@ and after actual data clicks across the seven-widget/four-period matrix.
 Touch and keyboard also select in place; explicit sizing must retain the
 selected point and its exact evidence.
 
+The sidebar performance case compares native collapse/expand motion on populated
+7- and 30-day Trends with Analyze and Reports in the same browser. It measures
+input-to-motion, completion, frame gaps, long tasks and full SVG rebuilds, with
+repeated reversal and a portrait layout. Width-only changes must reposition
+mounted chart nodes, not reformat dates or rebuild the evidence scene.
+Run it with `node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
+Set `WIRE_TRENDS_PERFORMANCE` to an owned JSON file for measurements; optional
+`WIRE_TRENDS_PROFILE` writes the 30-day Chromium CPU profile. Keep these private.
+Timing uses invented activity, disabled collection timers and the unchanged
+320ms sidebar animation; an empty chart or shorter animation is not a substitute.
+
 For the brand and navigation header, `tests/branding.browser.test.mjs` uses
 invented Cedar activity and a synthetic selected profile in the normal renderer.
 Set `WIRE_BRAND_PROOFS` to an owned private directory for theme/layout captures

@@ -118,6 +118,20 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     root.append(toolbar, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
     dialog.addEventListener("close", () => { scrub(dialogBody); dialogOrigin?.focus({ preventScroll: true }); dialogOrigin = null; });
 
+    const plotCards = new Map();
+    const observer = new ResizeObserver(entries => {
+        if (!current()) return;
+        const changed = entries.flatMap(({ target }) => {
+            if (!target.checkVisibility()) return [];
+            const card = plotCards.get(target), width = target.clientWidth, height = target.clientHeight;
+            return width === card.width && height === card.height ? [] : [{ card, width, height }];
+        });
+        for (const { card, width, height } of changed) {
+            card.width = width; card.height = height;
+            card.chart.resize({ width, height });
+        }
+        if (changed.some(({ card }) => card.id === family)) { inspectionKey = ""; paintInspection(); }
+    });
     for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
         const spec = families[id], panel = el("section", "trends-panel"), heading = el("div", "trends-heading"), title = el("h2", "", spec.label);
         panel.dataset.family = id; title.id = `trendsHeading-${id}`; title.tabIndex = -1; panel.setAttribute("aria-labelledby", title.id);
@@ -161,14 +175,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 card.chart.select(card.selection);
                 if (family === id) paintInspection();
             } });
-        const observer = new ResizeObserver(() => {
-            if (!current() || !plot.checkVisibility()) return;
-            const width = Math.round(plot.clientWidth), height = Math.round(plot.clientHeight);
-            if (width === card.width && height === card.height) return;
-            card.width = width; card.height = height;
-            card.chart.render(viewData(card), id, card.mode, card.hidden, card.selection);
-            if (family === id) { inspectionKey = ""; paintInspection(); }
-        });
+        plotCards.set(plot, card);
         observer.observe(plot);
     }
     doc.fonts.ready.then(() => { if (current()) paint(); });

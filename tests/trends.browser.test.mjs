@@ -5,9 +5,12 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption } from "./helpers.mjs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { createCopilotAccountBridge } from "../lib/copilot-account-snapshot.mjs";
+import { profilePNG } from "./source-profile-fixture.mjs";
 
 async function capture(page, name) {
     if (!process.env.WIRE_TRENDS_PROOFS) return;
@@ -67,15 +70,27 @@ async function setup(t, withBoundary = false, options = {}) {
     const { context } = await privateFixture({ after: value => { cleanup = value; } }, fixtures);
     if (options.roster) await replaceEvidence(context, () => ({ records: fixtures,
         importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: options.roster } }));
+    const access = options.profile ? await createCopilotRuntimeAccess(context) : undefined;
+    const host = { sessionId: "invented-trends-host", rpc: {
+        accounts: { get: async () => ({ kind: "activeAccount",
+            account: { active: true, kind: "githubDotCom", host: "github.com", login: "synthetic-riley", selectionId: "cedar-profile" },
+            authInfo: { type: "user", host: "github.com", login: "synthetic-riley" } }) },
+        gitHubAuth: { getStatus: async () => ({ isAuthenticated: true, authType: "user", host: "github.com", login: "synthetic-riley" }) },
+    } };
+    const bridge = options.profile ? createCopilotAccountBridge(() => host, { expectedSessionId: host.sessionId, binding: "copilot-app" }) : null;
     const before = await loadBoardState(context), errors = [], denied = [], reads = [];
     const server = await startServer(context, createExportController(context), {
-        port: 0, collector: { timers: false },
+        port: 0, access, collector: { timers: false },
+        ...(bridge ? { githubProfile: { copilot: bridge.copilot, fetch: async url => url.startsWith("https://api.github.com/")
+            ? Response.json({ type: "User", id: 70001, login: "synthetic-riley", name: "Riley Chen",
+                avatar_url: "https://avatars.githubusercontent.com/u/70001" })
+            : new Response(profilePNG, { headers: { "content-type": "image/png" } }) } } : {}),
         evaluation: { evaluatorFactory() { throw new Error("No providers in Trends proof."); }, readSource() { throw new Error("No history reads in Trends proof."); } },
     });
     const browser = await chromium.launch();
     t.after(async () => {
         try { await browser.close(); await server.close(); assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(await loadBoardState(context), before); }
-        finally { await cleanup(); }
+        finally { bridge?.close(); await access?.close(); await cleanup(); }
     });
     const page = await browser.newPage({ viewport: options.viewport ?? { width: 1440, height: 1000 }, timezoneId: "UTC",
         reducedMotion: options.motion ?? "reduce", hasTouch: options.touch ?? false, deviceScaleFactor: options.scale ?? 1 });
@@ -83,7 +98,7 @@ async function setup(t, withBoundary = false, options = {}) {
     await page.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
-            "/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+            "/api/session", "/api/access/watch", "/api/snapshot", "/api/collection/status", "/api/collection/sources/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/trends", "/api/report-artifacts/list", "/api/period-comparison",
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
         if (url.pathname === "/api/trends") reads.push(request.postDataJSON());
@@ -97,6 +112,7 @@ async function setup(t, withBoundary = false, options = {}) {
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     if (!options.direct) await navigateMain(page, "trends");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    if (options.profile) await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     return { page, reads };
 }
 async function dates(page, from = "2026-08-01", to = "2026-08-30") {
@@ -1477,5 +1493,197 @@ test("touch and keyboard select every chart in place and preserve its point thro
         await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
         await page.getByRole("button", { name: "Back to overview", exact: true }).click();
         await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
+    }
+});
+
+async function measureSidebarMotion(page, { keyboard = false, reverse = false } = {}) {
+    const button = page.locator("#navigationCollapse");
+    if (keyboard) await button.focus();
+    else await button.hover();
+    await page.evaluate(() => {
+        const sidebar = document.getElementById("sidebar"), plots = [...document.querySelectorAll(".trends-plot")];
+        const avatar = document.querySelector("#wireAccountTrigger img");
+        const result = { frames: [], longTasks: [], plotRebuilds: 0, started: null, ended: null, inputTimes: [] };
+        window.sidebarPerformance = result;
+        const observer = new MutationObserver(entries => {
+            for (const entry of entries) if (plots.includes(entry.target))
+                result.plotRebuilds += [...entry.addedNodes].filter(node => node.nodeName.toLowerCase() === "svg").length;
+        });
+        plots.forEach(plot => observer.observe(plot, { childList: true }));
+        const tasks = new PerformanceObserver(list => result.longTasks.push(...list.getEntries().map(entry => ({
+            start: entry.startTime, duration: entry.duration,
+        }))));
+        tasks.observe({ type: "longtask" });
+        const trigger = document.getElementById("navigationCollapse");
+        const click = () => {
+            const now = performance.now();
+            result.inputTimes.push(now);
+            if (result.started !== null) return;
+            result.started = now;
+            const sample = () => {
+                const at = performance.now(), width = sidebar.getBoundingClientRect().width;
+                const animations = sidebar.getAnimations({ subtree: true }).filter(animation => animation.playState === "running");
+                result.frames.push({ at, width, avatarSame: avatar === document.querySelector("#wireAccountTrigger img") && (!avatar || avatar.isConnected),
+                    animations: animations.length, durations: animations.filter(animation => animation.effect.target === sidebar)
+                        .map(animation => animation.effect.getTiming().duration) });
+                if (at - result.started < 1000) requestAnimationFrame(sample);
+                else {
+                    observer.disconnect(); tasks.disconnect(); trigger.removeEventListener("click", click, true);
+                    result.ended = at;
+                }
+            };
+            result.frames.push({ at: now, width: sidebar.getBoundingClientRect().width, animations: 0 });
+            requestAnimationFrame(sample);
+        };
+        trigger.addEventListener("click", click, true);
+    });
+    if (keyboard) await page.keyboard.press("Enter"); else await button.click();
+    if (reverse) {
+        await page.waitForTimeout(110);
+        if (keyboard) await page.keyboard.press("Enter");
+        else {
+            const box = await button.boundingBox();
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        }
+    }
+    await page.waitForFunction(() => window.sidebarPerformance.ended !== null);
+    return page.evaluate(() => {
+        const result = window.sidebarPerformance, frames = result.frames, first = frames[0], last = frames.at(-1);
+        const changed = frames.find(frame => Math.abs(frame.width - first.width) > .5);
+        const reached = frames.findLastIndex(frame => Math.abs(frame.width - last.width) > .5);
+        const gaps = frames.slice(1).map((frame, index) => frame.at - frames[index].at);
+        return {
+            firstMotionMs: changed ? changed.at - first.at : null,
+            completionMs: reached >= 0 ? frames[Math.min(reached + 1, frames.length - 1)].at - first.at : 0,
+            maxFrameGapMs: Math.max(...gaps), framesOver50ms: gaps.filter(gap => gap > 50).length,
+            longTaskCount: result.longTasks.length, longTaskMs: result.longTasks.reduce((sum, task) => sum + task.duration, 0),
+            plotRebuilds: result.plotRebuilds,
+            intermediateFrames: frames.filter(frame => frame.width > Math.min(...frames.map(frame => frame.width)) + 1
+                && frame.width < Math.max(...frames.map(frame => frame.width)) - 1).length,
+            widthSpan: Math.max(...frames.map(frame => frame.width)) - Math.min(...frames.map(frame => frame.width)),
+            initialWidth: first.width, finalWidth: last.width, inputCount: result.inputTimes.length,
+            avatarPreserved: frames.every(frame => frame.avatarSame !== false),
+            focusPreserved: document.activeElement === document.getElementById("navigationCollapse"),
+            motionDurations: [...new Set(frames.flatMap(frame => frame.durations ?? []))],
+        };
+    });
+}
+
+test("populated Trends sidebar motion stays responsive without rebuilding seven plots every animation frame", { timeout: 60000 }, async t => {
+    const { page } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 1920, height: 1080 },
+        motion: "no-preference", direct: true, profile: true });
+    const results = [];
+    for (const route of ["analyze", "reports", "trends7", "trends30"]) {
+        await navigateMain(page, route.startsWith("trends") ? "trends" : route);
+        if (route.startsWith("trends")) {
+            await page.locator(`[data-trend-period="${route === "trends7" ? "7" : "30"}"]`).click();
+            await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+            await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+        }
+        await page.evaluate(() => scrollTo(0, 0)); await settle(page);
+        const profiler = process.env.WIRE_TRENDS_PROFILE && route === "trends30" ? await page.context().newCDPSession(page) : null;
+        if (profiler) { await profiler.send("Profiler.enable"); await profiler.send("Profiler.start"); }
+        for (let repeat = 0; repeat < (route.startsWith("trends") ? 2 : 1); repeat++)
+            for (const phase of ["collapse", "expand"])
+                results.push({ route, phase, repeat, ...await measureSidebarMotion(page, { keyboard: phase === "expand" }) });
+        if (profiler) {
+            const { profile } = await profiler.send("Profiler.stop");
+            await writeFile(process.env.WIRE_TRENDS_PROFILE, JSON.stringify(profile));
+            await profiler.detach();
+            const nodes = new Map(profile.nodes.map(node => [node.id, node])), totals = new Map();
+            for (const [index, id] of profile.samples.entries()) {
+                const node = nodes.get(id), key = `${node.callFrame.functionName || "(anonymous)"}:${node.callFrame.lineNumber + 1}`;
+                totals.set(key, (totals.get(key) ?? 0) + profile.timeDeltas[index] / 1000);
+            }
+            console.log("Sidebar CPU self time", [...totals].sort((a, b) => b[1] - a[1]).slice(0, 18));
+        }
+    }
+    results.push({ route: "trends30", phase: "reversal", ...await measureSidebarMotion(page, { reverse: true }) });
+    await capture(page, "sidebar-motion-wide-30");
+    await page.setViewportSize({ width: 1080, height: 1920 }); await settle(page);
+    for (const phase of ["collapse", "expand", "reversal"])
+        results.push({ route: "trends30-portrait", phase, ...await measureSidebarMotion(page, { keyboard: true, reverse: phase === "reversal" }) });
+    await capture(page, "sidebar-motion-portrait-30");
+    console.log("Sidebar motion benchmark", JSON.stringify(results));
+    if (process.env.WIRE_TRENDS_PERFORMANCE) await writeFile(process.env.WIRE_TRENDS_PERFORMANCE, JSON.stringify(results, null, 2));
+    for (const result of results.filter(row => row.route.startsWith("trends"))) {
+        assert.ok(result.widthSpan > 100 && result.intermediateFrames >= 8, "Sidebar must actually animate through intermediate widths");
+        assert.equal(result.plotRebuilds, 0, `${result.route}/${result.phase}: width changes must reuse mounted charts`);
+        assert.ok(result.avatarPreserved && result.focusPreserved, "The selected avatar and active sidebar control remain mounted");
+        assert.deepEqual(result.motionDurations, [320], "The native sidebar duration is preserved, not shortened or disabled");
+        assert.ok(result.firstMotionMs < 120, `${result.route}/${result.phase}: ${result.firstMotionMs}ms to first motion`);
+        assert.ok(result.maxFrameGapMs < 100, `${result.route}/${result.phase}: ${result.maxFrameGapMs}ms frame gap`);
+        assert.ok(result.completionMs < 650, `${result.route}/${result.phase}: ${result.completionMs}ms to complete the unchanged sidebar animation`);
+    }
+});
+
+test("sidebar reflow keeps all chart nodes, evidence text, selection and reading while updating hit geometry", { timeout: 60000 }, async t => {
+    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 1440, height: 1080 },
+        motion: "no-preference", direct: true });
+    const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
+    await page.locator('[data-trend-period="30"]').click();
+    const data = await (await response).json(); await settle(page);
+    await page.getByRole("checkbox", { name: "Show retrieve", exact: true }).uncheck();
+    const marks = page.locator("#trendsPlot-tools [data-trend-mark]");
+    const index = await marks.evaluateAll(nodes => nodes.findIndex(node => !/unavailable|, 0(?:%| |$)/i.test(node.getAttribute("aria-label"))));
+    const mark = marks.nth(index);
+    await mark.focus(); await page.keyboard.press("Enter"); await page.keyboard.press("Escape");
+    const selected = await mark.getAttribute("aria-label"), selectedSeries = await mark.getAttribute("data-series");
+    const snapshot = async () => page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => ({
+        id: node.dataset.family, heading: node.querySelector(".trends-identity").textContent,
+        choices: [...node.querySelectorAll("input")].map(input => [input.dataset.series, input.checked]),
+        mode: node.querySelector("[data-trend-mode][aria-pressed=true]").dataset.trendMode,
+        marks: [...node.querySelectorAll("[data-trend-mark]")].map(node => [node.getAttribute("aria-label"), node.getAttribute("aria-pressed")]),
+        dates: [...node.querySelectorAll("[data-date-tick]")].map(node => node.textContent),
+    })));
+    await page.evaluate(() => {
+        window.keptTrendSvgs = [...document.querySelectorAll(".trends-plot>svg")];
+        for (const plot of document.querySelectorAll(".trends-plot")) plot.scrollLeft = 120;
+    });
+    await settle(page);
+    const before = await snapshot(), readCount = reads.length;
+    for (const phase of ["collapse", "expand", "reversal"]) {
+        const result = await measureSidebarMotion(page, { reverse: phase === "reversal" });
+        assert.equal(result.plotRebuilds, 0);
+        assert.deepEqual(await snapshot(), before);
+        assert.equal(reads.length, readCount);
+        const mounted = await page.evaluate(() => ({
+            same: window.keptTrendSvgs.every((node, index) => node === document.querySelectorAll(".trends-plot>svg")[index]),
+            scrolls: [...document.querySelectorAll(".trends-plot")].map(node => node.scrollLeft),
+        }));
+        assert.equal(mounted.same, true); assert.ok(mounted.scrolls.every(value => Math.abs(value - 120) < 1), JSON.stringify(mounted));
+    }
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    await expect(page.locator("#trendsPlot-tools [aria-pressed=true]")).toHaveAttribute("aria-label", selected);
+    await page.getByRole("button", { name: "View evidence", exact: true }).click();
+    const day = new Date(selected.split(":")[0].replace(/^Today · /, "")).toISOString().slice(0, 10);
+    const expected = data.days.find(value => value.date === day).values.tools.find(value => value.id === selectedSeries).rowIds;
+    const actual = await page.locator(".trends-evidence-row a").evaluateAll(nodes => nodes.map(node =>
+        new URLSearchParams(node.hash.split("?")[1]).get("call")));
+    assert.deepEqual(actual.sort(), [...expected].sort());
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await page.locator('[data-trend-period="7"]').click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
+    for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
+        const plot = page.locator(`#trendsPlot-${id}`);
+        const mark = plot.locator("[data-trend-mark]").first();
+        await plot.scrollIntoViewIfNeeded(); await settle(page);
+        const prior = await mark.evaluate(node => ({ node: node.getAttribute("aria-label"), rect: node.getBoundingClientRect().toJSON() }));
+        await page.locator("#navigationCollapse").click(); await settle(page);
+        await mark.scrollIntoViewIfNeeded(); await settle(page);
+        const box = await mark.boundingBox();
+        assert.notEqual(box.x, prior.rect.x, `${id}: geometry moves with the real workspace`);
+        const hit = await page.evaluate(({ x, y }) => {
+            const node = document.elementFromPoint(x, y);
+            return { tag: node?.tagName, label: node?.getAttribute("aria-label"), id: node?.id, cls: node?.getAttribute("class"), x, y, height: innerHeight };
+        }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+        assert.ok(hit.y > 76 && hit.y < hit.height, `${id}: pointer proof must reach a visible mark: ${JSON.stringify(hit)}`);
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(page.locator("#trendsTooltip"), `${id}: ${JSON.stringify(hit)}`).toBeVisible();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(plot.locator("[data-trend-mark][aria-pressed=true]")).toHaveCount(1);
+        await expect(page.locator(`.trends-panel[data-family="${id}"]`)).toHaveAttribute("data-maximized", "false");
+        await page.keyboard.press("Escape");
     }
 });
