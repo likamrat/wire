@@ -168,6 +168,8 @@ During sidebar motion, width changes update only mounted chart geometry.
 Reuse formatted labels, values and exact point membership; do not recreate all
 seven SVGs on every frame. Keep hit targets and selected outlines aligned with
 their marks, preserve horizontal reading, and retire stale hover during reflow.
+Reversing the sidebar must not turn a transient scroll clamp into a new reading
+position; deliberate wheel, touch or keyboard scrolling still takes precedence.
 Chart type scales with text size, and long recorded names wrap without truncation
 in legends, selected values and hover cards.
 

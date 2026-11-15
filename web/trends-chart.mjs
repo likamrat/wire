@@ -1,7 +1,7 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
 export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, formatDate, formatAxisDate, canInspect }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
-    let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false;
+    let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
     const rate = value => value === null ? "Unavailable" : `${number(value)}%`;
     const svgNode = (tag, attrs = {}, text) => {
@@ -336,12 +336,15 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
             if (node.isConnected && doc.activeElement === node && scene.points.includes(point)) show(point);
         }));
     });
-    root.addEventListener("focusout", event => { if (!root.contains(event.relatedTarget)) hide(); });
+    root.addEventListener("focusout", event => {
+        if (!root.contains(event.relatedTarget)) { userScrolling = false; hide(); }
+    });
     root.addEventListener("click", event => {
         const point = event.detail === 0 && event.target.dataset.trendMark !== undefined ? scene?.points[Number(event.target.dataset.trendMark)] : hit(event.clientX, event.clientY);
         if (point) onSelect(scene.data.days[point.index].date, point.id);
     });
     root.addEventListener("keydown", event => {
+        userScrolling = true;
         const point = scene?.points[Number(event.target.dataset.trendMark)];
         if (!point) return;
         if (["Enter", " "].includes(event.key)) { event.preventDefault(); onSelect(scene.data.days[point.index].date, point.id); return; }
@@ -360,13 +363,21 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
     doc.addEventListener("keydown", event => {
         if (event.key === "Escape" && active) { event.preventDefault(); dismissed = active.identity; hide({ preserveDismissed: true }); }
     });
-    doc.addEventListener("pointerdown", event => { if (!root.contains(event.target) && !tooltip.contains(event.target)) hide(); });
+    root.addEventListener("wheel", () => { userScrolling = true; }, { passive: true });
+    root.addEventListener("scrollend", () => { userScrolling = false; });
+    doc.addEventListener("pointerdown", event => {
+        userScrolling = root.contains(event.target);
+        if (!root.contains(event.target) && !tooltip.contains(event.target)) hide();
+    });
     doc.addEventListener("scroll", event => {
         if (tooltip.contains(event.target)) return;
         hide();
         if (event.target === root) {
             root.querySelector(".trends-y-axis")?.setAttribute("transform", `translate(${root.scrollLeft} 0)`);
-            if (scene?.viewportWidth === root.clientWidth) rememberReading();
+            // A reversal can clamp scrollLeft at a transient width before returning
+            // to the same measured width. Only user scrolling replaces that anchor.
+            const moving = doc.getElementById("sidebar")?.hasAttribute("data-navigation-moving");
+            if (userScrolling || scene?.viewportWidth === root.clientWidth && !moving) rememberReading();
         }
     }, { capture: true, passive: true });
     function rememberReading() {
@@ -388,5 +399,5 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         if (scale !== scene.scale) render(scene.data, scene.family, scene.mode, scene.hidden, scene.selection);
         else scene.resize(size);
     }
-    return { render, resize, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
+    return { render, resize, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; userScrolling = false; erase(root); } };
 }

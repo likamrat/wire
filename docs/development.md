@@ -206,6 +206,8 @@ The sidebar performance case compares native collapse/expand motion on populated
 input-to-motion, completion, frame gaps, long tasks and full SVG rebuilds, with
 repeated reversal and a portrait layout. Width-only changes must reposition
 mounted chart nodes, not reformat dates or rebuild the evidence scene.
+Both latest-date and earlier-date anchors must survive reversal; deliberate
+horizontal scrolling during the glide must replace the old anchor.
 Run it with `node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
 Set `WIRE_TRENDS_PERFORMANCE` to an owned JSON file for measurements; optional
 `WIRE_TRENDS_PROFILE` writes the 30-day Chromium CPU profile. Keep these private.

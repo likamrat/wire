@@ -1565,6 +1565,7 @@ async function measureSidebarMotion(page, { keyboard = false, reverse = false } 
             avatarPreserved: frames.every(frame => frame.avatarSame !== false),
             focusPreserved: document.activeElement === document.getElementById("navigationCollapse"),
             motionDurations: [...new Set(frames.flatMap(frame => frame.durations ?? []))],
+            plotsAtLatest: [...document.querySelectorAll(".trends-plot")].map(node => node.scrollWidth - node.clientWidth - node.scrollLeft),
         };
     });
 }
@@ -1615,6 +1616,10 @@ test("populated Trends sidebar motion stays responsive without rebuilding seven 
         assert.ok(result.maxFrameGapMs < 100, `${result.route}/${result.phase}: ${result.maxFrameGapMs}ms frame gap`);
         assert.ok(result.completionMs < 650, `${result.route}/${result.phase}: ${result.completionMs}ms to complete the unchanged sidebar animation`);
     }
+    const latest = await page.locator(".trends-plot").evaluateAll(nodes => nodes.map(node => ({
+        id: node.id, remaining: node.scrollWidth - node.clientWidth - node.scrollLeft,
+    })));
+    assert.ok(latest.every(plot => plot.remaining < 2), `Sidebar reflow preserves latest-date reading: ${JSON.stringify(latest)}`);
 });
 
 test("sidebar reflow keeps all chart nodes, evidence text, selection and reading while updating hit geometry", { timeout: 60000 }, async t => {
@@ -1653,6 +1658,26 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         }));
         assert.equal(mounted.same, true); assert.ok(mounted.scrolls.every(value => Math.abs(value - 120) < 1), JSON.stringify(mounted));
     }
+    const toolPlot = page.locator("#trendsPlot-tools");
+    await toolPlot.evaluate(node => {
+        node.scrollLeft = 300;
+        window.userPlotScroll = null;
+        node.addEventListener("scroll", () => {
+            if (document.getElementById("sidebar").hasAttribute("data-navigation-moving") && node.scrollLeft < 290)
+                window.userPlotScroll = node.scrollLeft;
+        });
+    });
+    await settle(page);
+    await page.locator("#navigationCollapse").click();
+    await page.waitForTimeout(50);
+    const toolBox = await toolPlot.boundingBox();
+    await page.mouse.move(toolBox.x + toolBox.width / 2, toolBox.y + 40);
+    await page.mouse.wheel(-100, 0);
+    await page.waitForFunction(() => window.userPlotScroll !== null);
+    await settle(page);
+    const reading = await toolPlot.evaluate(node => ({ actual: node.scrollLeft, requested: window.userPlotScroll }));
+    assert.ok(reading.actual < 290 && Math.abs(reading.actual - reading.requested) < 1,
+        `User scrolling during the glide replaces the old reading anchor: ${JSON.stringify(reading)}`);
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     await expect(page.locator("#trendsPlot-tools [aria-pressed=true]")).toHaveAttribute("aria-label", selected);
     await page.getByRole("button", { name: "View evidence", exact: true }).click();
