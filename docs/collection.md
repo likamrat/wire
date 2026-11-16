@@ -68,6 +68,13 @@ Choose the actual paths in source review; WSL can qualify Windows drive paths
 or their mounted equivalents. WIRE checks those named paths, not arbitrary
 home-directory contents. Approval and schema validation precede history reads.
 
+Managed connectors may record an opaque `cc-*` server name. WIRE recognizes
+their Work IQ calls only when the approved app metadata labels that exact
+session and event as **Work IQ** or **WorkIQ**. A tool named `fetch` alone is
+not enough. This bounded read admits at most 100,000 managed Work IQ event
+identities; incompatible mappings fail explicitly without replacing evidence.
+Updating WIRE does not reset collection cursors or authorize a historical reread.
+
 ### Account profile
 
 Account presentation uses a separate, bounded profile-only read of that approved
@@ -189,6 +196,13 @@ still agree. It does not reset cursors or adopt another host's store.
 | Automatic continuation | No new message is distinct from a missing/excluded prompt. Event kind does not establish author; unknown records do not default to User. |
 | Tool diagnostic | Screened message/code/status/details stay with their original call or returned entry, separately from optional assistant replies. |
 | Model and final-response timing | Require qualified source/message/response/turn links. Tool hints, deployment names and the current account cannot fill missing provenance. |
+
+Service classification uses recorded target paths, not the connector's display
+name or prompt wording. User-profile relationships such as `/me/manager` and
+`/me/directReports` are People operations; a more specific downstream path can
+identify another service. Correcting path recognition updates live views of
+retained calls without rereading history or changing outcomes. Previously saved
+report facts and files remain frozen.
 
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain

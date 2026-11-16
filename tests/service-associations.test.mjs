@@ -9,6 +9,56 @@ import { executeAction } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture } from "./helpers.mjs";
 import { serviceEvidenceFixture } from "./service-evidence-fixtures.mjs";
+import { normalizeEndpoint } from "../lib/analytics.mjs";
+import { routeShape } from "../lib/graph.mjs";
+
+test("People profile relationships share classification across raw, normalized and privacy-projected targets", () => {
+    for (const target of [
+        "/me/manager?$select=id,displayName", "/v1.0/me/manager/", "/beta/me/directReports?$top=12",
+        "https://graph.microsoft.com/v1.0/me/manager/microsoft.graph.user",
+        "/me/directReports/PRIVATE-PERSON/manager", "/me/directReports('PRIVATE-PERSON')",
+        "/users/PRIVATE-PERSON/manager", "/users('PRIVATE-PERSON')/directReports",
+    ]) {
+        assert.equal(classifyWorkload(target), "People", target);
+        assert.equal(classifyWorkload(normalizeEndpoint(target)), "People", target);
+        assert.doesNotMatch(JSON.stringify(normalizeEndpoint(target)), /PRIVATE-PERSON/);
+    }
+    for (const target of ["/me/manager?$select=id", "/me/directReports/PRIVATE-PERSON/manager",
+        "/users/PRIVATE-PERSON/directReports?$top=12"]) {
+        assert.equal(classifyWorkload(normalizeEndpoint(routeShape(target))), "People", target);
+    }
+    assert.equal(normalizeEndpoint("/me/directReports('PRIVATE-PERSON')").path, "/me/directReports/{id}");
+    for (const target of ["/unsupported/manager", "/me/management", "/me/directReportsExtra",
+        "https://untrusted.invalid/v1.0/me/manager", "https://name:secret@graph.microsoft.com/v1.0/me/manager"]) {
+        assert.equal(classifyWorkload(target), "Unknown", target);
+    }
+    for (const [target, service] of [["/me/manager/messages", "Mail"], ["/me/manager/events", "Calendar"],
+        ["/me/directReports/PRIVATE-PERSON/drive/root", "Files"]]) {
+        assert.equal(classifyWorkload(target), service, "A downstream service remains more specific than the profile relationship");
+    }
+});
+
+test("manager and direct-reports calls remain two People calls across summaries, filters and reported results", () => {
+    const record = serviceEvidenceFixture();
+    record.toolCalls = ["/me/manager?$select=id", "/users/PRIVATE-PERSON/directReports?$top=12"].map((target, index) => ({
+        ...record.toolCalls[1], toolCallId: `managed-profile-${index}`, startEventId: `managed-profile-start-${index}`,
+        mcpServerName: "cc-invented-connector", requestArgs: { entityUrls: [target] }, requestedApiPath: target,
+        apiResults: [{ index: 0, statusCode: 200 }],
+    }));
+    const before = structuredClone(record), model = buildActivityAnalytics([record]);
+    assert.deepEqual(model.rows.map(row => [row.workload, row.outcome]), [["People", "success"], ["People", "success"]]);
+    assert.deepEqual(model.rows.map(row => row.serviceAssociation.gaps), [[], []]);
+    assert.equal(model.serviceInvolvement.denominator, 2);
+    assert.equal(model.serviceInvolvement.missingDetailCount, 0);
+    assert.deepEqual(model.serviceInvolvement.groups.map(group => [group.label, group.count, group.sharePercent]), [["People", 2, 100]]);
+    assert.equal(buildActivityAnalytics([record], { filters: { services: ["People"] } }).totals.count, 2);
+    assert.equal(buildActivityAnalytics([record], { filters: { services: ["Unknown"] } }).totals.count, 0);
+    assert.deepEqual(buildRequestActivity([record]).tool.map(row => row.serviceAssociation.services), [["People"], ["People"]]);
+    const results = buildActivityAnalytics([record], { layer: "reported-api" });
+    assert.deepEqual(results.rows.map(row => [row.workload, row.status, row.outcome]), [["People", 200, "success"], ["People", 200, "success"]]);
+    assert.equal(buildActivityAnalytics([record], { layer: "http" }).totals.count, 0);
+    assert.deepEqual(record, before, "Read-time classification must not rewrite retained source evidence");
+});
 
 test("service filtering retains one canonical call with multiple supported targets", () => {
     const record = serviceEvidenceFixture();

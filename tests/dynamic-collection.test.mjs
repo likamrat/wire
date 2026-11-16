@@ -23,6 +23,7 @@ import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate } from "node:timers/promises";
+import { createRecollectionController } from "../lib/recollection.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -84,6 +85,92 @@ async function logFor(app, id, events = []) {
 const call = (id = "synthetic-call") => event("tool.execution_start", {
     toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch",
     toolCallId: id, arguments: { entityUrls: ["/me/messages"] },
+});
+
+const managedSchema = `CREATE TABLE session_managed_mcp_event_display_names(
+    session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT NOT NULL,
+    PRIMARY KEY(session_id,event_id));`;
+const managedCall = id => {
+    const start = call(id);
+    return { ...start, data: { ...start.data, toolName: "cc-invented-connector-fetch",
+        mcpServerName: "cc-invented-connector", mcpConfigServerName: "cc-invented-connector" } };
+};
+
+test("managed Work IQ uses event-bound app identity, including newly discovered connector calls and restart", async t => {
+    const app = await installation(t), id = app.session(), other = app.session();
+    app.db.exec(managedSchema);
+    await logFor(app, other);
+    const first = managedCall("managed-first"), unbound = managedCall("unbound-fetch");
+    const wrongLabel = managedCall("other-connector"), unknown = managedCall("unknown-operation");
+    unknown.data.mcpToolName = "unsupported_operation";
+    unbound.data.wireManagedWorkIq = true;
+    const bind = app.db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)");
+    bind.run(id, first.id, "Work IQ");
+    bind.run(other, unbound.id, "Work IQ");
+    bind.run(id, wrongLabel.id, "Another connector");
+    bind.run(id, unknown.id, "Work IQ");
+    const file = await logFor(app, id, [
+        event("user.message", { content: "Invented managed request" }),
+        first, unbound, wrongLabel, unknown,
+        event("tool.execution_complete", { toolCallId: first.data.toolCallId, success: true }),
+    ]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    await collector.collectNow();
+    const firstState = await loadBoardState(app.context);
+    assert.deepEqual(firstState.evidence.flatMap(row => row.toolCalls).map(call => [call.toolCallId, call.reportedOutcome]),
+        [["managed-first", "succeeded"]]);
+    const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json"), "utf8"));
+    const checkpoint = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", index.fingerprint, `${id}.json`), "utf8"));
+    const retained = checkpoint.events.find(event => event.id === first.id);
+    assert.equal(retained.data.mcpServerName, "cc-invented-connector");
+    assert.equal(retained.data.wireManagedWorkIq, true);
+    assert.equal(checkpoint.events.some(event => event.id === unbound.id), false);
+    const second = managedCall("managed-incremental");
+    bind.run(id, second.id, "WorkIQ");
+    await appendFile(file, [event("user.message", { content: "Invented incremental request" }), second,
+        event("tool.execution_complete", { toolCallId: second.data.toolCallId, success: false })]
+        .map(row => JSON.stringify(row) + "\n").join(""));
+    await collector.collectNow();
+    const secondState = await loadBoardState(app.context);
+    assert.deepEqual(secondState.evidence.flatMap(row => row.toolCalls).map(call => [call.toolCallId, call.reportedOutcome]).sort(),
+        [["managed-first", "succeeded"], ["managed-incremental", "failed"]]);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const unchanged = await collector.collectNow();
+    assert.equal(unchanged.metrics.lastBytesRead, 0);
+    assert.deepEqual((await loadBoardState(app.context)).evidence, secondState.evidence);
+    assert.deepEqual(await readFile(configFile), configBefore);
+});
+
+test("new managed identity does not reset consumed cursors; explicit recollection can recover the skipped call", async t => {
+    const app = await installation(t), id = app.session();
+    app.db.exec(managedSchema);
+    const start = managedCall("previously-unrecognized");
+    await logFor(app, id, [event("user.message", { content: "Invented historical connector request" }), start,
+        event("tool.execution_complete", { toolCallId: start.data.toolCallId, success: true })]);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    assert.equal((await loadBoardState(app.context)).evidence.length, 0);
+    app.db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)").run(id, start.id, "Work IQ");
+    const unchanged = await collector.collectNow();
+    assert.equal(unchanged.metrics.lastBytesRead, 0);
+    assert.equal((await loadBoardState(app.context)).evidence.length, 0);
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    const now = Date.now(), day = new Date(now).toISOString().slice(0, 10);
+    const recollection = createRecollectionController(app.context, { now: () => now });
+    const preview = await recollection.preview("invented-owner", { sourceSessionIds: [id], from: day, to: day,
+        timeContext: { timeZone: "UTC", locale: "en-US" }, restorePrompts: false });
+    assert.equal(preview.counts.toolCalls, 1);
+    assert.equal((await loadBoardState(app.context)).evidence.length, 0);
+    const result = await recollection.confirm("invented-owner", { operationId: preview.operationId, confirmed: true });
+    assert.equal(result.phase, "complete");
+    assert.equal((await loadBoardState(app.context)).evidence[0].toolCalls[0].toolCallId, start.data.toolCallId);
+    assert.deepEqual(await readFile(configFile), configBefore);
 });
 
 test("context retention uses linear serialization work and keeps late results after eviction", { timeout: 30000 }, async t => {
