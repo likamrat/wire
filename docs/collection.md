@@ -68,6 +68,13 @@ Choose the actual paths in source review; WSL can qualify Windows drive paths
 or their mounted equivalents. WIRE checks those named paths, not arbitrary
 home-directory contents. Approval and schema validation precede history reads.
 
+Managed connectors may record an opaque `cc-*` server name. WIRE recognizes
+their Work IQ calls only when the approved app metadata labels that exact
+session and event as **Work IQ** or **WorkIQ**. A tool named `fetch` alone is
+not enough. This bounded read admits at most 100,000 managed Work IQ event
+identities; incompatible mappings fail explicitly without replacing evidence.
+Updating WIRE does not reset collection cursors or authorize a historical reread.
+
 ### Account profile
 
 Account presentation uses a separate, bounded profile-only read of that approved

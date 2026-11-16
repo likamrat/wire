@@ -63,6 +63,27 @@ test("native and source-native readers use the same fixed projection contract an
     assert.deepEqual(app.calls.map(call => call.command), ["wslpath", "node.exe"]);
 });
 
+test("native and source-native readers bind managed Work IQ identity to its exact session and event", async t => {
+    const app = await fixture(t), db = new DatabaseSync(app.file);
+    db.exec(`CREATE TABLE session_managed_mcp_event_display_names(
+        session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT,
+        PRIMARY KEY(session_id,event_id));
+        INSERT INTO session_managed_mcp_event_display_names VALUES
+        ('00000000-0000-4000-8000-000000000001','managed-fetch','Work IQ'),
+        ('00000000-0000-4000-8000-000000000001','unrelated-fetch','Another connector'),
+        ('00000000-0000-4000-8000-000000000002','foreign-fetch','Work IQ');`);
+    db.close();
+    const native = await readSourceMetadata({ ...app.files, windowsDatabase: null });
+    const hosted = await readSourceMetadata(app.files, { run: app.run });
+    assert.deepEqual(native.roster[0].managedWorkIqEventIds, ["managed-fetch"]);
+    assert.deepEqual(hosted.roster[0].managedWorkIqEventIds, ["managed-fetch"]);
+    for (const ids of [["duplicate", "duplicate"], ["bad\nidentity"], "not-an-array"]) {
+        const invalid = structuredClone(hosted);
+        invalid.roster[0].managedWorkIqEventIds = ids;
+        assert.throws(() => validateMetadataProjection(invalid), { code: "source_metadata_invalid" });
+    }
+});
+
 test("a pending source-native read yields to freshness work and rechecks access afterward", async t => {
     const app = await fixture(t);
     let ticks = 0, current = true;
