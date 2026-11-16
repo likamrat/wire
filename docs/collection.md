@@ -197,6 +197,13 @@ still agree. It does not reset cursors or adopt another host's store.
 | Tool diagnostic | Screened message/code/status/details stay with their original call or returned entry, separately from optional assistant replies. |
 | Model and final-response timing | Require qualified source/message/response/turn links. Tool hints, deployment names and the current account cannot fill missing provenance. |
 
+Service classification uses recorded target paths, not the connector's display
+name or prompt wording. User-profile relationships such as `/me/manager` and
+`/me/directReports` are People operations; a more specific downstream path can
+identify another service. Correcting path recognition updates live views of
+retained calls without rereading history or changing outcomes. Previously saved
+report facts and files remain frozen.
+
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
 complete entries before malformed syntax, marked partial with an unknown

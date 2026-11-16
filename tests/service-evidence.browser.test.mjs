@@ -50,6 +50,31 @@ async function ready(page) {
 }
 const dataService = item => item.locator("dt").filter({ hasText: /^Data service$/ }).evaluate(node => node.nextElementSibling.textContent);
 
+test("profile relationship calls show People for the complete service denominator and exact-call reader", { timeout: 30000 }, async t => {
+    const source = serviceEvidenceFixture();
+    source.toolCalls = ["/me/manager?$select=id", "/users/INVENTED-PERSON/directReports?$top=12"].map((target, index) => ({
+        ...source.toolCalls[1], toolCallId: `profile-relationship-${index}`, startEventId: `profile-relationship-start-${index}`,
+        mcpServerName: "cc-invented-connector", requestArgs: { entityUrls: [target] }, requestedApiPath: target,
+        apiResults: [{ index: 0, statusCode: 200 }],
+    }));
+    const { context } = await privateFixture(t, [source]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage(), errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url + "#analyze"); await ready(page);
+    const services = page.locator("section.percentage-card").filter({ has: page.locator('[id$="-services-title"]') });
+    await expect(services.getByRole("link", { name: "People: 2 of 2 Work IQ tool calls (100%). View matching records.", exact: true })).toBeVisible();
+    await expect(services).not.toContainText("Recorded path not recognized");
+    await services.getByRole("link", { name: "People: 2 of 2 Work IQ tool calls (100%). View matching records.", exact: true }).click(); await ready(page);
+    await expect(page.locator("#activityList .request-row")).toHaveCount(1);
+    await page.locator("#activityList .request-card-open").click(); await ready(page);
+    await expect(page.locator('[data-tool-call-id="profile-relationship-0"] .reader-call-services .service-label-list')).toHaveText("People");
+    await expect(page.locator('[data-tool-call-id="profile-relationship-1"] .reader-call-services .service-label-list')).toHaveText("People");
+    assert.deepEqual(errors, []);
+});
+
 test("normal entry explains invented search, preparation and service gaps without changing filtered calls", { timeout: 30000 }, async t => {
     const source = serviceEvidenceFixture();
     const records = [
