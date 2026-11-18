@@ -61,6 +61,15 @@ their former conflict wording. Markdown-backed views read the saved Markdown.
 Opening either format must preserve the frozen reading, not only file hashes.
 Report explanation versions are independent of live screen wording.
 
+New focused product reports declare `presentation.productVersion: 1` alongside
+presentation schema 3 and the existing origin/brand versions. This changes
+reading order, repeated definitions and narrow-table layout, not facts, units
+or membership. Outcomes and timing lead; exact call/result details remain
+available. HTML evidence tables scroll locally rather than fragmenting tool
+identifiers. The marker is supported only for ordinary `kind: "report"` snapshots
+with reportPopulation v1. Unmarked saved files and JSON-only rendered readings
+retain their original presentation; unknown marker versions are refused.
+
 Synthetic, diagnostic, unknown-source and unidentifiable records retain
 explicit exclusions; missing project context alone is not exclusion. Counts
 distinguish chats, interactions and each evidence layer. Same-count identity
@@ -310,7 +319,7 @@ or corrupted payloads block preparation.
 | Source timestamps | Support ordering; withheld from the text projection |
 | Event/observation references | Pseudonymous; no raw source IDs or paths |
 | Snapshot and manifest | Agree on context copies, `recordedContextHash` and ordinary snapshot/file hashes |
-| Shared message edits | One edit key without merging interactions; conflicts fail |
+| Shared message edits | Source-qualified ordinary aliases reconcile to one shared edit key without merging interactions; equivalent choices survive context on/off/on, conflicting choices fail |
 | Analytical scope | Context adds no membership, metric denominator or period cohort |
 | Revoked reply-copy override | Cannot remain reusable text |
 
@@ -399,6 +408,24 @@ missing source text is not.
 
 Reading a pair does not save it. Preparation and explicit local Save retain
 their source checks and original-identity recovery.
+
+New saved comparisons retain schema 3 and declare
+`presentation.comparisonVersion: 1`. Their two `sourceIdentity` entries bind
+the exact Earlier/Later report references and hashes to manifest-declared
+titles, selected windows, time contexts and included-interaction counts.
+Missing historical metadata is explicitly null, not recovered from current
+activity or an indexed display name. Titles pass the report masking rules.
+The identity is frozen in the comparison hash, snapshot and manifest, and
+participates in preparation fingerprinting.
+
+The versioned reading leads with this named pair and recorded measures.
+Selected report windows are not verified per-call coverage. Operation failure
+wording names its evidence layer, and Markdown carries the same saved operation
+paths as HTML/PDF. Earlier/Later values stay adjacent when the layout reflows.
+Unmarked comparisons retain their historical wording, styles and original
+files; they acquire no inferred identity. Unsupported or mismatched new
+markers are refused. New JSON-only comparisons require the matching reader;
+downgrading is not permission to regenerate them from current history.
 
 ### Report a retained-period comparison
 

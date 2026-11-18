@@ -8912,6 +8912,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedView = $("preparedReportView");
         if (selectedView) pendingReportReading = { view: selectedView.value, file: preparedFileInspection?.selection(),
             copyKey: $("reportReviewBody").querySelector(".prompt-comparison")?.dataset.copyKey,
+            document: hide ? null : preparedReportReader?.reading() ?? pendingReportReading?.document,
+            outer: hide ? null : captureReading(),
+            intent: workspaceState.readingIntent, navigation: workspaceState.navigationGeneration,
             focusCopy: Boolean(document.activeElement?.closest(".report-copy-controls")) };
         saveAfterMask = false;
         clearTimeout(reportUpdateTimer);
@@ -8936,7 +8939,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         updateSelection();
         if (prepared) await previewExport();
     }
-    async function previewExport({ contentOnly = false } = {}) {
+    async function previewExport({ contentOnly = false, focus = !contentOnly } = {}) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const blocked = reportPreparationBlock("report");
@@ -8966,7 +8969,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         draft.change({ saveMode: "local", ...(!periodReport && !nativeRequest && !draft.options().reportFocus ? {
             reportFocus: { version: 1, preset: "custom", outcome: "all", services: [] }, resultTextKind: "errors",
         } : {}) });
-        const body = reportJourney.beginScan({ focus: !contentOnly });
+        const body = reportJourney.beginScan({ focus });
         if (!body) return;
         const preparationOwner = {};
         reportPreparationOwner = preparationOwner;
@@ -9004,7 +9007,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             activePreview = preview;
             reportRebuildFrom = null;
             if (preview.snapshot?.nativeEvidence) nativePublication.preview(preview, publicationContext, previewStartedAt);
-            renderPreview(body, preview, operation, { focus: !contentOnly });
+            renderPreview(body, preview, operation, { focus });
             if (saveAfterMask && preview.promptMode === "masked" && draft.current(operation)) {
                 saveAfterMask = false;
                 $("reportSaveActions").querySelector("button")?.click();
@@ -9217,6 +9220,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 preparedReportReader = assessmentFactories.preparedFrame(value.previewHtml, assessmentFactories.liveSearch.frozenFrame, {
                     isCurrent: () => api.isCurrent(publication),
                     contained: localSave,
+                    reading: readingSelection?.document,
+                    isReadingCurrent: () => readingSelection?.intent === workspaceState.readingIntent
+                        && readingSelection.navigation === workspaceState.navigationGeneration,
+                    onReadingIntent: () => workspaceState.noteReading(),
+                    onReadingRestored: () => {
+                        restoreReading(readingSelection?.outer);
+                        forgetReading(readingSelection?.outer);
+                    },
                     onReady: (source, refresh) => {
                         if (localSave) assessmentFactories.enhanceReportReading(source);
                         return assessmentFactories.decoratePreparedReport(source, {
@@ -9374,9 +9385,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     && error.reportSave.bundleId === original?.bundleId;
                 const saveRejected = !dispatched || !exportResponseReceived && (error.code === "request_rejected" || refusedBeforePublication);
                 feedback.className = "notice error"; feedback.setAttribute("role", "alert");
-                feedback.textContent = error.message + (saveRejected
+                const lostResponse = error.code === "request_outcome_unknown"
+                    && ["runtime_unavailable", "invalid_response"].includes(error.reason);
+                feedback.textContent = !saveRejected && lostResponse
+                    ? `${error.reason === "invalid_response" ? "The Save response could not be read." : "WIRE did not return a Save response."} The local write may have completed. Check save status; do not save again.`
+                    : error.message + (saveRejected
                     ? " No report was saved. Read current activity, then prepare a new report."
-                    : " The local write may have completed. Check save status; do not repeat the save.");
+                    : " Check save status; do not repeat the save.");
                 confirm.textContent = saveRejected ? "Save not sent" : "Export not confirmed";
                 reportJourney.failed(feedback.textContent, { saveRejected });
                 if (!saveRejected) offerSaveRecovery();
@@ -9761,7 +9776,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview(undefined, { preserveFileView: true });
         draft.change({ reportNotes: [], overrides: [] });
         renderReports();
-        if (prepared) void previewExport();
+        if (prepared) void previewExport({ focus: false });
     });
     ux.explainDisabled($("exportBtn"), () => workspaceState.stale || workspaceState.loading ? "Wait for a current activity snapshot." : !draft.options().formats.length ? "Select at least one file format." : "Choose interactions in Activity, or use Current Analyze view or All saved sessions.");
     $("reportTitle").addEventListener("input", () => {
@@ -9783,7 +9798,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }));
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
-        draft.change({ recordedContext: $("reportRecordedContext").checked, overrides: [] });
+        draft.changeRecordedContext($("reportRecordedContext").checked);
         updateReportContent({ hide: true }); updateSelection();
     });
     $("reportResultText").addEventListener("change", () => {
@@ -9905,7 +9920,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             loading: workspaceState.loading || workspaceState.stale || reportPreparing,
             preparing: reportJourney.snapshot().phase === "scanning",
             unavailable: workspaceState.loading || workspaceState.stale,
-            scopeLabel: !reportBaseExplicit ? "All retained activity in this period"
+            scopeLabel: !reportBaseExplicit ? "All retained activity"
                 : reportScope === "current" ? reportDatesReplaced ? "Based on Analyze filters" : "Current Analyze view"
                     : reportScope === "selected" ? "Selected interactions" : "All retained activity",
             services: categories.entries.filter(entry => !["Multiple workloads", "Platform metadata", "Unknown"].includes(entry.id)).map(entry => entry.id),

@@ -10,6 +10,7 @@ import { readSavedArtifactFile, loadSavedReportSource } from "../lib/report-arti
 import { inspectSavedReportSnapshot } from "../lib/saved-report-snapshot.mjs";
 import { startServer } from "../lib/server.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 function records() {
@@ -31,6 +32,40 @@ const options = () => ({
     dateSelection: { range: "7", from: "2026-11-02", to: "2026-11-08" },
     reportFocus: { version: 1, preset: "errors", outcome: "errors", services: [] },
     saveMode: "local",
+});
+
+test("new focused reports lead with separate outcomes and timing before patterns and preserve ordinal calls", async t => {
+    const all = reviewRecords(), source = [all[0], all[1], all.at(-1)];
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        ...options(), dateSelection: { range: "capture" }, reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    assert.equal(preview.snapshot.presentation.productVersion, 1);
+    const html = preview.files["product-report.html"], md = preview.files["product-report.md"];
+    assert.ok(html.indexOf('id="overview"') < html.indexOf('id="patterns"'));
+    assert.ok(html.indexOf('id="timing"') < html.indexOf('id="patterns"'));
+    assert.ok(md.indexOf("## Included evidence") < md.indexOf("## Patterns"));
+    assert.ok(md.indexOf("## Timing") < md.indexOf("## Patterns"));
+    assert.doesNotMatch(md, /Not an error grouping/);
+    assert.deepEqual([...html.matchAll(/Report call (\d+):/g)].map(match => Number(match[1])), [1, 2, 3, 4, 5, 6]);
+    assert.match(html, /2 completed \/ 2 failed \/ 1 outcome unknown \/ 1 partial/);
+    assert.match(html, /3 2xx \/ 2 reported failure \/ 1 status unknown/);
+    assert.match(html, /631 ms/);
+    assert.match(html, /2,305 ms/);
+});
+
+test("new product call ordinals follow retained interaction order rather than lexical call IDs", async t => {
+    const record = records()[0], first = record.toolCalls[0];
+    Object.assign(first, { toolCallId: "z-last-lexically", order: 1 });
+    record.toolCalls.push({ ...structuredClone(first), toolCallId: "a-first-lexically", startEventId: "second-start",
+        tool: "workiq-retrieve", order: 2, requestArgs: { query: "Find the release decision." }, requestedApiPath: null });
+    const { context } = await privateFixture(t, [record]), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        ...options(), reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    assert.deepEqual(preview.snapshot.resultFacts.calls.map(call => call.tool), ["workiq-fetch", "workiq-retrieve"]);
+    assert.match(preview.files["product-report.html"], /Report call 1: workiq-fetch/);
+    assert.match(preview.files["product-report.md"], /Report call 2: workiq-retrieve/);
 });
 
 test("normal preparation freezes error membership, the wider total and separately authored masked notes", async t => {

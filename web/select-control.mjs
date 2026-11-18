@@ -307,7 +307,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         }
         attribute(list, "aria-labelledby", entry.trigger.getAttribute("aria-labelledby"));
         attribute(list, "aria-label", entry.trigger.getAttribute("aria-label"));
-        (entry.trigger.closest("dialog[open]") || document.body).append(popup);
+        (entry.trigger.closest(":popover-open,dialog[open]") || document.body).append(popup);
         popup.hidden = false;
         // Fixed positioning is the explicit compatibility path, never a native select popup.
         if (typeof popup.showPopover === "function") popup.showPopover();

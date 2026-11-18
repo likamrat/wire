@@ -8,10 +8,95 @@ import { loadBoardState, moveCard, updateBoardState, replaceEvidence } from "../
 import { fixture, privateFixture } from "./helpers.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { readSavedArtifactFile, readSavedComparison, loadSavedReportSource } from "../lib/report-artifacts.mjs";
+import { readSavedArtifactFile, readSavedComparison, readSavedReportView, loadSavedReportSource } from "../lib/report-artifacts.mjs";
 import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
+import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
+import { validateComparisonIdentity } from "../lib/comparison-presentation-contract.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
+
+test("new comparison freezes source titles and declared windows with qualified operation wording in every format", async t => {
+    const records = ["cedar-a", "cedar-b"].map(id => fixture(id));
+    for (const record of records) Object.assign(record.toolCalls[0], {
+        startedAt: "2026-03-08T12:00:00.000Z",
+        requestArgs: { entityUrls: ["/me/drive/root/children", "/me/messages"] },
+        apiResults: [{ index: 0, path: "/me/messages", statusCode: 403 }],
+    });
+    for (const record of records) record.toolCalls.push({
+        ...structuredClone(record.toolCalls[0]), toolCallId: `${record.scenarioId}-calendar`,
+        startEventId: `${record.scenarioId}-calendar-start`, completionEventId: `${record.scenarioId}-calendar-end`,
+        requestArgs: { entityUrls: ["/sites/cedar", "/me/calendarView"] }, apiResults: [],
+    });
+    const { context } = await privateFixture(t, records), controller = createExportController(context), sources = [];
+    for (const [index, record] of records.entries()) {
+        const state = await loadBoardState(context);
+        const preview = await controller.preview("identity", undefined, {
+            title: index ? "Cedar later - two days" : "Cedar baseline - three days", promptMode: "none", formats: ["json"],
+            dateSelection: { range: "custom", from: index ? "2026-03-08" : "2026-03-07", to: "2026-03-09" },
+            timeContext: { timeZone: "America/New_York", locale: "en-US" },
+        }, { kind: "selected", revision: state.revision, scenarioIds: [record.scenarioId] });
+        await controller.review("identity", preview.previewId, true, preview.snapshot.timeContext);
+        sources.push((await controller.confirm("identity", preview.previewId, true, preview.snapshot.timeContext)).bundle);
+    }
+    const originals = await Promise.all(sources.flatMap(source => Object.values(source.files)).map(async file => [file, hash(await readFile(file))]));
+    const preview = await controller.previewComparison("identity", sources[0].bundleId, sources[1].bundleId,
+        { formats: ["html", "pdf", "json", "markdown"] });
+    assert.equal(preview.comparison.presentation.comparisonVersion, 1);
+    const identities = preview.comparison.sourceIdentity;
+    assert.deepEqual(identities.map(side => side.title), ["Cedar baseline - three days", "Cedar later - two days"]);
+    assert.deepEqual(identities.map(side => side.dateSelection.from), ["2026-03-07", "2026-03-08"]);
+    assert.ok(identities.every(side => side.timeContext.timeZone === "America/New_York" && side.sourceCount === 1));
+    const pdf = getDocument({ data: new Uint8Array(Buffer.from(preview.files["comparison-report.pdf"].data, "base64")), useSystemFonts: false });
+    const pages = [];
+    try {
+        const document = await pdf.promise;
+        for (let number = 1; number <= document.numPages; number++)
+            pages.push((await (await document.getPage(number)).getTextContent()).items.map(item => item.str || "").join(" "));
+    } finally { await pdf.destroy(); }
+    for (const text of [preview.files["comparison-report.html"], preview.files["comparison-report.md"], pages.join(" ")]) {
+        assert.match(text, /Cedar baseline - three days/);
+        assert.match(text, /Cedar later - two days/);
+        assert.match(text, /America\/New\\?_York/);
+        assert.match(text, /selected window/i);
+        assert.match(text, /tool calls failed/i);
+        assert.doesNotMatch(text, /0 of 1 calls recorded errors/);
+        assert.match(text, /\/me\/drive\/root\/children/);
+        assert.match(text, /\/me\/messages/);
+        assert.match(text, /\/me\/calendarView/);
+    }
+    await controller.reviewComparison("identity", preview.previewId, true);
+    const saved = (await controller.confirmComparison("identity", preview.previewId, true)).bundle;
+    const state = await loadBoardState(context);
+    assert.deepEqual((await readSavedComparison(context, state, saved.bundleId)).comparison.sourceIdentity, identities);
+    for (const [file, original] of originals) assert.equal(hash(await readFile(file)), original);
+    for (const alter of [
+        model => { delete model.sourceIdentity; },
+        model => { model.presentation.comparisonVersion = 2; },
+        model => { model.sourceIdentity[0].report.bundleId = sources[1].bundleId; },
+        model => { model.sourceIdentity[0].sourceCount = -1; },
+        model => { model.sourceIdentity[0].unexpected = true; },
+        model => { model.sourceIdentity[0].timeContext.timeZone = "not-a-zone"; },
+    ]) {
+        const model = structuredClone(preview.comparison); alter(model);
+        assert.throws(() => validateComparisonIdentity(model, preview.snapshot.sourceReports));
+        assert.throws(() => renderComparisonHtml(model, preview.snapshot));
+    }
+    const legacy = structuredClone(preview.comparison);
+    delete legacy.presentation.comparisonVersion; delete legacy.sourceIdentity;
+    const legacySnapshot = { ...preview.snapshot, presentation: legacy.presentation, comparison: legacy };
+    const oldHtml = renderComparisonHtml(legacy, legacySnapshot), oldMarkdown = renderComparisonMarkdown(legacy, legacySnapshot);
+    assert.match(oldHtml, /0 of 1 calls recorded errors/);
+    assert.match(oldMarkdown, /Earlier errors \/ calls/);
+    assert.doesNotMatch(oldHtml, /comparison-reading-v1|Cedar baseline/);
+    assert.doesNotMatch(oldMarkdown, /\/me\/calendarView/);
+    const jsonOnly = await controller.previewComparison("json-identity", sources[0].bundleId, sources[1].bundleId, { formats: ["json"] });
+    await controller.reviewComparison("json-identity", jsonOnly.previewId, true);
+    const jsonSaved = (await controller.confirmComparison("json-identity", jsonOnly.previewId, true)).bundle;
+    const reading = await readSavedReportView(context, await loadBoardState(context), jsonSaved.bundleId, "comparison");
+    assert.equal(reading.sourceFormat, "json");
+    assert.match(reading.text, /Cedar baseline - three days/);
+    assert.match(reading.text, /comparison-reading-v1/);
+});
 
 test("actual saved-report traffic-mix matrix refuses a false improvement narrative", async t => {
     function pattern(name, total, success, endpoint) {

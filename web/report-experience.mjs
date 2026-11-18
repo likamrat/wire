@@ -141,7 +141,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const refineButton = opener("Change what's included", refine);
     const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton, helpButton("formats", "About report file formats"));
-    choices.append(dateButton, privacyGroup, formatGroup, refineButton);
+    choices.append(dateButton, formatGroup, refineButton, privacyGroup);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
     toolbar.append(nameRow, choices, scopeCaption);
     byId("reportStage3").prepend(toolbar);
@@ -176,7 +176,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         toolbar.hidden = !value.prepared;
         gallery.hidden = value.paired && value.prepared;
         const privacyHost = value.prepared ? choices : gallery;
-        if (privacyGroup.parentElement !== privacyHost) privacyHost.insertBefore(privacyGroup, value.prepared ? formatGroup : tiles);
+        if (privacyGroup.parentElement !== privacyHost) privacyHost.insertBefore(privacyGroup, value.prepared ? null : tiles);
         byId("additionalMasking").hidden = !value.prepared;
         if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
         if (value.prepared && period.parentElement !== periodHost) periodHost.append(period);
@@ -200,7 +200,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         privacyButton.dataset.promptMode = mode;
         privacyButton.setAttribute("aria-label", "Report text: " + privacyButton.textContent);
         privacyHint.textContent = value.preparing ? "Updating the report. Save is unavailable."
-            : ({ masked: "Applies to the report and saved files. WIRE can miss names and sensitive wording.",
+            : ({ masked: "Masking can miss names and sensitive wording.",
                 original: "Personal details may be included. Detected credentials are still removed.",
                 none: "Calls and counts stay. Notes and error messages may still contain personal details." })[mode];
         setLabel(formatButton, "Save as: " + (value.options.formats.length > 1 ? `${value.options.formats.length} formats`
@@ -244,6 +244,9 @@ html,body{background:var(--report-sheet);color:var(--ink)}main{background:transp
 .wire-example-editor .wire-omit{display:flex;align-items:center;gap:8px;min-height:44px}
 `;
     source.head.append(style);
+    if (preview.snapshot?.presentation?.productVersion === 1) {
+        source.querySelector("main>.report-facts")?.remove();
+    }
     function theme() {
         if (!current()) return;
         const values = host.defaultView.getComputedStyle(host.documentElement), dark = host.documentElement.dataset.evidenceTheme === "dark";
@@ -256,16 +259,23 @@ html,body{background:var(--report-sheet);color:var(--ink)}main{background:transp
     }
     const observer = new host.defaultView.MutationObserver(theme);
     observer.observe(host.documentElement, { attributes: true, attributeFilter: ["data-evidence-theme", "style", "class"] }); theme();
+    for (const group of source.querySelectorAll(".wire-reading-section")) {
+        const section = group.querySelector(":scope>section[id]");
+        if (section) group.id = "reading-" + section.id;
+    }
     for (const section of source.querySelectorAll("[data-report-scenario]")) {
         const id = section.dataset.reportScenario;
+        const group = section.closest(".wire-reading-interaction");
+        if (group) group.id = "reading-" + id;
         const record = preview.records.find(record => record.scenarioId === id);
-        const editor = source.createElement("details"); editor.className = "wire-example-editor";
+        const editor = source.createElement("details"); editor.className = "wire-example-editor"; editor.id = "editor-" + id;
         const summary = source.createElement("summary"); summary.textContent = "Add a note or edit this example"; editor.append(summary);
         const label = source.createElement("label"), note = source.createElement("textarea");
         label.textContent = "Your note"; note.id = "note-" + id; label.htmlFor = note.id;
         note.setAttribute("placeholder", "What you expected, or why this matters");
         note.value = notes.find(entry => entry.scenarioId === id)?.text ?? "";
         const save = source.createElement("button"); save.type = "button"; save.textContent = "Update note";
+        save.id = "update-note-" + id;
         save.addEventListener("click", () => { if (current() && save.isConnected) onNote(id, note.value); });
         editor.append(label, note, save);
         const copy = preview.promptReview?.find(copy => record?.prompts.some(prompt => prompt.key === copy.key) && copy.kind === "origin");
@@ -278,6 +288,7 @@ html,body{background:var(--report-sheet);color:var(--ink)}main{background:transp
             omit.addEventListener("change", () => { input.disabled = omit.checked; });
             omitLabel.append(omit, source.createTextNode("Leave out this prompt"));
             const apply = source.createElement("button"); apply.type = "button"; apply.textContent = "Update prompt copy";
+            apply.id = "update-copy-" + id;
             apply.addEventListener("click", () => { if (current() && apply.isConnected) onCopy(copyKey, input.value, omit.checked); });
             editor.append(copyLabel, input, omitLabel, apply);
         }

@@ -438,15 +438,21 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-explicit-selection[open]>.report-scope-layout{margin-top:16px}
 .report-first .report-activity-actions{position:static;background:transparent}
 .report-first #reportStage2{display:none!important}
-.report-edit-toolbar{margin-bottom:20px}
-.report-name-row{display:flex;align-items:center;gap:24px}
+.report-edit-toolbar{margin-bottom:12px}
+#workspace:has(>#reportsView:not([hidden]) .report-edit-toolbar:not([hidden]))>.page-heading{flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+#workspace:has(>#reportsView:not([hidden]) .report-edit-toolbar:not([hidden]))>.page-heading>div:first-child{flex-basis:auto}
+.report-name-row{display:flex;align-items:center;gap:12px}
 .report-name-row>.report-title-field{flex:1;margin:0}
+.report-edit-toolbar .report-title-field>label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .report-first .report-title-field{gap:12px}
 .report-first .report-title-field>input{min-height:48px;font-size:1.1875rem}
 .report-first .report-title-field>p{display:none}
 .report-save-slot{align-self:end}
 .report-save-slot button{min-height:48px}
-.report-toolbar-choices{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-top:18px}
+.report-toolbar-choices{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-top:8px}
+.report-edit-toolbar .report-period-caption{margin:8px 0 0}
+.report-edit-toolbar .report-privacy-control label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#reportJourneyError+#reportSaveBody{margin:0 0 16px}
 .report-toolbar-group{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0}
 .report-toolbar-group>.report-toolbar-choice{flex:1;min-width:0;text-align:left}
 .report-toolbar-choice{display:inline-flex;align-items:center;gap:10px;min-height:44px;white-space:normal}
@@ -581,7 +587,11 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 }
 @media(max-width:900px){.report-tile-open{grid-template-columns:20px 9rem minmax(0,1fr) 44px 16px}.saved-library-tools{width:100%;margin-left:0}}
 @media(max-width:700px){
- .report-first{padding:0}.report-name-row{flex-wrap:wrap;gap:16px}.report-name-row>.report-title-field{flex-basis:100%}.report-save-slot{margin-left:auto}.report-toolbar-choice:last-child{margin-left:0}.report-options-popover{padding:20px}.report-save-warning{padding:20px}
+ .report-first{padding:0}.report-name-row{gap:8px}.report-name-row>.report-title-field{min-width:0}.report-save-slot{margin-left:auto}.report-toolbar-choice:last-child{margin-left:0}.report-options-popover{padding:20px}.report-save-warning{padding:20px}
+ .report-edit-toolbar .report-privacy-control{flex-basis:100%;max-width:none}
+ .report-edit-toolbar .report-privacy-hint{margin:0}
+ .report-reading-toolbar{gap:4px;padding:4px 12px}
+ .report-reading-toolbar .select-control{min-width:7rem}
  .report-tile-open{grid-template-columns:20px minmax(0,1fr) 44px 16px;grid-template-rows:auto auto;gap:2px 12px;padding:12px 6px}
  .report-tile-open>span{grid-column:2;grid-row:2}.report-tile-open>.report-tile-next{grid-column:4;grid-row:1 / 3}
  .report-tile>.report-help{right:22px}

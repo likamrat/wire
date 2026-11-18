@@ -75,7 +75,8 @@ stay unchanged. Prepare a new report to use the corrected author.
 
 ## Read the findings
 
-Start with which activity the report includes and which facts were available.
+New reports lead with the included activity, separate call and returned-entry
+outcomes, and timing coverage before the patterns and individual interactions.
 Read interaction, tool-call and returned-API counts separately.
 Then read the tool and service patterns, failures and timings. A completed
 tool call does not establish a correct answer, and a returned API error does
@@ -104,8 +105,8 @@ interactions supply the frozen reference count, not additional disclosed text.
 Use the section links to jump to patterns, interactions, timing or coverage.
 Open a section or interaction to read its full evidence. **Expand sections**
 opens everything; collapsing changes only the view, not the report's contents.
-The reader keeps its navigation visible while you scroll. **Report details**
-under Coverage holds the preparation and time-zone metadata.
+The reader keeps its navigation visible while you scroll. **Coverage**
+holds the preparation and time-zone metadata.
 
 ![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
 
@@ -113,6 +114,7 @@ Every included interaction remains accessible. Open it, then **Add a note or edi
 example** lets you explain what you expected, change a prompt copy or omit it.
 Notes are the report author's context; they do not change recorded outcomes or
 metrics. Select **Update note** or **Update prompt copy** to apply an edit.
+The interaction stays open so you can check the changed copy where you were reading.
 
 ![An interaction's optional note and editable prompt copy, with separate update controls.](images/report-example.png)
 
@@ -123,7 +125,9 @@ icons identify each state without relying on color. Masking can miss names
 or sensitive wording.
 
 **Change what's included** holds author/service/outcome choices and optional
-linked context. **View > Report text** opens optional text inspection.
+linked context. **Authors in report** keeps your choices as a draft until
+**Apply**; **Cancel** leaves the accepted authors unchanged.
+**View > Report text** opens optional text inspection.
 It shows one **Report copy** at a time, with its interaction and recorded author.
 **Local original** switches to the retained source; it is not an extra copy
 included in the report. **Edit or omit this report copy**, then **Update report
@@ -178,6 +182,11 @@ Additional masking terms, edits and omissions affect report copies only.
 Missing or partial text stays qualified; editing does not recover source text.
 Changing Report text keeps edits and omissions for included copies. Leaving out
 prompts also turns off linked context; edits to that excluded context are retired.
+Turning linked context on or off preserves edits and omissions for ordinary copies
+that remain included. Only copies removed with the linked context lose their edits.
+If the same recorded message appears as both an originating prompt and a follow-up,
+it shares one copy choice with context enabled. Conflicting choices are refused,
+not silently replaced.
 Changing the choice on Reports does not prepare a report until you open a tile.
 Reopening the same unfinished report keeps its frozen activity.
 
@@ -234,6 +243,7 @@ Use Previous/Next, or enter a page and choose **Go to page**. Enter submits the
 same page choice; an out-of-range number does not change the page.
 
 If Save is unconfirmed, use **Check save status** rather than Save again.
+The action appears beside the warning and checks the original save receipt.
 A missing receipt is not proof that nothing was written. Review files before
 sharing outside WIRE: local saving is not permission to publish, and pattern
 masking cannot recognize every confidential detail.
@@ -258,6 +268,8 @@ service, category, author, outcome, project, chat, evidence-layer and collection
 choices, plus path, service-intersection and timing-interval controls. Choices
 apply directly. **Use Analyze view** deliberately imports Analyze's non-date
 filters and authorized Search selection; it replaces only the dates.
+Choosing My prompts or Agent prompts keeps an existing error/completion focus;
+the menu names the combined choice. All activity clears those menu choices.
 
 Switch **Outcomes**, **Timeline**, **By tool** or **Timing** inside the chart.
 These views keep the same accepted pair. Hover or focus a mark for its exact
@@ -265,6 +277,9 @@ values; select it to inspect supporting records. **View calls** opens the
 paired activity, while **View numbers** shows the values for the current chart.
 Missing results and timing remain unavailable. Different period lengths,
 overlap and incomplete evidence can limit what a change means.
+Outcomes and By tool use a shared **Call count** scale, not percentage-scaled
+bars. Percentage-first values use each period's own denominator. Selecting a
+mark narrows both the exact rows and their interaction/service captions.
 
 **Create report** freezes the accepted pair and opens the existing report
 experience with the same formats, masking, optional notes and local Save.
@@ -281,6 +296,9 @@ inputs.
 The comparison opens with HTML prepared. Change its name or formats if needed,
 then select **Save comparison**. Its frozen copy can remain readable after an
 input report is deleted. Notes remain authored context, not comparable metrics.
+New comparisons name both source reports and their selected windows beside the
+first measures. These dates describe each report's selection, not verified
+per-call coverage. Older saved comparisons keep their original presentation.
 
 ## Remove a saved copy
 

@@ -6,6 +6,7 @@ import { projectReportResults } from "../lib/report-result-projection.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { fixture } from "./helpers.mjs";
 import { reportResultContent, reportResultHtml, reportResultMarkdown } from "../lib/report-result-output.mjs";
+import { marked } from "marked";
 
 const namespace = "namespace-" + "a".repeat(32);
 const recordRef = "record-" + "b".repeat(32);
@@ -17,6 +18,14 @@ function facts(flag, overrides = {}) {
             contentStatus: "body-excluded", resultCount: null, ...overrides,
         }, retainedResultCount: 0 })] }], namespace);
 }
+
+test("new Markdown definitions render apostrophes as prose instead of literal HTML entities", () => {
+    const output = reportResultMarkdown(facts(false), undefined, { productVersion: 1 }).join("\n");
+    assert.match(output, /interaction's retained order/);
+    assert.match(marked.parse(output), /interaction&#39;s retained order/);
+    assert.doesNotMatch(marked.parse(output), /interaction&amp;#39;/);
+    assert.match(reportResultHtml(facts(false), undefined, { productVersion: 1 }), /interaction&#39;s/);
+});
 
 test("human report output includes every call and the precise missing-error gap beyond twelve calls", () => {
     const value = freezeReportResultFacts(Array.from({ length: 15 }, (_, index) => ({
@@ -59,6 +68,26 @@ test("SDK projection binds the existing frozen canonical membership and resolves
     assert.ok(reading.calls[0].lines.some(line => line.startsWith("Requested: ")));
     assert.throws(() => reportResultContent({ ...projected.facts, namespace: "namespace-" + "e".repeat(32) }, githubFacts),
         /different report namespace/);
+});
+
+test("product-only ordering preserves canonical aliases and each call's returned entries", () => {
+    const first = fixture("z-first"), second = fixture("a-second");
+    first.sourceSessionId = "z-chat"; second.sourceSessionId = "a-chat";
+    first.toolCalls[0].toolCallId = "z-first-call";
+    first.toolCalls[0].apiResults = [{ index: 4, statusCode: 403 }, { index: 1, statusCode: 200 }];
+    first.toolCalls.push({ ...structuredClone(first.toolCalls[0]), toolCallId: "a-second-call",
+        startEventId: "second-start", tool: "workiq-retrieve" });
+    delete second.toolCalls[0].toolCallId;
+    const alias = { ...structuredClone(first), scenarioId: "legacy-alias", isLegacy: true };
+    const records = [first, second, alias], key = "a".repeat(64);
+    const ordinary = projectReportResults(records, key), ordered = projectReportResults(records, key, { preserveCallOrder: true });
+    assert.deepEqual(projectReportResults(records, key, { preserveCallOrder: false }), ordinary);
+    assert.equal(ordered.facts.calls.length, 3, "The duplicate-only alias does not add a call.");
+    assert.deepEqual(ordered.facts.calls.map(call => call.tool), ["workiq-fetch", "workiq-retrieve", "workiq-fetch"]);
+    assert.notDeepEqual(ordered.facts.calls.map(call => call.ref), ordinary.facts.calls.map(call => call.ref));
+    const byRef = value => value.facts.calls.toSorted((a, b) => a.ref.localeCompare(b.ref));
+    assert.deepEqual(byRef(ordered), byRef(ordinary), "Only reading order changes, not identities, observations or returned-entry order.");
+    assert.deepEqual(ordered.sources.map(source => source.memberRef), ordered.facts.calls.map(call => call.ref));
 });
 
 test("old missing result facts and partial flag coverage remain unavailable, not zero", () => {

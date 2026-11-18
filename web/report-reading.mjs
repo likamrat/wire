@@ -95,7 +95,8 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
         if (!heading) continue;
         const details = source.createElement("details"), summary = source.createElement("summary");
         details.className = "wire-reading-section";
-        details.open = expanded ?? ["patterns", "examples"].includes(section.id);
+        details.open = expanded ?? (main.dataset.productVersion === "1"
+            ? ["overview", "timing", "patterns", "examples"] : ["patterns", "examples"]).includes(section.id);
         const multiple = section.querySelectorAll(":scope>h2").length > 1;
         if (multiple) section.classList.add("wire-reading-multi-heading");
         summary.textContent = multiple && section.id === "patterns" ? "Patterns" : labels[heading.textContent] || heading.textContent;

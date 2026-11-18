@@ -390,6 +390,9 @@ A compact toolbar owns its name, period, personal-detail choice and formats,
 with Save beside the name.
 The name updates the document heading without remounting its input. Optional
 changes regenerate files; Save stays unavailable while the preview is stale.
+Name and Save share a row; secondary preparation choices stay compact while the
+privacy state remains visible. Author choices apply only on Apply, and their
+custom popup belongs to the containing inclusion popover.
 The report surface and border complement the current screen theme without
 changing frozen output. Example notes and copy edits stay beside their evidence.
 Report view uses a contained reading pane with persistent section links,
@@ -418,6 +421,8 @@ inspection shows the included copy first; Local original switches to its retaine
 source without adding that source to exports. Editing replaces the displayed copy
 with its editor, rather than showing the same long text twice.
 Content regeneration retains the selected file/mode and the inspected copy.
+Content-only example edits also retain the expanded interaction, editor and
+nearby reading/focus anchor. Disclosure changes do not restore excluded content.
 
 Transient menus, selects and Search dismiss when focus enters an embedded
 document, including an opaque saved file. The shell observes frame focus, not
@@ -477,12 +482,20 @@ By tool and Timing visible inside the chart and More options in its corner.
 Optional refinement retains every supported selector and combination, with
 local option finding and immediate selection. Additional restrictions appear
 once beside the accepted dates; pending reads must not relabel old facts.
+Author choices retain an existing completion/error focus; the menu names the
+combination (for example, Completed calls + My prompts), rather than hiding it
+under Custom activity. All activity clears the menu-owned author, outcome and
+focus choices without clearing independent refinements.
 
-One mounted footer owns View calls, View numbers and Create report. Chart
+One mounted action row near the chart controls owns View calls, View numbers and Create report. Chart
 switching and mark inspection do not change the pair. Exact values qualify
 their unit, period, denominator and missing evidence. Timings keep call latency
 and full-interaction clocks separate. The comparison-origin report return is
 Back to comparison, including the accepted scope and reading position.
+Outcomes and By tool name their common zero-based count scale separately from
+percentage-first labels. A/B outcome values stay adjacent, including narrow
+layouts. Exact-call inspection recomputes interaction and service coverage from
+the selected rows; opening their complete parent does not expand that table.
 
 ## Settings, collection and consequential actions
 

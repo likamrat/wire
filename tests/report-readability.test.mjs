@@ -20,9 +20,32 @@ import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { renderComparisonHtml, renderComparisonMarkdown, reportPresentationStyles } from "../lib/report-presentation.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
 import { createAssessmentWording } from "../web/assessment-presentation.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
+import { privateFixture } from "./helpers.mjs";
 
 const key = "a".repeat(64), preparedAt = "2026-10-12T02:00:00.000Z";
 const formats = ["html", "pdf", "json", "markdown"];
+test("versioned focused report reading keeps complete saved facts across every compact PDF page", { timeout: 60000 }, async t => {
+    const all = reviewRecords(), source = [all[0], all[1], all.at(-1)];
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context), controller = createExportController(context);
+    const preview = await controller.preview("reading-proof", undefined, {
+        saveMode: "local", promptMode: "masked", formats, timeContext: { timeZone: "America/Los_Angeles", locale: "en-US" },
+        dateSelection: { range: "capture" }, reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    const { bundle } = await controller.confirm("reading-proof", preview.previewId, true, preview.snapshot.timeContext,
+        { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+    const saved = (await loadBoardState(context)).exports.find(entry => entry.bundleId === bundle.bundleId);
+    const files = Object.fromEntries(await Promise.all(Object.entries(saved.files).map(async ([name, file]) =>
+        [name, await readFile(file, name.endsWith(".pdf") ? undefined : "utf8")])));
+    assert.equal(JSON.parse(files["product-report.json"]).presentation.productVersion, 1);
+    assert.equal(JSON.parse(files["coverage-and-redaction-manifest.json"]).presentation.productVersion, 1);
+    for (const [name, bytes] of Object.entries(files)) if (name !== "coverage-and-redaction-manifest.json") {
+        assert.deepEqual(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes), typeof preview.files[name] === "string"
+            ? Buffer.from(preview.files[name]) : Buffer.from(preview.files[name].data, "base64"));
+    }
+    await inspect(t, "focused-product", { ...preview, files, previewHtml: files["product-report.html"] });
+});
+
 async function inspect(t, name, bundle) {
     const files = Object.fromEntries(Object.entries(bundle.files).map(([name, value]) =>
         [name, typeof value === "string" || Buffer.isBuffer(value) ? value : Buffer.from(value.data, "base64")]));

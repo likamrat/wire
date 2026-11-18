@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -10,9 +10,9 @@ import { periodFixture } from "./period-comparison-fixture.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 
-async function setup(t, hash = "#analyze?tool=workiq-ask", { enforced = false } = {}) {
+async function setup(t, hash = "#analyze?tool=workiq-ask", { enforced = false, records = periodFixture().records } = {}) {
     let removeFixture;
-    const { context } = await privateFixture({ after: cleanup => { removeFixture = cleanup; } }, periodFixture().records);
+    const { context } = await privateFixture({ after: cleanup => { removeFixture = cleanup; } }, records);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const server = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, ...(access ? { access } : {}),
         evaluation: { evaluatorFactory() { throw new Error("No provider in comparison proof."); },
@@ -46,6 +46,96 @@ async function dates(page, a, b) {
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
     await ready(page);
 }
+test("exact-call captions follow narrowed membership", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await page.locator("#comparePeriods").click(); await ready(page);
+    await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    await page.locator('.compare-outcome-bar').first().locator('[data-outcome="failure"]').click();
+    await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("1 call across 1 interaction");
+    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("0 calls across 0 interactions");
+    await expect(page.locator("#comparisonExactRecordsA")).not.toContainText("missing service details");
+});
+test("comparison peers align at narrow enlarged text and menu combinations stay explicit", { timeout: 60000 }, async t => {
+    const { page, comparisons } = await setup(t);
+    await page.locator("#comparePeriods").click(); await ready(page);
+    await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    await selectActivityOption(page, "comparisonQuickChoice", "completed"); await ready(page);
+    await selectActivityOption(page, "comparisonQuickChoice", "mine"); await ready(page);
+    await expect(page.locator("#comparisonQuickChoice-control")).toContainText("Completed calls + My prompts");
+    assert.deepEqual(comparisons.at(-1).options.filters.promptAuthors, ["user"]);
+    assert.match(page.url(), /comparisonFocus=completed/);
+    await selectActivityOption(page, "comparisonQuickChoice", "all"); await ready(page);
+    const measurements = [], output = process.env.WIRE_COMPARISON_PROOFS;
+    if (output) await mkdir(output, { recursive: true });
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [768, 100], [390, 100], [390, 200]]) {
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+        await page.evaluate(() => document.fonts.ready);
+        const geometry = await page.locator(".comparison-outcome-values").evaluate(table => ({
+            overflow: document.documentElement.scrollWidth > innerWidth,
+            pairs: [...table.querySelectorAll("tbody tr")].map(row => [...row.querySelectorAll("button")].map(button => {
+                const box = button.getBoundingClientRect();
+                return { top: box.top, right: box.right, height: box.height, font: parseFloat(getComputedStyle(button).fontSize) };
+            })),
+        }));
+        assert.equal(geometry.overflow, false, `${theme}/${width}/${scale}`);
+        assert.ok(geometry.pairs.every(([a, b]) => Math.abs(a.top - b.top) < 1 && a.height >= 44 && b.height >= 44
+            && b.right <= width && a.font >= 14 * scale / 100), JSON.stringify(geometry));
+        measurements.push({ theme, width, scale, ...geometry });
+        if (output) {
+            await page.evaluate(() => scrollTo(0, 0));
+            await page.screenshot({ path: path.join(output, `paired-${theme}-${width}-${scale}.png`), fullPage: true });
+        }
+    }
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.getByRole("button", { name: "By tool", exact: true }).click();
+    await expect(page.locator(".comparison-breakdown")).toContainText("Call count scale:");
+    await expect(page.locator(".comparison-group").first()).toContainText("Later minus earlier:");
+    await expect(page.locator(".comparison-group").first()).toContainText("calls total");
+    if (output) await writeFile(path.join(output, "peer-geometry.json"), JSON.stringify(measurements, null, 2));
+});
+test("comparison paint is linear and exact-call captions follow narrowed membership", { timeout: 60000 }, async t => {
+    const records = periodFixture().records;
+    for (let index = 0; index < 100; index++) {
+        const record = structuredClone(records[4]);
+        record.scenarioId = `paint-${index}`;
+        record.sourceSessionId = `paint-chat-${index}`;
+        record.userPrompt.sourceEventId = `paint-prompt-${index}`;
+        Object.assign(record.toolCalls[0], { toolCallId: `paint-call-${index}`, startEventId: `paint-start-${index}`, completionEventId: `paint-end-${index}` });
+        records.push(record);
+    }
+    const { page, comparisons } = await setup(t, "#analyze", { records });
+    await page.locator("#comparePeriods").click(); await ready(page);
+    await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    const pair = comparisons.at(-1), maximum = Math.max(...Object.values(pair.periods).map(side => side.analytics.resultFacet.totals.count));
+    for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(() => document.fonts.ready);
+        const bars = await page.locator(".compare-outcome-bar").evaluateAll(nodes => nodes.map(node => ({
+            width: node.getBoundingClientRect().width,
+            marks: [...node.querySelectorAll("[data-outcome]")].map(mark => ({
+                outcome: mark.dataset.outcome, width: mark.querySelector(".compare-outcome-paint").getBoundingClientRect().width,
+            })),
+        })));
+        for (const [index, side] of Object.values(pair.periods).entries()) {
+            for (const mark of bars[index].marks) {
+                const count = side.analytics.totals[mark.outcome];
+                assert.ok(mark.width > 0, `${theme}/${width}: nonzero ${mark.outcome} must paint`);
+                assert.ok(Math.abs(mark.width - bars[index].width * count / maximum) < .1, `${theme}/${width}: ${mark.outcome} paint must be linear`);
+            }
+            assert.ok(bars[index].marks.every(mark => side.analytics.totals[mark.outcome] > 0), "True zero has no paint");
+        }
+    }
+    await page.locator('.compare-outcome-bar').first().locator('[data-outcome="failure"]').click();
+    await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("1 call across 1 interaction");
+    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("0 calls across 0 interactions");
+    await expect(page.locator("#comparisonExactRecordsA")).not.toContainText("missing service details");
+    await expect(page.locator("#comparisonExactRecordsA tbody tr")).toHaveCount(1);
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("5 calls across 3 interactions");
+    await expect(page.locator("#comparisonExactRecordsA")).toContainText("missing service details");
+});
 test("primary comparison opens complete days independently, keeps chart membership and restores Analyze", { timeout: 60000 }, async t => {
     const { page, comparisons } = await setup(t);
     const compare = page.getByRole("link", { name: "Compare", exact: true });

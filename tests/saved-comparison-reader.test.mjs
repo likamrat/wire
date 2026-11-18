@@ -6,8 +6,10 @@ import { privateFixture, fixture } from "./helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { readSavedArtifactFile, readSavedComparisonFile, reportHash, artifactIndexFingerprint } from "../lib/report-artifacts.mjs";
+import { readSavedArtifactFile, readSavedComparisonFile, readSavedComparison, readSavedReportView, reportHash, artifactIndexFingerprint } from "../lib/report-artifacts.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
+import { currentComparisonPresentation, currentReportPresentation, renderComparisonHtml } from "../lib/report-presentation.mjs";
+import { validateComparisonIdentity } from "../lib/comparison-presentation-contract.mjs";
 
 const formats = ["html", "json", "markdown", "pdf"];
 
@@ -68,6 +70,118 @@ async function setup(t, { firstSourceFormats = ["html", "json"], comparisonForma
     const comparison = (await controller.confirmComparison("fixture", preview.previewId, true)).bundle;
     return { context, controller, sources, comparison };
 }
+
+for (const preferred of ["html", "json"]) test(`saved ${preferred} comparison readers enforce outer and inner presentation boundaries with valid digests`, async t => {
+    const cleanup = [], { context, controller, comparison } = await setup({ after: fn => cleanup.push(fn) },
+        { comparisonFormats: preferred === "html" ? ["html", "json"] : ["json"] });
+    const originals = new Map(await Promise.all(Object.entries(comparison.files).map(async ([name, file]) => [name, await readFile(file)])));
+    const originalManifest = JSON.parse(originals.get("coverage-and-redaction-manifest.json"));
+    const originalSnapshot = JSON.parse(originals.get("comparison-report.json"));
+    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
+    t.after(async () => { await runtime.close(); for (const fn of cleanup) await fn(); });
+    const origin = new URL(runtime.url).origin;
+    const post = (route, body, capability) => fetch(origin + route, { method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1",
+            ...(capability ? { "X-Board-Capability": capability } : {}) }, body: JSON.stringify(body) });
+    const { capability } = await (await post("/api/session", {})).json();
+    const unknown = { ...currentComparisonPresentation, comparisonVersion: 99 };
+    for (const [name, outer, inner, refused] of [
+        ["current pair", currentComparisonPresentation, currentComparisonPresentation, false],
+        ["unmarked historical pair", currentReportPresentation, currentReportPresentation, false],
+        ["historical pair without inner declaration", currentReportPresentation, undefined, false],
+        ["marked outer with unmarked inner", currentComparisonPresentation, currentReportPresentation, true],
+        ["unsupported outer with unmarked inner", unknown, currentReportPresentation, true],
+        ["unsupported outer with marked inner", unknown, currentComparisonPresentation, true],
+        ["unmarked outer with marked inner", currentReportPresentation, currentComparisonPresentation, true],
+        ["missing outer with marked inner", undefined, currentComparisonPresentation, true],
+        ["marked outer with missing inner", currentComparisonPresentation, undefined, true],
+        ["unsupported inner with marked outer", currentComparisonPresentation, unknown, true],
+        ["extra outer field", { ...currentComparisonPresentation, unexpected: true }, currentComparisonPresentation, true],
+    ]) await t.test(name, async () => {
+        const snapshot = structuredClone(originalSnapshot), manifest = structuredClone(originalManifest);
+        if (outer === undefined) delete snapshot.presentation; else snapshot.presentation = outer;
+        if (inner === undefined) delete snapshot.comparison.presentation; else snapshot.comparison.presentation = inner;
+        if (inner?.comparisonVersion === undefined) delete snapshot.comparison.sourceIdentity;
+        const files = { "comparison-report.json": JSON.stringify(snapshot, null, 2) + "\n" };
+        if (preferred === "html") {
+            files["comparison-report.html"] = refused ? originals.get("comparison-report.html") : renderComparisonHtml(snapshot.comparison, snapshot);
+        }
+        manifest.presentation = outer;
+        manifest.comparison = snapshot.comparison;
+        manifest.comparisonHash = reportHash(JSON.stringify(manifest.comparison));
+        manifest.snapshotHash = reportHash(JSON.stringify(snapshot));
+        manifest.files = Object.fromEntries(Object.entries(files).map(([name, bytes]) =>
+            [name, { sha256: reportHash(bytes), bytes: Buffer.byteLength(bytes) }]));
+        for (const [name, bytes] of Object.entries(files)) await writeFile(comparison.files[name], bytes);
+        const bytes = JSON.stringify(manifest);
+        await writeFile(comparison.files["coverage-and-redaction-manifest.json"], bytes);
+        await updateBoardState(context, state => Object.assign(state.exports.find(entry => entry.bundleId === comparison.bundleId),
+            { manifestHash: reportHash(bytes), snapshotHash: manifest.snapshotHash }));
+        const state = await loadBoardState(context);
+        for (const [name, expected] of Object.entries(manifest.files)) {
+            const file = await readFile(comparison.files[name]);
+            assert.equal(reportHash(file), expected.sha256);
+            assert.equal(file.length, expected.bytes);
+        }
+        assert.equal(state.exports.find(entry => entry.bundleId === comparison.bundleId).manifestHash, reportHash(bytes));
+        const reads = await Promise.allSettled([
+            readSavedComparison(context, state, comparison.bundleId),
+            readSavedReportView(context, state, comparison.bundleId, "comparison"),
+        ]);
+        const responses = [];
+        for (const [route, input] of [
+            ["/api/report-comparison/open", { bundleId: comparison.bundleId }],
+            ["/api/report/open", { bundleId: comparison.bundleId, view: true, kind: "comparison" }],
+        ]) {
+            const response = await post(route, input, capability), result = await response.json();
+            responses.push({ status: response.status, result });
+        }
+        for (const response of responses) {
+            const { result } = response;
+            assert.equal(response.status, refused ? 422 : 200, JSON.stringify(result));
+            if (refused) assert.match(result.error, /comparison.*presentation|presentation.*manifest/i);
+            else assert.ok(result.comparison || result.format === "html");
+        }
+        for (const read of reads) {
+            assert.equal(read.status, refused ? "rejected" : "fulfilled");
+            if (refused) assert.match(read.reason.message, /comparison.*presentation|presentation.*manifest/i);
+        }
+    });
+});
+
+test("declared comparison windows preserve missing zones but reject reversed qualified bounds", async t => {
+    const { comparison } = await setup(t);
+    const snapshot = JSON.parse(await readFile(comparison.files["comparison-report.json"], "utf8"));
+    for (const timeContext of [null, { timeZone: "America/New_York", locale: "en-US" }]) {
+        for (const [from, to, refused] of [
+            ["2026-11-18", "2026-11-01", true],
+            ["2026-03-08", "2026-03-08", false],
+            ["2026-03-07", "2026-03-09", false],
+            ["2026-11-01T01:30:00-05:00", "2026-11-01T01:45:00-04:00", true],
+            ["2026-11-01T01:30:00-04:00", "2026-11-01T01:15:00-05:00", false],
+            ["2026-11-01T01:30:00-05:00", "2026-11-01T01:30:00-05:00", false],
+            [undefined, "2026-11-01", false], ["2026-11-01", undefined, false],
+        ]) {
+            const model = structuredClone(snapshot.comparison);
+            const dateSelection = { range: "custom", ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
+            Object.assign(model.sourceIdentity[0], { timeContext, dateSelection });
+            const before = JSON.stringify(model);
+            if (refused) assert.throws(() => validateComparisonIdentity(model, snapshot.sourceReports), /Start date must not follow end date/);
+            else assert.deepEqual(validateComparisonIdentity(model, snapshot.sourceReports)[0], model.sourceIdentity[0]);
+            assert.equal(JSON.stringify(model), before, "Validation must not fill a missing zone or rewrite source metadata");
+        }
+    }
+    const unknown = structuredClone(snapshot.comparison);
+    Object.assign(unknown.sourceIdentity[0], { title: null, sourceCount: null, timeContext: null, dateSelection: null });
+    const before = JSON.stringify(unknown);
+    validateComparisonIdentity(unknown, snapshot.sourceReports);
+    assert.equal(JSON.stringify(unknown), before);
+    unknown.sourceIdentity[0].dateSelection = { range: "custom", from: "2026-03-08", to: "2026-03-08T12:00:00Z" };
+    validateComparisonIdentity(unknown, snapshot.sourceReports);
+    assert.equal(unknown.sourceIdentity[0].timeContext, null, "Mixed civil/instant bounds do not acquire an invented zone");
+    unknown.sourceIdentity[0].dateSelection.extra = true;
+    assert.throws(() => validateComparisonIdentity(unknown, snapshot.sourceReports), /Invalid report date selection/);
+});
 
 test("verified artifact files retain exact bytes and identity for every ordinary/comparison format and manifest", { timeout: 30000 }, async t => {
     const { context, controller, sources, comparison } = await setup(t, { firstSourceFormats: formats, comparisonFormats: formats });

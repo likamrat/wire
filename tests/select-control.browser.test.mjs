@@ -26,6 +26,32 @@ const records = ["/me/events", "/me/messages", "/me/drive"].map((endpoint, index
     return record;
 });
 const isolated = process.env.WORKIQ_SELECT_ISOLATED === "1";
+test("select pointer choices remain owned by ordinary, modal and popover surfaces", async t => {
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    for (const surface of ["main", "dialog", "section"]) {
+        const page = await browser.newPage();
+        await page.setContent(`<style>${selectStyles}</style><${surface}${surface === "section" ? ' popover="auto"' : ""}>
+            <label for="scope">Scope</label><select id="scope"><option value="all">All activity</option>
+            <option value="selected">Selected activity</option></select></${surface}>`);
+        await page.addScriptTag({ content: `
+            const ux = (${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});
+            window.controls = (${createSelectControls.toString()})(ux);
+            window.changes = 0;
+            document.querySelector("select").addEventListener("change", () => window.changes++);
+            document.querySelector("dialog")?.showModal();
+            document.querySelector("[popover=auto]")?.showPopover();
+        ` });
+        await page.locator("#scope-control").click();
+        await page.getByRole("option", { name: "Selected activity", exact: true }).click();
+        assert.equal(await page.locator("#scope").inputValue(), "selected", surface);
+        assert.equal(await page.evaluate(() => changes), 1, surface);
+        if (surface === "dialog") assert.equal(await page.locator("dialog").evaluate(node => node.open), true);
+        if (surface === "section") assert.equal(await page.locator("section").evaluate(node => node.matches(":popover-open")), true);
+        await page.close();
+    }
+});
+
 test("select replacement scrubs held attributes without publishing invalid SVG geometry", async t => {
     const browser = await chromium.launch(), page = await browser.newPage(), errors = [];
     page.on("pageerror", error => errors.push(error.message));

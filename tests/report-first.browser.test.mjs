@@ -6,6 +6,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
+import { reportContextFixture } from "./report-context-fixture.mjs";
 import { time } from "../lib/time.mjs";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,13 +25,14 @@ function records() {
         return record;
     });
 }
-async function setup(t, { source = records(), route = "#reports", enforced = false, frontend, now } = {}) {
-    const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, source);
+async function setup(t, { source = records(), route = "#reports", enforced = false, frontend, now, hasTouch = false, contextFixture = false } = {}) {
+    const cleanup = [], lifetime = { after: work => cleanup.push(work) };
+    const { context } = contextFixture ? await reportContextFixture(lifetime) : await privateFixture(lifetime, source);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false }, ...(access ? { access } : {}) });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access?.close(); for (const work of cleanup) await work(); });
-    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId: "America/Los_Angeles" });
+    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId: "America/Los_Angeles", hasTouch });
     const page = await profile.newPage();
     if (now) await page.clock.setFixedTime(new Date(now));
     page.setDefaultTimeout(10000);
@@ -70,6 +72,7 @@ async function capturePicker(page, name) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
     await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
     await page.screenshot({ path: path.join(proofs, name + ".png") });
     const geometry = await page.locator("#reportActivityOptions").evaluate(picker => ({
         viewport: { width: innerWidth, height: innerHeight, font: getComputedStyle(document.documentElement).fontSize },
@@ -81,6 +84,280 @@ async function capturePicker(page, name) {
     }));
     await writeFile(path.join(proofs, name + ".json"), JSON.stringify(geometry, null, 2));
 }
+
+async function captureReport(page, name) {
+    const proofs = process.env.WIRE_REPORT_FIRST_PROOFS;
+    if (!proofs) return;
+    await mkdir(proofs, { recursive: true });
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
+    await page.screenshot({ path: path.join(proofs, name + ".png") });
+}
+
+test("linked context changes preserve ordinary edited and omitted report copies", { timeout: 60000 }, async t => {
+    const source = reviewRecords().slice(0, 2);
+    source[1].sourceSessionId = source[0].sourceSessionId;
+    const { page, context, errors } = await setup(t, { source, frontend: "react", now: "2026-11-18T16:00:00Z" });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    const initial = await prepare(page, "all");
+    const origin = initial.promptReview.find(copy => copy.kind === "origin");
+    const tool = initial.promptReview.find(copy => copy.kind === "tool");
+    assert.ok(origin && tool);
+    await selectActivityOption(page, "preparedReportView", "text");
+    async function updateCopy(key, { text, omit }) {
+        const copy = page.locator(`.prompt-comparison[data-copy-key="${key}"]`);
+        while (!await copy.count()) await page.getByRole("button", { name: "Next report copies", exact: true }).click();
+        await copy.getByText("Edit or omit this report copy", { exact: true }).click();
+        if (omit) await copy.getByRole("checkbox").check();
+        else await copy.locator("textarea").fill(text);
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await copy.getByRole("button", { name: "Update report copy", exact: true }).click();
+        return (await pending).json();
+    }
+    await updateCopy(origin.key, { text: "Deliberately revised release wording." });
+    await updateCopy(tool.key, { omit: true });
+    await captureReport(page, "copy-omitted-before-context");
+    let updated;
+    for (const enabled of [true, false, true]) {
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator("#reportRecordedContext").setChecked(enabled);
+        const response = await pending;
+        updated = await response.json();
+        const copies = updated.records.flatMap(record => record.prompts);
+        assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
+        assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
+        assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+        await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
+    }
+    await captureReport(page, "copy-omitted-after-context");
+    await page.locator("#reportPrivacyChoice").click();
+    for (const mode of ["original", "none", "masked"]) {
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`[name=promptMode][value=${mode}]`).check();
+        updated = await (await pending).json();
+        assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    }
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    const copies = updated.records.flatMap(record => record.prompts);
+    assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
+    assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    for (const format of ["pdf", "json", "markdown"]) {
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value=${format}]`).check();
+        updated = await (await pending).json();
+    }
+    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const saved = (await loadBoardState(context)).exports;
+    assert.equal(saved.length, 1);
+    for (const [name, file] of Object.entries(saved[0].files)) {
+        if (name === "coverage-and-redaction-manifest.json") continue;
+        const expected = updated.files[name];
+        assert.deepEqual(await readFile(file), typeof expected === "string" ? Buffer.from(expected) : Buffer.from(expected.data, "base64"));
+    }
+    const frozen = JSON.parse(await readFile(saved[0].files["product-report.json"], "utf8"));
+    assert.ok(frozen.records.flatMap(record => record.prompts).some(copy => copy.kind === "tool" && copy.omitted));
+    assert.doesNotMatch(JSON.stringify(frozen), /Find the decisions from the Cedar launch review/);
+    assert.deepEqual(errors, []);
+});
+
+test("Reports author pointer drafts stay inside their popover until Apply or Cancel", { timeout: 60000 }, async t => {
+    const { page, requests, errors } = await setup(t, { source: reviewRecords().slice(0, 4), frontend: "react",
+        now: "2026-11-18T16:00:00Z", hasTouch: true });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await prepare(page, "all");
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const trigger = page.getByRole("combobox", { name: "Authors in report", exact: true });
+    const reads = requests.filter(request => request.path === "/api/preview").length;
+    await trigger.click();
+    await page.getByRole("option", { name: "Agent prompts", exact: true }).click();
+    await expect(page.locator("#reportIncludeOptions")).toBeVisible();
+    await expect(page.locator(".select-popup").getByRole("button", { name: "Apply", exact: true })).toBeVisible();
+    await captureReport(page, "author-pointer-draft");
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, reads);
+    await page.locator(".select-popup").getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(trigger).toBeFocused();
+    assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node =>
+        [...node.selectedOptions].map(option => option.value)), ["user", "agent", "unknown"]);
+    await trigger.click();
+    await page.getByRole("option", { name: "My prompts", exact: true }).click();
+    await page.getByRole("option", { name: "Author unverified", exact: true }).click();
+    const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator(".select-popup").getByRole("button", { name: "Apply", exact: true }).click();
+    const updated = await (await pending).json();
+    assert.equal(updated.records.length, 1);
+    await expect(trigger).toBeFocused();
+    await expect(page.locator("#reportIncludeOptions")).toBeVisible();
+    await captureReport(page, "author-apply-focus");
+    if (process.env.WIRE_REPORT_FIRST_PROOFS) await writeFile(path.join(process.env.WIRE_REPORT_FIRST_PROOFS, "author-apply.json"),
+        JSON.stringify({ focused: await trigger.evaluate(node => document.activeElement === node),
+            containingPanelOpen: await page.locator("#reportIncludeOptions").evaluate(node => node.matches(":popover-open")),
+            includedInteractions: updated.records.length }, null, 2));
+    assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node =>
+        [...node.selectedOptions].map(option => option.value)), ["agent"]);
+    await trigger.tap();
+    await page.getByRole("option", { name: "My prompts", exact: true }).tap();
+    await page.locator(".select-popup").getByRole("button", { name: "Cancel", exact: true }).tap();
+    await expect(trigger).toBeFocused();
+    await trigger.press("ArrowDown");
+    await trigger.press("Home");
+    await trigger.press("Space");
+    await trigger.press("Escape");
+    await expect(trigger).toBeFocused();
+    assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node =>
+        [...node.selectedOptions].map(option => option.value)), ["agent"]);
+    assert.deepEqual(errors, []);
+});
+
+test("linked retained replies preserve edits and a shared origin-followup omission through re-entry and Save", { timeout: 60000 }, async t => {
+    const { page, context, requests } = await setup(t, { contextFixture: true, frontend: "react", now: "2026-09-30T20:00:00Z" });
+    const initial = await prepare(page, "all");
+    const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
+    await frame.locator(".wire-example-editor summary").first().click();
+    await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Kept originating edit.");
+    const editing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await frame.getByRole("button", { name: "Update prompt copy", exact: true }).first().click();
+    await editing;
+    await frame.locator(".wire-reading-interaction>summary").nth(1).click();
+    await frame.locator(".wire-example-editor summary").nth(1).click();
+    await frame.getByLabel("Leave out this prompt", { exact: true }).nth(1).check();
+    const omitting = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await frame.getByRole("button", { name: "Update prompt copy", exact: true }).nth(1).click();
+    await omitting;
+    let updated;
+    for (const enabled of [true, false, true]) {
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator("#reportRecordedContext").setChecked(enabled);
+        const response = await pending;
+        updated = await response.json();
+        assert.equal(response.status(), 200, updated.error);
+        assert.ok(updated.records.flatMap(record => record.prompts).some(copy => copy.text === "Kept originating edit."));
+        assert.ok(updated.records[1].prompts.find(copy => copy.kind === "origin").omitted);
+        if (enabled) assert.ok(updated.snapshot.recordedContext.entries.some(copy => copy.kind === "response" && copy.text));
+        assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+        await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
+    }
+    await page.locator("#reportPrivacyChoice").click();
+    for (const mode of ["original", "none", "masked"]) {
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`[name=promptMode][value=${mode}]`).check();
+        const response = await pending; updated = await response.json();
+        assert.equal(response.status(), 200, updated.error);
+    }
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const including = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("#reportRecordedContext").check();
+    updated = await (await including).json();
+    await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
+    const reply = updated.contextReview.find(copy => copy.kind === "response" && copy.original !== null);
+    assert.ok(reply);
+    await selectActivityOption(page, "preparedReportView", "text");
+    const replyCopy = page.locator(`.prompt-comparison[data-copy-key="${reply.key}"]`);
+    while (!await replyCopy.count()) await page.getByRole("button", { name: "Next report copies", exact: true }).click();
+    await replyCopy.getByText("Edit or omit this report copy", { exact: true }).click();
+    await replyCopy.locator("textarea").fill("Kept retained reply edit.");
+    const editingReply = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await replyCopy.getByRole("button", { name: "Update report copy", exact: true }).click();
+    updated = await (await editingReply).json();
+    await captureReport(page, "shared-context-before-save");
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    for (const format of ["pdf", "json", "markdown"]) {
+        const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value=${format}]`).check();
+        updated = await (await pending).json();
+    }
+    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const saved = (await loadBoardState(context)).exports;
+    assert.equal(saved.length, 1);
+    const snapshot = JSON.parse(await readFile(saved[0].files["product-report.json"], "utf8"));
+    assert.ok(snapshot.records[1].prompts.find(copy => copy.kind === "origin").omitted);
+    assert.ok(snapshot.records[0].prompts.find(copy => copy.kind === "followup").omitted);
+    assert.ok(snapshot.recordedContext.entries.some(copy => copy.kind === "response" && copy.text === "Kept retained reply edit."));
+    assert.match(JSON.stringify(snapshot), /Kept originating edit/);
+    assert.equal(JSON.stringify(snapshot).includes(initial.records[1].prompts.find(copy => copy.kind === "origin").text), false);
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "markdown");
+    const definition = page.locator("#savedReportReader .saved-markdown p").filter({ hasText: "Calls follow each interaction" });
+    await expect(definition).toContainText("interaction's retained order");
+    await expect(definition).not.toContainText("&#39;");
+    await definition.scrollIntoViewIfNeeded();
+    await captureReport(page, "saved-markdown-definition");
+    const proofs = process.env.WIRE_REPORT_FIRST_PROOFS, directory = proofs && path.join(proofs, "shared-context-saved");
+    if (directory) await mkdir(directory, { recursive: true });
+    for (const [name, file] of Object.entries(saved[0].files)) {
+        if (directory) await writeFile(path.join(directory, name), await readFile(file));
+        if (name === "coverage-and-redaction-manifest.json") continue;
+        const expected = updated.files[name];
+        assert.deepEqual(await readFile(file), typeof expected === "string" ? Buffer.from(expected) : Buffer.from(expected.data, "base64"));
+    }
+    if (directory) await writeFile(path.join(directory, "roundtrip-receipt.json"), JSON.stringify({
+        exportRequests: requests.filter(request => request.path === "/api/export").length,
+        preparations: requests.filter(request => request.path === "/api/preview").map(({ body }) => ({
+            context: body.options.recordedContext, mode: body.options.promptMode, overrides: body.options.overrides,
+        })),
+        bundleId: saved[0].bundleId, membership: snapshot.reportPopulation,
+    }, null, 2));
+});
+
+test("a later user focus choice supersedes pending inline reading restoration", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await prepare(page);
+    const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
+    await frame.locator(".wire-example-editor summary").first().click();
+    await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Updated before a newer reading intent.");
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/preview", async route => {
+        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
+    }, { times: 1 });
+    const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await frame.getByRole("button", { name: "Update prompt copy", exact: true }).first().click();
+    await entered.promise;
+    const name = page.getByLabel("Report name", { exact: true });
+    await name.click();
+    const position = await page.evaluate(() => scrollY);
+    release.resolve(); await pending;
+    await expect(frame.getByRole("button", { name: "Update prompt copy", exact: true }).first()).toBeVisible();
+    await expect(name).toBeFocused();
+    assert.equal(await page.evaluate(() => scrollY), position);
+});
+
+test("inline copy updates retain the outer screen anchor, not just iframe coordinates", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await prepare(page);
+    const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
+    await frame.locator(".wire-example-editor summary").first().click();
+    const button = frame.getByRole("button", { name: "Update prompt copy", exact: true }).first();
+    await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Outer reading stays here.");
+    await button.scrollIntoViewIfNeeded();
+    await page.evaluate(() => scrollTo(0, 197));
+    await button.focus();
+    const position = async () => ({ outer: await page.evaluate(() => scrollY), button: await button.boundingBox() });
+    const before = await position();
+    assert.ok(before.outer > 150);
+    await expect(button).toBeInViewport();
+    await captureReport(page, "outer-reading-before");
+    const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await button.click();
+    await pending;
+    await expect(button).toBeFocused();
+    await expect.poll(async () => Math.abs((await position()).button.y - before.button.y)).toBeLessThan(3);
+    const after = await position();
+    assert.ok(Math.abs(after.outer - before.outer) < 3);
+    await captureReport(page, "outer-reading-retained");
+    if (process.env.WIRE_REPORT_FIRST_PROOFS) await writeFile(path.join(process.env.WIRE_REPORT_FIRST_PROOFS, "outer-reading.json"),
+        JSON.stringify({ before, after }, null, 2));
+});
 
 test("the normal Reports picker has one reading scroller and retains paging, selection and focus", { timeout: 60000 }, async t => {
     const { page, context, before, prepared, errors } = await openReviewPicker(t);
@@ -278,6 +555,10 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
     const edited = await (await editedResponse).json();
     const editedCopy = edited.records.flatMap(record => record.prompts).find(copy => copy.text === "Edited wording for Avery Chen.");
     assert.ok(editedCopy);
+    await expect(frame.locator(".wire-reading-interaction").first()).toHaveAttribute("open", "");
+    await expect(frame.locator(".wire-example-editor").first()).toHaveAttribute("open", "");
+    await expect(frame.getByRole("button", { name: "Update prompt copy", exact: true }).first()).toBeFocused();
+    await captureReport(page, "inline-copy-keeps-reading");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     const preparedCount = requests.filter(request => request.path === "/api/preview").length;
     await page.locator("#reportPrivacyChoice").click();
@@ -486,6 +767,12 @@ for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direc
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("connectionreset"); }, { times: 1 });
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
+    const recovery = page.getByRole("button", { name: "Check save status", exact: true });
+    await expect(recovery).toBeInViewport();
+    const gap = await recovery.evaluate(node => node.getBoundingClientRect().top
+        - document.querySelector("#reportJourneyError").getBoundingClientRect().bottom);
+    assert.ok(gap >= 0 && gap <= 32, `Recovery must accompany its warning, not follow the document: ${gap}px`);
+    if (!paired) await captureReport(page, "save-recovery-with-warning");
     const back = page.getByRole("link", { name: paired ? "Back to comparison" : "Back to Reports", exact: true });
     await expect(back).toBeDisabled();
     await back.press("Enter");
@@ -499,6 +786,51 @@ for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direc
     assert.equal(saved.privacyReview.localSave.contentHash, preview.localSaveRequest.contentHash);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
     assert.deepEqual(errors, []);
+});
+
+test("prepared Reports leaves useful first-screen reading space at narrow and enlarged sizes", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await prepare(page);
+    for (const [theme, width, height, size] of [["light", 390, 844, 100], ["dark", 390, 844, 100],
+        ["light", 1024, 1000, 200], ["dark", 1024, 1000, 200], ["light", 1440, 1000, 100]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; scrollTo(0, 0); }, size);
+        await captureReport(page, `prepared-${theme}-${width}-${size}`);
+        const top = await page.locator(".report-contained-frame").evaluate(node => node.getBoundingClientRect().top);
+        if (process.env.WIRE_REPORT_FIRST_PROOFS) await writeFile(path.join(process.env.WIRE_REPORT_FIRST_PROOFS,
+            `prepared-${theme}-${width}-${size}.json`), JSON.stringify({ theme, width, height, size, documentTop: top }, null, 2));
+        assert.ok(top <= height * .7, `Report begins at ${top}px of ${height}px`);
+        await expect(page.locator("#reportPrivacyChoice")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    }
+});
+
+test("new actual HTML keeps exact tool names intact in a keyboard-scrollable narrow table", { timeout: 30000 }, async t => {
+    const all = reviewRecords(), { page } = await setup(t, { source: [all[0], all[1], all.at(-1)], frontend: "react",
+        now: "2026-11-18T16:00:00Z" });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await prepare(page, "all");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await selectActivityOption(page, "preparedReportView", "product-report.html");
+    const frame = page.frameLocator("#reportFileInspection iframe");
+    const table = frame.locator(".example-calls").first(), region = table.locator("..");
+    await table.scrollIntoViewIfNeeded();
+    const lines = await table.locator("tbody tr").first().locator("td").nth(1).evaluate(node => {
+        const range = document.createRange(); range.selectNodeContents(node);
+        return [...new Set([...range.getClientRects()].map(rect => rect.top))].length;
+    });
+    assert.equal(lines, 1, "An exact tool identity must not be fragmented merely to avoid document overflow.");
+    await expect(region).toHaveAttribute("tabindex", "0");
+    await region.focus();
+    await region.press("ArrowRight");
+    await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+    await expect(table.locator("td").nth(1)).toHaveText("workiq-retrieve");
+    assert.equal(await frame.locator("html").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+    if (process.env.WIRE_REPORT_FIRST_PROOFS) await page.screenshot({
+        path: path.join(process.env.WIRE_REPORT_FIRST_PROOFS, "new-html-narrow-exact-tool.png"),
+    });
 });
 
 test("new library metadata and saved comparisons use frozen files and direct local Save", { timeout: 60000 }, async t => {
@@ -959,8 +1291,9 @@ test("report-first controls retain equal geometry, readable themes and narrow en
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; scrollTo(0, 0); }, size);
         const name = page.getByLabel("Report name", { exact: true });
         await name.focus();
-        const gap = await name.evaluate(node => node.getBoundingClientRect().top - node.previousElementSibling.getBoundingClientRect().bottom);
-        assert.ok(gap >= 8);
+        await expect(name).toHaveAccessibleName("Report name");
+        const field = await name.boundingBox(), save = await page.getByRole("button", { name: "Save report", exact: true }).boundingBox();
+        assert.ok(save.x >= field.x + field.width + 4, "Name and Save remain separate on their compact row.");
         await capture(`report-${theme}-${width}-${size}`);
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });

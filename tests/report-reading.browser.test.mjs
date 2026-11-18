@@ -449,8 +449,9 @@ test("long reports keep complete evidence behind working navigation and real for
     await expect(report.locator(".wire-reading-interaction")).toHaveCount(6);
     await expect(report.locator(".wire-reading-interaction[open]")).toHaveCount(0);
     await expect(report.locator(".example-calls tbody tr")).toHaveCount(36);
-    assert.doesNotMatch(await report.locator("main>.report-facts").textContent(), /Timezone|Prepared|Prompts|Text/);
-    assert.match(await report.locator(".wire-reading-meta").textContent(), /Timezone/);
+    await expect(report.locator("main>.report-facts")).toHaveCount(0, "Prepared scope is already shown beside its controls.");
+    await expect(page.locator("#reportExperienceScope")).toContainText("All retained activity");
+    assert.match(await report.locator("#coverage>.report-facts").textContent(), /Timezone/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const measured = await report.locator("body").evaluate(body => ({
@@ -512,6 +513,8 @@ test("long reports keep complete evidence behind working navigation and real for
     }
     await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     const previewCount = posts.filter(item => item.path === "/api/preview").length;
+    await expect(report.locator(".wire-reading-section[open]")).toHaveCount(0, "Content-only regeneration retains deliberate collapse.");
+    await report.locator('.report-nav a[href$="#examples"]').click();
     await report.locator(".wire-reading-interaction>summary").first().click();
     const preparedPosition = await report.locator("body").evaluate(() => scrollY);
     for (const format of ["html", "pdf", "json", "markdown"]) {

@@ -41,6 +41,26 @@ test("privacy changes preserve edits and omissions while retiring only excluded 
     assert.deepEqual(native.options().overrides, [{ key: "native-origin", omit: true }]);
 });
 
+test("disabling linked context maps shared ordinary copies back and retires only context copies", () => {
+    const draft = createReportDraft();
+    draft.change({ overrides: [{ key: "scenario-one:origin", text: "Edited origin" }, { key: "tool-query", omit: true }] });
+    const ordinary = draft.options().overrides;
+    draft.changeRecordedContext(true);
+    assert.deepEqual(draft.options().overrides, ordinary);
+    const basis = { sourceRevision: 1, membershipRevision: 1, consentRevision: 1, overrideRevision: 0, deletionEpoch: 0 };
+    draft.bindContext({ revision: 1, records: [{ scenarioId: "scenario-one", prompts: [
+        { key: "shared-origin", kind: "origin" }, { key: "tool-query", kind: "tool" },
+    ] }], snapshot: { evaluationFacts: { basis }, recordedContext: { entries: [
+        { key: "shared-origin", kind: "origin" }, { key: "reply", kind: "response" },
+    ] } } });
+    draft.change({ overrides: [{ key: "shared-origin", text: "Edited origin" }, { key: "tool-query", omit: true },
+        { key: "reply", text: "Only linked context" }] });
+    draft.changeRecordedContext(false);
+    assert.deepEqual(draft.options().overrides, ordinary);
+    draft.changeRecordedContext(true);
+    assert.deepEqual(draft.options().overrides, ordinary);
+});
+
 test("native report drafts bind distinct original Current/All receipts and independent GitHub IDs across content edits", () => {
     const draft = createReportDraft();
     const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),
