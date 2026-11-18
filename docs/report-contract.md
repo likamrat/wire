@@ -222,6 +222,12 @@ membership. Legacy create URLs and Selected/Current/contextual entry retain
 their scope. An unconfirmed write cannot be hidden behind the landing or
 replayed through a tile. Saved-list menus use the current authorized index;
 withdrawal retires their held text and actions with the existing readers.
+Accepted activity deletion, changed scope and preview replacement use the same
+prepared-copy retirement boundary. It scrubs app-owned mutable Text/Attr nodes,
+editor fields and file/frame payloads before their owners detach them, and
+disables old callbacks. Hidden Local original copies are included. This is not
+erasure of immutable strings copied outside WIRE, and activity deletion does
+not delete or rewrite independently saved report files.
 
 | Change after preparation | Effect |
 | --- | --- |

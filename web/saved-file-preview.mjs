@@ -21,6 +21,10 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
     function erase(node) {
         const walker = doc.createTreeWalker(node, win.NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) walker.currentNode.data = "";
+        for (const child of node.querySelectorAll("*")) {
+            if (child.matches("input,textarea,select,option")) child.value = "";
+            for (const attribute of [...child.attributes]) { child.removeAttributeNode(attribute); attribute.value = ""; }
+        }
         node.replaceChildren();
     }
     function dispose() {
@@ -452,6 +456,10 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
         for (const root of [host, controls]) {
             const walker = doc.createTreeWalker(root, win.NodeFilter.SHOW_TEXT);
             while (walker.nextNode()) walker.currentNode.data = "";
+            for (const node of root.querySelectorAll("*")) for (const attribute of [...node.attributes]) {
+                node.removeAttributeNode(attribute);
+                attribute.value = "";
+            }
         }
         controls.remove(); sources.clear(); choices.clear(); files = null; selectedName = shownName = shownValue = undefined; host.replaceChildren();
     }

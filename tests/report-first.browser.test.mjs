@@ -1010,6 +1010,16 @@ test("access withdrawal erases held example editors and never resumes their old 
         window.heldReportNote = source.querySelector(".wire-example-editor textarea");
         window.heldReportTitle = source.querySelector("h1").firstChild;
     });
+    await selectActivityOption(page, "preparedReportView", "text");
+    const heldCopies = await page.evaluate(() => {
+        const root = document.querySelector(".prompt-comparison");
+        window.heldOrdinaryCopyText = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) heldOrdinaryCopyText.push(walker.currentNode);
+        window.heldOrdinaryCopyKey = root.getAttributeNode("data-copy-key");
+        return heldOrdinaryCopyText.filter(text => text.data.includes("REPORT_FIRST_")).length;
+    });
+    assert.equal(heldCopies, 2, "Both hidden original and masked report-copy nodes are held.");
     const controller = await page.context().newPage();
     await controller.goto(runtime.url);
     await expect(controller.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -1018,9 +1028,41 @@ test("access withdrawal erases held example editors and never resumes their old 
     await expect(page.locator("#workspace")).toBeHidden();
     assert.equal(await page.evaluate(() => window.heldReportNote.value), "");
     assert.equal(await page.evaluate(() => window.heldReportTitle.data), "");
+    assert.equal(await page.evaluate(() => heldOrdinaryCopyText.some(text => text.data.includes("REPORT_FIRST_"))), false);
+    assert.equal(await page.evaluate(() => heldOrdinaryCopyKey.value), "");
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 0);
     assert.deepEqual(errors, []);
+});
+
+test("changing report scope retires prior ordinary copies and their detached edit callbacks", { timeout: 30000 }, async t => {
+    const { page, requests } = await setup(t, { source: reviewRecords().slice(0, 4), frontend: "react",
+        now: "2026-11-18T16:00:00Z" });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await prepare(page, "all");
+    await selectActivityOption(page, "preparedReportView", "text");
+    await page.getByText("Edit or omit this report copy", { exact: true }).click();
+    await page.evaluate(() => {
+        const copy = document.querySelector(".prompt-comparison");
+        window.retiredScopeTexts = [];
+        const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) retiredScopeTexts.push(walker.currentNode);
+        window.retiredScopeKey = copy.getAttributeNode("data-copy-key");
+        window.retiredScopeField = copy.querySelector("textarea");
+        window.retiredScopeApply = copy.querySelector(".report-copy-controls button");
+    });
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await selectActivityOption(page, "reportPromptAuthorFilter", "user");
+    assert.equal((await (await prepared).json()).records.length, 3);
+    assert.deepEqual(await page.evaluate(() => ({
+        privateText: retiredScopeTexts.some(text => /Cedar launch review/.test(text.data)),
+        key: retiredScopeKey.value, field: retiredScopeField.value,
+    })), { privateText: false, key: "", field: "" });
+    const count = requests.filter(request => request.path === "/api/preview").length;
+    await page.evaluate(() => retiredScopeApply.click());
+    await page.waitForTimeout(450);
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, count);
 });
 
 test("keep-details warning can cancel or regenerate masked notes and copies before one Save", { timeout: 60000 }, async t => {

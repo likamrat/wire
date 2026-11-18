@@ -2267,6 +2267,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         preparedReportReader?.dispose(); preparedReportReader = null;
         preparedFileInspection?.dispose(); preparedFileInspection = null;
     }
+    function erasePreparedNodes(root) {
+        ux.withdrawAccess([root]);
+        const nodes = [root, ...root.querySelectorAll("*")];
+        for (const node of nodes) {
+            for (const text of node.childNodes) if (text.nodeType === Node.TEXT_NODE) text.data = "";
+            if (node.matches("input,textarea,select,option")) {
+                node.value = "";
+                if ("defaultValue" in node) node.defaultValue = "";
+            }
+            if (node !== root) for (const attribute of [...node.attributes]) {
+                node.removeAttributeNode(attribute);
+                attribute.value = "";
+            }
+        }
+    }
     function scrubContextPreview() {
         for (const bundle of renderedContextBundles) {
             for (const copy of bundle.nativeReview ?? []) {
@@ -2290,6 +2305,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderedContextBundles.clear();
         const body = $("reportReviewBody");
         if (body?.dataset.recordedContext !== "true") return;
+        clearPreviewPayload?.();
         clearPreparedReaders();
         for (const frame of body.querySelectorAll(".report-frame")) frame.srcdoc = "";
         body.replaceChildren();
@@ -2402,13 +2418,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         pendingReportReading = reading;
         clearTimeout(reportUpdateTimer); reportUpdateAgain = false; saveAfterMask = false;
         nativePublication.invalidate(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
+        const previewId = activePreview?.previewId ?? reportRebuildFrom;
+        if (message !== "") clearPreviewPayload?.();
         clearPreparedReaders();
         draft.invalidate();
         if (message !== "") $("reportReviewBody")?.querySelector(".rebuild-preview")?.remove();
         reportJourney?.invalidate(message);
-        const preview = activePreview;
         activePreview = null;
-        const previewId = preview?.previewId ?? reportRebuildFrom;
         reportRebuildFrom = null;
         if (previewId) api("/api/cancel-preview", { previewId }).catch(() => {
             if (api.isCurrent(publication)) announce("The previous preview could not be cancelled on the runtime. Do not reuse it; prepare a new preview before reviewing.", "error");
@@ -8969,6 +8985,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         draft.change({ saveMode: "local", ...(!periodReport && !nativeRequest && !draft.options().reportFocus ? {
             reportFocus: { version: 1, preset: "custom", outcome: "all", services: [] }, resultTextKind: "errors",
         } : {}) });
+        clearPreviewPayload?.();
         const body = reportJourney.beginScan({ focus });
         if (!body) return;
         const preparationOwner = {};
@@ -9081,13 +9098,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         };
         const reviewCopies = [...(preview.promptReview ?? []), ...(preview.contextReview ?? []), ...(preview.nativeReview ?? []), ...(preview.resultReview ?? [])];
+        let shownCopy;
         clearPreviewPayload = () => {
             clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
             clearPreparedReaders();
+            erasePreparedNodes(body);
+            if (shownCopy && !body.contains(shownCopy)) erasePreparedNodes(shownCopy);
+            shownCopy = null;
             for (const copy of reviewCopies) for (const key of Object.keys(copy)) delete copy[key];
             reviewCopies.length = 0;
+            for (const record of preview?.records ?? []) for (const copy of record.prompts ?? []) copy.text = null;
             for (const copy of preview?.snapshot?.resultText?.copies ?? []) copy.text = null;
+            for (const copy of preview?.snapshot?.recordedContext?.entries ?? []) copy.text = null;
+            for (const copy of preview?.snapshot?.nativeEvidence?.disclosure?.copies ?? []) copy.text = null;
             for (const note of preview?.snapshot?.reportNotes?.entries ?? []) note.text = "";
+            for (const key of Object.keys(preview?.files ?? {})) delete preview.files[key];
+            for (const key of Object.keys(preview?.snapshot ?? {})) delete preview.snapshot[key];
+            if (preview) { preview.previewHtml = ""; preview.title = ""; renderedContextBundles.delete(preview); }
             preview = null;
             clearPreviewPayload = null;
         };
@@ -9107,6 +9134,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const copiesKey = "copies:" + preview.previewId;
             if (readingSelection?.copyKey) presentation.setPage(copiesKey, Math.max(0, reviewCopies.findIndex(copy => copy.key === readingSelection.copyKey)));
             pagedList(copies, reviewCopies, { key: copiesKey, size: 1, noun: "report copies", renderItem: prompt => {
+                if (shownCopy) erasePreparedNodes(shownCopy);
                 detailOwner = "preview:" + preview.previewId + ":" + prompt.key;
                 const nativeCopy = typeof prompt.key === "string" && prompt.key.startsWith("native-copy-");
                 const resultCopy = typeof prompt.key === "string" && prompt.key.startsWith("result-copy-");
@@ -9115,6 +9143,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     : prompt.kind === "response" ? "Recorded reply (context; finality unverified)"
                     : prompt.kind === "origin" ? textAccess.caption(prompt) : prompt.kind === "tool" ? `Recorded tool argument (${prompt.label})` : `${prompt.label} / ${textAccess.caption(prompt)}`;
                 const item = el("article", "prompt-comparison");
+                shownCopy = item;
                 item.dataset.copyKey = prompt.key;
                 const interaction = preview.records.findIndex(record => record.prompts?.some(copy => copy.key === prompt.key)
                     || record.scenarioId === prompt.scenarioRef);
