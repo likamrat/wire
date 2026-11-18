@@ -1159,6 +1159,45 @@ for (const setting of ["pause", "configuration"]) {
     });
 }
 
+test("metadata becoming unreadable after evidence publication remains outcome-unknown", async t => {
+    const app = await fixture(t, { signedIn: true });
+    const http = await app.http(), panel = await http.panel();
+    await app.append(interaction("metadata-prior"));
+    assert.equal((await http.api(panel, "/api/collection/now", {})).code, 200);
+    const before = await checkpoint(app), config = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
+    const next = interaction("metadata-interrupted");
+    next[1].data.mcpServerName = "cc-invented";
+    next[1].data.toolName = "cc-invented-fetch";
+    const db = new DatabaseSync(app.config.appDbPath);
+    db.exec("CREATE TABLE session_managed_mcp_event_display_names(session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT,PRIMARY KEY(session_id,event_id))");
+    db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)").run(app.sourceId, next[1].id, "Work IQ");
+    db.close();
+    await app.append(next);
+    let published = false;
+    interceptRenames(t, async (from, to, rename) => {
+        await rename();
+        if (path.dirname(to) === app.context.dataDir && to.endsWith(".state.json")) published = true;
+    });
+    const stat = nativeFs.statSync;
+    t.mock.method(nativeFs, "statSync", (file, ...args) => {
+        if (published && file === app.config.appDbPath) throw Object.assign(new Error("Invented source access loss"),
+            { code: "EACCES", syscall: "stat" });
+        return stat(file, ...args);
+    });
+    syncBuiltinESMExports();
+    const failed = await http.api(panel, "/api/collection/now", {});
+    assert.equal(published, true);
+    assert.equal(failed.code, 409);
+    assert.equal(failed.body.code, "wire_access_admission_failed");
+    assert.equal(failed.body.outcome, "unknown");
+    assert.equal((await loadBoardState(app.context)).evidence.length, 2, "Evidence may have committed; never claim no effect.");
+    const after = await checkpoint(app);
+    assert.equal(after.bytes, before.bytes);
+    assert.equal(after.lastCheck, before.lastCheck, "The original receipt is not replaced by a failed check.");
+    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), config);
+    assert.equal((await app.collector.status()).config.enabled, app.config.enabled);
+});
+
 test("joined HTTP reply-write failure remains outcome-unknown and resumes from unchanged checkpoints after restart", async t => {
     const app = await fixture(t);
     let http = await app.http(), panel = await http.panel();

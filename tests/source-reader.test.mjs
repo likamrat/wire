@@ -5,9 +5,88 @@ import { mkdtemp, writeFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { readMetadataProjection, readMetadataSnapshot, validateMetadataProjection, metadataReadVersion,
     SOURCE_METADATA_MAX_BYTES, SOURCE_METADATA_READER_VERSION } from "../lib/source-metadata.mjs";
-import { readSourceMetadata } from "../lib/source-reader.mjs";
+import { readSourceMetadata, sourceMetadataStamp } from "../lib/source-reader.mjs";
+import { BoardError } from "../lib/store.mjs";
+
+test("missing required metadata is qualified consistently by stamp, native read and helper snapshot", async t => {
+    const app = await fixture(t);
+    await rm(app.file);
+    const missing = error => {
+        assert.equal(error.code, "source_metadata_unavailable");
+        assert.equal(error.status, 503);
+        assert.match(error.message, /ENOENT/);
+        assert.doesNotMatch(error.message, new RegExp(path.basename(path.dirname(app.file))));
+        return true;
+    };
+    assert.throws(() => sourceMetadataStamp(app.files), error => {
+        assert.ok(error instanceof BoardError);
+        return missing(error);
+    });
+    await assert.rejects(readSourceMetadata({ ...app.files, windowsDatabase: null }), missing);
+    await assert.rejects(readSourceMetadata(app.files, { run: () => assert.fail("A missing input must not launch its helper.") }), missing);
+    assert.throws(() => readMetadataSnapshot(app.file), missing);
+});
+
+test("absent WAL is optional but unreadable required or companion metadata is not", async t => {
+    const app = await fixture(t);
+    const before = sourceMetadataStamp(app.files), version = metadataReadVersion(app.file);
+    assert.match(before, /:absent$/);
+    const stat = fs.statSync;
+    const failure = Object.assign(new Error("Invented path must not enter the public message"), { code: "EACCES", syscall: "stat" });
+    for (const target of [app.file, app.file + "-wal"]) {
+        const mocked = t.mock.method(fs, "statSync", (file, ...args) => {
+            if (file === target) throw failure;
+            return stat(file, ...args);
+        });
+        syncBuiltinESMExports();
+        try {
+            assert.throws(() => sourceMetadataStamp(app.files), { code: "source_metadata_unavailable", status: 503 });
+            assert.throws(() => metadataReadVersion(app.file), { code: "source_metadata_unavailable", status: 503 });
+            await assert.rejects(readSourceMetadata({ ...app.files, windowsDatabase: null }), { code: "source_metadata_unavailable", status: 503 });
+        } finally { mocked.mock.restore(); syncBuiltinESMExports(); }
+    }
+    assert.equal(sourceMetadataStamp(app.files), before);
+    assert.equal(metadataReadVersion(app.file), version);
+});
+
+test("metadata disappearing after a valid helper read cannot publish its earlier projection", async t => {
+    const app = await fixture(t);
+    await assert.rejects(readSourceMetadata(app.files, { run: async (...args) => {
+        const result = await app.run(...args);
+        if (args[0] === "node.exe") await rm(app.file);
+        return result;
+    } }), { code: "source_metadata_unavailable", status: 503 });
+});
+
+test("metadata loss between stamp, identity and SQLite open stays a qualified read failure", async t => {
+    for (const boundary of ["identity", "open"]) await t.test(boundary, async t => {
+        const app = await fixture(t);
+        let paths = 0;
+        const files = { ...app.files, windowsDatabase: null, databaseFile() {
+            if (++paths === (boundary === "identity" ? 2 : 3)) fs.rmSync(app.file);
+            return app.file;
+        } };
+        await assert.rejects(readSourceMetadata(files), { code: "source_metadata_unavailable", status: 503 });
+    });
+});
+
+test("metadata stat normalization does not relabel an unrelated implementation error", async t => {
+    const app = await fixture(t), unexpected = new TypeError("Invented implementation defect");
+    const stat = fs.statSync;
+    const mocked = t.mock.method(fs, "statSync", (file, ...args) => {
+        if (file === app.file) throw unexpected;
+        return stat(file, ...args);
+    });
+    syncBuiltinESMExports();
+    try {
+        assert.throws(() => sourceMetadataStamp(app.files), error => error === unexpected);
+        await assert.rejects(readSourceMetadata(app.files), error => error === unexpected);
+    } finally { mocked.mock.restore(); syncBuiltinESMExports(); }
+});
 
 test("source-native metadata changes before SQL begins are included rather than rejected as stale", async t => {
     const app = await fixture(t);

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -10,7 +11,7 @@ import { evaluationFixture, materializeEvaluationSource } from "./evaluation-fix
 import { chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
 
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-async function fixture(t, problem, { clock = false, decodeResponse = response => response.json() } = {}) {
+async function fixture(t, problem, { clock = false, decodeResponse = response => response.json(), savedReport = false } = {}) {
     const denied = [], errors = [], requests = [], responses = [], cleanups = [], sourceBytes = [];
     let runtime, browser, configFile, configBefore;
     t.after(async () => {
@@ -36,10 +37,27 @@ async function fixture(t, problem, { clock = false, decodeResponse = response =>
         await writeFile(configFile, JSON.stringify(config));
         configBefore = await readFile(configFile);
     }
+    if (savedReport) {
+        const controller = createExportController(app.context), state = await loadBoardState(app.context);
+        const preview = await controller.preview("missing-source-proof", undefined, {
+            saveMode: "local", promptMode: "none", formats: ["json"],
+        }, { kind: "all", revision: state.revision });
+        await controller.confirm("missing-source-proof", preview.previewId, true, preview.snapshot.timeContext,
+            { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+    }
     const before = await loadBoardState(app.context);
+    const savedBytes = await Promise.all(before.exports.flatMap(bundle => Object.entries(bundle.files))
+        .map(async ([name, file]) => ({ name, file, bytes: await readFile(file) })));
+    const savedHashes = Object.fromEntries(savedBytes.map(({ name, bytes }) => [name, createHash("sha256").update(bytes).digest("hex")]));
     const options = { port: 0, collector: { timers: false },
         evaluation: { discover: deny("evaluation discovery"), readSource: deny("evaluation source"), evaluatorFactory: deny("evaluator") } };
     runtime = await startServer(app.context, createExportController(app.context), options);
+    const collectorDocuments = async () => {
+        const directory = path.join(app.context.dataDir, "collector");
+        return Object.fromEntries(await Promise.all((await readdir(directory, { recursive: true }))
+            .filter(name => name.endsWith(".json")).map(async name => [name, await readFile(path.join(directory, name))])));
+    };
+    const collectorBefore = savedReport ? await collectorDocuments() : null;
     options.port = Number(new URL(runtime.url).port);
     browser = await chromium.launch({ ...(process.env.WIRE_RECOVERY_HEADED ? { channel: "msedge", headless: false } : {}) });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
@@ -66,7 +84,12 @@ async function fixture(t, problem, { clock = false, decodeResponse = response =>
     });
     await page.goto(runtime.url); await ready(page); await page.evaluate(() => document.fonts.ready);
     await navigateMain(page, "settings"); await navigateSettings(page, "connection");
-    return { ...app, runtime, page, requests, responses, before,
+    return { ...app, runtime, page, requests, responses, before, savedHashes,
+        preserved: async () => {
+            assert.deepEqual(await loadBoardState(app.context), before);
+            if (collectorBefore) assert.deepEqual(await collectorDocuments(), collectorBefore, "Approval, cursors and original check receipts stay unchanged.");
+            for (const { file, bytes } of savedBytes) assert.deepEqual(await readFile(file), bytes);
+        },
         restart: async () => { runtime = await startServer(app.context, createExportController(app.context), options); return runtime; } };
 }
 
@@ -336,18 +359,50 @@ test("missing-metadata status observation awaits its real response when Node dec
 });
 
 test("a missing approved metadata file is a known source failure without a replay latch", { timeout: 20000 }, async t => {
-    const app = await fixture(t, "missing"), { page } = app;
+    const app = await fixture(t, "missing", { savedReport: true }), { page } = app;
+    const activityBefore = await page.locator("#activityCount").textContent();
     await pointer(page, "#checkActivity");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
     const responses = await Promise.all(app.responses);
     assert.equal(responses.length, 1);
-    await capture(page, "missing-metadata", { responses, requests: app.requests });
+    await capture(page, "missing-metadata", { responses, requests: app.requests, savedHashes: app.savedHashes });
     assert.equal(responses[0].status, 503);
     assert.equal(responses[0].body.code, "source_metadata_unavailable");
     assert.equal(await page.locator("#freshStatus").innerText(), "Local history could not be read.");
+    await expect(page.locator("#freshContextMessage")).toContainText("Local Copilot metadata could not be read (ENOENT)");
+    await expect(page.locator("#freshContextMessage")).not.toContainText("outcome unknown");
+    await expect(page.locator("#freshIssues")).toBeVisible();
+    await expect(page.locator("#freshIssues")).toHaveText("Review source");
+    assert.equal(await page.locator("#activityCount").textContent(), activityBefore);
     assert.equal(await page.locator("#refreshBtn").isVisible(), false);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
-    assert.deepEqual(await loadBoardState(app.context), app.before);
+    assert.equal((await app.runtime.collector.status()).config.enabled, false);
+    await app.preserved();
+    assert.equal(app.requests.filter(value => value === "/api/collection/now").length, 1);
+    const snapshot = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+    await page.locator("#checkActivity").click();
+    assert.equal((await snapshot).status(), 200);
+    await ready(page);
+    await expect(page.locator("#freshContextMessage")).toContainText("Stored activity refreshed");
+    assert.equal(app.requests.filter(value => value === "/api/collection/now").length, 1);
+    await app.preserved();
+    await capture(page, "missing-metadata-stored-recovery", { requests: app.requests, savedHashes: app.savedHashes });
+});
+
+test("a successful no-change Settings check retains its distinct confirmed receipt under Pause", { timeout: 20000 }, async t => {
+    const app = await fixture(t), { page } = app;
+    const prior = await app.runtime.collector.collectNow();
+    const before = await loadBoardState(app.context);
+    await pointer(page, "#checkActivity");
+    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
+    const [response] = await Promise.all(app.responses);
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.check.changes, { added: 0, updated: 0, items: [] });
+    assert.notEqual(response.body.check.id, prior.check.id);
+    await expect(page.locator("#freshStatus")).toHaveText("No additional activity in this check.");
+    assert.equal((await app.runtime.collector.status()).config.enabled, false);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
+    assert.deepEqual(await loadBoardState(app.context), before);
     assert.equal(app.requests.filter(value => value === "/api/collection/now").length, 1);
 });
 

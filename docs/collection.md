@@ -473,6 +473,14 @@ No-change, late results, outside-view updates and incomplete history remain
 separate. Previous accepted results survive an ordinary failed read; access
 withdrawal instead clears private content.
 
+A missing or unreadable approved metadata file is a known source-read failure,
+including the file checks before opening SQLite. Refresh identifies the source
+problem and keeps Review source and Read stored activity available; it does not
+replay the check or change approval or Pause. An absent optional SQLite WAL is
+normal, but an unreadable companion file is not. Failures after publication
+begins still require outcome recovery rather than being relabeled as no-effect
+source failures.
+
 GitHub checks do not have client-request correlation for a lost response.
 A newer last-check timestamp cannot settle that operation. The tab's verified
 pending sentinel survives reload; uncertain checks allow stored/status reads,
