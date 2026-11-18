@@ -12,6 +12,7 @@ use native Linux Node and install dependencies there; do not reuse a Windows
 
 ```text
 npm ci
+npm run build
 npm start
 ```
 
@@ -19,7 +20,7 @@ Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
 that terminal to stop WIRE; closing the browser tab leaves it running.
 
 To update an existing checkout, stop its WIRE process, pull the changes, run
-`npm ci` and restart. If the port is already in use, check whether WIRE is
+`npm ci`, rebuild with `npm run build` and restart. If the port is already in use, check whether WIRE is
 already running rather than stopping an unfamiliar process.
 
 ## Windows, WSL and Linux
@@ -38,7 +39,7 @@ Installing Node or running WIRE on an OS does not by itself make a supported
 Copilot source available.
 
 If Windows WIRE is already on port 4000, run a second instance from a separate
-WSL checkout. Run `npm ci` there, then choose a separate data folder and unused port:
+WSL checkout. Run `npm ci` and `npm run build` there, then choose a separate data folder and unused port:
 
 ```sh
 WORKIQ_EVIDENCE_DATA_DIR="$HOME/.local/share/wire-wsl/data" npm start -- --port 4001
@@ -97,6 +98,48 @@ node --test tests/search-text.test.mjs
 input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
+
+### Browser build and React evaluation
+
+`npm run build` creates local, content-hashed browser modules in `dist/client`.
+Normal startup serves these assets from the existing Node server; it does not
+run a Vite server or require development dependencies at runtime. The panel
+bootstrap remains private and uncached. A missing build or a source/build
+mismatch fails explicitly; rebuild rather than falling back to older code.
+Pre-paint theme/navigation preferences stay in the small inline bootstrap.
+
+The React evaluation is opt-in for development:
+
+```text
+npm start -- --development-frontend react
+```
+
+Use an explicitly owned development store, not an existing live instance.
+This keeps the supported source, access, Search, filters and reader controllers.
+React owns staged activity presentation and pagination; existing evidence
+formatters are deliberate DOM adapters. The compact Analyze layout moves the
+complete breakdowns below the evidence list. Other destinations are not a
+completed React migration. Omitting the flag retains the bundled established
+renderer; do not use the evaluation as a live replacement without qualification.
+
+For an isolated synthetic check without starting a normal store:
+
+```text
+npm run test:frontend
+```
+
+This type-checks, builds and exercises both entries, including exact Search
+Open/Back, accepted filters, retired row actions and access withdrawal.
+`WIRE_FRONTEND_PROOFS` can name a private output directory for screenshots and
+delivery measurements. `WIRE_FRONTEND_BROWSER=msedge` selects an already installed
+Edge for that fixture; it does not download a browser. Measurements are samples,
+not proof that adding React is faster. Numerical acceptance budgets remain
+separate from the existing behavioral checks.
+
+The `startServer` library retains its inline compatibility entry when `frontend`
+is omitted, for existing serialization-based fixtures. New frontend proof must
+explicitly use `frontend: "bundled"` or `"react"` and the real build. Do not treat
+an inline fixture as proof of the packaged browser entry.
 
 For source-reader changes, the opt-in
 `tests/wsl-portability.qualification.mjs` suite runs from Windows against

@@ -9,17 +9,21 @@ import path from "node:path";
 const context = { dataDir: process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
 function startupOptions(args) {
-    const options = { port: DEFAULT_RUNTIME_PORT, developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
+    const options = { port: DEFAULT_RUNTIME_PORT, frontend: "bundled", developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
         microsoftVisibleSignIn: false, microsoftVisibilityExperiment: false, microsoftManualCollection: false };
     const seen = new Set();
     const invalid = () => { throw Object.assign(new Error(
-        "Use npm start -- [--port 0-65535]. Microsoft incubation requires --development-microsoft; saved configuration is never adopted."),
+        "Use npm start -- [--port 0-65535] [--development-frontend bundled|react]. Microsoft incubation requires --development-microsoft; saved configuration is never adopted."),
     { code: "WIRE_START_OPTIONS_INVALID" }); };
     for (let index = 0; index < args.length; index++) {
         const key = args[index];
         if (seen.has(key)) invalid();
         seen.add(key);
-        if (key === "--development-microsoft") options.developmentMicrosoft = true;
+        if (key === "--development-frontend") {
+            const frontend = args[++index];
+            if (!["bundled", "react"].includes(frontend)) invalid();
+            options.frontend = frontend;
+        } else if (key === "--development-microsoft") options.developmentMicrosoft = true;
         else if (key === "--microsoft-retained") options.microsoftRetained = true;
         else if (key === "--microsoft-manual-collection") options.microsoftManualCollection = true;
         else if (key === "--microsoft-account-only") options.microsoftAccountOnly = true;
@@ -67,6 +71,7 @@ try {
     const collector = { timers: !options.developmentMicrosoft };
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
+        frontend: options.frontend,
         sourcePolicy: options.developmentMicrosoft ? "microsoft-incubation" : "copilot-only",
         collector, createAccess: async () => {
             if (!options.developmentMicrosoft) {
@@ -113,7 +118,7 @@ try {
     if (nativeHost) await nativeHost.close().catch(() => {
         console.error(`${PRODUCT_NAME} source cleanup is incomplete.`);
     });
-    console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
+    console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
         ? "The requested port is already owned. No second evidence writer was started; use the existing runtime or stop its owner explicitly."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;

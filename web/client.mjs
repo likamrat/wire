@@ -645,6 +645,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let dateDraft = null;
     let search = route.search || "", activityPage = Math.max(0, Number.parseInt(route.page || "0", 10) || 0), restoring = false, mounted = false;
     const pageSize = 8;
+    const frontendActivity = assessmentFactories.mountActivityList?.({
+        root: $("activityList"), pager: $("activityPager"), isCurrent: token => api.isCurrent(token),
+        release: releaseCardPreviews, onError: message => announce(message, "error"),
+    });
     const homeCount = el("span"), homeUnit = el("span");
     homeCount.id = "activityCount";
     homeUnit.id = "activityUnit";
@@ -4093,7 +4097,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else node.removeAttribute("aria-current");
         });
         const settings = route.view === "settings", operational = route.view === "collection-status", configurationOrStatus = settings || operational;
-        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
+        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView", ...($("frontendBreakdowns") ? ["frontendBreakdowns"] : [])], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
             for (const id of ids) $(id).hidden = route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
         }
         $("filters").hidden = configurationOrStatus || ["request", "reports", "trends"].includes(route.view);
@@ -4110,7 +4114,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
         const selectedRequest = state.scenarios.find(scenario => scenario.scenarioId === route.request);
         const titles = {
-            analyze: [route.compare === "periods" ? "Compare" : "Analyze", ""],
+            analyze: [route.compare === "periods" ? "Compare" : "Analyze",
+                frontendActivity && route.compare !== "periods" ? acceptedAnalyzePeriod().caption : ""],
             trends: ["Trends", ""],
             request: [selectedRequest ? route.call ? "Call in context" : "Interaction" : "Interaction unavailable", ""],
             reports: [route.bundle ? savedReportView?.bundleId === route.bundle && savedReportView.entryKey === route.savedEntry
@@ -4761,7 +4766,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             meaning.append(definitions);
         }
         document.querySelectorAll("[data-chart]").forEach((node) => node.setAttribute("aria-pressed", String(node.dataset.chart === chartType)));
-        $("chartTitle").textContent = chartType === "time" ? "Activity over time" : chartType === "workload" ? layer === "tool" ? "Activity categories" : "Service categories" : layer === "tool" ? "Paths and operations" : "API paths requested";
+        $("chartTitle").textContent = chartType === "time" ? frontendActivity && !native ? `${results.unit(layer, 2)} over time` : "Activity over time"
+            : chartType === "workload" ? layer === "tool" ? "Activity categories" : "Service categories" : layer === "tool" ? "Paths and operations" : "API paths requested";
         const notes = $("chartReadingNotes");
         const reading = el("dl");
         for (const [label, text] of [
@@ -4822,8 +4828,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             .sort((a, b) => a.date.localeCompare(b.date) || a.chartSource.localeCompare(b.chartSource));
         const mixed = Boolean(series?.points?.length && nativePoints.length);
         const chart = dimensional.timeView({
+            compact: Boolean(frontendActivity),
             points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
-            unit: total => results.columnUnit(applied.layer, total),
+            unit: frontendActivity ? undefined : total => results.columnUnit(applied.layer, total),
             summary: point => `${point.chartSource}: ${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
             createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined,
                 ...(native ? { source: point.native ? native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365" : "github-copilot" } : {}) }),
@@ -5057,10 +5064,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderActivity() {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
+        const scope = frontendActivity
+            ? JSON.stringify([applied, search, semanticQuery, semanticMembership?.receipt, route.withinServices, activityPage]) : "";
+        if (!state.nativeRead && frontendActivity?.retain(publication, state, scope)) return;
+        const stage = frontendActivity?.begin(publication, state, scope);
+        if (frontendActivity && !stage) return;
+        try {
+            if (!renderActivityContent(publication, stage?.host ?? $("activityList"), stage)) return;
+            stage?.commit();
+        } finally { stage?.discard(); }
+    }
+    function renderActivityContent(publication, host, stage) {
         captureReading();
         const scenarios = currentViewScenarios();
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
-        const host = $("activityList");
         releaseCardPreviews(host);
         nativeActivity.clearCards();
         boundedNative.clearCards();
@@ -5095,9 +5112,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged."));
         }
         for (const item of items.slice(roster.githubOffset, roster.githubOffset + roster.githubLimit)) {
-            const card = item.scenario ? requestCard(item.scenario) : matchingAction(item.record);
-            if (!api.isCurrent(publication)) return;
-            if (card) host.append(card);
+            const card = item.scenario ? requestCard(item.scenario, { eventSignal: stage?.signal }) : matchingAction(item.record);
+            if (card && stage) host.append(card);
+            if (!api.isCurrent(publication)) return false;
+            if (card && !stage) host.append(card);
         }
         if (nativeUnavailable) {
             if (!items.length) host.append(empty("Microsoft activity is unavailable", nativeViewRestriction()));
@@ -5120,7 +5138,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!nativePage.loading) void boundedNative.pageAt(roster.nativePage);
             }
         }
-        const pager = viewKey($("activityPager"), "pager:activity");
+        if (!api.isCurrent(publication)) return false;
+        const pager = viewKey(stage?.pager ?? $("activityPager"), "pager:activity");
         pager.hidden = !roster.total;
         pager.setAttribute("role", "navigation");
         pager.setAttribute("aria-label", "Analyze result pages");
@@ -5145,6 +5164,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             next.setAttribute("aria-describedby", position.id);
             pager.append(prev, next);
         }
+        return true;
     }
     function matchingAction(row) {
         const card = viewKey(el("article", "matched-action activity-card"), "action:" + row.id);
@@ -5332,7 +5352,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         problem.append(copy);
         return { presentation, problem };
     }
-    function requestCard(scenario, { reportPicker = false } = {}) {
+    function requestCard(scenario, { reportPicker = false, eventSignal } = {}) {
+        const authority = api.publicationToken();
+        if (!authority || clearingAccess || !state) return null;
         const layer = reportPicker ? "tool" : applied.layer;
         const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) ?? [] : rowsFor(scenario.scenarioId);
         if (nativeActivity.isNative(scenario)) return nativeActivity.card({
@@ -5400,6 +5422,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.append(categories, problem);
         action.append(facts);
         action.addEventListener("click", event => {
+            if (!api.isCurrent(authority)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
             event.preventDefault();
@@ -5413,7 +5436,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? callInvestigation.firstFailure(state.requestActivity, state.scenarios, rowsFor(scenario.scenarioId),
                     { ...target, layer: applied.layer }, state.revision) : null;
             navigate(target, false, { cardTarget: failure ? { target: failure, revision: state.revision } : null });
-        });
+        }, { signal: eventSignal });
         row.append(action);
         return row;
     }
@@ -10007,7 +10030,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         "recollectionUpdateStatus", "newDataNotice",
     ];
     function accessOwners() {
-        return [firstConnection, liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
+        return [...(frontendActivity ? [frontendActivity] : []), firstConnection, liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
             draft, reportJourney, reportExperience, reportSaveWarning, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
@@ -10154,6 +10177,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if ("selected" in field) field.selected = false;
         }
         for (const root of roots) {
+            if (frontendActivity && ["activityList", "activityPager"].includes(root.id)) continue;
             root.replaceChildren();
             for (const name of ["title", "aria-label", "data-revision", "data-view-key", "data-recorded-context"]) root.removeAttribute(name);
         }

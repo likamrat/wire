@@ -1,4 +1,5 @@
 node_modules/
+dist/
 assets/search-models/
 assets/search-linguistics/
 coverage/

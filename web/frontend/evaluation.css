@@ -1,0 +1,132 @@
+.wire-frontend-react .frontend-records,
+.wire-frontend-react .frontend-record-slot {
+    display: contents;
+}
+.wire-frontend-react.analyze-reading:not(.period-comparing) .page-heading > div:first-child {
+    position: static !important;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+}
+.wire-frontend-react.analyze-reading:not(.period-comparing) .page-heading { margin-bottom: 12px; }
+.wire-frontend-react .page-heading p { margin-top: 4px; font-size: var(--type-small); }
+.wire-frontend-react input.search-capsule-input,
+.wire-frontend-react input.search-capsule-input:is(:hover, :focus-visible, [aria-expanded=true]) {
+    background: var(--paper);
+    border-color: var(--control);
+    box-shadow: none;
+    transition: border-color .15s ease-out;
+}
+.wire-frontend-react input.search-capsule-input:focus-visible { outline-color: var(--focus); }
+.wire-frontend-react #activityList .activity-card {
+    display: block;
+    container-type: inline-size;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--surface-divider);
+    border-radius: 0;
+    background: var(--paper);
+}
+.wire-frontend-react #activityList .request-card-open {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr);
+    grid-template-areas: "author time" "prompt result" "more result" "availability result" "services result";
+    gap: 4px 24px;
+    padding: 16px 12px;
+    border-inline-start-width: 0;
+}
+.wire-frontend-react #activityList .request-card-origin { grid-area: author; margin: 0; font-weight: var(--weight-regular); }
+.wire-frontend-react #activityList .request-card-prompt { grid-area: prompt; font-size: var(--type-body); }
+.wire-frontend-react #activityList .request-card-read-more { grid-area: more; margin: 0; font-size: var(--type-small); }
+.wire-frontend-react #activityList .request-card-availability { grid-area: availability; margin: 0; }
+.wire-frontend-react #activityList .request-card-categories { grid-area: services; margin: 4px 0 0; }
+.wire-frontend-react #activityList .request-card-summary { grid-area: time; margin: 0; justify-content: flex-end; text-align: end; }
+.wire-frontend-react #activityList .request-card-problem { grid-area: result; margin: 0; font-size: var(--type-small); }
+.wire-frontend-react #activityList .request-card-problem.result-tone-success { color: var(--ink); }
+.wire-frontend-react #activityList .request-card-reason-text,
+.wire-frontend-react #activityList .returned-coverage { font-size: var(--type-small); }
+.wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open {
+    border-inline-start-width: 0;
+    background: var(--accent-soft);
+}
+.wire-frontend-react .analyze-dashboard { display: block; }
+.wire-frontend-react .analyze-chart-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 1fr);
+    gap: 0;
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--radius);
+    overflow: clip;
+    background: var(--paper);
+}
+.wire-frontend-react .analyze-chart-main {
+    grid-column: 1;
+    grid-row: 1;
+    border: 0;
+    border-radius: 0;
+}
+.wire-frontend-react .analyze-outcome-summary {
+    grid-column: 2;
+    grid-row: 1;
+    border: 0;
+    border-inline-start: 1px solid var(--surface-divider);
+    border-radius: 0;
+}
+.wire-frontend-react .analyze-chart-main .chart-panel { padding-block: 8px; }
+.wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
+.wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
+.wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 8rem; padding: 16px; }
+.wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+    gap: 0 12px;
+}
+.wire-frontend-react #frontendBreakdowns { margin-top: 20px; }
+.wire-frontend-react #frontendBreakdowns .percentage-card {
+    background: var(--canvas);
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--radius-small);
+    padding: 16px;
+}
+.wire-frontend-react #frontendBreakdowns .percentage-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: 16px;
+    align-items: start;
+}
+.wire-frontend-react #frontendBreakdowns .percentage-legend { row-gap: 4px; }
+.wire-frontend-react #frontendBreakdowns .percentage-value { justify-content: flex-end; }
+.wire-frontend-react #activityView { margin-top: 20px; }
+.wire-frontend-react #activityPager { margin-block: 12px 0; }
+.wire-frontend-react #activityPager > .frontend-record-slot > .pager { margin: 0; width: 100%; }
+.wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,
+.wire-frontend-react.period-comparing #frontendBreakdowns { display: none; }
+@container (max-width: 44rem) {
+    .wire-frontend-react #activityList .request-card-open {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "author" "prompt" "more" "availability" "services" "result" "time";
+        gap: 6px;
+    }
+    .wire-frontend-react #activityList .request-card-summary { justify-content: flex-start; text-align: start; }
+}
+@container analyze-view (max-width: 50rem) {
+    .wire-frontend-react .analyze-chart-grid { grid-template-columns: minmax(0, 1fr); }
+    .wire-frontend-react .analyze-outcome-summary {
+        grid-column: 1;
+        grid-row: 2;
+        border-inline-start: 0;
+        border-top: 1px solid var(--surface-divider);
+    }
+    @container outcome-card (max-width: 25rem) {
+        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}
+@media (forced-colors: active) {
+    .wire-frontend-react #activityList .activity-card,
+    .wire-frontend-react .analyze-chart-grid { border-color: CanvasText; }
+    .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open { outline: 2px solid Highlight; }
+}

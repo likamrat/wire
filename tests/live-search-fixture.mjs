@@ -26,7 +26,7 @@ export function searchRecords(count = 3) {
         return row;
     });
 }
-export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs } = {}) {
+export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend } = {}) {
     const cleanups = [];
     const { context, root } = await privateFixture({ after: fn => cleanups.push(fn) }, records);
     const sessionRoot = path.join(root, "session-state");
@@ -40,7 +40,7 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
     await writeFile(path.join(context.dataDir, "collector", "config.json"), JSON.stringify(config));
     const exports = createExportController(context);
     let providerCalls = 0;
-    const runtime = await startServer(context, exports, { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, exports, { port: 0, frontend, collector: { timers: false },
         search: typeof search === "function" ? search(root) : search, sessionTtlMs,
         evaluation: {
             evaluatorFactory: async () => { providerCalls++; throw new Error("Provider work forbidden in search proof."); },

@@ -80,7 +80,7 @@ async function setup(t, withBoundary = false, options = {}) {
     const bridge = options.profile ? createCopilotAccountBridge(() => host, { expectedSessionId: host.sessionId, binding: "copilot-app" }) : null;
     const before = await loadBoardState(context), errors = [], denied = [], reads = [];
     const server = await startServer(context, createExportController(context), {
-        port: 0, access, collector: { timers: false },
+        port: 0, access, frontend: process.env.WIRE_TEST_FRONTEND, collector: { timers: false },
         ...(bridge ? { githubProfile: { copilot: bridge.copilot, fetch: async url => url.startsWith("https://api.github.com/")
             ? Response.json({ type: "User", id: 70001, login: "synthetic-riley", name: "Riley Chen",
                 avatar_url: "https://avatars.githubusercontent.com/u/70001" })

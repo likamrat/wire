@@ -58,7 +58,7 @@ Follow README.md and docs/development.md for this machine. Check for
 Node.js 24+ and a running WIRE instance before installing or starting
 anything. Preserve existing work and data.
 
-Use npm ci and npm start for a new installation. Open the printed local
+Use npm ci, npm run build and npm start for a new installation. Open the printed local
 URL and verify that WIRE loads. Leave it running and tell me how to
 reopen it. Ask me when setup choices need my input. Leave source
 approval and reply-saving consent to me in WIRE.
@@ -72,6 +72,7 @@ approval and reply-saving consent to me in WIRE.
 git clone https://github.com/likamrat/wire.git
 cd wire
 npm ci
+npm run build
 npm start
 ```
 
