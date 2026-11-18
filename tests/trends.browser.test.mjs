@@ -137,6 +137,54 @@ async function setup(t, withBoundary = false, options = {}) {
     return { page, reads, url: server.url };
 }
 
+test("lower selected-date values keep their own visible scope after scrolling past the chart context", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, false, { trace: "lower-scope-trace" });
+    await dates(page);
+    const panel = page.locator('[data-family="tools"]');
+    await panel.getByRole("button", { name: /Aug 15, 2026: fetch,/ }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    const measurements = [];
+    for (const [theme, width, scale, mode, scope] of [
+        ["light", 390, 1, "reach", "Interactions % · 2 interactions"],
+        ["dark", 390, 1, "share", "Calls % · 2 calls"],
+        ["light", 1024, 2, "count", "Calls · 2 calls"],
+    ]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: scale === 2 ? 1000 : 844 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await selectMode(page, mode);
+        await page.mouse.move(width - 5, 400);
+        await page.mouse.wheel(0, 10000);
+        await settle(page);
+        const inspection = page.locator(".trends-inspection");
+        const caption = inspection.getByRole("heading", { name: `Aug 15, 2026 · ${scope}`, exact: true });
+        await expect(caption).toBeVisible();
+        const geometry = await inspection.evaluate(node => {
+            const box = target => target.getBoundingClientRect().toJSON();
+            return { caption: box(node.querySelector("h3")), values: box(node.querySelector(".trends-inspection-body")),
+                upper: box(document.querySelector(".trends-inspection-heading")),
+                header: box(document.querySelector(".app-header")), viewport: innerHeight };
+        });
+        assert.ok(geometry.upper.bottom <= geometry.header.bottom, "The upper context is outside the visible reading area");
+        assert.ok(geometry.caption.top >= geometry.header.bottom && geometry.caption.bottom <= geometry.values.top,
+            "The local scope is visible above the values, not hidden under the fixed header");
+        assert.ok(geometry.values.bottom <= geometry.viewport, "Scope and selected-date values fit in the same viewport");
+        await expect(inspection.getByRole("button")).toHaveCount(0);
+        await expect(panel.getByRole("button", { name: "View evidence", exact: true })).toHaveCount(1);
+        const dailyValue = inspection.locator('.trends-value-row[data-selected="true"] .trends-value');
+        await expect(dailyValue).toHaveText(mode === "count" ? "1" : "50% (1)");
+        const periodValue = panel.locator(".trends-legend-row").filter({
+            has: page.getByRole("checkbox", { name: "Show fetch", exact: true }),
+        }).locator(".trends-legend-value");
+        assert.notEqual(await dailyValue.textContent(), await periodValue.textContent(), "The fixture distinguishes period and selected-day figures");
+        measurements.push({ theme, width, scale, mode, scope, ...geometry });
+        await capture(page, `usability-lower-scope-${theme}-${scale}`);
+    }
+    if (process.env.WIRE_TRENDS_PROOFS) await writeFile(path.join(process.env.WIRE_TRENDS_PROOFS, "lower-scope-measurements.json"),
+        JSON.stringify(measurements, null, 2));
+});
+
 test("exact Trends numbers keep date and value text separate and scroll by keyboard at narrow and enlarged sizes", { timeout: 45000 }, async t => {
     const { page } = await setup(t, false, { records: measureRecords() });
     await dates(page, "2026-08-01", "2026-08-01");
@@ -344,6 +392,7 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
 test("withdrawal scrubs selected context and evidence return while a built Trends range is pending", { timeout: 30000 }, async t => {
     const { page, url } = await setup(t, false, { records: measureRecords(), enforced: true });
     await dates(page, "2026-08-01", "2026-08-01");
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     let release;
     t.after(() => release?.());
     await page.route("**/api/trends", async route => {

@@ -118,6 +118,9 @@ selected-date breakdown and View numbers. Back to overview restores the activati
 control and reading position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.
+The lower selected-date values retain a local date/measure/population caption,
+so their scope remains visible after the upper chart context scrolls away.
+This caption shares that qualified context and does not repeat its action buttons.
 Only the explicit maximize/restore controls change chart size. Clicking, tapping
 or pressing Enter/Space on a data mark selects it in place, without hiding other
 widgets, moving the page or changing horizontal reading position. A restrained

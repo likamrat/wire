@@ -112,9 +112,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         exact.hidden = !exact.hidden; exactButton.textContent = exact.hidden ? "View numbers" : "Hide numbers";
         if (!exact.hidden) paintExact();
     });
-    const inspectionBody = el("div", "trends-inspection-body"), exact = el("div", "trends-exact"); exact.hidden = true; inspection.hidden = true;
+    const inspectionCaption = el("h3", "trends-inspection-caption"), inspectionBody = el("div", "trends-inspection-body"), exact = el("div", "trends-exact"); exact.hidden = true; inspection.hidden = true;
+    inspectionCaption.id = "trendsInspectionCaption"; inspection.setAttribute("aria-labelledby", inspectionCaption.id);
     exact.tabIndex = 0; exact.setAttribute("role", "region"); exact.setAttribute("aria-label", "Daily exact values");
-    inspection.append(inspectionBody, exact);
+    inspection.append(inspectionCaption, inspectionBody, exact);
     const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div", "trends-dialog-body"), dialogHeader = el("div", "trends-dialog-heading");
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
@@ -449,15 +450,18 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         return { from, to, partial, label: `Week ${dates(from, to)}`,
             detail: `${number(day.values.rhythm[0].eligible)} calls on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
     }
-    function pointScope(day, card, label, hidden = false) {
+    function dayScope(day, card) {
         const scope = card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
             : ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
-        const measure = card.id === "timing" ? "" : ` · ${families[card.id].modes.find(([id]) => id === card.mode)[1]}`;
+        const measure = card.id === "timing" ? "" : `${families[card.id].modes.find(([id]) => id === card.mode)[1]} · `;
         if (card.id === "rhythm" && card.mode === "share") {
             const week = weekContext(day);
-            return `${label ?? "Call activity"} · ${week.label} · ${week.detail}`;
+            return `${week.label} · ${week.detail}`;
         }
-        return `${label}${hidden ? " (hidden)" : ""}${measure} · ${scope}`;
+        return `${measure}${scope}`;
+    }
+    function pointScope(day, card, label, hidden = false) {
+        return `${label ?? "Call activity"}${hidden ? " (hidden)" : ""} · ${dayScope(day, card)}`;
     }
     function paintPoint(card) {
         const day = selectedDay(card), source = viewData(card);
@@ -486,6 +490,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         const changedLayout = inspectionKey !== key;
         if (changedLayout) { inspectionKey = key; inspectionBody.style.minHeight = ""; }
         const prior = changedLayout ? 0 : inspectionBody.getBoundingClientRect().height;
+        scrub(inspectionCaption);
+        inspectionCaption.append(doc.createTextNode(`${fullDate(day.date)} · ${dayScope(day, card)}`));
         scrub(inspectionBody);
         for (const value of day.values[family].filter(value => shown(value, card))) {
             const row = el("div", "trends-value-row"), name = el("span", "trends-value-name");
@@ -586,7 +592,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         const selectedText = doc.getSelection();
         if (selectedText && (root.contains(selectedText.anchorNode) || root.contains(selectedText.focusNode))) selectedText.removeAllRanges();
         if (dialog.open) dialog.close(); scrub(dialogBody); scrub(dialogTitle); dialogOrigin = null;
-        for (const node of [qualification, inspectionBody, exact, paging, status, restrictionText]) scrub(node);
+        for (const node of [qualification, inspectionCaption, inspectionBody, exact, paging, status, restrictionText]) scrub(node);
         inspectionBody.style.minHeight = ""; inspectionKey = ""; root.setAttribute("aria-busy", "false");
     }
     function update() {
@@ -674,6 +680,7 @@ export const trendsStyles = `
 .trends-point-actions{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;min-width:0}
 .trends-point-actions>button{max-width:100%;white-space:normal}
 .trends-inspection{margin-top:20px;padding:20px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
+.trends-inspection-caption{margin:0 0 12px;font-size:var(--type-small);font-weight:var(--weight-regular);line-height:var(--leading-ui);overflow-wrap:anywhere}
 .trends-inspection-body{display:grid;gap:8px;align-content:start;overflow-anchor:none}
 .trends-value-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(50px,2fr) minmax(90px,1fr);align-items:center;gap:16px;min-height:36px}
 .trends-value-row[data-selected=true] .trends-sample{outline:1px solid var(--ink);outline-offset:3px}
