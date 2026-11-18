@@ -1411,7 +1411,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderBody?.(node.open);
         return node;
     }
-    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", pagerAfter = false, onPage, isCurrent, beforeReplace }) {
+    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", pagerAfter = false, hideSinglePage = false, onPage, isCurrent, beforeReplace }) {
         const publication = api.publicationToken();
         const paint = (position = null) => {
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) return;
@@ -1469,7 +1469,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             beforeReplace?.(host);
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) { beforeReplace?.(list); return; }
             const content = wrapList(list);
-            host.replaceChildren(...(pagerAfter ? [content, pager] : [pager, content]));
+            host.replaceChildren(...(hideSinglePage && items.length <= size ? [content] : pagerAfter ? [content, pager] : [pager, content]));
             if (position) restorePager(position);
         };
         paint();
@@ -2305,7 +2305,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         getContext: () => ({ active: underlyingRoute().view === "trends", revision: workspaceState.evidence?.revision,
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
         reload: () => load(),
-        recordLink: row => link(row.tool, "request", { request: row.scenarioId, call: row.id }, "text-link"),
+        recordLink: row => {
+            const node = link(row.tool, "request", { request: row.scenarioId, call: row.id }, "text-link");
+            const scenario = workspaceState.evidence?.scenarios.find(item => item.scenarioId === row.scenarioId);
+            const call = fullRowsFor(row.scenarioId, "tool")?.find(item => item.id === row.id);
+            const prompt = scenario && textAccess.describePrompt(scenario.userPrompt).hasText
+                ? textAccess.excerpt(scenario.userPrompt, 160) : scenario?.title || "Retained interaction";
+            node.append(el("span", "trends-evidence-context", prompt),
+                el("span", "trends-evidence-time", "Call started: " + time.formatTime(call ? sourceCallFor(call)?.startedAt : null, viewerTime)));
+            return node;
+        },
     });
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,
@@ -2899,7 +2908,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function pathField(list, label, path, missing = "Not recorded") {
         const value = el("dd", "api-path-value");
         value.append(recordedPathValue(path, missing));
-        list.append(el("dt", "", label), value);
+        list.append(el("dt", "api-path-label", label), value);
     }
     function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, includeMissing = true, returned = false } = {}) {
         const list = el("dl", "action-fields");
@@ -2908,6 +2917,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (includeTool) list.append(el("dt", "", "Tool"), el("dd", "action-tool", call?.tool || row?.tool || "Not recorded"));
         if (includeService) {
             const service = el("dd", "action-service");
+            let serviceContext;
             if (returned) {
                 const association = row?.serviceAssociation?.layer === "reported-api" ? row.serviceAssociation : null;
                 for (const [index, name] of (association?.services ?? []).entries()) {
@@ -2918,8 +2928,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     const gap = categories.displayEvidence(rawGap);
                     service.append(metadata.item(gap.label, { help: gap.description }));
                 }
-                if (includePurpose && association?.gaps.length) service.append(el("p", "context-help-note",
-                    categories.attributionReading(row, "reported-api").text));
+                if (includePurpose && association?.gaps.length) serviceContext = categories.attributionReading(row, "reported-api").text;
                 if (!service.childNodes.length) service.textContent = "Service evidence could not be read in this snapshot.";
             } else {
                 const scope = categories.requestedSearchScope(call);
@@ -2928,6 +2937,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (scope) service.append(ux.helpButton(categoryPresentation(row).label, [scope.label + ".", scope.description].filter(Boolean).join(" ")));
             }
             list.append(el("dt", "", returned ? "Result service" : "Services and operations"), service);
+            if (serviceContext) list.append(el("dt", "visually-hidden", "Service context"), el("dd", "action-attribution", serviceContext));
         }
         if (operation && includePurpose) {
             list.append(el("dt", "", "Purpose"), el("dd", "", operation.description));
@@ -3023,11 +3033,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const explanation = results.interpretationItems({ ...interpretations,
                 items: interpretations.items.filter(value => value.channel === "returned-entry" && value.entryIndex === retained?.index) });
             if (explanation.length) item.append(callReasonList(explanation));
-            item.append(actionFields(call, entry, { includeTool: false, returned: true, includeService: !results.inheritsCallService(call, entry, row) }));
-            const duration = el("p", "reader-api-duration");
-            duration.append("API result duration: ", durationValue(callInvestigation.duration(retained, "reported-api")));
-            item.append(duration);
-            if (retained?.evidenceLevel) item.append(el("p", "context-help-note", "Result attribution: " + retained.evidenceLevel));
+            const facts = actionFields(call, entry, { includeTool: false, returned: true, includeService: !results.inheritsCallService(call, entry, row) });
+            const duration = el("dd", "reader-api-duration");
+            duration.append(durationValue(callInvestigation.duration(retained, "reported-api")));
+            facts.append(el("dt", "", "API result duration"), duration);
+            if (retained?.evidenceLevel) facts.append(el("dt", "", "Result attribution"), el("dd", "",
+                retained.evidenceLevel === "intermediary-reported" ? "Reported by the tool" : retained.evidenceLevel));
+            item.append(facts);
             if (entry.id === selectedId) {
                 item.id = "selectedCall";
                 item.tabIndex = -1;
@@ -3037,14 +3049,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             return item;
         };
-        const list = el("div", "returned-api-entries");
+        const list = el("div", "returned-api-entries"), pages = el("div", "returned-entries-pages");
+        list.append(el("h4", "returned-entries-heading", "Returned results"), pages);
         const otherRows = selectedId ? apiRows.filter(entry => entry.id !== selectedId) : apiRows;
         const hasErrors = otherRows.some(entry => ["failure", "transport"].includes(entry.outcome)
             || results.diagnosticDetails(results.returnedResult(call, entry)?.errorDiagnostic).length);
-        pagedList(list, otherRows, {
+        pagedList(pages, otherRows, {
             key: "returned:" + row.id, noun: call.resultEvidence?.contentStatus === "partial"
                 ? "retained entries" : "returned results",
             size: hasErrors ? Math.max(6, otherRows.length) : 6,
+            hideSinglePage: true,
             renderItem: renderEntry,
         });
         const coverage = results.returnedCoverage(call);
@@ -5111,7 +5125,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(items.length ? [`${count(items.length)} GitHub ${items.length === 1 ? "interaction" : "interactions"}`] : []),
             `${count(native.aggregates.conversations)} Microsoft ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}`,
         ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable"
-            : `${nativeUnavailable ? "GitHub: " : ""}${groups} with ${count(selectionRows().length)} matching ${results.unit(workspaceState.scope.layer, selectionRows().length)}`
+            : `${nativeUnavailable ? "GitHub: " : ""}${groups} \u00b7 ${count(selectionRows().length)} matching ${workspaceState.scope.layer === "tool"
+                ? selectionRows().length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, selectionRows().length)}`
             + (unlinked ? `. ${count(unlinked)} records have no retained interaction and are listed separately below.` : "");
         $("activityListSummary").hidden = false;
         host.replaceChildren();
@@ -5839,9 +5854,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const label = el(identity ? "span" : "p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
-            const callResult = entry.recordKind === "tool" ? item.querySelector(".reader-call-summary .recorded-result-label") : null;
-            if (callResult) callResult.prepend(label, document.createTextNode(" "));
-            else if (identity) (identity.querySelector(".reader-call-identity-line") || identity).prepend(label, document.createTextNode(" "));
+            if (identity) (identity.querySelector(".reader-call-identity-line") || identity).prepend(label, document.createTextNode(" "));
             else item.prepend(label);
             if (entry.hideLabel || entry.kind === "follow-up" || entry.kind === "prompt" && entry.relation !== "selected") label.remove();
             if (entry.kind === "action") label.classList.add("reader-entry-label");
@@ -6199,8 +6212,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const scope = results.callGroupLabel(operations.map(entry => entry.ordinal));
                 const names = [...new Set(operations.map(entry => entry.label))].join(", ");
                 const note = el("p", "reader-call-evidence reader-operation-context",
-                    `${scope} (${names}) ${operations.length === 1 ? "records a request" : "record requests"}, not confirmed app use. `
-                    + `${operations.length === 1 ? "It stays" : "They stay"} in operation counts; this limit alone needs no action.`);
+                    `${scope} (${names}) ${operations.length === 1 ? "records a request" : "record requests"}, not confirmed app use.`);
                 note.dataset.contextGroup = scenarioId;
                 const references = operations.filter(entry => entry.hasInputReferences);
                 if (references.length) note.append(" Input files (" + results.callGroupLabel(references.map(entry => entry.ordinal))

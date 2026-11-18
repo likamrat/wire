@@ -44,7 +44,7 @@ export function createPeriodFlow(time, copy = chatCopy) {
                         historyLink = true;
                     }
                 } else {
-                    warning = "Checked history is unknown; this view uses retained activity.";
+                    warning = "Checked history is unknown; using retained activity.";
                     historyLink = true;
                 }
             }

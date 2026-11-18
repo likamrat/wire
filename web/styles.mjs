@@ -59,7 +59,7 @@ h1 {font-size:var(--type-title);font-weight:var(--weight-strong);line-height:var
 h2 {font-size:var(--type-section);font-weight:var(--weight-strong);line-height:var(--leading-section)}
 h3 {font-size:var(--type-body);font-weight:var(--weight-strong);line-height:var(--leading-ui)}
 :is(b,strong,h4,h5,h6) {font-weight:var(--weight-strong)}
-.chart-heading h2,.percentage-card h3 {text-transform:uppercase;letter-spacing:.025em}
+.chart-heading h2,.percentage-card h3 {text-transform:none;letter-spacing:normal}
 p {max-width:72ch}
 .muted {color:var(--muted);font-size:var(--type-caption)}
 .collector-panel {margin-bottom:20px;padding:12px 16px;border-radius:var(--radius);background:var(--paper)}
@@ -473,7 +473,7 @@ ${selectStyles}
 .recorded-results .result-unit {font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
 .recorded-result {display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--cue-color,var(--muted)) 8%,var(--paper));font-size:var(--type-caption);line-height:var(--leading-caption);font-variant-numeric:tabular-nums}
 .recorded-result:not(.result-link) {box-shadow:inset 0 0 0 1px var(--cue-color,var(--control))}
-.recorded-result-label {min-width:0;overflow-wrap:anywhere;text-transform:uppercase;font-weight:var(--weight-strong);letter-spacing:.02em}
+.recorded-result-label {min-width:0;overflow-wrap:anywhere;text-transform:none;font-weight:var(--weight-strong);letter-spacing:normal}
 .result-explanation {min-width:0;overflow-wrap:anywhere}
 .result-status {display:inline-flex;align-items:center;gap:6px;max-width:100%;font:var(--weight-regular) var(--type-reading)/1.5 var(--font);color:var(--cue-color,var(--muted))}
 .result-status>.wire-icon {flex:none;width:16px;height:16px}

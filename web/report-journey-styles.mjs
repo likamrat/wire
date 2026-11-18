@@ -465,6 +465,25 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 @media(forced-colors:active){#reportPrivacyChoice[data-prompt-mode]{color:ButtonText;border-color:ButtonText}}
 .report-options-popover{width:min(28rem,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border:1px solid var(--rule);border-radius:12px;background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow)}
 .report-options-popover h2{font-size:1.3125rem;font-weight:500;line-height:1.35;margin:0 0 20px}
+#reportActivityOptions:popover-open{display:flex;flex-direction:column;width:min(62rem,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:clip;padding:0;margin:auto}
+.report-selection-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;border-bottom:1px solid var(--surface-divider);flex:none}
+.report-selection-header h2{margin:0}
+.report-selection-header button{min-height:44px}
+.report-selection-body{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:16px 20px}
+#reportActivityOptions #reportList{max-height:none;overflow:visible}
+#reportActivityOptions .scope-choices{display:grid;gap:4px;grid-template-columns:repeat(3,minmax(0,1fr))}
+#reportActivityOptions .scope-choice{min-height:44px;padding:8px;margin:0;border:0;background:transparent}
+#reportActivityOptions .scope-choice>span{display:flex;flex-wrap:wrap;gap:0 8px;align-items:baseline}
+#reportActivityOptions .scope-choice :is(strong,small){font:inherit}
+#reportActivityOptions .scope-choice:has(input:checked){box-shadow:none;background:var(--accent-soft)}
+#reportActivityOptions .scope-choice-help{margin:8px 0 12px}
+#reportActivityOptions #reportActivityActions{position:static;flex:none;margin:0;padding:12px 20px;background:var(--floating-paper)}
+@media(max-width:700px){
+ #reportActivityOptions .scope-choices{grid-template-columns:minmax(0,1fr)}
+ #reportActivityOptions .report-selection-body{padding:12px 16px}
+ #reportActivityOptions #reportActivityActions{padding:8px 16px;gap:4px 12px}
+ #reportActivityOptions .report-activity-summary{flex:1 1 10rem;font-size:var(--type-small)}
+}
 .report-options-popover :is(fieldset,.report-author-choice){margin:0 0 20px;border:0;padding:0;min-width:0}
 .report-options-popover .prompt-choice{min-height:44px;padding:8px 0;background:transparent;border:0;align-items:start}
 .report-options-popover .prompt-choice strong{font-weight:500}

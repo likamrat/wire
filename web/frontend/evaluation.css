@@ -46,6 +46,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr);
     grid-template-areas: "author time" "prompt result" "more result" "availability result" "services result";
+    grid-template-rows: max-content max-content max-content max-content 1fr;
     gap: 4px 24px;
     padding: 12px;
     border-inline-start-width: 0;
@@ -58,6 +59,22 @@
 .wire-frontend-react #activityList .request-card-summary { grid-area: time; margin: 0; justify-content: flex-end; text-align: end; }
 .wire-frontend-react #activityList .request-card-problem { grid-area: result; margin: 0; font-size: var(--type-small); }
 .wire-frontend-react #activityList .request-card-problem.result-tone-success { color: var(--ink); }
+.wire-frontend-react #activityList .request-card-open:has(.request-card-reasons) {
+    grid-template-areas: "author time" "prompt prompt" "more more" "availability availability" "services services" "result result";
+    grid-template-rows: auto;
+}
+.wire-frontend-react #activityList .request-card-reasons { gap: 12px; }
+.wire-frontend-react #activityList .request-card-reason {
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+}
+.wire-frontend-react #activityList .request-card-reason-text,
+.wire-frontend-react #activityList .request-card-reason > .returned-coverage { grid-column: 1 / -1; }
+.wire-frontend-react #activityList .request-card-problem:has(.request-card-reasons) {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--surface-divider);
+}
 .wire-frontend-react #activityList .request-card-reason-text,
 .wire-frontend-react #activityList .returned-coverage { font-size: var(--type-small); }
 .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open {
@@ -66,7 +83,8 @@
 }
 .wire-frontend-react .analyze-dashboard { display: block; }
 .wire-frontend-react .analyze-chart-grid {
-    grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 1fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(27rem, 1fr);
+    align-items: stretch;
     gap: 0;
     border: 1px solid var(--surface-edge);
     border-radius: var(--radius);
@@ -98,21 +116,21 @@
 .wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary p { margin-block: 4px; }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
-.wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 8rem; padding: 16px; }
+.wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: 20px; }
 .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
-    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
-    gap: 0 12px;
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: 0 16px;
 }
-.wire-frontend-react #frontendBreakdowns { margin-top: 20px; }
+.wire-frontend-react #frontendBreakdowns { margin-top: 24px; container: breakdowns / inline-size; }
 .wire-frontend-react #frontendBreakdowns .percentage-card {
-    background: var(--canvas);
+    background: var(--paper);
     border: 1px solid var(--surface-edge);
     border-radius: var(--radius-small);
     padding: 16px;
 }
 .wire-frontend-react #frontendBreakdowns .percentage-panels {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
     align-items: start;
 }
@@ -124,14 +142,18 @@
 .wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,
 .wire-frontend-react.period-comparing #frontendBreakdowns { display: none; }
 @container (max-width: 44rem) {
-    .wire-frontend-react #activityList .request-card-open {
+    .wire-frontend-react #activityList .request-card-open,
+    .wire-frontend-react #activityList .request-card-open:has(.request-card-reasons) {
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "author" "prompt" "more" "availability" "services" "result" "time";
         gap: 6px;
     }
     .wire-frontend-react #activityList .request-card-summary { justify-content: flex-start; text-align: start; }
 }
-@container analyze-view (max-width: 50rem) {
+@container breakdowns (max-width: 40rem) {
+    .wire-frontend-react #frontendBreakdowns .percentage-panels { grid-template-columns: minmax(0, 1fr); }
+}
+@container analyze-view (max-width: 60rem) {
     .wire-frontend-react .analyze-chart-grid { grid-template-columns: minmax(0, 1fr); }
     .wire-frontend-react .analyze-outcome-summary {
         grid-column: 1;
@@ -158,26 +180,37 @@
         white-space: normal;
     }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend {
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
-        gap: 8px;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
     }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
-        grid-template-columns: max-content minmax(0, 1fr);
-        align-content: start;
+        grid-template-columns: max-content minmax(0, 1fr) max-content;
+        grid-template-rows: auto;
+        grid-row: auto;
+        gap: 8px;
+        align-items: center;
     }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-value {
-        grid-column: 1 / -1;
-        justify-self: start;
-    }
-    @supports (grid-template-rows: subgrid) {
-        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
-            grid-template-rows: subgrid;
-            grid-row: span 2;
-        }
+        grid-column: 3;
+        justify-self: end;
     }
     @media (max-width: 48rem) {
         .wire-frontend-react #frontendHeadingActions .analyze-toolbar { justify-content: flex-start; }
     }
+}
+@container analyze-view (max-width: 26rem) {
+    .wire-frontend-react #outcomeChart > .percentage-card { padding: 12px 16px; }
+    .wire-frontend-react #homeView .analyze-chart-main .chart-panel { padding-block: 4px; }
+    .wire-frontend-react #outcomeChart .percentage-legend-row .percentage-value { font-size: var(--type-small); }
+}
+@media (max-width: 48rem) {
+    .wire-frontend-react:has(#homeView:not([hidden])) .frontend-heading-copy {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 12px;
+    }
+    .wire-frontend-react:has(#homeView:not([hidden])) .frontend-heading-copy p { margin: 0; }
 }
 @media (forced-colors: active) {
     .wire-frontend-react #activityList .activity-card,

@@ -4,15 +4,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
-import { frontendRecords } from "./frontend-fixture.mjs";
+import { frontendRecords, reviewRecords, overviewGeometry } from "./frontend-fixture.mjs";
+import { scanSourceForExport } from "../lib/privacy.mjs";
 import { chooseTheme, navigateMain, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
 const proofs = process.env.WIRE_FRONTEND_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-async function setup(t, frontend = "react") {
+async function setup(t, frontend = "react", records = frontendRecords()) {
     const cleanup = [], errors = [], requests = [];
-    const app = await searchFixture({ after: work => cleanup.push(work) }, { records: frontendRecords(), reply: false, frontend });
+    const app = await searchFixture({ after: work => cleanup.push(work) }, { records, reply: false, frontend });
     const before = await loadBoardState(app.context);
     const browser = await chromium.launch(process.env.WIRE_FRONTEND_BROWSER ? { channel: process.env.WIRE_FRONTEND_BROWSER } : {});
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", reducedMotion: "no-preference" });
@@ -79,6 +80,134 @@ async function capture(page, name) {
     await page.waitForFunction(() => !document.getAnimations().some(animation => animation.playState === "running"));
     await page.screenshot({ path: path.join(proofs, `${name}.png`) });
 }
+
+test("the richer review fixture satisfies the unchanged report privacy producer contract", () => {
+    const records = reviewRecords(), scan = scanSourceForExport(records, Buffer.alloc(32, 7));
+    assert.equal(scan.allSelectedFieldsScanned, true);
+    assert.equal(scan.toolArgumentObjects, records.reduce((sum, record) => sum + record.toolCalls.length, 0));
+    assert.equal(scan.selectedScenarioCount, records.length);
+});
+
+test("the populated overview gives its total breathing room, completes its own divider and uses sentence-case headings", async t => {
+    const { page } = await setup(t);
+    const geometry = await overviewGeometry(page), defects = [];
+    assert.ok(geometry.ring, "The reproduced wide overview must actually show the donut.");
+    if (Math.min(geometry.ring.value.clearance, geometry.ring.unit.clearance) < 4) {
+        defects.push(`Total/unit lacks one 4px spacing step inside the painted ring: ${JSON.stringify(geometry.ring)}`);
+    }
+    if (geometry.divider.inline > 0) {
+        const gap = geometry.grid.bottom - geometry.gridBorder.bottom - geometry.summary.bottom;
+        if (Math.abs(gap) > 1) defects.push(`The overview's own divider ends ${gap}px before its enclosing frame.`);
+    }
+    const uppercase = geometry.headings.filter(heading => heading.transform === "uppercase");
+    if (uppercase.length) defects.push(`Screen headings are forced uppercase: ${uppercase.map(heading => heading.text).join(", ")}`);
+    assert.deepEqual(defects, []);
+});
+
+test("the normal-entry overview keeps a long total readable in both themes", { timeout: 60000 }, async t => {
+    const { page } = await setup(t, "react", frontendRecords(1000));
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        const geometry = await overviewGeometry(page);
+        assert.equal(geometry.ring.value.text, "1,000");
+        assert.ok(Math.min(geometry.ring.value.clearance, geometry.ring.unit.clearance) >= 4, JSON.stringify(geometry.ring));
+        await capture(page, "visual-long-total-" + theme);
+    }
+});
+
+test("failure rows keep prompt and service together and give diagnostics the row width", async t => {
+    const { page } = await setup(t);
+    await page.goto(page.url() + "&result=failure");
+    await ready(page);
+    const geometry = await page.locator("#activityList .activity-card").first().evaluate(node => {
+        const box = selector => node.querySelector(selector).getBoundingClientRect();
+        return { gap: box(".request-card-categories").top - box(".request-card-prompt").bottom,
+            diagnosticWidth: box(".request-card-problem").width, rowWidth: box(".request-card-open").width };
+    });
+    assert.ok(geometry.gap <= 32, JSON.stringify(geometry));
+    assert.ok(geometry.diagnosticWidth > geometry.rowWidth * .9, JSON.stringify(geometry));
+    await capture(page, "visual-failure-rows");
+});
+
+test("plural reading groups call identities and each call's returned evidence without singleton paging", async t => {
+    const { page } = await setup(t, "react", reviewRecords());
+    await page.locator('#activityList .request-card-open[href*="review-plural-activity"]').click();
+    const calls = page.locator('#requestContent [data-reader-section=activity] .reader-call-row');
+    await expect(calls).toHaveCount(4);
+    await expect(calls.first().locator(".reader-call-identity-line")).toContainText("Call #1");
+    await expect(calls.first().locator(".returned-api-entries")).toContainText("AccessDenied");
+    await expect(calls.nth(2).locator(".returned-api-entries")).toContainText("Not attributed to a target in this batch");
+    await expect(page.locator("#requestContent .returned-api-entries .list-pager")).toHaveCount(0);
+    await expect(page.locator("#requestContent .returned-entries-heading")).toHaveCount(2);
+    await capture(page, "visual-reader-plural");
+    for (const theme of ["light", "dark"]) {
+        await page.locator("#closeContextSidebar").click();
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await chooseTheme(page, theme);
+        await page.locator('#activityList .request-card-open[href*="review-plural-activity"]').click();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await calls.nth(2).locator(".reader-call-toggle").evaluate(node => node.scrollIntoView({ block: "start" }));
+        await capture(page, "visual-reader-long-narrow-" + theme);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+        await page.setViewportSize({ width: 1024, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+        await calls.nth(2).locator(".reader-call-toggle").evaluate(node => node.scrollIntoView({ block: "start" }));
+        await capture(page, "visual-reader-long-enlarged-" + theme);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+        await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator('#activityList .request-card-open[href*="review-plural-activity"]')).toBeFocused();
+});
+
+test("narrow outcomes align three readable rows and four breakdowns form paired columns", async t => {
+    const { page } = await setup(t);
+    const columns = await page.locator("#frontendBreakdowns .percentage-card").evaluateAll(nodes =>
+        [...new Set(nodes.map(node => Math.round(node.getBoundingClientRect().left)))]);
+    assert.equal(columns.length, 2);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const rows = await page.locator("#outcomeChart .percentage-legend-row").evaluateAll(nodes =>
+        nodes.map(node => { const box = node.getBoundingClientRect(); return { left: box.left, top: box.top, bottom: box.bottom }; }));
+    assert.equal(new Set(rows.map(row => Math.round(row.left))).size, 1);
+    assert.ok(rows.every((row, i) => !i || row.top >= rows[i - 1].bottom));
+    const firstLine = await page.locator("#activityList .request-card-prompt").first().evaluate(node =>
+        node.getBoundingClientRect().top + parseFloat(getComputedStyle(node).lineHeight));
+    assert.ok(firstLine < 844, "The initial narrow screen includes actual interaction text, not just its section heading.");
+    await capture(page, "visual-analyze-mobile");
+});
+
+test("Trends exact evidence is recognizable before opening and Compare keeps both periods compact", async t => {
+    const { page } = await setup(t, "react", reviewRecords());
+    await navigateMain(page, "trends");
+    await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.getByLabel("Trends from", { exact: true }).fill("2026-11-10");
+    await page.getByLabel("Trends to", { exact: true }).fill("2026-11-16");
+    await page.getByRole("button", { name: "Apply dates", exact: true }).click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    await page.locator('.trends-panel[data-family=tools] .trends-sizing button:first-child').click();
+    await page.locator(".trends-panel[data-maximized=true] .trends-plot").getByRole("button", { name: /Nov 15.*fetch,/ }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "View evidence", exact: true }).click();
+    const links = page.locator(".trends-evidence-row a");
+    await expect(links).toHaveCount(23);
+    assert.ok(new Set(await links.allTextContents()).size > 1);
+    await expect(links.first().locator(".trends-evidence-time")).toContainText("Call started:");
+    await expect(links.first().locator(".trends-evidence-time")).toContainText("Nov 15, 2026");
+    await capture(page, "visual-trends-evidence");
+    const call = new URLSearchParams((await links.first().getAttribute("href")).split("?")[1]).get("call");
+    await links.first().click();
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("call"), call);
+    await page.locator("#closeContextSidebar").click();
+    await navigateMain(page, "compare");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator(".compare-period-key p")).toHaveCount(2);
+    const buttons = await page.locator(".comparison-chart-views button").evaluateAll(nodes =>
+        nodes.map(node => node.getBoundingClientRect().top));
+    assert.equal(new Set(buttons.map(Math.round)).size, 1);
+    await capture(page, "visual-compare-mobile");
+});
 
 test("the selected evaluation layout retains complete membership, native reading, paging and peer routes", { timeout: 60000 }, async t => {
     const { page, requests } = await setup(t);

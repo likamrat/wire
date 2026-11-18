@@ -52,6 +52,8 @@ report's period and activity explicitly. To narrow an open report, use
 | All collected activity | Retained reportable activity independently of Analyze dates, filters, Search and paging. It does not collect new history or include complete original chat transcripts. |
 
 Choose the scope, select interactions if needed, then use **Show report**.
+The activity picker keeps **Close** and **Show report** visible while its
+contents scroll. **Close** leaves your selection intact; it does not save a report.
 You can also use **Add to report > Continue to report** in an interaction reader.
 Reading or selecting an interaction alone does not save a report.
 

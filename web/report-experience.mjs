@@ -86,7 +86,16 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     gallery.append(galleryHeading, periodCaption, tiles);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");
-    for (const node of [...stage.children]) if (node.id !== "reportStepTitle1") selection.append(node);
+    const selectionHeader = el("header", "report-selection-header"), selectionBody = el("div", "report-selection-body");
+    const closeSelection = button("Close", () => {});
+    closeSelection.setAttribute("commandfor", selection.id);
+    closeSelection.setAttribute("command", "hide-popover");
+    selectionHeader.append(selection.firstElementChild, closeSelection);
+    for (const node of [...stage.children]) if (node.id !== "reportStepTitle1" && node.id !== "reportActivityActions") selectionBody.append(node);
+    selection.append(selectionHeader, selectionBody, byId("reportActivityActions"));
+    selection.addEventListener("toggle", event => {
+        if (event.newState === "closed" && doc.activeElement === doc.body && current()) refineButton.focus({ preventScroll: true });
+    });
     stage.append(gallery); byId("reportStepTitle1").hidden = true;
     byId("reportContinue").textContent = "Show report";
     byId("reportContinue").addEventListener("click", () => selection.hidePopover());

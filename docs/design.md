@@ -68,6 +68,17 @@ Resting panels have no drop shadow. Navigation uses neutral selection without
 an outlined card or redundant Workspace caption. Settings follows the shared
 page and section type scale.
 
+The React evaluation pairs its compact overview above full-width interaction
+rows. Longer diagnostics use the row width rather than stretching the space
+between a prompt and its service. The four supporting breakdowns use paired,
+content-sized columns, becoming a single column when needed.
+
+Screen headings use sentence case, including **Work IQ**. Keep branding,
+genuine acronyms and recorded identifiers unchanged. In the interaction reader,
+each call leads with its ordinal, tool and outcome. Its returned entries form a
+subordinate group with aligned facts; call service, result service and their
+separate duration evidence retain their own meanings.
+
 Outcome words/icons accompany color. Completed calls use the current success
 role; failures use red, partial states retain their separate warning role and
 missing evidence stays neutral. Service colors identify services, not health.

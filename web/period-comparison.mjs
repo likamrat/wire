@@ -366,7 +366,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const resultHeading = el("div", undefined, "period-comparison-heading");
     const resultTitle = el("h2", "Comparison results"); resultTitle.id = "periodComparisonResultsTitle"; resultTitle.tabIndex = -1;
     const optionsSlot = el("div"); optionsSlot.id = "comparisonOptionsSlot";
-    resultHeading.append(resultTitle, optionsSlot); resultHeading.hidden = true;
+    resultHeading.append(resultTitle); resultHeading.hidden = true;
     const chartControls = el("div", undefined, "comparison-chart-controls"), quick = el("select");
     quick.id = "comparisonQuickChoice"; quick.setAttribute("aria-label", "Comparison starting point");
     for (const [value, label] of [["all", "All activity"], ["errors", "Errors & failures"], ["completed", "Completed calls"],
@@ -385,7 +385,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const control = button(name, () => { if (consumer()) navigate({ comparisonView: key }); });
         control.dataset.comparisonView = key; views.append(control);
     }
-    chartControls.append(quick, views);
+    chartControls.append(quick, optionsSlot, views);
     const additionalOptions = el("fieldset", undefined, "comparison-options");
     additionalOptions.append(el("legend", "Comparison"));
     function optionControl(id, label, entries, change, multiple = false) {
@@ -988,7 +988,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     function paint(value, labelTime, started, publication) {
         const { baseline: a, later: b } = value.periods, sides = [["baseline", a, "A"], ["later", b, "B"]];
         const names = presentation.names([a.range, b.range], value.timeContext, labelTime);
-        const heading = `${names[1].label} vs ${names[0].preset === "custom" ? names[0].label : names[0].label.toLowerCase()}`;
+        const heading = "Activity comparison";
         const membershipKey = JSON.stringify([value.definitions.layer, a.rowIds, b.rowIds]);
         if (membershipKey !== rosterKey) { if (rosterKey !== null) selectedPeriod = "baseline"; rosterKey = membershipKey; }
         const dayCount = side => Math.round((Date.parse(side.range.to) - Date.parse(side.range.from)) / 86400000) + 1;
@@ -1511,10 +1511,11 @@ export const periodComparisonStyles = `
 .period-comparing #workspace>#analyzePopulation{display:block;padding:0;background:none;border:0;box-shadow:none}
 .period-comparing #analyzeToolbar{display:none}
 .period-comparison{padding:24px 28px;background:var(--report-sheet);border:1px solid var(--rule);border-radius:var(--radius)}
-.period-comparison-heading{margin-bottom:20px;align-items:flex-start}
+.period-comparison-heading{margin-bottom:12px;align-items:flex-start}
 .period-comparison-heading h2{flex:1;min-width:0}
 .comparison-chart-controls{display:flex;align-items:center;gap:12px 24px;flex-wrap:wrap;margin-bottom:20px}
 .comparison-chart-controls>.select-control{flex:0 1 12rem;min-width:0;max-width:100%}
+#comparisonOptionsSlot{margin-inline-start:auto}
 .comparison-chart-views{display:flex;gap:4px;flex-wrap:wrap}
 .comparison-chart-views button{min-height:44px;padding:8px 12px;border:1px solid transparent}
 .comparison-chart-views [aria-pressed=true]{border-color:var(--control);background:var(--report-note)}
@@ -1578,16 +1579,20 @@ export const periodComparisonStyles = `
 .period-comparison .comparison-preset-option{gap:10px}
 .select-trigger .comparison-preset-option,.select-option .comparison-preset-option{display:inline-flex;align-items:center;gap:10px}
 @container comparison-results (max-width:38rem){
- .comparison-chart-controls{gap:12px}
+ .comparison-chart-controls{gap:8px;margin-bottom:12px}
+ .comparison-chart-controls>.select-control{flex:1;min-width:0}
+ #comparisonOptionsSlot{margin-inline-start:0;flex:none}
  .comparison-chart-views{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%}
  .comparison-chart-views button{padding-inline:6px;white-space:normal}
  .comparison-group-value{grid-template-columns:minmax(6rem,1fr) minmax(0,2fr) auto;gap:8px}
 }
 @container comparison-results (max-width:24rem){
- .comparison-chart-views{grid-template-columns:repeat(2,minmax(0,1fr))}
  .comparison-group-value{grid-template-columns:minmax(0,1fr)}
  .comparison-group-value>.percentage-value{grid-column:1;grid-row:2;justify-content:flex-start;text-align:start}
  .comparison-group-track{grid-row:3}
+}
+@container comparison-results (max-width:18rem){
+ .comparison-chart-views{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:600px){
  .period-comparison{padding:18px 16px}
