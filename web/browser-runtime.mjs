@@ -78,13 +78,14 @@ import { createNativeActivityPresentation } from "./native-activity.mjs";
 import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
 import { mountFirstConnection } from "./first-connection.mjs";
+import { createWorkspaceState } from "./frontend/workspace-state.ts";
 
 function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
         timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
-        createSearchFields, createAnalyzeScope, mountAnalyzeControls, mountFirstConnection,
+        createSearchFields, createAnalyzeScope, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),

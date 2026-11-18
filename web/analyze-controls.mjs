@@ -1,5 +1,5 @@
 // Presentation only. Existing controls retain their nodes, listeners and state owners.
-export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming }) {
+export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming, toolbarHost, scopeHost, sharedPeriod = false }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Analyze controls require the shared publication token interface.");
     }
@@ -154,6 +154,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         const toolbar = $("analyzeToolbar");
         const entryFocus = toolbar.contains(document.activeElement) ? document.activeElement : null;
         if (comparing) place($("pagePrimaryActions"), toolbar);
+        else if (toolbarHost) place(toolbarHost, toolbar);
         else if (toolbar.parentElement !== $("workspace")) $("analyzePopulation").before(toolbar);
         place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
         trigger.querySelector(".analyze-entry-label").textContent = comparing ? "More options" : "Filters";
@@ -242,11 +243,12 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (comparing) return;
         if (value === null) { entryScope(); return; }
         const { activeCount, status, error, revision, empty } = value;
-        const host = empty ? $("analyzeEmptyScope") : $("outcomeChart").querySelector('[data-percentage-card="outcomes"]');
+        const host = scopeHost || (empty ? $("analyzeEmptyScope") : $("outcomeChart").querySelector('[data-percentage-card="outcomes"]'));
         place(host, scope);
         $("analyzeEmptyScope").hidden = !empty;
         // Dates and collection defaults already have global controls; keep actual qualifications.
-        const parts = empty || !Array.isArray(value.restrictions) ? value.parts : value.parts.filter((part, index) => index > 1 || value.restrictions.includes(part));
+        const parts = value.parts.filter((part, index) => (!sharedPeriod || index !== 0)
+            && (empty || !Array.isArray(value.restrictions) || index > 1 || value.restrictions.includes(part)));
         scopeCaption($("analyzeScopeCaption"), { ...value, parts, text: parts.join("; ") });
         $("analyzeScopeCaption").hidden = !parts.length;
         if ($("analyzeScopeStatus").textContent !== status) $("analyzeScopeStatus").textContent = status;

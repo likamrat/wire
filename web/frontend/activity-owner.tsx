@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { Component, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal, flushSync } from "react-dom";
 import { createPublicationStore, type PublicationSnapshot } from "./publication-store.ts";
@@ -11,6 +11,7 @@ type Options = {
     isCurrent: (authority: object) => boolean;
     release: (node: HTMLElement) => void;
     onError: (message: string) => void;
+    render?: (content: ReactNode) => void;
 };
 type Stage = {
     host: HTMLDivElement;
@@ -42,8 +43,16 @@ function erase(node: HTMLElement) {
     node.remove();
 }
 
-export function mountReactActivity({ root, pager, isCurrent, release, onError }: Options) {
+class ActivityBoundary extends Component<{ children: ReactNode; onFailure: (error: unknown) => void }, { failed: boolean }> {
+    override state = { failed: false };
+    static getDerivedStateFromError() { return { failed: true }; }
+    override componentDidCatch(error: unknown) { this.props.onFailure(error); }
+    override render() { return this.state.failed ? null : this.props.children; }
+}
+
+export function mountReactActivity({ root, pager, isCurrent, release, onError, render }: Options) {
     const store = createPublicationStore<View>(isCurrent), stages = new Set<Stage>();
+    const failureMessage = "Recorded activity could not be displayed safely. Reload this panel.";
     let epoch = 0, accepted: Stage | null = null, failed = false;
     function retire(stage: Stage) {
         stage.retired = true;
@@ -102,15 +111,18 @@ export function mountReactActivity({ root, pager, isCurrent, release, onError }:
             {createPortal(<CardSlot card={snapshot.value.pager} snapshot={snapshot} />, pager, String(snapshot.value.epoch))}
         </>;
     }
-    const reactRoot = createRoot(root, {
-        onUncaughtError(error) {
-            failed = true;
-            console.error("WIRE activity presentation failed.", error);
-            try { withdrawAccess(); }
-            finally { onError("Recorded activity could not be displayed safely. Reload this panel."); }
-        },
-    });
-    flushSync(() => reactRoot.render(<ActivityList />));
+    function failure(error: unknown) {
+        failed = true;
+        console.error("WIRE activity presentation failed.", error);
+        try { withdrawAccess(); }
+        finally { onError(failureMessage); }
+    }
+    const content = <ActivityBoundary onFailure={failure}><ActivityList /></ActivityBoundary>;
+    if (render) render(content);
+    else {
+        const reactRoot = createRoot(root, { onUncaughtError: failure });
+        flushSync(() => reactRoot.render(content));
+    }
     return {
         retain(authority: object | null, identity: object, scope: string) {
             const previous = accepted;
@@ -119,8 +131,9 @@ export function mountReactActivity({ root, pager, isCurrent, release, onError }:
                 && accepted === previous && !previous.retired);
         },
         begin(authority: object | null, identity: object, scope: string) {
+            if (failed) { onError(failureMessage); return null; }
             const generation = epoch;
-            if (failed || !authority || isCurrent(authority) !== true || epoch !== generation) return null;
+            if (!authority || isCurrent(authority) !== true || epoch !== generation) return null;
             const stage: Stage = { host: root.ownerDocument.createElement("div"), pager: root.ownerDocument.createElement("div"),
                 controller: new AbortController(),
                 authority, identity, scope, epoch, retired: false, nodes: [] };

@@ -1,6 +1,6 @@
 import { mountBrowser } from "../browser-runtime.mjs";
-import { mountReactActivity } from "./activity-owner.tsx";
+import { mountReactShell } from "./app-shell.tsx";
 import "./evaluation.css";
 
 document.body.classList.add("wire-frontend-react");
-mountBrowser({ mountActivityList: mountReactActivity }, "react");
+mountBrowser(mountReactShell(), "react");

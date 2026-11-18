@@ -262,6 +262,18 @@ export function createAssessmentExperience({ api, createPresentation, createCont
         generation++;
         for (const reset of readers.values()) reset(true);
         readers.clear();
+        if ([...hosts].some(host => host.contains(recoveryHost)) && recoveryHome.parentNode) recoveryHome.after(recoveryHost);
+        for (const host of hosts) {
+            replaceContents(host);
+            for (const attribute of [...host.attributes]) {
+                if (attribute.name.startsWith("data-") || ["aria-busy", "aria-label", "title"].includes(attribute.name)) {
+                    clearAttribute(host, attribute.name);
+                }
+            }
+            host.style.minHeight = "";
+            hostOwners.delete(host);
+        }
+        hosts.clear();
     }
     function withdrawAccess() {
         generation++;

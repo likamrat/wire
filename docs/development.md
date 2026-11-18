@@ -115,12 +115,23 @@ npm start -- --development-frontend react
 ```
 
 Use an explicitly owned development store, not an existing live instance.
-This keeps the supported source, access, Search, filters and reader controllers.
-React owns staged activity presentation and pagination; existing evidence
-formatters are deliberate DOM adapters. The compact Analyze layout moves the
-complete breakdowns below the evidence list. Other destinations are not a
-completed React migration. Omitting the flag retains the bundled established
-renderer; do not use the evaluation as a live replacement without qualification.
+The single React shell composes the header/navigation, Analyze overview and
+activity, filter panel, Search and contextual reader. Existing chart, evidence,
+select-control and Search controllers are explicit native DOM adapters, not
+parallel authorities. React-owned structure and native-owned content do not
+replace each other's children.
+
+`web/frontend/workspace-state.ts` owns accepted evidence/scope, pending reads,
+navigation and reading generations, date drafts and return positions for both
+entries. Only public destination/readiness metadata enters the shell's React
+subscription; private content remains fenced by the shared transport and its
+owned presenters. Reader exit releases response hosts as well as text readers.
+
+The compact Analyze hierarchy shares one accepted period, keeps actual scope
+qualifications visible and retains complete breakdowns below full-width evidence.
+Trends, Reports, Compare and Settings still use their existing feature
+controllers. Omitting the flag retains the bundled established renderer; this
+development selection is not authorization to replace a live runtime.
 
 For an isolated synthetic check without starting a normal store:
 
@@ -129,7 +140,11 @@ npm run test:frontend
 ```
 
 This type-checks, builds and exercises both entries, including exact Search
-Open/Back, accepted filters, retired row actions and access withdrawal.
+Open/Back, accepted/failed/held filter reads, later navigation intent, retired
+actions and cross-panel withdrawal with the reader, Search and filters present.
+Repeated complete journeys check mounted-shell identity, released response hosts
+and stable connected DOM/listener counts. Raw heap/DOM-counter samples are also
+recorded; browser-native input edit history is not application-owned DOM leakage.
 `WIRE_FRONTEND_PROOFS` can name a private output directory for screenshots and
 delivery measurements. `WIRE_FRONTEND_BROWSER=msedge` selects an already installed
 Edge for that fixture; it does not download a browser. Measurements are samples,

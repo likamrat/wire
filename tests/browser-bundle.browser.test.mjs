@@ -63,10 +63,23 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     const { page, runtime } = await setup(t, { enforced: true, frontend });
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await page.locator("#activityList .request-card-open").first().click();
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await page.locator("#wireSearch").fill("SYNTHETIC_PRIVATE_PROMPT");
+    await expect(page.locator(".wire-search-hit").first()).toBeVisible();
+    await page.locator("#wireSearch").press("Escape");
+    await expect(page.locator("#wireSearchPanel")).toBeHidden();
+    await page.locator("#openAnalyzeFilters").click();
+    await expect(page.locator("#analyzeFilterDialog")).toBeVisible();
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await page.evaluate(() => {
-        const nodes = [], walker = document.createTreeWalker(document.getElementById("activityList"), NodeFilter.SHOW_TEXT);
-        while (walker.nextNode()) if (walker.currentNode.data.includes("SYNTHETIC_PRIVATE_PROMPT")) nodes.push(walker.currentNode);
+        const nodes = [];
+        for (const id of ["activityList", "requestContent", "wireSearchResults"]) {
+            const walker = document.createTreeWalker(document.getElementById(id), NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) if (walker.currentNode.data.includes("SYNTHETIC_PRIVATE_PROMPT")) nodes.push(walker.currentNode);
+        }
         window.heldPrivateNodes = nodes;
+        window.retiredSearchAction = document.querySelector(".wire-search-hit");
         window.retiredActivityAction = document.querySelector("#activityList .request-card-open");
         window.retiredActivityAttribute = window.retiredActivityAction.getAttributeNode("aria-label");
     });
@@ -90,14 +103,18 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
         && window.heldPrivateNodes.every(node => node.data === "")), true);
     assert.equal(await page.evaluate(() => document.body.textContent.includes("SYNTHETIC_PRIVATE_PROMPT")), false);
     assert.equal(await page.evaluate(() => window.retiredActivityAttribute.value), "");
+    await expect(page.locator("#wireSearch")).toHaveValue("");
+    await expect(page.locator("#wireSearchPanel")).toBeHidden();
+    await expect(page.locator("#contextSidebar[open],#analyzeFilterDialog[open]")).toHaveCount(0);
     const current = await fetch(origin + "/api/access/status", {
         headers: { "X-Board-Capability": session.capability },
     }).then(response => response.json());
     await send("/api/access/command", { schemaVersion: 1, action: "wire-sign-in",
         operationId: randomUUID(), generation: current.generation }, session.capability);
     await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await navigateMain(page, "analyze");
     const resumed = page.url();
-    await page.evaluate(() => window.retiredActivityAction.click());
+    await page.evaluate(() => { window.retiredActivityAction.click(); window.retiredSearchAction.click(); });
     assert.equal(page.url(), resumed, "Readiness cannot revive a retired row action.");
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await send("/api/session/release", {}, session.capability);

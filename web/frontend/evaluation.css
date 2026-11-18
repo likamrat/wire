@@ -11,7 +11,18 @@
     clip-path: none;
     white-space: normal;
 }
-.wire-frontend-react.analyze-reading:not(.period-comparing) .page-heading { margin-bottom: 12px; }
+.wire-frontend-react.analyze-reading:not(.period-comparing) .page-heading {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 20px;
+    margin-bottom: 16px;
+}
+.wire-frontend-react .frontend-heading-copy { min-width: 0; flex: 1 1 14rem; }
+.wire-frontend-react #frontendHeadingActions { align-self: center; }
+.wire-frontend-react #frontendHeadingActions .analyze-toolbar { margin: 0; padding: 0; container: none; flex-wrap: wrap; }
+.wire-frontend-react #pagePrimaryActions:not(:has(> :not([hidden]))) { display: none; }
 .wire-frontend-react .page-heading p { margin-top: 4px; font-size: var(--type-small); }
 .wire-frontend-react input.search-capsule-input,
 .wire-frontend-react input.search-capsule-input:is(:hover, :focus-visible, [aria-expanded=true]) {
@@ -36,7 +47,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(16rem, .65fr);
     grid-template-areas: "author time" "prompt result" "more result" "availability result" "services result";
     gap: 4px 24px;
-    padding: 16px 12px;
+    padding: 12px;
     border-inline-start-width: 0;
 }
 .wire-frontend-react #activityList .request-card-origin { grid-area: author; margin: 0; font-weight: var(--weight-regular); }
@@ -75,7 +86,16 @@
     border-inline-start: 1px solid var(--surface-divider);
     border-radius: 0;
 }
-.wire-frontend-react .analyze-chart-main .chart-panel { padding-block: 8px; }
+.wire-frontend-react #homeView .analyze-chart-main .chart-panel { padding-block: 8px; }
+.wire-frontend-react #chart .dimensional-scroll { padding-bottom: 8px; }
+.wire-frontend-react #chart .dimensional-time-labels { min-height: 32px; padding-top: 8px; }
+.wire-frontend-react #frontendAnalyzeQualification { margin-top: 8px; }
+.wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary {
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+.wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary p { margin-block: 4px; }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 8rem; padding: 16px; }
@@ -119,10 +139,44 @@
         border-inline-start: 0;
         border-top: 1px solid var(--surface-divider);
     }
-    @container outcome-card (max-width: 25rem) {
-        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
-            grid-template-columns: minmax(0, 1fr);
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) { display: block; }
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-visual { display: none; }
+    .wire-frontend-react #outcomeChart .percentage-card:has(> .percentage-content:not([data-unit-mode=separate])) .percentage-card-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 4px 16px;
+    }
+    .wire-frontend-react #outcomeChart .percentage-card:has(> .percentage-content:not([data-unit-mode=separate])) .percentage-denominator {
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 0;
+        overflow: visible;
+        clip-path: none;
+        white-space: normal;
+    }
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+        gap: 8px;
+    }
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
+        grid-template-columns: max-content minmax(0, 1fr);
+        align-content: start;
+    }
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-value {
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
+    @supports (grid-template-rows: subgrid) {
+        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
+            grid-template-rows: subgrid;
+            grid-row: span 2;
         }
+    }
+    @media (max-width: 48rem) {
+        .wire-frontend-react #frontendHeadingActions .analyze-toolbar { justify-content: flex-start; }
     }
 }
 @media (forced-colors: active) {
@@ -130,3 +184,8 @@
     .wire-frontend-react .analyze-chart-grid { border-color: CanvasText; }
     .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open { outline: 2px solid Highlight; }
 }
+.wire-frontend-react #wireReactShell,
+.wire-frontend-react .frontend-native-host {
+    display: contents;
+}
+.wire-frontend-react span.wire-icon > svg { width: 100%; height: 100%; display: block; }
