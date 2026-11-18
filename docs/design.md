@@ -79,15 +79,19 @@ each call leads with its ordinal, tool and outcome. Its returned entries form a
 subordinate group with aligned facts; call service, result service and their
 separate duration evidence retain their own meanings.
 
-Outcome words/icons accompany color. Completed calls use the current success
-role; failures use red, partial states retain their separate warning role and
-missing evidence stays neutral. Service colors identify services, not health.
+Outcome words/icons accompany color. The Petrol & coral screen scheme uses
+blue-cyan for recorded completion and coral for failure; partial states retain
+a separate gold warning role and missing evidence stays neutral. Completion
+does not establish answer quality. Service colors identify services, not health.
 Agent and user authorship use their own roles, not service or quality colors.
 Forced colors retain explicit words, shapes and system focus.
 
 Current palette, material roles, font scale and geometry live in
 [`web/tokens.mjs`](../web/tokens.mjs) and the existing component styles.
-Dark screens use the ink-blue material roles.
+Light screens use quiet cool-neutral surfaces; Dark uses separately designed
+petrol-neutral surfaces. Controls, selection and focus remain neutral rather
+than borrowing outcome colors. Dark service inks retain their identity hues
+with added lightness for contrast on selected surfaces.
 Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 

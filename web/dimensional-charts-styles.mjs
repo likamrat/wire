@@ -34,6 +34,13 @@ ${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face =>
 .chart-fade-high {stop-color:var(--chart-mark-high)}
 .chart-fade-low {stop-color:var(--chart-mark-low)}
 `;
+// Screen selection surfaces need brighter identity inks; frozen chart exports stay unchanged.
+const darkServiceInks = Object.values(servicePalette).map(entry =>
+    `--chart-${entry.token}-label:color-mix(in srgb,${entry.dark.label} 70%,#ffffff);`).join("");
+export const screenServiceInkStyles = `
+@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {${darkServiceInks}}}
+:root[data-evidence-theme=dark] {${darkServiceInks}}
+`;
 export const dimensionalChartStyles = `
 ${dimensionalColumnStyles}
 .flat-comparison {display:grid;gap:12px;min-width:0;container-type:inline-size}

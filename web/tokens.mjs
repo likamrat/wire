@@ -65,22 +65,26 @@ export const tokens = `
 
 // Screen surfaces are separate from the tokens embedded in saved reports and PDFs.
 const screenLight = `
- --report-sheet:#ffffff;--report-note:#f1f5fb;
- --page:#f1f3f7;--paper:#ffffff;--canvas:#f4f5f8;--hover:#f7f7f7;
- --surface-edge:#20202012;--surface-divider:#20202024;
+ --report-sheet:#ffffff;--report-note:#f5f8f8;
+ --page:#f0f3f3;--paper:#ffffff;--canvas:#f5f8f8;--hover:#edf2f2;
+ --navigation-paper:var(--page);--context-paper:var(--paper);--floating-paper:var(--paper);
+ --surface-edge:#d9e2e3;--surface-divider:#d9e2e3;
  --panel-shadow:none;
  --surface-shadow:0 3px 8px #26344d14,0 16px 36px #26344d1c;
  --control-shadow:none;
  --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
  --context-sidebar-shadow:inset 1px 0 #20202008,-3px 0 10px #0000000d,-14px 0 32px #0000001a;
- --toggle-on:#486cbb;--toggle-thumb:#ffffff;--toggle-off:#f0f2f7;
- --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
- --accent:#303030;--accent-soft:#f1f1f1;--accent-fill:#303030;--on-accent:#ffffff;
- --accent-hover:#ebebeb;--accent-pressed:#e5e5e5;--pill-pressed:#ededed;
- --primary-hover:#202020;--primary-pressed:#101010;
- --danger:#b3261e;--delete-fill:#b3261e;--delete-ink:#ffffff;--performance-red:#b3261e;
- --chart-success:#286336;--screen-success-high:#60906e;--screen-success-low:#325f40;
- --chart-failure:#b3261e;--screen-failure-high:#c17169;--screen-failure-low:#9e403a;
+ --toggle-on:#202d32;--toggle-thumb:#ffffff;--toggle-off:#e6eeee;
+ --ink:#202d32;--muted:#526368;--rule:#d9e2e3;--control:#6d8085;
+ --accent:#202d32;--accent-soft:#e6eeee;--accent-fill:#202d32;--on-accent:#ffffff;
+ --accent-hover:#edf2f2;--accent-pressed:#d9e5e5;--pill-pressed:#d9e5e5;
+ --primary-hover:#28454e;--primary-pressed:#15252c;
+ --success:#006677;--danger:#af3e37;--warning:#7e6116;--unknown:#536171;
+ --delete-fill:var(--danger);--delete-ink:#ffffff;
+ --performance-red:var(--danger);--performance-orange:#8c5518;--performance-gold:var(--warning);--performance-teal:var(--success);
+ --chart-success:var(--success);--screen-success-high:var(--success);--screen-success-low:var(--success);
+ --chart-failure:var(--danger);--screen-failure-high:var(--danger);--screen-failure-low:var(--danger);
+ --chart-partial:var(--warning);--chart-unknown:var(--unknown);
  --screen-service-files:#007357;
  --screen-activity-assistance:#9b3c82;
  --screen-prompt-user:#365f7a;
@@ -89,25 +93,30 @@ const screenLight = `
  --search-action:#845b00;--search-tool:#943981;--search-service:#5b690b;
  --search-report:#236c45;--search-comparison:#a34c1c;--search-view:#3330bd;--search-setting:#545454;
  --search-ring-start:#2576b5;--search-ring-middle:#7864c3;--search-ring-end:#a650a0;--search-ring-focus:#59459b;
- --focus:#303030;--scrim:#000000a6;
+ --focus:#28454e;--scrim:#000000a6;
 `;
 const screenDark = `
- --page:#111111;--paper:#202020;--canvas:#292929;--hover:#282828;
- --surface-edge:#ffffff0e;--surface-divider:#ffffff1c;
+ --report-sheet:#1c2629;--report-note:#222e32;
+ --page:#141a1c;--paper:#1c2629;--canvas:#222e32;--hover:#293a40;
+ --navigation-paper:var(--page);--context-paper:#222e32;--floating-paper:#222e32;
+ --surface-edge:#3a4a4e;--surface-divider:#3a4a4e;
  --panel-shadow:none;
- --surface-shadow:inset 0 1px 0 #ffffff0a,0 4px 12px #00000066,0 20px 44px #00000066;
+ --surface-shadow:0 8px 24px #03081133;
  --control-shadow:none;
  --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
- --context-sidebar-shadow:inset 1px 0 #ffffff08,-3px 0 10px #00000055,-16px 0 36px #00000066;
- --toggle-on:#8fa8eb;--toggle-thumb:#17213b;--toggle-off:#292c35;
- --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
- --accent:#e0e0e0;--accent-soft:#2d2d2d;--accent-fill:#e0e0e0;--on-accent:#191919;
- --accent-hover:#323232;--accent-pressed:#383838;--pill-pressed:#333333;
- --primary-hover:#f2f2f2;--primary-pressed:#ffffff;
- --danger:#f28b82;--delete-fill:#f28b82;--delete-ink:#281210;--performance-red:#f28b82;
- --chart-success:#83d494;--screen-success-high:#83d494;--screen-success-low:#528d5e;
- --chart-failure:#f28b82;--screen-failure-high:#f28b82;--screen-failure-low:#be635c;
- --screen-service-files:#10b981;
+ --context-sidebar-shadow:inset 1px 0 #b5cbe50d,-8px 0 24px #03081126;
+ --toggle-on:#edf4f4;--toggle-thumb:#17202b;--toggle-off:#35464c;
+ --ink:#edf4f4;--muted:#b8c8cc;--rule:#3a4a4e;--control:#8b9fa4;
+ --accent:#edf4f4;--accent-soft:#35464c;--accent-fill:#edf4f4;--on-accent:#17202b;
+ --accent-hover:#293a40;--accent-pressed:#324247;--pill-pressed:#324247;
+ --primary-hover:#d3eaee;--primary-pressed:#c0d9df;
+ --success:#75c6d3;--danger:#f0a097;--warning:#dcc080;--unknown:#b4c0cf;
+ --delete-fill:var(--danger);--delete-ink:#281210;
+ --performance-red:var(--danger);--performance-orange:#e1ac74;--performance-gold:var(--warning);--performance-teal:var(--success);
+ --chart-success:var(--success);--screen-success-high:var(--success);--screen-success-low:var(--success);
+ --chart-failure:var(--danger);--screen-failure-high:var(--danger);--screen-failure-low:var(--danger);
+ --chart-partial:var(--warning);--chart-unknown:var(--unknown);
+ --screen-service-files:color-mix(in srgb,#10b981 70%,#ffffff);
  --screen-activity-assistance:#f2a2dd;
  --chart-fade-strength:74%;
  --screen-prompt-user:#95b9d2;
@@ -116,25 +125,8 @@ const screenDark = `
  --search-action:#e2b455;--search-tool:#e791ce;--search-service:#becb6b;
  --search-report:#7cce97;--search-comparison:#eea276;--search-view:#9f9bff;--search-setting:#abbbc7;
  --search-ring-start:#70b6ed;--search-ring-middle:#a69beb;--search-ring-end:#d18eca;--search-ring-focus:#b5a5f3;
- --focus:#e0e0e0;--scrim:#000000bd;
-`;
-
-// Native forced colors retain the base palette; ordinary dark screens use these material roles.
-const darkScreenSurfaces = `
- --report-sheet:#24354a;--report-note:#1c2b3f;
- --page:#10161f;--paper:#192330;--navigation-paper:var(--page);
- --context-paper:#1c2939;--floating-paper:#202c3b;--canvas:#14212f;--hover:#1e2b3b;
- --ink:#f2f4f8;--muted:#bbc5d4;--rule:#3d4e64;--control:#8b9cb2;
- --surface-edge:#bfd2ee1a;--surface-divider:#bfd2ee24;
- --panel-shadow:none;
- --control-shadow:none;
- --surface-shadow:0 8px 24px #03081133;
- --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
- --context-sidebar-shadow:inset 1px 0 #b5cbe50d,-8px 0 24px #03081126;
- --accent:#dbe7f7;--accent-soft:#202c3b;--accent-fill:#dbe7f7;--on-accent:#142130;
- --accent-hover:#1e2b3b;--accent-pressed:#142332;--pill-pressed:#142332;
- --primary-hover:#edf4fc;--primary-pressed:#c7d8ee;
- --focus:#bdd6ff;--toggle-off:#152435;--scrim:#050a12bd;
+ --copilot-chat-title:color-mix(in srgb,#ad88f0 70%,#ffffff);
+ --focus:#d3eaee;--scrim:#050a12bd;
 `;
 
 export const screenFontStack = '"Asta Sans","Segoe UI","Segoe UI Web (West European)",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",sans-serif';
@@ -159,10 +151,4 @@ export const screenTokens = `${tokens}
 }
 :root[data-evidence-theme=light] {${screenLight}}
 :root[data-evidence-theme=dark] {${screenDark}}
-@media(prefers-color-scheme:dark) and (forced-colors:none) {
- :root:not([data-evidence-theme]) {${darkScreenSurfaces}}
-}
-@media(forced-colors:none) {
- :root[data-evidence-theme=dark] {${darkScreenSurfaces}}
-}
 `;

@@ -5,6 +5,42 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
+// Measure ordinary screen text against its composed surface, including inset control faces.
+export function visibleInk() {
+    const rgba = value => {
+        if (value.startsWith("color(srgb")) {
+            const [color, alpha] = value.slice(11, -1).split("/");
+            return [...color.trim().split(/\s+/).map(v => Number(v) * 255), Number(alpha ?? 1)];
+        }
+        const values = value.match(/[\d.]+/g).map(Number);
+        return [...values.slice(0, 3), values[3] ?? 1];
+    };
+    const blend = (a, b) => a.slice(0, 3).map((n, i) => n * a[3] + b[i] * (1 - a[3]));
+    function background(node) {
+        if (!node) return [255, 255, 255];
+        const css = getComputedStyle(node), surface = blend(rgba(css.backgroundColor), background(node.parentElement));
+        const before = getComputedStyle(node, "::before");
+        const coversText = parseFloat(before.width) >= node.getBoundingClientRect().width * .8
+            && parseFloat(before.height) >= parseFloat(css.lineHeight);
+        return before.content !== "none" && before.display !== "none" && coversText
+            ? blend(rgba(before.backgroundColor), surface) : surface;
+    }
+    return [...document.querySelectorAll("body *")].filter(node => node.checkVisibility({ visibilityProperty: true })
+        && !node.closest(".visually-hidden,.skip-link,svg,iframe") && !node.matches("option")
+        && ([...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())
+            || node.matches("input:not([type=checkbox],[type=radio]),textarea")))
+        .map(node => {
+            const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
+            return { target: node.id || node.tagName + "." + node.className, background: color(bg),
+                ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
+                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "400"
+                    : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "400"
+                        : node.matches("#activityList>.activity-card .card-tool-name") ? "400" : null,
+                placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,
+                code: !!node.closest("code,kbd,samp,.mono,pre:not(.full-text-content)") };
+        });
+}
+
 // Browser-side paint measurement includes alpha edges and the action's inset face.
 export function measureControlSurface(node) {
     const rgba = value => {

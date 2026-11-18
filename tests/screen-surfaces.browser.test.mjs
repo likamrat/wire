@@ -13,43 +13,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
-import { contrast, hue, rgb, measureChartPaint } from "./color-measurements.mjs";
-
-function visibleInk() {
-    const rgba = value => {
-        if (value.startsWith("color(srgb")) {
-            const [color, alpha] = value.slice(11, -1).split("/");
-            return [...color.trim().split(/\s+/).map(v => Number(v) * 255), Number(alpha ?? 1)];
-        }
-        const values = value.match(/[\d.]+/g).map(Number);
-        return [...values.slice(0, 3), values[3] ?? 1];
-    };
-    const blend = (a, b) => a.slice(0, 3).map((n, i) => n * a[3] + b[i] * (1 - a[3]));
-    function background(node) {
-        if (!node) return [255, 255, 255];
-        const css = getComputedStyle(node), surface = blend(rgba(css.backgroundColor), background(node.parentElement));
-        const before = getComputedStyle(node, "::before");
-        // Inset button faces cover text; thin navigation indicators do not.
-        const coversText = parseFloat(before.width) >= node.getBoundingClientRect().width * .8
-            && parseFloat(before.height) >= parseFloat(css.lineHeight);
-        return before.content !== "none" && before.display !== "none" && coversText
-            ? blend(rgba(before.backgroundColor), surface) : surface;
-    }
-    return [...document.querySelectorAll("body *")].filter(node => node.checkVisibility({ visibilityProperty: true })
-        && !node.closest(".visually-hidden,.skip-link,svg,iframe") && !node.matches("option")
-        && ([...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())
-            || node.matches("input:not([type=checkbox],[type=radio]),textarea")))
-        .map(node => {
-            const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
-            return { target: node.id || node.tagName + "." + node.className, background: color(bg),
-                ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
-                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "400"
-                    : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "400"
-                        : node.matches("#activityList>.activity-card .card-tool-name") ? "400" : null,
-                placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,
-                code: !!node.closest("code,kbd,samp,.mono,pre:not(.full-text-content)") };
-        });
-}
+import { contrast, hue, rgb, measureChartPaint, visibleInk } from "./color-measurements.mjs";
 
 test("screen surfaces leave report-facing tokens, typography and embedded font exports byte-exact", () => {
     const expected = {
@@ -64,14 +28,14 @@ test("screen surfaces leave report-facing tokens, typography and embedded font e
     }
     assert.ok(renderHtmlShell("a".repeat(64), "screen-surfaces").includes(screenTokens));
     const overrides = screenTokens.slice(tokens.length);
-    assert.doesNotMatch(overrides, /--(?:type-|success|warning|copilot-chat-title)|@font-face|Segoe Sans/);
-    assert.match(overrides, /--chart-failure:#b3261e/);
-    assert.match(overrides, /--chart-failure:#f28b82/);
+    assert.doesNotMatch(overrides, /--type-|@font-face|Segoe Sans/);
+    assert.match(overrides, /--danger:#af3e37/);
+    assert.match(overrides, /--danger:#f0a097/);
     assert.equal(screenFontStack.split(",")[0], '"Asta Sans"');
     assert.match(overrides, /--weight-regular:400;--weight-medium:500;--weight-strong:600/);
 });
 
-test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans and distinct red failures", async t => {
+test("production screens use cool-neutral surfaces, Asta Sans and Petrol and coral outcomes", async t => {
     const cleanups = [], { context } = await privateFixture({ after: cleanup => cleanups.push(cleanup) }, scopeRecords());
     const before = await loadBoardState(context);
     let providers = 0;
@@ -142,15 +106,13 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
             assert.ok(ratios.control >= 3, measured.target); assert.ok(ratios.surface >= 1.05, measured.target);
             for (const role of ["paper", "page", "canvas", "ink", "muted", "control"]) {
                 const channels = rgb(measured[role]);
-                if (theme === "light" && role === "page") {
-                    assert.ok(channels[2] > channels[0] && channels[2] - channels[0] <= 8, "Light canvas has only a subtle cool tint");
-                } else assert.ok(channels.every(channel => channel === channels[0]), `${role} is neutral: ${measured[role]}`);
+                assert.ok(Math.max(...channels) - Math.min(...channels) <= 30, `${role} stays restrained: ${measured[role]}`);
             }
             assert.equal(measured.borderWidth, "1px");
             assert.notEqual(measured.shadow, "none", "Standalone widgets use the shared soft panel depth");
             assert.equal(measured.font, screenFontStack);
-            assert.equal(measured.success, theme === "light" ? "#286336" : "#83d494");
-            assert.equal(measured.failure, theme === "light" ? "#b3261e" : "#f28b82");
+            assert.equal(measured.success, theme === "light" ? "#006677" : "#75c6d3");
+            assert.equal(measured.failure, theme === "light" ? "#af3e37" : "#f0a097");
             measured.ratios = ratios;
         }
         measurements.push({ theme, surfaces });
@@ -290,12 +252,12 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         screenPaint.push({ name: "outcome-identities", theme, statuses: statusColors });
         const failure = statusColors.find(status => status.id === "failure");
         const transport = statusColors.find(status => status.id === "transport");
-        assert.equal(transport.color, failure.color, "Tool and connection failures intentionally share the red failure role");
+        assert.equal(transport.color, failure.color, "Tool and connection failures intentionally share the coral failure role");
         assert.equal(new Set(statusColors.filter(status => status.id !== "transport").map(status => status.color)).size, 5,
             "Success, failure, unknown, partial and other status retain distinct paint roles");
         assert.ok(hue(failure.color) < 15);
         const successHue = hue(statusColors.find(status => status.id === "success").color);
-        assert.ok(successHue > 100 && successHue < 150, "Recorded success stays green, not a service cyan");
+        assert.ok(successHue > 180 && successHue < 200, "Recorded completion uses the selected petrol role");
         assert.equal(await page.locator('.select-option[data-value=failure] .result-option-label').evaluate(node => getComputedStyle(node).color), failure.color);
         assert.equal(await page.locator('.select-option[data-value=transport] .result-option-label').evaluate(node => getComputedStyle(node).color), transport.color);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-open-outcome-menu.png`) });

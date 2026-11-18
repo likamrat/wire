@@ -8,16 +8,16 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
-import { privateFixture, fixture, chooseTheme } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, openAnalyzeFilters, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
-test("screen roles preserve service inks while Agent authorship has its own explicit and system theme role", { timeout: 45000 }, async t => {
+test("Petrol and coral screen roles keep service identity and authorship separate in explicit and system themes", { timeout: 45000 }, async t => {
     const record = fixture("screen-role-calendar");
     record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
     const { context } = await privateFixture(t, [record]);
     let providers = 0;
     const refuse = async () => { providers++; throw Error("No provider work in screen role proof."); };
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false },
         evaluation: { evaluatorFactory: refuse, readSource: refuse } });
     const before = await loadBoardState(context), browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); });
@@ -47,8 +47,8 @@ test("screen roles preserve service inks while Agent authorship has its own expl
         assert.equal(await page.locator("html").getAttribute("data-evidence-theme"), entry.theme);
         if (entry.preference === null) await page.evaluate(() => document.documentElement.removeAttribute("data-evidence-theme"));
         await page.evaluate(() => document.fonts.ready);
-        const inkBlue = entry.theme === "dark" && entry.forced === "none";
-        const paper = inkBlue ? "#192330" : entry.theme === "dark" ? "#202020" : "#ffffff";
+        const dark = entry.theme === "dark";
+        const paper = dark ? "#1c2629" : "#ffffff";
         const roles = await page.evaluate(() => {
             const root = getComputedStyle(document.documentElement);
             return Object.fromEntries(["--page", "--paper", "--navigation-paper", "--context-paper", "--floating-paper",
@@ -58,23 +58,30 @@ test("screen roles preserve service inks while Agent authorship has its own expl
                 .map(name => [name, root.getPropertyValue(name).trim()]));
         });
         assert.equal(roles["--paper"], paper);
-        assert.equal(roles["--navigation-paper"], inkBlue ? "#10161f" : paper);
-        assert.equal(roles["--context-paper"], inkBlue ? "#1c2939" : paper);
-        assert.equal(roles["--floating-paper"], inkBlue ? "#202c3b" : paper);
-        assert.equal(roles["--danger"], entry.theme === "dark" ? "#f28b82" : "#b3261e");
-        assert.equal(roles["--chart-service-teams-label"], entry.theme === "dark" ? "#ad88f0" : "#6842ba");
+        assert.equal(roles["--navigation-paper"], dark ? "#141a1c" : "#f0f3f3");
+        assert.equal(roles["--context-paper"], dark ? "#222e32" : paper);
+        assert.equal(roles["--floating-paper"], dark ? "#222e32" : paper);
+        assert.equal(roles["--danger"], dark ? "#f0a097" : "#af3e37");
         for (const [face, color] of Object.entries(createDimensionalCharts().servicePalette.Teams[entry.theme])) {
-            assert.equal(roles["--chart-service-teams-" + face], color, `${entry.name}: unchanged Teams ${face}`);
+            assert.equal(roles["--chart-service-teams-" + face], dark && face === "label"
+                ? `color-mix(in srgb,${color} 70%,#ffffff)` : color, `${entry.name}: Teams ${face}`);
         }
         assert.equal(roles["--screen-prompt-agent"], entry.theme === "dark" ? "#e2c27b" : "#806018");
         assert.notEqual(roles["--screen-prompt-agent"], roles["--chart-service-teams-label"]);
         for (const surface of ["--paper", "--context-paper", "--floating-paper", "--hover", "--accent-soft", "--pill-pressed"]) {
             assert.ok(contrast(roles["--screen-prompt-agent"], roles[surface]) >= 4.5, `${entry.name}: Agent on ${surface}`);
         }
-        if (inkBlue) {
-            assert.equal(roles["--copilot-chat-title"], "#ad88f0");
-            assert.equal(roles["--chart-service-calendar-label"], "#5792fa");
-            const inks = [roles["--copilot-chat-title"], ...Object.values(createDimensionalCharts().servicePalette).map(value => value.dark.label)];
+        if (dark) {
+            const inks = await page.evaluate(tokens => {
+                const probe = document.createElement("span");
+                document.body.append(probe);
+                const colors = tokens.map(token => {
+                    probe.style.color = `var(${token})`;
+                    return getComputedStyle(probe).color;
+                });
+                probe.remove();
+                return colors;
+            }, ["--copilot-chat-title", ...Object.values(createDimensionalCharts().servicePalette).map(value => `--chart-${value.token}-label`)]);
             for (const ink of inks) for (const surface of ["--paper", "--context-paper", "--floating-paper", "--hover", "--accent-soft", "--pill-pressed"]) {
                 assert.ok(contrast(ink, roles[surface]) >= 4.5, `${entry.name}: ${ink} on ${surface}`);
             }
@@ -101,6 +108,8 @@ test("screen roles preserve service inks while Agent authorship has its own expl
         }));
         assert.equal(pane.paper, roles["--context-paper"]);
         assert.equal(pane.controlPaper, pane.paper);
+        await page.locator("#closeContextSidebar").click();
+        await openAnalyzeFilters(page);
         await page.locator("#outcomeFilter-control").click();
         await page.locator(".select-popup .select-all").click();
         const disabled = await page.locator(".select-popup .select-apply").evaluate(node => ({
@@ -109,9 +118,9 @@ test("screen roles preserve service inks while Agent authorship has its own expl
         }));
         assert.equal(disabled.disabled, true);
         assert.equal(disabled.visible, true);
-        if (inkBlue) {
+        if (dark && entry.forced === "none") {
             assert.match(disabled.fill, /^rgba\(\d+, \d+, \d+, 0\)$/);
-            assert.equal(disabled.ink, "rgb(187, 197, 212)");
+            assert.equal(disabled.ink, "rgb(184, 200, 204)");
         }
         const menu = await page.locator(".select-popup").evaluate(node => ({
             paper: getComputedStyle(node).getPropertyValue("--paper").trim(),
@@ -138,7 +147,7 @@ test("screen roles preserve service inks while Agent authorship has its own expl
     if (proofs) await writeFile(path.join(proofs, "roles.json"), JSON.stringify(evidence, null, 2));
 });
 
-test("changing screen roles leaves verified saved document paint and every saved format unchanged", { timeout: 30000 }, async t => {
+test("changing screen roles leaves original saved HTML paint and every saved format unchanged", { timeout: 60000 }, async t => {
     const { context } = await privateFixture(t, [fixture("screen-role-frozen")]);
     const exports = createExportController(context), state = await loadBoardState(context);
     const timeContext = { timeZone: "UTC", locale: "en-US" };
@@ -151,9 +160,10 @@ test("changing screen roles leaves verified saved document paint and every saved
     const originals = await Promise.all(Object.values(saved.files).map(async file => digest(await readFile(file))));
     let providers = 0;
     const refuse = async () => { providers++; throw Error("No provider or source access in frozen paint proof."); };
-    const runtime = await startServer(context, exports, { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, exports, { port: 0, frontend: "react", collector: { timers: false },
         evaluation: { evaluatorFactory: refuse, readSource: refuse } });
     const browser = await chromium.launch(), page = await browser.newPage({ colorScheme: "light", viewport: { width: 1440, height: 1100 } });
+    page.setDefaultTimeout(10000);
     t.after(async () => { await browser.close(); await runtime.close(); });
     const errors = [], posts = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -163,10 +173,11 @@ test("changing screen roles leaves verified saved document paint and every saved
     });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    const documentBody = page.frameLocator("#savedReportReader iframe").locator("body");
+    await page.locator(".saved-report-title").click();
+    await selectActivityOption(page, "savedReaderFormat", "html");
+    const documentBody = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe").locator("body");
     await documentBody.waitFor(); await documentBody.evaluate(() => document.fonts.ready);
-    const frame = page.locator("#savedReportReader iframe"), identity = await frame.elementHandle(), box = await frame.boundingBox();
+    const frame = page.locator("#savedReportReader .saved-file-preview:visible iframe"), identity = await frame.elementHandle(), box = await frame.boundingBox();
     const main = documentBody.locator(":scope>main"), content = await main.boundingBox();
     const padding = await main.evaluate(node => {
         const css = getComputedStyle(node);
@@ -224,6 +235,6 @@ test("changing screen roles leaves verified saved document paint and every saved
     assert.equal(difference.changed, 0, `Frozen document pixels: ${JSON.stringify(difference)}`);
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => digest(await readFile(file)))), originals);
     assert.equal(providers, 0); assert.deepEqual(errors, []);
-    assert.equal(posts.filter(endpoint => endpoint === "/api/report/open").length, 1);
+    assert.equal(posts.filter(endpoint => endpoint === "/api/report/open").length, 2);
     assert.ok(!posts.some(endpoint => /\/api\/(?:preview|export|privacy-review|collection\/(?:configure|now|enabled))$/.test(endpoint)));
 });

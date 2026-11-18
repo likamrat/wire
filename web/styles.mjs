@@ -3,7 +3,7 @@ import { fontFaceStyles } from "../lib/typeface.mjs";
 import { uxStyles } from "./ux-styles.mjs";
 import { visualStyles } from "./visual-styles.mjs";
 import { sidebarStyles } from "./sidebar-styles.mjs";
-import { dimensionalChartStyles } from "./dimensional-charts-styles.mjs";
+import { dimensionalChartStyles, screenServiceInkStyles } from "./dimensional-charts-styles.mjs";
 import { toolbarStyles } from "./toolbar-styles.mjs";
 import { metadataStyles } from "./metadata-styles.mjs";
 import { selectStyles } from "./select-styles.mjs";
@@ -758,6 +758,7 @@ dialog:not(#contextSidebar,.navigation-drawer) {box-shadow:var(--surface-shadow)
  #activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {outline:1px solid CanvasText;box-shadow:none}
 }
 /* Screen-only semantic aliases follow shared chart CSS; saved output keeps its own palette. */
+${screenServiceInkStyles}
 :root[data-evidence-theme],:root:not([data-evidence-theme]) {
  --chart-teal-top:var(--screen-success-high);--chart-teal-mid:var(--chart-success);
  --chart-teal-base:var(--screen-success-low);--chart-teal-side:var(--chart-success);
@@ -768,6 +769,12 @@ dialog:not(#contextSidebar,.navigation-drawer) {box-shadow:var(--surface-shadow)
  --chart-cyan-top:var(--screen-failure-high);--chart-cyan-mid:var(--chart-failure);
  --chart-cyan-base:var(--screen-failure-low);--chart-cyan-side:var(--chart-failure);
  --chart-cyan-cap:var(--chart-failure);--chart-cyan-label:var(--chart-failure);
+ --chart-orange-top:var(--chart-partial);--chart-orange-mid:var(--chart-partial);
+ --chart-orange-base:var(--chart-partial);--chart-orange-side:var(--chart-partial);
+ --chart-orange-cap:var(--chart-partial);--chart-orange-label:var(--chart-partial);
+ --chart-slate-top:var(--chart-unknown);--chart-slate-mid:var(--chart-unknown);
+ --chart-slate-base:var(--chart-unknown);--chart-slate-side:var(--chart-unknown);
+ --chart-slate-cap:var(--chart-unknown);--chart-slate-label:var(--chart-unknown);
  --chart-service-files-label:var(--screen-service-files);--chart-service-files-mid:var(--screen-service-files);
  --prompt-author-user:var(--screen-prompt-user);
 }
