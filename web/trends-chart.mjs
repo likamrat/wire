@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, formatDate, formatAxisDate, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, formatDate, formatAxisDate, weekContext, canInspect }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
@@ -90,6 +90,10 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         tooltip.append(element("div", "trends-tip-value", current === null ? "Unavailable"
             : scene.family === "timing" ? `${number(current)} ms` : scene.mode === "count" ? `${number(current)} ${unit}` : rate(current)));
         tooltip.append(element("div", "trends-tip-caption", `${numerator} of ${denominator} ${unit}`));
+        if (scene.family === "rhythm" && scene.mode === "share") {
+            const week = weekContext(day);
+            tooltip.append(element("div", "trends-tip-caption", `${week.label} · ${week.detail}`));
+        }
         if (scene.family === "tools") {
             const shown = day.values.tools.filter(row => !scene.hidden.has(row.id));
             if (scene.mode === "reach" && shown.length === 2) {
@@ -183,8 +187,7 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
             };
             placements.push(update); update(); return node;
         }
-        const series = data.definitions[family].filter(row => !hidden.has(row.id)
-            && (family !== "timing" || mode === "both" || row.id === (mode === "p95" ? "p95" : "timing")));
+        const series = data.definitions[family].filter(row => !hidden.has(row.id));
         const stacked = family === "authors" || family === "tools" && mode !== "reach", bars = stacked || family === "rhythm";
         const maximum = Math.max(1, ...data.days.map(day => stacked
             ? day.values[family].reduce((sum, value) => sum + (metric(value, family, mode) ?? 0), 0)
@@ -199,6 +202,24 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         const svg = place(svgNode("svg", { role: "group", "aria-label": "Daily trend", "data-time-axis": family }),
             () => ({ viewBox: `0 0 ${width} ${height}`, width, height }));
         svg.style.width = `${width}px`; svg.style.height = `${height}px`;
+        if (family === "rhythm" && mode === "share") {
+            const weeks = new Map();
+            data.days.forEach((day, index) => {
+                const week = weekContext(day);
+                if (!weeks.has(week.from)) weeks.set(week.from, { ...week, first: index, last: index });
+                else weeks.get(week.from).last = index;
+            });
+            for (const week of weeks.values()) {
+                if (week.partial) {
+                    const band = place(svgNode("rect", { fill: "var(--canvas)", "pointer-events": "none", "data-partial-week": week.from }),
+                        () => ({ x: left + pitch * week.first, y: top, width: pitch * (week.last - week.first + 1), height: bottom - top }));
+                    band.append(svgNode("title", {}, `${week.label} · ${week.detail}`)); svg.append(band);
+                }
+                if (week.first) svg.append(place(svgNode("line", { stroke: "var(--muted)", "stroke-width": 1,
+                    "pointer-events": "none", "data-week-boundary": week.from }),
+                    () => ({ x1: left + pitch * week.first, x2: left + pitch * week.first, y1: top, y2: bottom })));
+            }
+        }
         const axis = svgNode("g", { class: "trends-y-axis", "pointer-events": "none" });
         axis.append(place(svgNode("rect", { x: 0, y: top - 12 * scale, width: left - 5 * scale, fill: "var(--paper)" }),
             () => ({ height: bottom - top + 24 * scale })));

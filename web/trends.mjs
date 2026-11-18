@@ -68,9 +68,12 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     let data = null, timingData = null, family = null, period = "7", filters = {}, range = null, offset = 0;
     let pending = 0, requestedKey = "", acceptedKey = "", enabled = false, bound = null, lastRevision = null;
     let overviewScroll = 0, dialogOrigin = null, inspecting = null, allCollapsed = null, inspectionKey = "";
+    let evidenceReturn = null, pendingTimer = 0;
     const cards = new Map();
     const toolbar = el("div", "trends-toolbar"), periods = el("div", "trends-periods");
     const status = el("p", "notice"), qualification = el("p", "trends-qualification"), restrictions = el("div", "trends-restrictions");
+    const pendingNotice = el("p", "trends-pending");
+    pendingNotice.setAttribute("role", "status");
     status.setAttribute("role", "status"); status.hidden = true;
     for (const days of ["7", "14", "30"]) {
         const control = button(`Last ${days} days`, () => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters }));
@@ -105,18 +108,23 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const overview = el("div", "trends-overview");
     const tooltip = el("aside", "trends-tooltip"); tooltip.id = "trendsTooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
     const paging = el("div", "trends-paging"), inspection = el("section", "trends-inspection");
-    const inspectionHeader = el("div", "trends-inspection-heading"), selectedDate = el("h3"), selectedScope = el("span", "muted");
-    const evidenceButton = button("View evidence", showEvidence), exactButton = button("View numbers", () => {
+    const exactButton = button("View numbers", () => {
         exact.hidden = !exact.hidden; exactButton.textContent = exact.hidden ? "View numbers" : "Hide numbers";
         if (!exact.hidden) paintExact();
     });
     const inspectionBody = el("div", "trends-inspection-body"), exact = el("div", "trends-exact"); exact.hidden = true; inspection.hidden = true;
-    inspectionHeader.append(selectedDate, selectedScope, evidenceButton, exactButton); inspection.append(inspectionHeader, inspectionBody, exact);
-    const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div"), dialogHeader = el("div", "trends-dialog-heading");
+    exact.tabIndex = 0; exact.setAttribute("role", "region"); exact.setAttribute("aria-label", "Daily exact values");
+    inspection.append(inspectionBody, exact);
+    const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div", "trends-dialog-body"), dialogHeader = el("div", "trends-dialog-heading");
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
-    root.append(toolbar, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
-    dialog.addEventListener("close", () => { scrub(dialogBody); dialogOrigin?.focus({ preventScroll: true }); dialogOrigin = null; });
+    root.append(toolbar, pendingNotice, restrictions, status, retry, qualification, detailBar, overview, paging, inspection, tooltip, dialog);
+    dialog.addEventListener("close", () => {
+        if (dialog.open) return;
+        scrub(dialogBody); scrub(dialogTitle);
+        if (current() && dialogOrigin?.checkVisibility()) dialogOrigin.focus({ preventScroll: true });
+        dialogOrigin = null;
+    });
 
     const plotCards = new Map();
     const observer = new ResizeObserver(entries => {
@@ -147,7 +155,11 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         for (const [value, label] of spec.modes) {
             const control = button(label, () => {
                 if (!current()) return;
-                card.mode = value; paintStable(card);
+                if (id === "timing") {
+                    card.hidden.clear();
+                    if (value !== "both") card.hidden.add(value === "median" ? "p95" : "timing");
+                } else card.mode = value;
+                paintStable(card);
             });
             control.dataset.trendMode = value; modes.append(control);
         }
@@ -156,10 +168,17 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         plot.id = `trendsPlot-${id}`; plot.tabIndex = 0; plot.setAttribute("role", "region");
         plot.setAttribute("aria-label", `${spec.label} by day. Arrow keys move between dates and series.`);
         const limits = el("p", "trends-limits");
+        const point = el("div", "trends-point"), pointDate = el("h3"), pointScope = el("div", "trends-point-scope");
+        const pointText = el("span"), pointSpace = el("span", "trends-point-space"), pointActions = el("div", "trends-point-actions");
+        pointSpace.setAttribute("aria-hidden", "true");
+        const evidence = button("View evidence", () => showEvidence(card));
+        evidence.id = `trendsEvidence-${id}`;
+        pointScope.append(pointSpace, pointText); pointActions.append(evidence); point.append(pointDate, pointScope, pointActions);
         identity.append(totals); summary.append(legend); body.append(summary, plot);
         heading.insertBefore(modes, sizing);
-        content.append(body, limits); panel.append(heading, content); overview.append(panel);
+        content.append(point, body, limits); panel.append(heading, content); overview.append(panel);
         const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
+            point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "",
             mode: spec.modes[0][0], hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         cards.set(id, card);
         panel.addEventListener("click", event => {
@@ -168,11 +187,13 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 && node.matches("button,a,input,select,textarea,summary,[role=button]"))) return;
             if (card.collapsed || heading.contains(event.target)) toggleCollapsed(card);
         });
-        card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate,
+        card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
             onSelect(date, series) {
+                evidenceReturn = null;
                 card.selection = { date, id: series };
                 card.chart.select(card.selection);
+                paintPoint(card);
                 if (family === id) paintInspection();
             } });
         plotCards.set(plot, card);
@@ -196,6 +217,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         node.replaceChildren();
     }
     function notice(message) { status.textContent = message; status.hidden = !message; }
+    function clearPending() { clearTimeout(pendingTimer); pendingTimer = 0; scrub(pendingNotice); }
     function validate(value, request) {
         const history = value?.coverage?.historySummary;
         if (value?.kind !== "retained-trends" || value.schemaVersion !== 1 || value.revision !== request.expectedRevision
@@ -218,17 +240,28 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     async function read(next) {
         if (!enabled) return;
         const context = getContext(), token = api.publicationToken(), generation = ++pending, replacing = Boolean(data);
+        clearPending(); evidenceReturn = null;
         if (!token || context.stale) { notice("Current stored activity is unavailable. Read the current view before changing Trends."); return; }
         const request = { expectedRevision: context.revision, from: next.range.from, to: next.range.to,
             filters: next.filters, offset: next.offset ?? latestOffset(next.range), timeContext: context.timeContext };
         requestedKey = JSON.stringify(request); root.setAttribute("aria-busy", "true"); hideHover();
         if (!data) { notice("Loading Trends…"); overview.hidden = true; }
+        else {
+            notice("");
+            pendingTimer = setTimeout(() => {
+                if (!enabled || generation !== pending || !api.isCurrent(token)) return;
+                const dates = `${time.formatDate(request.from, request.timeContext, true)} – ${time.formatDate(request.to, request.timeContext, true)}`;
+                pendingNotice.textContent = `Loading ${next.period === "custom" ? dates : `Last ${next.period} days · ${dates}`}…`;
+            }, 300);
+        }
         retry.hidden = true;
         try {
             const value = await api("/api/trends", request);
             if (!enabled || generation !== pending) return;
             if (!api.isCurrent(token)) { withdrawAccess(); return; }
             validate(value, request);
+            evidenceReturn = null;
+            if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
             data = value; bound = token; range = next.range; period = next.period; filters = { ...next.filters }; offset = request.offset;
             // These are two encodings of server-qualified samples, not browser-side aggregation.
@@ -249,7 +282,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             if (generation !== pending || !enabled) return;
             if (!api.isCurrent(token)) { withdrawAccess(); return; }
             notice(error.message); retry.hidden = false;
-        } finally { if (generation === pending) root.setAttribute("aria-busy", "false"); }
+        } finally { if (generation === pending) { clearPending(); root.setAttribute("aria-busy", "false"); } }
     }
     function maximize(id) {
         if (!Object.hasOwn(families, id) || !current()) return;
@@ -271,7 +304,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     }
     function openDialog(name) {
         if (!current()) return false;
-        hideHover(); dialogOrigin = doc.activeElement; dialogTitle.textContent = name; scrub(dialogBody);
+        hideHover(); dialogOrigin = doc.activeElement; scrub(dialogTitle); dialogTitle.append(doc.createTextNode(name)); scrub(dialogBody);
         if (!dialog.open) dialog.showModal(); return true;
     }
     function openDates() {
@@ -318,6 +351,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     }
     function viewData(card) { return card.id === "timing" ? timingData : data; }
     function paintCard(card, dateRange) {
+        if (card.id === "timing") card.mode = card.hidden.has("timing") ? card.hidden.has("p95") ? "none" : "p95"
+            : card.hidden.has("p95") ? "median" : "both";
         const { id, panel, hidden, mode } = card, spec = families[id], source = viewData(card), totals = source.totals;
         panel.hidden = Boolean(family && family !== id); panel.dataset.maximized = String(family === id); panel.dataset.collapsed = String(card.collapsed);
         panel.dataset.manySeries = String(source.definitions[id].length > 6);
@@ -347,6 +382,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 const row = el("div", "trends-legend-row"), label = el("label", "trends-series"), check = el("input");
                 check.type = "checkbox"; check.dataset.series = definition.id; check.setAttribute("aria-label", `Show ${definition.label}`);
                 check.addEventListener("change", () => {
+                    if (!current()) return;
                     if (check.checked) hidden.delete(definition.id); else hidden.add(definition.id);
                     paintStable(card);
                 });
@@ -380,7 +416,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 if (totals.modelCoverage[status]) limits.push(`${description}: ${number(totals.modelCoverage[status])} interactions`);
         } else if (id === "timing") limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
+        else if (id === "rhythm" && mode === "share" && source.days.some(day => weekContext(day).partial))
+            limits.push("Shaded partial weeks use only the selected dates.");
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
+        paintPoint(card);
         if (!panel.hidden && !card.collapsed) {
             card.chart.render(source, id, mode, hidden, card.selection);
             card.width = Math.round(card.plot.clientWidth); card.height = Math.round(card.plot.clientHeight);
@@ -399,21 +438,54 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         return day.values[card.id].filter(value => card.selection?.id ? value.id === card.selection.id : shown(value, card));
     }
     function shown(value, card) {
-        return !card.hidden.has(value.id) && (card.id !== "timing" || card.mode === "both" || value.id === (card.mode === "p95" ? "p95" : "timing"));
+        return !card.hidden.has(value.id);
+    }
+    function weekContext(day) {
+        const from = time.bucketDate(time.midnight(day.date, data.timeContext.timeZone), "week", data.timeContext.timeZone), to = time.addDays(from, 6);
+        const selectedFrom = from < data.from ? data.from : from, selectedTo = to > data.to ? data.to : to;
+        const partial = from !== selectedFrom || to !== selectedTo;
+        const dates = (from, to) => from === to ? time.formatDate(from, data.timeContext, true)
+            : `${time.formatDate(from, data.timeContext)} – ${time.formatDate(to, data.timeContext, true)}`;
+        return { from, to, partial, label: `Week ${dates(from, to)}`,
+            detail: `${number(day.values.rhythm[0].eligible)} calls on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
+    }
+    function pointScope(day, card, label, hidden = false) {
+        const scope = card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
+            : ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
+        const measure = card.id === "timing" ? "" : ` · ${families[card.id].modes.find(([id]) => id === card.mode)[1]}`;
+        if (card.id === "rhythm" && card.mode === "share") {
+            const week = weekContext(day);
+            return `${label ?? "Call activity"} · ${week.label} · ${week.detail}`;
+        }
+        return `${label}${hidden ? " (hidden)" : ""}${measure} · ${scope}`;
+    }
+    function paintPoint(card) {
+        const day = selectedDay(card), source = viewData(card);
+        const selected = day.values[card.id].find(value => value.id === card.selection?.id);
+        card.point.classList.toggle("trends-inspection-heading", family === card.id);
+        scrub(card.pointDate); card.pointDate.append(doc.createTextNode(axisDate(day.date)));
+        scrub(card.pointText); card.pointText.append(doc.createTextNode(pointScope(day, card, selected?.label ?? "Shown series", selected && !shown(selected, card))));
+        // Reserve the available subject labels before selection, so selecting long
+        // source names never resizes this chart or shifts the widgets beneath it.
+        const key = `${acceptedKey}:${card.mode}`;
+        if (card.pointKey !== key) {
+            card.pointKey = key; scrub(card.pointSpace);
+            const largest = source.days.reduce((a, b) => a.calls + a.interactions > b.calls + b.interactions ? a : b);
+            const labels = ["Shown series", ...source.definitions[card.id].map(value => value.label)];
+            const texts = card.id === "rhythm" && card.mode === "share"
+                ? [...new Set(source.days.map(day => pointScope(day, card)))]
+                : labels.map(label => pointScope(largest, card, label, true));
+            for (const text of texts) card.pointSpace.append(el("span", "", text));
+        }
+        card.evidence.disabled = !evidenceValues(day, card).some(value => value.rowIds.length);
+        if (family === card.id) card.pointActions.append(exactButton);
     }
     function paintInspection() {
         if (!current() || !family) return;
         const card = cards.get(family), day = selectedDay(card), key = `${family}:${Math.round(inspectionBody.clientWidth)}`;
         const changedLayout = inspectionKey !== key;
-        if (changedLayout) { inspectionKey = key; inspectionBody.style.minHeight = ""; inspectionHeader.style.minHeight = ""; }
-        const prior = changedLayout ? 0 : inspectionBody.getBoundingClientRect().height, priorHeader = changedLayout ? 0 : inspectionHeader.getBoundingClientRect().height;
-        const selected = day.values[family].find(value => value.id === card.selection?.id);
-        selectedDate.textContent = axisDate(day.date);
-        const scope = family === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
-            : ["authors", "models", "problems"].includes(family) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
-        const measure = families[family].modes.find(([id]) => id === card.mode)[1];
-        selectedScope.textContent = `${selected ? selected.label + (!shown(selected, card) ? " (hidden)" : "") : "Shown series"} · ${measure} · ${scope}`;
-        inspectionHeader.style.minHeight = `${Math.max(priorHeader, inspectionHeader.getBoundingClientRect().height)}px`;
+        if (changedLayout) { inspectionKey = key; inspectionBody.style.minHeight = ""; }
+        const prior = changedLayout ? 0 : inspectionBody.getBoundingClientRect().height;
         scrub(inspectionBody);
         for (const value of day.values[family].filter(value => shown(value, card))) {
             const row = el("div", "trends-value-row"), name = el("span", "trends-value-name");
@@ -425,28 +497,47 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
             row.append(name, track, el("span", "trends-value", valueText(value, card))); inspectionBody.append(row);
         }
         inspectionBody.style.minHeight = `${Math.max(prior, inspectionBody.getBoundingClientRect().height)}px`;
-        evidenceButton.disabled = !evidenceValues(day, card).some(value => value.rowIds.length);
     }
-    function showEvidence() {
-        if (!current() || !family) return;
-        const card = cards.get(family), day = selectedDay(card), values = evidenceValues(day, card), ids = new Set(values.flatMap(value => value.rowIds));
+    function showEvidence(card) {
+        if (!current()) return;
+        const day = selectedDay(card), values = evidenceValues(day, card), ids = new Set(values.flatMap(value => value.rowIds));
+        const source = data, key = JSON.stringify([acceptedKey, card.id, day.date, [...ids]]);
+        const saved = evidenceReturn?.key === key ? evidenceReturn : null;
         if (!openDialog(`${fullDate(day.date)} · ${values.length === 1 ? values[0].label : "Shown series"}`)) return;
+        dialogOrigin = card.evidence;
         dialogBody.append(el("p", "muted", `${number(ids.size)} matching calls. Opening a call shows its full interaction.`));
+        let returnLink = null;
         for (const member of data.members.filter(row => ids.has(row.id))) {
             const row = el("div", "trends-evidence-row"), link = recordLink(member);
             if (!current()) { for (const attribute of [...link.attributes]) { attribute.value = ""; link.removeAttributeNode(attribute); } scrub(link); return; }
-            link.addEventListener("click", () => dialog.close()); row.append(link, el("span", "muted", member.operation)); dialogBody.append(row);
+            const open = event => {
+                if (!current() || data !== source || !dialog.open || !link.isConnected) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+                if (event.type !== "click" || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                evidenceReturn = { key, card: card.id, member: member.id, top: dialogBody.scrollTop };
+                // The existing reader captures its origin during the link handler.
+                // Give it a durable control, not the soon-to-be-scrubbed list link.
+                dialogOrigin = null; dialog.close(); card.evidence.focus({ preventScroll: true });
+            };
+            link.addEventListener("click", open, { capture: true });
+            link.addEventListener("auxclick", open, { capture: true });
+            if (member.id === saved?.member) returnLink = link;
+            row.append(link, el("span", "muted", member.operation)); dialogBody.append(row);
         }
+        if (returnLink) { dialogBody.scrollTop = saved.top; returnLink.focus({ preventScroll: true }); }
     }
     function paintExact() {
         scrub(exact); if (!family || exact.hidden) return;
-        const card = cards.get(family), source = viewData(card), table = el("table"), header = el("tr");
-        for (const label of ["Date", ...source.definitions[family].map(value => value.label), "Interactions", "Calls"]) header.append(el("th", "", label));
-        table.append(header);
+        const card = cards.get(family), source = viewData(card), table = el("table", "exact-data-table"), header = el("tr");
+        const head = el("thead"), body = el("tbody");
+        table.append(el("caption", "", `${families[family].label} · ${formatRange()}`));
+        for (const label of ["Date", ...source.definitions[family].map(value => value.label), "Interactions", "Calls"]) {
+            const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
+        }
+        head.append(header); table.append(head, body);
         for (const day of source.days) {
-            const row = el("tr"); row.append(el("th", "", fullDate(day.date)));
+            const row = el("tr"), date = el("th", "", fullDate(day.date)); date.scope = "row"; row.append(date);
             for (const value of day.values[family]) row.append(el("td", "", valueText(value, card)));
-            row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); table.append(row);
+            row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); body.append(row);
         }
         exact.append(table);
     }
@@ -460,6 +551,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         if (!current()) return;
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
         detailBar.hidden = !family; inspection.hidden = !family; collapseAll.hidden = Boolean(family);
+        exactButton.hidden = !family;
         collapseAll.textContent = allCollapsed || [...cards.values()].every(card => card.collapsed) ? "Restore all" : "Collapse all";
         if (family) chooser.field.value = family;
         for (const node of periods.children) node.setAttribute("aria-pressed", String(node.dataset.trendPeriod === period));
@@ -482,22 +574,25 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         paintInspection(); paintExact();
     }
     function withdrawAccess() {
+        clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         range = null; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
             card.mode = families[card.id].modes[0][0];
-            for (const node of [card.periodLabel, card.totals, card.legend, card.limits]) scrub(node);
+            card.pointKey = "";
+            for (const node of [card.periodLabel, card.totals, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace]) scrub(node);
         }
         const selectedText = doc.getSelection();
         if (selectedText && (root.contains(selectedText.anchorNode) || root.contains(selectedText.focusNode))) selectedText.removeAllRanges();
-        if (dialog.open) dialog.close(); scrub(dialogBody); dialogTitle.textContent = ""; dialogOrigin = null;
-        for (const node of [qualification, inspectionBody, exact, paging, status, selectedDate, selectedScope, restrictionText]) scrub(node);
-        inspectionBody.style.minHeight = ""; inspectionHeader.style.minHeight = ""; inspectionKey = ""; root.setAttribute("aria-busy", "false");
+        if (dialog.open) dialog.close(); scrub(dialogBody); scrub(dialogTitle); dialogOrigin = null;
+        for (const node of [qualification, inspectionBody, exact, paging, status, restrictionText]) scrub(node);
+        inspectionBody.style.minHeight = ""; inspectionKey = ""; root.setAttribute("aria-busy", "false");
     }
     function update() {
         const wasEnabled = enabled, context = getContext();
         if (!context.active) {
+            clearPending(); evidenceReturn = null;
             enabled = false; pending++; requestedKey = acceptedKey; root.setAttribute("aria-busy", "false");
             hideHover(); if (dialog.open) dialog.close(); return;
         }
@@ -510,7 +605,9 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         if (key !== requestedKey || lastRevision !== context.revision && key === acceptedKey) void read({ range, period, filters, offset });
         else if (data && key === acceptedKey && !wasEnabled) paint();
     }
-    return { update, withdrawAccess, leave: () => { hideHover(); if (dialog.open) dialog.close(); } };
+    return { update, withdrawAccess,
+        evidenceOrigin: () => current() && evidenceReturn ? cards.get(evidenceReturn.card).evidence : null,
+        leave: () => { hideHover(); clearPending(); if (dialog.open) dialog.close(); } };
 }
 
 export const trendsStyles = `
@@ -519,6 +616,7 @@ export const trendsStyles = `
 #trendsView{min-width:0;container-type:inline-size}
 .trends-toolbar,.trends-periods,.trends-detail-bar,.trends-heading,.trends-inspection-heading,.trends-dialog-heading,.trends-dialog-actions,.trends-restrictions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .trends-toolbar{margin-bottom:16px;gap:8px}.trends-periods{gap:4px;margin-right:auto}
+.trends-pending{min-height:1.5em;margin:-8px 0 8px;color:var(--muted);font-size:var(--type-small);line-height:1.5}
 .trends-toolbar>button,.trends-detail-bar>button{display:inline-flex;align-items:center;gap:8px}
 .trends-periods button[aria-pressed=true],.trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
 .trends-date-range{display:inline-flex;align-items:center;gap:8px;max-width:100%;white-space:normal}.trends-date-range>.wire-icon{width:16px;height:16px;flex:none}
@@ -555,32 +653,42 @@ export const trendsStyles = `
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}
-.trends-legend-row{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:center;gap:2px 12px;min-width:0;padding-bottom:6px}
-.trends-series{display:flex;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;cursor:pointer}
+.trends-legend-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;min-width:0;padding-bottom:6px}
+.trends-series{display:flex;flex:1 1 auto;width:max-content;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;cursor:pointer}
 .trends-series input{accent-color:var(--toggle-on);flex:none}.trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .trends-sample{display:inline-block;width:20px;height:12px;flex:none}
-.trends-legend-value{font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.trends-legend-value{flex:none;margin-inline-start:auto;font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trends-value-track{display:block;height:4px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
-.trends-legend-row>.trends-value-track{grid-column:1/-1}
+.trends-legend-row>.trends-value-track{flex:0 0 100%}
 .trends-legend-row[data-hidden=true]>.trends-value-track{visibility:hidden}
 .trends-panel:is([data-family=authors],[data-family=services]) .trends-series-label{white-space:nowrap;overflow-wrap:normal}
 .trends-panel:is([data-family=authors],[data-family=models],[data-family=timing]) .trends-legend-row>.trends-value-track{display:none}
 .trends-limits,.trends-qualification{font-size:var(--type-small);color:var(--muted);margin:12px 0 0}
 .trends-qualification{margin:0 0 16px}.trends-limits:empty{display:none}
 .trends-panel[data-maximized=true]{--trends-plot-height:clamp(22rem,48vh,34rem)}
+.trends-point{display:grid;grid-template-columns:6rem minmax(0,1fr) auto;align-items:center;gap:4px 12px;margin:12px 0;min-height:44px}
+.trends-point h3{margin:0;font-size:var(--type-body);font-weight:var(--weight-medium)}
+.trends-point-scope,.trends-point-space{display:grid;min-width:0;overflow-wrap:anywhere;font-size:var(--type-small);color:var(--muted)}
+.trends-point-scope>span,.trends-point-space>span{grid-area:1/1}
+.trends-point-space{visibility:hidden;pointer-events:none}
+.trends-point-actions{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;min-width:0}
+.trends-point-actions>button{max-width:100%;white-space:normal}
 .trends-inspection{margin-top:20px;padding:20px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
-.trends-inspection-heading{margin-bottom:12px}.trends-inspection-heading h3{margin:0;font-size:1.0625rem;font-weight:500}
-.trends-inspection-heading>button:first-of-type{margin-left:auto}.trends-inspection-heading .muted{min-width:0;max-width:100%;overflow-wrap:anywhere}
 .trends-inspection-body{display:grid;gap:8px;align-content:start;overflow-anchor:none}
 .trends-value-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(50px,2fr) minmax(90px,1fr);align-items:center;gap:16px;min-height:36px}
 .trends-value-row[data-selected=true] .trends-sample{outline:1px solid var(--ink);outline-offset:3px}
 .trends-value-name{display:flex;align-items:center;gap:8px;min-width:0}.trends-value{text-align:right;font-variant-numeric:tabular-nums}
 .trends-paging{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0}
-.trends-exact{overflow:auto}.trends-exact table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.trends-exact{overflow:auto;max-height:65dvh;overscroll-behavior:contain;container-type:inline-size}
+.trends-exact:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.trends-exact table{min-width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
 .trends-exact th,.trends-exact td{font-weight:400;text-align:right;padding:10px;border-bottom:1px solid var(--surface-divider);white-space:nowrap}
-.trends-exact th:first-child{text-align:left}
-.trends-dialog{width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow:auto;background:var(--floating-paper);color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius);padding:24px}
-.trends-dialog-heading{justify-content:space-between;margin-bottom:20px}.trends-dialog-heading h2{font-size:1.25rem;margin:0;min-width:0;overflow-wrap:anywhere}
+.trends-exact th:first-child{text-align:left;position:sticky;left:0;background:var(--paper)}
+.trends-exact thead{position:sticky;top:0;z-index:1}.trends-exact thead th{background:var(--canvas)}
+.trends-dialog{width:min(560px,calc(100dvw - 32px));max-height:calc(100dvh - 48px);overflow:hidden;background:var(--floating-paper);color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius);padding:24px}
+.trends-dialog[open]{display:flex;flex-direction:column}
+.trends-dialog-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;flex:none;gap:12px;margin-bottom:20px}.trends-dialog-heading h2{font-size:1.25rem;margin:0;min-width:0;overflow-wrap:anywhere}
+.trends-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain}
 .trends-dialog .trends-control{display:flex;flex-direction:column;align-items:stretch;margin:16px 0}
 .trends-dialog .trends-control select{width:100%;min-height:44px}.trends-dialog-actions{justify-content:flex-end;margin-top:20px}
 .trends-evidence-row{display:flex;flex-direction:column;gap:6px;padding:14px 0;border-bottom:1px solid var(--surface-divider)}
@@ -603,13 +711,12 @@ export const trendsStyles = `
  .trends-heading>.trends-sizing{grid-column:2}
  .trends-heading>.trends-modes{grid-column:1/-1;grid-row:2;justify-content:flex-start}
  .trends-panel[data-collapsed=true] .trends-title-group{flex-direction:column;align-items:flex-start}
+ .trends-point{grid-template-columns:max-content minmax(0,1fr)}
+ .trends-point-scope{grid-column:1/-1;grid-row:2}
+ .trends-point-actions{grid-column:2;grid-row:1}
 }
 @container trend-card (max-width:22rem){
  .trends-panel[data-collapsed=true] .trends-title-group h2{min-height:calc(2 * var(--type-section) * var(--leading-section))}
-}
-@container trend-summary (max-width:21rem){
- .trends-legend-row{grid-template-columns:minmax(0,1fr)}
- .trends-legend-value{text-align:left;padding-inline-start:48px}
 }
 @media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}.trends-toolbar{gap:4px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}

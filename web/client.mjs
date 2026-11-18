@@ -710,6 +710,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function requestIdentity(value = workspaceState.route) { return JSON.stringify([value.request, value.call, value.callRevision,
         value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal]); }
     function sidebarAnchor() {
+        if (underlyingRoute().view === "trends") return trendsUI.evidenceOrigin()?.closest(".trends-panel") ?? null;
         return (workspaceState.route.inspect ? savedInspector?.anchor || keyed("bundle:" + workspaceState.route.inspect) : null)
             ?? (fromReportCreation() ? keyed("report:" + workspaceState.route.request)?.closest(".activity-card") : null)
             ?? keyed("request:" + workspaceState.route.request)?.closest(".activity-card")
@@ -1193,7 +1194,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (preserveAnchor && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
             if (restoreFocus && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent) {
-                const origin = anchor?.querySelector(".request-card-open,.request-link");
+                const origin = underlyingRoute().view === "trends" ? trendsUI.evidenceOrigin()
+                    : anchor?.querySelector(".request-card-open,.request-link");
                 if (origin?.isConnected && origin.checkVisibility()) ux.restoreFocus(origin);
                 else if ($("activityView").checkVisibility()) revealResults();
             }

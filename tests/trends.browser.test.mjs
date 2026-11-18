@@ -5,12 +5,13 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption } from "./helpers.mjs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createCopilotAccountBridge } from "../lib/copilot-account-snapshot.mjs";
 import { profilePNG } from "./source-profile-fixture.mjs";
+import { randomUUID, createHash } from "node:crypto";
 
 async function capture(page, name) {
     if (!process.env.WIRE_TRENDS_PROOFS) return;
@@ -20,7 +21,7 @@ async function capture(page, name) {
     if (name === "overview-light") await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, "widgets-overview-light.png"),
     });
-    if (name.startsWith("responsive-") || name.startsWith("dates-") || name.startsWith("point-")) await page.screenshot({
+    if (name.startsWith("responsive-") || name.startsWith("dates-") || name.startsWith("point-") || name.startsWith("usability-")) await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, name + "-viewport.png"),
     });
     if (name === "responsive-enlarged") await page.locator('[data-family=tools]').screenshot({
@@ -70,7 +71,7 @@ async function setup(t, withBoundary = false, options = {}) {
     const { context } = await privateFixture({ after: value => { cleanup = value; } }, fixtures);
     if (options.roster) await replaceEvidence(context, () => ({ records: fixtures,
         importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: options.roster } }));
-    const access = options.profile ? await createCopilotRuntimeAccess(context) : undefined;
+    const access = options.profile || options.enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const host = { sessionId: "invented-trends-host", rpc: {
         accounts: { get: async () => ({ kind: "activeAccount",
             account: { active: true, kind: "githubDotCom", host: "github.com", login: "synthetic-riley", selectionId: "cedar-profile" },
@@ -87,13 +88,32 @@ async function setup(t, withBoundary = false, options = {}) {
             : new Response(profilePNG, { headers: { "content-type": "image/png" } }) } } : {}),
         evaluation: { evaluatorFactory() { throw new Error("No providers in Trends proof."); }, readSource() { throw new Error("No history reads in Trends proof."); } },
     });
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER });
+    const trace = process.env.WIRE_TRENDS_PROOFS && options.trace;
     t.after(async () => {
-        try { await browser.close(); await server.close(); assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(await loadBoardState(context), before); }
+        try {
+            if (trace) await page.context().tracing.stop({ path: path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}.zip`) });
+            await browser.close(); await server.close();
+            const after = await loadBoardState(context);
+            if (trace) {
+                const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+                await writeFile(path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}-receipt.json`), JSON.stringify({
+                    test: t.name, browser: browser.version(), frontend: process.env.WIRE_TEST_FRONTEND, url: server.url,
+                    fixtureHash: hash(fixtures), before: hash(before), after: hash(after), errors, denied,
+                    build: JSON.parse(await readFile(new URL("../dist/client/wire-build.json", import.meta.url), "utf8")),
+                    stopped: true,
+                }, null, 2));
+            }
+            assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(after, before);
+        }
         finally { bridge?.close(); await access?.close(); await cleanup(); }
     });
     const page = await browser.newPage({ viewport: options.viewport ?? { width: 1440, height: 1000 }, timezoneId: "UTC",
         reducedMotion: options.motion ?? "reduce", hasTouch: options.touch ?? false, deviceScaleFactor: options.scale ?? 1 });
+    if (trace) {
+        await mkdir(process.env.WIRE_TRENDS_PROOFS, { recursive: true });
+        await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
+    }
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
@@ -112,9 +132,260 @@ async function setup(t, withBoundary = false, options = {}) {
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     if (!options.direct) await navigateMain(page, "trends");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator(".trends-period-label").first()).not.toBeEmpty();
     if (options.profile) await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
-    return { page, reads };
+    return { page, reads, url: server.url };
 }
+
+test("exact Trends numbers keep date and value text separate and scroll by keyboard at narrow and enlarged sizes", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords() });
+    await dates(page, "2026-08-01", "2026-08-01");
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    const failures = [];
+    for (const [theme, width, scale] of [["light", 390, 1], ["dark", 390, 1], ["light", 1024, 2]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 844 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await settle(page);
+        const layout = await page.locator(".trends-exact").evaluate(node => {
+            const cells = [...node.querySelectorAll("tr")].at(-1).children;
+            const bounds = cell => { const range = document.createRange(); range.selectNodeContents(cell); return range.getBoundingClientRect(); };
+            const date = bounds(cells[0]), value = bounds(cells[1]);
+            return { gap: value.left - date.right, width: node.clientWidth, content: node.scrollWidth, tabindex: node.tabIndex,
+                headers: [...node.querySelectorAll("tr")][0].textContent };
+        });
+        if (layout.gap < 8) failures.push(`${theme}/${width}/${scale}: date/value gap ${layout.gap}`);
+        if (layout.content <= layout.width) failures.push(`${theme}/${width}/${scale}: no local overflow`);
+        if (layout.tabindex !== 0) failures.push(`${theme}/${width}/${scale}: not keyboard scrollable`);
+        assert.match(layout.headers, /Date.*fetch.*retrieve.*Interactions.*Calls/);
+        await capture(page, `usability-exact-${theme}-${scale}`);
+        if (process.env.WIRE_TRENDS_PROOFS) await page.locator(".trends-exact").screenshot({
+            path: path.join(process.env.WIRE_TRENDS_PROOFS, `usability-exact-${theme}-${scale}-table.png`),
+        });
+    }
+    assert.deepEqual(failures, []);
+    const exact = page.locator(".trends-exact");
+    await exact.focus(); await page.keyboard.press("ArrowRight");
+    await expect.poll(() => exact.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+});
+
+test("supporting calls keep Close available and restore the nineteenth call after reader return", { timeout: 45000 }, async t => {
+    const many = records().slice(0, 23).map((record, index) => {
+        record.userPrompt.text = `Inspect Cedar supporting call ${index + 1}.`;
+        Object.assign(record.toolCalls[0], { tool: "workiq-fetch", startedAt: "2026-08-01T12:00:01Z",
+            completedAt: "2026-08-01T12:00:02Z" });
+        return record;
+    });
+    const { page } = await setup(t, false, { records: many, touch: true, trace: "evidence-return-trace" });
+    await dates(page, "2026-08-01", "2026-08-01");
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    await page.getByRole("button", { name: "View evidence", exact: true }).click();
+    await expect(page.locator(".trends-evidence-row a")).toHaveCount(23);
+    const call = page.locator(".trends-evidence-row a").nth(18);
+    await call.scrollIntoViewIfNeeded();
+    const identity = await call.getAttribute("href");
+    const close = await page.locator(".trends-dialog").getByRole("button", { name: "Close", exact: true }).boundingBox();
+    const failures = [];
+    if (close.y < 0 || close.y + close.height > 1000) failures.push("Close left the viewport");
+    await call.click();
+    await expect(page.locator("#requestContent")).toContainText("Inspect Cedar supporting call");
+    await page.getByRole("button", { name: "Close interaction", exact: true }).click();
+    await settle(page);
+    const focus = await page.evaluate(() => document.activeElement.textContent);
+    if (focus !== "View evidence") failures.push("Reader did not return focus to View evidence");
+    await page.getByRole("button", { name: "View evidence", exact: true }).click();
+    await settle(page);
+    const returned = await call.boundingBox();
+    if (returned.y < 0 || returned.y + returned.height > 1000) failures.push("Nineteenth call was not restored");
+    assert.equal(await call.getAttribute("href"), identity);
+    await capture(page, "usability-evidence-return");
+    assert.deepEqual(failures, []);
+    await page.evaluate(() => { window.retiredTrendLink = document.querySelectorAll(".trends-evidence-row a")[18]; });
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await dates(page, "2026-08-01", "2026-08-02");
+    await page.getByRole("button", { name: "View evidence", exact: true }).click();
+    assert.equal(await page.locator(".trends-dialog-body").evaluate(node => node.scrollTop), 0);
+    await page.evaluate(() => window.retiredTrendLink.click());
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await expect(page.locator(".trends-dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await chooseTheme(page, "dark");
+    const evidence = page.getByRole("button", { name: "View evidence", exact: true });
+    await evidence.tap();
+    await call.scrollIntoViewIfNeeded(); await call.focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#requestContent")).toContainText("Inspect Cedar supporting call");
+    await page.getByRole("button", { name: "Close interaction", exact: true }).focus();
+    await page.keyboard.press("Enter"); await settle(page);
+    await expect(evidence).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(call).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(evidence).toBeFocused();
+    await evidence.tap();
+    // Native touch highlight has no completion event and briefly outlives the modal open.
+    await page.waitForTimeout(500);
+    await capture(page, "usability-evidence-narrow-dark");
+});
+
+test("selected overview evidence is available without resizing", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 }, touch: true });
+    await dates(page, "2026-08-01", "2026-08-01");
+    const panel = page.locator('[data-family="tools"]'), mark = panel.locator('[data-trend-mark][data-series="workiq-fetch"]');
+    await mark.focus(); await settle(page);
+    const before = await panel.boundingBox();
+    await page.keyboard.press("Enter"); await page.keyboard.press("Escape"); await settle(page);
+    const after = await panel.boundingBox();
+    assert.equal(after.height, before.height);
+    await expect(panel).toHaveAttribute("data-maximized", "false");
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(panel.getByRole("button", { name: "View evidence", exact: true })).toBeVisible();
+    await panel.getByRole("button", { name: "View evidence", exact: true }).click();
+    await expect(page.locator(".trends-evidence-row a")).toHaveCount(4);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await capture(page, "usability-selected-narrow");
+});
+
+test("short Trends legend pairs stay together at narrow widths", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 } });
+    await dates(page, "2026-08-01", "2026-08-01");
+    for (const [family, label] of [["tools", "fetch"], ["timing", "Median"]]) {
+        const row = page.locator(`[data-family="${family}"] .trends-legend-row`).filter({ has: page.getByRole("checkbox", { name: `Show ${label}`, exact: true }) });
+        const gap = await row.evaluate(node => {
+            const name = node.querySelector(".trends-series-label").getBoundingClientRect(), value = node.querySelector(".trends-legend-value").getBoundingClientRect();
+            return Math.abs(name.y + name.height / 2 - value.y - value.height / 2);
+        });
+        assert.ok(gap < 2, `${label} and its value have separated by ${gap}px`);
+    }
+});
+
+test("duration shortcuts and checkboxes describe the same drawn series", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords() });
+    await dates(page, "2026-08-01", "2026-08-01");
+    const panel = page.locator('[data-family="timing"]');
+    await panel.getByRole("button", { name: "Median", exact: true }).click();
+    await expect(panel.getByRole("checkbox", { name: "Show Median", exact: true })).toBeChecked();
+    await expect(panel.getByRole("checkbox", { name: "Show 95th percentile", exact: true })).not.toBeChecked();
+    await panel.getByRole("checkbox", { name: "Show Median", exact: true }).uncheck();
+    await expect(panel.locator("[data-trend-mark]")).toHaveCount(0);
+    await panel.getByRole("checkbox", { name: "Show 95th percentile", exact: true }).check();
+    await expect(panel.locator('[data-trend-mark][data-series="p95"]')).toHaveCount(1);
+    await expect(panel.getByRole("button", { name: "95th percentile", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await panel.getByRole("button", { name: "Both", exact: true }).click();
+    await expect(panel.locator("[data-trend-mark]")).toHaveCount(2);
+});
+
+test("weekly shares name clipped calendar windows", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await dates(page, "2026-08-01", "2026-08-03");
+    const panel = page.locator('[data-family="rhythm"]');
+    await panel.getByRole("button", { name: "Share within week", exact: true }).click();
+    const mark = panel.locator("[data-trend-mark]").last();
+    await mark.focus();
+    await expect(page.locator("#trendsTooltip")).toBeVisible();
+    await expect(page.locator("#trendsTooltip")).toContainText("Aug 3");
+    await expect(page.locator("#trendsTooltip")).toContainText("Aug 9");
+    await expect(page.locator("#trendsTooltip")).toContainText(/partial week/i);
+    await page.keyboard.press("Enter"); await page.keyboard.press("Escape");
+    await expect(panel).toContainText(/partial week/i);
+    await panel.scrollIntoViewIfNeeded();
+    await capture(page, "usability-weekly-window");
+});
+
+test("pending Trends ranges visibly name the request and leave accepted facts intact", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await dates(page, "2026-08-01", "2026-08-03");
+    const accepted = await page.locator(".trends-period-label").allTextContents();
+    const held = [];
+    t.after(() => held.forEach(read => read.release()));
+    await page.route("**/api/trends", async route => {
+        const response = await route.fetch();
+        await new Promise(resolve => { held.push({ release: resolve }); });
+        await route.fulfill({ response });
+    });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#trendsView")).toContainText(/Loading.*14 days/);
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
+    await expect.poll(() => held.length).toBe(1);
+    await capture(page, "usability-pending-range");
+    await page.getByRole("button", { name: "Last 30 days", exact: true }).click();
+    await expect.poll(() => held.length).toBe(2);
+    await expect(page.locator(".trends-pending")).toContainText("30 days");
+    held[0].release();
+    await expect(page.locator(".trends-pending")).toContainText("30 days");
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
+    held[1].release();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#trendsView")).not.toContainText(/Loading.*14 days/);
+    const applied = await page.locator(".trends-period-label").allTextContents();
+    await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await expect(page.locator("#trendsView > .notice")).toContainText("Synthetic stored-read failure");
+    await expect(page.locator(".trends-pending")).toBeEmpty();
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
+    await page.unroute("**/api/trends");
+    await page.route("**/api/trends", async route => {
+        const response = await route.fetch();
+        await new Promise(resolve => { held.push({ release: resolve }); });
+        await route.fulfill({ response });
+    });
+    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await expect.poll(() => held.length).toBe(3);
+    await navigateMain(page, "analyze"); await navigateMain(page, "trends");
+    await expect(page.locator(".trends-pending")).toBeEmpty();
+    held[2].release();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
+});
+
+test("withdrawal scrubs selected context and evidence return while a built Trends range is pending", { timeout: 30000 }, async t => {
+    const { page, url } = await setup(t, false, { records: measureRecords(), enforced: true });
+    await dates(page, "2026-08-01", "2026-08-01");
+    let release;
+    t.after(() => release?.());
+    await page.route("**/api/trends", async route => {
+        const response = await route.fetch();
+        await new Promise(resolve => { release = resolve; });
+        await route.fulfill({ response });
+    });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await expect(page.locator(".trends-pending")).toContainText("14 days");
+    await page.locator('[data-family="tools"]').getByRole("button", { name: "View evidence", exact: true }).click();
+    await page.evaluate(() => {
+        const walker = document.createTreeWalker(document.getElementById("trendsView"), NodeFilter.SHOW_TEXT), nodes = [];
+        while (walker.nextNode()) if (/Cedar|Maple|Aug 1|Loading/.test(walker.currentNode.data)) nodes.push(walker.currentNode);
+        window.heldTrendsText = nodes;
+        window.retiredTrendLink = document.querySelector(".trends-evidence-row a");
+        window.heldTrendsAttribute = document.querySelector("[data-trend-mark]").getAttributeNode("aria-label");
+    });
+    const origin = new URL(url).origin;
+    const send = async (path, body, capability) => {
+        const response = await fetch(origin + path, { method: "POST",
+            headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1",
+                ...(capability ? { "X-Board-Capability": capability } : {}) }, body: JSON.stringify(body) });
+        assert.equal(response.status, 200); return response.json();
+    };
+    const session = await send("/api/session", {});
+    const status = await fetch(origin + "/api/access/status", {
+        headers: { "X-Board-Capability": session.capability },
+    }).then(response => response.json());
+    await send("/api/access/command", { schemaVersion: 1, action: "wire-sign-out",
+        operationId: randomUUID(), generation: status.generation }, session.capability);
+    await expect(page.locator("#workspace")).toBeHidden();
+    const retired = await page.evaluate(() => ({ count: window.heldTrendsText.length,
+        retained: window.heldTrendsText.filter(node => node.data).map(node => node.data), attribute: window.heldTrendsAttribute.value }));
+    assert.ok(retired.count > 0);
+    assert.deepEqual({ retained: retired.retained, attribute: retired.attribute }, { retained: [], attribute: "" });
+    await expect(page.locator(".trends-dialog[open]")).toHaveCount(0);
+    await expect.poll(() => Boolean(release)).toBe(true); release();
+    await page.evaluate(() => window.retiredTrendLink.click());
+    await expect(page.locator("#workspace")).toBeHidden();
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await send("/api/session/release", {}, session.capability);
+});
 async function dates(page, from = "2026-08-01", to = "2026-08-30") {
     await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Trends from", { exact: true }).fill(from);
@@ -583,6 +854,10 @@ test("enlarged chart text and long recorded model labels fit the working view", 
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; }); await settle(page);
     await page.locator(".trends-panel[data-maximized=true] .trends-plot [data-trend-mark]").first().focus();
     await page.keyboard.press("Enter");
+    const dateHeight = await page.locator(".trends-point:visible h3").evaluate(node => ({
+        height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node).lineHeight),
+    }));
+    assert.ok(dateHeight.height <= dateHeight.line + 1, "The selected date must not be squeezed into a vertical letter column");
     await capture(page, "qualified-models-200percent");
     const size = await page.evaluate(() => ({
         body: parseFloat(getComputedStyle(document.body).fontSize),

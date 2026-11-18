@@ -163,8 +163,10 @@ Every Trends widget occupies the full workspace width in landscape and portrait.
 One shared chart layout places period figures beside the title, a readable
 legend beside the plot, and the same measure controls in every header.
 On narrower surfaces the legend moves below the plot instead of squeezing its
-names. Do not nest the author legend beside a ring or clamp short names to two
-lines. Single-measure plots do not reserve an empty legend column.
+names. Short label/value pairs stay on one row; longer pairs wrap when their
+actual content needs the space. Do not nest the author legend beside a ring or
+clamp short names to two lines. Single-measure plots do not reserve an empty
+legend column.
 Name the calendar control **Custom dates**. Show the accepted range in
 parentheses beside every widget title, including collapsed and maximized views.
 Do not relabel an accepted chart with calendar drafts or pending read dates. Ordinary
@@ -174,6 +176,8 @@ changes. Author and service colors use the existing WIRE roles. Hover or focus
 can emphasize one series without changing its values or the other series.
 Selecting a mark stays in place. Do not resize a chart or hide its neighbors
 as a side effect of a pointer, touch or keyboard data selection.
+Keep the selected date, subject and View evidence above the plot in reserved
+space, in overview as well as maximized reading. Sizing must not gate evidence.
 
 The same chart owner serves overview and maximized reading. Every daily date
 is labeled with month and day, except Today; hover supplies the exact date.

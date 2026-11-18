@@ -108,10 +108,14 @@ The **Custom dates** button opens the existing calendar. Each widget title
 shows its accepted range in parentheses. Presets and Apply update all seven
 headers together; drafts, Cancel, pending reads and failed reads retain the
 accepted range. Today remains a current-day label, not a claim of full-day coverage.
+Delayed reads show the requested range separately, without relabeling accepted
+facts. Success, failure, superseding intent, departure and withdrawal clear it.
 
-Maximize uses the same chart and shared controls, with a selected-date breakdown
-and exact evidence. Back to overview restores the activating control and reading
-position. Collapse/expand and Collapse all/Restore all preserve each chart's
+Every expanded widget reserves a selected-date/subject row above its plot with
+View evidence. Selection updates that row without changing widget height, even
+for long recorded names. Maximize uses the same chart and controls, adding the
+selected-date breakdown and View numbers. Back to overview restores the activating
+control and reading position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.
 Only the explicit maximize/restore controls change chart size. Clicking, tapping
@@ -119,10 +123,21 @@ or pressing Enter/Space on a data mark selects it in place, without hiding other
 widgets, moving the page or changing horizontal reading position. A restrained
 selected-mark outline remains after hover closes. Maximizing later retains that
 exact selected date and series for View evidence.
+The supporting-call sheet has one scrolling body with its title and Close outside
+that body. Opening a call scrubs the list, but retains its exact identity and
+position within the authorized scope. The existing contextual reader returns to
+the stable View evidence control; reopening the sheet restores the inspected call.
+Scope changes, departure and authority loss retire the return state and links.
+Never retain withdrawn private nodes for restoration.
 Measure controls use the same header position for every widget, not just Tools.
 Counts, percentages and timing keep their distinct units; these controls do not
 redefine the underlying evidence. Omit redundant subheaders and the repeated
 "tool calls" caption beneath the Tool calls total.
+Duration shortcuts and legend checkboxes share one series-visibility state.
+Weekly shares name the actual calendar week and its selected-date denominator;
+partial-week shading and week boundaries distinguish denominator changes without
+changing daily membership or the calculation. Exact tables retain every column
+in a keyboard-scrollable region with intrinsic column sizing and semantic headers.
 Collapsed rows contain the title, applied date range and sizing controls, not
 metric totals or explanatory labels. Clicking anywhere
 on the collapsed row expands it; clicking an expanded header's non-control
