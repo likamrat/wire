@@ -474,7 +474,10 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         const value = call?.resultEvidence;
         const completion = { success: "Tool completed", unknown: "Completion not recorded",
             partial: "Tool partly completed", other: "Tool reported another result", transport: "Tool connection failed" }[outcome];
-        const describe = text => contextual ? text : completion + "; " + text;
+        const partial = screen && outcome === "partial" && call?.reportedOutcome === "partial"
+            ? "The call was saved as partial. That flag alone does not say which part completed."
+                + (!call.completionEventId && !call.completedAt ? "\nNo completion event or end time is retained." : "") : null;
+        const describe = text => [partial, contextual ? text : completion + "; " + text].filter(Boolean).join("\n");
         const problems = [];
         if (value?.version === 1) {
             const diagnostic = value.diagnostic?.version === 1 && diagnosticSummary(value.diagnostic)
@@ -491,12 +494,12 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         if (includeReturned && failed && (!contextual || !returned)) problems.push(`${failed} of ${members.length} retained returned entries ${failed === 1 ? "reports" : "report"} an error`);
         if (returned) problems.push(returned);
         if (problems.length) return describe(problems.join("\n"));
-        if (value?.version !== 1) return null;
+        if (value?.version !== 1) return partial;
         if (Number.isInteger(value.statusCode)) return describe((contextual ? "Reported" : "reported") + " status " + value.statusCode);
-        if (!includeReturned && members.length) return null;
+        if (!includeReturned && members.length) return partial;
         if (Number.isSafeInteger(value.resultCount)) return describe(`${value.resultCount} returned result ${value.resultCount === 1 ? "entry" : "entries"}`
             + (value.resultCount > members.length ? ` (${members.length} retained)` : ""));
-        if (contextual && value.contentStatus === "body-excluded") return null;
+        if (contextual && value.contentStatus === "body-excluded") return partial;
         const content = ({
             "not-supplied": "result content was not supplied", "explicit-null": "no response body",
             "recorded-empty": "empty result content", "body-excluded": "response body excluded from retention",

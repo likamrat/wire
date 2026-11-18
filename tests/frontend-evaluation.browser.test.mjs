@@ -81,6 +81,25 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proofs, `${name}.png`) });
 }
 
+test("partial outcome opens the exact retained call and explains its limited provenance", async t => {
+    const { page } = await setup(t, "react", reviewRecords());
+    const card = page.locator('#outcomeChart [data-percentage-card="outcomes"]');
+    await expect(card.locator(".percentage-total-value")).toHaveText("244");
+    await expect(card.locator('li[data-category="partial"]')).toHaveAttribute("data-count", "1");
+    await card.locator('li[data-category="partial"] a').click(); await ready(page);
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
+    await page.locator("#activityList .request-card-open").click();
+    const call = page.locator('#contextSidebar [data-tool-call-id="review-call-2"]').first();
+    await expect(call).toContainText("The call was saved as partial.");
+    await expect(call).toContainText("That flag alone does not say which part completed.");
+    await expect(call).toContainText("No completion event or end time is retained.");
+    await expect(call).toContainText("Tool-reported HTTP 200");
+    await expect(call).toContainText("No status recorded");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
+    await expect(card.locator('li[data-category="partial"]')).toHaveAttribute("data-count", "1");
+});
+
 test("the richer review fixture satisfies the unchanged report privacy producer contract", () => {
     const records = reviewRecords(), scan = scanSourceForExport(records, Buffer.alloc(32, 7));
     assert.equal(scan.allSelectedFieldsScanned, true);

@@ -83,6 +83,11 @@ tool call does not establish a correct answer, and a returned API error does
 not automatically explain its parent call's outcome. Service associations
 can overlap.
 
+**Partial completion** means the retained call explicitly has a partial tool
+outcome. It does not say which part completed. It is not inferred from mixed
+API statuses, HTTP 206 (Partial Content), missing timing or partially retained
+response text. Open the call for its recorded details and provenance gaps.
+
 Timing keeps its recorded boundary and measured population. Missing model
 names, timing or recorded application results remain unavailable, not zero.
 Examples connect permitted prompt copies with recorded calls; they are not

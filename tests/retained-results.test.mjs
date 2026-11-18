@@ -7,6 +7,7 @@ import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { loadBoardState, mergeEvidenceWithState } from "../lib/store.mjs";
 import { buildSanitizedRecord } from "../lib/export.mjs";
+import { projectReportResults } from "../lib/report-result-projection.mjs";
 
 function retainedCall(result, success = true) {
     const raw = { id: "completion", type: "tool.execution_complete", timestamp: "2026-10-29T12:00:01.000Z",
@@ -16,6 +17,38 @@ function retainedCall(result, success = true) {
         JSON.parse(JSON.stringify(retained)));
     return { call, retained };
 }
+
+test("source completion, partial capture, mixed API statuses and HTTP 206 keep separate outcome meanings", () => {
+    const partialError = { id: "partial-content-end", type: "tool.execution_complete", timestamp: "2026-10-29T12:00:01.000Z",
+        data: { toolCallId: "result-call", success: false, error: {
+            code: "failure", message: `MCP server 'workiq': {"results":[{"statusCode":403,"error":{"code":"AccessDenied"}},`,
+        } } };
+    const prefix = completeWorkIqCall({ ...fixture().toolCalls[0], toolCallId: "result-call", startedAt: "2026-10-29T12:00:00.000Z" },
+        JSON.parse(JSON.stringify(retainEvent(partialError, { credentialExclusions: 0 }))));
+    assert.equal(prefix.resultEvidence.contentStatus, "partial");
+    const cases = [
+        [retainedCall({ structuredContent: { statusCode: 206 } }).call, "success", "succeeded"],
+        [retainedCall({ structuredContent: { results: [{ statusCode: 200 }, { statusCode: 403 }] } }).call, "success", "succeeded"],
+        [prefix, "failure", "failed"],
+        [retainedCall({ isError: true, content: "Recorded application error." }, null).call, "unknown", "unknown"],
+        [retainedCall({ structuredContent: { statusCode: 200 }, content: '{"statusCode":403}' }).call, "success", "succeeded"],
+        [completeWorkIqCall({ ...fixture().toolCalls[0], startedAt: "2026-10-29T12:00:00.000Z" }, undefined), "unknown", "unknown"],
+        [{ ...fixture().toolCalls[0], toolSucceeded: null, reportedOutcome: "partial" }, "partial", "partial"],
+    ];
+    for (const [call, outcome, completion] of cases) {
+        const record = fixture(); record.toolCalls = [call];
+        const before = JSON.stringify(record), analytics = buildActivityAnalytics([record]);
+        assert.equal(analytics.rows[0].outcome, outcome);
+        assert.equal(buildActivityAnalytics([record], { filters: { outcomes: [outcome] } }).rows.length, 1);
+        assert.equal(analytics.totals.partial, outcome === "partial" ? 1 : 0);
+        assert.equal(projectReportResults([record], "a".repeat(64)).facts.calls[0].completion, completion);
+        assert.equal(JSON.stringify(record), before);
+    }
+    const suppliedPartial = retainedCall({ structuredContent: { results: [{ statusCode: 206 }] } }).call;
+    const returned = buildActivityAnalytics([{ ...fixture(), toolCalls: [suppliedPartial] }], { layer: "reported-api" });
+    assert.equal(returned.totals.success, 1);
+    assert.equal(returned.totals.partial, 0, "HTTP Partial Content is a 2xx returned status, not partial tool execution");
+});
 
 test("single successful status survives without inventing returned entries or task success", async t => {
     const { call } = retainedCall({ structuredContent: { statusCode: 204, data: null } });

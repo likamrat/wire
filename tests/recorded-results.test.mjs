@@ -54,6 +54,37 @@ test("result widget titles name the evidence unit without conflating source popu
     }
 });
 
+test("partial-call reading identifies its retained flag without inventing a completed portion or changing report meaning", () => {
+    const screen = createRecordedResults({ screen: true }), frozen = createRecordedResults();
+    const call = { reportedOutcome: "partial", toolSucceeded: null, completedAt: null, apiResults: [
+        { index: 0, statusCode: 200 }, { index: 1, statusCode: null },
+    ] }, row = { id: "partial-call", outcome: "partial" };
+    const before = JSON.stringify(call);
+    const reason = screen.explainedEntries("tool", [row], () => call)[0].reason;
+    assert.match(reason, /call was saved as partial/i);
+    assert.match(reason, /flag alone does not say which part completed/i);
+    assert.match(reason, /No completion event or end time is retained/);
+    assert.ok(screen.callReasonItems(call, "partial").some(item => /call was saved as partial/i.test(item.text)));
+    assert.equal(frozen.explainedEntries("tool", [row], () => call)[0].reason, undefined);
+    assert.deepEqual(frozen.callReasonItems(call, "partial"), []);
+    assert.deepEqual(screen.interpretation(call, "partial"), frozen.interpretation(call, "partial"),
+        "Screen provenance is not a new frozen interpretation or evidence definition");
+    for (const metadata of [{ completionEventId: "retained-end" }, { completedAt: "2026-11-16T18:00:11Z" }]) {
+        const detailed = { ...call, ...metadata, apiResults: [{ index: 0, statusCode: 403, errorCode: "AccessDenied" }] };
+        const text = screen.explainedEntries("tool", [row], () => detailed)[0].reason;
+        assert.match(text, /call was saved as partial/i);
+        assert.match(text, /AccessDenied/);
+        assert.doesNotMatch(text, /No completion event or end time/);
+    }
+    for (const outcome of ["success", "failure", "unknown"]) {
+        const text = screen.explainedEntries("tool", [{ ...row, outcome }], () => ({
+            ...call, reportedOutcome: "unknown", resultEvidence: { version: 1, contentStatus: "partial" },
+        }))[0].reason;
+        assert.doesNotMatch(text ?? "", /call was saved as partial/i);
+    }
+    assert.equal(JSON.stringify(call), before);
+});
+
 test("operation labels use recorded tool and canonical requested targets without inventing methods", () => {
     const results = createRecordedResults({ screen: true });
     assert.equal(results.callOperation({ tool: "workiq-ask", endpoint: { path: null } }), "workiq-ask");

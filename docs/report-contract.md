@@ -105,6 +105,16 @@ different definitions and must not be substituted for one another.
 | Timing | Keep unit, boundary and timed/eligible population; never blend prompt/tool/HTTP intervals or sum concurrent calls |
 | Comparison timing | Compatible raw samples, not means of percentages or medians of medians; nearest-rank median/P95 and one-sample limits stay explicit |
 
+The canonical tool `partial` bucket preserves an explicit retained
+`reportedOutcome: "partial"`; it is not derived from returned statuses,
+`contentStatus: "partial"`, missing completion timing or response truncation.
+HTTP 206 remains a 2xx status in its own evidence layer. The current Copilot
+completion normalizer emits succeeded/failed/unknown from the completion event's
+boolean success field; no partial tool state is synthesized during capture.
+Screen explanations can identify the saved partial flag and absent completion
+provenance without inferring which work completed. Frozen report meanings and
+interpretations do not acquire that screen-only explanation.
+
 Missing timing remains unavailable, not zero.
 
 New result observations can include `timingFailure` v1: the saved, qualified
