@@ -53,7 +53,9 @@ report's period and activity explicitly. To narrow an open report, use
 
 Choose the scope, select interactions if needed, then use **Show report**.
 The activity picker keeps **Close** and **Show report** visible while its
-contents scroll. **Close** leaves your selection intact; it does not save a report.
+contents scroll together, without a second scroll area inside the interaction list.
+Failure summaries keep the recorded tool name; open an interaction to read its
+exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
 You can also use **Add to report > Continue to report** in an interaction reader.
 Reading or selecting an interaction alone does not save a report.
 

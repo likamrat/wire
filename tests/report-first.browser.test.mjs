@@ -4,9 +4,10 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
 import { time } from "../lib/time.mjs";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
@@ -23,14 +24,15 @@ function records() {
         return record;
     });
 }
-async function setup(t, { source = records(), route = "#reports", enforced = false } = {}) {
+async function setup(t, { source = records(), route = "#reports", enforced = false, frontend, now } = {}) {
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, source);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, ...(access ? { access } : {}) });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false }, ...(access ? { access } : {}) });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access?.close(); for (const work of cleanup) await work(); });
     const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId: "America/Los_Angeles" });
     const page = await profile.newPage();
+    if (now) await page.clock.setFixedTime(new Date(now));
     page.setDefaultTimeout(10000);
     const errors = [], requests = [];
     page.on("pageerror", error => errors.push(error.stack));
@@ -48,6 +50,151 @@ async function prepare(page, preset = "errors") {
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
     return body;
 }
+
+async function openReviewPicker(t) {
+    const app = await setup(t, { source: reviewRecords(), frontend: "react", now: "2026-11-18T16:00:00Z",
+        route: "#analyze?range=custom&from=2026-11-10&to=2026-11-16" });
+    app.before = await loadBoardState(app.context);
+    await chooseTheme(app.page, "light");
+    await navigateMain(app.page, "reports");
+    await app.page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    app.prepared = await prepare(app.page, "all");
+    await app.page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await app.page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    await expect(app.page.locator("#reportActivityOptions")).toBeVisible();
+    return app;
+}
+
+async function capturePicker(page, name) {
+    const proofs = process.env.WIRE_REPORT_FIRST_PROOFS;
+    if (!proofs) return;
+    await mkdir(proofs, { recursive: true });
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: path.join(proofs, name + ".png") });
+    const geometry = await page.locator("#reportActivityOptions").evaluate(picker => ({
+        viewport: { width: innerWidth, height: innerHeight, font: getComputedStyle(document.documentElement).fontSize },
+        open: picker.matches(":popover-open"),
+        regions: [picker, ...picker.querySelectorAll(".report-selection-body,.report-request-page")].map(node => ({
+            name: node.id || node.className, height: node.clientHeight, scrollHeight: node.scrollHeight,
+            scrollTop: node.scrollTop, overflow: getComputedStyle(node).overflowY,
+        })),
+    }));
+    await writeFile(path.join(proofs, name + ".json"), JSON.stringify(geometry, null, 2));
+}
+
+test("the normal Reports picker has one reading scroller and retains paging, selection and focus", { timeout: 60000 }, async t => {
+    const { page, context, before, prepared, errors } = await openReviewPicker(t);
+    assert.equal(prepared.records.length, 241);
+    const picker = page.locator("#reportActivityOptions"), body = picker.locator(".report-selection-body");
+    const rows = picker.locator(".report-request-page .request-row");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(rows).toHaveCount(4);
+    await capturePicker(page, "picker-mobile-top");
+    const innerScrollers = await body.evaluate(node => [...node.querySelectorAll("*")].filter(child =>
+        child.scrollHeight > child.clientHeight + 1 && /^(auto|scroll)$/.test(getComputedStyle(child).overflowY))
+        .map(child => ({ className: child.className, height: child.clientHeight, scroll: child.scrollHeight })));
+    assert.deepEqual(innerScrollers, [], "Only the picker body, not its relocated request page, owns vertical reading.");
+    const first = rows.first();
+    await first.scrollIntoViewIfNeeded();
+    const start = await body.evaluate(node => node.scrollTop);
+    const bounds = await body.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height - 70);
+    await page.mouse.wheel(0, 200);
+    await expect.poll(() => body.evaluate(node => node.scrollTop)).toBeGreaterThan(start);
+    assert.equal(await picker.locator(".report-request-page").evaluate(node => node.scrollTop), 0);
+    for (let index = 0; index < 4; index++) {
+        await rows.nth(index).locator(".request-card-open").scrollIntoViewIfNeeded();
+        await expect(rows.nth(index).locator(".request-card-open")).toBeInViewport();
+        await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
+        await expect(picker.getByRole("button", { name: "Show report", exact: true })).toBeInViewport();
+    }
+    await picker.locator('[name=reportScope][value=selected]').check();
+    await picker.locator("#report-select-search-0").check();
+    await picker.getByRole("button", { name: "Next report requests", exact: true }).click();
+    await picker.locator("#report-select-search-4").check();
+    await picker.getByRole("button", { name: "Previous report requests", exact: true }).click();
+    await expect(picker.locator("#report-select-search-0")).toBeChecked();
+    await expect(picker.locator(".report-activity-summary")).toContainText("2 interactions included");
+    await picker.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(picker).toBeHidden();
+    await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    await expect(picker.locator("#report-select-search-0")).toBeChecked();
+    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await picker.getByRole("button", { name: "Show report", exact: true }).click();
+    const response = await preparing, selected = await response.json();
+    assert.deepEqual(response.request().postDataJSON().selection.scenarioIds.sort(), ["search-0", "search-4"]);
+    assert.equal(selected.records.length, 2);
+    assert.deepEqual(await loadBoardState(context), before);
+    assert.deepEqual(errors, []);
+});
+
+test("the normal Reports picker preserves the exact known tool identity when opening its reader", { timeout: 60000 }, async t => {
+    const { page, context, before, errors } = await openReviewPicker(t);
+    const row = page.locator("#report-select-search-0").locator("xpath=ancestor::article[1]");
+    await capturePicker(page, "picker-known-tool");
+    await expect(row).toContainText("workiq-retrieve");
+    await expect(row).not.toContainText("Tool not recorded");
+    await expect(row).toContainText("Access was denied");
+    await expect(row).toContainText("403");
+    const origin = page.url();
+    await row.locator(".request-card-open").click();
+    const reader = page.locator("#requestContent");
+    await expect(reader).toContainText("Find the decisions from the Cedar launch review.");
+    await expect(reader.locator(".reader-call-identity-line")).toContainText("workiq-retrieve");
+    await expect(reader).toContainText("403");
+    await capturePicker(page, "picker-known-tool-reader");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page).toHaveURL(origin);
+    await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeVisible();
+    assert.deepEqual(await loadBoardState(context), before);
+    assert.deepEqual(errors, []);
+});
+
+test("the normal Reports picker keeps long plural evidence readable in both themes and enlarged text", { timeout: 60000 }, async t => {
+    const { page, context, before, errors } = await openReviewPicker(t);
+    const picker = page.locator("#reportActivityOptions"), body = picker.locator(".report-selection-body");
+    for (const [theme, width, height, size] of [
+        ["light", 390, 844, 100], ["dark", 390, 844, 100],
+        ["light", 1440, 1000, 100], ["light", 1024, 1000, 200], ["dark", 1024, 1000, 200],
+    ]) {
+        await picker.getByRole("button", { name: "Close", exact: true }).click();
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+        await picker.locator("#reportRequestSearch").fill("");
+        await body.evaluate(node => { node.scrollTop = 0; });
+        await capturePicker(page, `picker-${theme}-${width}-${size}-top`);
+        await picker.locator("#reportRequestSearch").fill("Review Cedar handover evidence");
+        const row = picker.locator(".request-row");
+        await expect(row).toHaveCount(1);
+        await expect(row).toContainText("4 recorded calls");
+        await expect(row).toContainText("workiq-retrieve");
+        await expect(row).not.toContainText("Tool not recorded");
+        await row.locator(".request-card-problem").scrollIntoViewIfNeeded();
+        await capturePicker(page, `picker-${theme}-${width}-${size}-plural`);
+        const layout = await body.evaluate(node => ({
+            scrolls: node.scrollHeight > node.clientHeight,
+            overflow: node.scrollWidth > node.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth + 1,
+            nested: [...node.querySelectorAll("*")].filter(child => child.scrollHeight > child.clientHeight + 1
+                && /^(auto|scroll)$/.test(getComputedStyle(child).overflowY)).map(child => child.className),
+        }));
+        assert.deepEqual(layout, { scrolls: true, overflow: false, nested: [] });
+        await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
+        await expect(picker.getByRole("button", { name: "Show report", exact: true })).toBeInViewport();
+        await picker.getByRole("button", { name: "Close", exact: true }).focus();
+        await page.keyboard.press("Escape");
+        await expect(picker).toBeHidden();
+        await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeFocused();
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    }
+    assert.deepEqual(await loadBoardState(context), before);
+    assert.deepEqual(errors, []);
+});
 
 test("creation text choice applies to the first report without a setup or preview request", { timeout: 60000 }, async t => {
     const { page, context, requests, errors } = await setup(t);

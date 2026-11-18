@@ -470,7 +470,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-selection-header h2{margin:0}
 .report-selection-header button{min-height:44px}
 .report-selection-body{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:16px 20px}
-#reportActivityOptions #reportList{max-height:none;overflow:visible}
+#reportActivityOptions :is(#reportList,.report-request-page){max-height:none;overflow:visible}
 #reportActivityOptions .scope-choices{display:grid;gap:4px;grid-template-columns:repeat(3,minmax(0,1fr))}
 #reportActivityOptions .scope-choice{min-height:44px;padding:8px;margin:0;border:0;background:transparent}
 #reportActivityOptions .scope-choice>span{display:flex;flex-wrap:wrap;gap:0 8px;align-items:baseline}

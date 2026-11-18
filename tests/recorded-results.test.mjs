@@ -449,6 +449,22 @@ test("full-request context uses canonical identities and keeps batched API units
     assert.deepEqual(createRecordedResults().summarize(context["reported-api"]), { count: 3, success: 1, failure: 1, unknown: 1, partial: 0, other: 0, transport: 0 });
 });
 
+test("full-request context preserves qualified tool identity for the shared operation formatter", () => {
+    const record = fixture("picker-tool");
+    const call = record.toolCalls[0];
+    call.tool = "workiq-retrieve";
+    call.requestArgs = { query: "Find the release decisions.", capabilities: [{ name: "Email" }] };
+    delete call.requestedApiPath;
+    const analytics = buildActivityAnalytics([record], { filters: { scope: "all" } });
+    const context = buildRequestActivity([record]), results = createRecordedResults();
+    assert.equal(context.tool[0].id, analytics.rows[0].id);
+    assert.equal(context.tool[0].tool, call.tool);
+    assert.equal(results.callOperation(context.tool[0]), results.callOperation(analytics.rows[0]));
+    assert.equal(context["reported-api"][0].tool, call.tool);
+    assert.equal(results.callOperation({ endpoint: { path: "/me/messages" } }),
+        "Tool not recorded \u00b7 Requested: /me/messages", "A target alone cannot supply a missing tool identity.");
+});
+
 test("literal API paths preserve all retained characters and missing targets without normalization", () => {
     const results = createRecordedResults();
     const path = "/Users/{User-ID}/messages?$filter=subject%20eq%20'\u65e5\u672c\u8a9e'&Case=Keep+This";
