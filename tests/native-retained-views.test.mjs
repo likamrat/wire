@@ -11,6 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { chatSource } from "./native-chat-source-fixtures.mjs";
 import { decodeNativeChatObservation } from "../lib/native-chat-source.mjs";
 import { retainNativeChatSourceObservations } from "../lib/native-read-model.mjs";
+import { createBoundedNativeState } from "../web/bounded-native-state.mjs";
 
 const input = () => ({ schemaVersion: 1, revision: null,
     sources: ["microsoft-365-chat", "microsoft-365-cowork"],
@@ -68,6 +69,15 @@ test("bounded time charts use current call-start facts, retain undated calls and
     const tool = await views.query({ ...input(), analytics: { ...analytics,
         filters: { from: point.from, to: point.to, tools: ["mcp__graph__CallGraph"] } } }, app.services.nativeReportAdmission);
     assert.equal(tool.aggregates.selectedRows, 1, "Call-specific filters still apply to actual dated call rows.");
+    for (const timelineFrom of ["1900-01-01", "2030-01-01"]) {
+        const outside = await views.query({ ...input(), analytics: { ...analytics, timelineFrom } }, app.services.nativeReportAdmission);
+        assert.equal(outside.timeSeries.window.count, 0);
+        assert.equal(outside.timeSeries.window.total, 1);
+        assert.equal(outside.timeSeries.datedRows, 2);
+        assert.equal(outside.timeSeries.undatedRows, 1);
+        assert.deepEqual(outside.aggregates, result.aggregates);
+        assert.deepEqual(createBoundedNativeState().decode(outside, { ...input(), analytics: { ...analytics, timelineFrom } }), outside);
+    }
 });
 
 test("bounded Dates retain ordinary Chat message context without inventing dated calls", async t => {
@@ -96,6 +106,51 @@ test("bounded Dates retain ordinary Chat message context without inventing dated
             assert.equal(selected.aggregates.conversations, 0);
             assert.equal(selected.aggregates.selectedRows, 0);
         });
+
+    }
+});
+
+for (const dense of [false, true]) test(`bounded daily native timelines preserve long ${dense ? "populated ranges" : "gaps"} and explicit intervals`, async t => {
+    const rows = coworkFixture(), starts = rows.filter(row => row.record.event === "ts");
+    const dated = [[starts[0], 0], [starts[1], 401]];
+    if (dense) for (let day = 1; day <= 400; day++) {
+        const row = envelope("cowork", { id: `daily-event-${day}`, event: "ts",
+            data: { tid: `daily-call-${day}`, tn: "mcp__graph__CallGraph" } },
+        { toolName: recorded("mcp__graph__CallGraph") }, {}, 10 + day);
+        rows.push(row); dated.push([row, day]);
+    }
+    for (const [row, day] of dated) {
+        const value = new Date(Date.UTC(2025, 0, 1 + day, 12)).toISOString();
+        row.record.data.ts = value;
+        row.qualifiedFields.observationTime = { availability: "recorded", scope: "observation",
+            unit: "iso8601", basis: "cowork.data.ts", value };
+        row.evidenceReferences.observationTime = { sourceDocument: "invented-native-response",
+            pointer: `/events/${row.ordering.recordOrdinal}/data/ts`, nativeEventId: row.record.id };
+    }
+    const app = await committedNativeReportFixture(t, { segmented: true, envelopes: rows });
+    const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
+    t.after(() => views.close());
+    const analytics = { layer: "tool", timeContext: { timeZone: "UTC", locale: "en-US" } };
+    const result = await views.query({ ...input(), analytics }, app.services.nativeReportAdmission);
+    assert.equal(result.timeSeries.bucket, "day");
+    assert.equal(result.timeSeries.points.length, 90);
+    assert.equal(result.timeSeries.window.total, 402);
+    assert.deepEqual(createBoundedNativeState().decode(result, { ...input(), analytics }), result);
+    const invalidWindow = structuredClone(result); invalidWindow.timeSeries.window.count++;
+    assert.throws(() => createBoundedNativeState().decode(invalidWindow, { ...input(), analytics }), TypeError);
+    assert.equal(result.timeSeries.datedRows, dated.length);
+    assert.equal(result.timeSeries.undatedRows, 1);
+    assert.equal(result.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dense ? 90 : 1);
+    assert.ok(result.timeSeries.points.slice(1, -1).every(point => point.count === (dense ? 1 : 0)));
+    const first = await views.query({ ...input(), analytics: { ...analytics, timelineFrom: "2025-01-01" } }, app.services.nativeReportAdmission);
+    assert.equal(first.timeSeries.points[0].date, "2025-01-01");
+    assert.equal(first.timeSeries.window.offset, 0);
+    assert.equal(first.timeSeries.datedRows, dated.length);
+    assert.equal(first.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dense ? 90 : 1);
+    for (const bucket of ["week", "month"]) {
+        const grouped = await views.query({ ...input(), analytics: { ...analytics, bucket } }, app.services.nativeReportAdmission);
+        assert.equal(grouped.timeSeries.bucket, bucket);
+        assert.equal(grouped.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dated.length);
     }
 });
 

@@ -45,17 +45,22 @@ export function createFilterState(results, authorship) {
         return filters;
     }
     function scope(route, next) {
-        const retained = Object.fromEntries(["layer", "range", "from", "to", "bucket", "tool", "service", "services", "includeMissingService",
+        const retained = Object.fromEntries(["layer", "range", "from", "to", "bucket", "timelineFrom", "tool", "service", "services", "includeMissingService",
             "withinServices", "scope", "authors", "result", "project", "endpoint", "source", "nativeGroup"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
-        return { ...retained, ...next };
+        return reconcileTimeline(route, { ...retained, ...next });
     }
     function bucket(route) {
-        if (route.bucket) return route.bucket;
-        if (["day", "week", "month", "7", "30"].includes(route.range)) return "day";
-        const span = Date.parse(route.to) - Date.parse(route.from);
-        return span < 31 * 86400000 ? "day" : span >= 366 * 86400000 ? "month" : "week";
+        return route.bucket || "day";
     }
-    return { canonical, query, scope, bucket, sources, sourceLabel, sourceIdentity };
+    function reconcileTimeline(previous, next) {
+        const basis = value => {
+            const route = canonical(value);
+            return JSON.stringify([route.layer || "tool", bucket(route), query(route),
+                route.withinServices || "", route.nativeGroup || "", route.search || "", route.analysisQuery || ""]);
+        };
+        return basis(previous) === basis(next) ? next : { ...next, timelineFrom: undefined };
+    }
+    return { canonical, query, scope, bucket, reconcileTimeline, sources, sourceLabel, sourceIdentity };
 }
 
 // Refine only an accepted canonical snapshot. Private search never becomes a server filter.
@@ -2451,7 +2456,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
+        const keys = ["layer", "chart", "bucket", "timelineFrom", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
             "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup", "comparisonView", "comparisonFocus"];
         const values = { view: ["analyze", "trends", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
@@ -2590,7 +2595,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             view = underlyingRoute().view;
         }
         view = sessionJourney.canonical({ view }).view;
-        return {
+        return filterState.reconcileTimeline(workspaceState.route, {
             ...workspaceState.route, view,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
             returnToResults: view === "request" ? workspaceState.route.returnToResults : undefined,
@@ -2607,7 +2612,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             setting: view === workspaceState.route.view && ["settings", "collection-status"].includes(view) ? workspaceState.route.setting : undefined,
             settingsWarning: undefined,
             ...changes,
-        };
+        });
     }
     function comparisonExitRoute(origin = underlyingRoute()) {
         return browseStates.get("analyze")?.route ?? { view: "analyze", search: "", analysisQuery: null };
@@ -2636,7 +2641,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(pair?.aFrom && pair?.aTo && pair?.bFrom && pair?.bTo
                 ? { aFrom: pair.aFrom, aTo: pair.aTo, bFrom: pair.bFrom, bTo: pair.bTo }
                 : assessmentFactories.periodComparison.createPresentation(time).completeDays(7, viewerTime)),
-            bucket: value.bucket ?? "day" };
+            bucket: value.bucket ?? "day", timelineFrom: undefined };
     }
     function navigateBrowse(name, options) {
         rememberBrowse();
@@ -2688,6 +2693,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function navigate(next, replace = false, options = {}) {
         if (clearingAccess || !api.publicationToken()) return false;
         next = canonicalRoute(next);
+        if (!options.restorePosition && browseName(workspaceState.route) === "analyze" && browseName(next) === "analyze")
+            next = filterState.reconcileTimeline(workspaceState.route, next);
         if (routeUrl(next) !== location.hash && !next.search) incomingNavigationError = null;
         if (options.isCurrent && !options.isCurrent()) {
             announce("This Search destination is no longer current. Search again before opening it.", "stale");
@@ -3102,7 +3109,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (sessionJourney.underlying(value).view === "trends") return {
             layer: "tool", groupBy: "workload", bucket: "month", filters: { scope: "all", sources: ["github-copilot"] }, limit: 8, timeContext: viewerTime,
         };
-        return { layer: value.layer || "tool", groupBy: value.chart === "endpoint" ? "endpoint" : "workload", bucket: filterState.bucket(value), filters: filterState.query(value), limit: 8, timeContext: viewerTime };
+        return { layer: value.layer || "tool", groupBy: value.chart === "endpoint" ? "endpoint" : "workload", bucket: filterState.bucket(value),
+            ...(value.timelineFrom && value.compare !== "periods" ? { timelineFrom: value.timelineFrom } : {}),
+            filters: filterState.query(value), limit: 8, timeContext: viewerTime };
     }
     function validateAnalytics(data, records) {
         if (!data || !Array.isArray(data.groups) || !Array.isArray(data.rows) || !data.coverage || !results.valid(data.totals)) throw new Error("Activity summaries are unavailable. No replacement counts were inferred.");
@@ -3776,7 +3785,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function viewChanged() {
         const defaults = { view: "analyze", chart: "time", range: "capture", layer: "tool", scope: "history", page: "0" };
-        const presentation = ["localSearch", "settingsWarning", "bucket",
+        const presentation = ["localSearch", "settingsWarning", "bucket", "timelineFrom",
             ...(workspaceState.route.compare === "periods" ? ["compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "chart"] : [])];
         return Object.entries(workspaceState.route).some(([key, value]) => !presentation.includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
     }
@@ -4774,7 +4783,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("homeView").dataset.empty = String(selectedCount === 0 && !slice.scenarios.length && !native?.aggregates.conversations
             && !workspaceState.loading && !workspaceState.stale && (semanticQuery === null || semanticBound && semanticComplete));
         const recordedDates = [workspaceState.analytics.coverage.firstAt, workspaceState.analytics.coverage.lastAt,
-            ...(native?.timeSeries.points.filter(point => point.count).map(point => point.date) ?? [])].filter(Boolean).sort();
+            ...(native?.timeSeries.window ? [native.timeSeries.window.first, native.timeSeries.window.last]
+                : native?.timeSeries.points.filter(point => point.count).map(point => point.date) ?? [])].filter(Boolean).sort();
         $("periodLabel").textContent = workspaceState.scope.filters.from || workspaceState.scope.filters.to || recordedDates.length
             ? `${date(workspaceState.scope.filters.from || recordedDates[0])} - ${date(workspaceState.scope.filters.to || recordedDates.at(-1))}`
             : "No dated activity in this view";
@@ -4816,7 +4826,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const reading = el("dl");
         for (const [label, text] of [
             ["Dates and grouping", chartType === "time"
-                ? "Undated records are excluded. Weeks start Monday, in the display time zone."
+                ? (workspaceState.scope.bucket === "week" ? "Weekly totals start Monday."
+                    : workspaceState.scope.bucket === "month" ? "Monthly totals start on the first."
+                    : "Each date shows one calendar day's records.")
+                    + " Dates use the display time zone. Undated records are excluded; zero means no qualifying retained records, not proof no activity occurred."
                 : chartType === "workload" && layer === "tool" ? help.charts.activityCategory : help.charts[chartType]],
             ["Evidence limits", explanations[layer]],
         ]) reading.append(el("dt", "", label), el("dd", "", text));
@@ -4861,8 +4874,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderTime() {
         const series = workspaceState.analytics.timeSeries;
         const native = sharedNativeView(), nativePoints = native?.timeSeries.points ?? [];
+        renderTimelineWindow();
         if (!series?.points?.length && !nativePoints.length) {
-            $("chart").append(empty("Dates unavailable"));
+            $("chart").append(empty(series?.window || native?.timeSeries.window ? "No dated records in this window" : "Dates unavailable"));
             const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
             if (missing) $("chartFooter").append(el("span", "", `${count(missing)} undated ${missing === 1 ? "record" : "records"}.`));
             return;
@@ -4876,22 +4890,58 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
             unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
             summary: point => `${point.chartSource}: ${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
-            createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined,
+            createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, timelineFrom: undefined, page: undefined,
                 ...(native ? { source: point.native ? native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365" : "github-copilot" } : {}) }),
             inspect: inspectColumnSection,
         });
         chart.removeAttribute("aria-label");
         chart.setAttribute("aria-labelledby", "chartTitle");
         chart.setAttribute("aria-describedby", "chartReadingNotes");
-        viewKey(chart, "chart:time");
+        const windowed = series?.window?.total > 90 || native?.timeSeries.window?.total > 90;
+        viewKey(chart, "chart:time" + (windowed ? ":" + points[0].date + ":" + points.at(-1).date : ""));
         chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].chartSource + ":" + points[index].date));
         $("chart").append(chart);
         dimensional.refreshView(chart);
+        if (windowed && !workspaceState.scope.timelineFrom) chart.scrollLeft = chart.scrollWidth;
         const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
         if (missing) $("chartFooter").append(el("span", "", `${count(missing)} undated ${missing === 1 ? "record" : "records"}.`));
     }
+    function renderTimelineWindow() {
+        const windows = [
+            ["GitHub Copilot", workspaceState.analytics.timeSeries?.window],
+            ["Microsoft 365", sharedNativeView()?.timeSeries.window],
+        ].filter(([, window]) => window);
+        if (!windows.length || !workspaceState.scope.timelineFrom && windows.every(([, window]) => window.count === window.total)) return;
+        const bucket = workspaceState.scope.bucket, first = windows.map(([, window]) => window.first).sort()[0],
+            last = windows.map(([, window]) => window.last).sort().at(-1);
+        const visible = windows.map(([, window]) => window.from).filter(Boolean).sort()[0];
+        const start = workspaceState.scope.timelineFrom ?? visible ?? first;
+        const distance = activityProjection.bucketDistance(first, last, bucket), unit = bucket === "day" ? "days" : bucket === "week" ? "weeks" : "months";
+        const host = el("div", "list-pager timeline-window"); host.id = "timelineWindow"; host.setAttribute("role", "group"); host.setAttribute("aria-label", "Timeline dates");
+        const summary = el("p", "muted", windows.map(([name, window]) => `${windows.length > 1 ? name + ": " : ""}${window.count
+            ? window.from === window.to ? date(window.from, true) : `${date(window.from, true)} – ${date(window.to, true)}`
+            : "No dates in this window"} (${window.count} of ${count(window.total)} ${window.total === 1 ? bucket : unit})`).join(" / ")
+            + ". Totals and filters still cover the whole selected period.");
+        const target = amount => activityProjection.advanceBucket(first, bucket,
+            Math.max(0, Math.min(distance, activityProjection.bucketDistance(first, start, bucket) + amount)));
+        const latest = activityProjection.advanceBucket(first, bucket, Math.max(0, distance - 89));
+        const publication = api.publicationToken(), accepted = workspaceState.analytics;
+        for (const [id, label, from, available] of [
+            ["first", "First dates", first, start !== first],
+            ["earlier", "Earlier dates", target(-90), start > first],
+            ["later", "Later dates", target(90), windows.some(([, window]) => window.offset + window.count < window.total)],
+            ["latest", "Latest dates", latest, start !== latest],
+        ]) {
+            const control = button(label, () => {
+                if (!available || !api.isCurrent(publication) || accepted !== workspaceState.analytics || workspaceState.loading || workspaceState.stale) return;
+                navigate(routeFor("analyze", { timelineFrom: from }), false, { keepFocus: true });
+            }, "quiet");
+            control.id = "timeline-" + id; control.setAttribute("aria-disabled", String(!available)); host.append(control);
+        }
+        host.append(summary); $("chartFooter").append(host);
+    }
     function drillTime(point) {
-        go("activity", { range: "custom", from: point.from, to: point.to, page: undefined });
+        go("activity", { range: "custom", from: point.from, to: point.to, timelineFrom: undefined, page: undefined });
     }
     function drillGroup(group) {
         if (group.id === "group:other") { go("home", { expanded: "true" }); return; }
@@ -4947,6 +4997,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const calendarMeaning = workspaceState.scope.bucket === "week" ? " Dates are Mondays." : workspaceState.scope.bucket === "month" ? " Dates are the first of each month." : "";
         const caption = el("caption", "", `${units[layer][0].toUpperCase() + units[layer].slice(1)}${time
             ? ` by ${workspaceState.scope.bucket}.${calendarMeaning}` : "."}`);
+        const window = time ? workspaceState.analytics.timeSeries?.window : null;
+        if (window && window.count < window.total) caption.append(` ${window.count ? `Showing ${date(window.from, true)} – ${date(window.to, true)}` : "No dated records in this window"}; use Timeline dates below the chart to reach every interval. Totals cover all selected dated records.`);
         if (groups.length > 24) caption.append(" Totals include every page.");
         if (layer === "reported-api") caption.append(" Error results include HTTP 4xx/5xx or a reported error code.");
         const dateLabel = time ? workspaceState.scope.bucket === "week" ? "Week starting" : workspaceState.scope.bucket === "month" ? "Month starting" : "Date" : chartType === "endpoint" ? workspaceState.scope.layer === "tool" ? "Path / operation" : "API path" : categoryNoun();
@@ -4958,9 +5010,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const cell = el("th", index ? "numeric" : "", label); cell.scope = "col"; heading.append(cell);
         }
         thead.append(heading);
-        const footer = el("tfoot"), totalRow = el("tr"), totalLabel = el("th", "", "Total (all rows)");
+        const footer = el("tfoot"), totalRow = el("tr"), totalLabel = el("th", "", window && window.count < window.total ? "Dated total (selected period)" : "Total (all rows)");
         totalLabel.scope = "row";
-        totalRow.append(totalLabel, ...["total", ...keys].map(key => el("td", "numeric", count(groups.reduce((sum, group) => sum + group[key], 0)))));
+        totalRow.append(totalLabel, ...["total", ...keys].map(key => el("td", "numeric", count(time && workspaceState.analytics.timeSeries?.totals
+            ? workspaceState.analytics.timeSeries.totals[key] : groups.reduce((sum, group) => sum + group[key], 0)))));
         footer.append(totalRow);
         if (createReferenceAction && !options.referenceKey) throw new TypeError("Exact chart rows require their accepted reference identity.");
         const tableKey = createReferenceAction ? "chart-reference:" + chartType + ":" + options.referenceKey : "chart:" + sliceKey();
@@ -9668,7 +9721,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("dateFields").hidden = range !== "custom";
         const dates = range === "capture" ? { range: undefined, from: undefined, to: undefined }
             : { range, ...time.preset(range, viewerTime.timeZone) };
-        navigate(routeFor(workspaceState.route.view, { ...dates, bucket: undefined, page: undefined }), false, { keepFocus: true });
+        navigate(routeFor(workspaceState.route.view, { ...dates, page: undefined }), false, { keepFocus: true });
     });
     $("filters").addEventListener("submit", (event) => {
         event.preventDefault();
@@ -9680,7 +9733,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         dateError("");
         workspaceState.dateDraft = null;
         if (workspaceState.loading && workspaceState.route.from === from && workspaceState.route.to === to) return;
-        navigate(routeFor(workspaceState.route.view, { range: "custom", from, to, bucket: undefined, page: undefined }), false, { keepFocus: true });
+        navigate(routeFor(workspaceState.route.view, { range: "custom", from, to, page: undefined }), false, { keepFocus: true });
     });
     function dateError(message) {
         setText($("dateError"), message);

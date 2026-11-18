@@ -203,6 +203,8 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const grouped = category && ["workload", "service"].includes(value.grouping.groupBy) || path && value.grouping.groupBy === "endpoint";
         const groups = timed ? value.timeSeries.points ?? [] : [...value.grouping.groups,
             ...(value.grouping.other ? [{ ...value.grouping.other, id: "group:other", label: "Other groups" }] : [])];
+        if (timed && value.timeSeries.window?.total > value.timeSeries.window.count) details.append(node("p",
+            `${value.timeSeries.window.count ? `Visible dates: ${formatDate(value.timeSeries.window.from)} to ${formatDate(value.timeSeries.window.to)}` : "No dated records in this window"}. ${number(value.timeSeries.datedRows)} dated records across the selected period. Use Timeline dates below the chart for other dates.`, "settings-help"));
         if (timed || grouped) tableFor(timed ? "Dated calls and results" : path ? "Selected paths" : "Selected categories", groups.map(group => ({
             ...group, label: timed ? formatDate(group.date) : group.label,
             action: group.count && group.id !== "group:other" ? button(timed ? formatDate(group.date) : group.label,

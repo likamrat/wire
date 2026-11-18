@@ -104,6 +104,7 @@ test("a populated sparse Analyze timeline keeps a steady plot in the complete ti
         return route.continue();
     });
     await page.goto(app.runtime.url); await ready(page);
+    await setLegacyTimeBucket(page, "week"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("15");
     await expect(page.locator(".time-column")).toHaveCount(1);
     await expect(page.locator(".time-column")).toHaveAttribute("aria-label", /15 Work IQ tool calls.*11 tool completed.*4 tool failed/);

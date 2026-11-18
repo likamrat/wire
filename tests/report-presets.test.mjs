@@ -11,6 +11,7 @@ import { inspectSavedReportSnapshot } from "../lib/saved-report-snapshot.mjs";
 import { startServer } from "../lib/server.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
+import { resolveReportView } from "../lib/report-population.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 function records() {
@@ -32,6 +33,30 @@ const options = () => ({
     dateSelection: { range: "7", from: "2026-11-02", to: "2026-11-08" },
     reportFocus: { version: 1, preset: "errors", outcome: "errors", services: [] },
     saveMode: "local",
+});
+
+test("fresh report membership stays independent of Analyze interval across a long daily range", async t => {
+    const source = records().slice(0, 2);
+    for (const [index, record] of source.entries()) {
+        record.capturedAt = index ? "2026-02-06T12:00:00Z" : "2025-01-01T12:00:00Z";
+        record.toolCalls[0].startedAt = record.capturedAt;
+    }
+    const settings = { ...options(), timeContext: { timeZone: "UTC", locale: "en-US" },
+        dateSelection: { range: "custom", from: "2025-01-01", to: "2026-02-06" },
+        promptMode: "none", formats: ["json"], reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } };
+    for (const bucket of ["day", "week", "month"]) {
+        const selected = resolveReportView(source, { analytics: { layer: "tool", bucket, timelineFrom: "2026-02-01", filters: { scope: "all" } },
+            withinServices: [] }, settings);
+        assert.deepEqual(selected.sort(), source.map(record => record.scenarioId).sort());
+    }
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("daily-report", undefined, settings,
+        { kind: "all", revision: state.revision });
+    assert.equal(preview.snapshot.reportPopulation.included.length, 2);
+    assert.equal(preview.records.length, 2);
+    assert.deepEqual(preview.snapshot.dateSelection, settings.dateSelection);
+    assert.equal(assertProjectedBundle(preview).blockedCategoryCount, 0);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
 });
 
 test("new focused reports lead with separate outcomes and timing before patterns and preserve ordinal calls", async t => {

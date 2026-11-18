@@ -362,7 +362,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                     : "Dated and undated counts are unavailable."));
                 host.append(section);
             }
-            list.append(definition("Dates and grouping", "Weeks start Monday, in the display time zone."));
+            list.append(definition("Dates and grouping", "Individual calendar days by default. Long timelines page through 90 intervals; Timeline dates below the chart reaches earlier or later dates without changing the selected-period totals. Explicit weekly or monthly views keep their intervals; weeks start Monday. Dates use the display time zone."));
         } else if (topic === "models") {
             if (showFacts()) {
                 const section = group(), data = context.model.models;

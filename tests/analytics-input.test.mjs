@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ANALYTICS_SCHEMA, validateAnalyticsInput } from "../lib/analytics-input.mjs";
 
+test("timeline navigation is a validated date separate from population filters", () => {
+    const input = { bucket: "day", timelineFrom: "1926-11-16", filters: { scope: "all" } };
+    assert.deepEqual(validateAnalyticsInput(input), input);
+    for (const timelineFrom of ["1926-02-30", "2026-11-16T00:00:00Z", "", 0, null]) {
+        assert.throws(() => validateAnalyticsInput({ ...input, timelineFrom }), error => error.status === 400);
+    }
+    assert.throws(() => validateAnalyticsInput({ ...input, timelineLimit: 100000 }), error => error.status === 400);
+});
+
 test("synthetic: additive chart and activity filters retain original input", () => {
     const options = { layer: "direct-request", groupBy: "workload", bucket: "week", limit: 10, filters: { scope: "history", includeMetadata: false, workloads: ["Mail", "Calendar"], activityTypes: ["direct-request", "recorded-http"], outcomes: ["unknown"], projectIds: [null], from: "2026-10-01", to: "2026-10-04" } };
     assert.equal(validateAnalyticsInput(options), options);

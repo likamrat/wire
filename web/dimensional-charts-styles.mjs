@@ -42,6 +42,9 @@ export const screenServiceInkStyles = `
 :root[data-evidence-theme=dark] {${darkServiceInks}}
 `;
 export const dimensionalChartStyles = `
+.timeline-window{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.timeline-window>p{flex-basis:100%;margin:0;font-size:var(--type-small);line-height:var(--leading-ui)}
+.timeline-window>button[aria-disabled=true]{color:var(--muted);cursor:default}
 ${dimensionalColumnStyles}
 .flat-comparison {display:grid;gap:12px;min-width:0;container-type:inline-size}
 .flat-comparison-row {min-width:0}

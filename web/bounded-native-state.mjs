@@ -245,7 +245,8 @@ export function createBoundedNativeState() {
             || value.resultFacet.count < a.selectedRows
             || resultKeys.some(key => value.resultFacet.outcomes[key] < a.outcomes[key])) throw invalid();
         const series = value.timeSeries, timed = Object.hasOwn(series ?? {}, "points");
-        if (!exact(series, ["qualification", "datedRows", "undatedRows", ...(timed ? ["bucket", "timeZone", "points"] : [])])
+        const windowed = Object.hasOwn(series ?? {}, "window");
+        if (!exact(series, ["qualification", "datedRows", "undatedRows", ...(timed ? ["bucket", "timeZone", "points"] : []), ...(windowed ? ["window"] : [])])
             || !integer(series.datedRows) || !integer(series.undatedRows)
             || series.datedRows + series.undatedRows !== a.selectedRows
             || series.qualification !== (series.datedRows ? "source-observation-qualified" : "unqualified")
@@ -253,7 +254,17 @@ export function createBoundedNativeState() {
         if (timed) {
             if (series.bucket !== (analytics?.bucket ?? "day") || !["day", "week", "month"].includes(series.bucket)
                 || series.timeZone !== (analytics?.timeContext?.timeZone ?? "UTC")
-                || !Array.isArray(series.points) || series.points.length > 400) throw invalid();
+                || !Array.isArray(series.points) || series.points.length > (windowed ? 90 : 400)) throw invalid();
+            if (windowed) {
+                const window = series.window;
+                if (window === null ? series.points.length || series.datedRows : !exact(window, ["first", "last", "from", "to", "offset", "count", "total", "limit"])
+                    || !["first", "last"].every(key => typeof window[key] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(window[key]))
+                    || window.first > window.last || window.limit !== 90 || !integer(window.total) || !window.total
+                    || !integer(window.offset) || window.offset > window.total || !integer(window.count)
+                    || window.count !== series.points.length || window.offset + window.count > window.total
+                    || window.count && (window.from !== series.points[0].date || window.to !== series.points.at(-1).endDate)
+                    || !window.count && (window.from !== null || window.to !== null)) throw invalid();
+            }
             let previous = "", total = 0;
             const sums = Object.fromEntries(resultKeys.map(key => [key, 0]));
             for (const point of series.points) {
@@ -267,7 +278,9 @@ export function createBoundedNativeState() {
                 previous = point.endDate; total += point.count;
                 for (const key of resultKeys) sums[key] += point.outcomes[key];
             }
-            if (total !== series.datedRows || resultKeys.some(key => sums[key] > a.outcomes[key])) throw invalid();
+            if ((windowed ? total > series.datedRows : total !== series.datedRows)
+                || windowed && series.window?.count === series.window?.total && total !== series.datedRows
+                || resultKeys.some(key => sums[key] > a.outcomes[key])) throw invalid();
         }
         function validateGrouping(g, by) {
         if (!exact(g, ["complete", "groupBy", "groupCount", "groups", "other"]) || g.complete !== true

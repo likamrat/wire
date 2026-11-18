@@ -78,6 +78,34 @@ Calendar presets and custom dates use the selected IANA zone. Custom dates
 are inclusive civil days; buckets are clipped to that scope. Undated records
 stay explicit. Missing history cannot be assigned to the current filtered
 slice from source-wide diagnostics.
+Analyze's time chart defaults to individual calendar days, including All dates
+and long ranges; it does not silently combine them into weeks or months.
+Every day between the first and last qualifying dated records remains reachable.
+The shared and bounded-native producers materialize at most 90 intervals per
+source/window before serialization; native accumulation also retains only that
+window's date groups. Earlier/Later and First/Latest navigate calendar windows,
+not evidence filters. Window dates are visibly separate from full-period counts,
+coverage and report membership. Exact data uses the same window and names its
+full selected-period dated total. Scope changes reset the window; ordinary
+navigation/reader return retains it. Retired controls and late reads cannot
+publish after a later intent or authority withdrawal.
+Window retirement compares canonical analytical filters, layer, interval and
+route-owned refinements, rather than maintaining a second list of filter flags.
+An out-of-range presentation anchor keeps First/Latest recovery even for a
+single dated record. Explicit window controls remain available after recovery
+to preserve keyboard focus and Back; genuinely empty or undated populations
+do not acquire invented date controls.
+Local scrolling keeps all labels readable within the current window.
+Empty days mean no qualifying retained records, not proof of no activity.
+Explicit weekly/monthly links retain their grouping and exact interval drilldown,
+including after changing Dates. Date ranges select membership, not chart granularity.
+Compare keeps its separate Day/Week/Month choice; Trends keeps daily points even
+when showing a share within a week.
+Compare retains its existing complete-series bound of 400 intervals per side:
+larger comparisons refuse explicitly before expansion instead of publishing an
+unlabelled partial comparison. Choosing Week/Month is always explicit.
+Row-only catalog, report membership, assessment-row and Search-corpus work uses
+the canonical filtered selection without materializing calendar bins.
 
 Prepare chat-name/reference lookups once for the current render, including the
 full source roster. Keep every option, exact name and shortest distinguishing

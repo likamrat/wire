@@ -153,6 +153,7 @@ export function createPeriodComparisonState({ time, search, contract, projection
             const projected = projection.project(analytics.rows, {
                 groupBy: input.options.groupBy ?? "workload", limit: input.options.limit ?? 10, bucket: input.options.bucket ?? "day",
                 filters: { ...input.options.filters, ...side.range }, timeContext: value.timeContext, dateRange: side.dateRange,
+                timelineLimit: 400, completeTimeline: true,
             }, scenarios);
             require(Object.entries(projected).every(([field, expected]) => same(analytics[field], expected)));
             if (semanticMembership && analytics.apiCoverage) {
@@ -714,6 +715,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const analytics = { ...side.analytics, ...projection.project(rows, {
                     ...value.options, filters: { ...value.options.filters, ...side.range }, groupBy: side.analytics.groupBy,
                     bucket: side.analytics.timeSeries.bucket, dateRange: side.dateRange, timeContext: value.timeContext,
+                    timelineFrom: undefined, timelineLimit: 400, completeTimeline: true,
                 }, getContext().snapshot.scenarios) };
                 if (analytics.apiCoverage) analytics.apiCoverage = projection.apiCoverage(
                     analytics.apiCoverage.calls.filter(call => call.resultIds.some(id => ids.has(id))), rows);

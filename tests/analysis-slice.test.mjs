@@ -50,6 +50,24 @@ function exact(slice, ids, scenarioIds) {
     }
 }
 
+test("literal analytical refinement pages calendar paint without paging its canonical membership", () => {
+    const records = scopeRecords();
+    for (const [index, record] of records.entries()) for (const call of record.toolCalls)
+        call.startedAt = (index === 0 || record.isLegacy ? "1926-11-16" : "2026-11-16") + "T12:00:00Z";
+    const options = { ...scopeOptions }, base = { revision: 17, scenarios: records, analytics: buildActivityAnalytics(records, options) };
+    const latest = refine(base, options, privateQuery);
+    assert.ok(latest.analytics.timeSeries.window.total > 36000);
+    assert.equal(latest.analytics.timeSeries.points.length, 90);
+    assert.equal(latest.analytics.timeSeries.totals.count, latest.rowIds.length);
+    const firstOptions = { ...options, timelineFrom: "1926-11-16" };
+    const first = refine({ ...base, analytics: buildActivityAnalytics(records, firstOptions) }, firstOptions, privateQuery);
+    assert.deepEqual(first.rowIds, latest.rowIds);
+    assert.deepEqual(first.scenarioIds, latest.scenarioIds);
+    assert.equal(first.analytics.timeSeries.points[0].date, "1926-11-16");
+    assert.ok(first.analytics.timeSeries.points[0].drilldownIds.length > 0);
+    assert.ok(first.analytics.timeSeries.points.flatMap(point => point.drilldownIds).length < first.rowIds.length);
+});
+
 test("context rows retain the exact full-analytics attribution without building discarded chart projections", () => {
     const records = [...scopeRecords(), ...projectRetainedNativeRecords(chatFixture()).records];
     records.push(...extractGraphActivities([
