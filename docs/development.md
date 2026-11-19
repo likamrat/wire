@@ -75,6 +75,42 @@ at a new address.
 
 ## Keep development data separate
 
+### Run a feature checkout beside main
+
+From the feature checkout, install dependencies with `npm ci`, then run:
+
+```text
+npm run dev
+```
+
+This builds the checkout and starts the normal access-bound WIRE server with
+the React renderer on loopback port 4100. Its private store is outside Git,
+keyed to the checkout's physical directory. Reopening the same checkout keeps
+its store; moving the checkout creates a new one. Different branches switched
+in the **same directory** share a store: use separate worktrees to isolate them.
+This launcher refuses an inherited `WORKIQ_EVIDENCE_DATA_DIR`. Unset it in the
+contributor shell; do not copy main's store or approvals.
+
+Open the **printed URL**, not main's port or a restricted preview. Choose an
+unused port with `npm run dev -- --port 4101`; keep it stable for browser
+preferences and pending operations. For the other renderer use
+`npm run dev -- --development-frontend bundled`. The renderer does not select
+an account, approve a source or change permission. **Review and connect**
+lets you independently approve supported local Copilot history. Before approval
+the Account menu is neutral; a verified profile comes from that instance's
+approved source, not a copied avatar or the branch name.
+
+If using the optional WIRE canvas, its **updated adapter** accepts
+`{"boardId":"workiq-evidence-board-v1","runtimePort":4100}` at open. Use the
+actual printed port and a distinct canvas instance; omitting the port selects
+main's default 4000. The installed shim points at one checkout's adapter, not
+its server. If its schema lacks `runtimePort`, use the browser URL or explicitly
+install the updated shim (`npm run install:canvas`) and reload extensions.
+Installing changes the personal adapter for future sessions; it does not start
+a writer or grant source access. A closed or replaced runtime requires a
+fresh canvas; resolve uncertain operations in the original instance, never
+replay them on another.
+
 A disposable fixture needs an explicit owned data directory outside source,
 disabled collection timers and invented source paths. Never point it at a
 normal store, existing browser profile or original history.

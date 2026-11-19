@@ -53,6 +53,14 @@ existing rejection, and the destination never comes from forwarded headers.
 Every client must match this protocol and its runtime client. A successful
 server start does not make an incompatible adapter safe to use.
 
+The registered canvas targets only the selected canonical loopback port.
+It checks the health identity against the enforced handshake and pins that
+runtime for its action owner; a restricted unbound preview or a replacement
+process is not a continuation. Its embedded browser obtains a different panel
+from the same server. Agent report previews are not browser disclosure approval.
+Source checks stay in the normal browser flow; the canvas does not advertise
+the unsupported legacy history import or network diagnostic writes.
+
 ## One latest-state watch
 
 `POST /api/access/watch` accepts exactly schema 1 and

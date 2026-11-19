@@ -30,6 +30,8 @@
     "vite": "8.3.8"
   },
   "scripts": {
+    "predev": "npm run build",
+    "dev": "node scripts/start.mjs --contributor",
     "start": "node scripts/start.mjs",
     "build": "vite build",
     "typecheck": "tsc --noEmit",

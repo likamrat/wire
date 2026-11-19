@@ -1,19 +1,18 @@
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
-import { defaultDataDir } from "../lib/paths.mjs";
+import { defaultDataDir, contributorDataDir } from "../lib/paths.mjs";
 import { PRODUCT_NAME } from "../lib/branding.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import path from "node:path";
 
-const context = { dataDir: process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
 function startupOptions(args) {
     const options = { port: DEFAULT_RUNTIME_PORT, frontend: "bundled", developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
         microsoftVisibleSignIn: false, microsoftVisibilityExperiment: false, microsoftManualCollection: false };
     const seen = new Set();
     const invalid = () => { throw Object.assign(new Error(
-        "Use npm start -- [--port 0-65535] [--development-frontend bundled|react]. Microsoft incubation requires --development-microsoft; saved configuration is never adopted."),
+        "Use npm start -- [--port 0-65535] [--development-frontend bundled|react], or npm run dev for a separate checkout store. Microsoft incubation requires --development-microsoft."),
     { code: "WIRE_START_OPTIONS_INVALID" }); };
     for (let index = 0; index < args.length; index++) {
         const key = args[index];
@@ -23,7 +22,8 @@ function startupOptions(args) {
             const frontend = args[++index];
             if (!["bundled", "react"].includes(frontend)) invalid();
             options.frontend = frontend;
-        } else if (key === "--development-microsoft") options.developmentMicrosoft = true;
+        } else if (key === "--contributor") options.contributor = true;
+        else if (key === "--development-microsoft") options.developmentMicrosoft = true;
         else if (key === "--microsoft-retained") options.microsoftRetained = true;
         else if (key === "--microsoft-manual-collection") options.microsoftManualCollection = true;
         else if (key === "--microsoft-account-only") options.microsoftAccountOnly = true;
@@ -45,6 +45,14 @@ function startupOptions(args) {
     if (options.microsoftVisibleSignIn && (!options.microsoftConfig || options.microsoftAccountOnly || options.microsoftRetained)) invalid();
     if (options.microsoftManualCollection && (options.microsoftRetained || options.microsoftAccountOnly || options.microsoftVisibilityExperiment)) invalid();
     if (!options.developmentMicrosoft && [...seen].some(key => key.startsWith("--microsoft-"))) invalid();
+    if (options.contributor) {
+        if (options.developmentMicrosoft) invalid();
+        if (process.env.WORKIQ_EVIDENCE_DATA_DIR) throw Object.assign(new Error(
+            "The contributor launcher uses a separate store for this checkout. Unset WORKIQ_EVIDENCE_DATA_DIR in this shell, or use npm start for an explicitly selected store."),
+        { code: "WIRE_START_OPTIONS_INVALID" });
+        if (!seen.has("--port")) options.port = 4100;
+        if (!seen.has("--development-frontend")) options.frontend = "react";
+    }
     return options;
 }
 async function stop() {
@@ -68,6 +76,7 @@ process.once("SIGTERM", stop);
 if (process.connected) process.once("disconnect", stop);
 try {
     const options = startupOptions(process.argv.slice(2));
+    const context = { dataDir: options.contributor ? contributorDataDir() : process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
     const collector = { timers: !options.developmentMicrosoft };
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
@@ -109,6 +118,7 @@ try {
     if (stopping) await stop();
     else {
         console.log(`${PRODUCT_NAME} ready at ${runtime.url}`);
+        if (options.contributor) console.log(`Contributor checkout (${options.frontend}); private store: ${context.dataDir}`);
         if (options.developmentMicrosoft) console.log("Development-only Microsoft incubation. Automatic collection is off; saved configuration is not adopted.");
     }
 } catch (error) {
@@ -119,7 +129,7 @@ try {
         console.error(`${PRODUCT_NAME} source cleanup is incomplete.`);
     });
     console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
-        ? "The requested port is already owned. No second evidence writer was started; use the existing runtime or stop its owner explicitly."
+        ? "The requested port is already owned. No second evidence writer was started. Choose an unused port for an independent store, or verify the existing owner before using it."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;
 }
