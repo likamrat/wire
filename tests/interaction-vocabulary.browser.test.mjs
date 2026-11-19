@@ -102,22 +102,15 @@ test("service evidence explains significance at its call without warning on ordi
         await page.setViewportSize({ width, height: 1000 });
         await settle();
         if (phase !== "before") {
-            for (const [name, label] of [
-                ["missing", "Service target not recorded"], ["unclassified", "Recorded path not recognized"],
-                ["unsupported", "Recorded target format unsupported"],
-            ]) await expect(card(name).locator(".service-availability")).toHaveText(label);
-            for (const name of ["hosted", "mixed", "known", "followup", "batch"]) await expect(card(name).locator(".service-availability")).toHaveCount(0);
+            await expect(page.locator("#activityList .service-availability,#activityList .request-card-categories")).toHaveCount(0);
             for (const name of ["hosted", "followup", "known"]) {
                 await expect(card(name).locator(".call-reason-list")).toHaveCount(0, "Successful body-retention policy is not a problem bullet.");
                 await expect(card(name)).not.toContainText("Response body excluded from retention");
             }
-            await expect(card("hosted").locator(".recorded-category-label")).toHaveText(["Tools:", "Operations:"]);
-            await expect(card("hosted").locator(".request-card-categories")).toContainText("Search and retrieval");
-            await expect(card("hosted").locator(".request-card-categories")).toContainText("Asked Copilot");
+            await expect(card("hosted")).not.toContainText(/Tools:|Operations:|Services:/);
             await expect(card("hosted").locator('[data-service="Files"],[data-service="Mail"],[data-service="Teams"]')).toHaveCount(0);
-            await expect(card("mixed").locator(".request-card-categories")).toContainText("Files");
             await expect(card("mixed")).not.toContainText("Payload too large");
-            await expect(card("mixed").locator('[data-result-outcome="failure"]')).toHaveText("Tool failed: 1");
+            await expect(card("mixed").locator(".request-card-exception")).toHaveText("1 tool call failed");
             await expect(page.locator("#activityList")).not.toContainText("Some service details unavailable");
             await expect(page.locator('[data-service-basis="Unknown"] .percentage-label')).toHaveText("Services not fully identified");
             await expect(page.locator(".percentage-gap-list")).toHaveAttribute("aria-label", "Service attribution limits");
@@ -126,12 +119,11 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(page.locator('[data-service-basis="Unknown"]')).toHaveAttribute("data-count", "3");
             await expect(page.locator('.percentage-content .percentage-service-scope')).toHaveText(
                 "Search and Copilot rows count requests, not confirmed use of particular apps.");
-            const paint = await card("unclassified").evaluate(node => ({
-                note: getComputedStyle(node.querySelector(".service-availability")).color,
-                muted: getComputedStyle(node.querySelector(".request-card-summary")).color,
-                failure: getComputedStyle(document.querySelector('[data-view-key="request:attribution-mixed"] [data-result-outcome="failure"]')).color,
+            const paint = await card("mixed").evaluate(node => ({
+                exception: getComputedStyle(node.querySelector(".request-card-exception")).color,
+                metadata: getComputedStyle(node.querySelector(".request-card-summary")).color,
             }));
-            assert.equal(paint.note, paint.muted); assert.notEqual(paint.note, paint.failure);
+            assert.equal(paint.exception, paint.metadata);
             observations.push({ theme, width, ...paint });
         }
         if (proof) {
@@ -195,7 +187,7 @@ test("service evidence explains significance at its call without warning on ordi
         ]) {
             await card(name).click(); await settle();
             const call = page.locator(`[data-tool-call-id="${name}-0"]`);
-            await expect(card(name).locator(".service-availability")).toHaveText(label);
+            await expect(card(name)).not.toContainText(label);
             await expect(call.locator(".service-availability")).toHaveCount(0);
             await expect(call.locator(".reader-attribution-context")).toBeVisible();
             await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toHaveCount(0);
@@ -410,10 +402,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         await expect(card("unknown").locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
         await expect(card("copilot")).not.toContainText("Not shown");
         await expect(card("copilot").locator(".service-availability")).toHaveCount(0);
-        await expect(card("missing")).toContainText("Service target not recorded");
-        await expect(card("unclassified")).toContainText("Recorded path not recognized");
-        await expect(card("partial")).toContainText("Mail");
-        await expect(card("partial")).toContainText("Recorded path not recognized");
+        await expect(page.locator("#activityList .request-card-categories,#activityList .service-cue")).toHaveCount(0);
         await expect(card("preparation").locator(".service-availability")).toHaveCount(0);
         await card("automatic").click();
         await expect(page.locator('[data-reader-section="prompt"] .reader-section-title')).toHaveText("Agent prompt (automatic continuation)");
@@ -429,34 +418,28 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
         if (proof) await card("automatic").screenshot({ path: path.join(proof, `vocabulary-${phase}-${theme}-${width}-automatic.png`) });
         await card("copilot").scrollIntoViewIfNeeded();
-        const cue = card("copilot").locator("[data-service-icon=Assistance]");
         if (proof) await card("copilot").screenshot({ path: path.join(proof, `vocabulary-${phase}-${theme}-${width}-card.png`) });
+        await card("copilot").click();
+        const cue = page.locator("#requestContent [data-service-icon=Assistance]").first();
         const cueStyle = await cue.evaluate(node => {
             const style = getComputedStyle(node), root = getComputedStyle(document.documentElement);
             const icon = node.querySelector(".wire-icon"), range = document.createRange(); range.selectNodeContents(node.querySelector("span"));
             const first = range.getClientRects()[0], rect = icon.getBoundingClientRect();
-            return { color: style.color, muted: root.getPropertyValue("--muted").trim(), failure: root.getPropertyValue("--chart-failure").trim(),
-                success: root.getPropertyValue("--chart-success").trim(), card: getComputedStyle(node.closest(".activity-card")).backgroundColor,
+            return { color: style.color, assistance: root.getPropertyValue("--screen-activity-assistance").trim(),
+                muted: root.getPropertyValue("--muted").trim(), failure: root.getPropertyValue("--chart-failure").trim(),
+                success: root.getPropertyValue("--chart-success").trim(),
                 paper: root.getPropertyValue("--paper").trim(), context: root.getPropertyValue("--context-paper").trim(), iconHeight: rect.height, lineHeight: parseFloat(style.lineHeight),
                 centerOffset: Math.abs(rect.y + rect.height / 2 - first.y - first.height / 2) };
         });
         if (phase !== "before") {
             assert.ok(contrast(cueStyle.color, cueStyle.paper) >= 4.5);
             assert.ok(contrast(cueStyle.color, cueStyle.context) >= 4.5);
-            assert.ok(contrast(cueStyle.color, cueStyle.muted) > 1.05, "Assistance must not remain unknown grey");
+            assert.deepEqual(rgb(cueStyle.color), rgb(cueStyle.assistance));
+            assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.muted), "Assistance must not remain unknown grey");
             assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.failure)); assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.success));
             assert.ok(cueStyle.centerOffset <= 1.5, JSON.stringify(cueStyle));
-            await card("copilot").hover();
-            assert.equal(await cue.evaluate(node => getComputedStyle(node).color), cueStyle.color);
-            await card("copilot").focus();
-            assert.equal(await cue.evaluate(node => getComputedStyle(node).color), cueStyle.color);
             const legend = page.locator('.percentage-legend-row[data-service-basis="Assistance"] .percentage-cue');
             assert.equal(await legend.evaluate(node => getComputedStyle(node).color), cueStyle.color);
-        }
-        await card("copilot").click();
-        const readerCue = page.locator("#requestContent [data-service-icon=Assistance]");
-        if (phase !== "before") {
-            assert.equal(await readerCue.evaluate(node => getComputedStyle(node).color), cueStyle.color);
             await expect(page.locator("#requestContent .reader-operation-context")).toContainText("Call #1 (Asked Copilot) records a request");
             await expect(page.locator("#requestContent")).not.toContainText("Service not shown");
             await expect(page.locator("#requestContent")).not.toContainText("not relevant");

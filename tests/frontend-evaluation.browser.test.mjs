@@ -101,18 +101,15 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
     }
     const card = page.locator('#activityList .request-card-open[href*="review-plural-activity"]');
     await expect(card).toContainText("Review the Cedar handover");
-    await expect(card).toContainText("4 recorded calls");
-    await expect(card).toContainText(/failed/i);
-    await expect(card).toContainText(/partial/i);
-    await expect(card).toContainText(/no result recorded/i);
-    await expect(card.locator(".request-card-result-issues")).toHaveText("1 completed call has a reported result issue");
+    await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
+    await expect(card).not.toContainText(/4 recorded calls|Partial completion|No result recorded|workiq-fetch|Tools:|Read more|More services|result issue/i);
     await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied|ToolUnavailable|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
-    await expect(card.locator(".card-tool-name")).toHaveText(["workiq-fetch", "workiq-retrieve"]);
     await expect(card.locator("button,input,details")).toHaveCount(0);
     await card.focus(); await page.keyboard.press("Enter");
     const reader = page.locator("#requestContent");
     await expect(reader.locator(".reader-call-row")).toHaveCount(4);
+    await expect(reader.locator(".reader-tool-name")).toHaveText(["workiq-fetch", "workiq-retrieve", "workiq-fetch", "workiq-fetch"]);
     await expect(reader).toContainText("AccessDenied");
     await expect(reader).toContainText("ToolUnavailable");
     await expect(reader).toContainText("WIRE interpretation");
@@ -126,6 +123,7 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
     await page.locator('#outcomeChart li[data-category="partial"] a').click(); await ready(page);
     await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
     await expect(card.locator(".request-card-count")).toHaveText("1 of 4 Work IQ tool calls matches this view");
+    await expect(card.locator(".request-card-exception")).toHaveText("Partial completion");
     await expect(card).not.toContainText(/WIRE interpretation|flag alone|Call #|Requested:/);
     await card.click();
     await expect(reader.locator(".reader-call-row")).toHaveCount(4);
@@ -157,7 +155,9 @@ test("heterogeneous summary cards stay readable in complete Light Dark narrow an
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `compact-after-${theme}-${width}-text${scale}-full.png`), fullPage: true });
-            await page.locator("#activityList .activity-card").first().scrollIntoViewIfNeeded();
+            const first = page.locator("#activityList .activity-card").first();
+            await first.screenshot({ path: path.join(proofs, `recognition-${theme}-${width}-text${scale}-row.png`) });
+            await first.scrollIntoViewIfNeeded();
             await capture(page, `compact-after-${theme}-${width}-text${scale}-reading`);
         }
     }
@@ -216,17 +216,18 @@ test("the normal-entry overview keeps a long total readable in both themes", { t
     }
 });
 
-test("failure summaries keep prompt service and outcome together without reader diagnostics", async t => {
+test("the prompt leads and a single secondary line names the exception", async t => {
     const { page } = await setup(t);
     await page.goto(page.url() + "&result=failure");
     await ready(page);
     const geometry = await page.locator("#activityList .activity-card").first().evaluate(node => {
         const box = selector => node.querySelector(selector).getBoundingClientRect();
-        return { gap: box(".request-card-categories").top - box(".request-card-prompt").bottom,
-            diagnosticWidth: box(".request-card-problem").width, rowWidth: box(".request-card-open").width };
+        return { gap: box(".request-card-summary").top - box(".request-card-prompt").bottom,
+            promptSize: parseFloat(getComputedStyle(node.querySelector(".request-card-prompt")).fontSize),
+            contextSize: parseFloat(getComputedStyle(node.querySelector(".request-card-summary")).fontSize) };
     });
-    assert.ok(geometry.gap <= 32, JSON.stringify(geometry));
-    assert.ok(geometry.diagnosticWidth > geometry.rowWidth * .9, JSON.stringify(geometry));
+    assert.ok(geometry.gap >= 0 && geometry.gap <= 8 && geometry.promptSize > geometry.contextSize, JSON.stringify(geometry));
+    await expect(page.locator("#activityList .activity-card").first().locator(".request-card-exception")).toContainText("tool call failed");
     await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|Requested:/);
     await capture(page, "visual-failure-rows");
 });

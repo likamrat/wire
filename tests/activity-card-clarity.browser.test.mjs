@@ -85,10 +85,6 @@ async function measure(page) {
         return { card: card.toJSON(), listWidth: node.closest("#activityList").clientWidth, prompt: box.toJSON(), lines: lines.length,
             font: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight,
             weight: style.fontWeight,
-            origin: node.querySelector(".request-card-origin").getBoundingClientRect().toJSON(),
-            categories: node.querySelector(".request-card-categories").getBoundingClientRect().toJSON(),
-            problem: node.querySelector(".request-card-problem").getBoundingClientRect().toJSON(),
-            more: node.querySelector(".request-card-more-problems")?.getBoundingClientRect().toJSON() ?? null,
             metadata: node.querySelector(".request-card-summary").getBoundingClientRect().toJSON(),
             authors: [...node.querySelectorAll(".request-card-author")].flatMap(n => [...n.getClientRects()].map(r => r.toJSON())),
             time: node.querySelector(".request-card-time").getBoundingClientRect().toJSON(),
@@ -114,39 +110,34 @@ async function capture(page, name, metrics) {
     await writeFile(path.join(proofs, name + ".json"), JSON.stringify(metrics, null, 2));
 }
 
-test("Activity gives origin, prompt, labelled services and meaningful problems distinct regions", async t => {
+test("the prompt leads each activity row; service identities belong to its reader", async t => {
     const { page } = await setup(t);
     const first = page.locator('.request-card-open[href*="card-clarity-0"]');
-    await expect(first.locator(".request-card-origin")).toHaveText("My prompt");
-    await expect(first.locator(".request-card-categories")).toContainText("Service:");
-    await expect(first.locator(".request-card-categories")).toContainText("Mail");
-    await expect(first.locator(".request-card-outcome")).toHaveText("Tool failed");
+    await expect(first.locator(".request-card-author")).toHaveText("My prompt");
+    await expect(first.locator(".request-card-exception")).toHaveText("1 tool call failed");
+    await expect(first.locator(".request-card-categories")).toHaveCount(0);
     const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
-    await expect(mixed.locator(".request-card-categories")).toContainText("Services:");
-    await expect(mixed.locator(".request-card-categories .service-cue")).toHaveCount(2);
-    await expect(mixed.locator(".request-card-outcome")).toHaveText(["Tool completed: 3", "Tool failed: 3"]);
+    await expect(mixed.locator(".request-card-exception")).toHaveText("3 tool calls failed");
     await expect(mixed).not.toContainText(/Access was denied|did not respond in time|required sign-in/);
     await expect(mixed.locator("button,input,a")).toHaveCount(0);
     const geometry = await mixed.evaluate(card => {
         const box = selector => card.querySelector(selector).getBoundingClientRect().toJSON();
-        return { origin: box(".request-card-origin"), prompt: box(".request-card-prompt"),
-            categories: box(".request-card-categories"), result: box(".request-card-problem"),
-            metadata: box(".request-card-summary") };
+        return { prompt: box(".request-card-prompt"), metadata: box(".request-card-summary") };
     });
-    assert.ok(geometry.prompt.top >= geometry.origin.bottom + 7);
-    assert.ok(geometry.categories.top >= geometry.prompt.bottom + 15);
-    assert.ok(geometry.result.top >= geometry.categories.bottom + 11);
-    assert.ok(geometry.metadata.top >= geometry.result.bottom + 11);
+    assert.ok(geometry.metadata.top >= geometry.prompt.bottom);
+    await first.click();
+    await expect(page.locator("#requestContent .reader-call-services")).toContainText("Mail");
 });
 
 test("the compact failure count opens the first failure in retained chronology", async t => {
     const record = records()[2];
+    record.userPrompt.text = "Check the workshop failures.";
     for (const [index, seconds] of [[3, 30], [4, 10], [5, 20]]) {
         record.toolCalls[index].startedAt = new Date(Date.parse(record.userPrompt.sourceTimestamp) + seconds * 1000).toISOString();
     }
     const { page } = await setup(t, [record]);
     const card = page.locator(".request-card-open");
-    await expect(card.locator('[data-result-outcome="failure"]')).toHaveText("Tool failed: 3");
+    await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
     await card.click();
     const problem = await page.locator('[data-reader-section="activity"]').innerText();
     for (const reason of ["The tool did not respond in time", "Work IQ required sign-in at the time", "Access was denied"]) assert.ok(problem.includes(reason));
@@ -156,7 +147,7 @@ test("the compact failure count opens the first failure in retained chronology",
     await expect(page.locator('[data-tool-call-id="clarity-call-2-3"]')).toContainText("Access was denied");
 });
 
-test("Read more starts at the actual reader top after motion without changing ordinary saved reading positions", { timeout: 90000 }, async t => {
+test("opening a clipped prompt starts at the actual reader top without changing ordinary saved reading positions", { timeout: 90000 }, async t => {
     const evidence = ["top-first", "top-second", "top-ordinary"].map((id, index) => {
         const record = records()[2];
         record.scenarioId = id;
@@ -198,7 +189,7 @@ test("Read more starts at the actual reader top after motion without changing or
             ["another", "top-second", "pointer"], ["return", "top-first", "keyboard"],
         ]) {
             const card = page.locator(`.request-card-open[href*="${id}"]`);
-            const more = card.locator(".request-card-read-more");
+            const more = card.locator(".request-card-open-label");
             await expect(more).toBeVisible();
             await more.scrollIntoViewIfNeeded();
             await card.focus();
@@ -254,12 +245,12 @@ test("Read more starts at the actual reader top after motion without changing or
     if (phase !== "before") {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        const first = page.locator('.request-card-open[href*="top-first"] .request-card-read-more');
+        const first = page.locator('.request-card-open[href*="top-first"]');
         await first.click();
         await settle();
         for (const [visit, more] of [
             ["same-open", first],
-            ["another-open", page.locator('.request-card-open[href*="top-second"] .request-card-read-more')],
+            ["another-open", page.locator('.request-card-open[href*="top-second"]')],
         ]) {
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             await more.click();
@@ -287,7 +278,7 @@ test("Read more starts at the actual reader top after motion without changing or
     }
 });
 
-test("card previews use real line space and Read more opens the prompt while coverage stays outside failure bullets", { timeout: 90000 }, async t => {
+test("card previews clamp at the available measure and the whole link opens the exact prompt", { timeout: 90000 }, async t => {
     const identifier = "13579bdf-2468-4ace-9bdf-0123456789ab";
     const opening = `You own the workshop reference pack under rehearsal coordinator${identifier}. This is a standalone preparation task. `;
     const fitting = opening + "Read the available briefing notes, preserve the existing schedule, and identify the files needed by the rehearsal team before preparing the handout.";
@@ -366,7 +357,7 @@ test("card previews use real line space and Read more opens the prompt while cov
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
                 assert.ok(accessibleName?.length < 220, `The actual link name must be concise, not ${accessibleName?.length} characters.`);
-                assert.match(accessibleName, /^Read more of prompt: You are checking the workshop notes/);
+                assert.match(accessibleName, /^Open interaction: You are checking the workshop notes/);
                 assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"), "The hidden original must not be announced as the link's name.");
             }
             for (const card of [first, second]) {
@@ -388,21 +379,20 @@ test("card previews use real line space and Read more opens the prompt while cov
                         lastLineUse: last ? (last.right - last.left) / node.clientWidth : 0, text: node.textContent };
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
-                await expect(card.locator(".request-card-read-more")).toBeVisible({ visible: omitted });
-                await expect(card).toHaveAccessibleName(omitted ? /^Read more of prompt: / : /^View interaction: /);
-                assert.equal(await card.locator(".request-card-read-more").evaluate(node => node.closest("a")?.getAttribute("href")),
-                    await card.getAttribute("href"), "Read more activates the existing real native link.");
+                await expect(card.locator(".request-card-read-more")).toHaveCount(0);
+                await expect(card).toHaveAccessibleName(/^Open interaction: /);
+                await expect(card.locator(".request-card-open-label")).toHaveText("Open");
                 assert.ok(geometry.height <= geometry.lineHeight * 2 + 1);
                 if (omitted) {
-                    assert.equal(geometry.visibleLines, 2);
-                    assert.ok(geometry.lastLineUse > .6, JSON.stringify(geometry));
+                    assert.ok(geometry.visibleLines >= 1 && geometry.visibleLines <= 2);
+                    // A long unbroken identifier can start on the next line without being rewritten.
+                    if (!geometry.text.includes(identifier)) assert.ok(geometry.lastLineUse > .6, JSON.stringify(geometry));
                 }
-                if (width >= 1440 && card === first) assert.equal(omitted, false, "The complete fitting prompt uses available card width.");
                 await expect(prompt).not.toContainText("\u2026");
                 measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted });
             }
             await expect(second.locator(".returned-coverage,.call-reason-list")).toHaveCount(0);
-            await expect(second.locator(".request-card-outcome")).toHaveText("Tool failed");
+            await expect(second.locator(".request-card-exception")).toHaveText("1 tool call failed");
             await expect(second.locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
             await expect(second.locator("a,button,[role=button]")).toHaveCount(0, "Read more belongs to the real card link, not a nested control.");
         }
@@ -419,7 +409,7 @@ test("card previews use real line space and Read more opens the prompt while cov
             }
         }
         if (phase !== "before") {
-            await expect(second.locator(".request-card-read-more")).toBeVisible();
+            await expect(second.locator(".request-card-open-label")).toBeVisible();
             await second.focus(); await page.keyboard.press("Enter");
             const original = page.locator('[data-reader-section="prompt"] .full-text-content');
             await expect(original).toBeFocused();
@@ -446,7 +436,7 @@ test("card previews use real line space and Read more opens the prompt while cov
             await call.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
-            await second.locator(".request-card-read-more").click();
+            await second.locator(".request-card-open-label").click();
             await expect(original).toBeFocused();
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
         } else {
@@ -458,11 +448,7 @@ test("card previews use real line space and Read more opens the prompt while cov
     if (phase !== "before") {
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await expect(first.locator(".request-card-read-more")).toBeHidden();
-        await page.setViewportSize({ width: 390, height: 1080 });
-        await expect(first.locator(".request-card-read-more")).toBeVisible();
-        await page.setViewportSize({ width: 1920, height: 1080 });
-        await expect(first.locator(".request-card-read-more")).toBeHidden();
+        await expect(first.locator(".request-card-read-more")).toHaveCount(0);
         await page.evaluate(() => {
             window.heldCardPreview = document.querySelector(".request-card-prompt");
             window.heldCardName = window.heldCardPreview.closest("a").getAttributeNode("aria-label");
@@ -521,10 +507,10 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed");
+            await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
             await expect(card.locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
             await expect(card).not.toContainText(message);
-            await expect(page.locator('.request-card-open[href*="grouped-multiple"] .request-card-outcome')).toHaveText("Tool failed: 2");
+            await expect(page.locator('.request-card-open[href*="grouped-multiple"] .request-card-exception')).toHaveText("2 tool calls failed");
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
@@ -655,18 +641,16 @@ test("card and reader keep neutral explanations under owning statuses without re
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
             await expect(card).not.toContainText(message);
-            await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 4", "Tool failed: 1"]);
-            await expect(card.locator(".request-card-problem")).not.toContainText(/1 of 5|Recorded error:/);
-            await expect(card.locator(".request-card-count")).toHaveText("5 recorded calls");
+            await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
+            await expect(card).not.toContainText(/1 of 5|Recorded error:|5 recorded calls/);
             const paint = await card.evaluate(node => {
-                const status = node.querySelector('[data-result-outcome="failure"]');
+                const status = node.querySelector(".request-card-exception");
                 return { ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
-                    status: getComputedStyle(status).color, icon: getComputedStyle(status.querySelector(".wire-icon")).color };
+                    status: getComputedStyle(status).color };
             });
             assert.notEqual(paint.ink, paint.status);
-            assert.equal(paint.status, paint.icon);
             measurements.push({ theme, width, scale, ...paint });
-            await expect(page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-outcome')).toHaveText("Tool failed: 2");
+            await expect(page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-exception')).toHaveText("2 tool calls failed");
             await expect(page.locator('.request-card-open[href*="hierarchy-returned"]')).not.toContainText(/Returned entry|document is restricted/);
         }
         if (proof) {
@@ -674,7 +658,7 @@ test("card and reader keep neutral explanations under owning statuses without re
             await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-page.png`), fullPage: true });
             await page.mouse.move(0, 0);
             if (width === 390) {
-                await card.locator(".request-card-problem").evaluate(node => node.scrollIntoView({ block: "center" }));
+                await card.locator(".request-card-exception").evaluate(node => node.scrollIntoView({ block: "center" }));
                 await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             } else await card.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             if (width === 1440) for (const name of ["multiple", "returned"]) {
@@ -893,11 +877,10 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(lateCard.locator(".request-card-prompt")).not.toContainText("Owner record-42");
         assert.equal(await card.locator(".request-card-prompt").textContent(), record.userPrompt.text.replace(/\s+/gu, " "));
         await expect(card.locator(".request-card-prompt")).not.toContainText("...");
-        await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 3", "Tool failed: 3", "No result recorded: 1"]);
-        await expect(card.locator(".request-card-result-issues")).toHaveText("1 completed call has a reported result issue");
+        await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
         await expect(card).not.toContainText(/Returned item|rehearsal item is locked|503|Call #|response body excluded/);
-        await expect(lateCard.locator(".request-card-count")).toHaveText("5 recorded calls");
-        await expect(lateCard.locator(".request-card-outcome")).toHaveText(["Tool completed: 4", "Tool failed: 1"]);
+        await expect(lateCard.locator(".request-card-count")).toHaveCount(0);
+        await expect(lateCard.locator(".request-card-exception")).toHaveText("1 tool call failed");
         await card.scrollIntoViewIfNeeded();
         await page.mouse.move(0, 0);
         if (proof) {
@@ -917,7 +900,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await card.focus();
         await page.keyboard.press("Enter");
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        if (theme === "light" && width === 1440) await expect(page.locator('[data-tool-call-id="all-failures-0"]')).toBeFocused();
+        if (theme === "light" && width === 1440) await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
         const firstFailure = page.locator('[data-tool-call-id="all-failures-0"]');
         await expect(firstFailure.locator(".reader-call-summary")).toContainText(parentMessage);
         await expect(firstFailure.locator(".reader-call-summary")).toContainText(detailMessage);
@@ -961,7 +944,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
     await page.keyboard.press("Escape");
     await page.goto(page.url().split("#")[0] + "#analyze?result=failure");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed: 3");
+    await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
     await expect(card.locator(".request-card-count")).toHaveText("3 of 7 Work IQ tool calls match this view");
     await card.click();
     await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(7);
@@ -1042,7 +1025,7 @@ test("service identity is stated once for an inherited target and keeps independ
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
         await expect(card).toHaveCount(1);
-        const cardIdentity = await card.locator(".request-card-categories").innerText();
+        const cardIdentity = await card.innerText();
         for (const width of [1440, 390]) {
             await page.setViewportSize({ width, height: 1000 });
             await card.scrollIntoViewIfNeeded();
@@ -1096,7 +1079,7 @@ test("service identity is stated once for an inherited target and keeps independ
     }
     if (proof) await writeFile(path.join(proof, "service-observations.json"), JSON.stringify(observations, null, 2));
     for (const { cardIdentity, values } of observations) {
-        assert.match(cardIdentity, /^Services and operations:/);
+        assert.doesNotMatch(cardIdentity, /Services and operations:|Tools:|More services/);
         const byId = new Map(values.map(value => [value.id, value]));
         const inherited = byId.get("service-inherited");
         assert.equal(inherited.identity, "Service: Mail");
@@ -1147,11 +1130,8 @@ test("Agent author cues use a distinct shared role while Teams keeps its service
         ["dark", "rgb(226, 194, 123)", "rgb(173, 136, 240)"],
     ]) {
         await chooseTheme(page, theme);
-        const colors = await card.evaluate(card => ({
-            author: getComputedStyle(card.querySelector("[data-prompt-actor=agent]")).color,
-            teams: getComputedStyle(card.querySelector("[data-service=Teams]")).color,
-        }));
-        assert.deepEqual(colors, { author, teams });
+        await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+        await expect(card.locator("[data-service=Teams]")).toHaveCount(0);
         await card.click();
         const reader = page.locator('[data-reader-section="prompt"]');
         assert.equal(await reader.locator(".reader-section-heading [data-prompt-actor]").evaluate(node => getComputedStyle(node).color), author);
@@ -1220,15 +1200,8 @@ test("Activity bands remain separate at wide and enlarged widths without clippin
             assert.match(row.font, /Asta Sans/);
             assert.equal(row.weight, "400");
             assert.ok(row.card.height >= 44, name + ": full-card target");
-            assert.ok(row.prompt.top >= row.origin.bottom + 7, name + ": origin is not merged into prompt or category");
-            assert.ok(row.categories.top >= row.prompt.bottom + 15, name + ": categories have their own band");
-            assert.ok(row.problem.top >= row.categories.bottom + 11, name + ": result stays separate from categories");
-            assert.ok(row.problem.right <= row.card.right, name + ": problem fits without clipping");
-            if (row.more) {
-                assert.ok(row.more.top >= row.problem.bottom + 11, name + ": additional reasons have a visible continuation cue");
-                assert.ok(row.metadata.top >= row.more.bottom + 11, name + ": continuation is not hidden in metadata");
-            }
-            assert.ok(row.time.top >= row.problem.bottom + 11 && row.time.right <= row.card.right, name + ": time stays secondary and readable");
+            assert.ok(row.metadata.top >= row.prompt.bottom && row.metadata.top <= row.prompt.bottom + 10, name + ": context follows its prompt");
+            assert.ok(row.time.right <= row.card.right, name + ": timestamp stays readable");
         }
     }
     for (const [width, scale] of [[1440, 1], [1024, 1.4], [390, 1], [390, 2]]) {
@@ -1261,18 +1234,19 @@ test("An empty retained agent message remains recognizable without pretending it
     const { page } = await setup(t);
     const card = page.locator('.request-card-open[href*="card-clarity-1"]');
     await expect(card).not.toContainText("Prompt not available");
-    await expect(card.locator(".request-card-author")).toHaveText("Automatic continuation");
-    await expect(card).toContainText("No new message was sent.");
-    await expect(card).toContainText("workiq-retrieve");
+    await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+    await expect(card).toContainText("Work continued without a new message.");
+    await expect(card).not.toContainText("workiq-retrieve");
     await expect(card).not.toContainText("SYNTHETIC_ARGUMENT_NOT_A_PROMPT");
     await card.click();
     await expect(page.locator("#requestContent")).toContainText("Work IQ required sign-in at the time");
+    await expect(page.locator("#requestContent .reader-tool-name")).toHaveText("workiq-retrieve");
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(1);
     await expect(page.locator("#requestContent")).not.toContainText(shortPrompt);
     await expect(page.locator("#requestContent")).not.toContainText(longPrompt);
     const prompt = page.locator('[data-reader-section="prompt"]');
-    await expect(prompt).toContainText("Automatic continuation");
-    await expect(prompt).toContainText("No new message was sent.");
+    await expect(prompt).toContainText("Agent prompt (automatic continuation)");
+    await expect(prompt).toContainText("Work continued without a new message.");
     await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
     await capture(page, "automatic-reader", []);
     await page.goBack();
@@ -1321,7 +1295,7 @@ test("cards and the reader distinguish observed automatic control, known gaps an
     evidence[2].userPrompt = { text: "", status: "full", authorship: { actor: "unknown", basis: "legacy-missing" } };
     const { page } = await setup(t, evidence);
     for (const [index, label, notice] of [
-        [1, "Automatic continuation", "No new message was sent."],
+        [1, "Author unverified (automatic continuation)", "Work continued without a new message."],
         [0, "Author unverified", "Prompt unavailable: a saved history entry could not be read."],
         [2, "Author unverified", "No prompt text retained"],
     ]) {
@@ -1330,18 +1304,15 @@ test("cards and the reader distinguish observed automatic control, known gaps an
         await expect(card.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
         await expect(card).toContainText(notice);
         if (index === 1) {
-            await expect(card.locator(".request-card-prompt")).toHaveText("Prompt: No new message was sent.");
-            const ink = await card.locator(".request-card-author").evaluate(node => getComputedStyle(node).color);
-            const agent = await page.locator('.request-card-open[href*="card-clarity-3"] .request-card-author')
-                .evaluate(node => getComputedStyle(node).color);
-            assert.notEqual(ink, agent, "Automatic kind must not acquire verified Agent paint.");
+            await expect(card.locator(".request-card-prompt")).toHaveText("Work continued without a new message.");
+            await expect(card.locator("[data-prompt-actor=agent]")).toHaveCount(0);
         }
         await card.click();
         const prompt = page.locator('[data-reader-section="prompt"]');
         await expect(prompt).toContainText(notice);
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
         if (index === 1) {
-            await expect(prompt.locator("h2")).toHaveText("Automatic continuation");
+            await expect(prompt.locator("h2")).toHaveText("Author unverified (automatic continuation)");
             await expect(prompt).not.toContainText("Prompt unavailable");
         } else await expect(prompt).not.toContainText("No new message was sent");
         await capture(page, `capture-state-${index}`, []);
@@ -1357,10 +1328,10 @@ test("immutable first-saved prompt text keeps its shared qualification in card a
     const { page } = await setup(t, [record]);
     const notice = "The source changed this message. The first saved text is shown.";
     const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-origin")).toHaveText("Author unverified");
+    await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
     await expect(card.locator(".request-card-prompt")).toHaveText(shortPrompt);
     await expect(card.locator(".request-card-availability")).toHaveText(notice);
-    await expect(card.locator(".request-card-categories")).toContainText("Mail");
+    await expect(card.locator(".request-card-categories")).toHaveCount(0);
     await card.click();
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt.locator(".full-text-content")).toHaveText(shortPrompt);

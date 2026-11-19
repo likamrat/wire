@@ -90,14 +90,15 @@ test("one minimal card opens the full log with private input owned by its exact 
     await expect(page.locator("[data-analyze-mode],#callSort")).toHaveCount(0);
     const card = page.locator(".request-card-open");
     await expect(card).toContainText("Find the workshop checklist.");
-    await expect(card.locator(".card-tool-name")).toContainText(["workiq-fetch"]);
+    await expect(card).not.toContainText("workiq-fetch");
     await expect(card).not.toContainText(/PRIVATE_CALL_ARGUMENT|did not respond in time/);
     const metadataType = await card.evaluate(node => {
         const time = getComputedStyle(node.querySelector(".request-card-time"));
-        const problem = getComputedStyle(node.querySelector(".request-card-problem"));
-        return { size: problem.fontSize, timeSize: time.fontSize, weight: problem.fontWeight };
+        const prompt = getComputedStyle(node.querySelector(".request-card-prompt"));
+        return { size: parseFloat(prompt.fontSize), timeSize: parseFloat(time.fontSize), weight: prompt.fontWeight };
     });
-    assert.deepEqual(metadataType, { size: "14px", timeSize: "12px", weight: "400" });
+    assert.ok(metadataType.size > metadataType.timeSize);
+    assert.equal(metadataType.weight, "400");
     await capture(page, "analyze-dark", true);
     await card.click();
     await settled(page);
@@ -209,8 +210,8 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page); await settled(page);
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
-    await expect(page.locator(".request-card-open [data-outcome=success]")).toHaveAttribute("data-count", "4");
-    await expect(page.locator(".request-card-outcome")).toHaveText("Tool completed: 4");
+    await expect(page.locator(".request-card-count")).toHaveText("4 of 6 Work IQ tool calls match this view");
+    await expect(page.locator(".request-card-exception")).toHaveCount(0);
     await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveCount(0);
     await closeAnalyzeFilters(page);
     await page.locator(".request-card-open").click(); await settled(page);
@@ -384,7 +385,8 @@ test("a success with missing service evidence, partial result and missing prompt
             if (outcome === "unknown") record.userPrompt = { text: null, status: "unavailable",
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
-            await expect(page.locator(".request-card-open .request-card-problem")).toContainText(new RegExp(cardLabel, "i"));
+            if (outcome === "succeeded") await expect(page.locator(".request-card-exception")).toHaveCount(0);
+            else await expect(page.locator(".request-card-exception")).toContainText(new RegExp(cardLabel, "i"));
             if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
             await page.locator(".request-card-open").click(); await settled(page);
             await expect(page.locator("#contextSidebarTitle")).toBeFocused();

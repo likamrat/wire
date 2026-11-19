@@ -54,7 +54,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open").filter({ hasText: "invented timeout request" });
-    await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed");
+    await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
     await expect(card).not.toContainText("The tool did not respond in time");
     await card.click();
     const call = page.locator('[data-tool-call-id="timeout-call"]');
@@ -65,7 +65,8 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await page.locator("#closeContextSidebar").click();
     for (const [name, outcome] of [["slow-completed", "success"], ["missing-completion", "unknown"]]) {
         const control = page.locator(".request-card-open").filter({ hasText: `invented ${name} request` });
-        await expect(control.locator(".request-card-problem")).toHaveAttribute("data-outcome", outcome);
+        if (outcome === "success") await expect(control.locator(".request-card-exception")).toHaveCount(0);
+        else await expect(control.locator(".request-card-exception")).toHaveText("No result recorded");
         await expect(control).not.toContainText(/timed out|did not respond in time|MCP -32001/);
     }
     await navigateMain(page, "reports");

@@ -42,7 +42,7 @@
     border-radius: 0;
     background: var(--paper);
 }
-.wire-frontend-react #activityList .request-card-open {
+.wire-frontend-react #activityList .request-card-open:not(.recognition-row) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "author time" "prompt prompt" "more more" "availability availability" "services services" "result result";
@@ -51,11 +51,9 @@
     border-inline-start-width: 0;
 }
 .wire-frontend-react #activityList .request-card-origin { grid-area: author; margin: 0; font-weight: var(--weight-regular); }
-.wire-frontend-react #activityList .request-card-prompt { grid-area: prompt; font-size: var(--type-body); }
-.wire-frontend-react #activityList .request-card-read-more { grid-area: more; margin: 0; font-size: var(--type-small); }
-.wire-frontend-react #activityList .request-card-availability { grid-area: availability; margin: 0; }
+.wire-frontend-react #activityList .request-card-open:not(.recognition-row) .request-card-prompt { grid-area: prompt; font-size: var(--type-body); }
 .wire-frontend-react #activityList .request-card-categories { grid-area: services; margin: 4px 0 0; }
-.wire-frontend-react #activityList .request-card-summary { grid-area: time; margin: 0; justify-content: flex-end; text-align: end; }
+.wire-frontend-react #activityList .request-card-open:not(.recognition-row) .request-card-summary { grid-area: time; margin: 0; justify-content: flex-end; text-align: end; }
 .wire-frontend-react #activityList .request-card-problem { grid-area: result; margin: 0; font-size: var(--type-small); }
 .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open {
     border-inline-start-width: 0;
@@ -122,12 +120,12 @@
 .wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,
 .wire-frontend-react.period-comparing #frontendBreakdowns { display: none; }
 @container (max-width: 44rem) {
-    .wire-frontend-react #activityList .request-card-open {
+    .wire-frontend-react #activityList .request-card-open:not(.recognition-row) {
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "author" "prompt" "more" "availability" "services" "result" "time";
         gap: 6px;
     }
-    .wire-frontend-react #activityList .request-card-summary { justify-content: flex-start; text-align: start; }
+    .wire-frontend-react #activityList .request-card-open:not(.recognition-row) .request-card-summary { justify-content: flex-start; text-align: start; }
 }
 @container breakdowns (max-width: 40rem) {
     .wire-frontend-react #frontendBreakdowns .percentage-panels { grid-template-columns: minmax(0, 1fr); }

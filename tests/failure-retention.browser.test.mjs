@@ -99,8 +99,8 @@ test("paired ask failures survive incremental collection and reach cards, reader
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
-        await expect(card.locator(".request-card-count")).toHaveText("8 recorded calls");
-        await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 6", "Tool failed: 2"]);
+        await expect(card.locator(".request-card-count")).toHaveCount(0);
+        await expect(card.locator(".request-card-exception")).toHaveText("2 tool calls failed");
         await expect(card).not.toContainText("SourcePolicyUnavailable");
         await expect(card).not.toContainText(message);
         await expect(card).not.toContainText("could not extract");
@@ -236,8 +236,8 @@ test("supported failure families keep their operation, recorded reason and hones
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-count")).toHaveText(`${cases.length} recorded calls`);
-    await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 2", "Tool failed: 16", "No result recorded: 1"]);
+    await expect(card.locator(".request-card-count")).toHaveCount(0);
+    await expect(card.locator(".request-card-exception")).toHaveText("16 tool calls failed");
     await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied/);
     await card.click();
     for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {

@@ -49,11 +49,11 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
         await selectActivityOption(page, "outcomeFilter", "success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await closeAnalyzeFilters(page);
-        await expect(page.locator(".request-card-outcome")).toHaveText("Tool completed");
-        await expect(page.locator(".request-card-result-issues")).toHaveCount(["application-error", "mixed"].includes(example.name) ? 1 : 0);
-        await expect(page.locator(".request-card-problem")).not.toContainText(example.summary);
-        await expect(page.locator(".request-card-problem")).not.toContainText("worked");
-        await expect(page.locator(".request-card-problem")).not.toContainText("missing..");
+        const card = page.locator(".request-card-open");
+        if (["application-error", "mixed"].includes(example.name)) await expect(card.locator(".request-card-exception")).toHaveText("Reported result issue");
+        else await expect(card.locator(".request-card-exception")).toHaveCount(0);
+        await expect(card).not.toContainText(example.summary);
+        await expect(card).not.toContainText(/tool call failed|worked|missing\.\./i);
     }
     const ready = () => page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     for (const theme of ["light", "dark"]) {

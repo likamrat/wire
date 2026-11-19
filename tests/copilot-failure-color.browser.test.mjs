@@ -65,20 +65,14 @@ test("normal cards and reader color compact status units, not explanatory prose,
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
         for (const [id, outcome] of [["completed", "success"], ["failed", "failure"], ["unknown", "unknown"], ["partial", "partial"], ["transport", "failure"]]) {
             const card = page.locator(".request-card-open").filter({ hasText: `invented ${id} operation` });
-            const summary = card.locator(".request-card-problem");
-            await expect(summary).toHaveAttribute("data-outcome", outcome);
-            const cardStatus = summary.locator(`[data-result-outcome="${outcome}"]`);
-            const cardPaint = await cardStatus.evaluate(measureControlSurface);
-            if (["success", "failure"].includes(outcome)) {
-                const colors = await cardStatus.evaluate(node => [node, ...node.querySelectorAll("span,svg")].map(part => getComputedStyle(part).color));
-                assert.ok(colors.every(color => color === colors[0]), `${theme} ${id} card: ${colors}`);
-                assert.ok(contrast(cardPaint.ink, cardPaint.face) >= 4.5, JSON.stringify(cardPaint));
-                const prose = await card.locator(".request-card-prompt").evaluate(measureControlSurface);
-                assert.notEqual(prose.ink, cardPaint.ink);
-                assert.ok(contrast(prose.ink, prose.face) >= 4.5, JSON.stringify(prose));
+            const summary = card.locator(".request-card-exception");
+            if (outcome === "success") await expect(summary).toHaveCount(0);
+            else await expect(summary).toHaveText(({ failure: "1 tool call failed", unknown: "No result recorded", partial: "Partial completion" })[outcome]);
+            for (const selector of [".request-card-prompt", ".request-card-summary"]) {
+                const paint = await card.locator(selector).evaluate(measureControlSurface);
+                assert.ok(contrast(paint.ink, paint.face) >= 4.5, JSON.stringify(paint));
             }
             if (id === "failed") {
-                await expect(summary).toHaveText("Tool failed");
                 await expect(card).not.toContainText(/UnsupportedItem|Returned entry 1/);
                 await expect(summary).not.toContainText(/too long|did not save|unsupported format/i);
                 if (proof && width === 1440) {
@@ -87,7 +81,6 @@ test("normal cards and reader color compact status units, not explanatory prose,
                 }
             }
             if (id === "transport") {
-                await expect(summary).toHaveText("Tool failed");
                 await expect(card).not.toContainText(/transport layer|HTTP 503|InventedTransport/i);
                 if (proof) {
                     await card.scrollIntoViewIfNeeded();

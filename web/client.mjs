@@ -5401,37 +5401,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
-    function activityCardSummary(rows, { layer = workspaceState.scope.layer } = {}) {
-        const presentation = results.activitySummary(layer, rows, sourceCallFor);
-        const problem = el("div", "request-card-problem");
-        const summary = presentation?.summary;
-        if (!presentation) problem.textContent = "Result counts unavailable.";
-        else if (!summary.count) problem.textContent = `No recorded ${results.unit(layer, 0)} in this view.`;
-        else {
-            const outcomes = el("div", "request-card-outcomes");
-            for (const entry of results.entries(layer, summary)) {
-                const item = el("span", "request-card-outcome result-tone-" + entry.key);
-                item.dataset.resultOutcome = entry.key;
-                item.append(ux.icon(results.icon(entry.key) + "-compact"),
-                    el("span", "", summary.count > 1 ? `${entry.label}: ${count(entry.count)}` : entry.label));
-                outcomes.append(item);
-            }
-            problem.append(outcomes);
-            // Completion and a reported result problem are separate evidence.
-            const issues = presentation.entries.filter(entry => entry.tone && entry.tone !== entry.key);
-            if (issues.length) {
-                const completed = issues.filter(entry => entry.key === "success").reduce((total, entry) => total + entry.count, 0);
-                problem.append(el("span", "request-card-result-issues", issues.every(entry => entry.key === "success")
-                    ? `${count(completed)} completed ${completed === 1 ? "call has" : "calls have"} a reported result issue`
-                    : "Result issues reported"));
-            }
-        }
-        if (presentation?.outcome) {
-            problem.dataset.outcome = presentation.outcome;
-            problem.dataset.count = String(presentation.entries.filter(entry => (entry.tone ?? entry.key) === presentation.outcome)
-                .reduce((total, entry) => total + entry.count, 0));
-        }
-        return { presentation, problem };
+    function activityCardException(layer, rows, summary) {
+        if (!summary) return "Result counts unavailable";
+        if (!summary.count) return `No recorded ${results.unit(layer, 0)} in this view`;
+        const label = results.labels(layer);
+        if (summary.failure) return layer === "tool"
+            ? `${count(summary.failure)} tool ${summary.failure === 1 ? "call" : "calls"} failed`
+            : `${label.failure}: ${count(summary.failure)}`;
+        if (summary.transport) return label.transport;
+        // A problem reported *by* a completed tool is not a failed tool call.
+        if (layer === "tool" && results.explainedEntries(layer, rows, sourceCallFor)
+            .some(entry => entry.tone && entry.tone !== entry.key)) return "Reported result issue";
+        if (summary.partial) return label.partial;
+        if (summary.unknown) return summary.unknown === summary.count ? label.unknown
+            : `${label.unknown}: ${count(summary.unknown)}`;
+        return summary.other ? label.other : null;
     }
     function requestCard(scenario, { reportPicker = false, eventSignal } = {}) {
         const authority = api.publicationToken();
@@ -5445,52 +5429,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         const row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
         const target = routeFor("request", { request: scenario.scenarioId });
-        const action = el("a", "request-card-open");
+        const action = el("a", "request-card-open recognition-row");
         action.href = routeUrl(target);
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && workspaceState.route.request === scenario.scenarioId));
         const description = textAccess.describePrompt(scenario.userPrompt);
-        const more = el("span", "request-card-read-more", "Read more");
-        more.hidden = true;
         const actor = authorship.read(scenario.userPrompt).actor;
         const authorLabel = actor === "unknown" && !description.automatic ? "Author unverified" : description.label;
         const moment = requestTiming.entry(scenario, workspaceState.scope.timeContext);
-        const recognition = description.hasText ? textAccess.excerpt(scenario.userPrompt, 96) : null;
-        const nameLink = omitted => action.setAttribute("aria-label",
-            `${omitted ? "Read more of prompt" : "View interaction"}: ${recognition} (${authorLabel}; ${moment.value})`);
-        if (description.hasText) nameLink(false);
-        const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, omitted => {
-            more.hidden = !omitted;
-            nameLink(omitted);
-        }) : el("p", "request-card-prompt",
+        const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt) : el("p", "request-card-prompt",
             (description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice);
         const sourceIdentity = filterState.sourceIdentity(rows);
         const sourceLabel = workspaceState.evidence.nativeRead ? sourceIdentity?.label ?? "Source unavailable" : null;
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
-        const author = el("p", "request-card-origin request-card-author", sourceLabel ? sourceLabel + " \u00b7 " + authorLabel : authorLabel);
+        const author = el("span", "request-card-author", sourceLabel ? sourceLabel + " \u00b7 " + authorLabel : authorLabel);
         author.dataset.promptActor = actor;
-        const identities = cardIdentityRows(rows, layer);
-        const categories = recordedCategory(identities, layer, { compact: true });
-        categories.classList.add("request-card-categories");
-        if (identities?.length && (layer === "tool" || identities.some(row => row.tool))) {
-            const tools = el("div", "recorded-category-field");
-            tools.append(el("span", "recorded-category-label", "Tools:"), cardTools(identities, false, { compact: true }));
-            categories.prepend(tools);
-        }
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
-        const { presentation, problem } = activityCardSummary(rows, { layer });
-        const summary = presentation?.summary;
+        const summary = results.summarize(rows);
         const facts = el("div", "request-card-summary");
-        facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
-        if (summary) {
-            const counts = full?.count === summary.count ? `${count(summary.count)} recorded ${results.columnUnit(layer, summary.count)}`
-                : results.countLabel(layer, summary.count, full?.count ?? null);
-            facts.append(el("span", "request-card-count", counts));
+        facts.append(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
+        if (summary && full?.count !== summary.count) {
+            facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         }
-        action.append(author, prompt, more);
-        if (description.hasText && description.notice) action.append(el("p", "request-card-availability", description.notice));
-        action.append(categories, problem);
-        action.append(facts);
+        const exception = activityCardException(layer, rows, summary);
+        if (exception) facts.append(el("span", "request-card-exception", exception));
+        if (description.hasText && description.notice) facts.append(el("span", "request-card-availability", description.notice));
+        if (description.hasText) action.setAttribute("aria-label",
+            `Open interaction: ${textAccess.excerpt(scenario.userPrompt, 96)} (${author.textContent}; ${moment.value}${exception ? "; " + exception : ""})`);
+        action.append(prompt, facts, el("span", "request-card-open-label", "Open"));
         action.addEventListener("click", event => {
             if (!api.isCurrent(authority)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;

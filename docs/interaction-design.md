@@ -243,15 +243,16 @@ cannot republish withdrawn data.
 
 ### Cards
 
-Cards show author/origin, an authorized prompt excerpt, compact tools and
-services/operations, aggregate recorded outcomes, and quiet time/count metadata.
-They identify reported result issues separately from tool completion without
-repeating per-call paths, codes, interpretations or completeness paragraphs.
-Those details belong to the existing right-hand reader opened by the card,
-not another card accordion or a clipped diagnostic block. Prompts use up to
-two actual line boxes, not an arbitrary character cap. Read more appears only
-on real overflow; it opens the reader at the prompt's top. Other valid reader
-returns can retain their prior position.
+Work IQ cards help people recognize and open an interaction. The authorized prompt
+excerpt comes first (one line in a wide row, up to two in a narrow row).
+When no text is available, show the recorded availability instead; never invent
+a prompt from the tool arguments. Author, time and a differing match scope are
+secondary. Show at most one factual exception: a failed tool call takes
+precedence over a reported result issue. The absence of a cue is not a verdict
+about the interaction. The existing right-hand reader owns tool and service
+identities, all outcomes, requested and returned facts, and their explanations.
+One link opens that reader. Opening a clipped excerpt starts at the prompt;
+other valid reader returns can retain their prior position.
 The reader offers a longer exact preview, not a second summary.
 
 A card is one native link without nested Copy, checkbox or duplicate Open

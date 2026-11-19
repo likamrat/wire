@@ -72,26 +72,12 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         fragment.append(text.slice(cursor));
         return fragment;
     }
-    function renderCardPreview(source, onOverflow) {
+    function renderCardPreview(source) {
         const node = document.createElement("p");
         node.className = "request-card-prompt";
         node.dataset.cardPreview = "";
         node.append(renderExcerpt(source, Infinity));
-        let released = false;
-        const measure = () => {
-            if (!released && node.isConnected && node.clientWidth) onOverflow(node.scrollHeight > node.clientHeight + 1);
-        };
-        const observer = new ResizeObserver(measure);
-        observer.observe(node);
-        document.fonts.ready.then(measure);
-        document.fonts.addEventListener("loadingdone", measure);
-        bindings.set(node, () => {
-            released = true;
-            observer.disconnect();
-            document.fonts.removeEventListener("loadingdone", measure);
-            source = onOverflow = null;
-            clearOwnedContent(node);
-        });
+        bindings.set(node, () => clearOwnedContent(node));
         return node;
     }
     function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel, collapsePrompt = false }) {
