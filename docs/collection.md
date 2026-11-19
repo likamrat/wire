@@ -446,6 +446,26 @@ activity permission is not artifact mutation permission.
 
 ## Explicit recollection
 
+In the normal Copilot runtime this is a **missing, nondeleted activity** review.
+Both local source approval and active acquisition must still be valid. This
+operation does not use manual Refresh's Pause exception. A panel can preview
+its selected scope without writing evidence; only a separate confirmation of
+that still-current preview can publish it. It cannot restore suppressed calls
+or deleted prompts. Reading an existing receipt does not require another
+source read. Older compatibility-mode previews can explicitly include deleted
+records; that is not authority for the normal runtime.
+
+**Also review source-verified corrections to saved calls** is off by default.
+The preview names each proposed change (up to 32). An unknown can become a
+completed call only through the bounded original start/completion qualification;
+omitted bodies or HTTP statuses are not recovered from success alone. For an
+already completed call, WIRE can fill an absent result or failure carrier when
+the start, completion, outcome and retained entries agree. It never replaces
+conflicting facts. Duplicate targets, an unread prefix or incomplete tail, and
+missing or contradictory checkpoint evidence prevent correction. Checkpoints
+and saved reports are not rewritten. If an existing checkpoint needs a different
+postimage, the separately reviewed maintenance path is required.
+
 1. Open **Read history again > Choose chats** and select eligible approved local
    chats. Selection survives paging. Inclusive dates intersect the approved
    window; they do not grant wider history or a new source.

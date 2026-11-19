@@ -691,7 +691,7 @@ export function createEvidenceUX(icons) {
         }
         return value;
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare,
+    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute,
         destroy() {
             clearTooltip();
             observer.disconnect();

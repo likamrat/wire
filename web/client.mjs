@@ -2186,9 +2186,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             recollectionNoticeKey = key;
             renderFreshActivity();
         },
-        pageSources: (host, sources, renderItem, reset, isCurrent) => {
+        pageSources: (host, sources, renderItem, reset, isCurrent, beforeReplace) => {
             if (reset) presentation.setPage("recollection-chats", 0);
-            pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem, isCurrent });
+            pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem, isCurrent, beforeReplace });
         },
         onCommitted: async () => {
             clearDeletedDraft("changed by explicit recollection");
@@ -3886,6 +3886,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (exportWriting || workspaceState.loading || collectionBusy || refreshWorking() || fresh.busy()) return "Wait for the current activity update or local save to finish.";
         if (action === "receipt" || action === "view") return "";
         if (!collection?.config?.approved) return "Approve a local source in Settings before reading its history again.";
+        if (api.accessState().mode === "enforced" && collection.recollection?.available !== true) {
+            return collection.recollection?.mode === "new-only" ? "History recovery is unavailable while collection is paused or the source is not ready."
+                : "This runtime does not support history recovery.";
+        }
         if (workspaceState.stale || collectionReadError || collectionSettings?.canRefresh() === false) return "Read the current stored activity and source status before previewing history again.";
         return "";
     }

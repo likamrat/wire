@@ -42,13 +42,14 @@ export const recollectionMarkup = `
     <p id="recollectSourceHelp" class="muted">Choose up to 128 chats and a date range before previewing. Search stays in this panel.</p>
     <div class="recollect-dates"><label>From<input id="recollectFrom" type="date" required></label><label>To<input id="recollectTo" type="date" required></label></div>
     <p id="recollectZone" class="muted"></p>
-    <label class="delete-choice"><input id="recollectPrompts" type="checkbox"><span>Also restore original prompts for these requests</span></label>
-    <p class="muted">Off by default. Includes available prompts and associated follow-ups.</p>
+    <label id="recollectPromptsChoice" class="delete-choice"><input id="recollectPrompts" type="checkbox"><span>Also restore original prompts for these requests</span></label>
+    <p id="recollectPromptsHelp" class="muted">Off by default. Includes available prompts and associated follow-ups.</p>
+    <label id="recollectCorrectionsChoice" class="delete-choice" hidden><input id="recollectCorrections" type="checkbox"><span>Also review source-verified corrections to saved calls</span></label>
   </form>
   <div id="recollectConfirmation" hidden>
     <div class="decision-scope"><p id="recollectScope"></p><button id="recollectChange" type="button" class="quiet" hidden>Change scope</button></div>
     <p id="recollectClipped" hidden></p>
-    <section id="recollectChanges"><h3 id="recollectChangesTitle">What will change</h3><p id="recollectSummary"></p><p id="recollectPromptSummary"></p></section>
+    <section id="recollectChanges"><h3 id="recollectChangesTitle">What will change</h3><p id="recollectSummary"></p><ul id="recollectCorrectionList" data-recollection-private-list hidden></ul><p id="recollectPromptSummary"></p></section>
     <h3>What stays unchanged</h3>
     <p id="recollectPreserved"></p>
     <details class="detail-disclosure"><summary id="recollectAvailabilityToggle">Source availability and limits</summary><p id="recollectBounds"></p><ul id="recollectAvailability"></ul><p id="recollectPolicy"></p><p class="muted">The preview expires after two minutes. Changes require a new preview. Refresh and restart never authorize recollection. This is a source reread, not an undo or backup restore.</p></details>
@@ -120,11 +121,23 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             : `${time.formatDate(first, context, first.slice(0, 4) !== last.slice(0, 4))} to ${time.formatDate(last, context, true)}`;
     }
     function selectionCount() {
-        $("recollectSelected").textContent = `${selectedSources.size} selected`;
+        ux.setOwnedText($("recollectSelected"), `${selectedSources.size} selected`);
         $("recollectShowSelected").disabled = !selectedSources.size && !selectedOnly;
         $("recollectShowSelected").hidden = !selectedSources.size && !selectedOnly;
         $("recollectShowSelected").textContent = selectedOnly ? "Show all chats" : "Show selected";
         for (const input of $("recollectSources").querySelectorAll("input")) input.disabled = selectedSources.size >= 128 && !input.checked;
+    }
+    function eraseSourceRows(root) {
+        for (const field of root.querySelectorAll("label.delete-choice input")) {
+            ux.removeOwnedAttribute(field, "value");
+            field.value = ""; field.checked = false;
+        }
+        for (const text of root.querySelectorAll("label.delete-choice span, [data-page-position]")) ux.setOwnedText(text);
+    }
+    function erasePreviewValues() {
+        for (const node of dialog.querySelectorAll("[data-recollection-private-list]")) ux.setOwnedText(node);
+        for (const id of ["recollectAvailability", "recollectScope", "recollectClipped", "recollectSummary",
+            "recollectPromptSummary", "recollectBounds", "recollectPolicy"]) ux.setOwnedText($(id));
     }
     function renderSources(reset = true) {
         const access = publication();
@@ -143,7 +156,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             name.textContent = source.name + (source.available ? "" : " - history unavailable");
             label.append(input, name);
             return label;
-        }, reset, () => current(access));
+        }, reset, () => current(access), eraseSourceRows);
         if (!matches.length) {
             const empty = document.createElement("p");
             empty.textContent = selectedOnly ? "No selected chats match this search." : "No chats match. Try another name.";
@@ -154,7 +167,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     function status(text, error = false) {
         if (!current(publication())) return;
         statusError = error;
-        if ($("recollectStatus").textContent !== text) $("recollectStatus").textContent = text;
+        if ($("recollectStatus").textContent !== text) ux.setOwnedText($("recollectStatus"), text);
         $("recollectStatus").classList.toggle("error", error);
         notify();
     }
@@ -162,7 +175,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (!current(publication())) return;
         const view = describe(phase, { preview, result, busy, error: statusError });
         const reason = canAct?.(["uncertain", "blocked"].includes(phase) ? "receipt" : "preview");
-        $("recollectTitle").textContent = view.title;
+        ux.setOwnedText($("recollectTitle"), view.title);
         dialog.dataset.decisionPhase = view.decisionPhase;
         dialog.dataset.operationId = receipt?.operationId || preview?.operationId || "";
         $("recollectForm").inert = busy || locked();
@@ -177,7 +190,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             || !$("recollectFrom").value || !$("recollectTo").value || locked() || Boolean(reason);
         $("recollectConfirm").hidden = phase !== "preview" && phase !== "pending";
         $("recollectConfirm").disabled = !view.canConfirm || Boolean(reason);
-        $("recollectConfirm").textContent = view.confirmLabel;
+        ux.setOwnedText($("recollectConfirm"), view.confirmLabel);
         $("recollectChange").hidden = phase !== "preview";
         $("recollectChange").disabled = busy || locked();
         $("recollectCheck").hidden = phase !== "uncertain";
@@ -209,28 +222,36 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (!current(publication()) || locked()) return;
         token++;
         cancelPreview();
+        erasePreviewValues();
         phase = "editing";
         update();
     }
     function scope() {
         return { sourceSessionIds: [...selectedSources],
             from: $("recollectFrom").value, to: $("recollectTo").value, timeContext: timeContext(),
-            restorePrompts: $("recollectPrompts").checked };
+            restorePrompts: $("recollectPrompts").checked, ...($("recollectCorrections").checked ? { correctExisting: true } : {}) };
     }
     async function readSources() {
         const access = publication();
         if (!current(access)) return;
         const version = ++token;
-        $("recollectSources").replaceChildren();
+        ux.setOwnedText($("recollectWindow")); ux.setOwnedText($("recollectZone"));
+        eraseSourceRows($("recollectSources")); $("recollectSources").replaceChildren();
         sources = []; selectedSources.clear(); selectedOnly = false; searchField.sync(""); selectionCount();
         busy = true; sourcesReady = false; update();
         status("Reading eligible chats from your approved local source. No evidence is being changed.");
         try {
             const result = await api("/api/recollection/sources", {});
             if (!current(access) || version !== token || !dialog.open) return;
+            $("recollectPrompts").disabled = result.newOnly === true;
+            if (result.newOnly) $("recollectPrompts").checked = false;
+            $("recollectPromptsChoice").hidden = $("recollectPromptsHelp").hidden = result.newOnly === true;
+            $("recollectCorrectionsChoice").hidden = result.correctionsAvailable !== true;
+            $("recollectCorrections").checked = false;
             sources = result.sources.toSorted((a, b) => a.name.localeCompare(b.name) || a.sourceSessionId.localeCompare(b.sourceSessionId));
             renderSources();
-            $("recollectWindow").textContent = `Approved history: ${period(result.since, result.until, timeContext())} (${result.windowDays} days).`;
+            $("recollectWindow").textContent = `Approved history: ${period(result.since, result.until, timeContext())} (${result.windowDays} days).`
+                + (result.newOnly ? " Deleted activity stays excluded." : "");
             $("recollectZone").textContent = `Dates are inclusive, in ${time.displayLabel(timeContext())}.`;
             sourcesReady = result.sources.length > 0;
             status(sourcesReady ? (result.skippedSources ? `${result.skippedSources} chats are outside the discovery limit and cannot be selected.` : "")
@@ -289,13 +310,27 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                 || !Number.isFinite(Date.parse(result.scope?.bounds?.from)) || !Number.isFinite(Date.parse(result.scope?.bounds?.to))) {
                 throw new Error("The runtime did not return a complete reviewed scope and receipt. Nothing can be confirmed.");
             }
+            erasePreviewValues();
             const c = result.counts;
             const view = describe("preview", { preview: result });
-            const kinds = [[c?.reauthorized, "previously deleted"], [c?.newRecords, "newly available"], [c?.promptOnly, "existing with prompt restoration"]]
+            const kinds = [[c?.reauthorized, "previously deleted"], [c?.newRecords, "newly available"], [c?.promptOnly, "existing with prompt restoration"],
+                [c?.verifiedCompletions, "saved unknowns with verified completion"], [c?.verifiedMetadata, "saved calls with verified result details"]]
                 .filter(([count]) => Number.isSafeInteger(count) && count > 0).map(([count, label]) => `${count.toLocaleString()} ${label}`).join(", ");
             $("recollectSummary").textContent = view.records === null ? "The preview record count is unavailable. Nothing can be confirmed."
-                : `${view.records.toLocaleString()} record${view.records === 1 ? "" : "s"}${kinds ? `: ${kinds}` : ""}.${Number.isSafeInteger(c?.alreadyPresent) && c.alreadyPresent > 0 ? ` ${c.alreadyPresent.toLocaleString()} already-present records will not be duplicated.` : ""}`;
+                : `${view.records.toLocaleString()} record${view.records === 1 ? "" : "s"}${kinds ? `: ${kinds}` : ""}.${Number.isSafeInteger(c?.alreadyPresent) && c.alreadyPresent > 0 ? ` ${c.alreadyPresent.toLocaleString()} already-present records will not be duplicated.` : ""}`
+                    + (c?.unresolved ? ` ${c.unresolved.toLocaleString()} saved calls could not be verified for correction and will stay unchanged.` : "")
+                    + (c?.checkpointConflicts ? ` Conflicting saved checkpoint evidence: ${c.checkpointConflicts.toLocaleString()}.` : "");
             const context = result.scope.timeContext;
+            const corrections = result.correctable ?? [];
+            if (result.scope.correctExisting && (!Array.isArray(result.correctable) || corrections.length > 32
+                || corrections.length !== c.verifiedCompletions + c.verifiedMetadata)) throw new Error("Saved-call corrections were not identified. Preview again.");
+            $("recollectCorrectionList").hidden = !corrections.length;
+            $("recollectCorrectionList").replaceChildren(...corrections.map(item => {
+                const li = document.createElement("li");
+                li.textContent = `${item.tool} (${time.formatMoment(item.startedAt, context)}): ${item.kind === "completion"
+                    ? "change unknown to verified tool completion" : "add verified result details; outcome unchanged"}. Call: ${item.toolCallId}`;
+                return li;
+            }));
             const chats = result.availability.length <= 3 ? result.availability.map(row => row.name).join("; ") : `${result.availability.length} selected chats (listed in source details)`;
             $("recollectScope").textContent = `${chats}. ${period(result.scope.from, result.scope.to, context)} (${time.displayLabel(context)}).`;
             const clipped = Date.parse(result.scope.since) > Date.parse(result.scope.bounds.from)
@@ -309,7 +344,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                     : "Original prompts are selected for restoration; the available count was not returned."
                 : "Deleted original prompts stay deleted.";
             $("recollectPreserved").textContent = "Responses and historical annotations stay deleted. Saved reports, comparisons and Copilot sources stay unchanged.";
-            $("recollectPolicy").textContent = result.boundary;
+            $("recollectPolicy").textContent = result.boundary + (Number.isSafeInteger(c?.suppressedSourceStarts)
+                ? ` ${c.suppressedSourceStarts.toLocaleString()} suppressed source call starts and ${c.excludedDeleted.toLocaleString()} deleted candidate records were excluded.`
+                : "");
             $("recollectAvailability").replaceChildren(...result.availability.map(row => {
                 const li = document.createElement("li");
                 const gaps = [[row.droppedBytes, "earlier bytes outside the bounded tail"], [row.unreadBytes, "unread bytes"],
@@ -363,7 +400,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     });
     const searchField = searchFields.mount($("recollectSearch"), { clearLabel: "Clear search", onInput: () => renderSources() });
     $("recollectShowSelected").addEventListener("click", () => { if (!current(publication())) return; selectedOnly = !selectedOnly; searchField.sync(""); renderSources(); });
-    for (const id of ["recollectFrom", "recollectTo", "recollectPrompts"]) $(id).addEventListener("input", () => { edit(); status(""); });
+    for (const id of ["recollectFrom", "recollectTo", "recollectPrompts", "recollectCorrections"]) $(id).addEventListener("input", () => { edit(); status(""); });
     $("recollectClose").addEventListener("click", () => dialog.close());
     dialog.addEventListener("cancel", event => { if (phase === "pending") event.preventDefault(); });
     dialog.addEventListener("close", () => {
@@ -371,7 +408,10 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (!current(publication())) return;
         token++;
         if (!locked()) busy = false;
-        if (!locked() && !["complete", "not-started"].includes(phase)) { cancelPreview(); phase = "editing"; }
+        if (!locked()) {
+            erasePreviewValues();
+            if (!["complete", "not-started"].includes(phase)) { cancelPreview(); phase = "editing"; }
+        }
         if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger.disabled ? trigger.closest(".ux-disabled-help") || trigger : trigger);
         notify();
     });
@@ -401,7 +441,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         trigger = initiator;
         if (!locked()) {
             phase = "editing"; preview = undefined; receipt = undefined; result = undefined; viewNeedsRead = false; sourcesReady = false;
-            $("recollectPrompts").checked = false; $("recollectFrom").value = ""; $("recollectTo").value = "";
+            $("recollectPrompts").checked = $("recollectCorrections").checked = false;
+            $("recollectCorrectionList").replaceChildren(); $("recollectCorrectionList").hidden = true;
+            $("recollectFrom").value = ""; $("recollectTo").value = "";
             restoreReceipt();
         }
         update(); if (!dialog.open) dialog.showModal();
@@ -420,8 +462,19 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (!["uncertain", "blocked", "complete", "not-started"].includes(phase)) phase = "editing";
         sources.length = 0; sourceMatches.length = 0; selectedSources.clear(); selectedOnly = false;
         preview = undefined; result = undefined; trigger = null; busy = false; sourcesReady = false; viewNeedsRead = false;
+        eraseSourceRows($("recollectSources"));
+        erasePreviewValues();
+        for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectStatus", "recollectConfirm"]) {
+            ux.setOwnedText($(id));
+        }
+        ux.removeOwnedAttribute(dialog, "data-operation-id");
+        for (const id of ["recollectSearch", "recollectFrom", "recollectTo"]) {
+            ux.removeOwnedAttribute($(id), "value"); $(id).value = "";
+        }
         if (dialog.open) { suppressedCloses++; dialog.close(); }
         $("recollectSources").replaceChildren(); $("recollectAvailability").replaceChildren();
+        $("recollectCorrectionList").replaceChildren(); $("recollectCorrectionList").hidden = true;
+        $("recollectCorrections").checked = false; $("recollectCorrectionsChoice").hidden = true;
         searchField.sync(""); $("recollectSearch").readOnly = true;
         $("recollectFrom").value = ""; $("recollectTo").value = ""; $("recollectPrompts").checked = false;
         for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectScope",
