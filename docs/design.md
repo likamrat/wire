@@ -69,8 +69,9 @@ an outlined card or redundant Workspace caption. Settings follows the shared
 page and section type scale.
 
 The React evaluation pairs its compact overview above full-width interaction
-rows. Longer diagnostics use the row width rather than stretching the space
-between a prompt and its service. The four supporting breakdowns use paired,
+rows. Cards summarize prompts, tools/services and recorded outcomes; detailed
+call diagnostics and provenance belong in the contextual reader rather than
+expanding the list. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
 
 Screen headings use sentence case, including **Work IQ**. Keep branding,

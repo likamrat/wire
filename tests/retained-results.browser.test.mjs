@@ -49,7 +49,9 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
         await selectActivityOption(page, "outcomeFilter", "success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await closeAnalyzeFilters(page);
-        await expect(page.locator(".request-card-problem")).toContainText(example.summary);
+        await expect(page.locator(".request-card-outcome")).toHaveText("Tool completed");
+        await expect(page.locator(".request-card-result-issues")).toHaveCount(["application-error", "mixed"].includes(example.name) ? 1 : 0);
+        await expect(page.locator(".request-card-problem")).not.toContainText(example.summary);
         await expect(page.locator(".request-card-problem")).not.toContainText("worked");
         await expect(page.locator(".request-card-problem")).not.toContainText("missing..");
     }
@@ -69,7 +71,8 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
         if (example.name === "application-error") {
             await expect(call.locator(".journey-result .recorded-result")).toHaveAttribute("data-outcome", "success");
             await expect(call.locator(".journey-result .recorded-result")).toHaveClass(/result-tone-success/);
-            await expect(call.locator(".reader-call-summary")).toContainText("Call #1 completed");
+            await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
+            await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText("completed");
             await expect(call.locator(".reader-call-summary")).not.toContainText("Worked");
             assert.equal((await call.innerText()).split(example.expected).length - 1, 1, "Expanded source error text is shown once");
             await expect(call.locator(".reader-call-summary .result-cause")).toBeHidden();

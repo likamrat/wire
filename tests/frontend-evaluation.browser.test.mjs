@@ -81,6 +81,88 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proofs, `${name}.png`) });
 }
 
+function compactCardRecords() {
+    const source = reviewRecords();
+    return [source.at(-1), source[0], source[1], source[5], source[7], source[12], source[17], source[23]].map((record, index) => {
+        const stamp = `2026-11-16T${String(20 - index).padStart(2, "0")}:00:00.000Z`;
+        record.capturedAt = stamp; record.userPrompt.sourceTimestamp = stamp;
+        if (index === 5) record.userPrompt = { ...record.userPrompt, text: "", status: "unavailable" };
+        for (const [ordinal, call] of record.toolCalls.entries()) call.startedAt = new Date(Date.parse(stamp) + ordinal * 5000).toISOString();
+        return record;
+    });
+}
+
+test("compact summaries keep diagnostic prose in the right reader while exact filtered calls remain reachable", { timeout: 60000 }, async t => {
+    const { page } = await setup(t, process.env.WIRE_TEST_FRONTEND ?? "react", compactCardRecords());
+    const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";
+    if (proofs) {
+        await mkdir(proofs, { recursive: true });
+        await page.screenshot({ path: path.join(proofs, `compact-${phase}-light-full.png`), fullPage: true });
+    }
+    const card = page.locator('#activityList .request-card-open[href*="review-plural-activity"]');
+    await expect(card).toContainText("Review the Cedar handover");
+    await expect(card).toContainText("4 recorded calls");
+    await expect(card).toContainText(/failed/i);
+    await expect(card).toContainText(/partial/i);
+    await expect(card).toContainText(/no result recorded/i);
+    await expect(card.locator(".request-card-result-issues")).toHaveText("1 completed call has a reported result issue");
+    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied|ToolUnavailable|flag alone|completion event|end time/);
+    await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
+    await expect(card.locator(".card-tool-name")).toHaveText(["workiq-fetch", "workiq-retrieve"]);
+    await expect(card.locator("button,input,details")).toHaveCount(0);
+    await card.focus(); await page.keyboard.press("Enter");
+    const reader = page.locator("#requestContent");
+    await expect(reader.locator(".reader-call-row")).toHaveCount(4);
+    await expect(reader).toContainText("AccessDenied");
+    await expect(reader).toContainText("ToolUnavailable");
+    await expect(reader).toContainText("WIRE interpretation");
+    const partial = reader.locator('[data-tool-call-id="review-call-2"]').first();
+    await expect(partial).toContainText("The call was saved as partial.");
+    await expect(partial).toContainText("No completion event or end time is retained.");
+    await expect(reader).toContainText("Not attributed to a target in this batch");
+    await expect(reader.getByRole("button", { name: /Copy/ }).first()).toBeVisible();
+    await page.locator("#closeContextSidebar").click();
+    await expect(card).toBeFocused();
+    await page.locator('#outcomeChart li[data-category="partial"] a').click(); await ready(page);
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
+    await expect(card.locator(".request-card-count")).toHaveText("1 of 4 Work IQ tool calls matches this view");
+    await expect(card).not.toContainText(/WIRE interpretation|flag alone|Call #|Requested:/);
+    await card.click();
+    await expect(reader.locator(".reader-call-row")).toHaveCount(4);
+    await expect(partial).toContainText("The call was saved as partial.");
+    await page.locator("#closeContextSidebar").click();
+    await expect(card).toBeFocused();
+    await page.goBack(); await ready(page);
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(8);
+    await page.locator("#wireSearch").fill("Cedar handover");
+    const hit = page.locator('.wire-search-hit').filter({ hasText: "Review the Cedar handover" }).first();
+    await expect(hit).toBeVisible();
+    await hit.click();
+    await expect(reader).toContainText("AccessDenied");
+    await expect(reader).toContainText("WIRE interpretation");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#wireSearch")).toHaveValue("Cedar handover");
+});
+
+test("heterogeneous summary cards stay readable in complete Light Dark narrow and enlarged compositions", { timeout: 60000 }, async t => {
+    const { page } = await setup(t, "react", compactCardRecords());
+    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1440, 1], ["dark", 390, 1], ["light", 1024, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await chooseTheme(page, theme); await page.mouse.move(0, 0);
+        await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
+        await page.evaluate(() => document.fonts.ready);
+        await expect(page.locator("#activityList .request-card-open")).toHaveCount(8);
+        await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|The call was saved as partial|Requested:|ToolUnavailable/);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        if (proofs) {
+            await page.screenshot({ path: path.join(proofs, `compact-after-${theme}-${width}-text${scale}-full.png`), fullPage: true });
+            await page.locator("#activityList .activity-card").first().scrollIntoViewIfNeeded();
+            await capture(page, `compact-after-${theme}-${width}-text${scale}-reading`);
+        }
+    }
+});
+
 test("partial outcome opens the exact retained call and explains its limited provenance", async t => {
     const { page } = await setup(t, "react", reviewRecords());
     const card = page.locator('#outcomeChart [data-percentage-card="outcomes"]');
@@ -134,7 +216,7 @@ test("the normal-entry overview keeps a long total readable in both themes", { t
     }
 });
 
-test("failure rows keep prompt and service together and give diagnostics the row width", async t => {
+test("failure summaries keep prompt service and outcome together without reader diagnostics", async t => {
     const { page } = await setup(t);
     await page.goto(page.url() + "&result=failure");
     await ready(page);
@@ -145,6 +227,7 @@ test("failure rows keep prompt and service together and give diagnostics the row
     });
     assert.ok(geometry.gap <= 32, JSON.stringify(geometry));
     assert.ok(geometry.diagnosticWidth > geometry.rowWidth * .9, JSON.stringify(geometry));
+    await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|Requested:/);
     await capture(page, "visual-failure-rows");
 });
 

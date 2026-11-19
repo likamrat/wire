@@ -67,19 +67,19 @@ test("normal cards and reader color compact status units, not explanatory prose,
             const card = page.locator(".request-card-open").filter({ hasText: `invented ${id} operation` });
             const summary = card.locator(".request-card-problem");
             await expect(summary).toHaveAttribute("data-outcome", outcome);
-            const cardStatus = summary.locator(".result-status").first();
+            const cardStatus = summary.locator(`[data-result-outcome="${outcome}"]`);
             const cardPaint = await cardStatus.evaluate(measureControlSurface);
             if (["success", "failure"].includes(outcome)) {
                 const colors = await cardStatus.evaluate(node => [node, ...node.querySelectorAll("span,svg")].map(part => getComputedStyle(part).color));
                 assert.ok(colors.every(color => color === colors[0]), `${theme} ${id} card: ${colors}`);
                 assert.ok(contrast(cardPaint.ink, cardPaint.face) >= 4.5, JSON.stringify(cardPaint));
-                const prose = await summary.locator(".request-card-reason-text").first().evaluate(measureControlSurface);
+                const prose = await card.locator(".request-card-prompt").evaluate(measureControlSurface);
                 assert.notEqual(prose.ink, cardPaint.ink);
                 assert.ok(contrast(prose.ink, prose.face) >= 4.5, JSON.stringify(prose));
             }
             if (id === "failed") {
-                await expect(summary).toContainText("Returned entry 1: The requested operation is not available for this item.");
-                await expect(summary).toContainText("UnsupportedItem; status 403");
+                await expect(summary).toHaveText("Tool failed");
+                await expect(card).not.toContainText(/UnsupportedItem|Returned entry 1/);
                 await expect(summary).not.toContainText(/too long|did not save|unsupported format/i);
                 if (proof && width === 1440) {
                     await card.scrollIntoViewIfNeeded();
@@ -87,11 +87,8 @@ test("normal cards and reader color compact status units, not explanatory prose,
                 }
             }
             if (id === "transport") {
-                await expect(summary).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
-                await expect(summary).not.toContainText("InventedTransport");
-                await expect(summary).toContainText("Transport ... error: HTTP 503");
-                const summaryText = await summary.textContent();
-                assert.ok(summaryText.length < 300, summaryText);
+                await expect(summary).toHaveText("Tool failed");
+                await expect(card).not.toContainText(/transport layer|HTTP 503|InventedTransport/i);
                 if (proof) {
                     await card.scrollIntoViewIfNeeded();
                     await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-transport-card.png`) });
@@ -101,7 +98,7 @@ test("normal cards and reader color compact status units, not explanatory prose,
             const call = page.locator(`[data-tool-call-id="${id}"]`);
             const line = call.locator(".reader-call-summary .recorded-result");
             await expect(line).toHaveAttribute("data-outcome", outcome);
-            await expect(line.locator(".reader-entry-label")).toHaveText("Call #1");
+            await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
             const status = await line.locator(".result-status").count() ? line.locator(".result-status") : line;
             const colors = await status.evaluate(node => [node, ...node.querySelectorAll("span,svg")].map(part => getComputedStyle(part).color));
             if (["success", "failure"].includes(outcome)) assert.ok(colors.every(color => color === colors[0]), `${theme} ${id} reader: ${colors}`);
@@ -116,9 +113,12 @@ test("normal cards and reader color compact status units, not explanatory prose,
                 const toggle = call.locator(".reader-call-toggle");
                 if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
                 await expect(call).toContainText(message);
+                await expect(call.locator(".api-result-entry").first()).toContainText("UnsupportedItem");
+                await expect(call.locator(".api-result-entry").first()).toContainText("403");
                 await expect(call).toContainText("This operation requires an editable item.");
                 await expect(call.locator(".returned-coverage")).toContainText("The full total is unknown.");
-                await expect(call.locator(".returned-api-entries .list-pager")).toContainText("retained entries");
+                await expect(call.locator(".api-result-entry")).toHaveCount(1);
+                await expect(call.locator(".returned-api-entries .list-pager")).toHaveCount(0);
                 await expect(call).toContainText("Not attributed to a target in this batch");
                 await expect(call).not.toContainText("EXCLUDED_BODY");
                 const copy = call.getByRole("button", { name: "Copy recorded arguments", exact: true });
@@ -141,6 +141,7 @@ test("normal cards and reader color compact status units, not explanatory prose,
                 }
             }
             if (id === "transport") {
+                await expect(line).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
                 const toggle = call.locator(".reader-call-toggle");
                 if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
                 await expect(call.locator(".reader-error-message")).toHaveText(transportMessage);

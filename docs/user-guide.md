@@ -45,6 +45,9 @@ in this release. Saving Copilot reply text is a separate choice under
 available response-model names, plus prompt authors. The interaction list below
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
+Cards keep a short prompt preview, tools/services and outcome counts. Open a
+card for each call's exact paths, errors, explanations and retained-result details
+in the right-hand reader. A completed call can still have a reported result issue.
 
 ![Analyze with call outcomes, activity over time, recorded models, tools, services and prompt authors in compact panels.](images/analyze.png)
 

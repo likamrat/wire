@@ -99,20 +99,21 @@ test("paired ask failures survive incremental collection and reach cards, reader
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
-        await expect(card).toContainText("8 recorded calls / 6 completed / 2 failed");
-        for (const number of [5, 6]) {
-            const reason = card.locator(".request-card-reason").filter({ hasText: `Call #${number} failed` });
-            await expect(reason).toContainText(message);
-            await expect(reason).toContainText("SourcePolicyUnavailable");
-        }
+        await expect(card.locator(".request-card-count")).toHaveText("8 recorded calls");
+        await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 6", "Tool failed: 2"]);
+        await expect(card).not.toContainText("SourcePolicyUnavailable");
+        await expect(card).not.toContainText(message);
         await expect(card).not.toContainText("could not extract");
         if (proofs) await page.screenshot({ path: path.join(proofs, `ask-errors-card-${theme}.png`) });
         await card.click();
         for (const number of [5, 6]) {
             const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="call-${number}"]`);
             await expect(call.locator(".reader-call-summary")).toContainText(message);
+            await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${number}`);
+            await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText("failed");
             if (await call.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await call.locator(".reader-call-toggle").click();
             await expect(call.locator(".technical-detail .reader-error-message")).toHaveText(message);
+            await expect(call).toContainText("SourcePolicyUnavailable");
         }
         await expect(page.locator("#requestContent")).not.toContainText("EXCLUDED_");
         if (proofs) await page.screenshot({ path: path.join(proofs, `ask-errors-reader-${theme}.png`) });
@@ -235,17 +236,19 @@ test("supported failure families keep their operation, recorded reason and hones
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open");
-    for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {
-        const index = cases.findIndex(entry => entry[0] === id), reason = card.locator(".request-card-reason").filter({ hasText: new RegExp(`Call #${index + 1}\\b`) });
-        await expect(reason).toContainText(expected);
-        await expect(reason.locator(".request-card-operation")).toContainText("workiq-");
-        if (!["retrieval", "blob"].includes(id)) await expect(reason).toContainText("Requested: /me/messages");
-    }
+    await expect(card.locator(".request-card-count")).toHaveText(`${cases.length} recorded calls`);
+    await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 2", "Tool failed: 16", "No result recorded: 1"]);
+    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied/);
     await card.click();
     for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {
         const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="${id}"]`);
         await expect(call).toContainText(expected);
         await expect(call.locator(".call-heading")).toContainText("workiq-");
+        if (!["retrieval", "blob"].includes(id)) {
+            const toggle = call.locator(".reader-call-toggle");
+            if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+            await expect(call).toContainText("/me/messages");
+        }
     }
     const completed = page.locator('[data-tool-call-id="completed"]');
     await completed.locator(".reader-call-toggle").click();

@@ -243,8 +243,12 @@ cannot republish withdrawn data.
 
 ### Cards
 
-Cards show author/origin, an authorized prompt excerpt, services/operations,
-recorded problems/results, then quiet time/count metadata. Prompts use up to
+Cards show author/origin, an authorized prompt excerpt, compact tools and
+services/operations, aggregate recorded outcomes, and quiet time/count metadata.
+They identify reported result issues separately from tool completion without
+repeating per-call paths, codes, interpretations or completeness paragraphs.
+Those details belong to the existing right-hand reader opened by the card,
+not another card accordion or a clipped diagnostic block. Prompts use up to
 two actual line boxes, not an arbitrary character cap. Read more appears only
 on real overflow; it opens the reader at the prompt's top. Other valid reader
 returns can retain their prior position.
@@ -259,13 +263,13 @@ text selection keep their established behavior.
 Failure presentation keeps three boundaries:
 
 - Each call owns its reasons and stable full-interaction ordinal. Matching prose
-  does not merge different calls. Card explanations name the recorded tool and
+  does not merge different calls. Reader explanations name the recorded tool and
   normalized requested paths when available; these are not proof of downstream
   API execution or a mapping between batch targets and returned entries.
 - Equivalent complete returned diagnostics within one call may share a reason
   only if all original entry identities remain. Missing/redacted/ambiguous facts
   cannot qualify that grouping.
-- Cards and readers show all supported reasons under their call, without a
+- Readers show all supported reasons under their call, without a
   first-N cap, "one more reason" disclosure or extra failure page. Keep the
   distinguishing middle of a retained diagnostic, not just its beginning and end.
 
@@ -275,7 +279,7 @@ The reader explains completed calls through their recorded completion evidence,
 without claiming the answer was correct or the overall task succeeded.
 
 When a terse error needs context, the same **WIRE interpretation** appears beside
-its recorded reason on the card and reader, and travels in newly prepared reports.
+its recorded reason in the reader, and travels in newly prepared reports.
 It explains the supported mechanism and remaining unknowns without replacing the
 code, status or full diagnostic. Opening exact evidence keeps that interpretation
 visible. A clear source explanation needs no duplicate glossary paragraph.

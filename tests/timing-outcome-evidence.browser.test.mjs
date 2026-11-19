@@ -54,7 +54,8 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open").filter({ hasText: "invented timeout request" });
-    await expect(card).toContainText("The tool did not respond in time");
+    await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed");
+    await expect(card).not.toContainText("The tool did not respond in time");
     await card.click();
     const call = page.locator('[data-tool-call-id="timeout-call"]');
     await expect(call).toContainText("workiq-retrieve");

@@ -5270,9 +5270,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         card.dataset.sessionId = row.sourceSessionId;
         const recordedLabel = workspaceState.scope.layer === "code-reference" ? "Reference recorded" : workspaceState.scope.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(workspaceState.scope.layer) ? "Request site recorded" : "Action recorded";
-        card.append(el("p", "", row.tool || results.unit(workspaceState.scope.layer, 1)),
+        card.append(el("p", "", workspaceState.scope.layer === "tool" ? results.callOperation(row) : row.tool || results.unit(workspaceState.scope.layer, 1)),
             el("p", "muted", "The owning interaction was not retained."),
-            recordedCategory([row], workspaceState.scope.layer), activityCardProblem([row]).problem);
+            recordedCategory([row], workspaceState.scope.layer),
+            resultLine(workspaceState.scope.layer, results.summarize([row]), { rows: [row], singleRecord: true,
+                recordLabel: results.labels(workspaceState.scope.layer)[row.outcome] }));
         const details = el("dl", "activity-card-facts");
         if (row.status != null) details.append(cardFact(workspaceState.scope.layer === "reported-api" ? "Tool-reported HTTP" : "Recorded HTTP", String(row.status)));
         if (["tool", "reported-api", "http"].includes(workspaceState.scope.layer)) details.append(cardFact(workspaceState.scope.layer === "tool" ? "Tool latency"
@@ -5349,12 +5351,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!tools.size) list.append(el("li", "", "No tool evidence in this view"));
         return list;
     }
+    function cardIdentityRows(rows, layer) {
+        // Full canonical context can omit tool names. Use only its exact owning call.
+        return rows?.map(row => Object.hasOwn(row, "tool") || !["tool", "reported-api"].includes(layer)
+            ? row : { ...row, tool: sourceCallFor(row)?.tool });
+    }
     function interactionSummary(rows, layer, scope, label) {
         const summary = el("div", "interaction-summary"), identity = el("div", "interaction-identity");
         if (!Array.isArray(rows) || rows.length) {
-            // Full canonical context omits tool names; recover only the exact owning call's identity.
-            const identities = rows?.map(row => Object.hasOwn(row, "tool") || !["tool", "reported-api"].includes(layer)
-                ? row : { ...row, tool: sourceCallFor(row)?.tool });
+            const identities = cardIdentityRows(rows, layer);
             const tools = el("span", "identity-group"), services = recordedCategory(identities, layer, { compact: true });
             tools.append(el("span", "identity-key", "Tools: "), cardTools(identities, false, { compact: true }));
             services.setAttribute("role", "group");
@@ -5390,73 +5395,45 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
-    function activityCardProblem(rows, { total, layer = workspaceState.scope.layer, callLabels = new Map() } = {}) {
-        const presentation = results.activitySummary(layer, rows, sourceCallFor, { contextual: true });
-        const problem = el("div", "request-card-problem"), copy = el("div", "request-card-result-copy");
+    function activityCardSummary(rows, { layer = workspaceState.scope.layer } = {}) {
+        const presentation = results.activitySummary(layer, rows, sourceCallFor);
+        const problem = el("div", "request-card-problem");
         const summary = presentation?.summary;
-        const scope = total === undefined || total === summary?.count ? "Recorded" : "Matching";
-        function appendEntries(host, entries, { showCounts = false, lowercase = false } = {}) {
-            entries.forEach((entry, index) => {
-                if (index) host.append(document.createTextNode("; "));
-                const part = el("span", ["failure", "transport"].includes(entry.key) ? "request-card-failure-text" : "",
-                    (showCounts ? count(entry.count) + " " : "") + (lowercase ? entry.label.toLowerCase() : entry.label));
-                part.dataset.resultOutcome = entry.key;
-                host.append(part);
-            });
-        }
-        function appendReasons() {
-            const reasons = el("ul", "request-card-reasons");
-            for (const entry of presentation.reasons) {
-                const item = el("li", "request-card-reason result-tone-" + entry.tone);
-                item.dataset.resultOutcome = entry.outcome;
-                if (entry.rowId) item.dataset.callId = entry.rowId;
-                const label = callLabels.get(entry.rowId);
-                const status = el("span", "result-status result-tone-" + entry.outcome);
-                status.append(ux.icon(results.icon(entry.outcome) + "-compact"),
-                    el("span", "", label ? label + " " + callOutcomeLabel(entry.outcome) : results.labels("tool")[entry.outcome]));
-                const explanations = callReasonList(entry.items);
-                explanations.classList.add("request-card-reason-text");
-                item.append(status, explanations);
-                if (entry.rowId) {
-                    const row = rows.find(row => row.id === entry.rowId);
-                    status.after(el("span", "request-card-operation", results.callOperation(row)));
-                }
-                if (entry.coverage) item.append(el("p", "returned-coverage", entry.coverage.text));
-                reasons.append(item);
-            }
-            copy.append(reasons);
-        }
-        if (!presentation) copy.textContent = "Result counts unavailable.";
-        else if (!summary.count) copy.textContent = `No recorded ${results.unit(layer, 0)} in this view.`;
-        else if (layer !== "tool") {
-            copy.append(document.createTextNode(results.heading(layer) + ": "));
-            appendEntries(copy, results.entries(layer, summary), { showCounts: true });
-            copy.append(document.createTextNode("."));
-        } else if (presentation.reasons.length) {
-            appendReasons();
-        } else if (summary.success === summary.count) copy.textContent = scope + " tool " + (summary.count === 1 ? "call completed." : "calls completed.");
+        if (!presentation) problem.textContent = "Result counts unavailable.";
+        else if (!summary.count) problem.textContent = `No recorded ${results.unit(layer, 0)} in this view.`;
         else {
-            copy.append(document.createTextNode(scope + " tool calls: "));
-            appendEntries(copy, results.entries("tool", summary), { showCounts: true, lowercase: true });
-            copy.append(document.createTextNode("."));
+            const outcomes = el("div", "request-card-outcomes");
+            for (const entry of results.entries(layer, summary)) {
+                const item = el("span", "request-card-outcome result-tone-" + entry.key);
+                item.dataset.resultOutcome = entry.key;
+                item.append(ux.icon(results.icon(entry.key) + "-compact"),
+                    el("span", "", summary.count > 1 ? `${entry.label}: ${count(entry.count)}` : entry.label));
+                outcomes.append(item);
+            }
+            problem.append(outcomes);
+            // Completion and a reported result problem are separate evidence.
+            const issues = presentation.entries.filter(entry => entry.tone && entry.tone !== entry.key);
+            if (issues.length) {
+                const completed = issues.filter(entry => entry.key === "success").reduce((total, entry) => total + entry.count, 0);
+                problem.append(el("span", "request-card-result-issues", issues.every(entry => entry.key === "success")
+                    ? `${count(completed)} completed ${completed === 1 ? "call has" : "calls have"} a reported result issue`
+                    : "Result issues reported"));
+            }
         }
         if (presentation?.outcome) {
-            problem.classList.add("result-tone-" + presentation.outcome);
             problem.dataset.outcome = presentation.outcome;
             problem.dataset.count = String(presentation.entries.filter(entry => (entry.tone ?? entry.key) === presentation.outcome)
                 .reduce((total, entry) => total + entry.count, 0));
-            if (!presentation.reasons.length) problem.append(ux.icon(results.icon(presentation.outcome) + "-compact"));
         }
-        problem.append(copy);
         return { presentation, problem };
     }
     function requestCard(scenario, { reportPicker = false, eventSignal } = {}) {
         const authority = api.publicationToken();
         if (!authority || clearingAccess || !workspaceState.evidence) return null;
         const layer = reportPicker ? "tool" : workspaceState.scope.layer;
-        const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) ?? [] : rowsFor(scenario.scenarioId);
+        const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) : rowsFor(scenario.scenarioId);
         if (nativeActivity.isNative(scenario)) return nativeActivity.card({
-            record: scenario, href: routeUrl(routeFor("request", { request: scenario.scenarioId })), rows, layer,
+            record: scenario, href: routeUrl(routeFor("request", { request: scenario.scenarioId })), rows: rows ?? [], layer,
             contextDateBasis: nativeContextDateBasis(scenario.scenarioId),
             onOpen: id => navigate(routeFor("request", { request: id })),
         });
@@ -5467,19 +5444,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && workspaceState.route.request === scenario.scenarioId));
         const description = textAccess.describePrompt(scenario.userPrompt);
-        const ordered = layer === "tool" ? rows.map(row => ({ row, source: sourceCallFor(row) }))
-            .sort((a, b) => !a.source || !b.source ? a.source ? 1 : b.source ? -1 : 0
-                : requestContext.compare({ at: a.source.startedAt }, { at: b.source.startedAt })
-                    || scenario.toolCalls.indexOf(a.source) - scenario.toolCalls.indexOf(b.source))
-            .map(entry => entry.row) : rows;
-        const actions = [...(scenario.toolCalls ?? []), ...(scenario.graphActivities ?? []), ...(scenario.httpRecords ?? [])]
-            .map(source => ({ source, at: source.startedAt })).sort(requestContext.compare);
-        const callLabels = new Map(ordered.map(row => {
-            const source = sourceCallFor(row);
-            const index = actions.findIndex(entry => entry.source === source || source && entry.source.toolCallId === source.toolCallId
-                && entry.source.startEventId === source.startEventId);
-            return [row.id, index < 0 ? row.tool || "Tool call" : results.callLabel(index + 1)];
-        }));
         const more = el("span", "request-card-read-more", "Read more");
         more.hidden = true;
         const actor = authorship.read(scenario.userPrompt).actor;
@@ -5499,21 +5463,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("p", "request-card-origin request-card-author", sourceLabel ? sourceLabel + " \u00b7 " + authorLabel : authorLabel);
         author.dataset.promptActor = actor;
-        const categories = recordedCategory(rows, layer);
+        const identities = cardIdentityRows(rows, layer);
+        const categories = recordedCategory(identities, layer, { compact: true });
         categories.classList.add("request-card-categories");
+        if (identities?.length && (layer === "tool" || identities.some(row => row.tool))) {
+            const tools = el("div", "recorded-category-field");
+            tools.append(el("span", "recorded-category-label", "Tools:"), cardTools(identities, false, { compact: true }));
+            categories.prepend(tools);
+        }
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
-        const { presentation, problem } = activityCardProblem(ordered, { ...description, total: full?.count ?? null, layer, callLabels });
+        const { presentation, problem } = activityCardSummary(rows, { layer });
         const summary = presentation?.summary;
         const facts = el("div", "request-card-summary");
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         if (summary) {
-            const values = results.entries(layer, summary);
             const counts = full?.count === summary.count ? `${count(summary.count)} recorded ${results.columnUnit(layer, summary.count)}`
                 : results.countLabel(layer, summary.count, full?.count ?? null);
-            const breakdown = layer === "tool" && values.length > 1
-                ? " / " + values.map(entry => `${count(entry.count)} ${["success", "failure"].includes(entry.key)
-                    ? callOutcomeLabel(entry.key) : entry.label.toLowerCase()}`).join(" / ") : "";
-            facts.append(el("span", "request-card-count", counts + breakdown));
+            facts.append(el("span", "request-card-count", counts));
         }
         action.append(author, prompt, more);
         if (description.hasText && description.notice) action.append(el("p", "request-card-availability", description.notice));

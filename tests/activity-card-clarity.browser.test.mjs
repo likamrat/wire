@@ -69,6 +69,11 @@ async function setup(t, evidence = records(), { start = startServer } = {}) {
     return { page, revision: (await (await snapshot).json()).revision };
 }
 
+async function expectCallStatus(call, ordinal, status) {
+    await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${ordinal}`);
+    await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText(status);
+}
+
 async function measure(page) {
     return page.locator(".request-card-open").evaluateAll(nodes => nodes.map(node => {
         const prompt = node.querySelector(".request-card-prompt"), style = getComputedStyle(prompt);
@@ -77,7 +82,7 @@ async function measure(page) {
         const lines = [...new Set([...range.getClientRects()].filter(rect => rect.height > 0 && rect.y < box.bottom)
             .map(rect => Math.round(rect.y)))];
         const card = node.getBoundingClientRect();
-        return { card: card.toJSON(), prompt: box.toJSON(), lines: lines.length,
+        return { card: card.toJSON(), listWidth: node.closest("#activityList").clientWidth, prompt: box.toJSON(), lines: lines.length,
             font: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight,
             weight: style.fontWeight,
             origin: node.querySelector(".request-card-origin").getBoundingClientRect().toJSON(),
@@ -115,16 +120,12 @@ test("Activity gives origin, prompt, labelled services and meaningful problems d
     await expect(first.locator(".request-card-origin")).toHaveText("My prompt");
     await expect(first.locator(".request-card-categories")).toContainText("Service:");
     await expect(first.locator(".request-card-categories")).toContainText("Mail");
-    await expect(first.locator(".request-card-problem")).toContainText("Work IQ required sign-in at the time");
+    await expect(first.locator(".request-card-outcome")).toHaveText("Tool failed");
     const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
     await expect(mixed.locator(".request-card-categories")).toContainText("Services:");
-    await expect(mixed.locator(".request-card-categories .service-label-list > li")).toHaveCount(2);
-    await expect(mixed.locator(".request-card-problem")).toContainText("Access was denied");
-    await expect(mixed.locator(".request-card-problem")).toContainText("The tool did not respond in time");
-    await expect(mixed.locator(".request-card-problem")).toContainText("Work IQ required sign-in at the time");
-    await expect(mixed.locator(".request-card-reason")).toHaveCount(3);
-    await expect(mixed.locator(".request-card-more-problems")).toHaveCount(0);
-    await expect(first.locator(".request-card-more-problems")).toHaveCount(0);
+    await expect(mixed.locator(".request-card-categories .service-cue")).toHaveCount(2);
+    await expect(mixed.locator(".request-card-outcome")).toHaveText(["Tool completed: 3", "Tool failed: 3"]);
+    await expect(mixed).not.toContainText(/Access was denied|did not respond in time|required sign-in/);
     await expect(mixed.locator("button,input,a")).toHaveCount(0);
     const geometry = await mixed.evaluate(card => {
         const box = selector => card.querySelector(selector).getBoundingClientRect().toJSON();
@@ -134,22 +135,23 @@ test("Activity gives origin, prompt, labelled services and meaningful problems d
     });
     assert.ok(geometry.prompt.top >= geometry.origin.bottom + 7);
     assert.ok(geometry.categories.top >= geometry.prompt.bottom + 15);
-    assert.ok(geometry.result.top >= geometry.categories.bottom + 15);
+    assert.ok(geometry.result.top >= geometry.categories.bottom + 11);
     assert.ok(geometry.metadata.top >= geometry.result.bottom + 11);
 });
 
-test("Card reasons follow the same retained chronology as native first-failure entry", async t => {
+test("the compact failure count opens the first failure in retained chronology", async t => {
     const record = records()[2];
     for (const [index, seconds] of [[3, 30], [4, 10], [5, 20]]) {
         record.toolCalls[index].startedAt = new Date(Date.parse(record.userPrompt.sourceTimestamp) + seconds * 1000).toISOString();
     }
     const { page } = await setup(t, [record]);
     const card = page.locator(".request-card-open");
-    const problem = await card.locator(".request-card-problem").textContent();
+    await expect(card.locator('[data-result-outcome="failure"]')).toHaveText("Tool failed: 3");
+    await card.click();
+    const problem = await page.locator('[data-reader-section="activity"]').innerText();
+    for (const reason of ["The tool did not respond in time", "Work IQ required sign-in at the time", "Access was denied"]) assert.ok(problem.includes(reason));
     assert.ok(problem.indexOf("The tool did not respond in time") < problem.indexOf("Work IQ required sign-in at the time"));
     assert.ok(problem.indexOf("Work IQ required sign-in at the time") < problem.indexOf("Access was denied"));
-    await expect(card.locator(".request-card-more-problems")).toHaveCount(0);
-    await card.click();
     await expect(page.locator('[data-tool-call-id="clarity-call-2-4"]')).toBeFocused();
     await expect(page.locator('[data-tool-call-id="clarity-call-2-3"]')).toContainText("Access was denied");
 });
@@ -397,18 +399,10 @@ test("card previews use real line space and Read more opens the prompt while cov
                 }
                 if (width >= 1440 && card === first) assert.equal(omitted, false, "The complete fitting prompt uses available card width.");
                 await expect(prompt).not.toContainText("\u2026");
-                const typography = await card.evaluate(node => [".result-status", ".call-reason-text"].map(selector => {
-                    const css = getComputedStyle(node.querySelector(selector)); return [css.fontFamily, css.fontSize, css.fontWeight];
-                }));
-                assert.deepEqual(typography[0], typography[1]);
-                measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted, typography });
+                measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted });
             }
-            await expect(second.locator(".call-reason-list > li")).toHaveCount(1);
-            await expect(second.locator(".call-reason-list")).not.toContainText(/total.*unknown|part of the response/);
-            await expect(second.locator(".returned-coverage")).toContainText("3 returned entries");
-            await expect(second.locator(".returned-coverage")).toContainText("total is unknown");
-            assert.equal(await second.locator(".returned-coverage").evaluate(node => node.closest("li.call-reason-item") === null), true);
-            await expect(second.locator(".result-status")).toHaveText("Call #9 failed");
+            await expect(second.locator(".returned-coverage,.call-reason-list")).toHaveCount(0);
+            await expect(second.locator(".request-card-outcome")).toHaveText("Tool failed");
             await expect(second.locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
             await expect(second.locator("a,button,[role=button]")).toHaveCount(0, "Read more belongs to the real card link, not a nested control.");
         }
@@ -442,6 +436,9 @@ test("card previews use real line space and Read more opens the prompt while cov
             await expect(call.locator(".api-result-entry")).toHaveCount(3);
             await expect(call.locator(".returned-coverage")).toHaveCount(1);
             await expect(call.locator(".returned-coverage")).toContainText("3 returned entries");
+            await expect(call.locator(".returned-coverage")).toContainText(/total is unknown/i);
+            await expectCallStatus(call, 9, "failed");
+            assert.equal(await call.locator(".returned-coverage").evaluate(node => node.closest(".call-reason-item") === null), true);
             const readerType = await call.evaluate(node => [".reader-call-summary .recorded-result-label", ".reader-error-message"].map(selector => {
                 const css = getComputedStyle(node.querySelector(selector)); return [css.fontFamily, css.fontSize, css.fontWeight];
             }));
@@ -524,28 +521,10 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".result-status")).toHaveText("Call #6 failed");
+            await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed");
             await expect(card.locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
-            await expect(card.locator(".call-reason-list > li")).toHaveCount(1);
-            await expect(card.locator(".call-reason-list")).toContainText("Returned entries 1\u20133");
-            assert.equal((await card.textContent()).split(message).length - 1, 1);
-            const geometry = await card.evaluate(node => {
-                const status = node.querySelector(".result-status"), list = node.querySelector(".call-reason-list");
-                const a = status.getBoundingClientRect(), b = list.getBoundingClientRect();
-                return { statusBottom: a.bottom, listTop: b.top, statusLeft: a.left, listLeft: b.left,
-                    statusColor: getComputedStyle(status).color, proseColor: getComputedStyle(list).color,
-                    listStyle: getComputedStyle(list).listStyleType };
-            });
-            assert.ok(geometry.listTop >= geometry.statusBottom);
-            assert.notEqual(geometry.statusColor, geometry.proseColor);
-            assert.equal(geometry.listStyle, "disc");
-            measurements.push({ theme, width, scale, ...geometry });
-            await expect(page.locator('.request-card-open[href*="grouped-different"] .call-reason-list > li')).toHaveCount(2);
-            const groups = page.locator('.request-card-open[href*="grouped-multiple"] .request-card-reason');
-            await expect(groups).toHaveCount(2);
-            await expect(groups.nth(0).locator(".result-status")).toHaveText("Call #6 failed");
-            await expect(groups.nth(1).locator(".result-status")).toHaveText("Call #7 failed");
-            for (const group of await groups.all()) await expect(group.locator(".call-reason-list > li")).toHaveCount(1);
+            await expect(card).not.toContainText(message);
+            await expect(page.locator('.request-card-open[href*="grouped-multiple"] .request-card-outcome')).toHaveText("Tool failed: 2");
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
@@ -566,6 +545,14 @@ test("filtered calls own subordinate grouped returned errors without merging cal
             await expect(call.locator(".returned-api-entries")).toHaveAttribute("aria-label", "Returned results for Call #6");
             await expect(call.locator(".reader-call-summary")).not.toContainText(message);
             await expect(call.locator(".reader-error-message")).toHaveText([message, message, message]);
+            const geometry = await call.evaluate(node => {
+                const status = node.querySelector(".reader-call-summary .recorded-result-label"), prose = node.querySelector(".reader-error-message");
+                return { statusColor: getComputedStyle(status).color, proseColor: getComputedStyle(prose).color,
+                    statusBottom: status.getBoundingClientRect().bottom, proseTop: prose.getBoundingClientRect().top };
+            });
+            assert.notEqual(geometry.statusColor, geometry.proseColor);
+            assert.ok(geometry.proseTop >= geometry.statusBottom);
+            measurements.push({ theme, width, scale, ...geometry });
             await expect(call.locator(".api-result-entry .recorded-result-label").nth(2)).toContainText("Returned entry 3");
         }
         const ids = await call.locator(".api-result-entry").evaluateAll(nodes => nodes.map(node => node.dataset.resultId));
@@ -595,6 +582,16 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.keyboard.press("Escape"); await expect(card).toBeFocused();
     }
     if (phase !== "before") {
+        for (const name of ["different", "multiple"]) {
+            await page.locator(`.request-card-open[href*="grouped-${name}"]`).click();
+            for (const index of name === "multiple" ? [5, 6] : [5]) {
+                const call = page.locator(`[data-tool-call-id="${name}-call-${index}"]`);
+                await expectCallStatus(call, index + 1, "failed");
+                await expect(call.locator(".reader-error-message")).toHaveText([message, message,
+                    name === "different" ? "This revision is restricted to its owner." : message]);
+            }
+            await page.keyboard.press("Escape");
+        }
         const exact = new URL(page.url());
         exact.hash = "#request?" + new URLSearchParams({ request: primary.scenarioId, call: returnedId,
             layer: "reported-api", callRevision: String(revision) });
@@ -657,29 +654,20 @@ test("card and reader keep neutral explanations under owning statuses without re
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".request-card-reason-text")).toHaveText(message);
-            await expect(card.locator(".result-status")).toHaveText("Call #3 failed");
+            await expect(card).not.toContainText(message);
+            await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 4", "Tool failed: 1"]);
             await expect(card.locator(".request-card-problem")).not.toContainText(/1 of 5|Recorded error:/);
-            await expect(card.locator(".request-card-count")).toHaveText("5 recorded calls / 4 completed / 1 failed");
+            await expect(card.locator(".request-card-count")).toHaveText("5 recorded calls");
             const paint = await card.evaluate(node => {
-                const prose = node.querySelector(".request-card-reason-text"), status = node.querySelector(".result-status");
-                return { prose: getComputedStyle(prose).color, ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
-                    status: getComputedStyle(status).color, icon: getComputedStyle(status.querySelector(".wire-icon")).color,
-                    proseSize: parseFloat(getComputedStyle(prose).fontSize), statusSize: parseFloat(getComputedStyle(status).fontSize),
-                    proseTop: prose.getBoundingClientRect().top, statusBottom: status.getBoundingClientRect().bottom };
+                const status = node.querySelector('[data-result-outcome="failure"]');
+                return { ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
+                    status: getComputedStyle(status).color, icon: getComputedStyle(status.querySelector(".wire-icon")).color };
             });
-            assert.equal(paint.prose, paint.ink);
-            assert.notEqual(paint.prose, paint.status);
+            assert.notEqual(paint.ink, paint.status);
             assert.equal(paint.status, paint.icon);
-            assert.equal(paint.proseSize, paint.statusSize);
-            assert.ok(paint.proseTop >= paint.statusBottom);
             measurements.push({ theme, width, scale, ...paint });
-            const failures = page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-reason-text');
-            await expect(failures).toHaveCount(2);
-            await expect(failures.nth(1)).toHaveText("The rehearsal schedule is locked.");
-            const entries = page.locator('.request-card-open[href*="hierarchy-returned"] .request-card-reason-text');
-            await expect(entries).toContainText("Returned entry 2: The archived document is restricted.");
-            await expect(entries).toContainText("Returned entry 3: The requested revision is no longer available.");
+            await expect(page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-outcome')).toHaveText("Tool failed: 2");
+            await expect(page.locator('.request-card-open[href*="hierarchy-returned"]')).not.toContainText(/Returned entry|document is restricted/);
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
@@ -699,13 +687,13 @@ test("card and reader keep neutral explanations under owning statuses without re
         const call = page.locator('[data-tool-call-id="hierarchy-call-2"]');
         if (phase !== "before") {
             await expect(call.locator(".result-cause")).toHaveText(message);
-            await expect(call.locator(".result-status")).toHaveText("Call #3 failed");
+            await expectCallStatus(call, 3, "failed");
             const colors = await call.locator(".reader-call-summary").evaluate(node => ({
                 prose: getComputedStyle(node.querySelector(".result-cause")).color,
                 status: getComputedStyle(node.querySelector(".result-status")).color,
             }));
             assert.notEqual(colors.prose, colors.status);
-            assert.equal(colors.prose, measurements.at(-1).prose);
+            assert.equal(colors.prose, measurements.at(-1).ink);
         }
         await call.scrollIntoViewIfNeeded();
         if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-reader.png`) });
@@ -735,6 +723,7 @@ test("card and reader keep neutral explanations under owning statuses without re
                 await call.locator(".api-result-entry").nth(1).scrollIntoViewIfNeeded();
             } else {
                 await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(2);
+                await expect(page.locator("#requestContent .reader-call-row").nth(1)).toContainText("The rehearsal schedule is locked.");
                 await page.locator("#requestContent .reader-call-row").first().scrollIntoViewIfNeeded();
             }
             if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}-reader.png`) });
@@ -904,29 +893,11 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(lateCard.locator(".request-card-prompt")).not.toContainText("Owner record-42");
         assert.equal(await card.locator(".request-card-prompt").textContent(), record.userPrompt.text.replace(/\s+/gu, " "));
         await expect(card.locator(".request-card-prompt")).not.toContainText("...");
-        const reasons = card.locator(".request-card-reason");
-        await expect(reasons).toHaveCount(4);
-        await expect(reasons.nth(0).locator(".result-status")).toHaveText("Call #3 failed");
-        await expect(reasons.nth(0).locator(".request-card-reason-text")).toContainText(parentMessage);
-        await expect(reasons.nth(0)).toContainText(detailMessage);
-        await expect(reasons.nth(1).locator(".result-status")).toHaveText("Call #4 failed");
-        await expect(reasons.nth(1).locator(".request-card-reason-text")).toHaveText(parentMessage);
-        await expect(reasons.nth(2)).toContainText("Transport ... error: HTTP 503 Service Unavailable: upstream connection timeout");
-        await expect(reasons.nth(3).locator(".result-status")).toHaveText("Call #6 completed");
-        for (let index = 1; index < 9; index++) await expect(reasons.nth(3)).toContainText(`Returned item ${index} cannot be changed.`);
-        await expect(card).not.toContainText(/more failure|more returned errors|response body excluded|reported status 200/);
-        await expect(lateCard.locator(".request-card-count")).toHaveText("5 recorded calls / 4 completed / 1 failed");
-        await expect(lateCard.locator(".result-status")).toHaveText("Call #5 failed");
-        await expect(lateCard).not.toContainText(/more failure|response body excluded|reported status 200/);
-        const colors = await reasons.evaluateAll(nodes => nodes.map(node => ({
-            text: getComputedStyle(node.querySelector(".request-card-reason-text")).color,
-            status: getComputedStyle(node.querySelector(".result-status")).color,
-            icon: getComputedStyle(node.querySelector(".wire-icon")).color,
-        })));
-        assert.equal(colors[0].status, colors[0].icon);
-        assert.notEqual(colors[0].text, colors[0].status);
-        assert.equal(colors[3].text, colors[0].text, "All explanation prose uses neutral primary ink.");
-        assert.notEqual(colors[3].status, colors[0].status, "Returned API errors do not paint successful execution as a failed tool.");
+        await expect(card.locator(".request-card-outcome")).toHaveText(["Tool completed: 3", "Tool failed: 3", "No result recorded: 1"]);
+        await expect(card.locator(".request-card-result-issues")).toHaveText("1 completed call has a reported result issue");
+        await expect(card).not.toContainText(/Returned item|rehearsal item is locked|503|Call #|response body excluded/);
+        await expect(lateCard.locator(".request-card-count")).toHaveText("5 recorded calls");
+        await expect(lateCard.locator(".request-card-outcome")).toHaveText(["Tool completed: 4", "Tool failed: 1"]);
         await card.scrollIntoViewIfNeeded();
         await page.mouse.move(0, 0);
         if (proof) {
@@ -948,6 +919,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(page.locator("#contextSidebar")).toBeVisible();
         if (theme === "light" && width === 1440) await expect(page.locator('[data-tool-call-id="all-failures-0"]')).toBeFocused();
         const firstFailure = page.locator('[data-tool-call-id="all-failures-0"]');
+        await expect(firstFailure.locator(".reader-call-summary")).toContainText(parentMessage);
         await expect(firstFailure.locator(".reader-call-summary")).toContainText(detailMessage);
         await firstFailure.locator(".reader-call-toggle").click();
         await expect(firstFailure.locator(".technical-detail")).toContainText(detailMessage);
@@ -955,6 +927,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(page.locator('[data-tool-call-id="all-failures-1"] .reader-call-summary')).toContainText(parentMessage);
         await expect(page.locator('[data-tool-call-id="all-failures-2"] .reader-call-summary')).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
         const returned = page.locator('[data-tool-call-id="returned-failures"]');
+        await expectCallStatus(returned, 6, "completed");
         await expect(returned.locator(".api-result-entry")).toHaveCount(9);
         for (let index = 1; index < 9; index++) await expect(returned.locator(".api-result-entry").nth(index)).toContainText(`Returned item ${index} cannot be changed.`);
         await expect(returned.getByRole("button", { name: /Next returned/ })).toHaveCount(0);
@@ -981,15 +954,18 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(card).toBeFocused();
     }
     await lateCard.click();
+    await expectCallStatus(page.locator('[data-tool-call-id="late-4"]'), 5, "failed");
     assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), late.userPrompt.text);
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.equal(await page.evaluate(() => window.copied.at(-1)), late.userPrompt.text);
     await page.keyboard.press("Escape");
     await page.goto(page.url().split("#")[0] + "#analyze?result=failure");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(card.locator(".request-card-reason")).toHaveCount(3);
-    await expect(card.locator(".request-card-reason").nth(0).locator(".result-status")).toHaveText("Call #3 failed");
-    await expect(card.locator(".request-card-reason").nth(2).locator(".result-status")).toHaveText("Call #5 failed");
+    await expect(card.locator(".request-card-outcome")).toHaveText("Tool failed: 3");
+    await expect(card.locator(".request-card-count")).toHaveText("3 of 7 Work IQ tool calls match this view");
+    await card.click();
+    await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(7);
+    for (let i = 0; i < 3; i++) await expectCallStatus(page.locator(`[data-tool-call-id="all-failures-${i}"]`), i + 3, "failed");
     if (proof) await writeFile(path.join(proof, "journey.json"), JSON.stringify({
         source: "Invented records only; temporary retained store and random local HTTP port.",
         themes: ["light", "dark"], sizes: [[1440, 1], [768, 1], [390, 2]],
@@ -1236,17 +1212,17 @@ test("Activity bands remain separate at wide and enlarged widths without clippin
     }
     assert.equal(views[0].metrics.length, 8);
     assert.equal(views[0].metrics[0].fontSize, "16px");
-    assert.equal(views[0].metrics[0].card.width, 1196);
     for (const { name, metrics } of views) {
         assert.ok(metrics.every(row => row.authors.every(box => box.left >= row.card.left && box.right <= row.card.right)),
             name + ": author must remain wholly readable");
         for (const row of metrics) {
+            assert.equal(row.card.width, row.listWidth, name + ": the link fills the list width");
             assert.match(row.font, /Asta Sans/);
             assert.equal(row.weight, "400");
             assert.ok(row.card.height >= 44, name + ": full-card target");
             assert.ok(row.prompt.top >= row.origin.bottom + 7, name + ": origin is not merged into prompt or category");
             assert.ok(row.categories.top >= row.prompt.bottom + 15, name + ": categories have their own band");
-            assert.ok(row.problem.top >= row.categories.bottom + 15, name + ": result stays separate from categories");
+            assert.ok(row.problem.top >= row.categories.bottom + 11, name + ": result stays separate from categories");
             assert.ok(row.problem.right <= row.card.right, name + ": problem fits without clipping");
             if (row.more) {
                 assert.ok(row.more.top >= row.problem.bottom + 11, name + ": additional reasons have a visible continuation cue");

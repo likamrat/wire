@@ -90,7 +90,8 @@ test("one minimal card opens the full log with private input owned by its exact 
     await expect(page.locator("[data-analyze-mode],#callSort")).toHaveCount(0);
     const card = page.locator(".request-card-open");
     await expect(card).toContainText("Find the workshop checklist.");
-    await expect(card).not.toContainText("workiq-fetch");
+    await expect(card.locator(".card-tool-name")).toContainText(["workiq-fetch"]);
+    await expect(card).not.toContainText(/PRIVATE_CALL_ARGUMENT|did not respond in time/);
     const metadataType = await card.evaluate(node => {
         const time = getComputedStyle(node.querySelector(".request-card-time"));
         const problem = getComputedStyle(node.querySelector(".request-card-problem"));
@@ -209,7 +210,7 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
     await expect(page.locator(".request-card-open [data-outcome=success]")).toHaveAttribute("data-count", "4");
-    await expect(page.locator(".request-card-problem")).toHaveText("Matching tool calls completed.");
+    await expect(page.locator(".request-card-outcome")).toHaveText("Tool completed: 4");
     await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveCount(0);
     await closeAnalyzeFilters(page);
     await page.locator(".request-card-open").click(); await settled(page);

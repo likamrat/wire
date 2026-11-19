@@ -642,16 +642,12 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .service-label-list>li {display:flex;align-items:baseline;min-width:0;max-width:100%}
 .service-label-list>li+li:not(.service-label-gap) {margin-inline-start:12px;padding-inline-start:12px;border-inline-start:1px solid var(--control)}
 .request-card-categories {margin-top:16px}
-.request-card-problem {display:flex;align-items:flex-start;gap:8px;margin-top:16px;max-width:none;font:var(--type-reading)/1.5 var(--font)}
-.request-card-problem>.wire-icon {flex:none;width:20px;height:20px;color:var(--cue-color)}
-.request-card-problem:is(.result-tone-success,.result-tone-failure) {color:var(--cue-color)}
-.request-card-result-copy {min-width:0;flex:1;overflow-wrap:anywhere}
-.request-card-reasons {display:grid;gap:12px;list-style:none;padding:0;margin:0;min-width:0;color:var(--ink)}
-.request-card-reason {display:grid;justify-items:start;gap:6px;min-width:0}
-.request-card-reason-text {min-width:0;color:var(--ink);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
-.request-card-operation {color:var(--muted);font:var(--weight-regular) var(--type-small)/1.5 var(--font);overflow-wrap:anywhere}
+.request-card-problem {display:grid;gap:6px;margin-top:12px;min-width:0;font:var(--type-small)/1.5 var(--font)}
+.request-card-outcomes {display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
+.request-card-outcome {display:inline-flex;align-items:center;gap:6px;color:var(--cue-color)}
+.request-card-outcome>.wire-icon {flex:none;width:16px;height:16px}
+.request-card-result-issues {color:var(--muted)}
 .returned-coverage {display:block;margin:6px 0 0;max-width:none;color:var(--muted);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
-.request-card-failure-text {color:var(--chart-failure)}
 .request-card-summary {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-top:12px;font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--muted)}
 @container(max-width:32rem) {.request-card-open {--request-card-inset:16px}}
 .interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}

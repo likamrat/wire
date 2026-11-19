@@ -111,13 +111,13 @@ test("service evidence explains significance at its call without warning on ordi
                 await expect(card(name).locator(".call-reason-list")).toHaveCount(0, "Successful body-retention policy is not a problem bullet.");
                 await expect(card(name)).not.toContainText("Response body excluded from retention");
             }
-            await expect(card("hosted").locator(".recorded-category-label")).toHaveText("Operations:");
+            await expect(card("hosted").locator(".recorded-category-label")).toHaveText(["Tools:", "Operations:"]);
             await expect(card("hosted").locator(".request-card-categories")).toContainText("Search and retrieval");
             await expect(card("hosted").locator(".request-card-categories")).toContainText("Asked Copilot");
             await expect(card("hosted").locator('[data-service="Files"],[data-service="Mail"],[data-service="Teams"]')).toHaveCount(0);
             await expect(card("mixed").locator(".request-card-categories")).toContainText("Files");
-            await expect(card("mixed").locator(".request-card-reason-text")).toHaveText("Payload too large; downloads are limited to 4 MB.");
-            await expect(card("mixed").locator(".result-status")).toHaveText("Call #3 failed");
+            await expect(card("mixed")).not.toContainText("Payload too large");
+            await expect(card("mixed").locator('[data-result-outcome="failure"]')).toHaveText("Tool failed: 1");
             await expect(page.locator("#activityList")).not.toContainText("Some service details unavailable");
             await expect(page.locator('[data-service-basis="Unknown"] .percentage-label')).toHaveText("Services not fully identified");
             await expect(page.locator(".percentage-gap-list")).toHaveAttribute("aria-label", "Service attribution limits");
@@ -129,7 +129,7 @@ test("service evidence explains significance at its call without warning on ordi
             const paint = await card("unclassified").evaluate(node => ({
                 note: getComputedStyle(node.querySelector(".service-availability")).color,
                 muted: getComputedStyle(node.querySelector(".request-card-summary")).color,
-                failure: getComputedStyle(document.querySelector('[data-view-key="request:attribution-mixed"] .result-status')).color,
+                failure: getComputedStyle(document.querySelector('[data-view-key="request:attribution-mixed"] [data-result-outcome="failure"]')).color,
             }));
             assert.equal(paint.note, paint.muted); assert.notEqual(paint.note, paint.failure);
             observations.push({ theme, width, ...paint });
@@ -148,8 +148,8 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(context).toHaveCount(1);
             await expect(context).toContainText("Calls #1\u20132 (Search and retrieval, Asked Copilot)");
             await expect(context).toContainText("not confirmed app use");
-            await expect(context).toContainText("operation counts");
-            await expect(context).toContainText("this limit alone needs no action");
+            await expect(context).toHaveText("Calls #1\u20132 (Search and retrieval, Asked Copilot) record requests, not confirmed app use.");
+            await expect(assistance.locator(".recorded-result")).toHaveAttribute("data-outcome", "success");
             assert.equal(await context.evaluate(node => node.closest(".technical-detail,button") === null), true);
             await expect(page.locator('[data-attribution-kind="operation"]')).toHaveCount(0);
             await expect(assistance.locator(".call-reason-list")).toHaveCount(0);
@@ -167,6 +167,8 @@ test("service evidence explains significance at its call without warning on ordi
         const failure = page.locator('[data-tool-call-id="mixed-2"]');
         await failure.locator(".reader-call-summary").scrollIntoViewIfNeeded();
         await expect(failure).toContainText("Payload too large; downloads are limited to 4 MB.");
+        await expect(failure.locator(".reader-entry-label")).toHaveText("Call #3");
+        await expect(failure.locator(".result-status")).toHaveText("failed");
         if (phase !== "before") {
             await expect(failure.locator(".service-availability")).toHaveCount(0, "The actual failed Files call has an identified service.");
             await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toContainText(
@@ -198,8 +200,8 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(call.locator(".reader-attribution-context")).toBeVisible();
             await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toHaveCount(0);
             await expect(call.locator(".reader-attribution-context")).toContainText(
-                name === "missing" ? "source omission or a capture problem" : name === "unclassified" ? "cannot classify" : "cannot interpret");
-            await expect(call.locator(".reader-attribution-context")).toContainText("service counts");
+                name === "missing" ? "source omission or a capture problem" : name === "unclassified" ? "does not identify a named app" : "cannot interpret");
+            await expect(call.locator(".reader-attribution-context")).toContainText("The call still counts; its result is shown separately.");
             await expect(call.locator(".reader-call-toggle")).toHaveAttribute("aria-expanded", "false");
             if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-detail-${name}.png`) });
             await page.keyboard.press("Escape"); await settle();

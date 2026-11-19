@@ -413,13 +413,14 @@ test("the normal Reports picker preserves the exact known tool identity when ope
     await capturePicker(page, "picker-known-tool");
     await expect(row).toContainText("workiq-retrieve");
     await expect(row).not.toContainText("Tool not recorded");
-    await expect(row).toContainText("Access was denied");
-    await expect(row).toContainText("403");
+    await expect(row.locator(".request-card-outcome")).toHaveText("Tool failed");
+    await expect(row).not.toContainText(/Access was denied|403|WIRE interpretation/);
     const origin = page.url();
     await row.locator(".request-card-open").click();
     const reader = page.locator("#requestContent");
     await expect(reader).toContainText("Find the decisions from the Cedar launch review.");
     await expect(reader.locator(".reader-call-identity-line")).toContainText("workiq-retrieve");
+    await expect(reader).toContainText("Access was denied");
     await expect(reader).toContainText("403");
     await capturePicker(page, "picker-known-tool-reader");
     await page.locator("#closeContextSidebar").click();
@@ -445,7 +446,7 @@ test("the normal Reports picker keeps long plural evidence readable in both them
         await picker.locator("#reportRequestSearch").fill("");
         await body.evaluate(node => { node.scrollTop = 0; });
         await capturePicker(page, `picker-${theme}-${width}-${size}-top`);
-        await picker.locator("#reportRequestSearch").fill("Review Cedar handover evidence");
+        await picker.locator("#reportRequestSearch").fill("Review the Cedar handover");
         const row = picker.locator(".request-row");
         await expect(row).toHaveCount(1);
         await expect(row).toContainText("4 recorded calls");
@@ -459,7 +460,7 @@ test("the normal Reports picker keeps long plural evidence readable in both them
             nested: [...node.querySelectorAll("*")].filter(child => child.scrollHeight > child.clientHeight + 1
                 && /^(auto|scroll)$/.test(getComputedStyle(child).overflowY)).map(child => child.className),
         }));
-        assert.deepEqual(layout, { scrolls: true, overflow: false, nested: [] });
+        assert.deepEqual(layout, { scrolls: width === 390 || size === 200, overflow: false, nested: [] });
         await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
         await expect(picker.getByRole("button", { name: "Show report", exact: true })).toBeInViewport();
         await picker.getByRole("button", { name: "Close", exact: true }).focus();
