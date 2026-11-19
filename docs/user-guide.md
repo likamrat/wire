@@ -11,8 +11,10 @@ Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
 `/compare` and `/settings`). You can bookmark those pages, a Settings category,
 or a public date/filter view. Older WIRE links such as `/#trends` still open.
 
-Search words, individual activity records and source-specific filters are not
-part of a shareable address. Use **Back** in the same tab to return to them.
+You can copy an ordinary interaction's address or refresh its reader. WIRE
+opens the same record only if it is still available in the same local store.
+The address does not contain its chat or record ID. Search words, exact calls
+and source-specific filters are private. Use **Back** in the same tab to return to them.
 If you refresh or copy a private view, WIRE may ask you to reopen its original
 record or repeat your Search rather than showing a broader result.
 

@@ -156,6 +156,13 @@ or authority. Private state and a modified-click handoff live only in the
 authorized page; copying the marker cannot recover them. An ordinary saved
 report link names the saved bundle, not permission to read it.
 
+An ordinary retained interaction may use `/request?record=…`. Its locator
+is a purpose-separated HMAC using the store's existing pseudonym key, access
+generation, source binding, deletion epoch and exact record identity. Resolve
+it only in the currently admitted snapshot, with no lookup API, separate
+registry, or write. A missing or ambiguous match is unavailable. Search-owned
+reads, exact calls and other private scopes do not become ordinary bookmarks.
+
 For React evaluation, use the [feature checkout launcher](#run-a-feature-checkout-beside-main).
 For an already managed, explicitly owned evaluation store, set
 `WORKIQ_EVIDENCE_DATA_DIR` to its absolute path and use

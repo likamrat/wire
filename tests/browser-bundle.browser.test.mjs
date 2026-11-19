@@ -7,6 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { loadBrowserAssets } from "../lib/browser-assets.mjs";
+import { createDeletionController } from "../lib/deletion.mjs";
 
 async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
     const cleanup = [];
@@ -22,7 +23,7 @@ async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
         await browser.close(); await runtime.close(); await access?.close();
         for (const work of cleanup.reverse()) await work();
     });
-    return { page, runtime };
+    return { page, runtime, context };
 }
 
 for (const frontend of ["bundled", "react"]) {
@@ -65,6 +66,8 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await page.locator("#activityList .request-card-open").first().click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    const ordinary = page.url();
+    assert.ok(new URL(ordinary).searchParams.has("record"));
     await page.locator("#wireSearch").fill("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator(".wire-search-hit").first()).toBeVisible();
     await page.locator("#wireSearch").press("Escape");
@@ -112,8 +115,10 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     }).then(response => response.json());
     await send("/api/access/command", { schemaVersion: 1, action: "wire-sign-in",
         operationId: randomUUID(), generation: current.generation }, session.capability);
-    await expect(page.locator("#message")).toContainText("private selection was cleared");
-    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
+    await expect(page.locator("#workspace")).toBeHidden();
+    assert.equal(page.url(), ordinary);
+    await page.locator("#closeContextSidebar").click();
     await navigateMain(page, "analyze");
     await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     const resumed = page.url();
@@ -123,3 +128,23 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     await send("/api/session/release", {}, session.capability);
 });
 }
+
+test("deleted and malformed ordinary bookmarks refuse without choosing another record", async t => {
+    const { page, context, runtime } = await setup(t, { frontend: "react", enforced: true });
+    await page.goto(runtime.url + "#request?request=bundled-second");
+    await expect(page.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    const url = new URL(page.url());
+    assert.ok(url.searchParams.has("record"));
+    assert.doesNotMatch(url.href, /#|bundled-second/);
+    const malformed = new URL(url); malformed.searchParams.append("record", "invalid");
+    await page.goto(malformed.href);
+    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
+    await expect(page.locator("#workspace")).toBeHidden();
+    const deletion = createDeletionController(context);
+    const plan = await deletion.preview("synthetic-owner", { scope: "all", timeContext: { timeZone: "UTC", locale: "en-US" } });
+    await deletion.confirm("synthetic-owner", { operationId: plan.operationId, confirmed: true });
+    await page.goto(url.href);
+    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
+    await expect(page.locator("#workspace")).toBeHidden();
+    await expect(page.locator("#requestContent")).not.toContainText("SYNTHETIC_PRIVATE_PROMPT");
+});

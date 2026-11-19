@@ -181,6 +181,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const currentAddress = () => paths.legacy(location.hash) ? location.hash : location.pathname + location.search;
     let linkTargets = new WeakMap(), initialRoute = null;
     const historyViews = new Map();
+    const bookmarkIndexes = new WeakMap();
+    function bookmarkIndex(snapshot) {
+        if (!snapshot) return null;
+        if (!bookmarkIndexes.has(snapshot)) {
+            const byId = new Map(), byRef = new Map();
+            for (const record of snapshot.scenarios) {
+                const ref = record.interactionBookmark, id = record.scenarioId;
+                if (!paths.validBookmark(ref) || typeof id !== "string" || !id) continue;
+                byId.set(id, byId.has(id) ? null : ref);
+                byRef.set(ref, byRef.has(ref) ? null : id);
+            }
+            bookmarkIndexes.set(snapshot, { byId, byRef });
+        }
+        return bookmarkIndexes.get(snapshot);
+    }
+    function resolveBookmark(route, snapshot) {
+        if (route.view !== "request" || route.bookmark === undefined) return route;
+        const index = bookmarkIndex(snapshot), id = index?.byRef.get(route.bookmark);
+        return { ...route, request: id && index.byId.get(id) === route.bookmark ? id : undefined };
+    }
     let acceptedAddress = null;
     const [incomingView, incomingQuery = ""] = currentAddress().split("?");
     const incomingParameters = new URLSearchParams(incomingQuery);
@@ -2481,7 +2501,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const current = api.publicationToken();
         if (!current || api.accessState().mode !== "unbound" && (navigationState?.wireAccess?.owner !== historyOwner
             || navigationState.wireAccess.epoch !== current.epoch || navigationState.wireAccess.runtimeId !== current.runtimeId)) {
-            if (navigationState?.evidenceView?.url === address && (navigationState.evidenceView.privateKey
+            if (navigationState?.evidenceView?.url === address && (navigationState.evidenceView.privateKey && !values.bookmark
                 || navigationState.evidenceView.search?.trim() || sessionJourney.hasHistoryAnalysis(navigationState.evidenceView))) {
                 incomingNavigationError = "The earlier private selection is no longer authorized. Search again or explicitly open this view without that selection.";
             }
@@ -2493,7 +2513,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const entry = navigationState.evidenceView;
             const snapshot = historyViews.get(entry.privateKey);
             if (snapshot && api.isCurrent(snapshot.publication)) Object.assign(values, snapshot.fields);
-            else if (entry.privateKey) incomingNavigationError = "This tab no longer has the private view. Open it again from its original records.";
+            else if (entry.privateKey && !values.bookmark) incomingNavigationError = "This tab no longer has the private view. Open it again from its original records.";
             // Read old history entries, but never write their private payload back to history.
             const remembered = snapshot?.fields || entry;
             if (typeof remembered.search === "string") values.search = remembered.search;
@@ -2506,12 +2526,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (/^[a-f0-9-]{36}$/.test(entry.savedEntry)) values.savedEntry = entry.savedEntry;
             if (entry.savedAuthority === "search") values.savedAuthority = "search";
         }
-        return canonicalRoute(values);
+        return resolveBookmark(canonicalRoute(values), current && workspaceState.evidence);
     }
     function canonicalRoute(next) {
         next = sessionJourney.savedRoute(filterState.canonical(sessionJourney.canonical(next)));
         if (next.view !== "request") {
-            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, ...rest } = next;
+            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, bookmark, searchOwned, ...rest } = next;
             next = rest;
         }
         if (next.view !== "request" && Object.hasOwn(next, "call")) next = { ...next, call: undefined };
@@ -2554,10 +2574,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             includeMissingService: ["true", "false"], expanded: ["true"], comparisonView: ["outcomes", "timeline", "tools", "timing"],
             comparisonFocus: ["errors", "completed"] })[key]?.includes(value) === true;
     }
-    function routeAddress(next, privateSelection = false) {
+    function routeAddress(next, privateSelection = false, snapshot = workspaceState.evidence) {
         const { path, params, privateFields } = paths.project(canonicalRoute(next), publicField);
+        let bookmark;
+        if (next.view === "request" && !next.searchOwned && !privateSelection && !next.nativeSource && !next.call && !next.nativeGroup
+            && Object.keys(privateFields).every(key => key === "request")) {
+            const index = bookmarkIndex(snapshot);
+            const ref = next.bookmark ?? index?.byId.get(next.request);
+            if (next.bookmark !== undefined || paths.validBookmark(ref) && index.byRef.get(ref) === next.request) {
+                bookmark = paths.validBookmark(ref) ? ref : "unavailable";
+                params.set("record", bookmark);
+                delete privateFields.request;
+            }
+        }
         if (privateSelection || Object.keys(privateFields).length || next.savedAuthority === "search") params.set("privateView", "required");
-        return { url: path + (params.size ? "?" + params : ""), privateFields };
+        return { url: path + (params.size ? "?" + params : ""), privateFields, bookmark };
     }
     function setRouteLink(node, next, privateSelection = Boolean(next.search?.trim() || next.analysisQuery != null)) {
         linkTargets.set(node, next);
@@ -2635,7 +2666,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
-            ...workspaceState.route, view,
+            ...workspaceState.route, view, bookmark: undefined, searchOwned: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
             returnToResults: view === "request" ? workspaceState.route.returnToResults : undefined,
             request: ["request", "reports"].includes(view) ? workspaceState.route.request : undefined,
@@ -2716,6 +2747,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const storeAnalysis = query => rememberHistoryAnalysis(query, publication, analysisKey);
         historyPosition = replace ? historyPosition : historyPosition + 1;
         if (next.search) privateFields.search = next.search;
+        if (next.searchOwned) privateFields.searchOwned = true;
         if (next.localSearch && Object.values(next.localSearch).some(Boolean)) privateFields.localSearch = next.localSearch;
         if (next.returnToSessions) privateFields.returnToSessions = sessionJourney.encodeHistoryRoute(next.returnToSessions, storeAnalysis);
         if (next.view === "request" && next.returnToResults) privateFields.returnToResults = sessionJourney.encodeHistoryRoute(next.returnToResults, storeAnalysis, true);
@@ -2753,6 +2785,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             searchOpenedRequest = null;
             searchReturnMarker = null;
         }
+        if (next.view === "request" && options.fromSearch) next = { ...next, bookmark: undefined, searchOwned: true };
+        else if (next.view === "request" && !next.bookmark) next = { ...next,
+            bookmark: routeAddress(next, Boolean(next.search?.trim() || (next.analysisQuery ?? semanticQuery) != null)).bookmark };
         if (next.view === "request" && workspaceState.route.view !== "request") {
             ownSidebarHistory(true);
             next = { ...next, returnToResults: sessionJourney.returnRoute({ ...workspaceState.route, search }, true), sidebarEntry: sidebarHistoryKey };
@@ -3401,9 +3436,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (refreshGestureCurrent(refreshOwner)) deferRefreshView(refreshOwner);
                 return false;
             }
+            const route = workspaceState.route;
+            const acceptedRoute = route.view === "request" ? resolveBookmark({ ...route,
+                bookmark: route.bookmark ?? routeAddress(route, Boolean(route.search?.trim() || semanticQuery != null), next).bookmark,
+            }, next) : route;
             if (!workspaceState.acceptRead(request, publication, {
-                evidence: next, analytics: validated, scope: config, route: workspaceState.route,
+                evidence: next, analytics: validated, scope: config, route: acceptedRoute,
             })) return false;
+            if (acceptedRoute.view === "request") rememberRoute(acceptedRoute, true);
             nativePublication.snapshot(next.nativeReportPublication, nativePublicationContext(false));
             syncNativeSaveAvailability?.();
             requestInvalidated = false;
@@ -3539,6 +3579,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else finishSidebarMotion();
         }
         const previousRoute = workspaceState.route, clearingFilter = $("filterChips").contains(document.activeElement);
+        if (previousRoute.bookmark && !previousRoute.request) $("workspace").hidden = false;
         rememberBrowse();
         const leavingSaved = savedEntries.get(workspaceState.route.savedEntry);
         if (workspaceState.evidence && !workspaceState.loading && !workspaceState.stale && workspaceState.route.view === "reports" && next.view === "reports"
@@ -5708,6 +5749,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const body = $("requestContent");
         renderReportInspectionReturn();
         body.replaceChildren();
+        if (workspaceState.route.bookmark && !workspaceState.route.request) {
+            body.append(empty("This interaction is unavailable", "Open a current interaction from Analyze."));
+            $("contextSidebarFooter").replaceChildren();
+            return;
+        }
         detailOwner = "request:" + workspaceState.route.request;
         viewKey(body, detailOwner);
         if (sourceCollection.active && workspaceState.route.nativeSource !== undefined) {
@@ -8011,6 +8057,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("workspace").removeAttribute("data-navigation-pending");
         $("navigationPending").hidden = true;
         const requestRoute = workspaceState.route.view === "request" ? workspaceState.route : null;
+        if (requestRoute?.bookmark && !requestRoute.request) {
+            // Refusing a locator is not navigation to the full Analyze population.
+            $("workspace").hidden = true;
+            showInteractionSidebar();
+            renderRequest();
+            return;
+        }
         if (requestRoute) {
             const origin = underlyingRoute();
             workspaceState.route = JSON.stringify(query(origin)) === JSON.stringify(workspaceState.scope) ? origin
