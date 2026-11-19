@@ -75,6 +75,12 @@ not enough. This bounded read admits at most 100,000 managed Work IQ event
 identities; incompatible mappings fail explicitly without replacing evidence.
 Updating WIRE does not reset collection cursors or authorize a historical reread.
 
+A failed managed call can return a JSON error labeled with its opaque connector
+name. WIRE reads supported diagnostics and returned entries only when the name
+matches the unique earlier call start in the source or its bounded checkpoint,
+and the app still identifies that event as Work IQ. A connector name alone
+does not qualify an error. Response bodies and inner identifiers remain excluded.
+
 ### Account profile
 
 Account presentation uses a separate, bounded profile-only read of that approved

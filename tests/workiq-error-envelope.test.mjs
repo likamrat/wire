@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { retainEvent, createCollector } from "../lib/collector.mjs";
-import { extractScenarios } from "../lib/history.mjs";
+import { extractScenarios, managedErrorServers } from "../lib/history.mjs";
 import { loadBoardState, replaceEvidence, mergeEvidenceWithState } from "../lib/store.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { privateFixture } from "./helpers.mjs";
@@ -29,6 +29,29 @@ function events(message) {
     ];
 }
 const extract = rows => extractScenarios(rows, { sessionId: "invented-session" }, rows[0].timestamp, rows.at(-1).timestamp).scenarios;
+
+test("opaque error diagnostics require a unique earlier mapped start and retain the same privacy exclusions", () => {
+    const server = "cc-invented", [, start, end] = events(envelope([failedResult()]).replace("'workiq'", `'${server}'`));
+    Object.assign(start.data, { toolName: server + "-fetch", mcpServerName: server, mcpToolName: "fetch", wireManagedWorkIq: true });
+    const bound = new Set([start.id]), other = new Set(["different-start"]);
+    for (const [incoming, prior, mapping] of [
+        [[start, end], [], other], [[end, start], [], bound], [[end], [], bound],
+        [[end], [start, { ...start, id: "another-start" }], bound],
+        [[end], [start, { ...end, id: "another-completion" }], bound],
+        [[end], [{ ...start, timestamp: "2030-01-01T00:00:00.000Z" }], bound],
+        [[end], [{ ...start, data: { ...start.data, mcpConfigServerName: "cc-other" } }], bound],
+    ]) {
+        assert.deepEqual(retainEvent(end, {}, { managedErrorServers: managedErrorServers(incoming, prior, mapping) })
+            .data.result.structuredContent.results, []);
+    }
+    const sensitive = { ...end, data: { ...end.data, error: { code: "failure", message: end.data.error.message.replace(
+        "Error while processing response.", "This restricted item is unavailable.") } } };
+    const qualified = managedErrorServers([sensitive], [start], bound);
+    assert.equal(qualified.get(sensitive), server);
+    const compact = retainEvent(sensitive, {}, { managedErrorServers: qualified });
+    assert.deepEqual(compact.data.result.structuredContent.results, []);
+    assert.equal(compact.data.wireFailureEvidence.diagnostic.status, "sensitive-excluded");
+});
 
 test("Work IQ ask error envelope retains its supplied reason and code instead of an unreadable-error fallback", () => {
     const message = "The invented source policy is unavailable.";

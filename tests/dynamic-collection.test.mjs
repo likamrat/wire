@@ -8,7 +8,8 @@ import { randomUUID } from "node:crypto";
 import { discoverSources, validateSourcePaths } from "../lib/source-discovery.mjs";
 import { createCollector } from "../lib/collector.mjs";
 import { loadBoardState, mergeEvidenceWithState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
-import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
+import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createHash } from "node:crypto";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
@@ -24,6 +25,7 @@ import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate } from "node:timers/promises";
 import { createRecollectionController } from "../lib/recollection.mjs";
+import { currentStatePayload } from "../lib/server.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -95,6 +97,56 @@ const managedCall = id => {
     return { ...start, data: { ...start.data, toolName: "cc-invented-connector-fetch",
         mcpServerName: "cc-invented-connector", mcpConfigServerName: "cc-invented-connector" } };
 };
+
+test("a managed failure retains only entries from its bound connector, including after restart", async t => {
+    const app = await installation(t), id = app.session();
+    app.db.exec(managedSchema);
+    const bind = app.db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)");
+    const starts = ["paired", "late", "mismatch", "unbound"].map(managedCall);
+    for (const start of starts.slice(0, 3)) bind.run(id, start.id, "Work IQ");
+    const finish = (key, server = "cc-invented-connector") => event("tool.execution_complete", {
+        toolCallId: key, success: false, error: { code: "failure", message: `MCP server '${server}': ` + JSON.stringify({
+            results: [{ statusCode: 200, data: "PRIVATE_BODY" }, { statusCode: 403,
+                error: { code: "AccessDenied", message: "Access denied for the invented resource." } }], requestId: "PRIVATE_REQUEST",
+        }) },
+    });
+    const file = await logFor(app, id, [event("user.message", { content: "Check invented items." }),
+        ...starts, finish("paired"), finish("mismatch", "cc-other"), finish("unbound")]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, JSON.stringify(finish("late")) + "\n");
+    await collector.collectNow();
+    const state = await loadBoardState(app.context), calls = state.evidence.flatMap(r => r.toolCalls);
+    assert.deepEqual(calls.map(c => c.toolCallId).sort(), ["late", "mismatch", "paired"]);
+    for (const name of ["paired", "late"]) {
+        const c = calls.find(c => c.toolCallId === name);
+        assert.deepEqual(c.apiResults.map(r => [r.index, r.statusCode, r.errorCode]), [[0, 200, null], [1, 403, "AccessDenied"]]);
+        assert.equal(c.apiResults[1].errorDiagnostic.message, "Access denied for the invented resource.");
+        assert.equal(c.resultEvidence.resultCount, 2);
+        assert.equal(c.reportedOutcome, "failed");
+    }
+    assert.deepEqual(calls.find(c => c.toolCallId === "mismatch").apiResults, []);
+    const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json")));
+    const checkpoint = await readFile(path.join(app.context.dataDir, "collector", index.fingerprint, `${id}.json`), "utf8");
+    assert.doesNotMatch(checkpoint + JSON.stringify(calls), /PRIVATE_BODY|PRIVATE_REQUEST/);
+    assert.ok(!JSON.parse(checkpoint).events.some(e => e.data.toolCallId === "unbound" && e.data.result?.structuredContent?.results?.length));
+    const records = mergeEvidenceWithState(state), activity = buildRequestActivity(records);
+    assert.equal(activity.tool.length, 3);
+    const returned = activity["reported-api"];
+    assert.deepEqual(returned.map(r => [r.status, r.outcome]), [[200, "success"], [403, "failure"], [200, "success"], [403, "failure"]]);
+    assert.equal(new Set(returned.map(r => r.parentCallId)).size, 2);
+    const snapshot = await currentStatePayload(app.context, state, { layer: "reported-api", filters: { scope: "all", outcomes: ["failure"] } });
+    assert.deepEqual(snapshot.analytics.rows.map(r => r.id).sort(), returned.filter(r => r.status === 403).map(r => r.id).sort());
+    assert.deepEqual(snapshot.requestActivity.tool, activity.tool);
+    assert.match(createRecordedResults().failureReason(calls.find(c => c.toolCallId === "late")), /Returned entry 2:.*AccessDenied.*403/);
+    const report = buildSanitizedRecord(records[0], state.pseudonymKey);
+    assert.deepEqual(report.toolCalls.map(c => c.apiResults.map(r => r.statusCode)), calls.map(c => c.apiResults.map(r => r.statusCode)));
+    assert.doesNotMatch(JSON.stringify(report), /PRIVATE_BODY|PRIVATE_REQUEST/);
+});
 
 test("managed Work IQ uses event-bound app identity, including newly discovered connector calls and restart", async t => {
     const app = await installation(t), id = app.session(), other = app.session();
