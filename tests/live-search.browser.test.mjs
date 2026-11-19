@@ -86,9 +86,9 @@ test("normal literal fragments and exact anchors open all types and restore Back
     await page.goBack();
     await expect(page.locator("#wireSearch")).toHaveValue(query);
     await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
-    const cases = [["context", "subsequent medical", "#request"], ["reply", "lab results", "#request"],
-        ["action", "403", "layer=http"], ["tool", "workiq-fet", "tool=workiq-fetch"],
-        ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "#analyze"],
+    const cases = [["context", "subsequent medical", "/request\\?"], ["reply", "lab results", "/request\\?"],
+        ["action", "403", "layer=http"], ["tool", "workiq-fet", "privateView=required"],
+        ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "/$"],
         ["setting", "Theme", "setting=theme"]];
     for (const [type, query, destination] of cases) {
         const rows = await find(page, query, type);
@@ -96,6 +96,11 @@ test("normal literal fragments and exact anchors open all types and restore Back
         await rows.first().click();
         await expect(page.locator("#wireSearchPanel")).toBeHidden();
         await expect(page).toHaveURL(new RegExp(destination));
+        assert.equal(new URL(page.url()).hash, "");
+        if (type === "tool") {
+            assert.equal(await page.locator("#toolFilter").inputValue(), "workiq-fetch");
+            assert.ok(!page.url().includes("workiq-fetch"));
+        }
         if (type === "action") await expect(page.locator("#selectedCall")).toBeVisible();
         if (type === "setting") await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", "false");
         await page.goBack();

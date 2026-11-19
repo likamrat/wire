@@ -228,7 +228,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         article.dataset.sourceId = item.sourceId; article.dataset.viewKey = "request:" + item.id;
         let target = { conversationId: item.id, sourceId: item.sourceId, revision: view.revision, sourceRevision: view.sourceRevision };
         const action = node("a", undefined, "request-card-open recognition-row");
-        action.href = conversationHref(target); action.setAttribute("aria-controls", "contextSidebar");
+        action.href = conversationHref(target, action); action.setAttribute("aria-controls", "contextSidebar");
         action.addEventListener("click", event => {
             if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;

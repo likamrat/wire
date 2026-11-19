@@ -81,7 +81,8 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
         window.heldPrivateNodes = nodes;
         window.retiredSearchAction = document.querySelector(".wire-search-hit");
         window.retiredActivityAction = document.querySelector("#activityList .request-card-open");
-        window.retiredActivityAttribute = window.retiredActivityAction.getAttributeNode("aria-label");
+        window.retiredActivityAttribute = window.retiredActivityAction.closest(".request-row").getAttributeNode("data-view-key");
+        if (!window.retiredActivityAttribute?.value.includes("bundled-")) throw new Error("Missing private activity identity in fixture");
     });
     const origin = new URL(runtime.url).origin;
     const send = async (path, body, capability) => {
@@ -111,8 +112,10 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     }).then(response => response.json());
     await send("/api/access/command", { schemaVersion: 1, action: "wire-sign-in",
         operationId: randomUUID(), generation: current.generation }, session.capability);
-    await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await expect(page.locator("#message")).toContainText("private selection was cleared");
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await navigateMain(page, "analyze");
+    await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     const resumed = page.url();
     await page.evaluate(() => { window.retiredActivityAction.click(); window.retiredSearchAction.click(); });
     assert.equal(page.url(), resumed, "Readiness cannot revive a retired row action.");

@@ -177,32 +177,39 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch);
-    const [incomingView, incomingQuery = ""] = location.hash.split("?");
+    const paths = assessmentFactories.createPagePaths();
+    const currentAddress = () => paths.legacy(location.hash) ? location.hash : location.pathname + location.search;
+    let linkTargets = new WeakMap(), initialRoute = null;
+    const historyViews = new Map();
+    let acceptedAddress = null;
+    const [incomingView, incomingQuery = ""] = currentAddress().split("?");
     const incomingParameters = new URLSearchParams(incomingQuery);
     const incomingNavigationKey = incomingParameters.get("privateView") ?? history.state?.wirePrivateNavigation;
-    if (incomingParameters.has("privateView")) {
+    let legacyHandoffTarget;
+    if (incomingView.startsWith("#") && incomingParameters.has("privateView")) {
         incomingParameters.delete("privateView");
-        history.replaceState({ ...history.state, wirePrivateNavigation: incomingNavigationKey }, "",
-            incomingView + (incomingParameters.size ? "?" + incomingParameters : ""));
+        legacyHandoffTarget = incomingView + (incomingParameters.size ? "?" + incomingParameters : "");
+        history.replaceState(null, "", legacyHandoffTarget);
     }
     let incomingNavigation = null, incomingNavigationError = null, incomingNavigationClaimed = false;
     function claimIncomingNavigation() {
         if (incomingNavigationClaimed || incomingNavigationKey === undefined || !api.publicationToken()) return;
         incomingNavigationClaimed = true;
         try {
-            incomingNavigation = window.opener?.__wireTakePrivateNavigation?.(incomingNavigationKey, window, location.hash) ?? null;
+            // Return data only to the WindowProxy opened by the source, never to the caller
+            // of the opener function. No transferable nonce in the URL or history is needed.
+            window.__wireReceivePrivateNavigation = value => { incomingNavigation = value; };
+            const legacy = window.opener?.__wireTakePrivateNavigation?.(incomingNavigationKey, window, legacyHandoffTarget ?? currentAddress());
+            if (incomingNavigationKey !== "required" && legacy) incomingNavigation = legacy;
         } catch (error) {
             if (error.name !== "SecurityError") throw error;
-        }
+        } finally { delete window.__wireReceivePrivateNavigation; }
         window.opener = null;
         if (!incomingNavigation || typeof incomingNavigation.search !== "string"
             || incomingNavigation.analysisQuery !== null && typeof incomingNavigation.analysisQuery !== "string"
             || !Number.isSafeInteger(incomingNavigation.revision)) {
             incomingNavigation = null;
             incomingNavigationError = "The private selection could not be restored. Return to the original tab and open the result again.";
-        } else {
-            history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView,
-                url: location.hash, search: incomingNavigation.search } }, "");
         }
     }
     if (api.publicationToken()) claimIncomingNavigation();
@@ -561,7 +568,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         dimensional, formatDate: value => date(value),
         createReaderSections: assessmentFactories.readerSections, presentation, renderText: value => renderDocument(value),
         onPage: () => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) queueMicrotask(() => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) render(); }); },
-        conversationHref: target => routeUrl(routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
+        conversationHref: (target, link) => setRouteLink(link, routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
             nativeRevision: String(target.revision), nativeSourceRevision: target.sourceRevision })),
         onFilter: values => navigate(routeFor("analyze", { ...values, request: undefined, page: undefined })),
         onInventories: dimension => {
@@ -653,6 +660,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let selectControls;
     let exportWriting = false, returnFocus = null;
     workspaceState.route = readRoute();
+    if (paths.legacy(location.hash) || location.pathname === "/analyze" || location.pathname.endsWith("/") && location.pathname !== "/") {
+        const { url } = routeAddress(workspaceState.route, incomingNavigationKey !== undefined);
+        initialRoute = { url, value: workspaceState.route };
+        history.replaceState(null, "", url + (paths.legacy(location.hash) ? "" : location.hash));
+    }
     let historyPosition = Number.isSafeInteger(history.state?.evidenceView?.position) ? history.state.evidenceView.position : 0;
     let search = workspaceState.route.search || "", activityPage = Math.max(0, Number.parseInt(workspaceState.route.page || "0", 10) || 0), restoring = false, mounted = false;
     const pageSize = 8;
@@ -1626,7 +1638,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const selected = anchor.dataset.category === section;
             if (selected) anchor.setAttribute("aria-current", "page");
             else anchor.removeAttribute("aria-current");
-            anchor.href = routeUrl(routeFor("settings", { section: anchor.dataset.category, setting: undefined, issues: undefined }));
+            setRouteLink(anchor, routeFor("settings", { section: anchor.dataset.category, setting: undefined, issues: undefined }));
         }
         setText($("settingsCategorySummary"), "Category: " + settingsNavigation.categories.find(category => category.id === section).title);
         const routeNotice = nativeSettingUnavailable(workspaceState.route.setting) ? sourceCollection.copilotOnly
@@ -2463,41 +2475,36 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return remembered.query;
     }
-    function readRoute(hash = location.hash, navigationState = history.state) {
+    function readRoute(address = currentAddress(), navigationState = history.state) {
+        const values = paths.parse(address);
+        if (!values) throw new TypeError("This address is not a WIRE page.");
         const current = api.publicationToken();
         if (!current || api.accessState().mode !== "unbound" && (navigationState?.wireAccess?.owner !== historyOwner
             || navigationState.wireAccess.epoch !== current.epoch || navigationState.wireAccess.runtimeId !== current.runtimeId)) {
-            if (navigationState?.evidenceView?.url === hash && (navigationState.evidenceView.search?.trim()
-                || sessionJourney.hasHistoryAnalysis(navigationState.evidenceView))) {
+            if (navigationState?.evidenceView?.url === address && (navigationState.evidenceView.privateKey
+                || navigationState.evidenceView.search?.trim() || sessionJourney.hasHistoryAnalysis(navigationState.evidenceView))) {
                 incomingNavigationError = "The earlier private selection is no longer authorized. Search again or explicitly open this view without that selection.";
             }
             navigationState = null;
         }
-        const [rawView, rawQuery = ""] = hash.slice(1).split("?");
-        const view = rawView === "report" ? "reports" : rawView || "analyze";
-        const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "timelineFrom", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
-            "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup", "comparisonView", "comparisonFocus"];
-        const values = { view: ["analyze", "trends", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
-        for (const key of keys) if (params.has(key)) values[key] = params.get(key);
-        if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
-        if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
-        if (navigationState?.evidenceView?.url === hash && typeof navigationState.evidenceView.search === "string") values.search = navigationState.evidenceView.search;
-        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) {
-            values.returnToSessions = sessionJourney.decodeHistoryRoute(navigationState.evidenceView.returnToSessions, readHistoryAnalysis);
-        }
-        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToResults) {
-            values.returnToResults = sessionJourney.decodeHistoryRoute(navigationState.evidenceView.returnToResults, readHistoryAnalysis, true);
-        }
-        if (navigationState?.evidenceView?.url === hash) {
-            const key = navigationState.evidenceView.analysisKey;
-            values.analysisQuery = key !== undefined || Object.hasOwn(navigationState.evidenceView, "analysisQuery")
-                ? readHistoryAnalysis(Object.hasOwn(navigationState.evidenceView, "analysisQuery") ? undefined : key) : null;
-            if (/^[a-f0-9-]{36}$/.test(navigationState.evidenceView.savedEntry)) values.savedEntry = navigationState.evidenceView.savedEntry;
-            if (navigationState.evidenceView.savedAuthority === "search") values.savedAuthority = "search";
-            values.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
-                .filter(key => typeof navigationState.evidenceView.localSearch?.[key] === "string")
-                .map(key => [key, navigationState.evidenceView.localSearch[key]]));
+        if (arguments.length === 0 && initialRoute?.url === address) Object.assign(values, initialRoute.value);
+        if (incomingNavigation && arguments.length === 0) Object.assign(values, incomingNavigation.fields, { search: incomingNavigation.search });
+        if (navigationState?.evidenceView?.url === address) {
+            const entry = navigationState.evidenceView;
+            const snapshot = historyViews.get(entry.privateKey);
+            if (snapshot && api.isCurrent(snapshot.publication)) Object.assign(values, snapshot.fields);
+            else if (entry.privateKey) incomingNavigationError = "This tab no longer has the private view. Open it again from its original records.";
+            // Read old history entries, but never write their private payload back to history.
+            const remembered = snapshot?.fields || entry;
+            if (typeof remembered.search === "string") values.search = remembered.search;
+            if (remembered.returnToSessions) values.returnToSessions = sessionJourney.decodeHistoryRoute(remembered.returnToSessions, readHistoryAnalysis);
+            if (remembered.returnToResults) values.returnToResults = sessionJourney.decodeHistoryRoute(remembered.returnToResults, readHistoryAnalysis, true);
+            if (remembered.localSearch) values.localSearch = remembered.localSearch;
+            const key = entry.analysisKey;
+            values.analysisQuery = key !== undefined || Object.hasOwn(entry, "analysisQuery")
+                ? readHistoryAnalysis(Object.hasOwn(entry, "analysisQuery") ? undefined : key) : null;
+            if (/^[a-f0-9-]{36}$/.test(entry.savedEntry)) values.savedEntry = entry.savedEntry;
+            if (entry.savedAuthority === "search") values.savedAuthority = "search";
         }
         return canonicalRoute(values);
     }
@@ -2531,19 +2538,31 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const { view, section, setting, warning } = settingsNavigation.resolve(next);
         return { ...next, view: view || "settings", section, setting, issues: undefined, settingsWarning: warning || next.settingsWarning };
     }
-    function routeUrl(next) {
-        next = canonicalRoute(next);
-        const params = new URLSearchParams();
-        for (const [key, value] of Object.entries(next)) if (!["view", "search", "analysisQuery", "returnToSessions", "returnToResults", "localSearch", "settingsWarning", "sidebarEntry", "savedEntry", "savedAuthority"].includes(key) && value !== null && value !== undefined && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key))) params.set(key, value);
-        return "#" + next.view + (params.size ? "?" + params.toString() : "");
+    function publicField(key, value) {
+        if (key === "section") return settingsNavigation.categories.some(item => item.id === value);
+        if (key === "setting") return settingsNavigation.entries.some(item => item.id === value);
+        if (["service", "services", "withinServices"].includes(key)) return value.split(",").every(id => recordedCategories.entries.some(item => item.id === id));
+        if (key === "source") return value === "microsoft-365" || filterState.sources.some(item => item.id === value);
+        if (key === "result") return value.split(",").every(item => Object.hasOwn(results.labels("tool"), item));
+        if (key === "authors") return authorship.validSelection(value.split(","));
+        if (key === "layer") return results.layers.includes(value);
+        if (["from", "to", "timelineFrom", "aFrom", "aTo", "bFrom", "bTo"].includes(key)) return /^\d{4}-\d\d-\d\d(?:T\d\d:\d\d:\d\d(?:\.\d{3})?Z)?$/.test(value);
+        if (["bundle", "inspect"].includes(key)) return /^export-[a-f0-9-]{36}$/.test(value);
+        if (key === "page") return /^\d{1,8}$/.test(value);
+        return ({ chart: ["time", "service", "endpoint", "workload"], bucket: ["day", "week", "month"], range: ["capture", "custom", "7", "30"],
+            task: ["create", "compare"], order: ["oldest"], scope: ["history", "legacy", "all"], origin: ["analyze", "trends", "reports"],
+            includeMissingService: ["true", "false"], expanded: ["true"], comparisonView: ["outcomes", "timeline", "tools", "timing"],
+            comparisonFocus: ["errors", "completed"] })[key]?.includes(value) === true;
     }
-    function linkUrl(next) {
-        const url = routeUrl(next), [view, query = ""] = url.split("?");
-        if (view !== "#analyze" || !search.trim() && semanticQuery === null) return url;
-        // A copied URL cannot silently drop private narrowing.
-        const parameters = new URLSearchParams(query);
-        parameters.set("privateView", "required");
-        return view + "?" + parameters;
+    function routeAddress(next, privateSelection = false) {
+        const { path, params, privateFields } = paths.project(canonicalRoute(next), publicField);
+        if (privateSelection || Object.keys(privateFields).length || next.savedAuthority === "search") params.set("privateView", "required");
+        return { url: path + (params.size ? "?" + params : ""), privateFields };
+    }
+    function setRouteLink(node, next, privateSelection = Boolean(next.search?.trim() || next.analysisQuery != null)) {
+        linkTargets.set(node, next);
+        node.href = routeAddress(next, privateSelection).url;
+        return node.href;
     }
     // Preparation only: recipients admit their own snapshot and fresh Search receipt.
     const privateNavigationLifetimeMs = 30000;
@@ -2555,14 +2574,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         privateNavigations.delete(key);
     }
     window.__wireTakePrivateNavigation = (key, recipient, target) => {
-        const entry = privateNavigations.get(key);
-        if (!entry || !api.isCurrent(entry.publication) || entry.recipient !== recipient || entry.target !== target) return null;
+        const entry = privateNavigations.get(recipient);
+        if (key !== "required" || !entry || !api.isCurrent(entry.publication) || entry.recipient !== recipient || entry.target !== target) return null;
         if (!(performance.now() < entry.expiresAt) || workspaceState.loading || workspaceState.stale || entry.value.revision !== workspaceState.evidence?.revision
             || entry.value.sourceVersion !== workspaceState.evidence.collection?.configVersion || entry.value.nativeRevision !== workspaceState.evidence.nativeRead?.revision
-            || entry.value.deletionVersion !== workspaceState.evidence.deletionVersion) { forgetPrivateNavigation(key); return null; }
+            || entry.value.deletionVersion !== workspaceState.evidence.deletionVersion) { forgetPrivateNavigation(recipient); return null; }
+        if (recipient.location.origin !== location.origin || recipient.location.pathname + recipient.location.search !== target
+            || typeof recipient.__wireReceivePrivateNavigation !== "function") return null;
         const value = structuredClone(entry.value);
-        forgetPrivateNavigation(key);
-        return value;
+        forgetPrivateNavigation(recipient);
+        recipient.__wireReceivePrivateNavigation(value);
+        return null;
     };
     window.addEventListener("pagehide", () => {
         for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
@@ -2574,16 +2596,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!api.publicationToken()) return;
         const modified = event.type === "auxclick" ? event.button === 1
             : event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
-        if (!modified || event.altKey || event.defaultPrevented || !search.trim() && semanticQuery === null) return;
+        if (!modified || event.altKey || event.defaultPrevented) return;
         const anchor = event.target.closest?.("a[href]");
         if (!anchor || anchor.hasAttribute("download")) return;
         const target = new URL(anchor.getAttribute("href"), location.href);
-        if (target.origin !== location.origin || target.pathname !== location.pathname || target.search !== location.search
-            || !["analyze", "home", "overview", "activity", "calls"].includes(target.hash.slice(1).split("?")[0])) return;
-        const [view, query = ""] = target.hash.split("?");
-        const parameters = new URLSearchParams(query);
-        if (parameters.get("privateView") !== "required") return;
+        const next = linkTargets.get(anchor);
+        if (!next || target.origin !== location.origin || !paths.isPagePath(target.pathname) || target.searchParams.get("privateView") !== "required") return;
         event.preventDefault();
+        if (next.savedAuthority === "search" || next.nativeGroup || searchOpenedRequest && searchOpenedRequest === next.request) {
+            privateNavigationNotice("Open this selection in its original tab; another tab must verify its own Search or group.", "stale");
+            return;
+        }
         if (workspaceState.loading || workspaceState.stale || !workspaceState.evidence || semanticQuery !== null && !semanticBound) {
             privateNavigationNotice("Wait for the current private selection before opening another tab.", "stale");
             return;
@@ -2593,21 +2616,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             privateNavigationNotice("The private Search changed. Wait for its current results before opening another tab.", "stale");
             return;
         }
-        const value = { search, analysisQuery: semanticQuery === null ? null : analysisQuery,
+        const value = { search: next.search ?? search, analysisQuery: next.analysisQuery === undefined ? semanticQuery === null ? null : analysisQuery : next.analysisQuery,
+            fields: routeAddress(next).privateFields,
             revision: workspaceState.evidence.revision, nativeRevision: workspaceState.evidence.nativeRead?.revision, sourceVersion: workspaceState.evidence.collection?.configVersion, deletionVersion: workspaceState.evidence.deletionVersion,
             timeContext: structuredClone(workspaceState.scope.timeContext) };
-        parameters.delete("privateView");
-        target.hash = view + (parameters.size ? "?" + parameters : "");
-        const key = crypto.randomUUID(), destination = new URL(target);
-        parameters.set("privateView", key);
-        destination.hash = view + "?" + parameters;
-        const recipient = window.open(destination.href, "_blank", event.shiftKey ? "popup" : undefined);
+        const recipient = window.open(target.href, "_blank", event.shiftKey ? "popup" : undefined);
         if (!recipient) {
             privateNavigationNotice("The new tab was blocked. Allow it or open this result in the current tab.", "error");
             return;
         }
-        privateNavigations.set(key, { publication: api.publicationToken(), recipient, target: target.hash, value, expiresAt: performance.now() + privateNavigationLifetimeMs,
-            timer: setTimeout(() => forgetPrivateNavigation(key), privateNavigationLifetimeMs) });
+        privateNavigations.set(recipient, { publication: api.publicationToken(), recipient, target: target.pathname + target.search, value, expiresAt: performance.now() + privateNavigationLifetimeMs,
+            timer: setTimeout(() => forgetPrivateNavigation(recipient), privateNavigationLifetimeMs) });
     }
     for (const event of ["click", "auxclick"]) document.addEventListener(event, openPrivateNavigation);
     function routeFor(view, changes = {}) {
@@ -2672,10 +2691,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return node.matches('.primary-navigation [data-nav="analyze"]') && origin.compare === "periods";
     }
     function readingKey(value) {
-        const [view, query = ""] = routeUrl(value).split("?");
-        const params = new URLSearchParams(query);
-        params.sort();
-        return JSON.stringify([view, params.toString(), value.search || ""]);
+        const { url, privateFields } = routeAddress(value);
+        return JSON.stringify([url, privateFields, value.search || ""]);
     }
     function go(view, changes = {}, replace = false) {
         if (view === "activity" && changes.session) presentation.setOpen("session:" + changes.session, true);
@@ -2690,24 +2707,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function rememberRoute(next, replace = false) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
-        const url = routeUrl(next);
         const analysisQuery = Object.hasOwn(next, "analysisQuery") ? next.analysisQuery : semanticQuery;
+        const { url, privateFields } = routeAddress(next, Boolean(next.search?.trim() || analysisQuery != null || incomingNavigationError));
         let analysisKey;
         if (typeof analysisQuery === "string" && analysisQuery.trim()) {
             analysisKey = rememberHistoryAnalysis(analysisQuery, publication, history.state?.evidenceView?.analysisKey);
         }
         const storeAnalysis = query => rememberHistoryAnalysis(query, publication, analysisKey);
         historyPosition = replace ? historyPosition : historyPosition + 1;
-        // Private-text search belongs to this browser history entry, never a copied URL.
+        if (next.search) privateFields.search = next.search;
+        if (next.localSearch && Object.values(next.localSearch).some(Boolean)) privateFields.localSearch = next.localSearch;
+        if (next.returnToSessions) privateFields.returnToSessions = sessionJourney.encodeHistoryRoute(next.returnToSessions, storeAnalysis);
+        if (next.view === "request" && next.returnToResults) privateFields.returnToResults = sessionJourney.encodeHistoryRoute(next.returnToResults, storeAnalysis, true);
+        // History is persisted by some browsers. Only page-local keys may cross this boundary.
+        const oldKey = history.state?.evidenceView?.privateKey;
+        const privateKey = Object.keys(privateFields).length ? replace && historyViews.has(oldKey) ? oldKey : crypto.randomUUID() : undefined;
+        if (replace && oldKey !== privateKey) historyViews.delete(oldKey);
+        if (!replace) for (const [key, entry] of historyViews) if (entry.position >= historyPosition) historyViews.delete(key);
+        if (privateKey) historyViews.set(privateKey, { fields: privateFields, publication, position: historyPosition });
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
-            evidenceView: { url, search: next.search || "", analysisKey, position: historyPosition,
+            evidenceView: { url, privateKey, analysisKey, position: historyPosition,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
-            returnToSessions: sessionJourney.encodeHistoryRoute(next.returnToSessions, storeAnalysis),
-            returnToResults: next.view === "request" ? sessionJourney.encodeHistoryRoute(next.returnToResults, storeAnalysis, true) : undefined,
-            savedEntry: next.savedEntry, savedAuthority: next.savedAuthority,
-            localSearch: next.localSearch } };
-        if (replace) history.replaceState(navigationState, "", url);
+            savedEntry: next.savedEntry, savedAuthority: next.savedAuthority } };
+        delete navigationState.wirePrivateNavigation;
+        acceptedAddress = url;
+        if (replace) history.replaceState(navigationState, "", url + (paths.legacy(location.hash) ? "" : location.hash));
         else history.pushState(navigationState, "", url);
     }
     function navigate(next, replace = false, options = {}) {
@@ -2715,7 +2740,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         next = canonicalRoute(next);
         if (!options.restorePosition && browseName(workspaceState.route) === "analyze" && browseName(next) === "analyze")
             next = filterState.reconcileTimeline(workspaceState.route, next);
-        if (routeUrl(next) !== location.hash && !next.search) incomingNavigationError = null;
+        if (!next.search) incomingNavigationError = null;
         if (options.isCurrent && !options.isCurrent()) {
             announce("This Search destination is no longer current. Search again before opening it.", "stale");
             return false;
@@ -2739,7 +2764,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function link(label, view, changes = {}, cls = "") {
         const node = el("a", cls, label);
         const publication = api.publicationToken();
-        node.href = linkUrl(routeFor(view, changes));
+        setRouteLink(node, routeFor(view, changes), Boolean(search.trim() || semanticQuery !== null));
         node.addEventListener("click", (event) => {
             if (!api.isCurrent(publication)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -2751,7 +2776,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function routeLink(label, next, cls = "text-link", options = {}) {
         const node = el("a", cls, label);
         const publication = api.publicationToken();
-        node.href = linkUrl(next);
+        setRouteLink(node, next, Boolean(next.search?.trim() || (next.analysisQuery ?? semanticQuery) != null));
         node.addEventListener("click", event => {
             if (!api.isCurrent(publication)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -3358,6 +3383,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 || workspaceState.evidence.collection?.configVersion !== next.collection?.configVersion)) {
                 for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
             }
+            if (workspaceState.evidence && (workspaceState.evidence.deletionVersion !== next.deletionVersion
+                || workspaceState.evidence.collection?.configVersion !== next.collection?.configVersion)) historyViews.clear();
             if (workspaceState.evidence && (next.deletionVersion ?? 0) !== (workspaceState.evidence.deletionVersion ?? 0)) clearDeletedDraft();
             if (!currentRead()) return false;
             if (sourceCollection.active) {
@@ -3454,7 +3481,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     semanticQuery = null; semanticMembership = undefined; semanticComplete = semanticBound = false;
                     const { wirePrivateNavigation, ...navigationState } = history.state;
                     history.replaceState(navigationState, "");
-                    navigate({ ...workspaceState.route, search: "" }, true);
+                    const route = workspaceState.route;
+                    navigate(route.view === "request" && !route.request ? { view: "analyze" }
+                        : route.view === "reports" && (route.bundle || route.savedAuthority) ? { view: "reports" }
+                        : { ...route, search: "", analysisQuery: null }, true);
                 }, "quiet"));
             }
             renderCollectionNotice();
@@ -4087,7 +4117,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (isCurrent()) {
                     if (event.type !== "click" || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
                     event.preventDefault(); event.stopImmediatePropagation();
-                    const next = { ...readRoute(link.getAttribute("href"), null), search: workspaceState.acceptedRoute.search, localSearch: workspaceState.acceptedRoute.localSearch };
+                    const next = { ...linkTargets.get(link), search: workspaceState.acceptedRoute.search, localSearch: workspaceState.acceptedRoute.localSearch };
                     if (readingKey(next) === readingKey(workspaceState.acceptedRoute)) { chartReferenceUI.leave(); revealResults(); }
                     else navigate(next, false, { revealReferenceRecords: true });
                     return;
@@ -4164,14 +4194,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || workspaceState.route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
         const active = browseName(workspaceState.route) === "compare" ? "compare" : workspaceState.route.view === "request" ? underlyingRoute().view === "trends" ? "trends" : "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
+        document.title = ({ analyze: "Analyze", trends: "Trends", reports: "Reports", compare: "Compare", settings: "Settings" }[active] || "Analyze") + " | WIRE";
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
             const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin)
                 : view === "trends" ? { view: "trends" } : routeFor(view, { request: undefined, task: undefined });
-            node.href = routeUrl(target);
-            if (["analyze", "compare"].includes(view) && (target.search?.trim() || target.analysisQuery !== null && target.analysisQuery !== undefined)) {
-                node.href += (node.href.includes("?") ? "&" : "?") + "privateView=required";
-            }
+            setRouteLink(node, target, Boolean(target.search?.trim() || target.analysisQuery != null));
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
@@ -4226,10 +4254,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ], { inlineHelp: false }), "source-header-details", "source:" + source.sessionId));
         }
         $("pageAction").textContent = "Create report";
-        $("pageAction").href = routeUrl(routeFor("reports", { task: "create" }));
+        setRouteLink($("pageAction"), routeFor("reports", { task: "create" }));
         const contextualAction = $("reportContextAction"), reviewingSelection = workspaceState.route.view === "request";
         contextualAction.textContent = reviewingSelection ? "Review selection" : "Back to Analyze";
-        contextualAction.href = routeUrl(routeFor(reviewingSelection ? "reports" : "analyze", reviewingSelection ? { task: "create" } : {}));
+        setRouteLink(contextualAction, routeFor(reviewingSelection ? "reports" : "analyze", reviewingSelection ? { task: "create" } : {}));
         const actionHost = reviewingSelection ? $("activitySelectionContext") : $("pageHeadingActions");
         if (contextualAction.parentElement !== actionHost) {
             if (reviewingSelection) actionHost.append(contextualAction);
@@ -4290,7 +4318,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const crumbs = $("breadcrumbs");
         crumbs.replaceChildren();
         crumbs.hidden = !crumbs.childElementCount;
-        $("exploreLink").href = routeUrl(routeFor("activity"));
+        setRouteLink($("exploreLink"), routeFor("activity"));
         renderReportTask();
     }
     function renderReportTask() {
@@ -4323,11 +4351,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("reportLibraryLink").setAttribute("aria-disabled", String(Boolean(exportWriting || current?.saveUnconfirmed)));
         for (const [id, active, task] of [["reportLibraryLink", !creating && !comparing, undefined], ["reportCreateLink", creating, "create"], ["reportCompareLink", comparing, "compare"]]) {
             const control = $(id);
-            control.href = routeUrl(routeFor("reports", { task, request: task ? workspaceState.route.request : undefined }));
+            setRouteLink(control, routeFor("reports", { task, request: task ? workspaceState.route.request : undefined }));
             if (active) control.setAttribute("aria-current", "page");
             else control.removeAttribute("aria-current");
         }
-        if (creating && (periodReport?.returnTo || reportEntry?.returnTo)) $("reportLibraryLink").href = routeUrl(periodReport?.returnTo ?? reportEntry.returnTo);
+        if (creating && (periodReport?.returnTo || reportEntry?.returnTo)) setRouteLink($("reportLibraryLink"), periodReport?.returnTo ?? reportEntry.returnTo);
         reportExperience?.sync();
     }
     function backToReports() {
@@ -5495,7 +5523,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const layer = reportPicker ? "tool" : workspaceState.scope.layer;
         const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) : rowsFor(scenario.scenarioId);
         if (nativeActivity.isNative(scenario)) return nativeActivity.card({
-            record: scenario, href: routeUrl(routeFor("request", { request: scenario.scenarioId })), rows: rows ?? [], layer,
+            record: scenario, setHref: link => setRouteLink(link, routeFor("request", { request: scenario.scenarioId })), rows: rows ?? [], layer,
             contextDateBasis: nativeContextDateBasis(scenario.scenarioId),
             onOpen: id => navigate(routeFor("request", { request: id })),
         });
@@ -5505,7 +5533,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const signal = eventSignal ? AbortSignal.any([events.signal, eventSignal]) : events.signal;
         function open(label, focus, exact = target, cls = "card-evidence-link") {
             const link = el("a", cls, label);
-            link.href = routeUrl(exact);
+            setRouteLink(link, exact);
             link.setAttribute("aria-controls", "contextSidebar");
             link.setAttribute("aria-expanded", String(sidebarIdentity !== null && workspaceState.route.request === target.request));
             link.addEventListener("click", event => {
@@ -8216,9 +8244,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("collectionNoticeText"), notice.text);
         $("collectionNoticeAction").hidden = false;
         setText($("collectionNoticeAction"), notice.action);
-        $("collectionNoticeAction").href = notice.href || (notice.issues ? "#collection-status?setting=issues"
-            : notice.severity === "error" || notice.action === "View collection details" ? "#collection-status"
-                : !collection?.config?.approved ? "#settings?section=connection&setting=source" : "#settings?section=connection");
+        $("collectionNoticeAction").href = notice.href || (notice.issues ? "/collection-status?setting=issues"
+            : notice.severity === "error" || notice.action === "View collection details" ? "/collection-status"
+                : !collection?.config?.approved ? "/settings?section=connection&setting=source" : "/settings");
     }
     function collectionUnavailable(error, reason, publication) {
         if (clearingAccess || !api.isCurrent(publication)) return;
@@ -8277,8 +8305,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const toolbarPending = workspaceState.route.view === "analyze" && $("analyzeRefresh").checkVisibility() && ["checking", "applying"].includes(model.phase)
             && !model.recovery && !collectionReadError && !workspaceState.stale;
         $("freshAwayNotice").hidden = !showRecollection && (contextual || !attention || toolbarPending);
-        $("freshAwayLink").href = showRecollection ? "#settings?section=privacy&setting=recollect-activity"
-            : "#settings?section=connection&setting=collect-now";
+        $("freshAwayLink").href = showRecollection ? "/settings?section=privacy&setting=recollect-activity"
+            : "/settings?section=connection&setting=collect-now";
         setText($("freshAwayLink"), showRecollection ? "View recollection result" : "View activity update");
         setText($("freshAwayStatus"), showRecollection ? ` ${reread.message}`
             : model.combined ? ` ${model.message}`
@@ -8316,7 +8344,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("freshStatus").dataset.severity = model.phase === "error" || model.sourceFailure ? "error"
             : model.combined?.problem || model.phase === "partial" ? "warning" : "normal";
         $("freshIssues").hidden = model.recovery !== "source";
-        $("freshIssues").href = "#settings?section=connection&setting=source-paths";
+        $("freshIssues").href = "/settings?section=connection&setting=source-paths";
         setText($("freshIssues"), "Review source");
         $("freshResult").hidden = $("freshStatus").hidden && !model.context && !model.sourceWarning && !completed && !collectionReadError && !workspaceState.stale;
         const gapDetails = $("freshCoverageDetails");
@@ -8333,7 +8361,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 reasons.append(row);
             }
             const current = el("a", "button-link", "View current history issues");
-            current.href = "#collection-status?setting=issues"; current.dataset.settingsLink = "";
+            current.href = "/collection-status?setting=issues"; current.dataset.settingsLink = "";
             gapDetails.replaceChildren(el("p", "", "Primary reasons from this manual check. Each affected chat is grouped once; other limits and pending counts may overlap."),
                 ...(groups.length ? [reasons] : [el("p", "", "No per-reason breakdown was retained for this check.")]),
                 el("p", "", "Previously collected evidence stays. Current issue details may differ after a later check."), current);
@@ -8704,7 +8732,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const statusAction = $("collectionStatusAction");
         statusAction.hidden = !view.action;
         if (view.action) { setText(statusAction, view.action.label); statusAction.href = view.action.href; }
-        $("collectionSourceLink").hidden = Boolean(nativeControl) || view.action?.href === "#settings?section=connection&setting=source";
+        $("collectionSourceLink").hidden = Boolean(nativeControl) || view.action?.href === "/settings?section=source-access&setting=source";
         $("collectionHistoryLink").hidden = Boolean(nativeControl);
         for (const id of ["collectionTimes", "collectionCoverageCounts", "collectionIssues", "collectionSetup"]) $(id).hidden = Boolean(nativeControl);
         setText($("collectionChecked"), status.lastCheckedAt ? `Last checked ${freshness(status.lastCheckedAt)}` : "Not checked yet");
@@ -9767,7 +9795,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const reportTask = ["reportLibraryLink", "reportCreateLink", "reportCompareLink"].includes(id);
         if (!reportTask && (workspaceState.loading || workspaceState.stale)) return;
         if (["pageAction", "reportCreateLink"].includes(id) && ["saved", "unavailable"].includes(reportJourney.snapshot().phase)) clearReportSelection();
-        navigate({ ...readRoute(new URL(event.currentTarget.href).hash, null), search: workspaceState.route.search, returnToSessions: workspaceState.route.returnToSessions,
+        navigate({ ...linkTargets.get(event.currentTarget), search: workspaceState.route.search, returnToSessions: workspaceState.route.returnToSessions,
             ...(reportTask ? { localSearch: workspaceState.route.localSearch } : {}) });
     });
     $("resetView").addEventListener("click", resetView);
@@ -9883,7 +9911,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     for (const category of settingsNavigation.categories) {
         const anchor = el("a");
-        anchor.href = routeUrl(routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
+        setRouteLink(anchor, routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
         // Static shell links use live navigation guards, not a pre-admission data publication.
         anchor.dataset.settingsLink = "";
         anchor.dataset.category = category.id;
@@ -9921,9 +9949,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         if (node.id === "openEvidenceHelp" && !api.publicationToken()) { navigateAccessShell("settings"); return; }
-        const target = readRoute(node.hash, null);
+        const target = readRoute(node.getAttribute("href"), null);
         const changes = { section: target.section, setting: target.setting, issues: undefined };
-        const mode = new URLSearchParams(node.hash.split("?")[1]).get("mode");
+        const mode = new URLSearchParams(node.search).get("mode");
         if (target.view === "analyze" && ["calls", "interactions"].includes(mode)) {
             changes.page = undefined;
         }
@@ -10007,15 +10035,40 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.restoreFocus(heading);
         heading.scrollIntoView({ block: "start" });
     });
-    window.addEventListener("popstate", () => {
-        if (!api.publicationToken()) { workspaceState.route = readRoute(location.hash, null); showAccessUnavailable(api.accessState()); return; }
+    function traverse() {
+        initialRoute = null;
+        if (!api.publicationToken()) {
+            workspaceState.route = readRoute(currentAddress(), null);
+            if (paths.legacy(location.hash)) {
+                const { url } = routeAddress(workspaceState.route);
+                initialRoute = { url, value: workspaceState.route };
+                history.replaceState(null, "", url);
+            }
+            showAccessUnavailable(api.accessState());
+            return;
+        }
+        if (location.hash && !paths.legacy(location.hash) && currentAddress() === acceptedAddress && !history.state?.evidenceView) {
+            // A real document anchor (e.g. Skip to content) stays in the same private view.
+            historyPosition++;
+            rememberRoute(workspaceState.route, true);
+            return;
+        }
+        incomingNavigationError = null;
         const next = readRoute();
+        if (location.search && new URLSearchParams(location.search).has("privateView") && !historyViews.has(history.state?.evidenceView?.privateKey)
+            && !analysisNavigations.has(history.state?.evidenceView?.analysisKey)) {
+            incomingNavigationError = "This tab no longer has the private view. Open it again from its original records.";
+        }
         if (next.view === "request" || next.inspect) ownSidebarHistory();
         else if (workspaceState.route.view !== "request" && !workspaceState.route.inspect) restoreSidebarHistoryMode();
         const position = history.state?.evidenceView?.position;
         historyPosition = Number.isSafeInteger(position) ? position : historyPosition + 1;
         applyRoute(next, { restorePosition: true });
-    });
+    }
+    window.addEventListener("popstate", traverse);
+    // A native fragment navigation can emit both events. popstate canonicalizes
+    // synchronously; do not dispatch the already-replaced fragment a second time.
+    window.addEventListener("hashchange", () => { if (paths.legacy(location.hash)) traverse(); });
     window.addEventListener("pageshow", (event) => {
         if (!event.persisted) return;
         pageInactive = false;
@@ -10208,7 +10261,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onDraftChange: changed => {
             retirePendingSaveMessage();
             $("settingsDraftNotice").hidden = workspaceState.route.view === "settings" || !changed;
-            $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "#settings?section=connection&setting=history-window" : "#settings?section=connection&setting=source";
+            $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "/settings?section=connection&setting=history-window" : "/settings?section=connection&setting=source";
             renderSettingsSearch();
             renderFreshActivity();
         },
@@ -10226,7 +10279,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         needsStoredRead: refreshUsesStoredRecovery,
         onDraftChange: changed => {
             $("settingsDraftNotice").hidden = workspaceState.route.view === "settings" || !(changed || githubHasDraft());
-            if (changed) $("settingsDraftNotice").querySelector("a").href = "#settings?section=connection&setting=microsoft-collection";
+            if (changed) $("settingsDraftNotice").querySelector("a").href = "/settings?section=connection&setting=microsoft-collection";
             renderFreshActivity();
         },
     });
@@ -10255,7 +10308,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
-        const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation);
+        const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation || new URLSearchParams(location.search).has("privateView"));
         clearingAccess = true;
         forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null; reportPreset = null;
         clearTimeout(reportUpdateTimer); reportRebuildFrom = null; reportUpdateAgain = saveAfterMask = false;
@@ -10346,6 +10399,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         semanticMembership = undefined; semanticQuery = null; semanticComplete = semanticBound = false; semanticStatus = "stale";
         browseStates.clear();
         analysisNavigations.clear();
+        historyViews.clear();
+        linkTargets = new WeakMap();
+        initialRoute = null;
         searchOpenedRequest = searchReturnMarker = null; searchTargetInvalid = true;
         incomingNavigation = null;
         if (privateNarrowing) incomingNavigationError = "The earlier private selection was cleared when WIRE access changed. Search again or explicitly open this view without that selection.";
@@ -10365,9 +10421,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const id of ["homeView", "activityView", "resultSummary", "promptAuthorSummary", "freshActivity", "freshCoverageDetails"]) {
             for (const name of ["data-revision", "data-check-id", "data-check-key"]) $(id)?.removeAttribute(name);
         }
-        for (const link of document.querySelectorAll("[data-nav]")) link.href = link.dataset.nav === "compare" ? "#analyze?compare=periods" : "#" + link.dataset.nav;
-        $("pageAction").href = "#reports?task=create";
-        $("reportContextAction").href = "#analyze";
+        for (const link of document.querySelectorAll("[data-nav]")) link.href = link.dataset.nav === "analyze" ? "/" : "/" + link.dataset.nav;
+        $("pageAction").href = "/reports?task=create";
+        $("reportContextAction").href = "/";
         for (const id of ["activitySearch", "settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch",
             "reportTitle", "manualTerms", "sourceDatabase", "sourceSessions"]) {
             if ($(id)) { $(id).value = ""; $(id).removeAttribute("value"); }
@@ -10407,7 +10463,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.body.removeAttribute("data-context-docked");
         selectControls?.withdrawAccess();
         syncSaveLocks();
-        workspaceState.route = readRoute(location.hash, null);
+        workspaceState.route = readRoute(currentAddress(), null);
         clearingAccess = false;
         if (failures.length) throw new AggregateError(failures, "Private-content clearance is incomplete. Reload before reading activity.");
     }
@@ -10421,12 +10477,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("accessShell").hidden = false;
         const active = browseName(workspaceState.route) === "compare" ? "compare" : workspaceState.route.view === "request" ? "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
-        setText($("accessPageTitle"), { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports" }[active] || "Analyze");
+        const title = { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports", trends: "Trends" }[active] || "Analyze";
+        setText($("accessPageTitle"), title);
+        document.title = title + " | WIRE";
         $("accessSettings").hidden = active === "settings";
         $("accessAccount").disabled = value.mode !== "enforced";
         $("accessRetry").hidden = !["freshness-expired", "watch-timeout", "watch-unavailable", "connection-unavailable", "invalid-bootstrap"].includes(value.reason);
         for (const node of document.querySelectorAll("[data-nav]")) {
-            node.href = node.dataset.nav === "compare" ? "#analyze?compare=periods" : "#" + node.dataset.nav;
+            node.href = node.dataset.nav === "analyze" ? "/" : "/" + node.dataset.nav;
             if (node.dataset.nav === active) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         }
@@ -10442,11 +10500,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         history.replaceState(safe, "");
     }
     function navigateAccessShell(view) {
-        if (!["analyze", "compare", "reports", "settings"].includes(view) || clearingAccess) return;
-        const hash = view === "compare" ? "#analyze?compare=periods" : "#" + view + (view === "settings" ? "?section=connection" : "");
-        if (api.publicationToken()) return navigate(readRoute(hash, null));
-        history.pushState({}, "", hash);
-        workspaceState.route = readRoute(hash, null);
+        if (!["analyze", "compare", "reports", "settings", "trends"].includes(view) || clearingAccess) return;
+        initialRoute = null;
+        const url = view === "analyze" ? "/" : "/" + view;
+        if (api.publicationToken()) return navigate(readRoute(url, null));
+        history.pushState({}, "", url);
+        workspaceState.route = readRoute(url, null);
         showAccessUnavailable(api.accessState());
     }
     $("accessSettings").addEventListener("click", event => {
@@ -10472,7 +10531,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("settingsView").hidden = false;
         setText($("pageTitle"), "Settings");
         const home = el("a", "", "Analyze");
-        home.href = "#analyze";
+        home.href = "/";
         $("breadcrumbs").replaceChildren(home, document.createTextNode(" / Settings"));
         renderSettingsNavigation();
         const latest = api.accessState();
@@ -10553,6 +10612,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         claimIncomingNavigation();
         workspaceState.route = readRoute();
+        search = workspaceState.route.search || "";
+        initialRoute = null;
         syncControls();
         rememberRoute(workspaceState.route, true);
         const firstSettingsRead = !mounted, connectionSettings = showConnectionSettings(value);

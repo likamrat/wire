@@ -144,6 +144,18 @@ bootstrap remains private and uncached. A missing build or a source/build
 mismatch fails explicitly; rebuild rather than falling back to older code.
 Pre-paint theme/navigation preferences stay in the small inline bootstrap.
 
+`lib/page-path.mjs` lists the shell's exact GET paths. `/` is Analyze;
+`/analyze` and a single trailing slash are accepted aliases. A recognized
+legacy route fragment is replaced in the same history entry; ordinary document
+anchors are not routes. Do not add a catch-all SPA fallback: assets, APIs, saved
+files and unknown paths must retain their own handling and access checks.
+The bundled and React clients use the same route controller. Its public query
+projection admits known choices and dates, never record IDs, free text, source
+paths or operation receipts. A `privateView=required` marker carries no data
+or authority. Private state and a modified-click handoff live only in the
+authorized page; copying the marker cannot recover them. An ordinary saved
+report link names the saved bundle, not permission to read it.
+
 For React evaluation, use the [feature checkout launcher](#run-a-feature-checkout-beside-main).
 For an already managed, explicitly owned evaluation store, set
 `WORKIQ_EVIDENCE_DATA_DIR` to its absolute path and use

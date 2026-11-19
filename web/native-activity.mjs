@@ -117,7 +117,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
             author: message?.value.author === "user" ? "user" : "unknown" };
     }
-    function card({ record, href, rows, layer, onOpen, contextDateBasis }) {
+    function card({ record, setHref, rows, layer, onOpen, contextDateBasis }) {
         const revision = cardRevision;
         const publication = api.publicationToken(), events = new AbortController();
         if (!authorized(publication) || revision !== cardRevision) return null;
@@ -126,7 +126,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const row = node("article", "request-row activity-card read-in-place"), action = node("a", "request-card-open recognition-row");
         row.dataset.viewKey = "request:" + record.scenarioId;
         row.dataset.sourceId = record.sourceId;
-        action.href = href;
+        setHref(action);
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", "false");
         const prompt = recognition(record, true);

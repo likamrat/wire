@@ -141,7 +141,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
     await exact.getByRole("link", { name: /Nov 15, 2026: 34/ }).click(); await ready(page);
     const drilled = await (await drilledResponse).json();
     assert.deepEqual(drilled.analytics.rows.map(row => row.id).sort(), [...points.find(point => point.date === "2026-11-15").drilldownIds].sort());
-    const params = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    const params = new URL(page.url()).searchParams;
     assert.equal(params.get("from"), "2026-11-15"); assert.equal(params.get("to"), "2026-11-15");
     await expect(page.locator("#activityCount")).toHaveText("34");
     await page.goBack(); await ready(page);
@@ -180,7 +180,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     await expect(page.locator("#activityCount")).toHaveText("3");
     await expect(page.locator("#timeline-first")).toBeFocused();
     assert.ok(await page.locator(".flat-time-scroll *").count() < 500);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("from"), null, "Paging never changes selected evidence dates");
+    assert.equal(new URL(page.url()).searchParams.get("from"), null, "Paging never changes selected evidence dates");
     await page.getByRole("button", { name: "Later dates", exact: true }).click(); await ready(page);
     await expect(page.locator(".time-zero")).toHaveCount(90);
     await expect(page.locator("#activityCount")).toHaveText("3");
@@ -225,7 +225,7 @@ test("removing missing-service context retires the old window without broadening
     const narrowed = await (await narrowedResponse).json();
     await closeAnalyzeFilters(page);
     await capture(page, process.env.WIRE_DAILY_BASELINE ? "anchor-before" : "anchor-mail-light", { request: reads.at(-1) });
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("timelineFrom"), null);
+    assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), null);
     assert.deepEqual(reads.at(-1).filters.services, ["Mail"]);
     assert.equal(reads.at(-1).filters.includeMissingService, false);
     assert.deepEqual(narrowed.analytics.rows.map(row => row.id), snapshots[0].analytics.rows.filter(row => row.scenarioId === "anchor-1").map(row => row.id));
@@ -246,7 +246,7 @@ test("removing missing-service context retires the old window without broadening
     await expect(page.locator("#timelineWindow")).toContainText("Nov 16, 2016");
     await closeAnalyzeFilters(page);
     await page.locator('a[href*="withinServices=Mail"]:visible').first().click(); await ready(page);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("timelineFrom"), null);
+    assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), null);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator(".time-column")).toHaveCount(1);
 });
@@ -283,13 +283,13 @@ test("out-of-range short and long timeline links retain keyboard recovery and Ba
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
         if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered", await measure(page));
         await page.goBack(); await ready(page);
-        assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("timelineFrom"), timelineFrom);
+        assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), timelineFrom);
         await expect(page.locator("#timeline-first")).toBeFocused();
         await page.locator("#timeline-latest").focus(); await page.keyboard.press("Enter"); await ready(page);
         await expect(page.locator(".time-column")).toHaveCount(1);
         await expect(page.locator("#timeline-latest")).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
-        const accepted = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+        const accepted = new URL(page.url()).searchParams;
         assert.equal(accepted.get("services"), short ? "Mail" : null);
         assert.equal(accepted.get("bucket"), bucket);
     }

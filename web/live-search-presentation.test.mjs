@@ -68,7 +68,7 @@ test("original Greek, ligature and astral text survive serialized presentation w
 
 test("navigation context stays human-readable without replacing an actually matched source", () => {
     const hit = { type: "view", title: "Recorded timing", excerpt: "Recorded timing",
-        source: { label: "WIRE navigation" }, target: { kind: "route", href: "#analyze?mode=calls" },
+        source: { label: "WIRE navigation" }, target: { kind: "route", href: "/?chart=time" },
         textMatch: { field: "title", start: 0, end: 3, excerptStart: 0 } };
     assert.deepEqual(search.searchHitPresentation(hit).source, [{ text: "Analyze", match: false }]);
     const sourceMatch = { ...hit, excerpt: hit.source.label, textMatch: { field: "source", start: 5, end: 15, excerptStart: 0 } };

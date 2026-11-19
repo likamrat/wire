@@ -53,12 +53,12 @@ export async function navigateMain(page, view) {
         if (await trigger.isVisible() && await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
     }
     if (view === "collection-status") {
-        const link = page.locator('a[href^="#collection-status"]:visible').first();
+        const link = page.locator('a[href^="/collection-status"]:visible').first();
         if (await link.count()) await link.click();
         else {
             await revealNavigation();
             await page.locator('nav [data-nav="settings"]').click();
-            await page.locator('a[href^="#collection-status"]:visible').first().click();
+            await page.locator('a[href^="/collection-status"]:visible').first().click();
         }
         return;
     }
@@ -80,7 +80,7 @@ export async function revealStoredRefresh(page) {
 
 export async function restoreLegacySearch(page, search) {
     await page.evaluate(search => {
-        history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, url: location.hash, search } }, "");
+        history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, url: location.pathname + location.search, search } }, "");
         dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     }, search);
     await page.waitForFunction(search => document.querySelector("#activitySearch").value === search

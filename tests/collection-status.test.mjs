@@ -36,7 +36,7 @@ test("source notices omit healthy narration and keep uncertain or stopped collec
         const notice = model.sourceEntry(sources, current, { microsoftState: "connected" });
         assert.equal(notice.text, text + " Start a new collection in Settings.");
         assert.equal(notice.severity, "warning");
-        assert.equal(notice.href, "#settings?section=connection&setting=microsoft-collection");
+        assert.equal(notice.href, "/settings?section=connection&setting=microsoft-collection");
         assert.doesNotMatch(notice.text, /ready|enabled|Showing saved activity|connected\./);
         const withheld = model.sourceEntry(sources, { ...current, actions: { microsoft: [] } }, { microsoftState: "connected" });
         assert.doesNotMatch(withheld.text, /Start a new collection/);
@@ -75,7 +75,7 @@ for (const [name, progress, meaning] of [
         assert.match(result.guidance, /does not guarantee.*prompt-to-action links.*restored/);
     }
     assert.equal(result.action.label, "See currently affected chats");
-    assert.equal(result.action.href, "#collection-status?setting=issues");
+    assert.equal(result.action.href, "/collection-status?setting=issues");
 });
 
 test("history impact explains omitted activity, disconnected links and useful next actions without invented repair", () => {
@@ -85,7 +85,7 @@ test("history impact explains omitted activity, disconnected links and useful ne
     assert.deepEqual(mixed, {
         explanation: "Some activity or links between prompts and actions may be missing from WIRE because parts of chat history couldn't be read.",
         guidance: "Repeating Refresh alone won't fix these gaps. Collected activity is kept.",
-        action: { label: "See currently affected chats", href: "#collection-status?setting=issues" },
+        action: { label: "See currently affected chats", href: "/collection-status?setting=issues" },
     });
     assert.match(mixed.explanation, /activity or links between prompts and actions may be missing/i);
     assert.match(mixed.guidance, /Repeating Refresh alone won't fix.*Collected activity is kept/);

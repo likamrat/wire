@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
@@ -36,7 +37,7 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
     if (!approved) { status.config = null; status.connected = false; status.state = "unconfigured"; assessment.source.available = false; }
     const automatic = automaticScoreOffSummary();
     const server = createServer(async (request, response) => {
-        if (request.method === "GET" && request.url === "/") {
+        if (request.method === "GET" && isPagePath(request.url.split("?")[0])) {
             response.setHeader("Content-Type", "text/html");
             response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-settings-reference'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
             return response.end(renderHtmlShell("a".repeat(64), "settings-reference", UNBOUND_FIXTURE_BOOTSTRAP));
@@ -141,7 +142,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
-        assert.match(await row.getAttribute("href"), /#settings\?/);
+        assert.equal(await row.getAttribute("href"), value === "connection" ? "/settings" : "/settings?section=" + value);
         assert.equal(await row.locator(".fluent-icon[aria-hidden=true]").count(), 1);
         assert.equal(await row.locator(".settings-category-label").count(), 1);
         const measure = await row.evaluate(node => {
@@ -165,7 +166,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
         assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
         assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
     }
-    await expect(page.locator('[data-settings-section=privacy] a.button-link[href="#reports"]')).toHaveText("Open saved reports");
+    await expect(page.locator('[data-settings-section=privacy] a.button-link[href="/reports"]')).toHaveText("Open saved reports");
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     if (process.env.WIRE_SETTINGS_REFERENCE_PROOFS) {
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
@@ -273,6 +274,12 @@ test("category navigation preserves source and reply drafts, local search, cance
     await selectActivityOption(page, "collectionWindow", "7");
     await selectActivityOption(page, "collectionCadence", "15");
     const sourceNode = await page.locator("#sourceDatabase").elementHandle();
+    await page.locator("#openEvidenceHelp").click();
+    await expect(page.locator('[data-settings-section="troubleshooting"]')).toBeVisible();
+    assert.equal(new URL(page.url()).hash, "");
+    await page.goBack();
+    await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify([location.href, history.state])), /invented-unsaved/);
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await expect(page.locator("#preferenceActions")).toBeHidden();
     await category(page, "privacy");
@@ -288,13 +295,18 @@ test("category navigation preserves source and reply drafts, local search, cance
     await page.getByRole("button", { name: "Discard change", exact: true }).click();
     await expect(choice).not.toBeChecked();
     await expect(choice).toBeFocused();
+    await page.locator("#settingsSearch").fill("");
     await category(page, "connection");
     assert.equal(await sourceNode.evaluate(node => node === document.getElementById("sourceDatabase")), true);
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
-    await expect(page.locator("#approvalScope")).toContainText("7 days; check every 15 seconds");
+    await expect(page.locator("#collectionWindow")).toHaveValue("7");
+    await expect(page.locator("#collectionCadence")).toHaveValue("15");
+    await expect(page.locator("#approvalScope")).toContainText("Collection stays paused");
+    await category(page, "source-access");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
     await expect(page.locator("#editSource")).toBeFocused();
+    await category(page, "connection");
     await selectActivityOption(page, "collectionCadence", "30");
     await category(page, "display");
     await category(page, "connection");
@@ -319,12 +331,12 @@ test("pending and uncertain settings results survive categories and only explici
     await selectActivityOption(page, "collectionCadence", "15");
     await page.locator("#saveCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Wait while");
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Saving...");
     await page.locator('#settingsCategoryNav [data-category="privacy"]').click();
     await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
     release();
     await expect(page.locator("#reloadSettings")).toBeVisible();
-    await expect(page.locator("#settingsMessage")).toContainText("No success is assumed");
+    await expect(page.locator("#settingsMessage")).toContainText("Change unconfirmed");
     await category(page, "privacy");
     await category(page, "display");
     await expect(page.locator("#settingsMessage")).toBeVisible();
@@ -679,13 +691,14 @@ test("Troubleshooting returns to unified Activity without losing scope, private 
         await link.focus();
         await page.keyboard.press("Enter");
         await expect(page.locator("#activityTitle")).toHaveText("Activity");
-        const params = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
-        assert.equal(params.get("project"), "test-project");
+        const params = new URL(page.url()).searchParams;
+        assert.equal(params.has("project"), false);
+        assert.equal(await page.locator("#projectFilter").inputValue(), "test-project");
         assert.equal(params.get("layer"), "tool");
         assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
         await expect(page.locator("#activitySearch")).toHaveValue(query);
         await expect(selected).toHaveCount(1);
         await expect(page.locator("#activityCount")).toHaveText("1");
-        await expect(page.locator('#activityList a[href*="request=settings-unmatched"]')).toHaveCount(0);
+        await expect(page.locator('#activityList [data-view-key="request:settings-unmatched"]')).toHaveCount(0);
     }
 });

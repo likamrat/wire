@@ -1061,10 +1061,10 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
 test("Troubleshooting converges collection investigation but keeps the unrelated HTTP diagnostic distinct", { timeout: 30000 }, async t => {
     const { page, posts } = await setup(t);
     await navigateSettings(page, "troubleshooting");
-    await expect(page.locator('#settingsView a[href="#collection-status"]:visible')).toHaveCount(1);
-    await expect(page.locator('#settingsView a[href="#collection-status?setting=issues"]:visible')).toHaveCount(0);
-    await expect(page.locator('#settingsView a[href="#collection-status?setting=collection-details"]:visible')).toHaveCount(0);
-    const diagnostic = page.locator('#settingsView a[href="#collection-status?setting=network-diagnostic"]');
+    await expect(page.locator('#settingsView a[href="/collection-status"]:visible')).toHaveCount(1);
+    await expect(page.locator('#settingsView a[href="/collection-status?setting=issues"]:visible')).toHaveCount(0);
+    await expect(page.locator('#settingsView a[href="/collection-status?setting=collection-details"]:visible')).toHaveCount(0);
+    const diagnostic = page.locator('#settingsView a[href="/collection-status?setting=network-diagnostic"]');
     await expect(diagnostic).toBeVisible();
     await diagnostic.click();
     await expect(page.locator("#recorderDiagnostics")).toHaveAttribute("open", "");
@@ -1073,7 +1073,7 @@ test("Troubleshooting converges collection investigation but keeps the unrelated
     assert.equal(posts.includes("/api/record"), false);
     await page.goBack();
     await expect(page.locator("[data-settings-section=troubleshooting]")).toBeVisible();
-    await page.locator('#settingsView a[href="#collection-status"]:visible').click();
+    await page.locator('#settingsView a[href="/collection-status"]:visible').click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
     assert.equal(posts.some(value => /\/(?:record|confirm|approve|configure|enabled|now)$/.test(value)), false);
 });

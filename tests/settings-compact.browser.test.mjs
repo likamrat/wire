@@ -144,7 +144,7 @@ test("compact Settings keeps four current categories readable, bounded and actio
         copy: node.getBoundingClientRect().width, row: node.closest(".settings-task-row").getBoundingClientRect().width,
     }));
     assert.ok(copyWidth.copy >= Math.min(copyWidth.row, 432), "Guidance uses the available row, not the fixed label column");
-    for (const selector of ["#deleteActivity", "#recollectActivity", '[data-settings-section=privacy] a[href="#reports"]']) {
+    for (const selector of ["#deleteActivity", "#recollectActivity", '[data-settings-section=privacy] a[href="/reports"]']) {
         const action = page.locator(selector);
         const paint = await action.evaluate(node => {
             const before = getComputedStyle(node, "::before"), style = getComputedStyle(node);
@@ -154,7 +154,7 @@ test("compact Settings keeps four current categories readable, bounded and actio
         assert.equal(paint.border, "1px", "Actions have a visible painted boundary");
         assert.ok(contrast(paint.color, paint.fill) >= 4.5);
     }
-    const reports = page.locator('[data-settings-section=privacy] a[href="#reports"]');
+    const reports = page.locator('[data-settings-section=privacy] a[href="/reports"]');
     await reports.focus();
     await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
     await expect(reports).toBeFocused();

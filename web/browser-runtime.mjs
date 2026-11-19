@@ -20,6 +20,7 @@ import { createDisclosureState } from "./disclosure-state.mjs";
 import { createReaderSections } from "./reader-sections.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { createSessionJourney } from "./session-journey.mjs";
+import { createPagePaths } from "../lib/page-path.mjs";
 import { createReportJourney, createPreparedReportFrame } from "./report-journey.mjs";
 import { createReportExperience, createReportSaveWarning, decoratePreparedReport, reportWorkspacePresentation } from "./report-experience.mjs";
 import { createDateRangeCalendar } from "./date-range-calendar.mjs";
@@ -85,7 +86,7 @@ function factories() {
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
         timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
-        createSearchFields, createAnalyzeScope, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
+        createPagePaths, createSearchFields, createAnalyzeScope, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),

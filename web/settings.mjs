@@ -16,7 +16,7 @@ export const settingsMarkup = `
   </aside>
   <div class="settings-content">
   <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
-  <a id="firstCollectionActivity" class="button-link" href="#analyze" data-settings-link hidden>View activity</a>
+  <a id="firstCollectionActivity" class="button-link" href="/" data-settings-link hidden>View activity</a>
   <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
@@ -36,7 +36,7 @@ export const settingsMarkup = `
     <p id="recollectActivityHelp">Missing history, deleted replies and past annotations aren't restored.</p>
     <p id="recollectionUpdateStatus" role="status" aria-live="polite" hidden></p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="/reports" data-settings-link>Open saved reports</a></div>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
@@ -80,16 +80,16 @@ export const settingsMarkup = `
         <p id="firstCollectionWait" class="settings-help" hidden>The first read may take a few minutes.</p>
       </div>
       </section>
-      <p id="registeredSourceNotice" hidden>Local Copilot source paths are not available in this runtime. <a href="#settings?section=connection" data-settings-link>Open collection</a></p>
+      <p id="registeredSourceNotice" hidden>Local Copilot source paths are not available in this runtime. <a href="/settings" data-settings-link>Open collection</a></p>
     </section>
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
       <h2 id="connectionTitle" tabindex="-1">Collection</h2>
       <div class="settings-task-row settings-collection-state">
         <div class="settings-row-copy"><h3 id="automaticCollectionTitle">Automatic collection</h3><p id="connectionStatus" class="connection-status">Checking connection</p><p id="connectionSourceHelp" class="settings-help" hidden></p></div>
-        <div id="approvedConnection" hidden><div class="settings-actions"><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" href="#settings?section=source-access&setting=source-paths" data-settings-link hidden>View source</a></div></div>
-        <a id="collectionSourceEntry" class="button-link" href="#settings?section=source-access&setting=source" data-settings-link hidden>Review source access</a>
+        <div id="approvedConnection" hidden><div class="settings-actions"><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" href="/settings?section=source-access&setting=source-paths" data-settings-link hidden>View source</a></div></div>
+        <a id="collectionSourceEntry" class="button-link" href="/settings?section=source-access&setting=source" data-settings-link hidden>Review source access</a>
       </div>
-      <p id="collectionSourceDraft" class="notice" hidden>Source review is open. <a href="#settings?section=source-access&setting=source" data-settings-link>Return to source review</a></p>
+      <p id="collectionSourceDraft" class="notice" hidden>Source review is open. <a href="/settings?section=source-access&setting=source" data-settings-link>Return to source review</a></p>
       <div id="microsoftConnectionHost" hidden></div>
       <section id="connectionPreferences" class="settings-group" aria-labelledby="preferencesTitle">
       <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
@@ -104,7 +104,7 @@ export const settingsMarkup = `
       </section>
       ${sourceCollectionMarkup}
       <div id="settingsRefreshSlot"></div>
-      <p id="settingsStatusLink" class="settings-status-link"><a href="#collection-status" data-settings-link>View collection status</a></p>
+      <p id="settingsStatusLink" class="settings-status-link"><a href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
@@ -114,11 +114,11 @@ export const settingsMarkup = `
       <details id="activityResultHelp" class="settings-advanced"><summary>What does a successful result mean?</summary><p>The tool reported success. That does not tell you whether the answer was correct or the whole task finished. Graph requests inside hosted Work IQ are not visible in local chat logs.</p></details>
     </section>
     <section class="settings-group" aria-labelledby="historyHelpTitle">
-      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Check which chats WIRE could read. Changing a date filter does not collect more history.</p></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
+      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Check which chats WIRE could read. Changing a date filter does not collect more history.</p></div><a class="button-link" href="/collection-status" data-settings-link>Open collection status</a></div>
     </section>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link" href="/collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
+    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="/" data-settings-link>Open Activity in Analyze</a></details>
+    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="/" data-settings-link>Open Activity in Analyze</a></details>
     <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search uses saved activity and reports. Check collection status for missing history.</p></details>
   </section>
   </div>
@@ -134,7 +134,7 @@ export const settingsMarkup = `
     <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
     <p id="collectionCoveragePending" class="settings-help" hidden></p>
-    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=source-access&setting=source-paths" data-settings-link>Source access</a><a id="collectionHistoryLink" href="#settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="#settings?section=troubleshooting" data-settings-link>Help &amp; status</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="/settings?section=source-access&setting=source-paths" data-settings-link>Source access</a><a id="collectionHistoryLink" href="/settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="/settings?section=troubleshooting" data-settings-link>Help &amp; status</a><a href="/" data-settings-link>Go to Analyze</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
     <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>
@@ -159,7 +159,7 @@ export const settingsMarkup = `
     <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open to read the last saved diagnostic.</p>
     <p id="recorderEvidence" class="settings-help" hidden></p>
     <p id="recorderStorageWarning" class="notice error" role="status" hidden></p>
-    <a id="recorderResultLink" class="text-link" href="#home?layer=http" hidden>View HTTP recorder evidence</a>
+    <a id="recorderResultLink" class="text-link" href="/?layer=http" hidden>View HTTP recorder evidence</a>
   </details>
 </section>`;
 

@@ -356,7 +356,7 @@ export async function runHistoryInvestigation({ expectedAccount, authorizationRe
                 });
                 if (refuseStopped()) return;
                 emit({ type: "normal-entry-ready", operationId, url: runtime.url, candidate,
-                    settingsUrl: runtime.url + "#settings?section=connection&setting=microsoft-connection",
+                    settingsUrl: new URL("/settings?section=connection&setting=microsoft-connection", runtime.url).href,
                     route: "Settings > Microsoft > Connect", scope: "both-source-list-responses-no-detail", acquisitionEnabled: false,
                     microsoft: "not-started", preparationClose: preparationControl ? "owned-ipc" : "original-process-cancellation",
                     userVisibility: "unconfirmed",

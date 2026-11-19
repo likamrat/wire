@@ -17,7 +17,10 @@ original history, grant permission, render UI or persist an index.
 | Saved comparison | Verified frozen manifest and compatibility reader | Exact independent saved comparison, not its source reports' current contents |
 | View/setting | Fixed current navigation/settings registry | Reveal/navigate only; never click a control or open approval |
 
-No source-path or live permission DOM values become setting text.
+View and setting targets use public page paths. Targets derived from record IDs,
+calls, tool names or service names are private navigation descriptors; do not
+copy them into a public link path or query string. No source-path or live permission
+DOM values become setting text.
 
 | Text or identity | Rule |
 | --- | --- |

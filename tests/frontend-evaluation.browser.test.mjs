@@ -99,7 +99,7 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
         await mkdir(proofs, { recursive: true });
         await page.screenshot({ path: path.join(proofs, `compact-${phase}-light-full.png`), fullPage: true });
     }
-    const card = page.locator('#activityList .activity-card:has(.request-card-open[href*="review-plural-activity"])');
+    const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const promptLink = card.locator(".request-card-open");
     await expect(card).toContainText("Review the Cedar handover");
     await expect(card.locator(".request-card-exception")).toHaveText(["workiq-retrieve failed", /result: HTTP 403/]);
@@ -237,7 +237,7 @@ test("the prompt leads and a separate evidence link names the scoped failure", a
 
 test("plural reading groups call identities and each call's returned evidence without singleton paging", async t => {
     const { page } = await setup(t, "react", reviewRecords());
-    await page.locator('#activityList .request-card-open[href*="review-plural-activity"]').click();
+    await page.locator('#activityList [data-view-key="request:review-plural-activity"] .request-card-open').click();
     const calls = page.locator('#requestContent [data-reader-section=activity] .reader-call-row');
     await expect(calls).toHaveCount(4);
     await expect(calls.first().locator(".reader-call-identity-line")).toContainText("Call #1");
@@ -250,7 +250,7 @@ test("plural reading groups call identities and each call's returned evidence wi
         await page.locator("#closeContextSidebar").click();
         await page.setViewportSize({ width: 1440, height: 1000 });
         await chooseTheme(page, theme);
-        await page.locator('#activityList .request-card-open[href*="review-plural-activity"]').click();
+        await page.locator('#activityList [data-view-key="request:review-plural-activity"] .request-card-open').click();
         await page.setViewportSize({ width: 390, height: 844 });
         await calls.nth(2).locator(".reader-call-toggle").evaluate(node => node.scrollIntoView({ block: "start" }));
         await capture(page, "visual-reader-long-narrow-" + theme);
@@ -264,7 +264,7 @@ test("plural reading groups call identities and each call's returned evidence wi
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.locator("#closeContextSidebar").click();
-    await expect(page.locator('#activityList .request-card-open[href*="review-plural-activity"]')).toBeFocused();
+    await expect(page.locator('#activityList [data-view-key="request:review-plural-activity"] .request-card-open')).toBeFocused();
 });
 
 test("narrow outcomes align three readable rows and four breakdowns form paired columns", async t => {
@@ -549,7 +549,9 @@ test("literal Search opens its exact interaction and returns to the current quer
     await hit.focus(); await hit.press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await expect(page.locator("#requestContent")).toContainText("Cedar");
-    await page.locator("#closeContextSidebar").click();
+    assert.deepEqual([new URL(page.url()).pathname, new URL(page.url()).hash], ["/request", ""]);
+    assert.doesNotMatch(await page.evaluate(() => location.href + JSON.stringify(history.state)), /Cedar|review-call|search-0/i);
+    await page.goBack();
     await expect(input).toHaveValue("Cedar");
     await expect(hit).toBeFocused();
     await capture(page, "react-search-return");

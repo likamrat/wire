@@ -2309,7 +2309,7 @@ for (const scenario of ["initializer", "sections", "sections-old-cohort", "docum
                         assert.equal(event.microsoft, "not-started");
                         assert.equal(event.userVisibility, "unconfirmed");
                         assert.equal(event.preparationClose, "owned-ipc");
-                        assert.equal(event.settingsUrl, event.url + "#settings?section=connection&setting=microsoft-connection");
+                        assert.equal(event.settingsUrl, new URL(event.url).origin + "/settings?section=connection&setting=microsoft-connection");
                         const origin = new URL(event.url).origin;
                         const custody = JSON.parse(await readFile(outputFile + ".custody", "utf8"));
                         const emptyCopilot = path.join(custody.root, "empty-copilot"), emptyGitHub = path.join(custody.root, "empty-github");

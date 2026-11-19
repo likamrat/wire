@@ -555,7 +555,7 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                     ? "Reply-saving status needs confirmation. Check the saved result in Settings."
                     : `Saving is off${defaultOff ? " by default" : ""}. The original Copilot chat may still have the reply.`, "reader-response-note");
                 const settings = el("a", "Reply settings", "text-link");
-                settings.href = "#settings?section=privacy";
+                settings.href = "/settings?section=privacy";
                 note.append(" ", settings);
                 host.append(note);
             } else if (contentFirst && !recordedAvailable) {

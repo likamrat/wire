@@ -29,7 +29,7 @@ grant backend authority.
 
 | Entry | Contract |
 | --- | --- |
-| `GET /` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability |
+| `GET` of `/`, `/analyze`, `/trends`, `/reports`, `/compare`, `/settings`, `/request` or `/collection-status` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability; named pages also accept a single trailing slash |
 | `GET /` with the exact `localhost` host and actual port, no Origin header | Once ready, empty redirect to the canonical root; no capability or private content |
 | `POST /api/session` | Independent-client handshake; exactly `{}` and `X-Wire-Session-Protocol: 1` |
 | Invalid/missing/duplicate protocol | 409 `WIRE_CLIENT_UPDATE_REQUIRED`, before allocating authority |
@@ -43,8 +43,9 @@ mode. Explicit unbound is a validated compatibility mode, never inferred from
 a missing or failed watch. Enforced renewal cannot silently downgrade.
 
 Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
-random capabilities, TTL and the 128-panel limit still apply. Repeated `GET /`
-allocates panels; closing a tab does not release authority before its TTL.
+random capabilities, TTL and the 128-panel limit still apply. Each page GET
+allocates a panel; closing a tab does not release authority before its TTL.
+There is no general HTML fallback for other paths, files, APIs or methods.
 The localhost spelling is only an entry redirect for root navigation; fragments
 stay with the browser. It is not an alternate API/write origin. Requests with
 an Origin header, a non-root path or non-navigation fetch metadata retain the

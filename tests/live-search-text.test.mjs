@@ -149,7 +149,7 @@ test("current timing navigation indexes tool latency wording at its authoritativ
     assert.equal(result.matches.total, 1);
     const hit = result.matches.hits[0];
     assert.equal(hit.title, "Recorded timing");
-    assert.equal(hit.target.href, "#analyze");
+    assert.equal(hit.target.href, "/");
     assert.equal(hit.target.focus, "activityView");
     const { start, end, excerptStart } = hit.textMatch;
     assert.equal(hit.textMatch.field, "content");

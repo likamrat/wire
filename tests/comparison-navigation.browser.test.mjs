@@ -140,7 +140,7 @@ test("primary comparison opens complete days independently, keeps chart membersh
     const { page, comparisons } = await setup(t);
     const compare = page.getByRole("link", { name: "Compare", exact: true });
     await expect(compare).toHaveAttribute("id", "comparePeriods");
-    await expect(compare).toHaveAttribute("href", /^#analyze\?compare=periods(?:&|$)/);
+    await expect(compare).toHaveAttribute("href", /^\/compare(?:\?|$)/);
     await expect(compare).toHaveText("Compare");
     await compare.click(); await ready(page);
     await expect(page.locator("#pageTitle")).toHaveText("Compare");
@@ -195,12 +195,12 @@ test("custom cancellation, immediate refinements, exact hover and both themes re
     const { page, comparisons } = await setup(t, "#analyze?compare=periods");
     await ready(page);
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
-    const accepted = comparisons.at(-1), hash = new URL(page.url()).hash;
+    const accepted = comparisons.at(-1), address = page.url();
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Period A from", { exact: true }).fill("2026-04-01");
     await expect(page.getByRole("button", { name: "Use dates", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    assert.equal(new URL(page.url()).hash, hash);
+    assert.equal(page.url(), address);
     await page.locator("#openAnalyzeFilters").click();
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
     await closeAnalyzeFilters(page); await ready(page);
@@ -368,7 +368,7 @@ test("global Search is independent and an unavailable analytical Search never br
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
     await expect(page.locator("#periodComparisonResults")).toBeEmpty();
     assert.equal(comparisons.length, reads);
-    assert.equal(new URL(page.url()).hash.includes("workiq"), false);
+    assert.equal(page.url().includes("workiq"), false);
 });
 test("overlap, one empty side and two empty sides retain exact membership and report eligibility", { timeout: 60000 }, async t => {
     const { page, comparisons } = await setup(t, "#analyze?compare=periods");
@@ -421,8 +421,8 @@ for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exa
     assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
     assert.equal(page.url().includes("physician"), false);
     const locationKey = () => {
-        const [view, query] = new URL(page.url()).hash.split("?"), parameters = new URLSearchParams(query);
-        parameters.sort(); return view + "?" + parameters;
+        const { pathname, searchParams } = new URL(page.url());
+        searchParams.sort(); return pathname + "?" + searchParams;
     };
     const pair = comparisons.at(-1), origin = locationKey();
     await page.getByRole("button", { name: "View calls", exact: true }).click();
@@ -432,7 +432,8 @@ for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exa
         await call.click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
-        assert.match(await page.evaluate(() => history.state.evidenceView.returnToResults.analysisKey), /^[a-f0-9-]{36}$/);
+        assert.match(await page.evaluate(() => history.state.evidenceView.privateKey), /^[a-f0-9-]{36}$/);
+        assert.equal(await page.evaluate(() => Object.hasOwn(history.state.evidenceView, "returnToResults")), false);
         if (back === "close") await page.locator("#closeContextSidebar").click();
         else await page.goBack();
         await ready(page);
@@ -455,7 +456,7 @@ for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exa
         assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
     }
     await page.reload();
-    await expect(page.locator("#message")).toContainText("private Search selection is unavailable");
+    await expect(page.locator("#message")).toContainText(/private (Search selection is unavailable|view|selection could not be restored)/i);
     await expect(page.locator("#workspace")).toBeHidden();
 });
 test("incomplete public comparison dates require an explicit choice without dispatch or fallback", { timeout: 30000 }, async t => {

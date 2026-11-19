@@ -62,9 +62,9 @@ export function searchHitPresentation(hit, { showSource = true } = {}) {
         ].filter(part => part.text);
     }
     if (field !== "source" && hit.type === "view" && hit.target?.kind === "route" && typeof hit.target.href === "string") {
-        const names = { analyze: "Analyze", reports: "Reports", settings: "Settings", "collection-status": "Collection status" };
-        const view = hit.target.href.slice(1).split("?")[0];
-        if (Object.hasOwn(names, view)) shown.source = names[view] === hit.title ? [] : plain(names[view]);
+        const names = { "/": "Analyze", "/compare": "Compare", "/reports": "Reports", "/settings": "Settings", "/collection-status": "Collection status" };
+        const path = hit.target.href.split("?")[0];
+        if (Object.hasOwn(names, path)) shown.source = names[path] === hit.title ? [] : plain(names[path]);
     }
     if (!showSource && field !== "source") shown.source = [];
     return shown;

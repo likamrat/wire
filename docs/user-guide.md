@@ -6,6 +6,16 @@ reports from your local GitHub Copilot app history.
 Follow [setup](../README.md#getting-started) first. For WSL or a second instance beside
 Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
+**Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
+Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
+`/compare` and `/settings`). You can bookmark those pages, a Settings category,
+or a public date/filter view. Older WIRE links such as `/#trends` still open.
+
+Search words, individual activity records and source-specific filters are not
+part of a shareable address. Use **Back** in the same tab to return to them.
+If you refresh or copy a private view, WIRE may ask you to reopen its original
+record or repeat your Search rather than showing a broader result.
+
 ## Connect local history
 
 WIRE prompts you to connect when you first open an unconfigured instance.

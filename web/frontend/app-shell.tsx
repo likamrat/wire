@@ -92,10 +92,10 @@ function Activity() {
         </div>
         <div className="activity-evidence-context">
             <details id="coverage"><summary>Scope details</summary><p id="coverageBody" />
-                <a href="#collection-status?setting=collection-details" data-settings-link="">Collection status</a>
+                <a href="/collection-status?setting=collection-details" data-settings-link="">Collection status</a>
             </details>
             <div id="coverageNotice" hidden><span id="activityCoverageGap" />{" "}
-                <a href="#collection-status?setting=collection-details" data-settings-link="">Collection status</a>
+                <a href="/collection-status?setting=collection-details" data-settings-link="">Collection status</a>
             </div>
         </div>
         <div id="activityList" /><div id="analyzeResultActions" className="analyze-result-actions" />
@@ -145,7 +145,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
 }) {
     const state = useSyncExternalStore(workspace?.subscribe ?? emptySubscribe, workspace?.getSnapshot ?? emptySnapshot);
     const nav = (name: string, label: string, id?: string) => <a id={id} key={name}
-        href={name === "compare" ? "#analyze?compare=periods" : "#" + name} data-nav={name}
+        href={name === "analyze" ? "/" : "/" + name} data-nav={name}
         aria-current={state.active === name ? "page" : undefined}
         onClick={event => navigate(event.currentTarget, event.nativeEvent)}><span className="navigation-label">{label}</span></a>;
     return <>
@@ -163,7 +163,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             </div>
         </header>
         {createPortal(<>
-            <a className="brand-home" href="#analyze" data-nav="analyze" aria-label="WIRE - Work IQ Request Explorer"
+            <a className="brand-home" href="/" data-nav="analyze" aria-label="WIRE - Work IQ Request Explorer"
                 onClick={event => navigate(event.currentTarget, event.nativeEvent)}
                 dangerouslySetInnerHTML={{ __html: ports.brandMarkup }} />
             <button id="navigationCollapse" className="navigation-collapse" type="button"
@@ -181,7 +181,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
                 <h2 className="navigation-group-label">Analyze tools</h2><div id="analyzeReturnActions" /><div id="analyzeToolActions" />
             </section>
             <div className="navigation-bottom"><nav className="primary-navigation" aria-label="Help navigation">
-                <a id="openEvidenceHelp" href="#settings?section=troubleshooting" aria-label="Help & status" data-settings-link><span className="navigation-label">Help &amp; status</span></a>
+                <a id="openEvidenceHelp" href="/settings?section=troubleshooting" aria-label="Help & status" data-settings-link><span className="navigation-label">Help &amp; status</span></a>
             </nav><div id="navigationFooter" className="navigation-footer">
                 <div id="wireAccountEntry" hidden /><nav className="primary-navigation" aria-label="Utility navigation">{nav("settings", "Settings")}</nav>
             </div></div>
@@ -207,7 +207,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
         {createPortal(<>
             <NativeHost node={ports.emptyScope} /><Analyze />
             <NativeHost id="frontendAnalyzeQualification" node={ports.scope} />
-            <div className="chart-actions"><a id="exploreLink" className="text-link" href="#activity" hidden>Explore the requests behind this chart</a></div>
+            <div className="chart-actions"><a id="exploreLink" className="text-link" href="/" hidden>Explore the requests behind this chart</a></div>
         </>, ports.home)}
         {createPortal(<Activity />, ports.activity)}
         {createPortal(<Filters ports={ports} />, ports.filters)}
