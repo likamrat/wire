@@ -52,6 +52,10 @@ function startupOptions(args) {
         { code: "WIRE_START_OPTIONS_INVALID" });
         if (!seen.has("--port")) options.port = 4100;
         if (!seen.has("--development-frontend")) options.frontend = "react";
+    } else if (options.frontend === "react" && !options.developmentMicrosoft && !process.env.WORKIQ_EVIDENCE_DATA_DIR) {
+        throw Object.assign(new Error(
+            "React evaluation needs an explicitly owned store. Use npm run dev for this checkout, or set WORKIQ_EVIDENCE_DATA_DIR before starting."),
+        { code: "WIRE_START_OPTIONS_INVALID" });
     }
     return options;
 }

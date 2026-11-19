@@ -144,13 +144,12 @@ bootstrap remains private and uncached. A missing build or a source/build
 mismatch fails explicitly; rebuild rather than falling back to older code.
 Pre-paint theme/navigation preferences stay in the small inline bootstrap.
 
-The React evaluation is opt-in for development:
-
-```text
-npm start -- --development-frontend react
-```
-
-Use an explicitly owned development store, not an existing live instance.
+For React evaluation, use the [feature checkout launcher](#run-a-feature-checkout-beside-main).
+For an already managed, explicitly owned evaluation store, set
+`WORKIQ_EVIDENCE_DATA_DIR` to its absolute path and use
+`npm start -- --development-frontend react --port <unused-port>`.
+Without an explicit store, this lower-level React command refuses startup;
+it never silently adopts the normal default store.
 The single React shell composes the header/navigation, Analyze overview and
 activity, filter panel, Search and contextual reader. Existing chart, evidence,
 select-control and Search controllers are explicit native DOM adapters, not

@@ -75,7 +75,7 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
         child.once("error", error => finish(error));
         child.stderr.on("data", bytes => {
             stderr += bytes;
-            if (/could not start|requested port is already owned|Unset WORKIQ_EVIDENCE_DATA_DIR/.test(stderr)) {
+            if (/could not start|requested port is already owned|Unset WORKIQ_EVIDENCE_DATA_DIR|React evaluation needs an explicitly owned store/.test(stderr)) {
                 if (expectFailure && child.connected) child.disconnect();
                 else finish(new Error(stderr));
             }
@@ -192,5 +192,8 @@ test("contributor launcher owns a stable checkout store, shares the enforced gat
     await assert.rejects(readdir(path.join(app.root, "WorkIQEvidence", "data")), { code: "ENOENT" });
     const refused = await launch(app, args, { expectFailure: true });
     assert.match(refused.stderr, /Unset WORKIQ_EVIDENCE_DATA_DIR/);
+    const unsafe = await launch(app, ["--development-frontend", "react", "--port", "0"], { expectFailure: true, dataDir: "" });
+    assert.match(unsafe.stderr, /React evaluation needs an explicitly owned store/);
+    await assert.rejects(readdir(path.join(app.root, "WorkIQEvidence", "data")), { code: "ENOENT" });
     assert.equal((await loadBoardState(app.context)).evidence[0].scenarioId, "invented-port-record");
 });
