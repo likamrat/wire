@@ -104,7 +104,7 @@ export const selectStyles = `
  max-width:min(28rem,var(--select-available-width));max-height:min(28rem,calc(100dvh - 16px));
  padding:8px;border-radius:var(--select-radius);background:var(--paper);box-shadow:var(--surface-shadow);
 }
-.select-popup-filter .select-option {grid-template-columns:minmax(0,1fr) 32px;column-gap:16px;padding:8px 12px;border-radius:var(--radius-control)}
+.select-popup-filter .select-option {grid-template-columns:minmax(0,1fr) 32px;column-gap:16px;padding:var(--space-sm) var(--choice-row-inset);border-radius:var(--radius-control)}
 .select-popup-filter .select-option:has(.select-option-count) {grid-template-columns:minmax(0,1fr) auto 32px}
 .select-option-count {max-inline-size:10ch;font-variant-numeric:tabular-nums;color:var(--muted);font-size:var(--type-caption);text-align:end}
 .select-popup-filter .select-option,

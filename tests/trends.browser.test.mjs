@@ -300,11 +300,18 @@ test("short Trends legend pairs stay together at narrow widths", { timeout: 3000
     await dates(page, "2026-08-01", "2026-08-01");
     for (const [family, label] of [["tools", "fetch"], ["timing", "Median"]]) {
         const row = page.locator(`[data-family="${family}"] .trends-legend-row`).filter({ has: page.getByRole("checkbox", { name: `Show ${label}`, exact: true }) });
-        const gap = await row.evaluate(node => {
-            const name = node.querySelector(".trends-series-label").getBoundingClientRect(), value = node.querySelector(".trends-legend-value").getBoundingClientRect();
-            return Math.abs(name.y + name.height / 2 - value.y - value.height / 2);
+        const target = row.locator(".trends-series");
+        await target.hover();
+        const layout = await row.evaluate(node => {
+            const rect = selector => node.querySelector(selector).getBoundingClientRect();
+            const name = rect(".trends-series-label"), value = rect(".trends-legend-value"), hit = rect("label"), input = rect("input");
+            return { gap: Math.abs(name.y + name.height / 2 - value.y - value.height / 2),
+                inset: input.left - hit.left, square: input.height === input.width, height: hit.height,
+                paint: getComputedStyle(node.querySelector("label")).backgroundColor };
         });
-        assert.ok(gap < 2, `${label} and its value have separated by ${gap}px`);
+        assert.ok(layout.gap < 2, `${label} and its value have separated by ${layout.gap}px`);
+        assert.ok(layout.square && layout.height >= 44 && layout.inset === 8, JSON.stringify(layout));
+        assert.notEqual(layout.paint, "rgba(0, 0, 0, 0)");
     }
 });
 

@@ -99,6 +99,14 @@ test("search control: capsule and page geometry stay fixed while live results ap
             await input.pressSequentially("Theme");
             await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
             await expect(page.locator("#wireSearchPanel")).toBeVisible();
+            const edges = await page.locator("#wireSearchResults button").evaluate(node => {
+                const left = selector => node.querySelector(selector).getBoundingClientRect().left;
+                return { gutter: left(".wire-search-type-icon") - node.getBoundingClientRect().left,
+                    title: left(".wire-search-body"),
+                    group: node.closest("li").querySelector(".wire-search-group-label").getBoundingClientRect().left };
+            });
+            assert.equal(edges.gutter, 12);
+            assert.equal(edges.title, edges.group, "Group heading stays on the result text axis, not the glyph axis");
             const result = await geometry(page);
             assert.equal(result.associated, true);
             assert.deepEqual(result.input, closed.input, "Typing and results must not change field position or size");

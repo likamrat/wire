@@ -112,12 +112,12 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 #wireSearchMatchesTitle {display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-xs) var(--space-md)}
 #wireSearchMatchesTitle>span {min-width:0;overflow-wrap:anywhere}
 #wireSearchCount {color:var(--ink)}
-.wire-search-set {margin:0;min-width:0}
-.wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px 6px 4px 34px;font:inherit;color:var(--muted)}
+.wire-search-set {--result-glyph-column:20px;--result-text-inset:calc(var(--choice-row-inset) + var(--result-glyph-column) + var(--space-sm));margin:0;min-width:0}
+.wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px var(--choice-row-inset) 4px var(--result-text-inset);font:inherit;color:var(--muted)}
 .wire-search-results {padding:0;margin:0;list-style:none}
 .wire-search-results>li+li {margin-top:2px}
-.wire-search-group-label {margin:10px 6px 2px 34px;font:inherit;color:var(--search-category)}
-#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px 6px;transition:var(--control-paint-transition)}
+.wire-search-group-label {margin:10px var(--choice-row-inset) 2px var(--result-text-inset);font:inherit;color:var(--search-category)}
+#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:var(--result-glyph-column) minmax(0,1fr);align-items:start;gap:var(--space-sm);width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px var(--choice-row-inset);transition:var(--control-paint-transition)}
 #wireSearchPanel .wire-search-hit:hover:not(:disabled) {background:var(--hover)}
 #wireSearchPanel .wire-search-hit:active:not(:disabled) {background:var(--pill-pressed)}
 @media(prefers-reduced-motion:reduce) {#wireSearchPanel .wire-search-hit {transition:none}}

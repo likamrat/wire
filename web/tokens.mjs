@@ -138,6 +138,7 @@ export const screenTokens = `${tokens}
  --radius:12px;--radius-small:8px;--radius-dialog:12px;--radius-field:8px;
  --pill-weight:var(--weight-regular);
  --icon-navigation-size:1.125rem;--icon-utility-size:18px;
+ --choice-row-inset:var(--space-md);
  --control-face-inset:6px;--control-hover-duration:160ms;--control-reveal-duration:140ms;
  --control-paint-transition:background-color var(--control-hover-duration) ease-out,border-color var(--control-hover-duration) ease-out,color var(--control-hover-duration) ease-out;
  --control-sheen:linear-gradient(180deg,#ffffff06,transparent);--control-sheen-edge:inset 0 1px 0 #ffffff0d;

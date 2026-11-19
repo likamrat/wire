@@ -120,6 +120,11 @@ enlarged text. Number fields size to their page digits rather than taking a
 wide fixed slot. A direct page jump keeps its native validation, Enter behavior
 and visible Go to page action. PDF paging keeps its existing commit behavior.
 Checkboxes and switches use the setting-state color, not outcome green.
+On painted choice rows, leave the same 12px inside the leading and trailing
+edges as in filter menus. Align a leading radio or checkbox with the **first
+line of the label**, not the middle of its explanation. The label owns the
+full target; enlarging the target should not stretch the glyph. Dense chart
+legends use the smaller 8px inset and keep their value tracks separate.
 Keep hover, pressed, selected and keyboard focus distinct; a smaller painted
 control is not permission to remove its focus ring or hit area.
 

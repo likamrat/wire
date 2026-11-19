@@ -1,3 +1,5 @@
+const optionRow = ".report-options-popover :is(.scope-choice,.prompt-choice,.format-choices label)";
+
 export const reportJourneyStyles = `
 #workspace:has(>#reportsView:not([hidden])){--report-content-width:var(--task-content-width)}
 #workspace:has(>#reportsView:not([hidden]) #reportCreatePanel:not([hidden]) #reportStage3:not([hidden]) #reportReviewBody:not([hidden])),
@@ -478,10 +480,8 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-selection-body{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:16px 20px}
 #reportActivityOptions :is(#reportList,.report-request-page){max-height:none;overflow:visible}
 #reportActivityOptions .scope-choices{display:grid;gap:4px;grid-template-columns:repeat(3,minmax(0,1fr))}
-#reportActivityOptions .scope-choice{min-height:44px;padding:8px;margin:0;border:0;background:transparent}
 #reportActivityOptions .scope-choice>span{display:flex;flex-wrap:wrap;gap:0 8px;align-items:baseline}
 #reportActivityOptions .scope-choice :is(strong,small){font:inherit}
-#reportActivityOptions .scope-choice:has(input:checked){box-shadow:none;background:var(--accent-soft)}
 #reportActivityOptions .scope-choice-help{margin:8px 0 12px}
 #reportActivityOptions #reportActivityActions{position:static;flex:none;margin:0;padding:12px 20px;background:var(--floating-paper)}
 @media(max-width:700px){
@@ -491,13 +491,19 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
  #reportActivityOptions .report-activity-summary{flex:1 1 10rem;font-size:var(--type-small)}
 }
 .report-options-popover :is(fieldset,.report-author-choice){margin:0 0 20px;border:0;padding:0;min-width:0}
-.report-options-popover .prompt-choice{min-height:44px;padding:8px 0;background:transparent;border:0;align-items:start}
+${optionRow}{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:start;align-content:center;gap:var(--space-md);min-width:0;min-height:44px;margin:0;padding:var(--space-sm) var(--choice-row-inset);border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font-weight:400;line-height:var(--leading-control);cursor:pointer}
+${optionRow}>input:is([type=checkbox],[type=radio]){width:18px;height:18px;min-height:0;padding:0;margin:0;margin-block-start:max(0px,calc((1lh - 18px)/2));font:inherit;accent-color:var(--toggle-on)}
+${optionRow}:has(>input:checked){background:var(--accent-soft);color:var(--ink);box-shadow:none}
+${optionRow}:hover:has(>input:enabled){background:var(--hover)}
+${optionRow}:active:has(>input:enabled){background:var(--accent-pressed)}
+${optionRow}:has(>input:focus-visible){outline:2px solid var(--focus);outline-offset:-2px}
+${optionRow}:has(>input:focus-visible)>input{outline:none}
+${optionRow}:has(>input:disabled){cursor:not-allowed;color:var(--muted)}
+@media(forced-colors:active){${optionRow}:has(>input:focus-visible){outline-color:Highlight}}
 .report-options-popover .prompt-choice strong{font-weight:500}
 .report-options-popover :is(.report-field,.report-author-choice){display:grid;gap:12px;margin:18px 0}
 .report-options-popover :is(input:not([type=checkbox]):not([type=radio]),select,textarea){width:100%;min-width:0;min-height:44px}
-.report-options-popover .prompt-choice:has(input:checked){box-shadow:none;background:var(--accent-soft)}
-.report-options-popover .format-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.report-options-popover .format-choices label{padding:10px 0;border:0;background:transparent;justify-content:start;font-weight:400}
+.report-options-popover .format-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));grid-auto-rows:auto;gap:var(--space-xs) var(--space-sm)}
 .report-options-popover .format-choices label::before{content:none}
 .report-options-popover #additionalMasking{margin-top:18px}
 .report-options-popover #additionalMasking>label{margin:16px 0 12px}

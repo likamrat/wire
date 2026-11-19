@@ -505,6 +505,66 @@ test("creation text choice applies to the first report without a setup or previe
     assert.deepEqual(errors, []);
 });
 
+test("report menus keep the native choice inside its paint and aligned with the first line", { timeout: 30000 }, async t => {
+    const { page, requests } = await setup(t, { frontend: "bundled" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "150%"; });
+    await page.evaluate(() => document.fonts.ready);
+    async function inspectRows(selector) {
+        const rows = page.locator(selector);
+        const boxes = await rows.evaluateAll(nodes => nodes.map(node => {
+            const input = node.querySelector("input").getBoundingClientRect(), row = node.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(node.querySelector("strong") || node.lastChild);
+            const line = range.getClientRects()[0];
+            return { inset: input.left - row.left, gap: line.left - input.right,
+                lineOffset: input.top + input.height / 2 - line.top - line.height / 2,
+                glyph: [input.width, input.height], height: row.height, overflow: node.scrollWidth - node.clientWidth };
+        }));
+        assert.ok(boxes.length >= 2);
+        for (const box of boxes) {
+            assert.deepEqual(box.glyph, [18, 18], "The native glyph must not acquire the target's height");
+            assert.ok(box.height >= 44 && box.overflow <= 1 && Math.abs(box.lineOffset) <= 2, JSON.stringify(box));
+            assert.equal(box.inset, 12, "Match the interior gutter of the painted filter options");
+            assert.equal(box.gap, box.inset, "Balance the interior gutter and distance to the label");
+        }
+        return rows;
+    }
+    await page.locator("#reportPrivacyChoice").click();
+    const modes = await inspectRows("#reportPrivacyOptions .prompt-choice");
+    const row = modes.first(), input = row.locator("input"), fill = () => row.evaluate(node => getComputedStyle(node).backgroundColor);
+    await row.hover(); const hover = await fill(); assert.notEqual(hover, "rgba(0, 0, 0, 0)");
+    await page.mouse.down(); assert.notEqual(await fill(), hover); await page.mouse.up();
+    await expect(input).toBeChecked();
+    await page.keyboard.press("ArrowDown");
+    const next = modes.nth(1);
+    await expect(next.locator("input")).toBeFocused();
+    await expect(next.locator("input")).toBeChecked();
+    await expect(next).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Escape");
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
+    await prepare(page, "all");
+    await page.getByRole("button", { name: /^Save as:/ }).click();
+    await inspectRows("#reportFileOptions .format-choices label");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const inclusion = await inspectRows("#reportIncludeOptions .prompt-choice");
+    const count = requests.filter(request => request.path === "/api/preview").length;
+    const changed = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await inclusion.first().click({ position: { x: 4, y: 12 } });
+    await changed; await expect(inclusion.first().locator("input")).toBeChecked();
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, count + 1);
+    await page.keyboard.press("Escape");
+    await page.locator("#reportPrivacyChoice").click();
+    const omitted = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await modes.first().click(); await omitted;
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const linked = page.locator("label:has(>#reportRecordedContext)");
+    await expect(linked.locator("input")).toBeDisabled();
+    await linked.hover(); await expect(linked).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});
+
 test("privacy choices have distinct readable state colors and labels in both themes", { timeout: 30000 }, async t => {
     const { page, requests, errors } = await setup(t);
     const luminance = channels => channels.map(value => {

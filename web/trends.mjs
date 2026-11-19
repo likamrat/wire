@@ -660,8 +660,14 @@ export const trendsStyles = `
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}
 .trends-legend-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;min-width:0;padding-bottom:6px}
-.trends-series{display:flex;flex:1 1 auto;width:max-content;align-items:center;gap:6px;min-height:44px;min-width:0;max-width:100%;cursor:pointer}
-.trends-series input{accent-color:var(--toggle-on);flex:none}.trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.trends-series{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-content:center;align-items:start;flex:1 1 auto;width:max-content;gap:6px;min-height:44px;min-width:0;max-width:100%;padding:var(--space-xs) var(--space-sm);border-radius:var(--radius-small);cursor:pointer}
+.trends-series:hover:has(input:enabled){background:var(--hover)}
+.trends-series:active:has(input:enabled){background:var(--accent-pressed)}
+.trends-series:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:-2px}
+.trends-series:has(input:focus-visible)>input{outline:none}
+.trends-series input{width:18px;height:18px;min-height:0;margin:0;margin-block-start:max(0px,calc((1lh - 18px)/2));font:inherit;accent-color:var(--toggle-on)}
+.trends-series>.trends-sample{margin-block-start:max(0px,calc((1lh - 12px)/2))}
+.trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .trends-sample{display:inline-block;width:20px;height:12px;flex:none}
 .trends-legend-value{flex:none;margin-inline-start:auto;font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trends-value-track{display:block;height:4px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
