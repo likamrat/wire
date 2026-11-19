@@ -149,19 +149,17 @@ test("homepage purpose, local-history limits, calendar captions, page totals and
     await page.goto(url); await ready(page);
     assert.equal(await page.locator("#pageIntro").innerText(), "Explore recorded activity and prepare feedback reports.");
     assert.ok((await page.locator("#pageIntro").innerText()).split(/\s+/).length <= 20);
-    const purpose = page.locator("#evidenceExplanation");
+    const purpose = page.locator("#coverageBody");
     assert.equal(await purpose.isVisible(), false);
     await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
-    assert.match(await purpose.innerText(), /Work IQ activity shows tool calls and recorded results/);
-    assert.match(await purpose.innerText(), /does not confirm that the whole task was completed correctly/);
+    assert.match(await purpose.innerText(), /interactions? from .*Copilot chat/);
     assert.match(await page.locator("#collectionEvidenceDetails").textContent(), /tool name or service category does not prove a Graph request or HTTP status/);
     assert.equal(await purpose.locator("button,a").count(), 0, "Purpose adds no competing actions");
     assert.ok(await purpose.evaluate(node => Boolean(document.querySelector("#filters").compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)));
     await page.locator("#coverage>summary").click();
     assert.equal(await page.locator("#coverageNotice").isVisible(), false);
     const note = await page.locator("#coverageNotice").textContent();
-    assert.match(note, /retained evidence.*unavailable Copilot chat history.*gaps/);
-    assert.match(note, /Graph requests.*inside hosted Work IQ.*not visible in local logs/);
+    assert.doesNotMatch(note, /retained evidence.*unavailable Copilot chat history.*gaps|inside hosted Work IQ/);
     assert.doesNotMatch(note, /all.*failed|coverage is incomplete|remain unverified/i);
     for (const [bucket, header, meaning] of [
         ["day", "Date", /by day\./],

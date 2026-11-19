@@ -663,6 +663,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
 .card-evidence-link {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
 .card-evidence-link:hover {background:var(--hover)}.card-reading-actions .request-card-open-label {margin-inline-start:auto}
+.card-reading-actions .result-tone-failure {color:var(--danger)}
 .reader-call-secondary .card-identities {padding:0;border:0}
 .reader-section-jumps {display:flex;flex-wrap:wrap;gap:4px;padding-block-end:6px;border-bottom:1px solid var(--rule)}
 .reader-section-jumps button,.reader-returned-facts>summary {min-height:44px}

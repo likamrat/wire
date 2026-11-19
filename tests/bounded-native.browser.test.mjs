@@ -519,15 +519,16 @@ test("native time exact data follows the guide topic independently of the catego
 
 test("native Analyze uses ordinary outcome rings, tool bars, exact columns and recognizable interaction cards",
     { skip: !root }, async t => {
-        const { page } = await setup(t, { mainClient: true });
+        const { page } = await setup(t, { mainClient: true, long: true });
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
         await openAnalyzeFilters(page);
         await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork"); await closeAnalyzeFilters(page);
         await expect(page.locator("#outcomeChart .percentage-ring")).toBeVisible();
         await expect(page.locator("#percentageCharts [data-breakdown=tools] .percentage-bar")).toHaveCount(3);
-        await expect(page.locator("#activityList .request-card-prompt")).toHaveText("Read the invented records.");
-        await expect(page.locator("#activityList .request-card-categories")).toContainText("mcp__graph__CallGraph");
+        await expect(page.locator("#activityList .request-card-prompt")).toHaveText("Read the invented records. Include the pending approvals and returned results, explain which calls failed, and keep unavailable dates separate from recorded dates when comparing the saved conversations.");
+        await expect(page.locator("#activityList .card-identities")).toContainText("mcp__graph__CallGraph");
+        await expect(page.locator("#activityList .card-identities")).toContainText("Not identified in this record");
         await page.locator("#openChartReference").click();
         await expect(page.locator("#chartReferenceExplanation")).toContainText("3 tool calls");
         await page.locator("#chartReferenceShowData").click();

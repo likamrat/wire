@@ -119,7 +119,7 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
     const partial = reader.locator('[data-tool-call-id="review-call-2"]').first();
     await expect(partial).toContainText("The call was saved as partial.");
     await expect(partial).toContainText("No completion event or end time is retained.");
-    await expect(reader).toContainText("Not attributed to a target in this batch");
+    await expect(reader).toContainText("No path returned for this batch entry.");
     await expect(reader.getByRole("button", { name: /Copy/ }).first()).toBeVisible();
     await page.locator("#closeContextSidebar").click();
     await expect(promptLink).toBeFocused();
@@ -242,7 +242,7 @@ test("plural reading groups call identities and each call's returned evidence wi
     await expect(calls).toHaveCount(4);
     await expect(calls.first().locator(".reader-call-identity-line")).toContainText("Call #1");
     await expect(calls.first().locator(".returned-api-entries")).toContainText("AccessDenied");
-    await expect(calls.nth(2).locator(".returned-api-entries")).toContainText("Not attributed to a target in this batch");
+    await expect(calls.nth(2).locator(".returned-api-entries")).toContainText("No path returned for this batch entry.");
     await expect(page.locator("#requestContent .returned-api-entries .list-pager")).toHaveCount(0);
     await expect(page.locator("#requestContent .returned-entries-heading")).toHaveCount(2);
     await capture(page, "visual-reader-plural");

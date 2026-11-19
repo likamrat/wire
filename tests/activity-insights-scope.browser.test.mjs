@@ -194,7 +194,7 @@ test("WIRE-UX-004: result/service/date/project/chat scopes retain explicit whole
     await expect(page.locator("#periodResult")).toHaveText("1 Copilot chat / 1 request group with 1 Work IQ tool call.");
     await expect(page.locator("#activityInsights")).toContainText("2 / 2 calls timed");
     assert.equal(await page.locator("#activityInsights .assessment-scope").count(), 0);
-    await expect(page.locator("#coverageBody .activity-list-explanation")).toContainText("each matching group's full retained interaction");
+    await expect(page.locator("#coverageBody")).toContainText(/interactions? from/);
     checkMetrics(responses.filter(value => value.path.endsWith("/overview")).at(-1).data.data, oneExpected);
     await selectActivityOption(page, "outcomeFilter", ["failure", "unknown"]); await ready(page); await insightsReady(page);
     await expect(page.locator("#periodResult")).toHaveText("2 Copilot chats / 2 request groups with 2 Work IQ tool calls.");

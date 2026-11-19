@@ -58,11 +58,11 @@ test("initial shell keeps routine health in hidden Settings and technical copy i
     const shell = renderHtmlShell("synthetic", "entry-proof");
     assert.ok(shell.indexOf('id="pageTitle"') < shell.indexOf('id="pageIntro"'));
     assert.ok(shell.indexOf('id="settingsView"') < shell.indexOf('id="collectionStrip"'));
-    assert.ok(shell.indexOf('id="filters"') < shell.indexOf('id="evidenceExplanation"'));
+    assert.ok(shell.indexOf('id="activityView"') < shell.indexOf('id="coverage"'));
     const intro = /id="pageIntro">([^<]+)/.exec(shell)[1];
     assert.equal(intro.split(/\s+/).length, 7);
     assert.doesNotMatch(shell, /id="homePurpose"|class="collector-panel|id="collectionIssueLink"/);
-    assert.match(shell, /id="coverage"[^>]*><summary>About this evidence/);
+    assert.match(shell, /id="coverage"[^>]*><summary>Scope details/);
 });
 
 test("task-first entry fits both themes and 100/200% text before opening retained help", { timeout: 120000 }, async t => {
@@ -116,9 +116,9 @@ test("task-first entry fits both themes and 100/200% text before opening retaine
         for (const id of ["meaning", "serviceDefinitions", "coverage"]) {
             await page.locator(`#${id}>summary`).focus(); await page.keyboard.press("Enter");
         }
-        const copy = await page.locator("#evidenceExplanation").innerText();
-        assert.match(copy, /Work IQ activity shows tool calls and recorded results/);
-        assert.match(copy, /does not confirm that the whole task was completed correctly/);
+        const copy = await page.locator("#coverageBody").innerText();
+        assert.match(copy, /interactions? from .*Copilot chat/);
+        assert.doesNotMatch(copy, /whole task|Follow-ups with calls/);
         assert.match(await page.locator("#collectionEvidenceDetails").textContent(), /API metadata returned by a tool.*separate.*direct Graph request sites/);
         const clipping = await page.locator("#pageIntro,#evidenceExplanation,.result-definitions dd,#serviceDefinitions dd,.header-inner button,.primary-navigation a").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).flatMap(node => {
             const r = node.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(node);

@@ -172,8 +172,8 @@ test("service evidence explains significance at its call without warning on ordi
         await card("batch").click(); await settle();
         if (phase !== "before") {
             const batch = page.locator('[data-tool-call-id="batch-0"]');
-            await expect(batch.locator(".api-result-entry")).toContainText("Returned target not identified");
-            await expect(batch.locator(".api-result-entry")).toContainText("Not attributed to a target in this batch");
+            await expect(batch.locator(".api-result-entry")).toContainText("No path returned for this batch entry.");
+            await expect(batch.getByRole("button", { name: "About batch target" })).toHaveCount(1);
             if (proof) {
                 await batch.locator(".api-result-entry").scrollIntoViewIfNeeded();
                 await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-batch-reader.png`) });

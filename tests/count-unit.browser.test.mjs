@@ -61,7 +61,7 @@ test("collapsed groups expose Copilot identity, group-to-call relationship and e
     assert.equal(await page.locator("#periodResult").innerText(), "4 Copilot chats / 9 request groups with 19 Work IQ tool calls.");
     assert.match(await page.locator("#periodHint").innerText(), /^All retained dates/);
     await page.getByRole("link", { name: "Choose a Copilot chat", exact: true }).click(); await ready(page);
-    assert.match(await page.locator("#coverageBody .activity-list-explanation").textContent(), /filters and private search/);
+    assert.match(await page.locator("#coverageBody").textContent(), /interactions? from/);
     for (const [source, text] of [["one", "1 request group with 3 Work IQ tool calls"], ["six", "6 request groups with 14 Work IQ tool calls"]]) {
         assert.equal(await group(page, source).locator(".session-toggle").getAttribute("aria-expanded"), "false");
         assert.equal(await group(page, source).locator(".session-label").innerText(), "Copilot chat name");

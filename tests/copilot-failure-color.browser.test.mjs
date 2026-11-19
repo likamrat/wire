@@ -112,7 +112,7 @@ test("normal cards and reader color compact status units, not explanatory prose,
                 await expect(call.locator(".returned-coverage")).toContainText("The full total is unknown.");
                 await expect(call.locator(".api-result-entry")).toHaveCount(1);
                 await expect(call.locator(".returned-api-entries .list-pager")).toHaveCount(0);
-                await expect(call).toContainText("Not attributed to a target in this batch");
+                await expect(call).toContainText("No path returned for this batch entry.");
                 await expect(call).not.toContainText("EXCLUDED_BODY");
                 const copy = call.getByRole("button", { name: "Copy recorded arguments", exact: true });
                 await copy.scrollIntoViewIfNeeded();

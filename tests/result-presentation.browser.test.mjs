@@ -111,7 +111,7 @@ test("multi-call and batched returned results preserve status, service and exact
     assert.equal(await entries.nth(1).locator(".action-service").textContent(), "More than one service", "The canonical call service category is not reclassified from one returned path");
     assert.deepEqual(await outcomes(entries.nth(1)), { failure: 1 });
     assert.equal(await entries.nth(2).locator(".api-path").count(), 0);
-    assert.match(await entries.nth(2).innerText(), /Not attributed to a target in this batch/);
+    assert.match(await entries.nth(2).innerText(), /No path returned for this batch entry/);
     assert.deepEqual(await outcomes(entries.nth(2)), { unknown: 1 });
     await secondCard.locator(".returned-api-details > summary").click();
     assert.equal(await secondCard.locator(".api-result-entry .api-path").textContent(), "/me/drive/root/children?Case=Returned");

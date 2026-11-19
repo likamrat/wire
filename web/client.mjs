@@ -2959,12 +2959,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const list = el("dl", "action-fields");
         const operation = !returned ? categories.operation(call?.tool || row?.tool) : null;
         const discovery = operation?.category === "Discovery";
+        const path = returned ? results.returnedPath(call, row, { discovery: categories.operation(call?.tool)?.category === "Discovery" }) : null;
+        const returnedAssociation = returned && row?.serviceAssociation?.layer === "reported-api" ? row.serviceAssociation : null;
+        const unassignedBatch = includeService && path?.source === "unattributed" && returnedAssociation?.services.length === 0
+            && returnedAssociation.gaps.length === 1 && returnedAssociation.gaps[0].reason === "unattributed-result";
         if (includeTool) list.append(el("dt", "", "Tool"), el("dd", "action-tool", call?.tool || row?.tool || "Not recorded"));
         if (includeService) {
             const service = el("dd", "action-service");
             let serviceContext;
-            if (returned) {
-                const association = row?.serviceAssociation?.layer === "reported-api" ? row.serviceAssociation : null;
+            if (unassignedBatch) {
+                service.append(el("span", "", "No path returned for this batch entry."),
+                    ux.helpButton("batch target", "The entry's position does not identify a requested target. Its recorded status still counts."));
+                service.classList.add("returned-target-help");
+            } else if (returned) {
+                const association = returnedAssociation;
                 for (const [index, name] of (association?.services ?? []).entries()) {
                     if (index) service.append(document.createTextNode(", "));
                     service.append(serviceCue("span", name));
@@ -2981,7 +2989,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 service.append(identity);
                 if (scope) service.append(ux.helpButton(categoryPresentation(row).label, [scope.label + ".", scope.description].filter(Boolean).join(" ")));
             }
-            list.append(el("dt", "", returned ? "Result service" : "Services and operations"), service);
+            list.append(el("dt", "", unassignedBatch ? "Returned target" : returned ? "Result service" : "Services and operations"), service);
             if (serviceContext) list.append(el("dt", "visually-hidden", "Service context"), el("dd", "action-attribution", serviceContext));
         }
         if (operation && includePurpose) {
@@ -2996,9 +3004,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             list.append(el("dt", "", "Why this category"), el("dd", "", evidence.description));
         }
         if (returned) {
-            const value = results.returnedPath(call, row, { discovery: categories.operation(call?.tool)?.category === "Discovery" });
-            pathField(list, "API path", value.path, value.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
-            if (value.source === "call") {
+            if (!unassignedBatch) pathField(list, "API path", path.path, path.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
+            if (path.source === "call") {
                 const note = el("dd", "path-attribution");
                 note.textContent = "Call target; no separate path returned.";
                 list.append(el("dt", "path-attribution", "Path source"), note);
@@ -5471,7 +5478,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const values = cues(targets);
         if (values.length > 3 && includeTools) {
             const extra = el("details", "card-more-targets");
-            extra.append(el("summary", "", `${values.length - 3} more targets`), ...values.splice(3));
+            const more = values.length - 3;
+            extra.append(el("summary", "", `${more} more ${more === 1 ? "target" : "targets"}`), ...values.splice(3));
             values.push(extra);
         }
         field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values);
@@ -5975,7 +5983,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (entry.kind === "action") label.classList.add("reader-entry-label");
             if (entry.recordKind === "tool") {
                 for (const parent of item.querySelectorAll(".returned-call-parent")) parent.prepend(labelText + " · ");
-                for (const results of item.querySelectorAll(":scope > .returned-api-entries, :scope > .selected-api-result")) {
+                for (const results of item.querySelectorAll(":scope > .returned-api-entries, :scope > .selected-api-result, :scope > .reader-returned-facts > .returned-api-entries")) {
                     results.setAttribute("role", "group");
                     results.setAttribute("aria-label", "Returned results for " + labelText);
                 }
@@ -7899,8 +7907,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? ` ${count(c.unscopedSessionCount)} ${http ? "source" : "chat"}${c.unscopedSessionCount === 1 ? " has" : "s have"} no project.` : "";
         // The coverage projection describes the GitHub/recorder population, not the
         // separately paged Microsoft source. Never combine unlike denominators.
-        const scope = workspaceState.evidence.nativeRead ? "GitHub activity" : scopeLabels[workspaceState.scope.filters.scope] || "Selected collection";
-        setText(body, `${scope}: ${count(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
+        const native = sharedNativeView(), sourceFilter = workspaceState.scope.filters.sources;
+        const withGitHub = !sourceFilter?.length || sourceFilter.includes("github-copilot");
+        const scope = workspaceState.evidence.nativeRead && !http ? "GitHub activity" : scopeLabels[workspaceState.scope.filters.scope] || "Selected collection";
+        const membership = [];
+        if (withGitHub) membership.push(`${scope}: ${count(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
+        if (native) membership.push(`Microsoft: ${count(native.aggregates.conversations)} retained ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}.`);
+        else if (boundedIncludesMicrosoft()) membership.push("Microsoft membership unavailable.");
+        setText(body, membership.join(" "));
         const gaps = [];
         if (c.unknownSessionRows) gaps.push(`${count(c.unknownSessionRows)} matching records have no known source chat.`);
         if (!coverage.graphHistory && ["direct-request", "recorded-http", "code-reference"].includes(workspaceState.scope.layer))

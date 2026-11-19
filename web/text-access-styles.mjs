@@ -329,6 +329,13 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-call-row>.returned-api-entries,#requestContent .reader-call-row>.selected-api-result {margin:16px 0 0 8px;padding:0 0 0 16px;border-inline-start:1px solid var(--rule);min-width:0}
 #requestContent .returned-entries-heading {margin:0 0 8px;color:var(--muted);font:var(--weight-medium) var(--type-small)/1.5 var(--font)}
 #requestContent .api-result-entry+.api-result-entry {margin-top:16px;padding-top:16px;border-top:1px solid var(--surface-divider)}
+#requestContent .api-result-entry {padding:10px 12px;min-width:0;border-radius:4px}
+#requestContent .api-result-entry:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
+#requestContent .api-result-entry>.returned-call-parent {margin:0 0 6px}
+#requestContent .api-result-entry .returned-target-help {display:flex;align-items:center;gap:4px;min-width:0}
+#requestContent .api-result-entry .returned-target-help>span {min-width:0;line-height:1.5}
+#requestContent .api-result-entry .returned-target-help .ux-help {justify-content:center;flex:0 0 44px}
+#requestContent .api-result-entry .action-service>.metadata-item {line-height:1.5}
 #requestContent .api-result-entry .recorded-result {padding:0;border:0;border-radius:0;background:none;box-shadow:none;font:var(--weight-regular) var(--type-body)/1.5 var(--font)}
 #requestContent .api-result-entry>.action-fields {margin:8px 0 0}
 #requestContent .api-result-entry>.action-fields .reader-api-duration {margin:0}
@@ -425,9 +432,11 @@ body[data-reader-expanded]>main {visibility:hidden}
  #requestContent .reader-check-counts {grid-template-columns:minmax(0,1fr)}
  #requestContent .reader-section :is(.facts,.action-fields) {grid-template-columns:minmax(0,7.5rem) minmax(0,1fr);gap:6px 12px}
  #requestContent .reader-section .action-fields>:is(.api-path-label,.api-path-value) {grid-column:1/-1}
+ #requestContent .reader-section .api-result-entry>.action-fields {grid-template-columns:minmax(0,6.6rem) minmax(0,1fr)}
 }
 @container(max-width:18rem) {
  #requestContent .reader-section :is(.facts,.action-fields) {grid-template-columns:minmax(0,1fr);gap:2px}
+ #requestContent .reader-section .api-result-entry>.action-fields {grid-template-columns:minmax(0,1fr)}
  #requestContent .reader-section :is(.facts,.action-fields) dd:not(:last-child) {margin-bottom:8px}
 }
 `;

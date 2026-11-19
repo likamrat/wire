@@ -1499,7 +1499,9 @@ test("report picker replacements retire private native cards and their caller-ow
     { skip: !root, timeout: 90000 }, async t => {
         const app = await setup(t, { segmented: true, mixed: true }), { page } = app;
         await navigateMain(page, "reports");
-        await page.getByRole("link", { name: "Create a report", exact: true }).click();
+        await page.locator('[data-report-preset="all"]').click();
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
         const list = page.locator("#reportList"), first = list.locator("[data-native-report-request]").first();
         const id = await first.getAttribute("data-native-report-request");
         await first.check();
@@ -1526,7 +1528,7 @@ test("report picker replacements retire private native cards and their caller-ow
             await checkbox.dispose(); await open.dispose(); await card.dispose();
         }
         assert.deepEqual(app.writes, []);
-        assert.equal(app.previews.length, 0);
+        assert.equal(app.previews.length, 1, "Opening the report prepared it once; reading/picking issued no further preview.");
     });
 
 test("a GitHub-only Analyze filter does not invent an unavailable Microsoft report page",

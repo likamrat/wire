@@ -92,17 +92,18 @@ async function capture(page, name, fullPage = false) {
 
 test("enforced React activity keeps the full request, matched identities, exact return and scoped report selection", { timeout: 90000 }, async t => {
     const prompt = "Compare the room booking with the invitation for the Willow workshop.\n\n> Monday: library\n> Wednesday: west stairs\n\nKeep both original dates. Do not send an invitation.";
+    const longPath = "/me/drive/root:/Workshop materials/Willow session/Facilitator seating and accessibility instructions.docx:/content";
     const start = (id, tool, args) => ({ type: "tool.execution_start", data: { toolCallId: id, toolName: tool, arguments: args } });
     const end = (id, success, result) => ({ type: "tool.execution_complete", data: { toolCallId: id, success,
         ...(success ? { result } : { error: { code: "ToolUnavailable", message: "Synthetic tool unavailable." } }) } });
     const now = Date.now() - 60000;
     const activityEvents = [
         { type: "user.message", data: { content: prompt } },
-        start("read", "workiq-fetch", { entityUrls: ["/me/calendarView", "/me/messages"] }),
+        start("read", "workiq-fetch", { entityUrls: ["/me/calendarView", "/me/messages", "/me/people"] }),
         end("read", true, { structuredContent: { results: [{ statusCode: 200, path: "/me/calendarView" },
             { statusCode: 403, path: "/me/messages", errorCode: "AccessDenied" }] } }),
         start("lookup", "workiq-retrieve", { query: "Willow handover" }), end("lookup", false),
-        start("directory", "workiq-fetch", { entityUrls: ["/me/contacts"] }), end("directory", true, {}),
+        start("document", "workiq-fetch", { entityUrls: [longPath] }), end("document", true, { structuredContent: { results: [{ statusCode: 200 }] } }),
         start("assistance", "workiq-ask", { question: "Compare the two notes." }), end("assistance", true, {}),
         { type: "assistant.message", data: { content: "The two sources name different rooms." } },
         { type: "user.message", data: { content: "When does the workshop start?" } },
@@ -125,15 +126,36 @@ test("enforced React activity keeps the full request, matched identities, exact 
     await page.keyboard.press("Enter"); await expect(quote).not.toHaveAttribute("open", "");
     const fail = card.getByRole("link", { name: /workiq-retrieve failed/ }), issue = card.getByRole("link", { name: /result: HTTP 403/i });
     await expect(fail).toBeVisible(); await expect(issue).toBeVisible();
-    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 390, 1], ["light", 1024, 2]]) {
+    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1440, 1], ["dark", 390, 1], ["light", 390, 2], ["light", 1024, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(n => { document.documentElement.style.fontSize = n * 100 + "%"; }, scale);
         await card.scrollIntoViewIfNeeded(); await capture(page, `bound-cards-${theme}-${width}`);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await issue.focus(); await page.keyboard.press("Enter");
         await expect(page.locator(".api-result-entry:focus")).toContainText("403");
+        const exact = page.locator(".api-result-entry:focus"), batchHelp = exact.getByRole("button", { name: "About batch target" });
+        await expect(batchHelp).toBeVisible();
+        const box = await exact.evaluate(entry => {
+            const outer = entry.getBoundingClientRect(), fact = entry.querySelector(".returned-target-help"), text = fact.firstElementChild;
+            const first = entry.querySelector(".returned-call-parent").getBoundingClientRect(), help = fact.lastElementChild.getBoundingClientRect();
+            return { inset: first.left - outer.left, end: outer.right-help.right, hit: help.height,
+                leading: parseFloat(getComputedStyle(text).lineHeight) / parseFloat(getComputedStyle(text).fontSize),
+                fits: text.getBoundingClientRect().right <= help.left };
+        });
+        assert.ok(box.inset >= 10 && box.end >= 10 && box.hit >= 44 && box.leading <= 1.65 && box.fits, JSON.stringify(box));
         await expect(page.locator('#requestContent [data-reader-section="activity"] .reader-call-row')).toHaveCount(4);
         await capture(page, `bound-reader-${theme}-${width}`);
+        await batchHelp.focus(); await page.keyboard.press("Enter");
+        await expect(page.getByRole("tooltip")).toContainText("position does not identify");
+        if (width === 390 && scale === 2) await capture(page, "bound-returned-target-help-enlarged");
+        await page.keyboard.press("Escape");
+        const documentCall = page.locator('#requestContent [data-tool-call-id="document"]');
+        await documentCall.locator(".reader-returned-facts > summary").click();
+        await expect(documentCall.locator(".api-path-value")).toContainText("Willow session");
+        await expect(documentCall.locator(".path-attribution").last()).toHaveText("Call target; no separate path returned.");
+        await documentCall.locator(".api-path-value").scrollIntoViewIfNeeded();
+        assert(await documentCall.locator(".api-result-entry").evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+        await capture(page, `bound-known-${theme}-${width}`);
         await page.locator("#closeContextSidebar").click(); await expect(issue).toBeFocused();
     }
     await page.setViewportSize({ width: 1440, height: 1000 }); await page.evaluate(() => document.documentElement.style.fontSize = "");

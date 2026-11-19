@@ -57,7 +57,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return (prefix || compact.slice(0, end).trimEnd()) + "\u00a0\u2026";
     }
     function renderExcerpt(source, limit = 170) {
-        const text = excerpt(source, limit), fragment = document.createDocumentFragment();
+        return exactFragment(excerpt(source, limit));
+    }
+    function exactFragment(text) {
+        const fragment = document.createDocumentFragment();
         const identifiers = /(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\p{L}\p{N}_-])/giu;
         let cursor = 0;
         for (const match of text.matchAll(identifiers)) {
@@ -89,8 +92,14 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             summary.textContent = `Quoted passage (${quotes[0].split(/\r?\n/u).length} lines)`;
             details.className = "card-quotation";
             details.append(summary, document.createTextNode(quotes[0]));
-            node.append(openPrompt(blocks.slice(0, quoted - 1).join("")), details, document.createTextNode(blocks.slice(quoted + 2).join("")));
-        } else node.append(openPrompt ? openPrompt(original) : document.createTextNode(original));
+            const link = openPrompt(blocks.slice(0, quoted - 1).join(""));
+            link.replaceChildren(exactFragment(link.textContent));
+            node.append(link, details, exactFragment(blocks.slice(quoted + 2).join("")));
+        } else if (openPrompt) {
+            const link = openPrompt(original);
+            link.replaceChildren(exactFragment(original));
+            node.append(link);
+        } else node.append(exactFragment(original));
         bindings.set(node, () => clearOwnedContent(node));
         return node;
     }

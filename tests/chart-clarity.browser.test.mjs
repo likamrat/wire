@@ -44,9 +44,9 @@ test("small counts are directly readable and reports are route-first without dup
     assert.deepEqual(await page.locator("#countTable tbody tr").nth(3).locator("td").allTextContents(), ["Sep 21, 2026", "121", "105", "15", "1"]);
     assert.equal(await page.locator("#chartReadingNotes").isVisible(), false, "Detailed reading help stays closed, not above the exact numbers");
     assert.equal(await page.locator("#coverageNotice").isVisible(), false);
-    assert.equal(await page.locator("#coverage #coverageNotice").count(), 1, "General caveats live only in existing About");
+    assert.equal(await page.locator("#activityView #coverageNotice").count(), 1, "Current gaps belong beside the population");
     await page.locator("#coverage>summary").click();
-    assert.match(await page.locator("#coverageNotice").innerText(), /retained evidence.*history may leave gaps.*hosted Work IQ.*not visible/);
+    assert.match(await page.locator("#coverageBody").innerText(), /interactions? from/);
     await page.locator("#coverage>summary").click();
     for (const [category, count] of [["success", 193], ["failure", 25], ["unknown", 1]]) {
         assert.equal(await page.locator(`[data-percentage-card=outcomes] [data-category=${category}].percentage-legend-row`).getAttribute("data-count"), String(count));

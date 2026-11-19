@@ -114,7 +114,7 @@ test("expanded reading sections use clear hierarchy, bounded text and aligned nu
         await chooseTheme(page, theme);
         assert.equal(await page.locator("#coverage details").count(), 0);
         assert.equal(await page.locator("#collectionSetup").evaluate(node => node.open), false);
-        assert.match(await page.locator("#coverageNotice").innerText(), /unavailable Copilot chat history may leave gaps.*hosted Work IQ.*not visible in local logs/);
+        assert.match(await page.locator("#coverageBody").innerText(), /interactions? from .*Copilot chat/);
         assert.deepEqual(await page.locator(".evidence-notes li").allTextContents(), [
             ...buildActivityAnalytics(records).warnings.filter(w => w.code !== "tool-not-http").map(w => w.message), ...coverage.notes,
         ]);

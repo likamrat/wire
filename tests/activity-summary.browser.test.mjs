@@ -101,9 +101,8 @@ test("one Activity summary separates matches from listed metadata-only chats and
     assert.equal(await page.locator(".session-group").count(), 4);
     await page.locator("#activityPager").getByRole("button", { name: "Previous", exact: true }).click(); await ready(page);
     await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
-    assert.match(await page.locator("#coverageBody .activity-list-explanation").innerText(), /filters and private search/);
-    assert.match(await page.locator("#coverageBody .activity-list-explanation").innerText(), /full retained interaction/);
-    assert.match(await page.locator("#coverageBody .activity-list-explanation").innerText(), /may have recorded history outside this view/);
+    assert.match(await page.locator("#coverageBody").innerText(), /interactions? from .*Copilot chat/);
+    assert.doesNotMatch(await page.locator("#coverageBody").innerText(), /full retained interaction|private search/);
     assert.equal(await page.locator("#coverage>summary").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
 });
 

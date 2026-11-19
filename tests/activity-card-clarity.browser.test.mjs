@@ -75,7 +75,7 @@ async function expectCallStatus(call, ordinal, status) {
 }
 
 async function measure(page) {
-    return page.locator(".request-card-open").evaluateAll(nodes => nodes.map(node => {
+    return page.locator(".read-in-place").evaluateAll(nodes => nodes.map(node => {
         const prompt = node.querySelector(".request-card-prompt"), style = getComputedStyle(prompt);
         const range = document.createRange(); range.selectNodeContents(prompt);
         const box = prompt.getBoundingClientRect();
@@ -110,23 +110,23 @@ async function capture(page, name, metrics) {
     await writeFile(path.join(proofs, name + ".json"), JSON.stringify(metrics, null, 2));
 }
 
-test("the prompt leads each activity row; service identities belong to its reader", async t => {
+test("the prompt, scoped tools and targets identify each interaction before reading exact evidence", async t => {
     const { page } = await setup(t);
     const first = page.locator('.request-card-open[href*="card-clarity-0"]');
-    await expect(first.locator(".request-card-author")).toHaveText("My prompt");
-    await expect(first.locator(".request-card-exception")).toHaveText("1 tool call failed");
-    await expect(first.locator(".request-card-categories")).toHaveCount(0);
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("My prompt");
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
     const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
-    await expect(mixed.locator(".request-card-exception")).toHaveText("3 tool calls failed");
+    await expect(mixed.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
     await expect(mixed).not.toContainText(/Access was denied|did not respond in time|required sign-in/);
     await expect(mixed.locator("button,input,a")).toHaveCount(0);
-    const geometry = await mixed.evaluate(card => {
+    const geometry = await mixed.locator("xpath=ancestor::article[1]").evaluate(card => {
         const box = selector => card.querySelector(selector).getBoundingClientRect().toJSON();
         return { prompt: box(".request-card-prompt"), metadata: box(".request-card-summary") };
     });
     assert.ok(geometry.metadata.top >= geometry.prompt.bottom);
     await first.click();
-    await expect(page.locator("#requestContent .reader-call-services")).toContainText("Mail");
+    await expect(page.locator("#requestContent .reader-call-services").first()).toContainText("Mail");
 });
 
 test("the compact failure count opens the first failure in retained chronology", async t => {
@@ -136,8 +136,8 @@ test("the compact failure count opens the first failure in retained chronology",
         record.toolCalls[index].startedAt = new Date(Date.parse(record.userPrompt.sourceTimestamp) + seconds * 1000).toISOString();
     }
     const { page } = await setup(t, [record]);
-    const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
+    const card = page.locator(".read-in-place .result-tone-failure");
+    await expect(card).toHaveText("3 tool calls failed");
     await card.click();
     const problem = await page.locator('[data-reader-section="activity"]').innerText();
     for (const reason of ["The tool did not respond in time", "Work IQ required sign-in at the time", "Access was denied"]) assert.ok(problem.includes(reason));
@@ -147,7 +147,7 @@ test("the compact failure count opens the first failure in retained chronology",
     await expect(page.locator('[data-tool-call-id="clarity-call-2-3"]')).toContainText("Access was denied");
 });
 
-test("opening a clipped prompt starts at the actual reader top without changing ordinary saved reading positions", { timeout: 90000 }, async t => {
+test("opening an explicit prompt link starts at its original and restores the list origin", { timeout: 90000 }, async t => {
     const evidence = ["top-first", "top-second", "top-ordinary"].map((id, index) => {
         const record = records()[2];
         record.scenarioId = id;
@@ -189,7 +189,7 @@ test("opening a clipped prompt starts at the actual reader top without changing 
             ["another", "top-second", "pointer"], ["return", "top-first", "keyboard"],
         ]) {
             const card = page.locator(`.request-card-open[href*="${id}"]`);
-            const more = card.locator(".request-card-open-label");
+            const more = card;
             await expect(more).toBeVisible();
             await more.scrollIntoViewIfNeeded();
             await card.focus();
@@ -271,14 +271,14 @@ test("opening a clipped prompt starts at the actual reader top without changing 
         await close();
         await ordinary.click();
         await settle();
-        assert.equal(await body.evaluate(node => node.scrollTop), saved, "Ordinary non-Read-more entry keeps its saved reading position.");
+        assert.equal(await body.evaluate(node => node.scrollTop), 0, "An explicit prompt link opens the original, not the last technical detail.");
         if (proof) await writeFile(path.join(proof, phase + "-positions.json"), JSON.stringify({
             entries: measurements, ordinarySavedPosition: saved, ordinaryRestoredPosition: await body.evaluate(node => node.scrollTop),
         }, null, 2));
     }
 });
 
-test("card previews clamp at the available measure and the whole link opens the exact prompt", { timeout: 90000 }, async t => {
+test("full prompt text reflows and independent evidence links open their own reading target", { timeout: 90000 }, async t => {
     const identifier = "13579bdf-2468-4ace-9bdf-0123456789ab";
     const opening = `You own the workshop reference pack under rehearsal coordinator${identifier}. This is a standalone preparation task. `;
     const fitting = opening + "Read the available briefing notes, preserve the existing schedule, and identify the files needed by the rehearsal team before preparing the handout.";
@@ -340,8 +340,8 @@ test("card previews clamp at the available measure and the whole link opens the 
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(first.locator(".request-card-prompt")).toHaveText(fitting);
-            await expect(second.locator(".request-card-prompt")).toHaveText(long);
+            await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(fitting);
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(long);
             if (theme === "light" && width === 1920) {
                 const session = await page.context().newCDPSession(page);
                 let accessibleName;
@@ -356,12 +356,10 @@ test("card previews clamp at the available measure and the whole link opens the 
                     accessibleName, length: accessibleName?.length, originalPromptLength: long.length,
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
-                assert.ok(accessibleName?.length < 220, `The actual link name must be concise, not ${accessibleName?.length} characters.`);
-                assert.match(accessibleName, /^Open interaction: You are checking the workshop notes/);
-                assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"), "The hidden original must not be announced as the link's name.");
+                assert.equal(accessibleName, long, "All visible request words remain readable to assistive technology.");
             }
             for (const card of [first, second]) {
-                const prompt = card.locator(".request-card-prompt");
+                const prompt = card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt");
                 const geometry = await prompt.evaluate(node => {
                     const css = getComputedStyle(node), box = node.getBoundingClientRect(), lines = new Map();
                     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -380,20 +378,14 @@ test("card previews clamp at the available measure and the whole link opens the 
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
                 await expect(card.locator(".request-card-read-more")).toHaveCount(0);
-                await expect(card).toHaveAccessibleName(/^Open interaction: /);
-                await expect(card.locator(".request-card-open-label")).toHaveText("Open");
-                assert.ok(geometry.height <= geometry.lineHeight * 2 + 1);
-                if (omitted) {
-                    assert.ok(geometry.visibleLines >= 1 && geometry.visibleLines <= 2);
-                    // A long unbroken identifier can start on the next line without being rewritten.
-                    if (!geometry.text.includes(identifier)) assert.ok(geometry.lastLineUse > .6, JSON.stringify(geometry));
-                }
+                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toContainText("Inspect");
+                assert.equal(omitted, false, "Ordinary prompt prose is not clipped.");
                 await expect(prompt).not.toContainText("\u2026");
                 measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted });
             }
             await expect(second.locator(".returned-coverage,.call-reason-list")).toHaveCount(0);
-            await expect(second.locator(".request-card-exception")).toHaveText("1 tool call failed");
-            await expect(second.locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
             await expect(second.locator("a,button,[role=button]")).toHaveCount(0, "Read more belongs to the real card link, not a nested control.");
         }
         if (proof) {
@@ -402,14 +394,14 @@ test("card previews clamp at the available measure and the whole link opens the 
             for (const [name, card] of [["download", first], ["partial", second]]) {
                 await card.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}.png`) });
                 if (width === 390 && name === "partial") {
-                    await card.locator(".request-card-count").scrollIntoViewIfNeeded();
-                    await expect(card.locator(".request-card-count")).toBeInViewport();
+                    await card.locator("xpath=ancestor::article[1]").locator(".request-card-count").scrollIntoViewIfNeeded();
+                    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toBeInViewport();
                     await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-partial-tail.png`) });
                 }
             }
         }
         if (phase !== "before") {
-            await expect(second.locator(".request-card-open-label")).toBeVisible();
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toBeVisible();
             await second.focus(); await page.keyboard.press("Enter");
             const original = page.locator('[data-reader-section="prompt"] .full-text-content');
             await expect(original).toBeFocused();
@@ -436,9 +428,9 @@ test("card previews clamp at the available measure and the whole link opens the 
             await call.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
-            await second.locator(".request-card-open-label").click();
-            await expect(original).toBeFocused();
-            await page.keyboard.press("Escape"); await expect(second).toBeFocused();
+            await second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label").click();
+            await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+            await page.keyboard.press("Escape"); await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toBeFocused();
         } else {
             await second.click();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
@@ -451,7 +443,7 @@ test("card previews clamp at the available measure and the whole link opens the 
         await expect(first.locator(".request-card-read-more")).toHaveCount(0);
         await page.evaluate(() => {
             window.heldCardPreview = document.querySelector(".request-card-prompt");
-            window.heldCardName = window.heldCardPreview.closest("a").getAttributeNode("aria-label");
+            window.heldCardName = window.heldCardPreview.querySelector("a").getAttributeNode("href");
         });
         await page.goto(page.url().split("#")[0] + "#analyze?result=success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -496,7 +488,7 @@ test("filtered calls own subordinate grouped returned errors without merging cal
     });
     const phase = process.env.WIRE_GROUP_PHASE ?? "after", proof = process.env.WIRE_GROUP_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const card = page.locator('.request-card-open[href*="grouped-permission"]');
+    const card = page.locator('.activity-card:has(.request-card-open[href*="grouped-permission"]) .result-tone-failure');
     let returnedId;
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
@@ -507,10 +499,10 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
-            await expect(card.locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
             await expect(card).not.toContainText(message);
-            await expect(page.locator('.request-card-open[href*="grouped-multiple"] .request-card-exception')).toHaveText("2 tool calls failed");
+            await expect(page.locator('.activity-card:has(.request-card-open[href*="grouped-multiple"]) .result-tone-failure')).toHaveText("2 tool calls failed");
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
@@ -528,6 +520,7 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         if (phase !== "before") {
             await expect(call.locator(".reader-entry-label")).toHaveText("Call #6");
             if (theme === "light" && width === 1440) await expect(call).toBeFocused();
+            await call.locator(".reader-returned-facts > summary").click();
             await expect(call.locator(".returned-api-entries")).toHaveAttribute("aria-label", "Returned results for Call #6");
             await expect(call.locator(".reader-call-summary")).not.toContainText(message);
             await expect(call.locator(".reader-error-message")).toHaveText([message, message, message]);
@@ -641,16 +634,16 @@ test("card and reader keep neutral explanations under owning statuses without re
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
             await expect(card).not.toContainText(message);
-            await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
             await expect(card).not.toContainText(/1 of 5|Recorded error:|5 recorded calls/);
-            const paint = await card.evaluate(node => {
+            const paint = await card.locator("xpath=ancestor::article[1]").evaluate(node => {
                 const status = node.querySelector(".request-card-exception");
                 return { ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
                     status: getComputedStyle(status).color };
             });
             assert.notEqual(paint.ink, paint.status);
             measurements.push({ theme, width, scale, ...paint });
-            await expect(page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-exception')).toHaveText("2 tool calls failed");
+            await expect(page.locator('.activity-card:has(.request-card-open[href*="hierarchy-multiple"]) .result-tone-failure')).toHaveText("2 tool calls failed");
             await expect(page.locator('.request-card-open[href*="hierarchy-returned"]')).not.toContainText(/Returned entry|document is restricted/);
         }
         if (proof) {
@@ -658,7 +651,7 @@ test("card and reader keep neutral explanations under owning statuses without re
             await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-page.png`), fullPage: true });
             await page.mouse.move(0, 0);
             if (width === 390) {
-                await card.locator(".request-card-exception").evaluate(node => node.scrollIntoView({ block: "center" }));
+                await card.locator("xpath=ancestor::article[1]").locator(".request-card-exception").evaluate(node => node.scrollIntoView({ block: "center" }));
                 await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             } else await card.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             if (width === 1440) for (const name of ["multiple", "returned"]) {
@@ -770,14 +763,14 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         for (const [name, text, count] of cases) {
-            const prompt = page.locator(`.request-card-open[href*="identifier-${name}"] .request-card-prompt`);
+            const prompt = page.locator(`.request-card-open[href*="identifier-${name}"]`);
             await expect(prompt.locator(".text-preview-identifier")).toHaveCount(count);
-            assert.equal(await prompt.textContent(), text.replace(/\s+/gu, " "));
+            assert.equal(await prompt.textContent(), text);
             assert.equal(await prompt.evaluate(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
                 const text = selection.toString(); selection.removeAllRanges(); return text;
-            }), text.replace(/\s+/gu, " "), "Selection still contains the original preview characters only.");
+            }), text, "Selection still contains the original preview characters only.");
         }
         await joined.scrollIntoViewIfNeeded();
         const geometry = await joined.locator(".text-preview-identifier").evaluate(node => {
@@ -811,10 +804,7 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-    await page.getByRole("link", { name: "Create report", exact: true }).click();
-    const preview = page.locator("#reportList .request-card-prompt").filter({ hasText: cases[0][1] });
-    await expect(preview.locator(".text-preview-identifier")).toHaveCount(1);
-    assert.equal(await preview.textContent(), cases[0][1], "The existing shared preview path uses the same visual-only treatment.");
+    assert.equal(await joined.textContent(), cases[0][1], "Reopening an original must not alter its visible card.");
     if (proof) await writeFile(path.join(proof, "spacing.json"), JSON.stringify(measurements, null, 2));
 });
 
@@ -872,15 +862,15 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(card.locator(".request-card-prompt")).toContainText("owner record-42");
-        await expect(lateCard.locator(".request-card-prompt")).toContainText("Ownerrecord-42");
-        await expect(lateCard.locator(".request-card-prompt")).not.toContainText("Owner record-42");
-        assert.equal(await card.locator(".request-card-prompt").textContent(), record.userPrompt.text.replace(/\s+/gu, " "));
-        await expect(card.locator(".request-card-prompt")).not.toContainText("...");
-        await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toContainText("owner record-42");
+        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toContainText("Ownerrecord-42");
+        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).not.toContainText("Owner record-42");
+        assert.equal(await card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt").textContent(), record.userPrompt.text);
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).not.toContainText("...");
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
         await expect(card).not.toContainText(/Returned item|rehearsal item is locked|503|Call #|response body excluded/);
-        await expect(lateCard.locator(".request-card-count")).toHaveCount(0);
-        await expect(lateCard.locator(".request-card-exception")).toHaveText("1 tool call failed");
+        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveCount(0);
+        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
         await card.scrollIntoViewIfNeeded();
         await page.mouse.move(0, 0);
         if (proof) {
@@ -892,7 +882,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
             });
             if (width === 390) {
                 await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
-                await card.locator(".request-card-summary").evaluate(node => node.scrollIntoView({ block: "end" }));
+                await card.locator("xpath=ancestor::article[1]").locator(".request-card-summary").evaluate(node => node.scrollIntoView({ block: "end" }));
                 await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card-tail.png`) });
             } else await card.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
         }
@@ -911,6 +901,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(page.locator('[data-tool-call-id="all-failures-2"] .reader-call-summary')).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
         const returned = page.locator('[data-tool-call-id="returned-failures"]');
         await expectCallStatus(returned, 6, "completed");
+        await returned.locator(".reader-returned-facts > summary").click();
         await expect(returned.locator(".api-result-entry")).toHaveCount(9);
         for (let index = 1; index < 9; index++) await expect(returned.locator(".api-result-entry").nth(index)).toContainText(`Returned item ${index} cannot be changed.`);
         await expect(returned.getByRole("button", { name: /Next returned/ })).toHaveCount(0);
@@ -944,8 +935,8 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
     await page.keyboard.press("Escape");
     await page.goto(page.url().split("#")[0] + "#analyze?result=failure");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(card.locator(".request-card-exception")).toHaveText("3 tool calls failed");
-    await expect(card.locator(".request-card-count")).toHaveText("3 of 7 Work IQ tool calls match this view");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("3 of 7 Work IQ tool calls match this view");
     await card.click();
     await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(7);
     for (let i = 0; i < 3; i++) await expectCallStatus(page.locator(`[data-tool-call-id="all-failures-${i}"]`), i + 3, "failed");
@@ -967,8 +958,8 @@ test("Reader call disclosure groups identity and result without a blank target r
     const call = page.locator('#requestContent [data-tool-call-id="clarity-call-0-0"]');
     const toggle = call.locator(".reader-call-toggle");
     await expect(toggle.locator(".reader-call-summary")).toContainText("Work IQ required sign-in at the time");
-    await expect(call.locator(".reader-call-secondary .recorded-category")).toContainText("Service:");
-    await expect(call.locator(".reader-call-secondary .recorded-category")).toContainText("Mail");
+    await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Target");
+    await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Mail");
     await expect(call.locator(".reader-call-secondary .reader-call-duration")).toContainText("Tool latency:");
     await expect(toggle.locator("button,a,input")).toHaveCount(0);
     const geometry = await toggle.evaluate(toggle => {
@@ -1038,6 +1029,8 @@ test("service identity is stated once for an inherited target and keeps independ
         const activity = page.locator('[data-reader-section="activity"]');
         const row = id => activity.locator(`[data-tool-call-id="${id}"]`);
         const inherited = row("service-inherited");
+        const closed = activity.locator("details.reader-returned-facts:not([open]) > summary");
+        while (await closed.count()) await closed.first().click();
         const values = await activity.locator("[data-tool-call-id]").evaluateAll(nodes => nodes.map(node => ({
             id: node.dataset.toolCallId,
             identity: node.querySelector(".reader-call-services")?.innerText.replace(/\s+/g, " ").trim() ?? "",
@@ -1046,7 +1039,7 @@ test("service identity is stated once for an inherited target and keeps independ
                 id: entry.dataset.resultId,
                 label: entry.querySelector(".action-service")?.previousElementSibling.textContent ?? null,
                 service: entry.querySelector(".action-service")?.textContent.trim() ?? null,
-                path: entry.querySelector(".api-path-value").innerText,
+                path: entry.querySelector(".api-path-value")?.innerText ?? null,
                 attribution: entry.querySelector(".path-attribution")?.nextElementSibling.textContent ?? null,
             })),
         })));
@@ -1082,27 +1075,27 @@ test("service identity is stated once for an inherited target and keeps independ
         assert.doesNotMatch(cardIdentity, /Services and operations:|Tools:|More services/);
         const byId = new Map(values.map(value => [value.id, value]));
         const inherited = byId.get("service-inherited");
-        assert.equal(inherited.identity, "Service: Mail");
+        assert.match(inherited.identity, /^Target\s*Mail$/);
         assert.equal(inherited.returned[0].service, null);
         assert.equal(inherited.returned[0].attribution, "Call target; no separate path returned.");
         const returned = byId.get("service-returned");
-        assert.equal(returned.identity, "Service: Mail");
+        assert.match(returned.identity, /^Target\s*Mail$/);
         assert.deepEqual(returned.returned.map(value => [value.label, value.service]),
             [["Result service", "Mail"], ["Result service", "Calendar"]]);
         assert.deepEqual(returned.returned.map(value => value.path),
             ["/me/messages/invented-reply", "/me/calendar/events/invented-visit"]);
-        assert.equal(byId.get("service-batch").identity, "Services: Mail Files");
+        assert.match(byId.get("service-batch").identity, /Targets\s*Mail\s*Files/);
         assert.match(byId.get("service-batch").attribution, /recorded path does not identify a named app.*call still counts.*result is shown separately/);
         assert.equal(byId.get("service-batch").returned[0].service, "Files");
-        assert.match(byId.get("service-batch").returned[1].service, /Returned target not identified/);
-        assert.equal(byId.get("service-batch").returned[1].path, "Not attributed to a target in this batch");
-        assert.equal(byId.get("service-missing").identity, "");
+        assert.match(byId.get("service-batch").returned[1].service, /No path returned for this batch entry/);
+        assert.equal(byId.get("service-batch").returned[1].path, null, "Don't duplicate a missing batch target as an API path.");
+        assert.match(byId.get("service-missing").identity, /Service target not recorded/);
         assert.match(byId.get("service-missing").attribution, /No usable service target.*source omission or a capture problem/);
         assert.match(byId.get("service-missing").returned[0].service, /Service target not recorded/);
-        assert.equal(byId.get("service-preparation").identity, "Operation: Schema lookup");
+        assert.match(byId.get("service-preparation").identity, /Operation\s*Schema lookup/);
         assert.equal(byId.get("service-preparation").returned[0].path, "Not recorded");
-        assert.equal(byId.get("service-search").identity, "Operation: Search and retrieval");
-        assert.equal(byId.get("service-assistance").identity, "Operation: Asked Copilot");
+        assert.match(byId.get("service-search").identity, /Operation\s*Search requested/);
+        assert.match(byId.get("service-assistance").identity, /Asked Copilot.*Underlying services not recorded/);
     }
     const selectedId = observations[0].values.find(value => value.id === "service-returned").returned[1].id;
     const exact = new URL(page.url());
@@ -1111,7 +1104,7 @@ test("service identity is stated once for an inherited target and keeps independ
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-result-id", selectedId);
     await expect(page.locator("#selectedCall")).toBeFocused();
     await expect(page.locator("#selectedCall .action-service")).toHaveText("Calendar");
-    await expect(page.locator('[data-tool-call-id="service-returned"] .reader-call-services')).toHaveText("Service: Mail");
+    await expect(page.locator('[data-tool-call-id="service-returned"] .reader-call-services')).toHaveText(/Target\s*Mail/);
     const copy = page.locator('[data-reader-section="prompt"]').getByRole("button", { name: "Copy prompt", exact: true });
     await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => {} } }));
     await copy.scrollIntoViewIfNeeded();
@@ -1127,11 +1120,12 @@ test("Agent author cues use a distinct shared role while Teams keeps its service
     const card = page.locator('.request-card-open[href*="card-clarity-2"]');
     for (const [theme, author, teams] of [
         ["light", "rgb(128, 96, 24)", "rgb(104, 66, 186)"],
-        ["dark", "rgb(226, 194, 123)", "rgb(173, 136, 240)"],
+        ["dark", "rgb(226, 194, 123)", "color(srgb 0.774902 0.673333 0.958824)"],
     ]) {
         await chooseTheme(page, theme);
-        await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
-        await expect(card.locator("[data-service=Teams]")).toHaveCount(0);
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+        await expect(card.locator("xpath=ancestor::article[1]").locator("[data-service=Teams]")).toHaveCount(1);
+        assert.equal(await card.locator("xpath=ancestor::article[1]").locator("[data-service=Teams]").evaluate(n => getComputedStyle(n).color), teams);
         await card.click();
         const reader = page.locator('[data-reader-section="prompt"]');
         assert.equal(await reader.locator(".reader-section-heading [data-prompt-actor]").evaluate(node => getComputedStyle(node).color), author);
@@ -1139,18 +1133,6 @@ test("Agent author cues use a distinct shared role while Teams keeps its service
         assert.equal(await page.locator('#requestContent .reader-call-services [data-service=Teams]').first()
             .evaluate(node => getComputedStyle(node).color), teams);
         await page.goBack();
-    }
-    await page.getByRole("link", { name: "Create report", exact: true }).click();
-    const agent = page.locator('#reportList .full-text:has([data-prompt-actor=agent])').first();
-    await expect(agent).toBeVisible();
-    await expect(page.locator("#reportList .interaction-identity").first()).toContainText("Service:");
-    for (const [theme, color] of [["light", "rgb(128, 96, 24)"], ["dark", "rgb(226, 194, 123)"]]) {
-        await chooseTheme(page, theme);
-        const ink = await agent.evaluate(node => ({
-            label: getComputedStyle(node.querySelector("[data-prompt-actor=agent]")).color,
-            edge: getComputedStyle(node.querySelector(":scope > .full-text-preview, :scope > .full-text-body")).borderInlineStartColor,
-        }));
-        assert.deepEqual(ink, { label: color, edge: color });
     }
 });
 
@@ -1234,7 +1216,7 @@ test("An empty retained agent message remains recognizable without pretending it
     const { page } = await setup(t);
     const card = page.locator('.request-card-open[href*="card-clarity-1"]');
     await expect(card).not.toContainText("Prompt not available");
-    await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
     await expect(card).toContainText("Work continued without a new message.");
     await expect(card).not.toContainText("workiq-retrieve");
     await expect(card).not.toContainText("SYNTHETIC_ARGUMENT_NOT_A_PROMPT");
@@ -1273,7 +1255,7 @@ test("unavailable and empty nonautomatic records retain their own identity witho
     for (const [index, label, notice] of [[0, "My activity", "Prompt text unavailable"],
         [1, "Agent activity", "Prompt text unavailable"], [2, "Author unverified", "No prompt text retained"]]) {
         const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
-        await expect(card.locator(".request-card-author")).toHaveText(label);
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText(label);
         await expect(card).toContainText(notice);
         await expect(card).not.toContainText("Automatic continuation");
         await card.click();
@@ -1300,12 +1282,12 @@ test("cards and the reader distinguish observed automatic control, known gaps an
         [2, "Author unverified", "No prompt text retained"],
     ]) {
         const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
-        await expect(card.locator(".request-card-author")).toHaveText(label);
-        await expect(card.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText(label);
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
         await expect(card).toContainText(notice);
         if (index === 1) {
-            await expect(card.locator(".request-card-prompt")).toHaveText("Work continued without a new message.");
-            await expect(card.locator("[data-prompt-actor=agent]")).toHaveCount(0);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText("Work continued without a new message.");
+            await expect(card.locator("xpath=ancestor::article[1]").locator("[data-prompt-actor=agent]")).toHaveCount(0);
         }
         await card.click();
         const prompt = page.locator('[data-reader-section="prompt"]');
@@ -1328,10 +1310,10 @@ test("immutable first-saved prompt text keeps its shared qualification in card a
     const { page } = await setup(t, [record]);
     const notice = "The source changed this message. The first saved text is shown.";
     const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
-    await expect(card.locator(".request-card-prompt")).toHaveText(shortPrompt);
-    await expect(card.locator(".request-card-availability")).toHaveText(notice);
-    await expect(card.locator(".request-card-categories")).toHaveCount(0);
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Author unverified");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(shortPrompt);
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-availability")).toHaveText(notice);
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
     await card.click();
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt.locator(".full-text-content")).toHaveText(shortPrompt);
