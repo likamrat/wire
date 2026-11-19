@@ -1535,6 +1535,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function settingsTarget(entry) {
         const approved = collection?.config?.approved;
         if (nativeSettingUnavailable(entry.id)) return "connectionTitle";
+        if (sourceCollection.copilotOnly && !approved && $("sourceEditor").hidden
+            && ["history-window", "cadence", "save-preferences"].includes(entry.id)) return "reviewSource";
         if (sourceCollection.active && entry.id === "microsoft-collection") return "sourceMicrosoftSurfaces";
         if (entry.id === "collection-state" && historyStatus.native(collection)) {
             return collectionSettings?.nativeConfigurationIntent?.() === "enable" ? "saveCollection" : "pauseCollection";
@@ -1561,7 +1563,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (entry.id === "microsoft-connection") return !$("wireMicrosoftConnection") || $("microsoftConnectionHost").hidden
                 ? "Unavailable in this runtime" : $("wireMicrosoftStatus").textContent;
             if (!collection?.config?.approved && !historyStatus.native(collection)
-                && ["source-paths", "collection-state"].includes(entry.id)) return "Source approval needed";
+                && (["source-paths", "collection-state"].includes(entry.id) || id === "reviewSource" && entry.id !== "source")) return "Source approval needed";
             if (control?.disabled) return "Action unavailable";
             return "";
         });
@@ -8144,11 +8146,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (host.querySelector(".fresh-controls").lastElementChild !== $("freshResult")) {
             host.querySelector(".fresh-controls").append($("freshResult"));
         }
-        host.hidden = !contextual;
         $("freshHeading").hidden = !contextual;
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
         const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery || model.combined?.problem
             || refreshOwnsReadFailure() || !globalRecovery && (["error", "unconfirmed"].includes(model.phase) || collectionReadError || workspaceState.stale && !workspaceState.loading);
+        host.hidden = !contextual || connection && !approved && sourceCollection.copilotOnly
+            && !$("sourceEditor").hidden && model.phase === "idle" && !attention;
         const reread = recollectionUI?.snapshot();
         const recollectionAttention = reread?.needsReceipt || reread?.viewNeedsRead || reread?.phase === "pending";
         const privacy = workspaceState.route.view === "settings" && settingsNavigation.resolve(workspaceState.route).section === "privacy";
@@ -8562,7 +8565,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("collectionIssueGroups").replaceChildren();
             setText($("issueSearchCount"), "Reading current issues...");
         }
+        const newProfileSource = sourceCollection.copilotOnly && collection && status.config?.approved
+            && (!collection.config?.approved || collection.config.appDbPath !== status.config.appDbPath
+                || collection.config.sessionRoot !== status.config.sessionRoot);
         collection = status;
+        if (newProfileSource) void accountProfile?.receiveSourceChange();
         collectionReadError = "";
         collectionReadReason = "";
         if (!sourceCollection.active && nativePersistence && workspaceState.evidence && !historyStatus.nativeReadbackCurrent(workspaceState.evidence, nativeStatus)) {
@@ -8786,7 +8793,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else if (connectionNeedsSnapshot || collection.revision !== workspaceState.evidence?.revision) $("newDataNotice").hidden = false;
             return result;
         } catch (error) {
-            if (sourceCollection.controlsActive && api.isCurrent(publication)) collectionUnavailable(error.message, error.reason, publication);
+            if (sourceCollection.controlsActive && api.isCurrent(publication) && error.configuration !== "not-saved") {
+                collectionUnavailable(error.message, error.reason, publication);
+            }
             throw error;
         } finally {
             if (api.isCurrent(publication)) {

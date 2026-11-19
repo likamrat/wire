@@ -119,7 +119,7 @@ test("real click route recorder path persists exact outcomes without workplace c
     const { page, context, sent, respond, runtime } = await setup(t);
     const before = await loadBoardState(context);
     assert.match(await page.locator("#recorderPurpose").innerText(), /Test the HTTP recorder, not collection/);
-    assert.match(await page.locator("#recorderPurpose").innerText(), /not needed/);
+    assert.match(await page.locator("#recorderPurpose").innerText(), /one public request.*saves the result locally/);
     assert.equal(sent.length, 0, "Opening diagnostics is read-only");
     const ids = [];
     for (const [reply, expected] of [[200, /HTTP 200 received/], [503, /returned HTTP 503/], [new Error("fixture network failure"), /No HTTP response received/]]) {

@@ -16,7 +16,7 @@ import { privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
-async function setup(t, { activity = true, records = [], storageBlocked = false } = {}) {
+async function setup(t, { activity = true, records = [], storageBlocked = false, frontend } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
     const home = path.join(root, "invented-copilot"), sessionRoot = path.join(home, "session-state");
     const id = randomUUID(), at = new Date().toISOString();
@@ -52,7 +52,7 @@ async function setup(t, { activity = true, records = [], storageBlocked = false 
     });
     access = await createCopilotRuntimeAccess(context);
     runtime = await startServer(context, createExportController(context), {
-        port: 0, access, collector: { timers: false },
+        port: 0, access, frontend, collector: { timers: false },
         evaluation: {
             evaluatorFactory: async () => { blocked.push("provider"); throw new Error("Providers are excluded from onboarding proof."); },
             readSource: async () => { blocked.push("evaluation source"); throw new Error("Evaluation source reads are excluded."); },
@@ -251,6 +251,27 @@ test("an interrupted first approval stays in Settings for read-current recovery 
         const response = await route.fetch();
         assert.equal(response.status(), 200);
         await route.abort("connectionreset");
+    });
+
+    test("packaged source review keeps pre-write refusal editable; recorder status never offers a blocked write", { timeout: 30000 }, async t => {
+        const { page, runtime, mutations } = await setup(t, { frontend: "react" });
+        await page.goto(runtime.url); await ready(page);
+        await page.locator("#welcomeReviewSource").click();
+        await page.locator("#changeReviewedPaths").click();
+        const database = page.locator("#sourceDatabase"), selected = await database.inputValue();
+        await database.fill(path.join(path.dirname(selected), "absent", "data.db"));
+        await page.locator("#connectCollection").click();
+        await expect(page.locator("#settingsMessage")).toContainText("Settings were not saved.");
+        await expect(page.locator("#reloadSettings")).toBeHidden();
+        assert.equal((await runtime.collector.status()).config, null);
+        await database.fill(selected);
+        await page.locator("#connectCollection").click();
+        await expect(page.locator("#firstCollectionActivity")).toBeVisible();
+        assert.equal((await runtime.collector.status()).config.approved, true);
+        assert.equal(mutations.filter(row => row.path === "/api/collection/configure").length, 2);
+        await page.goto(runtime.url + "#collection-status?setting=network-diagnostic");
+        await expect(page.locator("#recorderStatus")).toContainText("cannot start a network test");
+        await expect(page.locator("#recordBtn")).toBeHidden();
     });
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");

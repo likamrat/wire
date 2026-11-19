@@ -69,6 +69,14 @@ export function createAccountProfile({ api, present, provider = "github", visibl
     }
     return {
         receiveAccess, refresh, withdrawAccess,
+        receiveSourceChange() {
+            withdrawAccess();
+            const owner = api.publicationToken();
+            if (pending && visible() && synchronous(owner) && api.isCurrent(owner) === true) {
+                present({ phase: "loading", profile: null }, owner);
+            }
+            return receiveAccess();
+        },
         dispose() { withdrawAccess(); disposed = true; },
     };
 }

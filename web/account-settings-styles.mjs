@@ -12,6 +12,7 @@ export const accountSettingsStyles = `
 .wire-account-copy {display:flex;flex-direction:column;min-width:0;white-space:nowrap}
 .wire-account-copy>span,.wire-account-copy>small {overflow:hidden;text-overflow:ellipsis}
 .wire-account-copy>span {font-size:var(--type-control);line-height:1.3}
+.wire-account-copy:has(>small[hidden])>span {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow-wrap:anywhere}
 .wire-account-copy>small {font-size:var(--type-caption);line-height:1.4;color:var(--muted)}
 .wire-account-trigger>svg {width:16px;height:16px;color:var(--muted)}
 .wire-account-menu {--paper:var(--floating-paper);--pill-fill:var(--paper);position:fixed;inset:auto;margin:0;width:min(320px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:8px;border:1px solid var(--rule);border-radius:12px;background:var(--paper);color:var(--ink);box-shadow:var(--surface-shadow)}

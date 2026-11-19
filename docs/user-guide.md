@@ -29,6 +29,10 @@ does not connect a source. Configured instances open normally, and Pause stays
 paused. A missing source or failed read shows its own explanation instead of
 asking you to keep waiting.
 
+If Settings says the source settings were not saved, correct the paths or
+restore local access and approve again. If it says the change is **unconfirmed**,
+read the current connection first; do not repeat the write.
+
 Repeat source approval in each independent instance. They keep separate
 collection progress, settings, consent and saved reports. Collection can be on
 while older history is still catching up; **Collection status** shows pending,
@@ -328,11 +332,16 @@ older retained activity or rewrite saved reports.
 **Account > Sign out of this instance** stops collection and hides saved private
 activity in every tab of that WIRE instance, without deleting it. It does not
 sign out of GitHub, the Copilot app or another independent WIRE instance.
-Account inherits the GitHub name and avatar from the approved Copilot app
+Open **Account** at the bottom of the navigation (inside the navigation drawer
+on small screens). WIRE reads the GitHub name and avatar from the approved Copilot app
 source: the recorded workspace's linked account, otherwise the app's GitHub
 default. This display profile does not control access to history. A neutral
 icon means the profile is unavailable, not that collection needs a different
 GitHub CLI login.
+
+**Troubleshooting > HTTP recorder** shows any saved diagnostic. Normal WIRE
+launches cannot start a new network test. A saved diagnostic is separate from
+Copilot collection status.
 
 In **Privacy & saved data**, **Review deletion** previews an exact activity
 scope before separate confirmation. **Read history again > Choose chats**

@@ -72,6 +72,23 @@ test("renewing a current GitHub profile does not publish an empty loading presen
     } finally { held.resolve(null); state.profile.dispose(); }
 });
 
+test("a newly approved source retires the displayed identity and any in-flight renewal before reading its profile", async () => {
+    const state = fixture(), old = Promise.withResolvers();
+    try {
+        state.read = () => ({ identity: { state: "verified", login: "old", expiresAt: Date.now() + 15000 } });
+        await state.profile.receiveAccess();
+        state.read = () => old.promise;
+        const renewing = state.profile.refresh();
+        state.read = () => ({ identity: { state: "verified", login: "new", expiresAt: Date.now() + 15000 } });
+        const changed = state.profile.receiveSourceChange();
+        assert.deepEqual(state.deliveries.at(-1).github, { phase: "loading", profile: null });
+        old.resolve({ identity: { state: "verified", login: "stale" } });
+        await Promise.all([renewing, changed]);
+        await state.profile.receiveAccess();
+        assert.deepEqual(state.deliveries.flatMap(({ github }) => github.profile ? [github.profile.identity.login] : []), ["old", "new"]);
+    } finally { old.resolve(null); state.profile.dispose(); }
+});
+
 test("GitHub profile renewal starts before the hard identity and image deadlines", async t => {
     t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
     const state = fixture();

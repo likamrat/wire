@@ -236,9 +236,15 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         setText(triggerDetail, verified ? "" : detail); triggerDetail.hidden = verified;
         setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
         menuDetail.hidden = !verified && detail === "This instance";
-        const needsRead = github.phase === "error" || verified === false
+        const failedAppRead = appProfile && profile?.identity.reason === "app-profile-read-failed";
+        const needsRead = failedAppRead || github.phase === "error" || verified === false
             && (profile?.identity.reason === "account-snapshot-expired" || profile?.issues?.length > 0);
-        const profileHelp = !wireHidden && needsRead ? "GitHub profile could not be read." : "";
+        const profileHelp = wireHidden ? "" : needsRead ? "GitHub profile could not be read."
+            : appProfile && !verified ? ({
+                "app-profile-source-unavailable": "Copilot profile unavailable from the current source.",
+                "app-profile-signed-out": "No GitHub account found in the Copilot app.",
+                "app-profile-selection-ambiguous": "The selected Copilot account is unclear.",
+            }[profile.identity.reason] || "Copilot profile unavailable.") : "";
         setText(profileMessage, profileHelp); profileMessage.hidden = !profileHelp;
         if (profileRetry) {
             profileRetry.hidden = wireHidden || !needsRead;

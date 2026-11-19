@@ -46,6 +46,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
     const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
         && api.isCurrent(access.token) === true;
     const key = "workiq-evidence.deletion-operation";
+    const records = count => `${count} record${count === 1 ? "" : "s"}`;
     const setStatus = (message, error = false) => {
         $("deleteStatus").textContent = message;
         $("deleteStatus").classList.toggle("error", error);
@@ -125,12 +126,12 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             $("deleteChangeScope").hidden = true;
             $("deleteCancel").textContent = "Close";
             $("deleteTitle").textContent = "Collected activity deleted";
-            setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and dependent local data" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
+            setStatus(`Deleted ${records(result.counts.records)}${result.linkedInsights?.interactions ? " and dependent local data" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
             update();
             if (dialog.open) $("deleteCancel").focus();
             const applied = await onCommitted();
             if (!current(access)) return;
-            if (!applied) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
+            if (!applied) setStatus(`Deleted ${records(result.counts.records)}. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
         } else if (result.phase === "not-started") {
             flow.edit(scope());
             form.hidden = false;
@@ -165,9 +166,9 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             const result = await api("/api/deletion/preview", scope());
             if (!current(access) || !flow.accept(token, result)) return;
             const c = result.counts;
-            $("deleteSummary").textContent = result.scope.scope === "all"
-                ? `All collected activity: ${c.records} records across ${c.requestGroups} current request groups.`
-                : `${result.scope.from} through ${result.scope.to}, inclusive (${result.scope.timeContext.timeZone}): ${c.records} records across ${c.requestGroups} current request groups.`;
+            const scopeLabel = result.scope.scope === "all" ? "All collected activity"
+                : `${result.scope.from} through ${result.scope.to}, inclusive (${result.scope.timeContext.timeZone})`;
+            $("deleteSummary").textContent = `${scopeLabel}: ${records(c.records)} across ${c.requestGroups} current request group${c.requestGroups === 1 ? "" : "s"}.`;
             $("deleteZone").textContent = `Time zone: ${result.scope.timeContext.timeZone}. Dates use each record's start time, not completion. Calls without a start use their recorded group capture time; Graph sites never borrow it. ${result.scope.bounds ? `UTC bounds: ${result.scope.bounds.from} up to (not including) ${result.scope.bounds.to}.` : "Includes unknown-time records and retained recovery copies."}`;
             const units = [[c.toolCalls - (c.anonymousToolCalls ?? 0), "tool call"],
                 [c.graphRecords - (c.anonymousGraphRecords ?? 0), "Graph record"],

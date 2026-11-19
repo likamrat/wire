@@ -107,7 +107,7 @@ export const settingsMarkup = `
     <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
     <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
     <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search matches text in saved activity and reports. Missing history may leave results out. Refresh the stored view, then try again.</p></details>
+    <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search uses saved activity and reports. Check collection status for missing history.</p></details>
   </section>
   </div>
   </div>
@@ -141,10 +141,10 @@ export const settingsMarkup = `
       <div id="collectionEvidenceDetails"></div>
     </details>
   <details id="recorderDiagnostics" class="settings-advanced"><summary>Optional network diagnostic</summary>
-    <p id="recorderPurpose">Test the HTTP recorder, not collection. This sends one public request to Microsoft Graph and saves its diagnostic result locally. It is not needed to collect your Copilot history.</p>
-    <p id="recorderEffect" class="settings-help">GET graph.microsoft.com/v1.0/$metadata. No sign-in, credentials, response body logging or automatic retries. This cannot verify Work IQ, access to your workplace data or collection health.</p>
-    <button id="recordBtn" type="button" aria-describedby="recorderPurpose recorderEffect recorderStatus" disabled>Test HTTP recorder</button>
-    <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open this section to read the last saved diagnostic. No request is sent until you confirm.</p>
+    <p id="recorderPurpose" hidden>Test the HTTP recorder, not collection. Sends one public request to Microsoft Graph and saves the result locally.</p>
+    <p id="recorderEffect" class="settings-help" hidden>GET graph.microsoft.com/v1.0/$metadata, without credentials, saved response body or retries. This cannot verify Work IQ or access to workplace data.</p>
+    <button id="recordBtn" type="button" aria-describedby="recorderPurpose recorderEffect recorderStatus" hidden disabled>Test HTTP recorder</button>
+    <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open to read the last saved diagnostic.</p>
     <p id="recorderEvidence" class="settings-help" hidden></p>
     <p id="recorderStorageWarning" class="notice error" role="status" hidden></p>
     <a id="recorderResultLink" class="text-link" href="#home?layer=http" hidden>View HTTP recorder evidence</a>
@@ -473,7 +473,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("changeReviewedPaths").disabled = working;
         $("firstCollectionWait").hidden = !editing || approved || uncertain || Boolean(readError);
         $("firstCollectionActivity").hidden = visibleSection !== "connection" || !firstApprovalConfirmed || !approved || editing || uncertain || Boolean(readError);
-        $("connectionPreferences").hidden = editing || sourceCollection?.active && !approved;
+        $("connectionPreferences").hidden = editing || sourceCollection?.controlsActive && !approved;
         const preferenceHome = editing ? $("sourcePreferenceSlot") : $("connectionPreferences");
         if ($("collectionPreferenceFields").parentElement !== preferenceHome) {
             if (editing) preferenceHome.append($("collectionPreferenceFields"));
@@ -637,12 +637,13 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             reset();
             message(typeof success === "function" ? success(latest) : success, false, origin);
         } catch (error) {
-            if (operation.dispatched) uncertain = true;
+            const refused = endpoint === "/api/collection/configure" && error.configuration === "not-saved" && current(stamp);
+            if (operation.dispatched && !refused) uncertain = true;
             if (!current(stamp)) { revokedWrite ||= operation.dispatched; return; }
             const detail = error.reason === "runtime_unavailable" ? "WIRE is not responding."
                 : error.reason === "invalid_response" ? "The response could not be read."
                 : error.reason === "wire_access_stale" ? "WIRE access changed." : error.message;
-            message(detail + (operation.dispatched ? " Change unconfirmed." : " Change not started."), true);
+            message(detail + (refused ? " Settings were not saved." : operation.dispatched ? " Change unconfirmed." : " Change not started."), true);
         } finally {
             input = null; success = null;
             if (pendingOperation === operation) {
@@ -879,6 +880,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setSection(section, setting) {
             if (visibleSection === section && visibleSetting === setting) return;
             const sectionChanged = visibleSection !== section;
+            if (section !== "connection") firstApprovalConfirmed = false;
             visibleSection = section;
             visibleSetting = setting;
             if (sectionChanged && !busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");
