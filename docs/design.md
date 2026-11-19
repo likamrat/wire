@@ -51,10 +51,10 @@ with its task. Missing optional facts need no empty row. Missing or conflicting
 evidence that limits a conclusion must remain explicit. Do not repeat the same
 fact in a badge, paragraph, warning and disclosure.
 
-Compact identity summaries show at most two tool names and two known service
-names. More tools/services flows inline with matching typography, not as a
-separate control. Full reading preserves exact identities. Tool, service,
-author and outcome are different meanings and must not share inferred labels.
+On interaction cards, put source, author and time with the prompt. Group tool
+names separately from requested targets, operation and missing attribution. Keep
+the glyph beside its label, with dividers between adjacent identities. Repeated
+tool names may share a count; the reader still lists every distinct call.
 
 ### Surfaces and color
 
@@ -69,9 +69,9 @@ an outlined card or redundant Workspace caption. Settings follows the shared
 page and section type scale.
 
 The React evaluation pairs its compact overview above full-width interaction
-rows. In the Work IQ list the prompt leads; a quieter line gives its origin,
-time, filter scope when different, and at most one recorded exception.
-Tool/service inventories and complete results belong to the interaction reader.
+rows. In the Work IQ list the prompt leads. An adjacent identity key stacks below
+it in narrow columns. A tool failure and a separate returned issue each lead to
+their own evidence; routine rows need no four-state ledger.
 The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
 

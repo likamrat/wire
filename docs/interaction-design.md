@@ -243,21 +243,20 @@ cannot republish withdrawn data.
 
 ### Cards
 
-Work IQ cards help people recognize and open an interaction. The authorized prompt
-excerpt comes first (one line in a wide row, up to two in a narrow row).
-When no text is available, show the recorded availability instead; never invent
-a prompt from the tool arguments. Author, time and a differing match scope are
-secondary. Show at most one factual exception: a failed tool call takes
-precedence over a reported result issue. The absence of a cue is not a verdict
-about the interaction. The existing right-hand reader owns tool and service
-identities, all outcomes, requested and returned facts, and their explanations.
-One link opens that reader. Opening a clipped excerpt starts at the prompt;
-other valid reader returns can retain their prior position.
-The reader offers a longer exact preview, not a second summary.
+On Work IQ cards, keep ordinary retained prompt text in full, including its
+paragraphs and final instruction. A single explicitly marked quotation between
+two ordinary passages may fold in place. Ambiguous text, code or a retained
+fragment is not a candidate. Missing text has an availability label, not a
+title inferred from the arguments. A bounded source preview is not a full
+conversation; opening it uses its own authorized reader.
 
-A card is one native link without nested Copy, checkbox or duplicate Open
-controls. Report-picker checkboxes remain separate. Native modified-click and
-text selection keep their established behavior.
+The origin and date identify the request. The identity key describes the
+matching records, not the current account: exact tools, recorded targets,
+operations and applicable gaps. The reader keeps complete-parent ordinals.
+Inspect opens the activity; a prompt link opens the original; tool failure and
+returned-result links resolve their own evidence. Report selection is separate.
+Keep the native links, text selection, focus return and disclosure controls
+independent. Opening the reader does not alter report membership.
 
 ### Call results
 

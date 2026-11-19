@@ -16,7 +16,7 @@ import { privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
-async function setup(t, { activity = true, records = [], storageBlocked = false, frontend } = {}) {
+async function setup(t, { activity = true, records = [], storageBlocked = false, frontend, activityEvents } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
     const home = path.join(root, "invented-copilot"), sessionRoot = path.join(home, "session-state");
     const id = randomUUID(), at = new Date().toISOString();
@@ -26,14 +26,14 @@ async function setup(t, { activity = true, records = [], storageBlocked = false,
     db.prepare("INSERT INTO sessions(id,title,session_type) VALUES(?,?,?)").run(id, "Cedar planning notes", "general_chat");
     const events = [
         { type: "session.start", data: { sessionId: id, version: 1 } },
-        ...(activity ? [
+        ...(activityEvents ?? (activity ? [
             { type: "user.message", data: { content: "Find the Cedar planning notes." } },
             { type: "tool.execution_start", data: { toolName: "workiq-fetch", toolCallId: id, arguments: { entityUrls: ["/me/messages"] } } },
             { type: "tool.execution_complete", data: { toolCallId: id, success: true } },
-        ] : []),
+        ] : [])),
     ];
     await writeFile(path.join(sessionRoot, id, "events.jsonl"), events.map(event =>
-        JSON.stringify({ ...event, id: randomUUID(), timestamp: at })).join("\n") + "\n");
+        JSON.stringify({ id: randomUUID(), timestamp: at, ...event })).join("\n") + "\n");
     const previousHome = process.env.COPILOT_HOME;
     process.env.COPILOT_HOME = home;
     let access, runtime, browser;
@@ -84,10 +84,95 @@ async function capture(page, name, fullPage = false) {
     await mkdir(proofs, { recursive: true });
     await page.evaluate(async () => {
         await document.fonts.ready;
+        await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})));
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage });
 }
+
+test("enforced React activity keeps the full request, matched identities, exact return and scoped report selection", { timeout: 90000 }, async t => {
+    const prompt = "Compare the room booking with the invitation for the Willow workshop.\n\n> Monday: library\n> Wednesday: west stairs\n\nKeep both original dates. Do not send an invitation.";
+    const start = (id, tool, args) => ({ type: "tool.execution_start", data: { toolCallId: id, toolName: tool, arguments: args } });
+    const end = (id, success, result) => ({ type: "tool.execution_complete", data: { toolCallId: id, success,
+        ...(success ? { result } : { error: { code: "ToolUnavailable", message: "Synthetic tool unavailable." } }) } });
+    const now = Date.now() - 60000;
+    const activityEvents = [
+        { type: "user.message", data: { content: prompt } },
+        start("read", "workiq-fetch", { entityUrls: ["/me/calendarView", "/me/messages"] }),
+        end("read", true, { structuredContent: { results: [{ statusCode: 200, path: "/me/calendarView" },
+            { statusCode: 403, path: "/me/messages", errorCode: "AccessDenied" }] } }),
+        start("lookup", "workiq-retrieve", { query: "Willow handover" }), end("lookup", false),
+        start("directory", "workiq-fetch", { entityUrls: ["/me/contacts"] }), end("directory", true, {}),
+        start("assistance", "workiq-ask", { question: "Compare the two notes." }), end("assistance", true, {}),
+        { type: "assistant.message", data: { content: "The two sources name different rooms." } },
+        { type: "user.message", data: { content: "When does the workshop start?" } },
+        start("time", "workiq-fetch", { entityUrls: ["/me/calendarView"] }), end("time", true, {}),
+    ].map((event, i) => ({ ...event, timestamp: new Date(now + i * 1000).toISOString() }));
+    const { page, runtime, mutations } = await setup(t, { frontend: "react", activityEvents });
+    await page.goto(runtime.url); await ready(page);
+    await expect(page.locator("#welcomeReviewSource")).toBeVisible();
+    await page.locator("#welcomeReviewSource").click(); await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toHaveText("Source approved.");
+    await navigateMain(page, "analyze"); await ready(page);
+    assert.equal(mutations.filter(m => m.path === "/api/collection/configure").length, 1);
+    await expect(page.locator("#activityList .request-row")).toHaveCount(2);
+    const card = page.locator("#activityList .read-in-place").filter({ hasText: "Keep both original dates." });
+    await expect(card.locator(".card-tool-name").first()).toContainText(/workiq-/);
+    await expect(card).toContainText("Asked Copilot"); await expect(card).toContainText("Underlying services not recorded");
+    const quote = card.locator(".card-quotation");
+    await quote.locator("summary").focus(); await page.keyboard.press("Enter");
+    await expect(quote).toHaveAttribute("open", ""); await expect(quote).toContainText("> Wednesday: west stairs");
+    await page.keyboard.press("Enter"); await expect(quote).not.toHaveAttribute("open", "");
+    const fail = card.getByRole("link", { name: /workiq-retrieve failed/ }), issue = card.getByRole("link", { name: /result: HTTP 403/i });
+    await expect(fail).toBeVisible(); await expect(issue).toBeVisible();
+    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 390, 1], ["light", 1024, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(n => { document.documentElement.style.fontSize = n * 100 + "%"; }, scale);
+        await card.scrollIntoViewIfNeeded(); await capture(page, `bound-cards-${theme}-${width}`);
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await issue.focus(); await page.keyboard.press("Enter");
+        await expect(page.locator(".api-result-entry:focus")).toContainText("403");
+        await expect(page.locator('#requestContent [data-reader-section="activity"] .reader-call-row')).toHaveCount(4);
+        await capture(page, `bound-reader-${theme}-${width}`);
+        await page.locator("#closeContextSidebar").click(); await expect(issue).toBeFocused();
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 }); await page.evaluate(() => document.documentElement.style.fontSize = "");
+    await fail.click(); await expect(page.locator(".reader-call-row:focus")).toContainText("workiq-retrieve");
+    await page.locator(".reader-section-jumps").getByRole("button", { name: "Prompt" }).click();
+    assert.equal(await page.locator("#selectedContext .full-text-content").textContent(), prompt);
+    await page.locator("#closeContextSidebar").click(); await expect(fail).toBeFocused();
+    await page.locator("#wireSearch").click();
+    await page.locator("#wireSearch").fill("both original dates");
+    await page.locator(".wire-search-hit").filter({ hasText: "both original dates" }).first().click();
+    await expect(page.locator("#selectedContext .full-text-content")).toHaveText(prompt);
+    await page.locator("#closeContextSidebar").click(); await expect(page.locator("#wireSearch")).toHaveValue("both original dates");
+    await page.keyboard.press("Escape");
+    await navigateMain(page, "reports");
+    await page.locator('[data-report-preset="all"]').click();
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });
+    await expect(picker.locator(".card-identities")).toContainText("People");
+    const selected = await picker.locator("input[type=checkbox]").isChecked();
+    await capture(page, "bound-picker");
+    await picker.locator(".request-card-open").click(); await expect(page.locator("#selectedContext")).toContainText(prompt);
+    await page.getByRole("button", { name: /Back to (activity|report setup)/ }).click();
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    assert.equal(await picker.locator("input[type=checkbox]").isChecked(), selected);
+    await page.evaluate(() => {
+        const row = document.querySelector("#reportActivityOptions .read-in-place");
+        window.heldCard = [row.querySelector(".request-card-open").firstChild, row.querySelector(".request-card-open").getAttributeNode("href")];
+    });
+    await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
+    await navigateMain(page, "analyze");
+    await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#coverageBody")).toContainText("2 interactions");
+    await page.locator("#coverage [data-settings-link]").click(); await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
+    await page.locator("#wireAccountTrigger").click(); await page.locator("#wireAccountGate").click();
+    await expect(page.locator("#accessShell")).toBeVisible();
+    assert.deepEqual(await page.evaluate(() => window.heldCard.map(n => n.nodeValue)), ["", ""]);
+});
 
 test("fresh enforced entry dismisses once and reaches real retained activity through the existing source approval", { timeout: 60000 }, async t => {
     const { page, runtime, context, mutations } = await setup(t);

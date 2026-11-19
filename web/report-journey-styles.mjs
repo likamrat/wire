@@ -294,6 +294,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-scope-details>.scoped-search{max-width:32rem}
 #reportList .report-entry{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:0;border:0;border-top:1px solid var(--rule);padding:0}
 #reportList .report-entry:has(>.report-selection-toggle){grid-template-columns:44px minmax(0,1fr)}
+#reportList .read-in-place:has(>.report-selection-toggle)>:is(.card-reading-body,.card-reading-actions){grid-column:2}
 .report-selection-toggle{display:grid;place-items:start center;align-self:start;padding-top:1px;flex:none;width:44px;min-height:44px;cursor:pointer}
 .report-selection-toggle>input{width:18px;height:18px;margin:0}
 #reportList .report-selection-toggle{padding-top:24px}

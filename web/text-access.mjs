@@ -72,11 +72,25 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         fragment.append(text.slice(cursor));
         return fragment;
     }
-    function renderCardPreview(source) {
-        const node = document.createElement("p");
+    function renderCardPreview(source, { openPrompt } = {}) {
+        const node = document.createElement("div");
         node.className = "request-card-prompt";
         node.dataset.cardPreview = "";
-        node.append(renderExcerpt(source, Infinity));
+        const original = retained(source) ?? "";
+        // Only a single blank-line-delimited block of explicitly quoted lines, between
+        // ordinary passages. Don't interpret code, indentation or a partial record.
+        const blocks = original.split(/(\r?\n[ \t]*\r?\n)/u);
+        const quotes = blocks.filter((part, i) => !(i % 2) && /^> /u.test(part));
+        const quoted = source?.status === "full" && openPrompt && quotes.length === 1
+            && !/(?:```|~~~)|^(?: {4}|\t)/mu.test(original) && quotes[0].split(/\r?\n/u).every(line => line.startsWith("> "))
+            ? blocks.indexOf(quotes[0]) : -1;
+        if (quoted > 0 && quoted < blocks.length - 1 && blocks[0].trim() && blocks.at(-1).trim()) {
+            const details = document.createElement("details"), summary = document.createElement("summary");
+            summary.textContent = `Quoted passage (${quotes[0].split(/\r?\n/u).length} lines)`;
+            details.className = "card-quotation";
+            details.append(summary, document.createTextNode(quotes[0]));
+            node.append(openPrompt(blocks.slice(0, quoted - 1).join("")), details, document.createTextNode(blocks.slice(quoted + 2).join("")));
+        } else node.append(openPrompt ? openPrompt(original) : document.createTextNode(original));
         bindings.set(node, () => clearOwnedContent(node));
         return node;
     }

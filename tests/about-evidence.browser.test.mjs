@@ -96,7 +96,7 @@ async function measure(page) {
     });
 }
 
-test("About uses short plain paragraphs, one reading measure and unclipped text in both themes at 375/820/1200/2560 and 200%", { timeout: 60000 }, async t => {
+test("scope details belong to the list and do not repeat static guidance at any reading size", { timeout: 60000 }, async t => {
     const { page, url } = await setup(t), measurements = [];
     if (proofs) await mkdir(proofs, { recursive: true });
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
@@ -108,26 +108,26 @@ test("About uses short plain paragraphs, one reading measure and unclipped text 
         const value = await measure(page);
         assert.ok(value.overflow <= 1, `${theme}/${width}/${scale} overflow`);
         assert.equal(value.facts, 0); assert.equal(value.nestedDisclosures, 0);
-        assert.ok(value.words < 160, "Evidence limits live once in this disclosure, not in an unconditional footer");
+        assert.ok(value.words < 60, "Only current membership and a path to collection details belong here");
         assert.doesNotMatch(value.text, /GMT|Snapshot revision|Coverage checked|Sources scanned|sources currently eligible/i);
         assert.equal(new Set(value.paragraphs.map(p => p.width)).size, 1, "Same-role paragraphs share one adaptive measure");
         for (const p of value.paragraphs) {
-            assert.ok(p.font >= 16 * scale && p.lineHeight / p.font >= 1.5);
+            assert.ok(p.font >= 14 * scale && p.lineHeight / p.font >= 1.5);
             assert.equal(p.clipped, false, p.text); assert.notEqual(p.whiteSpace, "nowrap");
             assert.notEqual(p.overflow, "hidden"); assert.equal(p.clamp, "none");
         }
         if (width >= 1200 && scale === 1) {
-            assert.ok(value.paragraphs[0].lines <= 2 && value.paragraphs[1].lines <= 2);
+            assert.ok(value.paragraphs[0].lines <= 2);
             assert.ok(value.height < 400);
             assert.ok(value.paragraphs[0].width < 800, "Wide screens still have a bounded reading line");
         }
-        assert.match(value.text, /message, which may be automated.*Follow-ups with calls.*missing origins stay unverified/s);
-        assert.match(value.text, /date filter selects saved evidence, not the history to collect/);
+        assert.match(value.text, /Scope details.*interactions? from .*Copilot chat/s);
+        assert.doesNotMatch(value.text, /Follow-ups with calls|date filter selects saved evidence|hosted Work IQ/);
         assert.equal(await page.locator("#coverage h2,#coverage h3").count(), 0);
         await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
-        assert.equal(await page.locator("#evidenceExplanation").isVisible(), false);
+        assert.equal(await page.locator("#coverageBody").isVisible(), false);
         await page.keyboard.press("Space");
-        assert.equal(await page.locator("#evidenceExplanation").isVisible(), true);
+        assert.equal(await page.locator("#coverageBody").isVisible(), true);
         if (proofs) await page.locator("#coverage").screenshot({ path: path.join(proofs, `about-${theme}-${width}-${scale * 100}.png`) });
         measurements.push({ theme, width, scale, ...value });
     }
@@ -139,9 +139,9 @@ test("Collection status holds distinct scope/check/scan meanings, canonical coun
     await page.goto(url + "#home?range=custom&from=2026-09-30&to=2026-09-30"); await ready(page);
     await page.locator("#coverage>summary").click();
     const c = current().coverage;
-    assert.match(await page.locator(".coverage-counts").innerText(), new RegExp(`${c.scenarioCount} request group.*${c.sessionCount} Copilot chat.*${c.projectCount} project`));
+    assert.match(await page.locator("#coverageBody").innerText(), new RegExp(`${c.scenarioCount} interaction.*${c.sessionCount} Copilot chat.*${c.projectCount} project`));
     assert.equal(c.sessionCount, 1, "Metadata-only and date-excluded chats are not evidence-bearing counts");
-    assert.equal(await page.locator("#coverageNotice").isVisible(), true, "The history-gap warning remains visible near the activity");
+    assert.equal(await page.locator("#coverageNotice").isVisible(), false, "No missing chat identity or unscanned Graph layer in this view");
     await page.locator("#coverage").getByRole("link", { name: "Collection status", exact: true }).focus();
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#collectionSetup")).toHaveAttribute("open", "");
@@ -189,11 +189,11 @@ test("unknown, empty and code-only evidence stay distinct, including a pending t
     await page.locator("#coverage>summary").click();
     assert.equal(current().totals.count, 1);
     assert.equal(current().coverage.sessionCount, 1);
-    assert.match(await page.locator(".coverage-warning").innerText(), /Coverage is unknown, not zero/);
+    assert.match(await page.locator("#activityCoverageGap").innerText(), /coverage is unknown/i);
     await page.goto(url + "#home?layer=direct-request"); await ready(page);
     if (!await page.locator("#coverage").evaluate(n => n.open)) await page.locator("#coverage>summary").click();
     assert.equal(current().totals.count, 0);
-    assert.match(await page.locator(".coverage-counts").innerText(), /0 request groups from 0 Copilot chats/);
+    assert.match(await page.locator("#coverageBody").innerText(), /0 interactions from 0 Copilot chats/);
     const release = holdUtc();
     try {
         await page.evaluate(() => {

@@ -202,7 +202,15 @@ non-date filters and authorized Search into the comparison.
 
 ## Inspect an interaction
 
-Open a card to read its prompt and recorded activity in the right-hand reader.
+**Scope details** beside the activity list shows which chats and projects contribute
+to the current view. An actual coverage gap stays with the activity it affects;
+**Collection status** opens the underlying collection details.
+
+Read the request directly on its card. Expand a marked quotation in place, or
+open the prompt to read and copy the retained original. **Inspect** goes to the
+recorded activity in the right-hand reader. Tools, requested targets and operations
+are separate; a search or Copilot request does not confirm which apps were used.
+When a tool fails and another call returns an issue, use their separate links.
 Long prompts start with a six-line preview so recorded activity stays close.
 Choose **Show full prompt** to read the rest, or **Show less** to return to the
 preview. Copy still includes the whole retained prompt. Search opens the full

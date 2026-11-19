@@ -1,5 +1,5 @@
 // Present the accepted native conversation without converting it to a GitHub interaction.
-export function createNativeActivityPresentation({ api, ux, presentation, createReaderSections, sourceLabel, excerpt, timing, results, capturedAt, pagedList }) {
+export function createNativeActivityPresentation({ api, ux, presentation, createReaderSections, sourceLabel, excerpt, timing, results, capturedAt, pagedList, activityIdentities }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Native presentation requires the shared publication interface.");
     }
@@ -107,14 +107,14 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         }
         root.replaceChildren();
     }
-    function recognition(record) {
+    function recognition(record, complete = false) {
         const messages = record.nativeConversation.messages;
         const message = messages.find(message => text(message) !== null && message.value.author === "user")
             || messages.find(message => text(message) !== null);
         const fact = !message && sourceFacts(record.nativeConversation)[0];
         if (fact) return { label: factLabels[fact.kind], text: excerpt({ text: factTitle(fact) }), author: "unknown" };
         return { label: message ? messagePresentation(message).label : "Conversation",
-            text: message ? message.value.text.trim() ? excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
+            text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
             author: message?.value.author === "user" ? "user" : "unknown" };
     }
     function card({ record, href, rows, layer, onOpen, contextDateBasis }) {
@@ -123,26 +123,28 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         if (!authorized(publication) || revision !== cardRevision) return null;
         const dateContext = dateContextLabel(contextDateBasis);
         if (dateContext && rows.length) throw new TypeError("Message-date context cannot contain measured call rows.");
-        const row = node("article", "request-row activity-card"), action = node("a", "request-card-open");
+        const row = node("article", "request-row activity-card read-in-place"), action = node("a", "request-card-open recognition-row");
         row.dataset.viewKey = "request:" + record.scenarioId;
         row.dataset.sourceId = record.sourceId;
         action.href = href;
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", "false");
-        const prompt = recognition(record);
+        const prompt = recognition(record, true);
         const origin = node("p", "request-card-origin request-card-author", sourceLabel(record.sourceId) + " \u00b7 " + prompt.label);
         origin.dataset.promptActor = prompt.author;
-        action.append(origin, node("p", "request-card-prompt", prompt.text));
-        const tools = [...new Set(rows.flatMap(row => row.nativeToolNames || []))];
-        if (tools.length) action.append(node("p", "request-card-categories", "Tools: " + tools.slice(0, 2).join(", ")
-            + (tools.length > 2 ? ", More tools" : "")));
+        const body = node("div", "card-reading-body"), context = node("div", "card-request-context");
+        action.append(node("p", "request-card-prompt", prompt.text));
         const summary = results.summarize(rows);
-        action.append(node("p", "request-card-problem", dateContext || (rows.length
-            ? results.entries(layer, summary).map(entry => `${entry.count} ${entry.label.toLowerCase()}`).join(" / ")
-            : record.nativeConversation.calls.length ? "No calls match this view." : "No tool calls recorded.")));
+        const signals = results.entries(layer, summary) ?? [];
+        const highlight = signals.find(entry => entry.key === "failure") ?? signals.find(entry => entry.key !== "success") ?? signals[0];
+        const foot = node("div", "card-reading-actions", dateContext || (rows.length
+            ? highlight ? `${highlight.count} ${highlight.label.toLowerCase()}` : "Result counts unavailable"
+            : record.nativeConversation.calls.length ? "No calls match this view." : "No tool calls recorded."));
         const facts = node("div", "request-card-summary");
         facts.append(node("span", "request-card-time", "Captured: " + capturedAt(record.nativeConversation.observations[0]?.capture.capturedAt)));
-        action.append(facts);
+        context.append(action, origin, facts);
+        body.append(context);
+        if (activityIdentities) body.append(activityIdentities(rows, layer));
         action.addEventListener("click", event => {
             if (!record || !authorized(publication) || revision !== cardRevision || !record) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -150,7 +152,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             event.preventDefault();
             onOpen(record.scenarioId);
         }, { signal: events.signal });
-        row.append(action);
+        row.append(body, foot);
         cards.add(() => { events.abort(); record = null; rows = null; onOpen = null; clear(row, true); });
         return row;
     }

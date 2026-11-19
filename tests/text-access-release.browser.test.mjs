@@ -28,22 +28,22 @@ async function setup(t) {
     return page;
 }
 
-test("line previews adapt to width without rebuilding private text, then retire it synchronously", async t => {
+test("full card text wraps at the available width without rewriting its source, then retires synchronously", async t => {
     const page = await setup(t);
-    await page.addStyleTag({ content: ".request-card-prompt{font:16px/24px sans-serif;max-height:48px;overflow:hidden;margin:0}#home{width:900px}" });
+    await page.addStyleTag({ content: ".request-card-prompt{font:16px/24px sans-serif;white-space:pre-wrap;margin:0}#home{width:900px}" });
     const source = "Review the workshop reference notes, confirm the recorded room layout, and keep the preparation order. ".repeat(2);
     await page.evaluate(text => {
         const source = { status: "full", text };
         window.preview = window.access.renderCardPreview(source);
         document.querySelector("#home").append(window.preview);
     }, source);
-    const clipped = () => page.evaluate(() => window.preview.scrollHeight > window.preview.clientHeight + 1);
-    assert.equal(await clipped(), false);
-    assert.equal(await page.locator(".request-card-prompt").textContent(), source.trim());
+    const height = () => page.evaluate(() => window.preview.clientHeight);
+    const wide = await height();
+    assert.equal(await page.locator(".request-card-prompt").textContent(), source);
     await page.locator("#home").evaluate(node => node.style.width = "240px");
-    assert.equal(await clipped(), true);
+    assert.ok(await height() > wide);
     await page.locator("#home").evaluate(node => node.style.width = "900px");
-    assert.equal(await clipped(), false);
+    assert.equal(await height(), wide);
     const released = await page.evaluate(() => {
         const nodes = [...window.preview.childNodes];
         window.access.release(window.preview);

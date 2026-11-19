@@ -223,11 +223,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         onPage();
     }
     function card({ item, view, onOpen = openConversation, selection = null }) {
-        const owner = api.publicationToken(), events = new AbortController(), article = node("article", undefined, "request-row activity-card");
+        const owner = api.publicationToken(), events = new AbortController(), article = node("article", undefined, "request-row activity-card read-in-place");
         let retired = false;
         article.dataset.sourceId = item.sourceId; article.dataset.viewKey = "request:" + item.id;
         let target = { conversationId: item.id, sourceId: item.sourceId, revision: view.revision, sourceRevision: view.sourceRevision };
-        const action = node("a", undefined, "request-card-open");
+        const action = node("a", undefined, "request-card-open recognition-row");
         action.href = conversationHref(target); action.setAttribute("aria-controls", "contextSidebar");
         action.addEventListener("click", event => {
             if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
@@ -239,14 +239,24 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             + ({ prompt: "My prompt", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation"),
         "request-card-origin request-card-author");
         author.dataset.promptActor = kind === "prompt" ? "user" : "unknown";
-        const recognition = item.presentation ? [...renderText(item.title).children].map(child => child.textContent).join(" ")
-            : "Message preview unavailable";
-        action.append(author, node("p", recognition, "request-card-prompt"));
-        const tools = (item.presentation?.tools ?? []).slice(0, 2);
-        if (item.selectedRows) action.append(node("p", tools.length ? "Tools: " + tools.join(", ")
-            + (item.presentation.toolCount > tools.length ? " / More tools" : "") : "Tool name unavailable", "request-card-categories"));
+        // This paged source deliberately supplies recognition text, not an unrestricted
+        // conversation body. Don't shorten or Markdown-rewrite it again in the browser.
+        action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"));
+        const tools = item.presentation?.tools ?? [];
+        const body = node("div", undefined, "card-reading-body"), context = node("div", undefined, "card-request-context");
+        const key = node("dl", undefined, "card-identities");
+        if (item.selectedRows) {
+            for (const [label, values] of [["Tools", tools.length ? [...tools, ...(item.presentation.toolCount > tools.length
+                ? [`${number(item.presentation.toolCount - tools.length)} more in the reader`] : [])] : ["Not recorded"]],
+            ["Service", ["Not identified in this record"]]]) {
+                const line = node("div", undefined, "card-identity-field"), items = node("dd", undefined, "card-identity-values");
+                items.append(...values.map(value => node("span", value)));
+                line.append(node("dt", label), items); key.append(line);
+            }
+        }
         const problem = node("p", undefined, "request-card-problem"), labels = outcomeLabels(view.aggregates.layer);
-        for (const [key, count] of Object.entries(item.outcomes).filter(([, count]) => count)) {
+        const recorded = Object.entries(item.outcomes).filter(([, count]) => count);
+        for (const [key, count] of recorded.filter(([key]) => key !== "success" || recorded.length === 1)) {
             const label = view.aggregates.layer === "tool" ? ({ failure: "failed", unknown: "unverified" }[key] ?? labels[key].toLowerCase())
                 : labels[key].toLowerCase();
             const part = node("span", `${number(count)} ${label}`, "result-tone-" + key
@@ -256,7 +266,6 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         if (!item.selectedRows) problem.textContent = item.presentation?.contextDateBasis
             ? "Message in the selected dates; call dates unavailable." : "No recorded calls in this selection.";
-        action.append(problem);
         const facts = node("div", undefined, "request-card-summary");
         const dates = item.presentation?.activityDateRange, dated = dates?.datedRows > 0;
         const dateLabel = view.aggregates.layer === "reported-api" ? "Result recorded" : "Call started";
@@ -265,9 +274,12 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             + (dates.undatedRows ? ` / ${number(dates.undatedRows)} undated` : "") : "Activity date unavailable";
         facts.append(node("span", date, "request-card-time"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
-        action.append(facts);
+        context.append(action, author, facts);
+        body.append(context, key);
         if (selection) article.append(selection);
-        article.append(action);
+        const foot = node("div", undefined, "card-reading-actions");
+        foot.append(problem);
+        article.append(body, foot);
         cardNodes.set(article, () => {
             if (retired) return;
             retired = true; events.abort();
