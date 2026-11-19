@@ -11,8 +11,8 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 WIRE prompts you to connect when you first open an unconfigured instance.
 
 1. Choose **Review and connect** in the welcome. **Not now** closes it and leaves
-   the connection prompt in Analyze. You can also use **Settings > Connection &
-   updates > Review source & connect**.
+   the connection prompt in Analyze. You can also use **Settings > Source
+   access > Review source & connect**.
 2. Check **Copilot metadata database** and **Chat history folder**. These must
    point to the supported local Copilot installation whose history you want to read.
    Choose **Change paths** if either location is wrong.
@@ -326,8 +326,9 @@ Changing the display does not rewrite saved reports or their original time zone.
 
 ## Keep collection and saved data separate
 
-**Settings > Connection & updates** owns source approval, history window,
-check frequency and Pause. **Refresh** checks approved local history;
+**Settings > Source access** shows which paths WIRE can read. **Collection**
+sets the history window, check frequency and Pause. Edit the values to show
+**Save preferences** and **Cancel changes**. **Refresh** checks approved local history;
 **Read stored activity** only rereads WIRE's retained view. Paused collection
 stays paused after a deliberate local-history check. **Collection status**
 explains missing files, bounded reads and other known coverage gaps.
@@ -348,7 +349,8 @@ default. This display profile does not control access to history. A neutral
 icon means the profile is unavailable, not that collection needs a different
 GitHub CLI login.
 
-**Troubleshooting > HTTP recorder** shows any saved diagnostic. Normal WIRE
+Use **Help & status** above Account and Settings for the meaning of counts
+and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
 

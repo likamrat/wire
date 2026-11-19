@@ -557,10 +557,16 @@ action after confirmed first approval.
 
 ### Categories and setting search
 
-The four categories are Connection & updates, Privacy & saved data, Display
-and Troubleshooting. Keep one task-oriented pane and the same narrow category
-disclosure, not another application sidebar. Search finds fixed setting
+Settings opens in **Collection**. Its category rail switches between Collection,
+Source access, Display, Privacy & saved data, and Help & status. Keep one
+focused pane; on narrow screens the same categories collapse into a chooser.
+Source access owns approval and paths; Collection owns cadence, Pause and
+one-time checks. Opening either area never approves a source. Search finds fixed setting
 metadata and navigates; it never clicks an action or reads private path values.
+
+The Help & status link just above Account and Settings opens that same category.
+Keep static explanations of counts and recorded tool outcomes there. Coverage
+warnings belong with the affected activity and link to Collection status.
 
 While a Settings query is present, replace the category list with grouped
 destinations. Show each category once, followed by indented setting names.

@@ -180,9 +180,11 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <section id="analyzeTools" className="analyze-tools" aria-label="Analyze tools" hidden>
                 <h2 className="navigation-group-label">Analyze tools</h2><div id="analyzeReturnActions" /><div id="analyzeToolActions" />
             </section>
-            <div id="navigationFooter" className="navigation-footer">
+            <div className="navigation-bottom"><nav className="primary-navigation" aria-label="Help navigation">
+                <a id="openEvidenceHelp" href="#settings?section=troubleshooting" aria-label="Help & status" data-settings-link><span className="navigation-label">Help &amp; status</span></a>
+            </nav><div id="navigationFooter" className="navigation-footer">
                 <div id="wireAccountEntry" hidden /><nav className="primary-navigation" aria-label="Utility navigation">{nav("settings", "Settings")}</nav>
-            </div>
+            </div></div>
         </>, ports.navigation)}
         {createPortal(<>
             <div className="frontend-heading-copy"><p id="pageIdentity" className="session-label" hidden /><h1 id="pageTitle" tabIndex={-1} /><p id="pageIntro" /></div>

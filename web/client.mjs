@@ -605,6 +605,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     document.querySelectorAll(".primary-navigation [data-nav]").forEach(node => {
         node.prepend(ux.icon(`navigation-${node.dataset.nav}`));
     });
+    $("openEvidenceHelp").prepend(ux.icon("navigation-help"));
+    ux.tooltip($("openEvidenceHelp"), () => $("openEvidenceHelp").querySelector(".navigation-label").getBoundingClientRect().width ? "" : "Help & status",
+        { placement: "right", tone: "contrast" });
     for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", closeDialog: "close" })) {
         ux.utility($(id), icon, $(id).getAttribute("aria-label") || $(id).textContent);
     }
@@ -1550,9 +1553,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function settingsTarget(entry) {
         const approved = collection?.config?.approved;
-        if (nativeSettingUnavailable(entry.id)) return "connectionTitle";
-        if (sourceCollection.copilotOnly && !approved && $("sourceEditor").hidden
-            && ["history-window", "cadence", "save-preferences"].includes(entry.id)) return "reviewSource";
+        if (nativeSettingUnavailable(entry.id)) return entry.section === "source-access" ? "sourceAccessTitle" : "connectionTitle";
+        if (entry.section === "connection" && !$("sourceEditor").hidden
+            && ["history-window", "cadence", "save-preferences"].includes(entry.id)) return "collectionSourceDraft";
+        if (sourceCollection.copilotOnly && !approved && ["history-window", "cadence", "save-preferences", "collection-state"].includes(entry.id)) return "collectionSourceEntry";
         if (sourceCollection.active && entry.id === "microsoft-collection") return "sourceMicrosoftSurfaces";
         if (entry.id === "collection-state" && historyStatus.native(collection)) {
             return collectionSettings?.nativeConfigurationIntent?.() === "enable" ? "saveCollection" : "pauseCollection";
@@ -1573,13 +1577,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const query = localQuery("settingsSearch"), entries = settingsNavigation.find(query).filter(entry => !nativeSettingUnavailable(entry.id));
         const searching = Boolean(query.trim());
         $("settingsCategories").hidden = searching;
-        $("settingsStatusLink").hidden = searching || workspaceState.route.section === "troubleshooting";
         const availability = entries.map(entry => {
             const id = settingsTarget(entry), control = $(id);
             if (entry.id === "microsoft-connection") return !$("wireMicrosoftConnection") || $("microsoftConnectionHost").hidden
                 ? "Unavailable in this runtime" : $("wireMicrosoftStatus").textContent;
             if (!collection?.config?.approved && !historyStatus.native(collection)
-                && (["source-paths", "collection-state"].includes(entry.id) || id === "reviewSource" && entry.id !== "source")) return "Source approval needed";
+                && (["source-paths", "collection-state"].includes(entry.id) || id === "collectionSourceEntry" || id === "reviewSource" && entry.id !== "source")) return "Source approval needed";
             if (control?.disabled) return "Action unavailable";
             return "";
         });
@@ -1626,7 +1629,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             anchor.href = routeUrl(routeFor("settings", { section: anchor.dataset.category, setting: undefined, issues: undefined }));
         }
         setText($("settingsCategorySummary"), "Category: " + settingsNavigation.categories.find(category => category.id === section).title);
-        $("settingsStatusLink").hidden = section === "troubleshooting";
         const routeNotice = nativeSettingUnavailable(workspaceState.route.setting) ? sourceCollection.copilotOnly
             ? "This setting is not available in this release." : "This setting is not available for the registered Microsoft reads."
             : workspaceState.route.settingsWarning || (workspaceState.route.setting === "microsoft-connection"
@@ -1734,10 +1736,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function reviewFirstConnection() {
         const publication = api.publicationToken(), origin = { ...workspaceState.route };
         if (!publication || !sourceCollection.copilotOnly) return;
-        const update = navigate({ view: "settings", section: "connection", setting: "source" });
+        const update = navigate({ view: "settings", section: "source-access", setting: "source" });
         const navigation = workspaceState.navigationGeneration, intent = workspaceState.readingIntent;
         const destinationCurrent = () => api.isCurrent(publication) && navigation === workspaceState.navigationGeneration
-            && workspaceState.route.view === "settings" && workspaceState.route.section === "connection" && workspaceState.route.setting === "source";
+            && workspaceState.route.view === "settings" && workspaceState.route.section === "source-access" && workspaceState.route.setting === "source";
         const current = () => destinationCurrent() && intent === workspaceState.readingIntent;
         try {
             if (await Promise.resolve(update) === false || !current()) return;
@@ -8239,7 +8241,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("analyzeRefreshStatus"), model.message);
         const connection = workspaceState.route.view === "settings" && settingsNavigation.resolve(workspaceState.route).section === "connection";
         const contextual = connection || workspaceState.route.view === "collection-status";
-        const anchor = workspaceState.route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
+        const anchor = workspaceState.route.view === "collection-status" ? $("collectionCoverageCounts") : $("settingsRefreshSlot");
         if (host.nextElementSibling !== anchor) anchor.before(host);
         const refresh = $("checkActivity").closest(".ux-disabled-help") || $("checkActivity");
         const refreshHost = host.querySelector(".fresh-controls");
@@ -8248,6 +8250,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             host.querySelector(".fresh-controls").append($("freshResult"));
         }
         $("freshHeading").hidden = !contextual;
+        setText($("freshHeading"), connection ? "One-time check" : "Recorded activity");
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
         const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery || model.combined?.problem
             || refreshOwnsReadFailure() || !globalRecovery && (["error", "unconfirmed"].includes(model.phase) || collectionReadError || workspaceState.stale && !workspaceState.loading);
@@ -9870,7 +9873,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         // Static shell links use live navigation guards, not a pre-admission data publication.
         anchor.dataset.settingsLink = "";
         anchor.dataset.category = category.id;
-        anchor.append(el("span", "settings-category-label", category.title));
+        anchor.append(ux.icon("settings-" + category.id), el("span", "settings-category-label", category.title));
         $("settingsCategoryNav").append(anchor);
     }
     const settingsSize = new ResizeObserver(() => {
@@ -9903,6 +9906,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
+        if (node.id === "openEvidenceHelp" && !api.publicationToken()) { navigateAccessShell("settings"); return; }
         const target = readRoute(node.hash, null);
         const changes = { section: target.section, setting: target.setting, issues: undefined };
         const mode = new URLSearchParams(node.hash.split("?")[1]).get("mode");
@@ -10445,7 +10449,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     $("accessRetry").addEventListener("click", () => api.startAccess());
     function showConnectionSettings(value) {
-        if (workspaceState.route.view !== "settings" || settingsNavigation.resolve(workspaceState.route).section !== "connection"
+        if (workspaceState.route.view !== "settings" || !["connection", "source-access"].includes(settingsNavigation.resolve(workspaceState.route).section)
             || value.mode !== "enforced" || value.state?.wire !== "signed-in"
             || !value.readable && value.reason !== "generation-changed") return false;
         for (const id of ["homeView", "activityView", "requestView", "reportsView", "collectionStatusView",

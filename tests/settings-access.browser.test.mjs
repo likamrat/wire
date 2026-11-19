@@ -39,7 +39,11 @@ window.fixtureUI=fixtureMount({
  onDraftChange:dirty=>fixtureEvents.push("draft:"+dirty)
 });
 fixtureUI.receive(fixtureStatus(),fixtureApi.publicationToken());
-fixtureUI.setSection("connection","source-paths");
+window.fixtureSection=(section,setting)=>{
+ for(const pane of document.querySelectorAll("[data-settings-section]"))pane.hidden=pane.dataset.settingsSection!==section;
+ fixtureUI.setSection(section,setting);
+};
+fixtureSection("connection");
 document.body.dataset.fixtureReady="true";
 `;
     return html.replace("</body>", `<script nonce="${nonce}">${script}</script></body>`);
@@ -86,6 +90,7 @@ test("withdrawal synchronously clears private source presentation but retains sa
     await safeDraft(page);
     await page.locator("#themePreference").focus();
     await page.evaluate(() => {
+        fixtureSection("source-access","source-paths");
         fixtureUI.unavailable("SECRET_ALPHA_READ_ERROR", fixtureApi.publicationToken());
         window.heldSourceText = ["approvedDatabase", "approvedSessions", "settingsConnectionError"].map(id => document.getElementById(id).firstChild);
         window.heldSourceBefore = heldSourceText.map(node => node.data);
@@ -268,6 +273,7 @@ test("repeated withdrawal before a fresh status cannot erase the original safe p
 test("suggested and edited source paths are erased without retaining a private source draft", async t => {
     const page = await setup(t);
     await page.evaluate(()=>{
+        fixtureSection("source-access");
         const status=fixtureStatus();
         status.suggestedSource={...status.config,error:"SECRET_ALPHA_SUGGESTION"};
         status.config=null;

@@ -22,6 +22,8 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .navigation-content>* {flex-shrink:0}
 .navigation-workspace>.navigation-group-label {display:none}
 .navigation-content>.analyze-tools {margin-top:0;padding-top:0;border-top:0}
+.navigation-bottom {margin-top:auto;min-width:0}
+.navigation-bottom>.navigation-footer {margin:0;padding-top:4px}
 .app-sidebar #analyzeTools .analyze-tool-action {white-space:nowrap}
 .navigation-footer {position:relative;display:grid;grid-template-columns:minmax(44px,1fr) 44px;align-items:center;gap:8px;contain:inline-size;margin-top:auto;padding-top:12px;border-top:0}
 .navigation-footer>#wireAccountEntry {grid-column:1;grid-row:1;min-width:0;margin:0}

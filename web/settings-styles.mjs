@@ -209,6 +209,17 @@ export const settingsStyles = `
 #connectionPreferences .settings-preferences .settings-field {padding-block:0;border:0}
 #connectionPreferences #preferenceActions {margin-top:16px;padding-top:0}
 .settings-view #connectionPreferences {padding-bottom:0}
+.settings-view #connectionPreferences:not([hidden]) {padding:var(--space-lg);margin-block:var(--space-md) var(--space-lg);background:var(--canvas);border:0;border-radius:var(--radius)}
+.settings-view .settings-collection-state {border:0;padding-block:0 var(--space-sm);align-items:center}
+.settings-view #connectionTitle {margin-bottom:var(--space-lg)}
+.settings-view .settings-collection-state .connection-status {color:var(--muted);font-weight:var(--weight-regular)}
+.settings-view #approvedConnection {justify-self:end}
+.settings-view #sourceEditAction {margin-top:8px}
+.settings-view #approvedSourceDetails {padding:0;border:0}
+.settings-view #settingsStatusLink {margin:8px 0 0}
+.settings-evidence-guide {margin-block:var(--space-lg)}
+.settings-evidence-guide .settings-advanced {margin:0}
+.settings-evidence-guide h3 {margin-bottom:var(--space-sm)}
 .settings-view .settings-group>.settings-task-row {padding:0;border:0;margin:0}
 .settings-view .settings-group>.settings-task-row h3 {margin:0}
 .settings-group>.collection-status-actions {margin-top:8px}

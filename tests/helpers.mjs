@@ -97,8 +97,7 @@ export async function navigateSettings(page, category) {
 }
 
 export async function openSourceEditor(page) {
-    const inspect = page.locator("#viewApprovedSource");
-    if (await inspect.isVisible()) await inspect.click();
+    if (!await page.locator('[data-settings-section="source-access"]').isVisible()) await navigateSettings(page, "source-access");
     await page.locator("#editSource").click();
 }
 
