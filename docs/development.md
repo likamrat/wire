@@ -191,6 +191,16 @@ is omitted, for existing serialization-based fixtures. New frontend proof must
 explicitly use `frontend: "bundled"` or `"react"` and the real build. Do not treat
 an inline fixture as proof of the packaged browser entry.
 
+To compare Analyze counts with main, prepare this checkout and a separate
+trusted reference checkout for their respective normal startup (`npm ci` and
+`npm run build --if-present` in each). Set
+`WIRE_COUNT_REFERENCE_ROOT` to the reference checkout's absolute path, then run
+`node --test tests/count-parity.qualification.mjs` here. It launches the
+reference normally and this checkout in contributor mode on ephemeral ports,
+approves the same invented source in two disposable stores, and checks call
+and interaction identities as well as the counts shown across pages and filters.
+It does not connect to either running installation or copy personal history.
+
 For source-reader changes, the opt-in
 `tests/wsl-portability.qualification.mjs` suite runs from Windows against
 an owned WSL installation of the same revision. Set `WIRE_WSL_DISTRO`,
