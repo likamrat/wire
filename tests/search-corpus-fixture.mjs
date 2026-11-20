@@ -11,6 +11,9 @@ export const inventedSource = () => ({ available: true, sourceConfigRef: `source
 
 // Seed an already-retained invented envelope; no collector, original history reader or capture is run.
 export async function seedRetainedReply(session, source = inventedSource(), text = "INVENTED_RETAINED_REPLY three documents found") {
+    return (await seedRetainedReplies(session, source, text, 1))[0];
+}
+export async function seedRetainedReplies(session, source, text, count) {
     await updateBoardState(session, state => {
         state.personalEvaluation = defaultPersonalEvaluation();
         state.personalEvaluation.source = source;
@@ -23,9 +26,19 @@ export async function seedRetainedReply(session, source = inventedSource(), text
         sourceConfigRef: source.sourceConfigRef, sourceConfigRevision: source.sourceConfigRevision, confirmed: true,
     }, { source: () => source });
     state = await loadBoardState(session);
-    const model = buildAssessmentModel(state, { source }), view = [...model.details.values()][0];
+    const model = buildAssessmentModel(state, { source });
+    const captures = [], files = [];
+    for (const [i, view] of [...model.details.values()].slice(0, count).entries()) {
+        const { capture, file } = await seedFile(session, state, view, text, source, i);
+        captures.push(capture); files.push(file);
+    }
+    await updateBoardState(session, current => { current.personalEvaluation.captures.push(...captures); });
+    invalidateAssessmentCache();
+    return files;
+}
+async function seedFile(session, state, view, text, source, index) {
     const interactionRef = view.interaction.interactionRef;
-    const observationRef = assessmentRef(state, "observation", "invented-response");
+    const observationRef = assessmentRef(state, "observation", index ? `invented-response-${index}` : "invented-response");
     const evidenceRef = assessmentRef(state, "evidence", observationRef), basis = assessmentBasis(state);
     const dependencies = { ...assessmentDependencies(view), basis, evidenceRefs: [evidenceRef] };
     const captureKeys = [{ category: "answer", eventHash: assessmentHash("invented-event") }];
@@ -47,9 +60,6 @@ export async function seedRetainedReply(session, source = inventedSource(), text
     const directory = path.join(session.dataDir, "assessment-evidence");
     await mkdir(directory, { recursive: true });
     await writeFile(path.join(directory, payloadFile), bytes, { mode: 0o600 });
-    await updateBoardState(session, current => {
-        current.personalEvaluation.captures.push({ category: "answer", observation, dependencies, payloadFile, captureKeys });
-    });
-    invalidateAssessmentCache();
-    return { payloadFile: path.join(directory, payloadFile), observationRef };
+    return { capture: { category: "answer", observation, dependencies, payloadFile, captureKeys },
+        file: { payloadFile: path.join(directory, payloadFile), observationRef } };
 }
