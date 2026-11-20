@@ -22,7 +22,7 @@ import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { createSessionJourney } from "./session-journey.mjs";
 import { createPagePaths } from "../lib/page-path.mjs";
 import { createReportJourney, createPreparedReportFrame } from "./report-journey.mjs";
-import { createReportExperience, createReportSaveWarning, decoratePreparedReport, reportWorkspacePresentation } from "./report-experience.mjs";
+import { createReportExperience, createReportSaveWarning, decoratePreparedReport, reportFileChoices, reportWorkspacePresentation } from "./report-experience.mjs";
 import { createDateRangeCalendar } from "./date-range-calendar.mjs";
 import { enhanceReportReading } from "./report-reading.mjs";
 import { mountCollectionSettings, mountDisplayTimeSettings } from "./settings.mjs";
@@ -96,7 +96,7 @@ function factories() {
         createSourceCollectionState, createRefreshSources, mountSourceCollectionSettings, createBoundedNativeState,
         createNativeReportPublicationState, mountBoundedNative,
         savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection,
-        createReportSaveIdentity, reportWorkspacePresentation, createDateRangeCalendar,
+        createReportSaveIdentity, reportWorkspacePresentation, reportFileChoices, createDateRangeCalendar,
         mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart }),
         createReportExperience: options => createReportExperience({ ...options, createCalendar: createDateRangeCalendar }),
         createReportSaveWarning, decoratePreparedReport, enhanceReportReading, mountAnalyzeReferenceEntry,

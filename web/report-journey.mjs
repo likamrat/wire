@@ -153,7 +153,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, readSavedReports, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep, api, createSaveIdentity, reportFirst = false } = {}) {
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, readSavedReports, showSourceIssues, downloadFile, fileLabel = name => name, openSavedReport, icon, utility, onStateChange, presentStep, requestStep, api, createSaveIdentity, reportFirst = false } = {}) {
     const accessIntegrated = Boolean(root) || api !== undefined || createSaveIdentity !== undefined;
     if (accessIntegrated && (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function")) {
         throw new TypeError("Mounted report journeys require publication authority and a save-identity factory.");
@@ -730,9 +730,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 const field = el("label", "saved-file-choice", "File"), select = el("select");
                 select.setAttribute("aria-label", "Saved file");
                 for (const name of Object.keys(value.files).sort((a, b) => Number(a === "coverage-and-redaction-manifest.json") - Number(b === "coverage-and-redaction-manifest.json"))) {
-                    const label = name === "coverage-and-redaction-manifest.json" ? "Manifest" : name.endsWith(".html") ? "HTML"
-                        : name.endsWith(".pdf") ? "PDF" : name.endsWith(".md") ? "Markdown" : "JSON";
-                    const option = el("option", "", label); option.value = name; select.append(option);
+                    const option = el("option", "", fileLabel(name)); option.value = name; select.append(option);
                 }
                 const control = button("Download", async () => {
                     if (!currentSaved() || !control.isConnected || control.disabled) return;

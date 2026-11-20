@@ -342,7 +342,7 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
     return { ready, dispose };
 }
 
-export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, utility, onInfo, title, brand, hideRail = false } = {}) {
+export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, utility, onInfo, title, brand, hideRail = false, fileLabel } = {}) {
     const doc = host.ownerDocument, win = doc.defaultView, sources = new Map();
     let disposed = false, mounted = null, sourceMode = selection?.source === true, shownName, shownValue;
     const el = (tag, text, cls) => {
@@ -368,8 +368,8 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
     const preview = el("div", undefined, "prepared-file-preview"), originals = el("div", undefined, "prepared-file-source");
     preview.tabIndex = 0; preview.setAttribute("role", "region"); preview.setAttribute("aria-label", externalToolbar ? "Saved file preview" : "Prepared file preview");
     const rail = el("nav", undefined, "prepared-file-rail"), choices = new Map();
-    rail.id = id; rail.setAttribute("aria-label", "Files to be saved");
-    rail.append(el("h3", "Files to be saved"));
+    rail.id = id; rail.setAttribute("aria-label", "Viewing");
+    rail.append(el("h3", "Viewing"));
     const format = name => name === "coverage-and-redaction-manifest.json" ? "manifest"
         : name.endsWith(".md") ? "markdown" : name.split(".").at(-1);
     const labels = { html: "HTML", pdf: "PDF", markdown: "Markdown", json: "JSON", manifest: "Manifest" };
@@ -378,7 +378,7 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
         Number(a === "coverage-and-redaction-manifest.json") - Number(b === "coverage-and-redaction-manifest.json"))) {
         const choice = el("button", undefined, "quiet prepared-file-choice"), label = el("span");
         choice.type = "button"; choice.dataset.fileName = name;
-        label.append(el("strong", labels[format(name)] || name), el("span", name, "prepared-file-choice-name"));
+        label.append(el("strong", fileLabel?.(name) ?? labels[format(name)] ?? name), el("span", name, "prepared-file-choice-name"));
         if (icon) choice.append(icon(["json", "manifest"].includes(format(name)) ? "code" : "reports"));
         choice.append(label); rail.append(choice); choices.set(name, choice);
         if (typeof contents === "string") {
