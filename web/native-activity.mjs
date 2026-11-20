@@ -7,7 +7,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
     const isNative = record => record?.recordKind === "native-conversation";
     const present = fact => fact?.availability === "recorded";
     const text = fact => present(fact) && typeof fact.value?.text === "string" ? fact.value.text : null;
-    const names = { user: "My prompt", assistant: "Assistant reply", tool: "Tool message", unknown: "Author unverified" };
+    const names = { user: "Recorded user message", assistant: "Assistant reply", tool: "Tool message", unknown: "Author unverified" };
     function messagePresentation(message) {
         const author = message.value?.author, representation = message.value?.representation;
         if (author === "user") return { section: "prompt", kind: "prompt", label: representation === "follow-up" ? "Follow-up" : names.user };
@@ -130,8 +130,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", "false");
         const prompt = recognition(record, true);
-        const origin = node("p", "request-card-origin request-card-author", sourceLabel(record.sourceId) + " \u00b7 " + prompt.label);
-        origin.dataset.promptActor = prompt.author;
+        const origin = node("span", "request-card-author", prompt.label);
+        origin.prepend(ux.icon("search-interaction"));
         const body = node("div", "card-reading-body"), context = node("div", "card-request-context");
         action.append(node("p", "request-card-prompt", prompt.text));
         const summary = results.summarize(rows);
@@ -142,7 +142,13 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             : record.nativeConversation.calls.length ? "No calls match this view." : "No tool calls recorded."));
         const facts = node("div", "request-card-summary");
         facts.append(node("span", "request-card-time", "Captured: " + capturedAt(record.nativeConversation.observations[0]?.capture.capturedAt)));
-        context.append(action, origin, facts);
+        const orientation = node("div", "card-orientation"); orientation.append(origin);
+        if (layer === "tool" && summary?.failure) {
+            const cue = node("span", "card-failure", `${summary.failure} tool ${summary.failure === 1 ? "call" : "calls"} failed`);
+            cue.prepend(ux.icon("result-failure-compact")); orientation.append(cue); foot.textContent = "";
+        }
+        facts.prepend(node("span", "request-card-source", "Source: " + sourceLabel(record.sourceId)));
+        context.append(orientation, action, facts);
         body.append(context);
         if (activityIdentities) body.append(activityIdentities(rows, layer));
         action.addEventListener("click", event => {
@@ -173,8 +179,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const responses = conversation.messages.filter(message => message.value?.author === "assistant");
         const activityMessages = conversation.messages.some(message => messagePresentation(message).section === "activity");
         let updates = sourceFacts(conversation);
-        const promptTitle = prompts.some(message => message.unit === "message-representation-part") ? "My prompt text"
-            : prompts.length === 1 ? "My prompt" : "Recorded prompts";
+        const promptTitle = prompts.some(message => message.unit === "message-representation-part") ? "Recorded user text"
+            : prompts.length === 1 ? names.user : "Recorded user messages";
         const replyTitle = responses.some(message => message.unit === "message-representation-part") ? "Assistant reply text"
             : responses.length === 1 ? "Assistant reply" : "Assistant replies";
         const prompt = sections.add("prompt", promptTitle,

@@ -54,15 +54,15 @@ async function setup(t, empty = false) {
     return { page, runtime, current, set: next => { override = next; }, failStatus: value => { statusError = value; }, posts };
 }
 
-test("initial shell keeps routine health in hidden Settings and technical copy in one closed disclosure", () => {
+test("initial shell keeps routine health in Settings without a scope accordion above activity", () => {
     const shell = renderHtmlShell("synthetic", "entry-proof");
     assert.ok(shell.indexOf('id="pageTitle"') < shell.indexOf('id="pageIntro"'));
     assert.ok(shell.indexOf('id="settingsView"') < shell.indexOf('id="collectionStrip"'));
-    assert.ok(shell.indexOf('id="activityView"') < shell.indexOf('id="coverage"'));
+    assert.ok(shell.indexOf('id="activityView"') < shell.indexOf('id="coverageNotice"'));
     const intro = /id="pageIntro">([^<]+)/.exec(shell)[1];
     assert.equal(intro.split(/\s+/).length, 7);
     assert.doesNotMatch(shell, /id="homePurpose"|class="collector-panel|id="collectionIssueLink"/);
-    assert.match(shell, /id="coverage"[^>]*><summary>Scope details/);
+    assert.doesNotMatch(shell, /<summary>Scope details/);
 });
 
 test("task-first entry fits both themes and 100/200% text before opening retained help", { timeout: 120000 }, async t => {

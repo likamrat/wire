@@ -8,6 +8,8 @@ import { frontendRecords, reviewRecords, overviewGeometry } from "./frontend-fix
 import { scanSourceForExport } from "../lib/privacy.mjs";
 import { chooseTheme, navigateMain, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { palettes } from "../web/theme.mjs";
+import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_FRONTEND_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -102,8 +104,8 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
     const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const promptLink = card.locator(".request-card-open");
     await expect(card).toContainText("Review the Cedar handover");
-    await expect(card.locator(".request-card-exception")).toHaveText(["workiq-retrieve failed", /result: HTTP 403/]);
-    await expect(card.locator(".card-identities")).toContainText("workiq-fetch ×3");
+    await expect(card.locator(".request-card-exception")).toHaveText(["1 tool call failed", /result: HTTP 403/]);
+    await expect(card.locator(".card-tool-item").filter({hasText:"workiq-fetch"})).toHaveText("workiq-fetch (3 calls)");
     await expect(card.locator(".card-identities")).toContainText("Mail");
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
     await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied|ToolUnavailable|flag alone|completion event|end time/);
@@ -164,6 +166,63 @@ test("heterogeneous summary cards stay readable in complete Light Dark narrow an
             await capture(page, `compact-after-${theme}-${width}-text${scale}-reading`);
         }
     }
+});
+
+test("wrapped card identities keep their value edge, named counts and distinct origin and failure cues", { timeout: 90000 }, async t => {
+    const records = compactCardRecords(), mixed = records[0], failed = mixed.toolCalls[1];
+    records[1].userPrompt.status = "partial";
+    records[1].userPrompt.text = "Review this reference:\n\n> https://example.invalid/" + "workshop-notes/".repeat(90);
+    records[2].userPrompt.authorship = { actor: "unknown", basis: "missing-source" };
+    records[2].toolCalls[0].apiResults = [{ index: 0, path: "/me/messages", statusCode: 403, evidenceLevel: "intermediary-reported" }];
+    mixed.toolCalls.push(...Array.from({ length: 10 }, (_, i) => ({ ...mixed.toolCalls[0],
+        toolCallId: `repeat-${i}`, startEventId: `repeat-start-${i}`, completionEventId: `repeat-end-${i}`, apiResults: [] })));
+    mixed.toolCalls.push({ ...failed, tool: "workiq-search_paths", toolCallId: "prepare", startEventId: "prepare-start",
+        completionEventId: "prepare-end", toolSucceeded: true, reportedOutcome: "succeeded", failureEvidence: undefined });
+    const { page } = await setup(t, "react", records);
+    const row = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    const count = row.locator(".card-tool-count"), failure = row.locator(".card-failure"), author = row.locator(".request-card-author");
+    await expect(count).toHaveText("(13 calls)"); await expect(failure).toHaveAccessibleName("1 tool call failed");
+    await expect(author).toContainText("My prompt"); await expect(author.locator("svg")).toHaveCount(1);
+    await expect(failure.locator("svg")).toHaveCount(1); await expect(row.locator(".returned-issue-ink")).toBeVisible();
+    await expect(row.locator(".request-card-source")).toHaveCount(0);
+    await expect(page.locator("#activityList .request-card-author").filter({hasText:"Agent prompt"}).first()).toBeVisible();
+    const partial = page.locator("#activityList .activity-card").filter({hasText:"Part of the prompt was retained."});
+    const resultOnly = page.locator("#activityList .activity-card").filter({has:page.locator(".request-card-author").filter({hasText:"Author unverified"})})
+        .filter({has:page.locator(".returned-issue-ink")});
+    await expect(resultOnly).toHaveCount(1); await expect(resultOnly.locator(".card-failure")).toHaveCount(0);
+    await expect(partial.locator(".card-quotation")).toHaveCount(0);
+    let wrapped = false;
+    for (const palette of Object.keys(palettes)) for (const mode of ["dark","light"]) {
+        await page.evaluate(id => document.documentElement.dataset.evidencePalette = id, palette);
+        await chooseTheme(page, mode);
+        for (const [width, scale] of [[1440,1],[1170,1],[390,2]]) {
+            await page.setViewportSize({width,height:1000}); await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
+            const measured = await row.evaluate(node => {
+                const list = node.querySelector(".card-tool-item").parentElement, left = list.getBoundingClientRect().left;
+                let prevTop = -Infinity, lines = 0;
+                for (const item of list.children) {
+                    const r = item.getBoundingClientRect(), css = getComputedStyle(item);
+                    if (Math.abs(prevTop - r.top) > 2) lines++;
+                    if (Math.abs(prevTop - r.top) > 2 && Math.abs(r.left - left) > 1 || r.right > list.getBoundingClientRect().right + 1
+                        || parseFloat(css.borderInlineStartWidth) || parseFloat(css.paddingInlineStart)) return {aligned:false};
+                    prevTop = r.top;
+                }
+                const c = node.querySelector(".card-tool-count"), name = c.previousElementSibling, face = node.querySelector(".card-failure-face");
+                return {aligned:true, lines, paper:getComputedStyle(node).backgroundColor, count:getComputedStyle(c).color,
+                    failure:getComputedStyle(face).color, failPaper:getComputedStyle(face).backgroundColor,
+                    author:getComputedStyle(node.querySelector(".request-card-author")).color,
+                    size:getComputedStyle(c).fontSize, nameSize:getComputedStyle(name).fontSize};
+            });
+            assert.ok(measured.aligned, `${palette}/${mode} ${width}: wrapped tool names start on the value edge`);
+            wrapped ||= measured.lines > 1;
+            assert.equal(measured.size,measured.nameSize);
+            assert.ok(contrast(measured.count,measured.paper)>=4.5 && contrast(measured.author,measured.paper)>=4.5
+                && contrast(measured.failure,measured.failPaper)>=4.5, JSON.stringify(measured));
+            const clipped = await partial.locator(".card-excerpt").evaluate(n => n.clientHeight < n.scrollHeight && n.clientHeight <= parseFloat(getComputedStyle(n).lineHeight)*4+1);
+            assert.ok(clipped, "An incomplete URL and quotation cannot grow past the home preview.");
+        }
+    }
+    assert.ok(wrapped, "Exercise an actual wrapped value group, not just a wide row.");
 });
 
 test("partial outcome opens the exact retained call and explains its limited provenance", async t => {

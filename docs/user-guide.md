@@ -214,13 +214,16 @@ non-date filters and authorized Search into the comparison.
 
 ## Inspect an interaction
 
-**Scope details** beside the activity list shows which chats and projects contribute
-to the current view. An actual coverage gap stays with the activity it affects;
-**Collection status** opens the underlying collection details.
+The count above the cards follows your filters. **Collection status** shows
+the contributing chats, projects and source coverage. An actual coverage
+warning stays beside the affected activity.
 
-Read the request directly on its card. Expand a marked quotation in place, or
-open the prompt to read and copy the retained original. **Inspect** goes to the
-recorded activity in the right-hand reader. Tools, requested targets and operations
+Analyze cards show a short preview. Open the prompt to read and copy the
+retained original, including text after the ellipsis. **Inspect** goes to the
+recorded activity in the right-hand reader. **My prompt**, **Agent prompt** or
+**Author unverified** describes the prompt’s origin, not its app. A label such
+as **1 tool call failed** opens the failed call; it does not mean the whole
+request failed. Repeated tools show a count with its unit. Tools, requested targets and operations
 are separate; a search or Copilot request does not confirm which apps were used.
 When a tool fails and another call returns an issue, use their separate links.
 Long prompts start with a six-line preview so recorded activity stays close.

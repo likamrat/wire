@@ -412,7 +412,7 @@ test("the normal Reports picker preserves the exact known tool identity when ope
     const row = page.locator("#report-select-search-0").locator("xpath=ancestor::article[1]");
     await capturePicker(page, "picker-known-tool");
     await expect(row.locator(".card-identities")).toContainText("workiq-retrieve");
-    await expect(row.locator(".request-card-exception").first()).toHaveText("workiq-retrieve failed");
+    await expect(row.locator(".request-card-exception").first()).toHaveText("1 tool call failed");
     await expect(row.locator(".request-card-exception").last()).toHaveText("Mail result: HTTP 403");
     await expect(row).not.toContainText(/Access was denied|WIRE interpretation/);
     const origin = page.url();
@@ -450,7 +450,7 @@ test("the normal Reports picker keeps long plural evidence readable in both them
         const row = picker.locator(".request-row");
         await expect(row).toHaveCount(1);
         await expect(row.locator(".card-identities")).toContainText("workiq-retrieve");
-        await expect(row.locator(".request-card-exception")).toHaveText(["workiq-retrieve failed", /result: HTTP 403/]);
+        await expect(row.locator(".request-card-exception")).toHaveText(["1 tool call failed", /result: HTTP 403/]);
         await row.scrollIntoViewIfNeeded();
         await capturePicker(page, `picker-${theme}-${width}-${size}-plural`);
         const layout = await body.evaluate(node => ({
