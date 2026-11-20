@@ -210,13 +210,18 @@ services or models overlap. Straight lines use the same observations; a missing
 measurement breaks the line. Chart type, unit, population and selection are
 independent. Select a value to reach its exact calls without maximizing.
 
+Keep Period, Filters and the guide together at the chart column's leading
+edge. Place display choices together by the measure title. The plot shares
+the chart card's surface, not a second palette-colored rectangle. An empty
+period uses a compact dated explanation and optional jump to real activity.
 Period opens the 7/14/30/custom choices. Never substitute a pending date or
 filter for the last accepted facts. Compare measures adds charts on the same
 dates without copying a second scope. **All charts**, available within the
 comparison chooser, retains the full-width overview and its sizing controls.
 
-The same chart owner serves overview and maximized reading. Every daily date
-is labeled with month and day, except Today; hover supplies the exact date.
+The same chart owner serves overview and maximized reading. Daily ticks use
+month and day, except Today; the compact index may show fewer tick labels
+while preserving the full set of dated marks. Hover supplies the exact date.
 Measure label widths at the screen's 14px axis role and scroll locally instead
 of thinning dates, shrinking text or scaling an old SVG. Isolated observations
 may use a small dot; never connect across an unknown day. Author rows remain

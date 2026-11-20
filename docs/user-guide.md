@@ -122,12 +122,19 @@ Analyze** restores the original widget.
 ### Choose the period and activity
 
 Open **Period** for **Last 7 days**, **Last 14 days**, **Last 30 days** or
-**Custom dates**. The control names the applied range.
-While a new range loads, its pending label appears above the charts; the dates
-and values stay on the last accepted range until the read succeeds.
-Every date is labeled, including all 30 days: past dates show month and day,
-and the current day says **Today**. Scroll inside a chart to read earlier dates;
-new ranges open at the latest dates. Custom ranges over 90 days page through
+**Custom dates**. With no period selected, Trends starts with the last seven
+days. If that week is empty and older dated calls exist, **Latest activity**
+shows the seven days ending on the most recent matching call. An explicit
+period or Analyze widget never moves automatically. An empty period can offer
+**Show week ending …** without dropping the active filters.
+
+The period control shows the accepted dates while a new read is pending.
+An explicit preset, measure or user-entered custom range can be reopened
+from the address; private filtered selections stay in the original tab.
+Every civil day is available in **Data table**. Long single-series charts
+space out date labels to show more of the period at once. If the chart
+scrolls, the dates in view are shown below it; the index initially shows
+the span with the most calls. Custom ranges over 90 days page through
 days without changing full-period totals. Dates use the display time zone and
 include both endpoints; choosing older dates does not collect older history.
 

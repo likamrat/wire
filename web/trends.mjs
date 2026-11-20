@@ -1,4 +1,4 @@
-export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, getContext, recordLink, reload, returnToAnalyze }) {
+export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, getContext, recordLink, reload, returnToAnalyze, onScopeChange }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models"];
     const families = {
@@ -77,6 +77,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     let overviewScroll = 0, dialogOrigin = null, inspecting = null, allCollapsed = null, inspectionKey = "";
     let evidenceReturn = null, pendingTimer = 0;
     let activeMeasure = "rhythm", allCharts = false, compared = new Set(), entryKey = null, acceptedEntry = null, readingRevision = null, readingZone = null, failedRead = null;
+    let routeScopeKey;
+    function rememberScope(kind) {
+        onScopeChange?.({ family: family ?? activeMeasure, period, range, filters }, kind);
+        routeScopeKey = JSON.stringify(getContext().routeScope ?? null);
+    }
     const cards = new Map();
     const toolbar = el("div", "trends-toolbar"), periods = el("div", "trends-periods");
     const status = el("p", "notice"), qualification = el("p", "trends-qualification"), restrictions = el("div", "trends-restrictions");
@@ -84,7 +89,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     pendingNotice.setAttribute("role", "status");
     status.setAttribute("role", "status"); status.hidden = true;
     for (const days of ["7", "14", "30"]) {
-        const control = button(`Last ${days} days`, () => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters }));
+        const control = button(`Last ${days} days`, () => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" }));
         control.dataset.trendPeriod = days; periods.append(control);
     }
     const custom = button("Custom dates", openDates, "quiet trends-date-range"); custom.dataset.trendPeriod = "custom";
@@ -106,7 +111,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         paint();
     });
     toolbar.append(periods, filtersButton, guide, collapseAll);
-    const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset }));
+    const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset, remember: "filters" }));
     restrictions.append(restrictionText, clearFilters); restrictions.hidden = true;
     const retry = button("Read stored activity", () => {
         const context = getContext();
@@ -133,7 +138,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const homeBack = button("Back to Analyze", () => { if (current() && getContext().entry) returnToAnalyze?.(); });
     homeBack.prepend(ux.icon("back")); homeBack.hidden = true; toolbar.prepend(homeBack);
     const primaryColumn = el("div", "trends-primary-column");
-    primaryColumn.append(overview); workspace.append(index, primaryColumn);
+    primaryColumn.append(toolbar, overview); workspace.append(index, primaryColumn);
     const tooltip = el("aside", "trends-tooltip"); tooltip.id = "trendsTooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
     const paging = el("div", "trends-paging"), inspection = el("section", "trends-inspection");
     const exactButton = button("View numbers", () => {
@@ -149,7 +154,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
     const feedback = el("div", "trends-read-feedback");
     feedback.append(pendingNotice, status, retry, qualification);
-    root.append(toolbar, restrictions, detailBar, feedback, workspace, paging, inspection, tooltip, dialog);
+    root.append(restrictions, detailBar, feedback, workspace, paging, inspection, tooltip, dialog);
+    toolbar.setAttribute("role", "group"); toolbar.setAttribute("aria-label", "Trend scope and options");
     dialog.addEventListener("close", () => {
         if (dialog.open) return;
         scrub(dialogBody); scrub(dialogTitle);
@@ -233,6 +239,14 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         plot.id = `trendsPlot-${id}`; plot.tabIndex = 0; plot.setAttribute("role", "region");
         plot.setAttribute("aria-label", `${spec.label} by day. Arrow keys move between dates and series.`);
         const limits = el("p", "trends-limits"), indexScope = el("p", "trends-index-scope");
+        const empty = el("div", "trends-no-activity"), emptyTitle = el("h3"), emptyDetail = el("p", "muted");
+        const showWeek = button("", () => {
+            if (!current() || !data.coverage.latestMatchingDate) return;
+            const to = data.coverage.latestMatchingDate;
+            void read({ range: { from: time.addDays(to, -6), to }, period: "latest", filters, remember: "period" });
+        });
+        empty.append(emptyTitle, emptyDetail, showWeek); empty.hidden = true;
+        const visibleDays = el("p", "trends-visible-days"); visibleDays.hidden = true;
         const actions = el("div", "trends-secondary");
         const comparison = button("Compare measures", () => openComparison(card)), numbers = button("Data table", () => openTable(card));
         actions.append(comparison, numbers);
@@ -242,12 +256,12 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const evidence = button("View evidence", () => showEvidence(card));
         evidence.id = `trendsEvidence-${id}`;
         pointScope.append(pointSpace, pointText); pointActions.append(evidence); point.append(pointDate, pointScope, pointActions);
-        identity.append(totals, indexScope); summary.append(legend, types); body.append(summary, plot);
+        identity.append(totals, indexScope); indexModes.append(types); summary.append(legend); body.append(summary, plot, visibleDays);
         heading.insertBefore(modes, sizing);
         heading.append(indexModes);
-        content.append(body, point, limits, actions); panel.append(heading, content); overview.append(panel);
+        content.append(empty, body, point, limits, actions); panel.append(heading, content); overview.append(panel);
         const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
-            point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "",
+            point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "", empty, emptyTitle, emptyDetail, showWeek, visibleDays,
             types, indexModes, indexScope, basis, comparison, numbers, actions, type: "columns", percentMode: "share",
             mode: id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         cards.set(id, card);
@@ -258,6 +272,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             if (allCharts && (card.collapsed || heading.contains(event.target))) toggleCollapsed(card);
         });
         card.chart = mountChart({ root: plot, tooltip, color, authorIcon, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
+            onWindow(first, last, count) {
+                visibleDays.hidden = !first;
+                const text = first ? `${axisDate(first)} – ${axisDate(last)} in view · ${count} days in this chart` : "";
+                if (visibleDays.textContent !== text) visibleDays.textContent = text;
+            },
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
             onSelect(date, series) {
                 evidenceReturn = null;
@@ -283,6 +302,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (!Object.hasOwn(families, id) || !current()) return;
         hideHover(); activeMeasure = id; family = null; allCharts = false; compared.delete(id);
         evidenceReturn = null; paint();
+        rememberScope("measure");
         const card = cards.get(id);
         if (card.plot.getBoundingClientRect().top >= innerHeight) {
             card.title.focus({ preventScroll: true });
@@ -312,7 +332,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const presets = el("div", "trends-periods");
         for (const days of ["7", "14", "30"]) {
             const control = button(`Last ${days} days`, () => {
-                dialog.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters });
+                dialog.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
             });
             control.setAttribute("aria-pressed", String(period === days)); presets.append(control);
         }
@@ -355,6 +375,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             || value.window.offset !== request.offset || value.days.some(day => !day.date || !Number.isSafeInteger(day.calls)
                 || !Number.isSafeInteger(day.interactions) || Object.keys(families).some(id => !Array.isArray(day.values?.[id])))
             || !Array.isArray(value.members) || Object.keys(families).some(id => !Array.isArray(value.definitions[id]))
+            || value.coverage?.latestMatchingDate != null && !/^\d{4}-\d\d-\d\d$/.test(value.coverage.latestMatchingDate)
             || history && (history.scope !== "saved-chats" || history.affectedDates !== "unknown"
                 || ["unreadableChats", "limitedChats", "pendingChats"].some(key => !Number.isSafeInteger(history[key]) || history[key] < 0)
                 || !history.reasons || Object.values(history.reasons).some(count => !Number.isSafeInteger(count) || count < 0))) {
@@ -380,7 +401,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             pendingTimer = setTimeout(() => {
                 if (!enabled || generation !== pending || !api.isCurrent(token)) return;
                 const dates = `${time.formatDate(request.from, request.timeContext, true)} – ${time.formatDate(request.to, request.timeContext, true)}`;
-                pendingNotice.textContent = `Loading ${next.period === "custom" ? dates : `Last ${next.period} days · ${dates}`}…`;
+                pendingNotice.textContent = `Loading ${["custom","latest"].includes(next.period) ? dates : `Last ${next.period} days · ${dates}`}…`;
             }, 300);
         }
         if (doc.activeElement === retry && data) filtersButton.focus({ preventScroll: true });
@@ -390,6 +411,10 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             if (!enabled || generation !== pending) return;
             if (!api.isCurrent(token)) { withdrawAccess(); return; }
             validate(value, request);
+            if (next.initial && !value.totals.calls && value.coverage.latestMatchingDate && value.coverage.latestMatchingDate < request.from) {
+                const to = value.coverage.latestMatchingDate;
+                return await read({ ...next, initial: false, range: { from: time.addDays(to, -6), to }, period: "latest" });
+            }
             evidenceReturn = null;
             if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
@@ -407,6 +432,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 if (changedPopulation) card.selection = null;
                 for (const definition of data.definitions[id]) color(definition.id, id);
             }
+            if (next.routeFamily) { activeMeasure = next.routeFamily; family = null; allCharts = false; compared.clear(); }
             if (next.entry && getContext().entry?.key === next.entry.key) {
                 const entry = next.entry, card = cards.get(entry.family);
                 acceptedEntry = entry.key;
@@ -418,6 +444,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 paint(); card.chart.reveal(entry.date); card.title.focus({ preventScroll: true }); card.title.scrollIntoView({ block: "nearest", behavior: "instant" });
             } else if (replacing) paintStable(family ? cards.get(family) : null);
             else paint();
+            if (next.remember && generation === pending && current()) rememberScope(next.remember);
         } catch (error) {
             if (generation !== pending || !enabled) return;
             if (!api.isCurrent(token)) { withdrawAccess(); return; }
@@ -429,6 +456,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (!family) overviewScroll = scrollY;
         hideHover(); family = id; cards.get(id).collapsed = false; allCollapsed = null; inspectionKey = "";
         paint(); window.scrollTo({ top: 0, behavior: "instant" }); cards.get(id).title.focus({ preventScroll: true });
+        rememberScope("measure");
     }
     function restore() {
         if (!family) return;
@@ -455,7 +483,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         calendar.reset(range);
         actions.append(button("Cancel", () => dialog.close()), button("Apply dates", () => {
             if (!calendar.valid()) return;
-            const selected = calendar.value(); dialog.close(); void read({ range: selected, period: "custom", filters });
+            const selected = calendar.value(); dialog.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
         }));
         dialogBody.append(host, actions);
     }
@@ -469,7 +497,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const actions = el("div", "trends-dialog-actions");
         actions.append(button("Cancel", () => dialog.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
-            dialog.close(); void read({ range, period, filters: next, offset });
+            dialog.close(); void read({ range, period, filters: next, offset, remember: "filters" });
         })); dialogBody.append(actions);
     }
     function openGuide() {
@@ -502,7 +530,27 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         panel.dataset.manySeries = String(source.definitions[id].length > 6);
         card.modes.hidden = collapsed || !allCharts;
         card.totals.hidden = collapsed || !allCharts;
-        card.indexModes.hidden = allCharts;
+        const noCalls = !totals.calls, noMeasure = !allCharts && totals.calls && (
+            id === "timing" && !totals.timedCalls || id === "models" && totals.missingModels === totals.interactions
+            || id === "services" && !totals.values.services.some(value => value.calls));
+        const unavailable = noCalls || Boolean(noMeasure);
+        card.indexModes.hidden = allCharts || unavailable;
+        card.body.hidden = unavailable;
+        card.plot.hidden = unavailable;
+        card.empty.hidden = !unavailable;
+        if (unavailable) {
+            const latest = source.coverage.latestMatchingDate;
+            card.emptyTitle.textContent = noCalls ? "No matching calls in this period"
+                : id === "timing" ? "No calls with recorded duration" : id === "models" ? "No recorded response models" : "No identified services";
+            card.emptyDetail.textContent = noCalls ? latest ? `Most recent matching call: ${fullDate(latest)}.`
+                : source.coverage.undatedCalls ? "Matching calls without a start date cannot be placed on a daily chart."
+                : Object.keys(filters).length ? "No dated calls match these filters in retained activity." : "No dated Work IQ calls are available in retained activity."
+                : id === "timing" ? "A duration needs a recorded start and completion." : "The calls are included in the period count.";
+            card.showWeek.hidden = !(noCalls && latest);
+            if (!card.showWeek.hidden) card.showWeek.textContent = `Show week ending ${axisDate(latest)}`;
+            card.visibleDays.hidden = true;
+            if (card.drawing) { card.chart.withdrawAccess(); card.drawing = null; }
+        }
         card.indexScope.hidden = allCharts;
         card.actions.hidden = allCharts;
         card.types.hidden = allCharts;
@@ -558,7 +606,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             const maximum = mode === "count" ? Math.max(1, totals.calls) : id === "timing" ? Math.max(1, ...totals.values.timing.map(value => card.chart.metric(value, id, mode) ?? 0)) : 100;
             row.querySelector(".trends-value-fill").style.width = `${(amount ?? 0) * 100 / maximum}%`;
         }
-        card.summary.hidden = allCharts && !card.legend.childElementCount;
+        card.summary.hidden = !card.legend.childElementCount;
         card.body.dataset.summary = String(!card.summary.hidden);
         const limits = [];
         if (id === "services") {
@@ -579,14 +627,14 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const captions = [summary + " in this period"];
         if (id === "timing") captions.push("milliseconds");
         if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
-        if (id !== "services" && source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
+        if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
         if (Object.keys(filters).length) captions.push(restrictionText.textContent);
         card.indexScope.textContent = captions.join(" · ");
         paintPoint(card);
-        if (!panel.hidden && !collapsed) {
+        if (!panel.hidden && !collapsed && !unavailable) {
             const encoding = JSON.stringify([mode, card.type, [...hidden].sort(), allCharts, family === id]);
             if (source !== card.drawing?.source || encoding !== card.drawing.encoding) {
-                card.chart.render(source, id, mode, hidden, card.selection, card.type);
+                card.chart.render(source, id, mode, hidden, card.selection, card.type, !allCharts);
                 card.drawing = { source, encoding };
             } else if (card.width !== card.plot.clientWidth || card.height !== card.plot.clientHeight) {
                 card.chart.resize({ width: card.plot.clientWidth, height: card.plot.clientHeight });
@@ -656,7 +704,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.evidence.disabled = ids.size === 0;
             return;
         }
-        card.point.hidden = false; card.evidence.textContent = "View evidence";
+        card.point.hidden = !source.totals.calls; card.evidence.textContent = "View evidence";
         card.point.classList.toggle("trends-inspection-heading", family === card.id);
         scrub(card.pointDate); card.pointDate.append(doc.createTextNode(axisDate(day.date)));
         scrub(card.pointText); card.pointText.append(doc.createTextNode(pointScope(day, card, selected?.label ?? "Shown series", selected && !shown(selected, card))));
@@ -752,6 +800,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (!current()) return;
         filtersButton.disabled = false; periodButton.disabled = false;
         root.dataset.layout = allCharts ? "all" : "index";
+        const toolbarHost = allCharts ? root : primaryColumn;
+        if (toolbar.parentElement !== toolbarHost) toolbarHost.prepend(toolbar);
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
         detailBar.hidden = !allCharts || !family; inspection.hidden = !allCharts || !family; collapseAll.hidden = !allCharts || Boolean(family);
         exactButton.hidden = !allCharts || !family;
@@ -764,22 +814,21 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (family) chooser.field.value = family;
         for (const node of periods.children) node.setAttribute("aria-pressed", String(node.dataset.trendPeriod === period));
         const dateRange = formatRange();
-        rangeText.textContent = dateRange;
+        rangeText.textContent = `${period === "latest" ? "Latest activity · " : ""}${dateRange}`;
         periodButton.title = `Inclusive dates · ${data.timeContext.timeZone}`;
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
         restrictions.hidden = !allCharts || !Object.keys(filters).length;
-        clearFilters.hidden = allCharts && !Object.keys(filters).length;
         if (!Object.keys(filters).length && doc.activeElement === clearFilters) filtersButton.focus({ preventScroll: true });
         clearFilters.disabled = !Object.keys(filters).length;
+        clearFilters.hidden = clearFilters.disabled;
         filtersButton.setAttribute("aria-label", "Filters");
         filtersButton.title = restrictionText.textContent || "Filter activity";
         const clearHost = allCharts ? restrictions : toolbar;
         if (clearFilters.parentElement !== clearHost) clearHost.append(clearFilters);
         const limits = [];
         if (allCharts && data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} calls have no start date and are left out.`);
-        if (!data.totals.calls) limits.push("No matching calls in this period. Change the dates or clear filters.");
         qualification.textContent = limits.join(" "); qualification.hidden = !limits.length;
         for (const card of cards.values()) paintCard(card, dateRange);
         const feedbackHost = cards.get(family ?? (allCharts ? order[0] : activeMeasure)).panel;
@@ -797,7 +846,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         root.insertBefore(feedback, workspace);
-        range = null; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
+        range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
         scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("title"); periodButton.hidden = true;
         filtersButton.disabled = true; periodButton.disabled = true;
@@ -805,7 +854,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
             card.mode = card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
-            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence]) scrub(node);
+            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence,
+                card.emptyTitle, card.emptyDetail, card.showWeek, card.visibleDays]) scrub(node);
         }
         const selectedText = doc.getSelection();
         if (selectedText && (root.contains(selectedText.anchorNode) || root.contains(selectedText.focusNode))) selectedText.removeAllRanges();
@@ -824,20 +874,32 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         enabled = true;
         if (!context.publication || context.stale) { hideHover(); return; }
         if (data && !api.isCurrent(bound)) { withdrawAccess(); enabled = true; }
-        const entry = context.entry;
+        const entry = context.entry, routeScope = context.routeScope, routeKey = JSON.stringify(routeScope ?? null);
         if (entry && entry.key !== entryKey && entry.revision === context.revision && entry.timeContext.timeZone === context.timeContext.timeZone
             && Object.hasOwn(families, entry.family) && families[entry.family].modes.some(([id]) => entry.measure === id)) {
-            entryKey = entry.key; evidenceReturn = null; homeBack.hidden = false;
+            entryKey = entry.key; routeScopeKey = routeKey; evidenceReturn = null; homeBack.hidden = false;
             const start = entry.date && entry.date >= entry.range.from && entry.date <= entry.range.to
                 ? 90 * Math.floor((Date.parse(entry.date) - Date.parse(entry.range.from)) / (86400000 * 90)) : latestOffset(entry.range);
             void read({ entry, period: entry.period, range: entry.range, filters: entry.filters, offset: start }); return;
         }
+        if (routeScopeKey !== routeKey && (routeScope || routeScopeKey !== undefined)) {
+            routeScopeKey = routeKey;
+            const target = routeScope ?? { family: "rhythm", period: "7", range: time.preset("7",context.timeContext.timeZone), filters: {}, adaptive:true };
+            const same = current() && target.range.from === range.from && target.range.to === range.to
+                && JSON.stringify(target.filters) === JSON.stringify(filters) && period === target.period && data.timeContext.timeZone === context.timeContext.timeZone;
+            if (!same || root.getAttribute("aria-busy") === "true") {
+                void read({ ...target, initial: Boolean(target.adaptive), routeFamily: target.family }); return;
+            }
+            activeMeasure = target.family; family = null; compared.clear(); allCharts = false; paint(); return;
+        }
+        routeScopeKey = routeKey;
         if (root.getAttribute("aria-busy") === "true" && readingRevision === context.revision && readingZone === context.timeContext.timeZone) return;
         if (!entry) { acceptedEntry = entryKey = null; homeBack.hidden = true; }
-        if (!range) range = time.preset("7", context.timeContext.timeZone);
+        const initial = !range;
+        if (initial) range = time.preset("7", context.timeContext.timeZone);
         const input = { expectedRevision: context.revision, from: range.from, to: range.to, filters, offset, timeContext: context.timeContext };
         const key = JSON.stringify(input);
-        if (key !== requestedKey || lastRevision !== context.revision && key === acceptedKey) void read({ range, period, filters, offset });
+        if (key !== requestedKey || lastRevision !== context.revision && key === acceptedKey) void read({ range, period, filters, offset, initial });
         else if (data && key === acceptedKey && !wasEnabled) paint();
     }
     return { update, withdrawAccess,
@@ -1015,7 +1077,13 @@ export const trendsStyles = `
 #trendsView[data-layout=all] .trends-workspace{display:block}#trendsView[data-layout=all] .trends-measure-index{display:flex;flex-wrap:wrap;border:0;margin-bottom:12px}#trendsView[data-layout=all] .trends-measure{width:auto}
 #trendsView[data-layout=all] .trends-plot{contain:layout paint}
 #trendsView[data-layout=all] .trends-plot svg{content-visibility:auto}
-#trendsView[data-layout=index] .trends-toolbar{justify-content:flex-end;margin-bottom:12px}
+#trendsView[data-layout=index] .trends-toolbar{justify-content:flex-start;gap:4px 8px;margin-bottom:8px}
+#trendsView[data-layout=index] .trends-index-modes{justify-content:flex-end;gap:6px 12px}
+#trendsView[data-layout=index] .trends-no-activity{margin-block:16px 8px}
+.trends-no-activity h3{margin:0;font:var(--weight-medium) var(--type-body)/1.5 var(--font)}
+.trends-no-activity p,.trends-visible-days{margin:4px 0;color:var(--muted);font-size:var(--type-small);overflow-wrap:anywhere}
+.trends-no-activity button{margin-top:4px}
+.trends-visible-days{grid-column:1/-1}
 .trends-read-feedback .trends-pending,.trends-read-feedback .trends-qualification{min-height:0;margin:8px 0 0;overflow-wrap:anywhere}
 .trends-read-feedback .trends-pending:empty{display:none}
 #trendsView{position:relative;--trends-selected-hover:color-mix(in srgb,var(--accent-soft),var(--accent-pressed))}#trendsView[data-layout=index] .trends-toolbar button:disabled{visibility:hidden}
@@ -1023,11 +1091,13 @@ export const trendsStyles = `
 #trendsView :is(.trends-choice[aria-pressed=true],.trends-measure[aria-current=page]){--choice-hover:var(--trends-selected-hover);background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium);box-shadow:inset 0 0 0 1px var(--control)}
 #trendsView :is(.trends-choice,.trends-measure):enabled:hover{background:var(--choice-hover,var(--hover))}
 #trendsView :is(.trends-choice,.trends-measure):enabled:active{background:var(--accent-pressed)}
-#trendsView[data-layout=index] .trends-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
-@container trend-card (max-width:34rem){#trendsView[data-layout=index] .trends-heading{grid-template-columns:minmax(0,1fr)}}
+#trendsView[data-layout=index] .trends-heading{display:flex;align-items:start}
+#trendsView[data-layout=index] .trends-identity{flex:1 1 11rem}
+#trendsView[data-layout=index] .trends-index-modes{min-width:0;max-width:100%}
 @container trend-card (max-width:34rem){
  #trendsView[data-layout=index] .trends-legend{flex:1 1 100%;max-height:min(28vh,12rem);overflow-y:auto}
  #trendsView[data-layout=index] .trends-chart-types{margin-inline-start:0}
+ #trendsView[data-layout=index] .trends-index-modes{justify-content:flex-start;flex-basis:100%}
 }
 @container (max-width:52rem){.trends-workspace{grid-template-columns:minmax(0,1fr);gap:8px}.trends-measure-index{display:flex;flex-wrap:wrap;gap:2px;border-inline-end:0;border-bottom:1px solid var(--surface-divider);padding:0 0 8px}.trends-measure-index .trends-measure{width:auto}.trends-heading .trends-identity{flex:1 1 17rem}}
 @container (max-width:27rem){.trends-measure-index{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.trends-measure-index .trends-measure{padding:4px 8px;white-space:normal}#trendsView[data-layout=index] .trends-panel{padding:12px}.trends-switch{max-width:100%}}

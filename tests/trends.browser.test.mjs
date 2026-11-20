@@ -703,7 +703,7 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await page.locator(".trends-evidence-row a").first().click();
     await expect(page.locator("#requestContent")).toContainText("Cedar release notes");
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
-    await expect(page).toHaveURL(/\/trends$/);
+    await expect(page).toHaveURL(/\/trends\?measure=tools&period=custom&from=2026-08-01&to=2026-08-30$/);
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
     await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
     assert.ok(reads.every(read => !("scenarioIds" in read) && read.timeContext.timeZone === "UTC"));
@@ -1299,7 +1299,7 @@ test("series identities scale beyond four tools and stay fixed across visibility
     await page.getByRole("button", { name: "Apply filters", exact: true }).click();
     const empty = await (await response).json();
     assert.equal(empty.totals.calls, 0);
-    await expect(page.locator(".trends-qualification")).toContainText("No matching calls");
+    await expect(page.locator(".trends-panel:visible .trends-no-activity").first()).toContainText("No matching calls");
     await expect(page.locator('[data-family=tools]')).toHaveAttribute("data-maximized", "true");
     await page.getByRole("button", { name: "Filters", exact: true }).click();
     await selectActivityOption(page, "trendsPromptauthors", "");
@@ -1385,7 +1385,7 @@ test("source-wide read metadata remains separate from the selected Trends period
     assert.equal(data.coverage.historySummary.scope, "saved-chats");
     assert.equal(data.coverage.historySummary.affectedDates, "unknown");
     assert.equal(data.coverage.historySummary.unreadableChats, 1);
-    await expect(qualification).toContainText("No matching calls");
+    await expect(page.locator(".trends-panel:visible .trends-no-activity").first()).toContainText("No matching calls");
     await expect(qualification).not.toContainText("dates unknown");
 });
 

@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, formatDate, formatAxisDate, weekContext, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, onWindow, formatDate, formatAxisDate, weekContext, canInspect }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format;
@@ -171,9 +171,9 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         candidates.sort((a, b) => a.distance - b.distance);
         return candidates[0]?.point ?? null;
     }
-    function render(data, family, mode, hidden, selection = null, chartType = "columns") {
+    function render(data, family, mode, hidden, selection = null, chartType = "columns", indexed = false) {
         if (!canInspect()) return;
-        const key = `${data.from}:${data.to}:${data.window.offset}`;
+        const key = `${data.from}:${data.to}:${data.window.offset}:${indexed}`;
         const previous = scene, savedReading = previous?.key === key ? previous.reading : null;
         const focused = root.contains(doc.activeElement) ? previous?.points[Number(doc.activeElement.dataset.trendMark)] : null;
         hide();
@@ -187,7 +187,9 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const dense = definitions.length > 2 || data.days.length > 7 && definitions.length > 1;
         const labelWidth = dense ? 16 * scale : context.measureText(shares ? "100.0%" : number(maximum)).width + 8 * scale;
         // Keep the day pitch independent of checkboxes and encoding so the same date stays in view.
-        const dayWidth = Math.max(...labels.map(label => context.measureText(label).width),
+        const compact = indexed && definitions.length === 1 && data.days.length > 14;
+        const tickWidth = Math.max(...labels.map(label => context.measureText(label).width));
+        const dayWidth = compact ? Math.max(24 * scale, labelWidth) : Math.max(tickWidth,
             definitions.length * Math.max(labelWidth, 20 * scale)) + 16 * scale;
         const left = (family === "timing" ? 78 : 56) * scale;
         // Native focus and scrollIntoView must treat the pinned scale as occluding the plot.
@@ -195,7 +197,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const minimumWidth = data.days.length * dayWidth + left + 12 * scale, top = 26 * scale;
         let width = Math.max(root.clientWidth, minimumWidth), height = Math.max(1, root.clientHeight - 18);
         let bottom = height - 42 * scale, pitch = (width - left - 12 * scale) / data.days.length;
-        scene = { data, family, mode, hidden, chartType, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null };
+        scene = { data, family, mode, hidden, chartType, indexed, left, key, pitch, scale, viewportWidth: root.clientWidth, points: [], segments: [], emphasized: null };
         const placements = [];
         function place(node, geometry) {
             const update = () => {
@@ -243,7 +245,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                 () => ({ y: y(value) + 4 * scale })));
         }
         function position(point) {
-            const stride = Math.min(Math.max(48 * scale, labelWidth), (pitch - 12 * scale) / series.length);
+            const stride = Math.min(Math.max(48 * scale, labelWidth), (pitch - (compact ? 4 : 12) * scale) / series.length);
             point.x = x(point.index) + (bars || point.amount === null ? (point.slot - (series.length - 1) / 2) * stride : 0);
             point.y = point.amount === null ? bottom + 11 * scale : y(point.amount);
             if (point.rect) {
@@ -279,7 +281,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                 if (!bars) last.set(id, amount === null ? null : point);
                 if (!point.rect) paint.append(place(svgNode("circle", { r: 8 * scale, fill: "transparent" }),
                     () => ({ cx: point.x, cy: point.y })));
-                if (amount === null || bars && (!dense || series.length === 1 || amount === 0)) {
+                if (amount === null || bars && (!compact || amount > 0) && (!dense || series.length === 1 || amount === 0)) {
                     const text = amount === null ? "—" : shares ? rate(amount) : number(amount);
                     paint.append(place(svgNode("text", { "text-anchor": "middle" }, text),
                         () => ({ x: point.x, y: amount === null ? point.y + 4 * scale : y(amount) - 5 * scale })));
@@ -288,7 +290,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         }
         for (const [index, day] of data.days.entries())
             svg.append(place(svgNode("text", { "text-anchor": "middle", "data-date-tick": day.date }, labels[index]),
-                () => ({ x: x(index), y: bottom + 32 * scale })));
+                () => ({ x: x(index), y: bottom + 32 * scale,
+                    visibility: compact && index % Math.ceil((tickWidth + 8 * scale) / pitch) ? "hidden" : "visible" })));
         svg.append(svgNode("g", { class: "trends-mark-selection", "pointer-events": "none" }),
             axis, svgNode("g", { class: "trends-mark-focus", "pointer-events": "none" }));
         erase(root); root.append(svg);
@@ -296,6 +299,17 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         if (!series.length) root.append(element("p", "trends-chart-empty", data.definitions[family].length ? "No series shown"
             : family === "models" ? "No recorded model names" : "No recorded service associations"));
         root.scrollLeft = !savedReading || savedReading.end ? root.scrollWidth : savedReading.day * pitch;
+        if (indexed && !savedReading && root.scrollLeft > 1) {
+            const span = Math.max(1, Math.floor((root.clientWidth - left - 12 * scale) / pitch));
+            let total = 0, best = -1, start = 0;
+            // Start with the most activity that fits. Prefer the latest equally populated span.
+            for (let i = 0; i < data.days.length; i++) {
+                total += data.days[i].calls;
+                if (i >= span) total -= data.days[i - span].calls;
+                if (i >= span - 1 && total >= best) { best = total; start = i - span + 1; }
+            }
+            root.scrollLeft = start * pitch;
+        }
         rememberReading();
         axis.setAttribute("transform", `translate(${root.scrollLeft} 0)`);
         // Width-only reflow repositions this scene; evidence and formatted text do not change.
@@ -312,6 +326,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
             }
             root.scrollLeft = reading.end ? root.scrollWidth : reading.day * pitch;
             axis.setAttribute("transform", `translate(${root.scrollLeft} 0)`);
+            reportWindow();
         };
         const selected = scene.points.find(point => point.id === selection?.id && data.days[point.index].date === selection.date);
         if (selected) rove(selected.node);
@@ -403,7 +418,16 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         }
     }, { capture: true, passive: true });
     function rememberReading() {
-        if (scene) scene.reading = { end: root.scrollWidth - root.clientWidth - root.scrollLeft < 2, day: root.scrollLeft / scene.pitch };
+        if (scene) { scene.reading = { end: root.scrollWidth - root.clientWidth - root.scrollLeft < 2, day: root.scrollLeft / scene.pitch }; reportWindow(); }
+    }
+    function reportWindow() {
+        if (!onWindow || !scene?.indexed || !canInspect()) return;
+        const days = scene.data.days;
+        if (root.scrollWidth <= root.clientWidth + 1) { onWindow(null); return; }
+        const first = Math.max(0, Math.min(days.length - 1, Math.ceil(root.scrollLeft / scene.pitch - .5)));
+        const last = Math.min(days.length - 1, Math.max(first, Math.floor((root.scrollLeft + root.clientWidth - scene.left) / scene.pitch - .5)));
+        if (first === 0 && last === days.length - 1) { onWindow(null); return; }
+        onWindow(days[first].date, days[last].date, days.length);
     }
     function reveal(date) {
         if (!date || !scene) return;
@@ -418,7 +442,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
     function resize(size) {
         if (!scene || !canInspect()) return;
         const scale = parseFloat(getComputedStyle(doc.documentElement).fontSize) / 16;
-        if (scale !== scene.scale) render(scene.data, scene.family, scene.mode, scene.hidden, scene.selection, scene.chartType);
+        if (scale !== scene.scale) render(scene.data, scene.family, scene.mode, scene.hidden, scene.selection, scene.chartType, scene.indexed);
         else scene.resize(size);
     }
     return { render, resize, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; userScrolling = false; erase(root); } };

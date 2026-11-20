@@ -16,7 +16,9 @@ export function createSessionJourney() {
             "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "comparisonFocus", "analysisQuery", "search", "inspect", "order", "nativeGroup"];
         const saved = Object.fromEntries(Object.entries(value)
             .filter(([key, entry]) => keys.includes(key) && ["string", "number", "boolean"].includes(typeof entry)));
-        if (value.view === "trends" && typeof value.trendEntry === "string") saved.trendEntry = value.trendEntry;
+        if (value.view === "trends") for (const key of ["trendEntry", "trendMeasure", "trendPeriod", "trendFrom", "trendTo", "trendUnavailable"]) {
+            if (["string", "boolean"].includes(typeof value[key])) saved[key] = value[key];
+        }
         if (value.localSearch) saved.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
             .filter(key => typeof value.localSearch[key] === "string").map(key => [key, value.localSearch[key]]));
         if (includeSourceReturn && value.returnToSessions) saved.returnToSessions = returnRoute(value.returnToSessions);
@@ -51,6 +53,10 @@ export function createSessionJourney() {
             .some(route => route && (route.analysisKey !== undefined || typeof route.analysisQuery === "string"));
     }
     function canonical(route) {
+        if (route.view !== "trends") {
+            const { trendEntry, trendMeasure, trendPeriod, trendFrom, trendTo, trendUnavailable, ...rest } = route;
+            route = rest;
+        }
         const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);
         if (!overview && route.view !== "request") {
             const { compare, aFrom, aTo, bFrom, bTo, comparisonView, comparisonFocus, ...peer } = route;

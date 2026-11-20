@@ -96,7 +96,7 @@ export const paletteTokens = Object.entries(materials).flatMap(([id, modes]) => 
 })).join("\n") + `
 @media(forced-colors:none) {
  :root[data-evidence-palette]:not([data-evidence-palette=petrol]) {
-   .chart-panel,.percentage-card,.trends-plot {background:var(--screen-plot)}
+   .chart-panel,.percentage-card {background:var(--screen-plot)}
    .trends-grid {stroke:var(--screen-grid)}
    .wire-search-panel {--wire-search-match:var(--accent)}
    .ux-tooltip {background:var(--screen-tip);color:var(--screen-tip-ink)}

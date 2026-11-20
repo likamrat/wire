@@ -337,7 +337,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!reading) return;
             viewKey(trigger, trigger.id);
             Object.assign(reading, { focus: { id: trigger.id }, anchor: trigger.id, top: trigger.getBoundingClientRect().top });
-            trendEntries.set(key, { entry: { ...entry, key }, origin: { ...workspaceState.acceptedRoute, search, analysisQuery: semanticQuery },
+            trendEntries.set(key, { entry: { ...entry, key }, publication: reading.publication, revision: entry.revision, timeZone: entry.timeContext.timeZone,
+                origin: { ...workspaceState.acceptedRoute, search, analysisQuery: semanticQuery },
                 reading, position: historyPosition });
             if (navigate({ view: "trends", search: "", analysisQuery: null, trendEntry: key }) === false) trendEntries.delete(key);
         },
@@ -2414,17 +2415,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || workspaceState.route.view !== "analyze" || workspaceState.route.compare !== "periods") { periodReturnReading = null; return; }
         if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
     }
-    const expiredTrend = el("section", "empty-state");
+    const expiredTrend = el("section", "empty-state"), expiredTrendTitle = el("h2"), expiredTrendHelp = el("p");
     expiredTrend.hidden = true;
-    expiredTrend.append(el("h2", "", "This Analyze scope is no longer current"),
-        el("p", "", "Reopen the original widget from Analyze, or open Trends without its scope."),
+    expiredTrend.append(expiredTrendTitle, expiredTrendHelp,
         button("Open Trends without this scope", () => navigate({ view: "trends", search: "", analysisQuery: null }, true)));
     $("trendsView").before(expiredTrend);
     const trendsUI = assessmentFactories.mountTrends({
         root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
             entry: trendOrigin(underlyingRoute())?.entry ?? null,
+            routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
+        onScopeChange: rememberTrendScope,
         returnToAnalyze: () => {
             const from = trendOrigin(workspaceState.route);
             if (from && from.position < historyPosition) history.go(from.position - historyPosition);
@@ -2576,11 +2578,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (/^[a-f0-9-]{36}$/.test(entry.savedEntry)) values.savedEntry = entry.savedEntry;
             if (entry.savedAuthority === "search") values.savedAuthority = "search";
         }
+        if (values.view === "trends" && new URLSearchParams(address.split("?")[1]).has("privateView") && !values.trendEntry)
+            values.trendUnavailable = true;
         return resolveBookmark(canonicalRoute(values), current && workspaceState.evidence);
     }
     function canonicalRoute(next) {
         next = sessionJourney.savedRoute(filterState.canonical(sessionJourney.canonical(next)));
-        if (next.view !== "trends" && next.trendEntry) delete next.trendEntry;
+        if (next.view === "trends" && next.trendPeriod === "custom") {
+            try {
+                time.calendar(next.trendFrom); time.calendar(next.trendTo);
+                time.range({ from: next.trendFrom, to: next.trendTo }, viewerTime.timeZone);
+            } catch { next = { view: "trends", trendUnavailable: true }; }
+        }
         if (next.view !== "request") {
             const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, nativeCompletedRef, completedCalls, bookmark, searchOwned, ...rest } = next;
             next = rest;
@@ -2685,6 +2694,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const next = linkTargets.get(anchor);
         if (!next || target.origin !== location.origin || !paths.isPagePath(target.pathname) || target.searchParams.get("privateView") !== "required") return;
         event.preventDefault();
+        if (next.trendEntry || next.trendUnavailable) {
+            privateNavigationNotice("Open this Trends selection in its original tab.", "stale");
+            return;
+        }
         if (next.savedAuthority === "search" || next.nativeGroup || next.nativeCompletedRef || searchOpenedRequest && searchOpenedRequest === next.request) {
             privateNavigationNotice("Open this selection in its original tab; another tab must verify its own Search or group.", "stale");
             return;
@@ -2742,7 +2755,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function browseName(value) {
         const origin = sessionJourney.underlying(value);
-        return origin?.view === "analyze" ? origin.compare === "periods" ? "compare" : "analyze" : null;
+        return origin?.view === "analyze" ? origin.compare === "periods" ? "compare" : "analyze" : origin?.view === "trends" ? "trends" : null;
     }
     function rememberBrowse() {
         const name = browseName(workspaceState.route);
@@ -2756,6 +2769,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (saved && !api.isCurrent(saved.publication)) {
             throw new Error("The earlier view is no longer authorized. Open a current view before using it.");
         }
+        if (name === "trends") return saved?.route ?? { view: "trends", search: "", analysisQuery: null };
         const value = saved?.route ?? { view: "analyze", search: "", analysisQuery: null };
         if (name === "analyze") return { ...value, compare: undefined };
         const pair = underlyingRoute().compare === "periods" ? underlyingRoute() : saved?.route;
@@ -2776,15 +2790,64 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function readingKey(value) {
         const { url, privateFields } = routeAddress(value);
-        return JSON.stringify(value.trendEntry ? [url, privateFields, value.search || "", value.trendEntry] : [url, privateFields, value.search || ""]);
+        return JSON.stringify([url, privateFields, value.search || ""]);
+    }
+    function boundTrend(route) {
+        const bound = route.view === "trends" && trendEntries.get(route.trendEntry);
+        return bound && api.isCurrent(bound.publication) && bound.revision === workspaceState.evidence?.revision
+            && bound.timeZone === viewerTime.timeZone ? bound : null;
     }
     function trendOrigin(route) {
-        const from = route.view === "trends" && trendEntries.get(route.trendEntry);
-        return from && api.isCurrent(from.reading.publication) && from.entry.revision === workspaceState.evidence?.revision
-            && from.entry.timeContext.timeZone === viewerTime.timeZone ? from : null;
+        const bound = boundTrend(route);
+        return bound?.origin ? bound : null;
     }
     function expiredTrendEntry(route) {
-        return Boolean(route.view === "trends" && route.trendEntry && !trendOrigin(route));
+        return Boolean(route.view === "trends" && (route.trendUnavailable || route.trendEntry && !boundTrend(route)));
+    }
+    function trendRouteScope(route) {
+        if (route.view !== "trends" || expiredTrendEntry(route)) return null;
+        const bound = boundTrend(route);
+        if (bound?.scope) return bound.scope;
+        if (!route.trendMeasure && !route.trendPeriod) return null;
+        const period = route.trendPeriod ?? "7";
+        return { family: route.trendMeasure ?? "rhythm", period, adaptive: !route.trendPeriod,
+            range: period === "custom" ? { from: route.trendFrom, to: route.trendTo } : time.preset(period, viewerTime.timeZone), filters: {} };
+    }
+    function rememberTrendScope({ family, period, range, filters }, kind) {
+        const previous = workspaceState.route;
+        if (previous.view !== "trends" || !api.publicationToken() || workspaceState.loading || workspaceState.stale || expiredTrendEntry(previous)) return;
+        if (!paths.trendMeasures.includes(family) || !["measure", "period", "filters"].includes(kind)) throw new TypeError("Invalid Trends navigation.");
+        const scope = { family, period, adaptive: false, range: { from: range.from, to: range.to }, filters: { ...filters } };
+        const oldScope = trendRouteScope(previous);
+        const bound = boundTrend(previous);
+        const implicitPeriod = !bound?.origin && (bound ? bound.implicitPeriod : !previous.trendPeriod);
+        const keepImplicit = kind !== "period" && implicitPeriod;
+        if (oldScope && !(kind === "period" && implicitPeriod) && JSON.stringify(oldScope) === JSON.stringify(scope)) return;
+        // A widget is a single bound visit. Forward reopens its latest selection;
+        // its original widget, reading position and revision remain authoritative.
+        const home = trendOrigin(previous);
+        let next;
+        if (home) {
+            home.scope = scope;
+            next = previous;
+        } else {
+            next = { view: "trends", search: "", analysisQuery: null, trendMeasure: family };
+            const publicPeriod = ["7", "14", "30"].includes(period);
+            const userDates = period === "custom" && (kind === "period" || previous.trendPeriod === "custom"
+                && previous.trendFrom === range.from && previous.trendTo === range.to);
+            if (!keepImplicit && (publicPeriod || userDates)) next.trendPeriod = period;
+            if (userDates) Object.assign(next, { trendFrom: range.from, trendTo: range.to });
+            if (Object.keys(filters).length || !keepImplicit && !publicPeriod && !userDates) {
+                next.trendEntry = crypto.randomUUID();
+                trendEntries.set(next.trendEntry, { scope, implicitPeriod: keepImplicit, position: historyPosition,
+                    publication: api.publicationToken(), revision: workspaceState.evidence.revision, timeZone: viewerTime.timeZone });
+            } else if (next.trendMeasure === previous.trendMeasure && !previous.trendEntry && keepImplicit) return;
+        }
+        // The controller already accepted and painted the selection. Publish history,
+        // not another projection read or a navigation/focus cycle.
+        rememberRoute(next, Boolean(home));
+        workspaceState.route = next;
+        workspaceState.acceptedRoute = { ...next };
     }
     function go(view, changes = {}, replace = false) {
         if (view === "activity" && changes.session) presentation.setOpen("session:" + changes.session, true);
@@ -2807,7 +2870,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const storeAnalysis = query => rememberHistoryAnalysis(query, publication, analysisKey);
         historyPosition = replace ? historyPosition : historyPosition + 1;
-        if (next.view === "trends" && next.trendEntry) privateFields.trendEntry = next.trendEntry;
         if (!replace) for (const [key, from] of trendEntries) {
             if (key !== next.trendEntry && from.position + 1 >= historyPosition) trendEntries.delete(key);
         }
@@ -3605,6 +3667,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     const route = workspaceState.route;
                     navigate(route.view === "request" && !route.request ? { view: "analyze" }
                         : route.view === "reports" && (route.bundle || route.savedAuthority) ? { view: "reports" }
+                        : route.view === "trends" ? { view: "trends", search: "", analysisQuery: null }
                         : { ...route, search: "", analysisQuery: null }, true);
                 }, "quiet"));
             }
@@ -4340,7 +4403,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
             const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin)
-                : view === "trends" ? { view: "trends" } : routeFor(view, { request: undefined, task: undefined });
+                : view === "trends" ? browseRoute("trends") : routeFor(view, { request: undefined, task: undefined });
             setRouteLink(node, target, Boolean(target.search?.trim() || target.analysisQuery != null));
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
@@ -4351,6 +4414,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const expired = expiredTrendEntry(workspaceState.route);
         if (expired) {
+            const home = workspaceState.route.trendEntry && !workspaceState.route.trendMeasure;
+            setText(expiredTrendTitle, home ? "This Analyze scope is no longer current" : "This Trends selection is unavailable");
+            setText(expiredTrendHelp, home ? "Reopen the original widget from Analyze, or open Trends without its scope."
+                : "Open Trends without this scope to choose a new period and filters.");
             if (expiredTrend.hidden) trendsUI.withdrawAccess();
             $("trendsView").hidden = true;
         }
@@ -10003,7 +10070,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         event.preventDefault();
         if (!api.publicationToken()) { navigateAccessShell(node.dataset.nav); return; }
         if (node.dataset.nav === "analyze") navigateBrowse("analyze");
-        else if (node.dataset.nav === "trends") navigate({ view: "trends", search: "", analysisQuery: null });
+        else if (node.dataset.nav === "trends") navigateBrowse("trends");
         else go(node.dataset.nav, { request: undefined, task: undefined });
     }
     if (assessmentFactories.bindNavigation) assessmentFactories.bindNavigation(activateNavigation);

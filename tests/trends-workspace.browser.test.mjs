@@ -36,9 +36,9 @@ function callsFixture() {
         return r;
     });
 }
-async function setup(t, touch = false) {
+async function setup(t, touch = false, { records = callsFixture(), now = "2026-11-18T19:00:00Z" } = {}) {
     let cleanup;
-    const { context } = await privateFixture({ after(fn) { cleanup = fn; } }, callsFixture()), original = await loadBoardState(context), errors = [], reads = [];
+    const { context } = await privateFixture({ after(fn) { cleanup = fn; } }, records), original = await loadBoardState(context), errors = [], reads = [];
     const server = await startServer(context, createExportController(context), { port: 0, frontend: "react",
         collector: { timers: false }, evaluation: { evaluatorFactory() { throw Error("No evaluator in chart test"); }, readSource() { throw Error("No source in chart test"); } } });
     const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER });
@@ -53,11 +53,65 @@ async function setup(t, touch = false) {
         ].includes(url.pathname)) { errors.push(`${request.method()} ${url.pathname}`); return route.abort(); }
         if (url.pathname === "/api/trends") reads.push(request.postDataJSON()); return route.continue();
     });
-    await page.clock.setFixedTime(new Date("2026-11-18T19:00:00Z")); await page.goto(new URL("/trends", server.url).href);
+    await page.clock.setFixedTime(new Date(now)); await page.goto(new URL("/trends", server.url).href);
     const index = page.getByRole("navigation", { name: "Trend measures" });
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
 }
+test("first entry finds the latest retained week; an explicitly empty period stays empty and names the way back", async t => {
+    const {page, index, reads} = await setup(t, false, { now: "2026-12-05T19:00:00Z" });
+    const region = page.locator("#trendsView"), card = panelOf(page,"rhythm"), period = region.locator("#trendsPeriod");
+    await navigateMain(page,"settings"); await navigateSettings(page,"themes");
+    await page.locator(".palette-option:has(#palette-blue)").click(); await navigateMain(page,"trends");
+    await screenshot(page,"historical-first-entry");
+    await expect(card.locator(".trends-index-scope")).toContainText("4 dated calls");
+    assert.equal(reads.at(-1).from,"2026-11-12"); assert.equal(reads.at(-1).to,"2026-11-18");
+    await expect(period).toContainText("Nov 18"); await expect(card.locator("[data-trend-bar]")).toHaveCount(2);
+    await period.click(); await region.getByRole("button",{name:"Last 7 days",exact:true}).click();
+    await expect(card.locator(".trends-index-scope")).toContainText("0 dated calls");
+    for (const id of ["rhythm","problems","services","tools","models","timing","authors"]) {
+        await index.locator(`[data-measure="${id}"]`).click();
+        await expect(panelOf(page,id).locator(".trends-plot")).toBeHidden();
+        await expect(panelOf(page,id).getByRole("button",{name:"Data table"})).toBeVisible();
+    }
+    await index.locator('[data-measure="rhythm"]').click();
+    await screenshot(page,"explicit-empty-week");
+    await region.getByRole("button",{name:/Show week ending Nov 18/}).click();
+    await expect(card.locator(".trends-index-scope")).toContainText("4 dated calls");
+    await period.click(); await region.getByRole("button",{name:"Last 30 days",exact:true}).click();
+    await expect(card.locator("svg [data-trend-bar]")).toHaveCount(2);
+    await screenshot(page,"sparse-30-days");
+});
+test("the first clipped 30-day view shows the busiest dated span without rebasing the total or overriding later scrolling", async t => {
+    const records = Array.from({length:21}, (_,i) => {
+        const r = callsFixture()[1], key = `invented-window-${i}`, stamp = i === 20 ? "2026-12-05T12:00:00Z"
+            : `2026-11-${String(7 + Math.floor(i / 4)).padStart(2,"0")}T12:0${i % 4}:00Z`;
+        r.scenarioId = key; r.sourceSessionId = key; r.userPrompt.sourceEventId = key;
+        Object.assign(r.toolCalls[0], {toolCallId:key, startEventId:key, startedAt:stamp});
+        return r;
+    });
+    const {page} = await setup(t,false,{records,now:"2026-12-05T19:00:00Z"});
+    const card = panelOf(page,"rhythm"), plot = card.locator(".trends-plot");
+    await page.setViewportSize({width:768,height:820});
+    await page.locator("#trendsPeriod").click(); await page.getByRole("button",{name:"Last 30 days",exact:true}).click();
+    await expect(card.locator(".trends-index-scope")).toContainText("21 dated calls");
+    await screenshot(page,"dense-30-days");
+    const at = () => plot.evaluate(n => {
+        const left = n.querySelector(".trends-y-axis rect").getBoundingClientRect().right, right = n.getBoundingClientRect().right;
+        const bars = [...n.querySelectorAll("[data-trend-bar]")].filter(col => {
+            const box = col.getBoundingClientRect(); return box.left >= left && box.right <= right;
+        });
+        return { count:bars.reduce((sum,b)=>sum + Number(b.closest("[data-trend-mark]").getAttribute("aria-label").match(/, (\d+) calls?$/)[1]),0),
+            scroll:n.scrollLeft, overflow:n.scrollWidth - n.clientWidth };
+    });
+    const first = await at(); assert(first.overflow > 10 && first.count >= 20,JSON.stringify(first));
+    await plot.evaluate(n => { n.scrollLeft = n.scrollWidth; });
+    await expect.poll(async () => (await at()).count).toBe(1);
+    await expect(card.locator(".trends-visible-days")).toContainText("Today in view");
+    await card.getByRole("button",{name:"Lines",exact:true}).click();
+    assert(Math.abs((await at()).scroll - first.overflow) < 2);
+    await expect(card.locator(".trends-index-scope")).toContainText("21 dated calls");
+});
 const panelOf = (page, id) => page.locator(`.trends-panel[data-family="${id}"]`);
 const proof = process.env.WIRE_TRENDS_PROOFS;
 async function screenshot(page, name) {
@@ -293,7 +347,7 @@ test("compiled Trends keeps the reading anchor across refinements, compare, empt
         await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
         await choose(view,"Apply comparison");
     }, {scene:true});
-    await watch("empty filter", async () => { await applyService("Discovery"); await expect(view.locator(".trends-qualification")).toContainText("No matching calls"); });
+    await watch("empty filter", async () => { await applyService("Discovery"); await expect(panel.locator(".trends-no-activity")).toContainText("No matching calls"); });
     await watch("clear empty", async () => { await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });
     await watch("failed filter", async () => {
         await page.route("**/api/trends", route => route.fulfill({ status:503,json:{error:"Invented read failure"} }), {times:1});

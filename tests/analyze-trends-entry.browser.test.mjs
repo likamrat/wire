@@ -8,12 +8,13 @@ import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildTrends } from "../lib/trends.mjs";
 import { assessmentOverview, cachedAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const visiblePanel = page => page.locator(".trends-panel:visible");
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const day = "2026-09-30";
+const privateTrends = "/trends?privateView=required";
 const builds = new Map();
 test.before(async () => {
     for (const renderer of ["react", "bundled"]) builds.set(renderer, await loadBrowserAssets({ renderer }));
@@ -94,7 +95,7 @@ for (const frontend of ["react", "bundled"]) {
         const y = (await link.boundingBox()).y;
         await link.press("Enter");
         await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
-        assert.equal(page.url(), url + "/trends");
+        assert.equal(page.url(), url + privateTrends);
         assert.equal(reads.length - count, 1, "no intermediate default read");
         assert.deepEqual(reads.at(-1).filters, { tool: "workiq-fetch", author: "user", service: "Calendar" });
         assert.equal(reads.at(-1).from, day); assert.equal(reads.at(-1).to, day);
@@ -134,7 +135,7 @@ for (const frontend of ["react", "bundled"]) {
             }
             await expect(visiblePanel(page)).toHaveAttribute("data-family", family);
             await expect(visiblePanel(page).getByRole("heading", { level: 2 })).toBeFocused();
-            assert.equal(reads.length - before, 1, family); assert.equal(page.url(), url + "/trends");
+            assert.equal(reads.length - before, 1, family); assert.equal(page.url(), url + privateTrends);
             await visiblePanel(page).getByRole("button", { name: `View ${size} call${size === 1 ? "" : "s"}` }).click();
             const calls = page.locator(".trends-evidence-row a"); await expect(calls).toHaveCount(size);
             await calls.filter({ hasText: "workiq-fetch" }).click();
@@ -162,8 +163,10 @@ test("qualified outcome transition cancels in place, accepts only supported scop
     assert.equal(page.url(), original); assert.equal(reads.length, 0);
     await link.click(); await decision.getByRole("button", { name: "Open trend" }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "problems");
-    assert.deepEqual(reads.at(-1).filters, {}); assert.equal(page.url(), url + "/trends");
+    assert.deepEqual(reads.at(-1).filters, {}); assert.equal(page.url(), url + privateTrends);
+    const beforeReload = reads.length;
     await page.reload(); await ready(page);
+    assert.equal(reads.length, beforeReload, "reload cannot replace a bound home scope with all calls");
     await page.getByRole("button", { name: "Open this view without the private selection" }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "rhythm");
     await expect(page.getByRole("button", { name: "Back to Analyze" })).toHaveCount(0);
@@ -181,6 +184,7 @@ test("no retained supported calls: unbounded Analyze offers no widget transfer, 
 });
 test("a changed retained revision cannot silently replace a widget transfer with ordinary Trends", async t => {
     const { page, url, reads, advanceRevision } = await setup(t, "react", records());
+    await page.clock.setFixedTime(new Date(day + "T21:00:00Z"));
     await page.goto(`${url}/?range=custom&from=${day}&to=${day}&authors=user`); await ready(page);
     advanceRevision();
     await page.locator("#analyze-trend-authors").click();
@@ -202,8 +206,105 @@ test("accepted private Search and weekly grouping stay in Analyze, not in the Tr
     await expect(consent).not.toContainText(query); assert.equal(reads.length, 0);
     await consent.getByRole("button", { name: "Open trend" }).click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "rhythm");
-    assert.ok(!JSON.stringify(reads).includes(query)); assert.equal(page.url(), url + "/trends");
+    assert.ok(!JSON.stringify(reads).includes(query)); assert.equal(page.url(), url + privateTrends);
     assert.ok(!(await page.evaluate(() => JSON.stringify(history.state))).includes(query));
     await page.getByRole("button", { name: "Back to Analyze" }).click(); await ready(page);
     await expect(page.locator("#activitySearch")).toHaveValue(query); await expect(link).toBeFocused();
+});
+
+test("compiled Trends restores explicit period and measure via URL, reload and Back without a default read", async t => {
+    const { page, url, reads } = await setup(t, "react", records());
+    await page.clock.setFixedTime(new Date("2026-11-20T05:30:00Z")); // Nov 19 in the display zone
+    await page.goto(url + "/trends?measure=models&period=14");
+    const panel = visiblePanel(page), index = page.getByRole("navigation", { name: "Trend measures" });
+    await expect(panel).toHaveAttribute("data-family", "models");
+    assert.deepEqual(reads.map(({ from, to }) => [from, to]), [["2026-11-06", "2026-11-19"]]);
+    await index.getByRole("button", { name: "Services", exact: true }).click();
+    await expect(page).toHaveURL(url + "/trends?measure=services&period=14");
+    assert.equal(reads.length, 1, "presentation alone must not reread the projection");
+    await page.locator("#trendsPeriod").click();
+    await page.getByRole("button", { name: "Last 30 days", exact: true }).click();
+    await expect(page).toHaveURL(url + "/trends?measure=services&period=30");
+    await page.reload(); await expect(panel).toHaveAttribute("data-family", "services");
+    assert.deepEqual(reads.map(r => [r.from, r.to, r.timeContext.timeZone]), [
+        ["2026-11-06", "2026-11-19", "America/Los_Angeles"],
+        ["2026-10-21", "2026-11-19", "America/Los_Angeles"],
+        ["2026-10-21", "2026-11-19", "America/Los_Angeles"],
+    ]);
+    await page.goBack(); await expect(page).toHaveURL(url + "/trends?measure=services&period=14");
+    await expect.poll(() => reads.at(-1).from).toBe("2026-11-06");
+    await page.goBack(); await expect(panel).toHaveAttribute("data-family", "models");
+    await page.locator("#trendsPeriod").click();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.getByLabel("Trends from", { exact: true }).fill(day);
+    await page.getByLabel("Trends to", { exact: true }).fill(day);
+    await page.getByRole("button", { name: "Apply dates", exact: true }).click();
+    const custom = `${url}/trends?measure=models&period=custom&from=${day}&to=${day}`;
+    await expect(page).toHaveURL(custom);
+    await page.reload(); await expect(panel).toHaveAttribute("data-family", "models");
+    assert.deepEqual([reads.at(-1).from, reads.at(-1).to], [day, day]);
+});
+
+test("compiled Trends keeps explicit filters tab-bound, never broadens on expired reload or carries them to a new visit", async t => {
+    const { page, url, reads } = await setup(t, "react", records());
+    const publicRoute = `${url}/trends?measure=tools&period=custom&from=${day}&to=${day}`;
+    await page.goto(publicRoute);
+    const panel = visiblePanel(page);
+    await expect(panel).toHaveAttribute("data-family", "tools");
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    await selectActivityOption(page, "trendsTool", "workiq-fetch");
+    await selectActivityOption(page, "trendsService", "Calendar");
+    await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page).toHaveURL(publicRoute + "&privateView=required");
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|Calendar/);
+    const filters = { tool: "workiq-fetch", service: "Calendar" };
+    assert.deepEqual(reads.at(-1).filters, filters);
+    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await expect(page).toHaveURL(publicRoute);
+    await page.goBack(); await expect(page).toHaveURL(publicRoute + "&privateView=required");
+    await expect.poll(() => reads.at(-1).filters).toEqual(filters);
+    const privateCount = reads.length;
+    await page.reload();
+    const recover = page.getByRole("button", { name: "Open this view without the private selection" });
+    await expect(recover).toBeVisible();
+    assert.equal(reads.length, privateCount);
+    await recover.click(); await expect(panel).toHaveAttribute("data-family", "rhythm");
+    await expect(page).toHaveURL(url + "/trends");
+    assert.deepEqual(reads.at(-1).filters, {});
+});
+
+test("compiled Trends refuses ambiguous or unsupported deep links instead of reading all calls", async t => {
+    const { page, url, reads } = await setup(t, "react", records());
+    for (const query of ["period=7&period=30", "period=custom&from=2026-02-31&to=2026-03-01", "tool=workiq-fetch"]) {
+        await page.goto(`${url}/trends?${query}`);
+        await expect(page.getByRole("heading", { name: "This Trends selection is unavailable" })).toBeVisible();
+        await expect(visiblePanel(page)).toHaveCount(0);
+        assert.equal(reads.length, 0);
+        assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|02-31/);
+    }
+});
+
+test("compiled Trends keeps an implicit historical week adaptive across measure selection and reload, but binds an explicit historical week", async t => {
+    const { page, url, reads } = await setup(t, "react", records());
+    await page.clock.setFixedTime(new Date("2026-11-20T05:30:00Z"));
+    await page.goto(url + "/trends");
+    const index = page.getByRole("navigation", { name: "Trend measures" }), panel = visiblePanel(page);
+    await expect.poll(() => reads.at(-1)?.to).toBe(day);
+    await index.getByRole("button", { name: "Services", exact: true }).click();
+    const adaptive = url + "/trends?measure=services";
+    await expect(page).toHaveURL(adaptive);
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-09-30|privateView/);
+    const count = reads.length;
+    await page.reload(); await expect(panel).toHaveAttribute("data-family", "services");
+    await expect.poll(() => reads.slice(count).map(r => r.to)).toEqual(["2026-11-19", day]);
+    await page.locator("#trendsPeriod").click();
+    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await expect(page).toHaveURL(adaptive + "&period=7");
+    await page.getByRole("button", { name: /^Show week ending / }).click();
+    await expect(page).toHaveURL(adaptive + "&privateView=required");
+    assert.equal(reads.at(-1).to, day);
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-09-30/);
+    const privateCount = reads.length;
+    await page.reload(); await expect(page.getByRole("button", { name: "Open this view without the private selection" })).toBeVisible();
+    assert.equal(reads.length, privateCount);
 });

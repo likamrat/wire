@@ -190,13 +190,18 @@ actions. The named expand/collapse button provides the same action by keyboard
 and exposes its expanded state and content relationship.
 Restore all also works after the widgets have been collapsed individually.
 
-Keep the 7/14/30/custom date family, defaulting to seven days. Every civil day
-remains separate in the selected IANA zone. Every daily axis label remains
-visible in its scrollable plot, including all 30 dates in a 30-day range.
+Keep the 7/14/30/custom date family. Bare entry (or a measure-only link) first
+checks the current seven days. Only when that week is empty can it open seven
+days ending at the latest retained matching call. Explicit dates, including
+an empty period, do not widen. Preserve accepted public period/measure history;
+do not serialize private filter values or an activity-derived date.
+Every civil day remains separate in the selected IANA zone. A compact index
+plot may thin tick labels, never observations or daily table rows.
 Use month and day for past dates, Today for the current day and an exact date
 in hover. Measured label widths set minimum day spacing at a stable screen
-font size; maximization never magnifies SVG text. New ranges open at their
-latest dates; measure/size changes preserve horizontal reading position.
+font size; maximization never magnifies SVG text. All charts opens at the latest
+dates; a clipped index plot opens at the busiest span that fits and identifies
+its visible dates. Encoding/size changes preserve the user's reading position.
 Gap days keep labels without invented bars. Long ranges still page at 90 days
 after establishing complete membership, without a new range limit.
 Date filtering never approves collection.

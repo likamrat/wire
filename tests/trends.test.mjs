@@ -69,6 +69,17 @@ test("cohort filtering retains every day and does not expand exact member identi
     assert.equal(result.days[7].values.authors.find(value => value.id === "agent").count, 0);
 });
 
+test("latest matching day respects retained source, filter, local midnight and undated exclusions without changing period counts", () => {
+    const empty = { from: "2026-03-20", to: "2026-03-26" };
+    for (const [filters, expected] of [[{}, "2026-03-09"], [{tool:"workiq-retrieve"}, "2026-03-08"], [{service:"Calendar"},null]]) {
+        const result = run(data(), { ...empty, filters });
+        assert.equal(result.coverage.latestMatchingDate, expected);
+        assert.equal(result.totals.calls, 0); assert.deepEqual(result.members, []);
+        assert(result.days.every(day => day.calls === 0));
+    }
+    assert.equal(run([fixture("undated-only")],empty).coverage.latestMatchingDate,null);
+});
+
 test("a long custom range pages daily values without changing full-period totals", () => {
     const first = run(data(), { from: "2025-01-01", to: "2026-03-30" });
     const later = run(data(), { from: "2025-01-01", to: "2026-03-30", offset: 360 });
