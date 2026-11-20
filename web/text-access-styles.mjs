@@ -291,9 +291,7 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-owned-text:has([data-prompt-actor=agent])>.full-text-body {border-inline-start-color:var(--prompt-author-agent)}
 #requestContent .reader-section-actions>.full-text-reader-actions {display:flex;align-items:center;gap:2px;margin:0}
 #requestContent .full-text-content.prompt-preview-clamped {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:clip}
-#requestContent .prompt-preview-toggle {min-height:44px;max-width:100%;margin:4px 0 0;padding:8px 0;border:0;background:transparent;color:var(--accent);font:inherit;text-align:start;text-decoration:underline;text-underline-offset:3px;white-space:normal;overflow-wrap:anywhere}
-#requestContent .prompt-preview-toggle::before {content:none}
-#requestContent .prompt-preview-toggle:hover {color:var(--ink)}
+#requestContent .prompt-preview-toggle {--pill-fill:transparent;--pill-hover:var(--hover);--pill-pressed:var(--accent-soft);--pill-border:transparent;min-height:44px;max-width:100%;margin:4px 0 0;padding-inline:8px;color:var(--accent);font:inherit;text-align:start;white-space:normal;overflow-wrap:anywhere}
 #requestContent .reader-section .reader-facts {display:grid;gap:12px;margin:12px 0 0}
 #requestContent .reader-section .reader-facts>.reader-fields {display:grid;gap:12px;margin:0}
 #requestContent .reader-section .reader-facts>.reader-fields>div {display:flex;flex-wrap:wrap;gap:2px 8px}
@@ -418,7 +416,8 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-call-toggle[aria-expanded=true] .reader-call-disclosure {transform:rotate(90deg)}
 #requestContent .reader-call-toggle::before {content:none}
 #requestContent .reader-call-toggle:hover {background:transparent;text-decoration:none}
-#requestContent .reader-call-toggle:hover .reader-call-identity-line {text-decoration:underline;text-underline-offset:3px}
+#requestContent .reader-call-toggle:is(:hover,:focus-visible) .reader-call-disclosure {color:var(--accent);outline:4px solid var(--hover);background:var(--hover);border-radius:2px}
+#requestContent .reader-call-toggle:active .reader-call-disclosure {outline-color:var(--accent-soft);background:var(--accent-soft);color:var(--ink)}
 #requestContent .technical-detail[hidden] {display:none}
 #requestContent .reader-call-row .reader-call-duration {font-size:var(--type-small);color:var(--muted)}
 #requestContent .reader-call-row .reader-call-duration data {color:var(--muted)}

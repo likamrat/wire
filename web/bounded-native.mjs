@@ -240,7 +240,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         author.prepend(ux.icon("search-interaction"));
         // This paged source deliberately supplies recognition text, not an unrestricted
         // conversation body. Don't shorten or Markdown-rewrite it again in the browser.
-        action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"));
+        action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"), ux.icon("read"));
         const tools = item.presentation?.tools ?? [];
         const body = node("div", undefined, "card-reading-body"), context = node("div", undefined, "card-request-context");
         const key = node("dl", undefined, "card-identities");

@@ -5646,7 +5646,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function labelPanelLink(node, active) {
         const label = `${active ? "Close" : "Open"} activity panel: ${node.textContent.trim()}`;
         node.setAttribute("aria-label", label);
-        node.title = label;
     }
     function requestCard(scenario, { reportPicker = false, eventSignal } = {}) {
         const authority = api.publicationToken();
@@ -5690,6 +5689,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const openPrompt = text => open(text, "prompt", target, "request-card-open recognition-row");
         const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt, home: !reportPicker }) : el("p", "request-card-prompt");
         if (!description.hasText) prompt.append(openPrompt((description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice));
+        prompt.querySelector(".request-card-open").append(ux.icon("read"));
         const sourceIdentity = filterState.sourceIdentity(rows);
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);

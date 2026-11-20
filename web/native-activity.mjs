@@ -133,7 +133,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const origin = node("span", "request-card-author", prompt.label);
         origin.prepend(ux.icon("search-interaction"));
         const body = node("div", "card-reading-body"), context = node("div", "card-request-context");
-        action.append(node("p", "request-card-prompt", prompt.text));
+        action.append(node("p", "request-card-prompt", prompt.text), ux.icon("read"));
         const summary = results.summarize(rows);
         const signals = results.entries(layer, summary) ?? [];
         const highlight = signals.find(entry => entry.key === "failure") ?? signals.find(entry => entry.key !== "success") ?? signals[0];

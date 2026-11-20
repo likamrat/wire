@@ -1593,7 +1593,7 @@ export const periodComparisonStyles = `
 .comparison-chart-controls:has(#comparisonQuickChoice[data-preset=mine]){--comparison-focus:var(--screen-prompt-user)}
 .comparison-chart-controls:has(#comparisonQuickChoice[data-preset=agent]){--comparison-focus:var(--screen-prompt-agent)}
 #comparisonQuickChoice-control{color:var(--comparison-focus,var(--copilot-chat-title))}
-.comparison-preset-option{display:inline-flex;align-items:center;gap:10px;color:var(--copilot-chat-title)}
+.comparison-preset-option{color:var(--copilot-chat-title)}
 .comparison-preset-option[data-preset=errors]{color:var(--chart-failure)}
 .comparison-preset-option[data-preset=completed]{color:var(--chart-success)}
 .comparison-preset-option[data-preset=mine]{color:var(--screen-prompt-user)}
@@ -1609,8 +1609,6 @@ export const periodComparisonStyles = `
 .comparison-outcome-values .percentage-value{display:inline-flex;font:inherit}
 .compare-outcome-bar .compare-outcome-paint{height:32px}
 .comparison-application-results{margin-top:18px}
-.period-comparison .comparison-preset-option{gap:10px}
-.select-trigger .comparison-preset-option,.select-option .comparison-preset-option{display:inline-flex;align-items:center;gap:10px}
 @container comparison-results (max-width:38rem){
  .comparison-chart-controls{gap:8px;margin-bottom:12px}
  .comparison-actions{gap:4px}

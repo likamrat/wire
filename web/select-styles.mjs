@@ -81,6 +81,13 @@ export const selectStyles = `
 :root:has(.select-trigger[aria-expanded=true]:focus-visible) .select-option[data-active=true] {outline:2px solid var(--focus);outline-offset:-2px}
 .select-check {display:block;width:16px;height:16px;justify-self:center;visibility:hidden;fill:none}
 .select-option-label {min-width:0;white-space:normal;overflow-wrap:anywhere}
+:is(.select-trigger,.select-option) :is(.select-value,.select-option-label):has(>.wire-icon,>.result-legend-icon) {
+ --choice-icon-size:1.125rem;display:flex;align-items:flex-start;gap:var(--pill-gap);min-width:0;white-space:normal;overflow-wrap:anywhere;
+}
+:is(.select-value,.select-option-label)>:is(svg.wire-icon,.result-legend-icon) {
+ display:inline-flex;flex:0 0 var(--choice-icon-size);width:var(--choice-icon-size);height:var(--choice-icon-size);margin-block-start:calc((1lh - var(--choice-icon-size)) / 2);
+}
+:is(.select-value,.select-option-label)>.result-legend-icon>svg.wire-icon {width:100%;height:100%}
 .select-option-detail {grid-column:1/-1;display:block;margin-top:3px;color:var(--muted);font-size:var(--type-caption);font-weight:var(--weight-regular);line-height:1.45;overflow-wrap:anywhere}
 .select-option[aria-selected=true] .select-check {visibility:visible}
 .select-option[aria-disabled=true] {color:var(--muted);cursor:not-allowed}
@@ -95,8 +102,9 @@ export const selectStyles = `
 .select-footer {display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;border-top:1px solid var(--rule)}
 .select-trigger.select-trigger-filter {border-radius:24px;font-weight:var(--weight-regular)}
 .select-trigger.select-trigger-filter::before {inset:var(--control-face-inset) 0;border-color:var(--control);background:var(--paper);box-shadow:none}
-.select-trigger.select-trigger-filter:hover:not(:disabled)::before {border-color:var(--ink);background:var(--paper)}
 .select-trigger.select-trigger-filter:is([data-filter-active=true],[aria-expanded=true])::before {border-color:var(--control);background:var(--paper);box-shadow:var(--control-shadow)}
+.select-trigger.select-trigger-filter:hover:not(:disabled)::before {border-color:var(--ink);background:var(--pill-hover)}
+.select-trigger.select-trigger-filter:active:not(:disabled)::before {background:var(--pill-pressed)}
 .select-trigger.select-trigger-filter[aria-expanded=true]::before {background-image:var(--control-sheen);box-shadow:var(--control-sheen-edge)}
 .select-trigger.select-trigger-filter:disabled::before {border-style:dashed;border-color:var(--rule);box-shadow:none}
 .select-popup-filter {
@@ -148,7 +156,7 @@ export const selectStyles = `
 }
 .select-popup-filter .select-footer>.select-apply,.select-popup-filter .select-footer>button:hover {--pill-border:var(--control)}
 .select-popup-filter .select-validation {margin:10px 12px;color:var(--muted);font-size:var(--type-caption);line-height:1.5}
-.filter-chip {min-height:44px;padding:4px 12px;gap:6px;line-height:20px;border-radius:var(--radius-control)}
+.filter-chip {min-height:44px;padding:4px var(--pill-inset);gap:var(--pill-gap);line-height:20px;border-radius:var(--radius-control)}
 .view-switch {padding:0;gap:var(--pill-gap);border-radius:var(--radius-control);background:transparent;flex-wrap:wrap;max-width:100%;flex-shrink:1}
 .view-switch button {min-height:var(--pill-height);padding:6px var(--pill-inset);line-height:1.5;border-radius:var(--radius-control);background:var(--pill-fill);color:var(--pill-ink);border-color:var(--pill-border);white-space:normal}
 .view-switch button[aria-pressed=true] {background:var(--pill-hover);color:var(--pill-ink);border-color:var(--pill-border);font-weight:var(--weight-strong);box-shadow:inset 0 0 0 1px var(--pill-border)}
@@ -178,7 +186,7 @@ export const selectStyles = `
 .format-choices label:has(input:checked) {color:var(--pill-ink)}
 .filter-chip:hover::before,.format-choices label:hover::before {background:var(--pill-hover)}
 .filter-chip:active:not(:disabled) {background:transparent;box-shadow:none}
-.filter-chip:active:not(:disabled)::before {background:var(--pill-hover);box-shadow:inset 0 0 0 1px var(--pill-border)}
+.filter-chip:active:not(:disabled)::before {background:var(--pill-pressed);box-shadow:inset 0 0 0 1px var(--pill-border)}
 @media(pointer:coarse) {
  .select-option {min-height:44px}
  .filter-chip,.view-switch button,.result-summary button,.format-choices label {min-height:44px}

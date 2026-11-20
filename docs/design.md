@@ -134,6 +134,12 @@ preserve the established 44px targets, focus indications and wrapping labels.
 On activity cards, a trailing arrow opens the exact failed call or returned
 result. Hover and press tint only the arrow; keyboard focus outlines the link.
 Noninteractive outcome labels have no arrow.
+Prompt openers keep the passage itself unpainted and selectable. Their eye
+cue signals reading; hover and press change the cue, not the text. Do not put
+a tooltip over the passage. Call disclosures similarly emphasize the chevron.
+In a choice field, align the leading icon to the *first line* of the value;
+use the same glyph slot and text gap in the popup and closed field. The
+trailing chevron belongs at the field edge, not next to the last word.
 
 The main Analyze, Trends, Reports and Compare headings use their existing
 navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node mounted

@@ -86,7 +86,6 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             passage.append(exactFragment(original));
             link.replaceChildren(passage);
             link.setAttribute("aria-label", `Read retained prompt: ${excerpt(source, 96)}`);
-            link.title = "Read retained prompt";
             node.append(link);
             bindings.set(node, () => clearOwnedContent(node));
             return node;

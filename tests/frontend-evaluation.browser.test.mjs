@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { frontendRecords, reviewRecords, overviewGeometry } from "./frontend-fixture.mjs";
 import { scanSourceForExport } from "../lib/privacy.mjs";
-import { chooseTheme, navigateMain, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { chooseTheme, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast } from "./color-measurements.mjs";
@@ -231,6 +231,61 @@ test("wrapped card identities keep their value edge, named counts and distinct o
         }
     }
     assert.ok(wrapped, "Exercise an actual wrapped value group, not just a wide row.");
+});
+
+test("reading a retained prompt never paints or underlines the passage or floats a title over it", async t => {
+    const { page } = await setup(t, "react", compactCardRecords());
+    const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    const link = card.locator(".request-card-open");
+    const original = await link.textContent();
+    for (const [mode, width, scale] of [["light", 1440, 1], ["dark", 390, 2]]) {
+        await chooseTheme(page, mode); await page.setViewportSize({width, height: 900});
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await link.scrollIntoViewIfNeeded(); await link.hover(); await capture(page, `reading-action-${mode}`);
+        const area = await link.boundingBox();
+        await expect(link).toHaveCSS("background-color","rgba(0, 0, 0, 0)",{timeout:1000});
+        await expect(link).toHaveCSS("text-decoration-line","none");
+        assert.equal(await link.getAttribute("title"),null);
+        await page.mouse.down();
+        try {
+            await expect(link).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+            assert.deepEqual(await link.boundingBox(),area);
+        } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
+        await link.focus(); await page.keyboard.press("Enter");
+        await expect(page.locator("#requestContent")).toContainText(original);
+        await page.goBack(); await expect(link).toBeFocused();
+    }
+});
+
+test("decorated selected values and list options align their glyph to the first label line", async t => {
+    const {page} = await setup(t, "react", compactCardRecords());
+    await openAnalyzeFilters(page);
+    await selectActivityOption(page, "promptAuthorFilter", "agent");
+    await selectActivityOption(page, "outcomeFilter", "failure");
+    await ready(page);
+    const trigger = page.locator("#promptAuthorFilter-control");
+    async function spacing(value) {
+        return value.evaluate(node => {
+            const icon = node.querySelector("svg").getBoundingClientRect(), text = node.lastElementChild;
+            const label = text.getBoundingClientRect(), height = parseFloat(getComputedStyle(node).lineHeight);
+            return {gap:label.left-icon.right, offset:icon.y+icon.height/2-label.y-height/2, width:icon.width};
+        });
+    }
+    for (const [width,scale] of [[1440,1],[390,2]]) {
+        await page.setViewportSize({width,height:900});
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await trigger.scrollIntoViewIfNeeded(); await capture(page, `decorated-filters-${width}`);
+        const author = await spacing(trigger.locator(".select-value"));
+        const outcome = await spacing(page.locator("#outcomeFilter-control .select-value"));
+        assert.ok(author.gap >= 6 && Math.abs(author.gap - outcome.gap) <= 1, JSON.stringify({author,outcome}));
+        assert.ok(Math.abs(author.width - outcome.width) <= 1 && Math.abs(author.offset) <= 1.5, JSON.stringify({author,outcome}));
+        await trigger.focus(); await page.keyboard.press("Enter");
+        const active = page.locator('.select-popup [data-value="agent"]');
+        await active.hover(); await expect(active).toHaveAttribute("aria-selected","true");
+        const row = await spacing(active.locator(".select-option-label"));
+        assert.ok(Math.abs(row.gap-author.gap) <= 1 && Math.abs(row.width-author.width) <= 1);
+        await page.keyboard.press("Escape"); await expect(trigger).toBeFocused();
+    }
 });
 
 test("exact evidence links keep hover and press paint off the full hit target", async t => {

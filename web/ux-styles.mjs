@@ -1,7 +1,7 @@
 export const uxStyles = `
 :where(details>summary).ux-disclosure {list-style:none}
 :where(details>summary).ux-disclosure::-webkit-details-marker {display:none}
-.ux-disclosure>.disclosure-icon {margin-inline-end:4px;vertical-align:calc((1cap - 16px)/2)}
+.ux-disclosure>.disclosure-icon {margin-inline-end:var(--pill-gap);vertical-align:calc((1cap - 16px)/2)}
 :where(details[open]>summary) .disclosure-icon {transform:rotate(90deg)}
 .progress-slot {display:inline-block;width:16px;height:16px;margin-inline-end:.5em;vertical-align:calc((1cap - 16px)/2);visibility:hidden}
 .progress-slot-trailing {margin-inline:.5em 0}

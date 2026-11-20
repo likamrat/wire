@@ -31,7 +31,7 @@ export const periodFlowStyles = `
 .more-filters {margin:4px;padding:0;border:0;background:transparent}
 .more-filters>summary {min-height:44px;width:fit-content;padding:10px 4px;color:var(--accent);font-size:var(--type-control)}
 .secondary-filters {padding-block:4px 8px}
-#filterChips {--pill-fill:var(--paper);--pill-hover:var(--paper);--pill-pressed:var(--paper);display:flex;flex-wrap:wrap;gap:4px 8px}
+#filterChips {--pill-fill:var(--paper);--pill-hover:var(--hover);--pill-pressed:var(--accent-soft);display:flex;flex-wrap:wrap;gap:4px 8px}
 #filterChips .filter-chip {max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}
 #filterChips .filter-chip .wire-icon {flex:none}
 .service-focus {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0;font-size:var(--type-small)}
