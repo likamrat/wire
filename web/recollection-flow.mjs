@@ -41,8 +41,10 @@ export const recollectionMarkup = `
   <form id="recollectForm">
     <p id="recollectWindow"></p>
     <label id="recollectOperationChoice" hidden>Operation
-      <select id="recollectOperation"><option value="strict">Read selected history again</option><option value="verified-records-only">Review individually verified calls</option></select>
+      <select id="recollectOperation"><option value="strict">Read selected history again (strict)</option><option value="verified-records-only">Verified records only (day incomplete)</option></select>
     </label>
+    <button id="recollectLoadSources" type="button" hidden>Load eligible chats</button>
+    <div id="recollectScopeFields">
     <fieldset><legend>Choose local Copilot chats</legend>
       <label for="recollectSearch" class="visually-hidden">Find a chat to recollect</label>
       ${searchFieldMarkup({ id: "recollectSearch", clearId: "recollectClearSearch", placeholder: "Find a chat" })}
@@ -55,6 +57,7 @@ export const recollectionMarkup = `
     <label id="recollectPromptsChoice" class="delete-choice"><input id="recollectPrompts" type="checkbox"><span>Also restore original prompts for these requests</span></label>
     <p id="recollectPromptsHelp" class="muted">Off by default. Includes available prompts and associated follow-ups.</p>
     <label id="recollectCorrectionsChoice" class="delete-choice" hidden><input id="recollectCorrections" type="checkbox"><span>Also review source-verified corrections to saved calls</span></label>
+    </div>
   </form>
   <div id="recollectConfirmation" hidden>
     <div class="decision-scope"><p id="recollectScope"></p><button id="recollectChange" type="button" class="quiet" hidden>Change scope</button></div>
@@ -98,7 +101,7 @@ export const recollectionStyles = `
 `;
 
 // Serialized into the page; dependencies stay inside the mount function.
-export function mountRecollection({ api, time, timeContext, search, pageSources, ux, searchFields, describe, canAct, onChanged, onNotice, onCommitted }) {
+export function mountRecollection({ api, time, timeContext, search, pageSources, ux, searchFields, describe, canAct, onChanged, onNotice, onCommitted, offerVerifiedRecords }) {
     if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
         throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
     }
@@ -108,6 +111,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     let result, statusError = false, viewNeedsRead = false, mounted = false;
     const exactMode = "verified-records-only";
     let exact = false, exactAvailable = false, newOnly = false, correctionsAvailable = false;
+    let choosingOperation = false;
     let sources = [], sourceMatches = [], selectedOnly = false;
     let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
     const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
@@ -219,7 +223,10 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         $("recollectConfirmation").hidden = !view.scopeAvailable || phase === "editing";
         $("recollectChanges").hidden = phase === "complete";
         $("recollectChangesTitle").textContent = phase === "preview" ? "What will change" : "Confirmed selection";
-        $("recollectPreview").hidden = phase !== "editing";
+        $("recollectScopeFields").hidden = choosingOperation;
+        $("recollectLoadSources").hidden = phase !== "editing" || !choosingOperation;
+        $("recollectLoadSources").disabled = busy || Boolean(reason);
+        $("recollectPreview").hidden = phase !== "editing" || choosingOperation;
         $("recollectPreview").disabled = busy || !sourcesReady || !selectedSources.size
             || !$("recollectFrom").value || (exact ? selectedSources.size !== 1 : !$("recollectTo").value) || locked() || Boolean(reason);
         $("recollectConfirm").hidden = phase !== "preview" && phase !== "pending";
@@ -283,7 +290,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             ...(exact ? { mode: exactMode, restorePrompts: false } : { restorePrompts: $("recollectPrompts").checked,
                 ...($("recollectCorrections").checked ? { correctExisting: true } : {}) }) };
     }
-    async function readSources() {
+    async function readSources(useExact = false) {
         const access = publication();
         if (!current(access)) return;
         const version = ++token;
@@ -291,7 +298,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         eraseSourceRows($("recollectSources")); $("recollectSources").replaceChildren();
         sources = []; selectedSources.clear(); selectedOnly = false; searchField.sync("");
         exactAvailable = false; chooseOperation(false);
-        busy = true; sourcesReady = false; update();
+        choosingOperation = false; busy = true; sourcesReady = false; update();
         status("Reading eligible chats from your approved local source. No evidence is being changed.");
         try {
             const result = await api("/api/recollection/sources", {});
@@ -299,7 +306,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             exactAvailable = result.exactRecordsAvailable === true;
             newOnly = result.newOnly === true;
             correctionsAvailable = result.correctionsAvailable === true;
-            chooseOperation(false);
+            chooseOperation(useExact);
             $("recollectCorrections").checked = false;
             sources = result.sources.toSorted((a, b) => a.name.localeCompare(b.name) || a.sourceSessionId.localeCompare(b.sourceSessionId));
             renderSources();
@@ -310,7 +317,10 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             status(sourcesReady ? (result.skippedSources ? `${result.skippedSources} chats are outside the discovery limit and cannot be selected.` : "")
                 : "No eligible local chats are available from the approved source.");
         } catch (error) {
-            if (current(access) && version === token) status(`Source list unavailable. Nothing changed. ${error.message}`, true);
+            if (current(access) && version === token) {
+                if (offerVerifiedRecords?.()) { choosingOperation = exactAvailable = true; chooseOperation(useExact); }
+                status(`Source list unavailable. Nothing changed. ${error.message}`, true);
+            }
         } finally { if (current(access) && version === token) { busy = false; update(); } }
     }
     function checkExact(data, complete) {
@@ -581,6 +591,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         finally { if (current(access)) { busy = false; update(); } }
     });
     $("recollectChange").addEventListener("click", () => { if (!current(publication())) return; edit(); status(""); $("recollectSources").focus(); });
+    $("recollectLoadSources").addEventListener("click", () => {
+        if (dialog.open && choosingOperation && !busy && phase === "editing" && allowed("open")) void readSources(exact);
+    });
     $("recollectOperation").addEventListener("change", () => {
         if (!exactAvailable || phase !== "editing" || busy || !current(publication())) return;
         chooseOperation($("recollectOperation").value === exactMode);
@@ -645,7 +658,10 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             phase = "editing"; preview = undefined; receipt = undefined; result = undefined; viewNeedsRead = false; sourcesReady = false;
             $("recollectPrompts").checked = $("recollectCorrections").checked = false;
             erasePreviewValues(); $("recollectCorrectionList").hidden = true;
-            exactAvailable = false; chooseOperation(false);
+            choosingOperation = exactAvailable = offerVerifiedRecords?.() === true;
+            sources = []; sourceMatches = []; selectedSources.clear(); selectedOnly = false;
+            eraseSourceRows($("recollectSources")); $("recollectSources").replaceChildren();
+            chooseOperation(false);
             $("recollectFrom").value = ""; $("recollectTo").value = "";
             restoreReceipt();
         }
@@ -653,6 +669,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         dialog.querySelector(".decision-body").scrollTop = 0; $("recollectClose").focus();
         if (phase === "uncertain") status("A previous recollection needs checking. Read its saved receipt before starting another operation.", true);
         else if (phase === "blocked") status(blockedMessage, true);
+        else if (choosingOperation) status("Choose an operation, then load the eligible chats. No history has been read for this review.");
         else await readSources();
         return true;
     }
@@ -678,7 +695,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (dialog.open) { suppressedCloses++; dialog.close(); }
         $("recollectSources").replaceChildren(); $("recollectAvailability").replaceChildren();
         $("recollectCorrectionList").replaceChildren(); $("recollectCorrectionList").hidden = true;
-        exact = exactAvailable = correctionsAvailable = false;
+        choosingOperation = exact = exactAvailable = correctionsAvailable = false;
         $("recollectOperation").value = "strict"; $("recollectOperation").disabled = $("recollectOperationChoice").hidden = true;
         $("recollectCorrections").checked = false; $("recollectCorrectionsChoice").hidden = true;
         searchField.sync(""); $("recollectSearch").readOnly = true;
@@ -703,6 +720,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         }
     }, invalidate() {
         if (!current(publication())) return;
+        if (choosingOperation && phase === "editing" && dialog.open) { update(); return; }
         if (exact && phase === "verifying" && dialog.open) {
             cancelPreview(); phase = "uncertain"; erasePreviewValues();
             status("The connection or display time zone changed. Check the original receipt before starting another review.", true); update();

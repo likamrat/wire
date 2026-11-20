@@ -503,7 +503,11 @@ approved day, only records inside the original window can be proposed. If
 any proposed record leaves the rolling window before saving, the whole
 selection is refused rather than silently shortened.
 
-**Verified records only (isolated qualification; not enabled in normal startup).**
+**Verified records only (day incomplete; runtime opt-in).**
+Strict recovery stays selected by default. A Copilot-only runtime started
+with `--verified-record-recovery` also offers this operation. Opening the
+chooser on that runtime does not read the chat list. **Load eligible chats**
+reads the list; previewing and confirming the selected calls remain separate.
 This is a separate choice for one chat and one day, not a fallback from a
 failed full-day preview. It lists up to 32 missing calls whose original
 identities, explicit message and tool links, and recorded completions can be

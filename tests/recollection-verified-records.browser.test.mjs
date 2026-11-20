@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { fork } from "node:child_process";
+import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { appendFile, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -401,6 +403,8 @@ test("the normal panel reports a proved exact refusal without offering to check 
         await navigateMain(page, "settings"); await navigateSettings(page, "data");
         await page.locator("#recollectActivity").click();
         await selectActivityOption(page, "recollectOperation", mode);
+        await page.locator("#recollectLoadSources").click();
+        await expect(page.locator("#recollectOperation")).toHaveValue(mode);
         await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
         await page.locator("#recollectFrom").fill(f.day);
         const previewed = page.waitForResponse(r => r.url() === `${origin}/api/recollection/preview`);
@@ -455,6 +459,8 @@ test("the normal panel switches reviews explicitly and recovers a lost exact con
         await open();
         const operation = page.locator("#recollectOperation");
         await expect(operation).toHaveValue("strict");
+        assert.deepEqual(sent, [], "Opening the chooser does not read the approved source");
+        await action("#recollectLoadSources", "sources");
         await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
         await page.locator("#recollectFrom").fill(f.day);
         await page.locator("#recollectTo").fill(f.day);
@@ -505,5 +511,66 @@ test("the normal panel switches reviews explicitly and recovers a lost exact con
         assert.deepEqual(sent.filter(([name]) => name === "cancel").map(([, req]) => req.operationId),
             [strict.operationId, empty.operationId]);
         assert.deepEqual(ids(await loadBoardState(f.context)), ["call-known", "call-unknown"]);
+    } finally { await browser.close(); }
+});
+
+test("the normal CLI exposes a strict-first operation chooser only by explicit opt-in", { timeout: 90000 }, async t => {
+    const f = await fixture(t), root = path.dirname(f.context.dataDir);
+    const browser = await chromium.launch();
+    try {
+        for (const enabled of [false, true, false]) {
+            const child = fork(new URL("../scripts/start.mjs", import.meta.url),
+                ["--development-frontend", "react", "--port", "0", ...(enabled ? ["--verified-record-recovery"] : [])],
+                { silent: true, execArgv: [], env: { ...process.env, COPILOT_HOME: root, GH_CONFIG_DIR: path.join(root, "no-profile"),
+                    WORKIQ_EVIDENCE_DATA_DIR: f.context.dataDir, LOCALAPPDATA: root } });
+            const exited = once(child, "exit"), context = await browser.newContext();
+            let timer;
+            try {
+                const url = await new Promise((resolve, reject) => {
+                    let output = "";
+                    child.stdout.on("data", bytes => {
+                        output += bytes;
+                        const ready = /WIRE ready at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(output);
+                        if (ready) resolve(ready[1]);
+                    });
+                    child.once("error", reject);
+                    child.once("exit", () => reject(new Error("Normal WIRE startup exited before ready")));
+                    timer = setTimeout(() => reject(new Error("Normal WIRE startup timed out")), 15000);
+                });
+                const origin = new URL(url).origin, calls = [], page = await context.newPage();
+                await page.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+                page.on("request", r => {
+                    const match = new URL(r.url()).pathname.match(/^\/api\/recollection\/(\w+)$/);
+                    if (match) calls.push(match[1]);
+                });
+                const status = page.waitForResponse(r => r.url() === origin + "/api/collection/status");
+                await page.goto(url + "settings?section=privacy&setting=recollect-activity");
+                const col = await (await status).json();
+                assert.equal(col.recollection.mode, "new-only");
+                assert.equal(col.recollection.exactRecordsAvailable === true, enabled);
+                await page.locator("#recollectActivity").click();
+                await expect(page.locator("#recollectOperation")).toHaveValue("strict");
+                if (enabled) {
+                    await expect(page.locator("#recollectOperationChoice")).toBeVisible();
+                    await expect(page.locator("#recollectLoadSources")).toBeVisible();
+                    await expect(page.locator("#recollectScopeFields")).toBeHidden();
+                    await selectActivityOption(page, "recollectOperation", mode);
+                    await page.locator("#recollectClose").click();
+                    await page.locator("#recollectActivity").click();
+                    await expect(page.locator("#recollectOperation")).toHaveValue("strict");
+                    assert.deepEqual(calls, []);
+                } else {
+                    await expect(page.locator(`#recollectSources input[value="${f.sourceId}"]`)).toBeVisible();
+                    await expect(page.locator("#recollectOperationChoice")).toBeHidden();
+                    assert.deepEqual(calls, ["sources"]);
+                }
+            } finally {
+                clearTimeout(timer);
+                await context.close();
+                if (child.connected) child.disconnect();
+                const killTimer = setTimeout(() => child.kill(), 10000);
+                try { assert.equal((await exited)[0], 0); } finally { clearTimeout(killTimer); }
+            }
+        }
     } finally { await browser.close(); }
 });

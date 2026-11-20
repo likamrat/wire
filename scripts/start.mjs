@@ -12,7 +12,7 @@ function startupOptions(args) {
         microsoftVisibleSignIn: false, microsoftVisibilityExperiment: false, microsoftManualCollection: false };
     const seen = new Set();
     const invalid = () => { throw Object.assign(new Error(
-        "Use npm start -- [--port 0-65535] [--development-frontend bundled|react], or npm run dev for a separate checkout store. Microsoft incubation requires --development-microsoft."),
+        "Use npm start -- [--port 0-65535] [--development-frontend bundled|react] [--verified-record-recovery], or npm run dev for a separate checkout store. Microsoft incubation requires --development-microsoft."),
     { code: "WIRE_START_OPTIONS_INVALID" }); };
     for (let index = 0; index < args.length; index++) {
         const key = args[index];
@@ -22,7 +22,8 @@ function startupOptions(args) {
             const frontend = args[++index];
             if (!["bundled", "react"].includes(frontend)) invalid();
             options.frontend = frontend;
-        } else if (key === "--contributor") options.contributor = true;
+        } else if (key === "--verified-record-recovery") options.exactRecords = true;
+        else if (key === "--contributor") options.contributor = true;
         else if (key === "--development-microsoft") options.developmentMicrosoft = true;
         else if (key === "--microsoft-retained") options.microsoftRetained = true;
         else if (key === "--microsoft-manual-collection") options.microsoftManualCollection = true;
@@ -39,6 +40,7 @@ function startupOptions(args) {
             options.port = Number(port);
         } else invalid();
     }
+    if (options.exactRecords && options.developmentMicrosoft) invalid();
     if (options.microsoftConfig && options.microsoftRetained || options.microsoftAccountOnly && !options.microsoftConfig) invalid();
     if (options.microsoftVisibilityExperiment && options.microsoftVisibleSignIn) invalid();
     if (options.microsoftVisibilityExperiment) options.microsoftVisibleSignIn = true;
@@ -85,6 +87,7 @@ try {
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
         frontend: options.frontend,
+        exactRecords: options.exactRecords === true,
         sourcePolicy: options.developmentMicrosoft ? "microsoft-incubation" : "copilot-only",
         collector, createAccess: async () => {
             if (!options.developmentMicrosoft) {

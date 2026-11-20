@@ -2231,6 +2231,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     recollectionUI = assessmentFactories.mountRecollection({ api, time, timeContext: () => viewerTime, search: localSearch, ux, searchFields,
         describe: assessmentFactories.describeRecollection,
+        offerVerifiedRecords: () => collection?.recollection?.exactRecordsAvailable === true,
         canAct: recollectionGuard,
         onNotice: message => announce(message, "error"),
         onChanged: current => {

@@ -169,6 +169,12 @@ For an already managed, explicitly owned evaluation store, set
 `npm start -- --development-frontend react --port <unused-port>`.
 Without an explicit store, this lower-level React command refuses startup;
 it never silently adopts the normal default store.
+To offer **Verified records only (day incomplete)** on one Copilot-only
+runtime, append `--verified-record-recovery` to its startup command. The
+option lasts only for that process; it does not change the store, approval,
+collection policy or default strict selection. Omitting it leaves
+verified-record recovery unavailable. See [explicit recollection](collection.md#explicit-recollection).
+
 The single React shell composes the header/navigation, Analyze overview and
 activity, filter panel, Search and contextual reader. Existing chart, evidence,
 select-control and Search controllers are explicit native DOM adapters, not
