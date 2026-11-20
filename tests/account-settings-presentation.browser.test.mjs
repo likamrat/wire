@@ -278,18 +278,20 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
         await receive(page, presentationFixture("disconnected", profile));
         if (!process.env.WIRE_ACCOUNT_RENDERER_PIN) {
             const footer = await page.locator("#navigationFooter").evaluate(node => {
-                const rect = node.getBoundingClientRect(), rail = node.closest("aside").getBoundingClientRect();
+                const rect = node.getBoundingClientRect(), rail = node.closest("aside");
                 const settings = node.querySelector('[data-nav="settings"]').getBoundingClientRect();
                 const account = node.querySelector("#wireAccountTrigger").getBoundingClientRect();
-                return { bottom: rect.bottom, railBottom: rail.bottom, settings: settings.toJSON(), account: account.toJSON() };
+                return { bottom: rect.bottom, contentBottom: rail.getBoundingClientRect().bottom - parseFloat(getComputedStyle(rail).paddingBottom),
+                    settings: settings.toJSON(), account: account.toJSON() };
             });
-            assert.equal(footer.bottom, footer.railBottom - 16);
+            assert.equal(footer.bottom, footer.contentBottom, "The footer anchors to the padded rail, not the viewport edge");
             assert.ok(footer.settings.bottom + 4 <= footer.account.top, "Settings and account have separate rows");
             assert.equal(footer.settings.left, footer.account.left);
         }
         await capture(page, theme + "-account-footer");
         await page.locator("#wireAccountTrigger").click();
         await expect(page.locator("#wireAccountMenu")).toBeFocused();
+        await expect(page.locator("#wireAccountMenu .wire-account-identity p")).toHaveText(profile.displayName.value);
         await capture(page, theme + "-account-expanded");
         const scroll = await page.evaluate(() => scrollY);
         await page.keyboard.press("ArrowDown");
@@ -306,8 +308,7 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
         await capture(page, theme + "-account-collapsed");
         await page.keyboard.press("Escape");
         await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-        await page.locator('.primary-navigation [data-nav="settings"]').click();
-        assert.match(page.url(), /#settings$/);
+        await expect(page.locator('.primary-navigation [data-nav="settings"]')).toHaveAttribute("href", "/settings");
         await page.locator("#navigationCollapse").click();
     }
     await page.setViewportSize({ width: 390, height: 1000 });

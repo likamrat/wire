@@ -152,6 +152,10 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         if (!menu.matches(":popover-open")) return;
         if (event.key === "Escape") {
             event.preventDefault(); event.stopImmediatePropagation(); close(true);
+        } else if (event.key === "Tab" && menu.contains(document.activeElement)) {
+            // The popover is portaled out of the rail. Resume native tab order
+            // from its trigger, even when no menu item is enabled.
+            close(true);
         } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
             const items = [...menu.querySelectorAll('[role="menuitem"]')].filter(item => !item.disabled && item.checkVisibility());
