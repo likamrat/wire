@@ -1321,13 +1321,12 @@ test("series identities scale beyond four tools and stay fixed across visibility
 test("shared main headings keep the same focus node, use navigation icons and leave Settings undecorated", { timeout: 45000 }, async t => {
     const { page } = await setupIndex(t, false, { records: currentRecords(), motion: "no-preference" });
     await page.evaluate(() => window.originalPageHeading = document.getElementById("pageTitle"));
-    for (const [destination, label, icon] of [["analyze", "Analyze", "chart-column"], ["trends", "Trends", "chart-no-axes-combined"],
-        ["reports", "Reports", "clipboard-list"], ["compare", "Compare", "scale"], ["settings", "Settings", null]]) {
+    for (const [destination, label] of [["analyze", "Analyze"], ["trends", "Trends"], ["reports", "Reports"], ["compare", "Compare"], ["settings", "Settings"]]) {
         await navigateMain(page, destination); await settle(page);
         await expect(page.locator("#pageTitle")).toHaveText(label);
-        if (icon) {
+        if (destination !== "settings") {
             const glyph = page.locator("#pageTitle svg");
-            await expect(glyph).toHaveAttribute("data-lucide-icon", icon);
+            await expect(glyph).toHaveAttribute("data-icon-role", `navigation-${destination}`);
             await expect(glyph).toHaveAttribute("aria-hidden", "true");
             await expect(glyph).not.toHaveAttribute("title");
         } else await expect(page.locator("#pageTitle svg")).toHaveCount(0);

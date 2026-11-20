@@ -48,6 +48,7 @@ test("the built workbench carries each palette through screens and nested readin
         await option.click();
         await expect(page.locator("html")).toHaveAttribute("data-evidence-palette", palette);
         await expect(option.getByRole("radio")).toBeChecked();
+        await expect(option.locator('.palette-active svg[data-icon-role="select-check"][aria-hidden="true"]')).toBeVisible();
         await option.getByRole("radio").focus();
         // Simulate denial for the next palette write only; the app must keep the new
         // choice locally, announce the failure, and save it on deliberate retry.

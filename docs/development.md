@@ -393,4 +393,9 @@ Read the contract for the boundary you change. Use source and tests for exact
 schemas rather than copying them into another guide.
 
 When changing bundled assets, keep their license notices intact, including the
-[Asta Sans OFL](../assets/fonts/OFL.txt) and Lucide ISC/Feather MIT notices.
+[Asta Sans OFL](../assets/fonts/OFL.txt), React Icons MIT and Lucide ISC/Feather MIT notices.
+Add icon roles to `web/icon-roles.mjs` and named `react-icons/lu` exports to
+`scripts/react-icon-selection.mjs`. Run `npm run icons:generate` and commit the
+generated SVG catalog; `npm run build` checks it against the installed package.
+The packaged DOM and native renderers use this catalog without React roots,
+an icon font, an external request, or a development dependency at startup.

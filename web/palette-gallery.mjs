@@ -1,4 +1,5 @@
 import { palettes } from "./theme.mjs";
+import { uxIcons } from "./ux-icons.mjs";
 
 function preview(id, mode) {
     return `<span class="palette-scene" data-preview-palette="${id}" data-preview-mode="${mode}" aria-hidden="true">
@@ -14,7 +15,7 @@ export const paletteGallery = `
     <div id="recentPalettes" hidden></div></div>
   <fieldset class="palette-grid" aria-labelledby="paletteTitle" aria-describedby="paletteStorageNotice">
   ${Object.entries(palettes).map(([id,name]) => `<label class="palette-option"><input id="palette-${id}" type="radio" name="screenPalette" value="${id}" aria-label="${name}${id === "petrol" ? ", default" : ""}">
-    ${preview(id,"light")}${preview(id,"dark")}<span class="palette-caption"><span>${name}${id === "petrol" ? ' <small>Default</small>' : ""}</span><span class="palette-active">✓ Active</span></span></label>`).join("")}</fieldset>
+    ${preview(id,"light")}${preview(id,"dark")}<span class="palette-caption"><span>${name}${id === "petrol" ? ' <small>Default</small>' : ""}</span><span class="palette-active">${uxIcons["select-check"]} Active</span></span></label>`).join("")}</fieldset>
   <p id="paletteEmpty" hidden>No palettes match.</p>
   <details class="palette-comparison"><summary>Compare Light and Dark</summary><div>${["light","dark"].map(mode =>
         `<div><b>${mode === "light" ? "Light" : "Dark"}</b>${preview("petrol",mode)}</div>`).join("")}</div></details>
@@ -35,7 +36,7 @@ export const galleryStyles = `
 .palette-option:has(:focus-visible){outline:3px solid var(--focus);outline-offset:3px}
 .palette-caption{margin-top:auto;min-height:44px;padding:8px 12px;border-radius:0 0 8px 8px}.palette-option:has(:checked) .palette-caption {background:var(--accent-soft)}
 .palette-option:hover .palette-caption{background:var(--hover)}.palette-option:active .palette-caption{background:var(--pill-pressed)}
-.palette-active{font-size:var(--type-caption);color:var(--accent);visibility:hidden}.palette-option:has(:checked) .palette-active{visibility:visible}
+.palette-active{display:inline-flex;align-items:center;gap:.25em;font-size:var(--type-caption);color:var(--accent);visibility:hidden}.palette-option:has(:checked) .palette-active{visibility:visible}
 .palette-scene {display:grid;grid-template-columns:1.15rem 1fr;gap:6px;padding:8px;background:var(--page);border-radius:7px 7px 0 0}
 .palette-rail{background:var(--screen-rail);border-inline-start:3px solid var(--accent-fill);border-radius:3px}
 .palette-sheet{display:grid;gap:8px;padding:8px;background:var(--screen-plot);border:1px solid var(--rule);border-radius:4px}

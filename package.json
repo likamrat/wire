@@ -10,7 +10,6 @@
   },
   "packageManager": "npm@11.17.0",
   "dependencies": {
-    "lucide-static": "1.52.0",
     "marked": "18.1.1",
     "pdfjs-dist": "6.3.289",
     "playwright": "1.63.0",
@@ -26,6 +25,7 @@
     "esbuild": "0.28.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-icons": "5.7.0",
     "typescript": "7.0.2",
     "vite": "8.3.8"
   },
@@ -33,7 +33,8 @@
     "predev": "npm run build",
     "dev": "node scripts/start.mjs --contributor",
     "start": "node scripts/start.mjs",
-    "build": "vite build",
+    "icons:generate": "node scripts/build-icon-assets.mjs --write",
+    "build": "node scripts/build-icon-assets.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "check": "node scripts/check.mjs",
     "pretest": "npm run build",

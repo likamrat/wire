@@ -128,13 +128,19 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         const names = await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label")));
         await screenshot(page, `measure-${id}-columns`);
         if (id === "authors") {
-            for (const [actor, text, glyph] of [["user","Human prompts","user-round"],["agent","Agent prompts","bot"],["unknown","Author unverified","circle-question-mark"]]) {
+            for (const [actor, text, role] of [["user","Human prompts","account"],["agent","Agent prompts","report-agent"],["unknown","Author unverified","unobserved"]]) {
                 const legend = panel.locator(".trends-series").filter({has:page.getByRole("checkbox",{name:`Show ${text}`,exact:true})});
-                await expect(legend.locator(".trends-author-icon")).toHaveAttribute("data-lucide-icon",glyph);
+                const glyph = legend.locator(".trends-author-icon");
+                await expect(glyph).toHaveAttribute("data-icon-role",role);
+                await expect(glyph).toHaveAttribute("aria-hidden","true");
+                const iconBox = await glyph.boundingBox(), labelBox = await legend.locator(".trends-series-label").boundingBox();
+                assert(iconBox && labelBox && iconBox.width > 0 && iconBox.height > 0 && iconBox.x + iconBox.width <= labelBox.x
+                    && Math.abs((iconBox.y + iconBox.height / 2) - (labelBox.y + labelBox.height / 2)) <= 2,
+                    `${actor}: glyph stays centered beside, not over, its readable label`);
                 const day = actor === "unknown" ? 6 : 4;
                 await panel.locator(`[data-trend-mark][data-series="${actor}"]`).nth(day).focus();
                 await expect(page.locator("#trendsTooltip .trends-tip-series")).toHaveText(text);
-                await expect(page.locator("#trendsTooltip .trends-author-icon")).toHaveAttribute("data-lucide-icon",glyph);
+                await expect(page.locator("#trendsTooltip .trends-author-icon")).toHaveAttribute("data-icon-role",role);
                 await expect(page.locator("#trendsTooltip .trends-tip-value")).toHaveText("1 interaction");
                 await page.keyboard.press("Escape");
             }

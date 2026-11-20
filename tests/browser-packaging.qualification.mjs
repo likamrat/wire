@@ -44,7 +44,7 @@ test("the built React workspace runs with production dependencies and no fronten
     const args = ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"];
     if (process.platform === "win32") await run(process.env.ComSpec, ["/d", "/s", "/c", `npm ${args.join(" ")}`], { cwd: destination });
     else await run("npm", args, { cwd: destination });
-    for (const dependency of ["react", "react-dom", "vite", "typescript"]) {
+    for (const dependency of ["react", "react-dom", "react-icons", "lucide-static", "vite", "typescript"]) {
         await assert.rejects(readFile(path.join(destination, "node_modules", dependency, "package.json")), { code: "ENOENT" });
     }
     const runner = path.join(destination, "browser-runtime-proof.mjs");
@@ -80,5 +80,7 @@ process.send({ url: runtime.url });
     await expect(page.locator("#activityList .request-card-open")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator("body")).toHaveClass(/wire-frontend-react/);
     await expect(page.locator(".frontend-record-slot").first()).toBeAttached();
+    await expect(page.locator("#wireSearchHome svg[data-icon-role=search]")).toHaveCount(1);
+    await expect(page.locator("#activityList svg[data-icon-role='activity-panel']").first()).toBeVisible();
     assert.deepEqual(errors, []);
 });

@@ -65,6 +65,10 @@ New ordinary reports declare `presentation.authorLabelVersion: 1` for the
 “Human prompt” vocabulary. Reports without that marker keep their original
 author captions when rendered from JSON. The marker changes neither actor
 classification nor membership; previously saved titles, text and files stay frozen.
+`presentation.iconVersion: 2` selects the frozen React Icons author marks and
+their license notice for new HTML. A report with the earlier Human captions
+and no `iconVersion` keeps its original glyphs; older reports still have none.
+Screen icon upgrades must not change any of these saved presentations.
 
 New focused product reports declare `presentation.productVersion: 1` alongside
 presentation schema 3 and the existing origin/brand versions. This changes

@@ -44,7 +44,7 @@ use the same native modal.
 | Metadata label/value | Same regular weight and size; use placement and neutral label contrast for hierarchy |
 | Prompt | Regular, not bold italic |
 | Exact code and API path | Deliberate monospace |
-| Icon | Official Lucide paths/viewBox, unchanged |
+| Icon | [React Icons](https://react-icons.github.io/react-icons/), Lucide family, official 24-unit viewBox |
 
 Keep the label with its value, the explanation with its evidence and the action
 with its task. Missing optional facts need no empty row. Missing or conflicting
@@ -112,6 +112,14 @@ Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 
 ### Icons and controls
+
+Use the role map in `web/icon-roles.mjs` for navigation, actions, authors, outcomes and
+services. A role identifies what the icon means, not its color or file name.
+React controls and the static SVG adapter use the same React Icons components
+and expose `data-icon-role` on the SVG. Keep icons decorative beside text;
+give an icon-only control an accessible name on the control itself.
+Retain WIRE branding, authorized profile imagery and actual chart data marks
+as their own assets: none is a substitute for an action or an outcome.
 
 Decorative glyphs fit their text line without acquiring control-sized
 whitespace. Keep official Lucide's 24-unit viewBox; painted navigation glyphs

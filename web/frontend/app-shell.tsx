@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal, flushSync } from "react-dom";
-import { uxIcons } from "../ux-icons.mjs";
+import { LuFilter, LuSearch, LuX } from "react-icons/lu";
+import type { IconType } from "react-icons";
+import { componentName, iconProps, iconSize, uxIconSources } from "../icon-roles.mjs";
 import { mountReactActivity } from "./activity-owner.tsx";
 import type { createWorkspaceState, WorkspacePresentation } from "./workspace-state.ts";
 
@@ -28,8 +30,11 @@ function NativeHost({ node, id, className }: { node: HTMLElement; id?: string; c
     }, [node]);
     return <div id={id} className={className ?? (id ? undefined : "frontend-native-host")} ref={host} />;
 }
+const shellGlyphs: Readonly<Record<string, IconType>> = { LuFilter, LuSearch, LuX };
 function Icon({ name }: { name: "search" | "filter" | "close" }) {
-    return <span className="wire-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: uxIcons[name] }} />;
+    const asset = uxIconSources[name], Glyph = shellGlyphs[componentName(asset)];
+    if (!Glyph) throw new TypeError(`Unregistered shell icon: ${name}`);
+    return <Glyph {...iconProps(name, asset, iconSize(name))} />;
 }
 function Search() {
     return <div id="wireSearchHome" className="wire-search-entry">
