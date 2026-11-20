@@ -7056,7 +7056,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!savedCount) {
             const notice = $("bundleList").querySelector(":scope > p");
             if (notice) setText(notice, workspaceState.loading ? "Checking saved reports..." : workspaceState.stale ? "Saved reports could not be checked. Retry the stored view."
-                : "No saved reports.");
+                : workspaceState.route.task === "library" ? "No saved reports." : "No saved reports yet. Your first local copy will appear here after Save.");
         }
         const value = reportSelection();
         const hasNativeScope = value.nativeView === true;

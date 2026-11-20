@@ -568,6 +568,10 @@ ${optionRow}:has(>input:disabled){cursor:not-allowed;color:var(--muted)}
 .saved-shelf #bundleList>p{margin:.25rem 0 0;color:var(--muted)}
 .saved-shelf .saved-report-title:is(:hover,:focus-visible):not(:disabled){background:var(--hover);border-color:var(--accent)}
 #savedShelfAction:empty{display:none}
+@media(max-width:40rem){
+ #reportsView #savedReportsPanel.saved-shelf{padding:10px 12px 12px;margin-bottom:20px}
+ .saved-shelf .saved-report-title{gap:8px;padding:8px 10px}
+}
 .saved-report-rows{display:grid;grid-template-columns:subgrid;grid-column:1 / -1}
 #reportsView .saved-library-row,.saved-library-columns{display:grid;grid-template-columns:subgrid;grid-column:1 / -1;align-items:center}
 .saved-library-columns{min-height:36px;font-size:var(--type-caption);color:var(--muted)}
