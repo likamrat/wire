@@ -569,7 +569,7 @@ test("Display and header share switch artwork, native activation, storage update
     await expect(other.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", "true");
     await captureSwitchState(page, "theme-storage-warning");
     await category(page, "connection");
-    await category(page, "display");
+    await category(page, "regional");
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await page.locator("#displayTimeZone-control").focus();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
