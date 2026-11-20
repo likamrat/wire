@@ -162,7 +162,8 @@ test("changing screen roles leaves original saved HTML paint and every saved for
     const refuse = async () => { providers++; throw Error("No provider or source access in frozen paint proof."); };
     const runtime = await startServer(context, exports, { port: 0, frontend: "react", collector: { timers: false },
         evaluation: { evaluatorFactory: refuse, readSource: refuse } });
-    const browser = await chromium.launch(), page = await browser.newPage({ colorScheme: "light", viewport: { width: 1440, height: 1100 } });
+    const browser = await chromium.launch(), profile = await browser.newContext({ colorScheme: "light", viewport: { width: 1440, height: 1100 } });
+    const page = await profile.newPage();
     page.setDefaultTimeout(10000);
     t.after(async () => { await browser.close(); await runtime.close(); });
     const errors = [], posts = [];
@@ -194,6 +195,11 @@ test("changing screen roles leaves original saved HTML paint and every saved for
     });
     await page.mouse.move(0, 0);
     const before = await paint(), pixels = await page.screenshot({ clip });
+    const palettePanel = await page.context().newPage();
+    await palettePanel.goto(new URL("/settings?section=display", runtime.url).href);
+    await palettePanel.locator(".palette-option:has(#palette-blue)").click();
+    await page.waitForFunction(() => document.documentElement.dataset.evidencePalette === "blue");
+    await palettePanel.close();
     await chooseTheme(page, "dark");
     await page.mouse.move(0, 0);
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));

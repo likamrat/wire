@@ -330,11 +330,14 @@ This search runs on-device over fixed setting information. It is separate from
 the main Search field for saved activity and reports, and does not read private
 path values.
 
-In **Display**, choose Light or Dark and a time zone for this browser.
-The theme switch in the top toolbar changes the same preference.
-Changing the display does not rewrite saved reports or their original time zone.
+In **Display**, choose Light or Dark, a color palette and a time zone for this
+browser. The toolbar switch changes only Light/Dark. Select a palette card to
+change the screen immediately; **Compare Light and Dark** shows the selected
+palette in both modes. **Reset palette** restores Petrol & coral without
+changing mode. If storage is unavailable, the choice applies to this panel
+only. Changing appearance does not rewrite saved reports or their original time zone.
 
-![Display settings with Light selected and a separate time-zone choice.](images/settings-display.png)
+![Display with four palette previews. Petrol & coral is active in Light mode.](images/settings-display.png)
 
 ## Keep collection and saved data separate
 

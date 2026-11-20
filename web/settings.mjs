@@ -1,5 +1,6 @@
 import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
+import { paletteGallery } from "./palette-gallery.mjs";
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -41,8 +42,9 @@ export const settingsMarkup = `
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
-      <h3>Theme</h3>
+      <h3>Appearance mode</h3><span id="settingsModeLabel"></span>
     </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
+    ${paletteGallery}
     <div class="settings-field settings-display-field display-time-field">
       <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>

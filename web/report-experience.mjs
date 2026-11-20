@@ -252,13 +252,20 @@ html,body{background:var(--report-sheet);color:var(--ink)}main{background:transp
         const values = host.defaultView.getComputedStyle(host.documentElement), dark = host.documentElement.dataset.evidenceTheme === "dark";
         source.documentElement.dataset.evidenceTheme = dark ? "dark" : "light";
         for (const key of ["ink", "muted", "rule", "control", "focus", "danger", "warning", "chart-success"]) source.documentElement.style.setProperty("--" + key, values.getPropertyValue("--" + key));
+        // The editable screen copy can adopt chart inks. Never inject into a saved original.
+        const alternate = host.documentElement.dataset.evidencePalette && host.documentElement.dataset.evidencePalette !== "petrol";
+        for (const key of values) {
+            if (!/^--chart-(?:service-|teal-|pink-|cyan-|orange-|slate-|violet-)/.test(key)) continue;
+            if (alternate) source.documentElement.style.setProperty(key, values.getPropertyValue(key));
+            else source.documentElement.style.removeProperty(key);
+        }
         source.documentElement.style.setProperty("--screen-font", values.getPropertyValue("--font"));
         source.documentElement.style.setProperty("--report-sheet", values.getPropertyValue("--report-sheet"));
         source.documentElement.style.setProperty("--report-note", values.getPropertyValue("--report-note"));
         refresh();
     }
     const observer = new host.defaultView.MutationObserver(theme);
-    observer.observe(host.documentElement, { attributes: true, attributeFilter: ["data-evidence-theme", "style", "class"] }); theme();
+    observer.observe(host.documentElement, { attributes: true, attributeFilter: ["data-evidence-theme", "data-evidence-palette", "style", "class"] }); theme();
     for (const group of source.querySelectorAll(".wire-reading-section")) {
         const section = group.querySelector(":scope>section[id]");
         if (section) group.id = "reading-" + section.id;

@@ -1584,6 +1584,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || id === "collect-now" && !historyStatus.persistence(collection));
     }
     function settingsTarget(entry) {
+        if (entry.id === "palette") {
+            const checked = document.querySelector("input[name=screenPalette]:checked");
+            return checked?.parentElement.hidden ? "paletteQuery" : checked?.id ?? entry.target;
+        }
         const approved = collection?.config?.approved;
         if (nativeSettingUnavailable(entry.id)) return entry.section === "source-access" ? "sourceAccessTitle" : "connectionTitle";
         if (entry.section === "connection" && !$("sourceEditor").hidden
@@ -5634,10 +5638,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const service = issue.serviceAssociation?.services?.length === 1 ? serviceLabel(issue.serviceAssociation.services[0]) : "Returned";
             const label = diagnostic != null && issue.status != null && diagnostic !== issue.status ? "statuses disagree"
                 : issue.status != null ? `HTTP ${issue.status}` : "reported error";
-            foot.append(open(`${service} result: ${label}`, "record", exact(issue, "reported-api"), "card-evidence-link request-card-exception"));
+            foot.append(open(`${service} result: ${label}`, "record", exact(issue, "reported-api"), "card-evidence-link request-card-exception returned-issue-ink"));
         }
         const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));
-        if (reported) foot.append(open("Reported result issue", "record", exact(reported, layer), "card-evidence-link request-card-exception"));
+        if (reported) foot.append(open("Reported result issue", "record", exact(reported, layer), "card-evidence-link request-card-exception returned-issue-ink"));
         if (!failure && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
             if (cue) foot.append(el("span", "request-card-exception", cue));
