@@ -65,6 +65,35 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("a compact, unrelated post-tool hook can close without certifying a tool completion", async () => {
+    const simple = change(hook, { input: { sessionId, toolCallId: "hook-call", toolName: "other-tool", toolArgs: {} } });
+    const close = line("hook-done", "hook.end", { hookInvocationId: simple.data.hookInvocationId,
+        hookType: "postToolUse", success: false }, 1, simple.id);
+    const expected = (await scan([p, a, s, e])).records;
+    for (const at of [0, 4]) {
+        const out = await scan([p, a, s, e].toSpliced(at, 0, simple, close));
+        assert.deepEqual(out.records, expected);
+        assert.equal(out.omittedRegions, 0);
+    }
+    assert.equal((await scan([p, a, s, simple, close, e])).excluded, 1);
+    const prefix = encode([boot, line("padding", "user.message", { content: "x".repeat(68000) }, 0), simple]);
+    const bytes = Buffer.concat([prefix, encode([close, p, a, s, e])]);
+    const reads = await parts(bytes, [65536 + 256 + prefix.length + 2]);
+    assert.equal(reads[0].cursor.offset, prefix.length);
+    assert.deepEqual(decide(reads), decide(await parts(bytes)));
+    for (const pair of [[close], [simple, { ...close, parentId: s.id }], [simple, { ...close, id: p.data.messageId }],
+        [simple, change(close, { output: { toolCallId: s.data.toolCallId } })], [simple, change(close, { success: "false" })],
+        [simple, change(close, { hookInvocationId: "other-invocation" })], [simple, close, close], [hook, close]]) {
+        await assert.rejects(scan([p, a, s, e, ...pair]), unverified);
+    }
+    await assert.rejects(scan([simple, close, p, a, s, e], { state: { checkpointEvents: [
+        line("foreign", "assistant.message", { wireToolRequestIds: [simple.data.input.toolCallId] }, 8),
+    ] } }), unverified);
+    await assert.rejects(scan([simple, close, p, a, s, e], { state: { deletion: {
+        contextCalls: [callIdentity(sessionId, simple.data.input.toolCallId)],
+    } } }), unverified);
+});
+
 test("SDK session-mode metadata is a boundary, not a call, grant or source of missing links", async () => {
     const changeMode = line("mode-event", "session.mode_changed", { previousMode: "interactive", newMode: "plan" }, 5, boot.id);
     const permission = line("permission-event", "session.permissions_changed", { mode: "manual" }, 6, changeMode.id);

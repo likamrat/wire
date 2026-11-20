@@ -521,6 +521,11 @@ It never uses a notice to link separated events or to grant access. Unknown
 fields, ambiguous identifiers, and unclassified oversized entries still
 prevent a verified-record preview.
 
+A compact, text-free post-tool hook may close directly after its matching
+unrelated hook start. Its success flag describes the hook, not the tool call.
+An unmatched close, an intervening record, or an unverified hook body cannot
+supply that link.
+
 Confirmation rereads the same bounded originals, using the same two-minute
 deadline and explicit reading steps. A changed mapping, file, checkpoint,
 approval, selection or review basis refuses the operation. The writer preserves
