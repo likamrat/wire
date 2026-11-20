@@ -169,7 +169,11 @@
     }
 }
 @container analyze-view (max-width: 26rem) {
-    .wire-frontend-react #outcomeChart > .percentage-card { padding-inline: 16px; }
+    .wire-frontend-react .analyze-dashboard { --widget-heading-inset: 4px; }
+    .wire-frontend-react #homeView .analyze-chart-main .chart-panel,
+    .wire-frontend-react #outcomeChart > .percentage-card {
+        padding: var(--widget-heading-inset) 16px 8px;
+    }
     .wire-frontend-react #outcomeChart .percentage-legend-row .percentage-value { font-size: var(--type-small); }
 }
 @media (max-width: 48rem) {
