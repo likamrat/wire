@@ -526,6 +526,20 @@ unrelated hook start. Its success flag describes the hook, not the tool call.
 An unmatched close, an intervening record, or an unverified hook body cannot
 supply that link.
 
+For an app-mapped Work IQ start already linked to the user's prompt and the
+assistant's request, the completion's parent can instead lead back through
+three adjacent hook pairs: `preToolUse`, `preMcpToolCall`, then `postToolUse`.
+The start, all six original hook records and the original completion must fit
+in one read part. WIRE checks every parent link and event time, the distinct
+event and invocation IDs across the source and checkpoint, the hook session,
+tool, `workiq` server on the MCP hook and arguments, and the completion's own call and turn.
+Only the completion reports the outcome; missing success stays unknown.
+Projected hooks, ambiguous original fields, credentials and deleted
+dependencies cannot qualify the chain. This path requires compact JSON
+originals: WIRE checks their encoded digest so that duplicate fields lost
+during parsing cannot conceal another identity. WIRE refuses a split chain rather
+than carrying private hook arguments or result bodies into the next part.
+
 Confirmation rereads the same bounded originals, using the same two-minute
 deadline and explicit reading steps. A changed mapping, file, checkpoint,
 approval, selection or review basis refuses the operation. The writer preserves

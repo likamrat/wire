@@ -6,6 +6,7 @@ import { readTail, TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { retainEvent } from "../lib/collector.mjs";
 import { callIdentity, eventIdentity, recordUnits } from "../lib/deletion-identities.mjs";
 import { createExactEvidence } from "../lib/exact-record-evidence.mjs";
+import { withCausalHooks } from "./causal-hook-fixture.mjs";
 
 const sessionId = "22222222-2222-4222-8222-222222222222";
 const since = "2026-11-01T00:00:00.000Z", until = "2026-11-01T23:59:59.999Z";
@@ -64,6 +65,83 @@ function decide(reads, options = {}) {
 }
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
+
+test("six causal originals link an app-mapped start only to its independently recorded completion", async () => {
+    for (const [success, outcome] of [[true, "succeeded"], [false, "failed"], [undefined, "unknown"]]) {
+        const rows = withCausalHooks([p, a, s, change(e, { success })], sessionId);
+        const out = await scan(rows);
+        assert.deepEqual(out.records, (await scan([p, a, s, change(e, { success })])).records);
+        const [call] = out.records[0].toolCalls;
+        assert.deepEqual([call.startEventId, call.completionEventId, call.reportedOutcome, out.excluded, out.omittedRegions],
+            [s.id, e.id, outcome, 0, 0]);
+        assert.doesNotMatch(JSON.stringify(out), /private hook result|invented response body/i);
+    }
+});
+
+test("a causal chain cannot borrow another request, source, hook, completion or grant", async () => {
+    const rows = withCausalHooks([p, a, s, e], sessionId);
+    const input = (i, fields) => change(rows[i], { input: { ...rows[i].data.input, ...fields } });
+    for (const [index, replacement] of [
+        [0, change(p, { source: "agent-peer" })], [1, change(a, { toolRequests: [{ toolCallId: "other" }] })],
+        [3, input(3, { sessionId: "other" })], [3, input(3, { toolCalls: [] })],
+        [4, change(rows[4], { hookInvocationId: "other" })], [4, change(rows[4], { success: "false" })],
+        [5, input(5, { serverName: "another" })], [5, input(5, { toolCallId: "other" })],
+        [5, input(5, { toolName: "other" })], [5, input(5, { arguments: {} })], [5, input(5, { timestamp: 0 })],
+        [6, { ...rows[6], parentId: rows[3].id }], [6, { ...rows[6], agentId: "subagent" }],
+        [6, { ...rows[6], timestamp: since }], [6, { ...rows[6], timestamp: "2026-11-02T00:00:00.000Z" }],
+        [7, input(7, { toolArgs: {} })], [7, input(7, { toolResult: { content: '{"password":"invented-value"}' } })],
+        [7, input(7, { toolResult: { content: padding } })], [7, input(7, { toolResult: { content: "x".repeat(16500) } })],
+        [7, JSON.stringify(rows[7]).replace('"postToolUse"', '"other","hookType":"postToolUse"')],
+        [8, change(rows[8], { output: { success: true } })],
+        [9, { ...rows[9], parentId: s.id }], [9, change(rows[9], { toolCallId: "other" })],
+        [9, change(rows[9], { parentToolCallId: "subtask" })], [9, change(rows[9], { turnId: undefined })],
+    ]) await assert.rejects(scan(rows.with(index, replacement)), unverified, `replacement at ${index}`);
+    for (const bad of [rows.slice(0, -1), rows.toSpliced(4, 1), rows.toSpliced(5, 0, p),
+        rows.toSpliced(5, 2, rows[7], rows[8]), rows.toSpliced(5, 2, ...rows.slice(5, 7).map(row =>
+            change(row, { hookInvocationId: rows[3].data.hookInvocationId })))]) await assert.rejects(scan(bad), unverified);
+    await assert.rejects(scan(rows, { source: { ...source, managedWorkIqEventIds: [] } }), unverified);
+});
+
+test("causal hook identities are exclusive over the source and checkpoint, including later and suppressed rows", async () => {
+    const rows = withCausalHooks([p, a, s, e], sessionId);
+    const reads = await parts(encode([boot, ...rows]));
+    for (const id of rows.slice(3, 9).flatMap(row => [row.id, row.data.hookInvocationId])) {
+        const foreign = line("foreign", "assistant.message", { apiCallId: id }, 86400001);
+        for (const events of [[foreign, ...rows], [...rows, foreign]]) await assert.rejects(scan(events), unverified);
+        for (const options of [{ checkpointEvents: [{ data: { nested: [id] } }] },
+            { deletion: { events: [eventIdentity(sessionId, id)] } }, { deletion: { contextCalls: [callIdentity(sessionId, id)] } }]) {
+            assert.throws(() => decide(reads, { state: options }), unverified);
+        }
+    }
+    const retained = [p, a, s, rows.at(-1)].map(event => retainEvent(event, { credentialExclusions: 0 },
+        { managedWorkIqEventIds: new Set(source.managedWorkIqEventIds) }));
+    assert.equal(decide(reads, { state: { checkpointEvents: retained } }).records.length, 1);
+    assert.equal(decide(reads, { state: { checkpointEvents: [...retained, retained[3]] } }).excluded, 1);
+});
+
+test("a parsed original that could hide a second ID cannot validate a causal chain", async () => {
+    const rows = withCausalHooks([p, a, s, e], sessionId);
+    const shadowed = JSON.stringify(line("foreign", "assistant.message", {}, 86400001))
+        .replace('"id":', `"id":"${rows[3].id}","id":`);
+    for (const events of [[shadowed, ...rows], [...rows, shadowed]]) await assert.rejects(scan(events), unverified);
+    for (const key of ["id", "hookInvocationId", "toolCallId"]) {
+        const shadowedProjection = JSON.stringify(hook).replace(`"${key}":`, `"${key}":"${rows[3].id}","${key}":`);
+        await assert.rejects(scan([shadowedProjection, ...rows]), unverified);
+    }
+});
+
+test("only an entire start/hooks/completion in one committed part can certify the causal edge", async () => {
+    const rows = withCausalHooks([p, a, s, e], sessionId);
+    const pad = line("pad", "assistant.message", { content: "x".repeat(68000) }, 0);
+    const bytes = encode([boot, pad, ...rows]);
+    for (let split = 2; split < rows.length; split++) {
+        const offset = encode([boot, pad, ...rows.slice(0, split)]).length;
+        const reads = await parts(bytes, [65536 + 256 + offset + 2]);
+        assert.equal(reads[0].cursor.offset, offset);
+        if (split === 2) assert.equal(decide(reads).records.length, 1);
+        else assert.throws(() => decide(reads), unverified);
+    }
+});
 
 test("a compact, unrelated post-tool hook can close without certifying a tool completion", async () => {
     const simple = change(hook, { input: { sessionId, toolCallId: "hook-call", toolName: "other-tool", toolArgs: {} } });

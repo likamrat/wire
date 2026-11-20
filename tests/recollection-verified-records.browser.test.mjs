@@ -9,6 +9,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { createCollector } from "../lib/collector.mjs";
 import { TAIL_LIMITS } from "../lib/collector-io.mjs";
+import { withCausalHooks } from "./causal-hook-fixture.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
@@ -39,7 +40,7 @@ const ids = state => state.evidence.flatMap(r => r.toolCalls.map(c => c.toolCall
 const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptToken });
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
-async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false } = {}) {
+async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -87,7 +88,8 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         event("other-turn-open", "assistant.turn_start", at(day, 5), { turnId: "other-turn" }),
         event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
     ]));
-    await appendFile(file, encode([...chain(day, "known", 10, true), ...chain(day, "unknown", 20, undefined),
+    const known = chain(day, "known", 10, true);
+    await appendFile(file, encode([...(causalHooks ? withCausalHooks(known, sourceId) : known), ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]));
     if (preservation) {
         await mkdir(path.dirname(otherFile));
@@ -172,7 +174,7 @@ test("a bound exact preview reviews only identified members, never the full day"
 });
 
 test("the reviewed subset and original receipts survive ordinary incremental collection and restart", async t => {
-    const f = await fixture(t, { preservation: true, disjointTurns: true });
+    const f = await fixture(t, { preservation: true, disjointTurns: true, causalHooks: true });
     await f.start();
     // A real, older strict receipt must not acquire the new mode or its membership.
     await appendFile(f.otherFile, encode(chain(f.day, "earlier", 5, true, { literal: true })));
@@ -441,8 +443,8 @@ test("the normal panel reports a proved exact refusal without offering to check 
     } finally { await browser.close(); }
 });
 
-test("the normal panel switches reviews explicitly and recovers a lost exact confirmation without replay", async t => {
-    const f = await fixture(t, { disjointTurns: true });
+for (const causalHooks of [false, true]) test(`the normal panel recovers a lost confirmation without replay: ${causalHooks ? "hook-linked" : "direct"} completion`, async t => {
+    const f = await fixture(t, { disjointTurns: true, causalHooks });
     await f.start({ exactRecords: true, frontend: "bundled" });
     const browser = await chromium.launch();
     try {
@@ -454,11 +456,11 @@ test("the normal panel switches reviews explicitly and recovers a lost exact con
             const name = new URL(r.url()).pathname.match(/^\/api\/recollection\/(\w+)$/)?.[1];
             if (name) sent.push([name, r.postDataJSON()]);
         });
-        const action = async (control, name) => {
+        const action = async (control, name, status = 200) => {
             const [r] = await Promise.all([page.waitForResponse(r => r.url() === `${origin}/api/recollection/${name}`),
                 page.locator(control).click()]);
             const body = await r.json();
-            assert.equal(r.status(), 200, body.error);
+            assert.equal(r.status(), status, body.error);
             return body;
         };
         const open = async () => {
@@ -482,12 +484,18 @@ test("the normal panel switches reviews explicitly and recovers a lost exact con
         await selectActivityOption(page, "recollectOperation", mode);
         const otherDay = new Date(Date.parse(at(f.day, 0)) + 86400000).toISOString().slice(0, 10);
         await page.locator("#recollectFrom").fill(otherDay);
-        const empty = await action("#recollectPreview", "preview");
-        assert.deepEqual(empty.exactMembers, []);
-        await expect(page.locator("#recollectExactCounts")).toContainText(/day coverage is incomplete/i);
-        await expect(page.locator("#recollectStatus")).toContainText(/does not establish that no calls are missing/i);
-        await expect(page.locator("#recollectConfirm")).toBeDisabled();
-        await action("#recollectChange", "cancel");
+        const empty = await action("#recollectPreview", "preview", causalHooks ? 422 : 200);
+        if (causalHooks) {
+            // The start on the other day cannot authorize inspecting its causal arguments.
+            assert.equal(empty.code, "EXACT_EVIDENCE_UNVERIFIED");
+            await expect(page.locator("#recollectConfirm")).toBeHidden();
+        } else {
+            assert.deepEqual(empty.exactMembers, []);
+            await expect(page.locator("#recollectExactCounts")).toContainText(/day coverage is incomplete/i);
+            await expect(page.locator("#recollectStatus")).toContainText(/does not establish that no calls are missing/i);
+            await expect(page.locator("#recollectConfirm")).toBeDisabled();
+            await action("#recollectChange", "cancel");
+        }
         await page.locator("#recollectFrom").fill(f.day);
         const p = await action("#recollectPreview", "preview");
         assertReview(f, p);
@@ -520,7 +528,7 @@ test("the normal panel switches reviews explicitly and recovers a lost exact con
         assert.deepEqual(sent.filter(([name]) => name === "confirm"), [["confirm", confirm(p)]]);
         assert.deepEqual(sent.filter(([name]) => name === "status"), [["status", receiptFor(p)]]);
         assert.deepEqual(sent.filter(([name]) => name === "cancel").map(([, req]) => req.operationId),
-            [strict.operationId, empty.operationId]);
+            [strict.operationId, ...(causalHooks ? [] : [empty.operationId])]);
         assert.deepEqual(ids(await loadBoardState(f.context)), ["call-known", "call-unknown"]);
     } finally { await browser.close(); }
 });
