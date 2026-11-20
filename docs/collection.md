@@ -536,6 +536,12 @@ text is not a user prompt and is not copied into the call. A linked turn
 end is checked against the completion and changes neither its outcome nor
 the receipt's incomplete-day coverage.
 
+An unrelated external-tool request or canvas record can be classified when
+its matching close is the next original event. The supported forms carry no
+tool arguments or canvas input; an empty arguments object is also allowed.
+Their IDs must be disjoint from the reviewed activity. Neither an external
+completion nor a canvas close can supply a missing call outcome.
+
 A compact, text-free post-tool hook may close directly after its matching
 unrelated hook start. Its success flag describes the hook, not the tool call.
 An unmatched close, an intervening record, or an unverified hook body cannot

@@ -80,6 +80,11 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         } }]));
     }
     if (disjointTurns) await appendFile(file, encode([
+        event("other-request", "external_tool.requested", at(day, 1), { requestId: "request-key", sessionId: sourceId,
+            toolCallId: "external-key", toolName: "invented-tool" }, "boot"),
+        event("other-finished", "external_tool.completed", at(day, 1), { requestId: "request-key" }, "other-request"),
+        event("surface", "session.canvas.recorded", at(day, 1), { extensionId: "extension", canvasId: "canvas", instanceId: "instance" }, "boot"),
+        event("surface-removed", "session.canvas.removed", at(day, 1), { extensionId: "extension", canvasId: "canvas", instanceId: "instance" }, "surface"),
         event("plain-hook", "hook.start", at(day, 1), { hookInvocationId: "plain-invocation", hookType: "postToolUse",
             input: { sessionId: sourceId, toolCallId: "plain-hook-call", toolName: "other-tool", toolArgs: {} } }, "boot"),
         event("plain-hook-closed", "hook.end", at(day, 1), { hookInvocationId: "plain-invocation",

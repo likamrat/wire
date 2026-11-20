@@ -66,6 +66,41 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+function otherLifecycle(family) {
+    if (family === "external") return [
+        line("dispatch", "external_tool.requested", { requestId: "foreign-request", sessionId, toolCallId: "foreign-call", toolName: "invented-tool", arguments: {} }, 0, boot.id),
+        line("dispatch-end", "external_tool.completed", { requestId: "foreign-request" }, 0, "dispatch"),
+    ];
+    const data = { canvasId: "foreign-canvas", extensionId: "invented-extension", instanceId: "foreign-instance" };
+    return [line("surface-open", "session.canvas.recorded", { ...data, title: "Invented private title." }, 0, boot.id),
+        line("surface-close", "session.canvas.removed", data, 0, "surface-open")];
+}
+
+test("paired unrelated external requests and canvas records cannot become tool outcomes or user origins", async () => {
+    const baseline = (await scan([p, a, s, e])).records;
+    for (const kind of ["external", "canvas"]) {
+        const [start, end] = otherLifecycle(kind);
+        const result = await scan([start, end, p, a, s, e]);
+        assert.deepEqual(result.records, baseline); assert.equal(result.omittedRegions, 0);
+        assert.doesNotMatch(JSON.stringify(result), /private title|invented-tool/);
+        for (const events of [[end], [start, { ...end, parentId: boot.id }], [start, end, end],
+            [start, change(end, { result: {} })], [{ ...start, id: p.data.messageId }, { ...end, parentId: p.data.messageId }],
+            [change(start, kind === "external" ? { toolCallId: s.data.toolCallId } : { instanceId: a.data.messageId }), end]]) {
+            await assert.rejects(scan([...events, p, a, s, e]), unverified);
+        }
+        await assert.rejects(scan([start, end, p, a, s, e], { state: { checkpointEvents: [{ data: { alias: end.id } }] } }), unverified);
+        await assert.rejects(scan([start, end, p, a, s, e], { state: { deletion: { events: [eventIdentity(sessionId, start.id)] } } }), unverified);
+        // No crossing into the assistant's logical attribution through a foreign UI or request.
+        assert.deepEqual((await scan([p, start, end, a, s, e])).records, []);
+    }
+    const [external, end] = otherLifecycle("external");
+    for (const bad of [change(external, { sessionId: "another-chat" }), change(external, { toolName: "workiq-fetch" }),
+        change(external, { toolName: s.data.toolName }), change(external, { arguments: { namedCallId: s.data.toolCallId } }),
+        change(external, { providerId: "unknown-provider" })]) {
+        await assert.rejects(scan([bad, end, p, a, s, e]), unverified);
+    }
+});
+
 function originJournal() {
     const info = line("info", "session.info", { infoType: "timing", message: "Invented private timeline notice." }, 1, p.id);
     const usage = line("usage", "session.usage_checkpoint", { totalNanoAiu: 17 }, 1, info.id);
