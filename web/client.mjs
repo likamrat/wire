@@ -2423,7 +2423,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         button("Open Trends without this scope", () => navigate({ view: "trends", search: "", analysisQuery: null }, true)));
     $("trendsView").before(expiredTrend);
     const trendsUI = assessmentFactories.mountTrends({
-        root: $("trendsView"), api, time, ux,
+        root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
             entry: trendOrigin(underlyingRoute())?.entry ?? null,
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),

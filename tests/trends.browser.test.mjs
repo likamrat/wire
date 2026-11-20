@@ -280,6 +280,17 @@ test("supporting calls keep Close available and restore the nineteenth call afte
     const close = await page.locator(".trends-dialog").getByRole("button", { name: "Close", exact: true }).boundingBox();
     const failures = [];
     if (close.y < 0 || close.y + close.height > 1000) failures.push("Close left the viewport");
+    const origin = await call.boundingBox();
+    await page.evaluate(() => {
+        const plot = document.querySelector("#trendsPlot-tools"), samples = [];
+        window.readerReturnFrames = { active:true, samples };
+        (function tick() {
+            if (!window.readerReturnFrames.active) return;
+            samples.push([scrollY, plot.getBoundingClientRect().top, plot.scrollLeft, document.activeElement.id || document.activeElement.tagName,
+                Boolean(document.querySelector("#contextSidebar[open]")), Boolean(document.querySelector(".trends-dialog[open]"))]);
+            requestAnimationFrame(tick);
+        })();
+    });
     await call.click();
     await expect(page.locator("#requestContent")).toContainText("Inspect Cedar supporting call");
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
@@ -289,6 +300,12 @@ test("supporting calls keep Close available and restore the nineteenth call afte
     await page.getByRole("button", { name: "View evidence", exact: true }).click();
     await settle(page);
     const returned = await call.boundingBox();
+    const readerTrace = await page.evaluate(() => { window.readerReturnFrames.active = false; return window.readerReturnFrames.samples; });
+    assert(readerTrace.length > 2 && readerTrace.some(row => row[4]) && readerTrace.at(-1)[5], "Frames include reader and restored evidence dialog");
+    assert(Math.abs(origin.y - returned.y) <= 2 && Math.abs(readerTrace[0][0] - readerTrace.at(-1)[0]) <= 2,
+        "Reader returns to the same evidence row and document position");
+    if (process.env.WIRE_TRENDS_PERFORMANCE) await writeFile(path.join(path.dirname(process.env.WIRE_TRENDS_PERFORMANCE),"reader-return-frames.json"),
+        JSON.stringify({columns:["scrollY","plotTop","plotScrollLeft","focus","readerOpen","evidenceOpen"],origin,returned,samples:readerTrace}));
     if (returned.y < 0 || returned.y + returned.height > 1000) failures.push("Nineteenth call was not restored");
     assert.equal(await call.innerText(), identity);
     await capture(page, "usability-evidence-return");
@@ -425,7 +442,7 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
     await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
         body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
     await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
-    await expect(page.locator("#trendsView > .notice")).toContainText("Synthetic stored-read failure");
+    await expect(page.locator("#trendsView .trends-read-feedback .notice")).toContainText("Synthetic stored-read failure");
     await expect(page.locator(".trends-pending")).toBeEmpty();
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
     await page.unroute("**/api/trends");
@@ -624,8 +641,8 @@ test("author, overlapping service/model, error, timing and calendar marks open o
     await dates(page, "2026-08-01", "2026-08-01");
     await page.locator('.trends-panel[data-family="authors"] .trends-sizing button:first-child').click();
     const cases = [
-        ["authors", "share", "My prompts", [0, 1, 2], "33.3% (1)", 100 / 3],
-        ["authors", "count", "My prompts", [0, 1, 2], "1", 100],
+        ["authors", "share", "Human prompts", [0, 1, 2], "33.3% (1)", 100 / 3],
+        ["authors", "count", "Human prompts", [0, 1, 2], "1", 100],
         ["services", "share", "Mail", [0, 1], "40% (2)", 40],
         ["services", "count", "Mail", [0, 1], "2", 200 / 3],
         ["services", "share", "Files", [0, 2, 3], "60% (3)", 60],
@@ -1840,7 +1857,7 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
     await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
         body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
     await page.locator('[data-trend-period="30"]').click();
-    await expect(page.locator("#trendsView > .notice")).toBeVisible();
+    await expect(page.locator("#trendsView .trends-read-feedback .notice")).toBeVisible();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
     const cleared = await page.evaluate(() => {

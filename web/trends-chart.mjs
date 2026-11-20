@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, formatDate, formatAxisDate, weekContext, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, formatDate, formatAxisDate, weekContext, canInspect }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format;
@@ -93,9 +93,13 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         erase(tooltip);
         const heading = element("div", "trends-tip-heading");
         const label = element("span", "trends-tip-series", value.label);
-        const sample = svgNode("svg", { class: "trends-sample", viewBox: "0 0 36 16", "aria-hidden": "true" });
-        sample.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(point.id, scene.family), "stroke-width": 3 }));
-        label.prepend(sample); heading.append(label, element("span", "muted", formatDate(day.date)));
+        if (scene.family === "authors") label.prepend(authorIcon(point.id));
+        else {
+            const sample = svgNode("svg", { class: "trends-sample", viewBox: "0 0 36 16", "aria-hidden": "true" });
+            sample.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(point.id, scene.family), "stroke-width": 3 }));
+            label.prepend(sample);
+        }
+        heading.append(label, element("span", "muted", formatDate(day.date)));
         tooltip.append(heading);
         const denominator = scene.family === "tools" && scene.mode === "reach" ? value.reachEligible : value.eligible;
         const numerator = scene.family === "tools" && scene.mode === "reach" ? value.interactions : value.count;

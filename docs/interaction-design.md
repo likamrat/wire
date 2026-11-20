@@ -141,6 +141,11 @@ together; drafts, Cancel, pending reads and failed reads retain the
 accepted range. Today remains a current-day label, not a claim of full-day coverage.
 Delayed reads show the requested range separately, without relabeling accepted
 facts. Success, failure, superseding intent, departure and withdrawal clear it.
+With a chart already on screen, read feedback sits with that chart rather than
+pushing the measure index down. Adding a comparison keeps the existing chart
+mounted. The author legend and exact-value tooltip use the same Human, Agent
+and unverified presentation as the interaction reader; the chart does not
+infer who wrote a prompt.
 
 In the index, hover/focus previews a mark; click, tap or Enter pins its reading
 and exposes the matching calls. **Data table** includes hidden series and the

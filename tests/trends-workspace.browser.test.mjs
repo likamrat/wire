@@ -127,6 +127,18 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         await expect(panel.locator("[data-trend-mark]")).toHaveCount(7 * series[id]);
         const names = await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label")));
         await screenshot(page, `measure-${id}-columns`);
+        if (id === "authors") {
+            for (const [actor, text, glyph] of [["user","Human prompts","user-round"],["agent","Agent prompts","bot"],["unknown","Author unverified","circle-question-mark"]]) {
+                const legend = panel.locator(".trends-series").filter({has:page.getByRole("checkbox",{name:`Show ${text}`,exact:true})});
+                await expect(legend.locator(".trends-author-icon")).toHaveAttribute("data-lucide-icon",glyph);
+                const day = actor === "unknown" ? 6 : 4;
+                await panel.locator(`[data-trend-mark][data-series="${actor}"]`).nth(day).focus();
+                await expect(page.locator("#trendsTooltip .trends-tip-series")).toHaveText(text);
+                await expect(page.locator("#trendsTooltip .trends-author-icon")).toHaveAttribute("data-lucide-icon",glyph);
+                await expect(page.locator("#trendsTooltip .trends-tip-value")).toHaveText("1 interaction");
+                await page.keyboard.press("Escape");
+            }
+        }
         await panel.getByRole("button", { name: "Lines", exact: true }).click();
         assert.deepEqual(await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label"))), names);
         await panel.getByRole("button", { name: "Columns", exact: true }).click();
@@ -217,6 +229,74 @@ test("compiled Trends keeps its mounted chart and scroll during accepted, cancel
     await expect(panel.locator(".trends-index-scope")).toContainText("2 dated calls");
     await page.getByRole("button", { name: "Read stored activity", exact: true }).click(); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls");
     if (proof) await writeFile(path.join(proof, "filter-motion.json"), JSON.stringify(motion));
+});
+
+test("compiled Trends keeps the reading anchor across refinements, compare, empty, failed and superseded reads", { timeout: 90000 }, async t => {
+    const { page, index } = await setup(t), view = page.locator("#trendsView"), panel = panelOf(page, "tools");
+    const filters = view.getByRole("button", { name: "Filters", exact: true }), period = view.locator("#trendsPeriod");
+    const tool = index.getByRole("button", { name: "Tool usage", exact: true });
+    await tool.click();
+    const frames = [];
+    async function watch(label, act, { scene = false } = {}) {
+        await page.evaluate(() => {
+            const tab = document.querySelector(".trends-measure-index"), toolbar = document.querySelector(".trends-toolbar");
+            const host = document.querySelector("#trendsPlot-tools"), svg = host.querySelector("svg");
+            const ref = [scrollY, tab.getBoundingClientRect().top, toolbar.getBoundingClientRect().top];
+            const trace = window.trendsMotionTest = { ref, frames: [], alive: true };
+            const tick = () => {
+                if (!trace.alive) return;
+                trace.frames.push({ pos: [scrollY, tab.getBoundingClientRect().top, toolbar.getBoundingClientRect().top],
+                    joined: tab.isConnected && toolbar.isConnected && host.isConnected, scene: host.firstElementChild === svg,
+                    focus: document.activeElement.id || document.activeElement.getAttribute("aria-label") || document.activeElement.tagName });
+                requestAnimationFrame(tick);
+            }; tick();
+        });
+        await act();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const trace = await page.evaluate(() => { const t = window.trendsMotionTest; t.alive = false; return t; });
+        frames.push({ label, ...trace });
+        const displacement = Math.max(...trace.frames.flatMap(frame => frame.pos.map((v,i)=>Math.abs(v-trace.ref[i]))));
+        assert(trace.frames.length >= 2 && displacement <= 1, `${label}: ${displacement}px movement of unrelated controls`);
+        assert(trace.frames.every(frame => frame.joined && (!scene || frame.scene)), `${label}: replaced retained content`);
+    }
+    async function applyService(value) {
+        await filters.click(); await selectActivityOption(page, "trendsService", value);
+        await view.getByRole("button", { name: "Apply filters" }).click();
+        await expect(view).toHaveAttribute("aria-busy", "false");
+    }
+    const choose = (owner, name) => owner.getByRole("button", { name, exact: true }).click();
+    await watch("cancel draft", async () => { await filters.click(); await selectActivityOption(page,"trendsService","Mail"); await choose(view,"Cancel"); await expect(filters).toBeFocused(); }, {scene:true});
+    await watch("percentage then count", async () => { await choose(panel,"Percentage"); await choose(panel,"Count"); });
+    await watch("lines then columns", async () => { await choose(panel,"Lines"); await choose(panel,"Columns"); });
+    const check = panel.getByRole("checkbox").first();
+    await watch("series visibility", async () => { await check.uncheck(); await check.check(); await expect(check).toBeFocused(); });
+    await watch("change measure and return", async () => { await choose(index,"Response models"); await tool.click(); });
+    await watch("add comparison", async () => {
+        await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
+        await choose(view,"Apply comparison"); await expect(panelOf(page,"services")).toBeVisible();
+    }, {scene:true});
+    await watch("remove comparison", async () => {
+        await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
+        await choose(view,"Apply comparison");
+    }, {scene:true});
+    await watch("empty filter", async () => { await applyService("Discovery"); await expect(view.locator(".trends-qualification")).toContainText("No matching calls"); });
+    await watch("clear empty", async () => { await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });
+    await watch("failed filter", async () => {
+        await page.route("**/api/trends", route => route.fulfill({ status:503,json:{error:"Invented read failure"} }), {times:1});
+        await applyService("Mail"); await expect(view.locator(".notice")).toContainText("Invented read failure");
+    }, {scene:true});
+    await watch("retry original filter", async () => { await choose(view,"Read stored activity"); await expect(panel.locator(".trends-index-scope")).toContainText("2 dated calls"); });
+    let release, arrived;
+    const gate = new Promise(resolve => { release = resolve; }), held = new Promise(resolve => { arrived = resolve; });
+    t.after(() => release());
+    await page.route("**/api/trends", async route => { const response = await route.fetch(); arrived(); await gate; await route.fulfill({response}); }, {times:1});
+    await watch("supersede pending date", async () => {
+        await period.click(); await choose(view,"Last 14 days"); await held;
+        await expect(view.locator(".trends-pending")).toContainText("14 days");
+        await period.click(); await choose(view,"Last 30 days"); await expect(panel.locator("[data-date-tick]")).toHaveCount(30);
+        release(); await expect(view).toHaveAttribute("aria-busy","false"); await expect(period).toBeFocused();
+    });
+    if (proof) await writeFile(path.join(proof,"trends-control-frames.json"),JSON.stringify(frames));
 });
 
 test("compiled Trends is readable in all five palettes, both modes, narrow and enlarged with the same keyboard and touch evidence", { timeout: 150000 }, async t => {

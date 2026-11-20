@@ -1,4 +1,4 @@
-export function mountTrends({ root, api, time, ux, createCalendar, mountChart, getContext, recordLink, reload, returnToAnalyze }) {
+export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, getContext, recordLink, reload, returnToAnalyze }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models"];
     const families = {
@@ -61,7 +61,13 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         }
         return `var(--trends-series-${colors.get(key) + 1})`;
     }
+    function authorIcon(id) {
+        const node = ux.icon(authorship.iconRole(id));
+        node.classList.add("trends-author-icon"); node.style.color = color(id, "authors");
+        return node;
+    }
     function sample(id, family) {
+        if (family === "authors") return authorIcon(id);
         const svg = svgNode("svg", { viewBox: "0 0 36 16", class: "trends-sample", "aria-hidden": "true" });
         svg.append(svgNode("line", { x1: 1, x2: 35, y1: 8, y2: 8, stroke: color(id, family), "stroke-width": 3 }));
         return svg;
@@ -141,7 +147,9 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div", "trends-dialog-body"), dialogHeader = el("div", "trends-dialog-heading");
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
-    root.append(toolbar, pendingNotice, restrictions, status, retry, qualification, detailBar, workspace, paging, inspection, tooltip, dialog);
+    const feedback = el("div", "trends-read-feedback");
+    feedback.append(pendingNotice, status, retry, qualification);
+    root.append(toolbar, restrictions, detailBar, feedback, workspace, paging, inspection, tooltip, dialog);
     dialog.addEventListener("close", () => {
         if (dialog.open) return;
         scrub(dialogBody); scrub(dialogTitle);
@@ -249,7 +257,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 && node.matches("button,a,input,select,textarea,summary,[role=button]"))) return;
             if (allCharts && (card.collapsed || heading.contains(event.target))) toggleCollapsed(card);
         });
-        card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
+        card.chart = mountChart({ root: plot, tooltip, color, authorIcon, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
             onSelect(date, series) {
                 evidenceReturn = null;
@@ -261,7 +269,10 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         plotCards.set(plot, card);
         observer.observe(plot);
     }
-    doc.fonts.ready.then(() => { if (current()) paint(); });
+    doc.fonts.ready.then(() => {
+        for (const card of cards.values()) card.drawing = null;
+        if (current()) paint();
+    });
     doc.addEventListener("keydown", event => {
         if (event.key !== "Escape" || event.defaultPrevented || dialog.open || !enabled) return;
         if (!tooltip.hidden) { hideHover(); return; }
@@ -372,6 +383,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
                 pendingNotice.textContent = `Loading ${next.period === "custom" ? dates : `Last ${next.period} days · ${dates}`}…`;
             }, 300);
         }
+        if (doc.activeElement === retry && data) filtersButton.focus({ preventScroll: true });
         retry.hidden = true;
         try {
             const value = await api("/api/trends", request);
@@ -572,7 +584,13 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         card.indexScope.textContent = captions.join(" · ");
         paintPoint(card);
         if (!panel.hidden && !collapsed) {
-            card.chart.render(source, id, mode, hidden, card.selection, card.type);
+            const encoding = JSON.stringify([mode, card.type, [...hidden].sort(), allCharts, family === id]);
+            if (source !== card.drawing?.source || encoding !== card.drawing.encoding) {
+                card.chart.render(source, id, mode, hidden, card.selection, card.type);
+                card.drawing = { source, encoding };
+            } else if (card.width !== card.plot.clientWidth || card.height !== card.plot.clientHeight) {
+                card.chart.resize({ width: card.plot.clientWidth, height: card.plot.clientHeight });
+            }
             card.width = Math.round(card.plot.clientWidth); card.height = Math.round(card.plot.clientHeight);
         }
     }
@@ -752,6 +770,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
         restrictions.hidden = !allCharts || !Object.keys(filters).length;
         clearFilters.hidden = allCharts && !Object.keys(filters).length;
+        if (!Object.keys(filters).length && doc.activeElement === clearFilters) filtersButton.focus({ preventScroll: true });
         clearFilters.disabled = !Object.keys(filters).length;
         filtersButton.setAttribute("aria-label", "Filters");
         filtersButton.title = restrictionText.textContent || "Filter activity";
@@ -762,6 +781,8 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         if (!data.totals.calls) limits.push("No matching calls in this period. Change the dates or clear filters.");
         qualification.textContent = limits.join(" "); qualification.hidden = !limits.length;
         for (const card of cards.values()) paintCard(card, dateRange);
+        const feedbackHost = cards.get(family ?? (allCharts ? order[0] : activeMeasure)).panel;
+        if (feedback.parentElement !== feedbackHost) feedbackHost.append(feedback);
         paging.replaceChildren(); paging.hidden = data.window.totalDays <= 90;
         if (!paging.hidden) {
             const previous = button("Earlier days", () => void read({ range, period, filters, offset: Math.max(0, offset - 90) }));
@@ -774,12 +795,13 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
     function withdrawAccess() {
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
+        root.insertBefore(feedback, workspace);
         range = null; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
         scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("title"); periodButton.hidden = true;
         filtersButton.disabled = true; periodButton.disabled = true;
         for (const card of cards.values()) {
-            card.chart.withdrawAccess(); card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
+            card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
             card.mode = card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
             for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence]) scrub(node);
@@ -875,6 +897,7 @@ export const trendsStyles = `
 .trends-series>.trends-sample{margin-block-start:max(0px,calc((1lh - 12px)/2))}
 .trends-series-label{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .trends-sample{display:inline-block;width:20px;height:12px;flex:none}
+.trends-author-icon{flex:none;width:1em;height:1em;align-self:center}
 .trends-legend-value{flex:none;margin-inline-start:auto;font-size:var(--type-body);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trends-value-track{display:block;height:4px;background:var(--canvas)}.trends-value-fill{display:block;height:100%}
 .trends-legend-row>.trends-value-track{flex:0 0 100%}
@@ -959,6 +982,7 @@ export const trendsStyles = `
 #trendsView[data-layout=index] .trends-series{padding:4px;max-width:100%;width:auto;min-height:36px;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:5px}
 #trendsView[data-layout=index] .trends-series input{accent-color:var(--series-color,var(--toggle-on));margin:0}#trendsView[data-layout=index] .trends-series .trends-sample{display:none}
 #trendsView[data-layout=index] .trends-series-label{white-space:normal;overflow-wrap:anywhere}
+#trendsView[data-layout=index] [data-family=authors] .trends-series{grid-template-columns:auto auto minmax(0,1fr)}
 #trendsView[data-layout=index] .trends-point{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0;padding:4px 8px;background:var(--canvas);border-radius:var(--radius-small)}
 #trendsView[data-layout=index] .trends-point-actions{margin-left:auto}#trendsView[data-layout=index] .trends-point-space{display:none}
 .trends-secondary{border-top:1px solid var(--surface-divider);justify-content:space-between;padding-top:4px;margin-top:8px}.trends-secondary>button{--pill-border:transparent;--pill-fill:transparent;color:var(--muted)}
@@ -968,8 +992,9 @@ export const trendsStyles = `
 #trendsView[data-layout=all] .trends-workspace{display:block}#trendsView[data-layout=all] .trends-measure-index{display:flex;flex-wrap:wrap;border:0;margin-bottom:12px}#trendsView[data-layout=all] .trends-measure{width:auto}
 #trendsView[data-layout=all] .trends-plot{contain:layout paint}
 #trendsView[data-layout=all] .trends-plot svg{content-visibility:auto}
-#trendsView[data-layout=index] .trends-toolbar{justify-content:flex-end;margin-bottom:12px}#trendsView[data-layout=index] .trends-pending{min-height:0;margin:0}
-#trendsView[data-layout=index] .trends-pending:not(:empty){position:absolute;inset:auto 0 auto auto;z-index:var(--layer-tooltip);padding:4px 8px;background:var(--floating-paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
+#trendsView[data-layout=index] .trends-toolbar{justify-content:flex-end;margin-bottom:12px}
+.trends-read-feedback .trends-pending,.trends-read-feedback .trends-qualification{min-height:0;margin:8px 0 0;overflow-wrap:anywhere}
+.trends-read-feedback .trends-pending:empty{display:none}
 #trendsView{position:relative}#trendsView[data-layout=index] .trends-toolbar button:disabled{visibility:hidden}
 #trendsView .trends-measure::before,#trendsView .trends-choice::before{display:none}
 #trendsView .trends-choice[aria-pressed=true]{background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium)}
