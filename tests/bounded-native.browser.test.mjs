@@ -232,6 +232,10 @@ test("bounded cards replace pages while full totals stay fixed, and Dates/source
 test("compiled workspace keeps the bounded completed selector private and restores its link on Back", async t => {
     const {page,calls} = await setup(t,{mainClient:true,compiled:true,extraSuccesses:11,localBackend:true});
     await selectActivityOption(page,"sourceFilter","microsoft-365-cowork");
+    // The source control changes before the narrowed snapshot and its inventory owner are installed.
+    await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
+    await expect(page.locator("#activityList .activity-card")).toHaveAttribute("data-source-id","microsoft-365-cowork");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy","false");
     await selectActivityOption(page,"toolFilter","mcp__m365_search__SearchM365");
     await closeAnalyzeFilters(page);
     const link=page.locator("#activityList").getByRole("link",{name:"12 tool calls completed"});
