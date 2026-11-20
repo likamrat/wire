@@ -9,7 +9,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { readSavedArtifactFile, loadSavedReportSource, readSavedComparison } from "../lib/report-artifacts.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
+import { openReportComparison, prepareLandingReport } from "./report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 
 test("retained timeout cause stays with its tool across reader, new files, saved reading and Compare", { timeout: 90000 }, async t => {
@@ -71,7 +71,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     }
     await navigateMain(page, "reports");
     const preparedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const response = await preparedResponse, prepared = await response.json();
     assert.equal(response.status(), 200, prepared.error);
     assert.equal(prepared.records.length, 1);
@@ -93,7 +93,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         }
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const rebuilt = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

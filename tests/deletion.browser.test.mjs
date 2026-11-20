@@ -7,7 +7,7 @@ import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme, s
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { reportContents, chooseReportScope } from "./report-journey-helpers.mjs";
+import { reportContents, chooseReportScope, chooseLandingReportDates, prepareLandingReport } from "./report-journey-helpers.mjs";
 
 test("anonymous local records are qualified in deletion preview, not presented as verified distinct tool calls", { timeout: 15000 }, async t => {
     const record = fixture("anonymous-preview");
@@ -70,12 +70,12 @@ async function previewAll(page) {
 }
 async function prepareCurrentReport(page) {
     await navigateMain(page, "reports");
-    await page.locator("#reportGallery").getByRole("button", { name: "Custom dates", exact: true }).click();
+    await chooseLandingReportDates(page, "Custom dates");
     await page.locator("#reportDatefrom").fill("2026-09-29");
     await page.locator("#reportDateto").fill("2026-09-30");
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
     const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     assert.equal((await (await preparing).json()).records.length, 2);
 }
 

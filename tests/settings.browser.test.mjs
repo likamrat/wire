@@ -10,6 +10,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { navigateMain, navigateSettings, selectActivityOption, chooseTheme, openActivitySessions, openSourceEditor } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_SETTINGS_PROOFS;
@@ -236,7 +237,7 @@ test("Settings cannot grant report review or revive an invalidated frozen previe
     const { page, runtime, context, controller, posts } = await setup(t, true);
     await page.goto(runtime.url + "#reports"); await ready(page);
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     assert.equal((await prepared).status(), 200);
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
     await navigateMain(page, "settings");

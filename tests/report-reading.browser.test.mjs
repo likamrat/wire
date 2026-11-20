@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
@@ -31,7 +32,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await chooseTheme(page, "light");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const initial = await (await response).json();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByLabel("Report name", { exact: true }).fill("Cedar release call failures");
@@ -138,6 +139,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     assert.deepEqual(await readFile(saved.files["product-report.html"]), bytes);
+    await viewAllSavedReports(page);
     const row = page.locator(".saved-library-row").filter({ hasText: "Cedar revised report" });
     const title = row.locator(".saved-report-title");
     for (const theme of ["light", "dark"]) {
@@ -196,7 +198,7 @@ test("late regeneration retains the selected file mode and never publishes super
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     const initial = await (await response).json();
     await selectActivityOption(page, "preparedReportView", "product-report.html");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
@@ -218,7 +220,7 @@ test("late regeneration retains the selected file mode and never publishes super
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
     assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
     assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     prepared = await (await response).json();
@@ -258,7 +260,7 @@ test("report period closes when reading an embedded document and when leaving Re
     page.setDefaultTimeout(5000);
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     await expect(page.frameLocator(".report-contained-frame").locator("h1")).toHaveText("All activity");
     await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
     await expect(page.locator("#reportPeriodChoices")).toBeVisible();
@@ -295,7 +297,7 @@ test("report period closes when reading an embedded document and when leaving Re
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.frameLocator("#reportFileInspection iframe").locator("h1").click();
     await expect(period).toBeHidden();
-    await page.getByRole("combobox", { name: "Prepared report view", exact: true }).click();
+    await page.getByRole("combobox", { name: "Viewing", exact: true }).click();
     const fileBox = await page.locator("#reportFileInspection iframe").boundingBox();
     await page.mouse.click(fileBox.x + fileBox.width - 20, fileBox.y + 100);
     await expect(page.locator(".select-popup")).toBeHidden({ timeout: 1000 });
@@ -313,7 +315,7 @@ test("report period closes when reading an embedded document and when leaving Re
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(period).toBeHidden();
     await expect(page.locator("#reportGallery")).toBeVisible();
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.locator('nav [data-nav="analyze"]').click();
@@ -352,9 +354,10 @@ test("older Activity disclosure owns its following tool and service breakdowns",
     });
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(page);
     await page.getByRole("button", { name: "Files for Archived activity example", exact: true }).click();
     await page.getByRole("dialog", { name: "Files for Archived activity example", exact: true })
-        .getByRole("button", { name: "HTML", exact: true }).click();
+        .getByRole("button", { name: "Web page (HTML)", exact: true }).click();
     const frame = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
     await expect(frame.locator("#breakdowns")).toBeVisible();
     assert.equal(await frame.locator("#breakdowns").evaluate(node =>
@@ -441,7 +444,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     let prepared = await (await response).json();
     const population = structuredClone(prepared.snapshot.reportPopulation);
     assert.equal(population.reference.length, 52); assert.equal(prepared.records.length, 6);
@@ -501,7 +504,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1800, height: 1100 });
 
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

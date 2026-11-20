@@ -8,7 +8,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { createNativeReportPublicationState } from "../web/native-report-publication-state.mjs";
 import { navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme } from "./helpers.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
+import { openReportComparison, prepareLandingReport } from "./report-journey-helpers.mjs";
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 
 const root = process.env.WIRE_NATIVE_SAVE_BACKEND_ROOT;
@@ -1499,7 +1499,7 @@ test("report picker replacements retire private native cards and their caller-ow
     { skip: !root, timeout: 90000 }, async t => {
         const app = await setup(t, { segmented: true, mixed: true }), { page } = app;
         await navigateMain(page, "reports");
-        await page.locator('[data-report-preset="all"]').click();
+        await prepareLandingReport(page, "all");
         await page.getByRole("button", { name: "Change what's included", exact: true }).click();
         await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
         const list = page.locator("#reportList"), first = list.locator("[data-native-report-request]").first();

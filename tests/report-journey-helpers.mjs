@@ -1,5 +1,30 @@
+export async function selectReportFocus(page, preset) {
+    const compact = page.locator("#reportDeskFocus");
+    if (await compact.isVisible()) return compact.selectOption(preset);
+    return page.locator(`#reportGallery [data-report-preset="${preset}"]`).click();
+}
+
+export function prepareReportPreview(page) {
+    return page.locator("#prepareReportPreview").click();
+}
+
+export async function prepareLandingReport(page, preset) {
+    await selectReportFocus(page, preset);
+    await prepareReportPreview(page);
+}
+
+export async function chooseLandingReportDates(page, label) {
+    await page.locator("#reportDeskDates").click();
+    await page.locator("#reportPeriodChoices").getByRole("button", { name: label, exact: true }).click();
+}
+
+export async function viewAllSavedReports(page) {
+    await page.locator("#viewAllSavedReports").click();
+}
+
 export async function openReportLibrary(page) {
     if (!await page.locator("#savedReportsPanel").isVisible()) await page.locator("#reportLibraryLink").click();
+    if (await page.locator("#viewAllSavedReports").isVisible()) await viewAllSavedReports(page);
 }
 
 export async function openReportComparison(page) {

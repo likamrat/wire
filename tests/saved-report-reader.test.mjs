@@ -43,13 +43,14 @@ test("saved report names remain actionable while details close and altered HTML 
     });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportLibrary(page);
     const row = page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"]`);
     await row.getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator("#savedReportReader .saved-json-tree").waitFor();
     await writeFile(bundle.files["product-report.html"], "changed saved HTML");
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const start = calls.length;
     await row.locator(".saved-report-title").click();
@@ -58,7 +59,7 @@ test("saved report names remain actionable while details close and altered HTML 
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
     assert.equal(await page.locator("#savedReportReader pre, #savedReportReader iframe").count(), 0);
     assert.equal(calls.slice(start).some(route => route === "/api/report-original" || route === "/api/artifact-file"), false);
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).waitFor();
 });
 
@@ -90,8 +91,9 @@ test("saved files preview every format and switch without changing bytes or down
     page.on("download", download => downloads.push(download));
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportLibrary(page);
     for (const [index, bundle] of bundles.slice(0, 3).entries()) {
-        if (index) await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        if (index) await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
         await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).click();
         const reader = page.locator("#savedReportReader");
         await selectActivityOption(page, "savedReaderFormat", bundle.formats[0]);
@@ -140,14 +142,14 @@ test("saved files preview every format and switch without changing bytes or down
     }
     assert.equal(downloads.length, 1);
     for (const [file, bytes] of savedBytes) assert.deepEqual(await readFile(file), bytes);
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${bundles[4].bundleId}"] .saved-report-title`).click();
     await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: bundles[4].title, level: 1, exact: true }).waitFor();
     assert.equal(calls.some(call => call.path === "/api/report-original"), false, "Missing optional formats does not downgrade a verified HTML read");
     assert.equal(await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).count(), 0,
         "Do not offer a download that the stricter format-inventory endpoint cannot validate");
     const broken = bundles[3];
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"]`).getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
@@ -276,7 +278,7 @@ test("saved files preview every format and switch without changing bytes or down
     assert.equal(await page.locator(".saved-markdown h1").textContent(), broken.title);
     assert.deepEqual(foreign, []);
     await writeFile(broken.files["product-report.html"], "changed saved HTML");
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const start = calls.length;
     await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-title`).click();

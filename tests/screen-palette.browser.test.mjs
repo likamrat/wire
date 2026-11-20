@@ -6,6 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
 import { chooseTheme, navigateMain, navigateSettings, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast, rgb, measureChartPaint, measureControlSurface, visibleInk } from "./color-measurements.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -150,7 +151,7 @@ test("the built workbench carries each palette through screens and nested readin
         await ready(); await expect(page.locator(".compare-period-key p")).toHaveCount(2);
         await inspect("compare", theme);
         await navigateMain(page, "reports"); await inspect("reports", theme);
-        await page.locator('[data-report-preset="errors"]').click();
+        await prepareLandingReport(page, "errors");
         await expect(page.locator(".report-frame")).toBeVisible();
         await inspect("report-reading", theme);
         const editorFrame = page.locator("iframe.report-frame").first();

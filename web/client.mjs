@@ -1402,7 +1402,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? { identity: sidebarIdentity, top: contextBody.scrollTop } : null;
         const focus = contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
             id: active.id, ...(readerPosition ? { text: active.textContent } : {}),
-        } : owner ? {
+        } : owner === active && active?.closest("#savedReportsPanel") && owner?.dataset.viewKey ? { key: owner.dataset.viewKey, self: true } : owner ? {
             key: owner.dataset.viewKey, label: active.getAttribute("aria-label"), tag: active.tagName,
             text: active.textContent, type: active.getAttribute("type"), self: active === owner,
         } : null;
@@ -1505,10 +1505,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderBody?.(node.open);
         return node;
     }
-    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", pagerAfter = false, hideSinglePage = false, onPage, isCurrent, beforeReplace }) {
+    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", pagerAfter = false, hideSinglePage = false, onPage, isCurrent, beforeReplace, signal }) {
         const publication = api.publicationToken();
+        let pageEvents;
         const paint = (position = null) => {
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) return;
+            pageEvents?.abort();
+            if (signal) pageEvents = new AbortController();
+            const listeners = pageEvents ? { signal: AbortSignal.any([signal, pageEvents.signal]) } : undefined;
             const page = presentation.page(key, items.length, size), start = page * size;
             const pager = viewKey(el("div", "pager list-pager"), "pager:" + key);
             const label = viewKey(el("span", "", items.length ? `${count(start + 1)}-${count(Math.min(start + size, items.length))} of ${count(items.length)} ${noun}` : `0 ${noun}`), "position:" + key);
@@ -1526,7 +1530,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         const position = capturePager(pager, offset);
                         presentation.setPage(key, page + offset);
                         paint(position);
-                    }, "quiet");
+                    }, "quiet", listeners);
                     control.setAttribute("aria-label", `${name} ${noun}`);
                     control.setAttribute("aria-describedby", label.id);
                     control.dataset.pageDirection = String(offset);
@@ -1554,12 +1558,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         presentation.setPage(key, input.valueAsNumber - 1);
                         paint(position);
                         keyed("pager:" + key)?.querySelector("input")?.focus({ preventScroll: true });
-                    });
+                    }, listeners);
                     pager.append(form);
                 }
             }
             const list = el(listTag, listClass);
-            for (const item of items.slice(start, start + size)) list.append(renderItem(item));
+            for (const item of items.slice(start, start + size)) list.append(renderItem(item, listeners));
             beforeReplace?.(host);
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) { beforeReplace?.(list); return; }
             const content = wrapList(list);
@@ -1575,14 +1579,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (text !== undefined && text !== null) node.textContent = String(text);
         return node;
     }
-    function button(text, action, cls = "") {
+    function button(text, action, cls = "", listeners) {
         const node = el("button", cls, text);
         const publication = accessToken;
         node.type = "button";
         node.addEventListener("click", event => {
             if (clearingAccess || !api.publicationToken() || publication && !api.isCurrent(publication)) return;
             action?.(event);
-        });
+        }, listeners);
         const utilityRole = { Previous: "previous", Next: "next", Close: "close", Back: "back" }[text];
         if (utilityRole) ux.utility(node, utilityRole, text);
         return node;
@@ -2581,6 +2585,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (/^[a-f0-9-]{36}$/.test(entry.savedEntry)) values.savedEntry = entry.savedEntry;
             if (entry.savedAuthority === "search") values.savedAuthority = "search";
         }
+        // Old saved-list bookmarks predate the shelf; keep their explicit list order or inspector.
+        if (values.view === "reports" && !values.bundle && !values.task && (values.order === "oldest" || values.inspect && !values.savedEntry))
+            values.task = "library";
         if (values.view === "trends" && new URLSearchParams(address.split("?")[1]).has("privateView") && !values.trendEntry)
             values.trendUnavailable = true;
         return resolveBookmark(canonicalRoute(values), current && workspaceState.evidence);
@@ -4557,12 +4564,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
             ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
                 : current.saveUnconfirmed ? "Report save status" : "Your report" : "Reports");
-        else if (workspaceState.route.view === "reports" && view.landing) setText($("pageTitle"), "Reports");
+        else if (workspaceState.route.view === "reports" && view.landing) setText($("pageTitle"), workspaceState.route.task === "library" ? "Saved report library" : "Reports");
         if (workspaceState.route.view === "reports" && comparing) setText($("pageTitle"), reportComparisonUI?.title() || "Compare saved reports");
         $("reportCreateLink").hidden = true;
         $("reportLibraryLink").hidden = !creating && !comparing;
         $("reportCompareLink").hidden = !view.landing;
-        setText($("reportLibraryLink"), creating && periodReport?.returnTo ? "Back to comparison"
+        setText($("reportLibraryLink"), comparing && savedEntries.get(workspaceState.route.savedEntry)?.kind === "library-comparison" ? "Back to saved reports"
+            : creating && periodReport?.returnTo ? "Back to comparison"
             : creating && reportEntry?.returnTo ? "Back to Analyze" : "Back to Reports");
         $("reportLibraryLink").setAttribute("aria-disabled", String(Boolean(exportWriting || current?.saveUnconfirmed)));
         for (const [id, active, task] of [["reportLibraryLink", !creating && !comparing, undefined], ["reportCreateLink", creating, "create"], ["reportCompareLink", comparing, "compare"]]) {
@@ -4572,6 +4580,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else control.removeAttribute("aria-current");
         }
         if (creating && (periodReport?.returnTo || reportEntry?.returnTo)) setRouteLink($("reportLibraryLink"), periodReport?.returnTo ?? reportEntry.returnTo);
+        const comparisonOrigin = comparing && savedEntries.get(workspaceState.route.savedEntry);
+        if (comparisonOrigin?.kind === "library-comparison") setRouteLink($("reportLibraryLink"), comparisonOrigin.origin);
         syncSavedLibraryTask(view);
         reportExperience?.sync();
     }
@@ -7050,7 +7060,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const savedCount = workspaceState.evidence.exports?.length || 0;
         const verifiedEmptyLibrary = !savedCount && !workspaceState.loading && !workspaceState.stale;
         for (const node of $("bundles").querySelectorAll(".saved-library-tools,:scope > #savedLibraryManagement")) {
-            if (verifiedEmptyLibrary && node.contains(document.activeElement)) $("reportPreset-all")?.focus({ preventScroll: true });
+            if (verifiedEmptyLibrary && node.contains(document.activeElement)) $("savedLibraryTitle").focus({ preventScroll: true });
             node.hidden = verifiedEmptyLibrary || workspaceState.route.task !== "library";
         }
         if (!savedCount) {
@@ -7424,6 +7434,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function retireSavedList() {
+        savedListOwner?.events.abort();
         savedListOwner = null;
         for (const id of ["bundleList", "savedShelfAction"]) {
             const host = $(id);
@@ -7443,7 +7454,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("reportCreatePanel").hidden = true;
         $("reportTaskNav").hidden = $("reportLibraryLink").hidden = false;
         $("reportLibraryLink").removeAttribute("aria-current");
-        setText($("pageTitle"), "Saved report library");
     }
     function renderReports() {
         if (workspaceState.route.bundle) { renderSavedReader(); return; }
@@ -7452,13 +7462,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             + (periodReport?.value.nativePeriods ? "Qualified Microsoft activity dates are included; raw source identifiers stay withheld." : "Source event timestamps stay withheld.");
         renderReportPicker();
         retireSavedList();
-        if (workspaceState.route.view !== "reports" || $("savedReportsPanel").hidden) { updateSelection(); return; }
+        if (workspaceState.route.view !== "reports" || $("savedReportsPanel").hidden) {
+            if (workspaceState.route.view === "reports" && workspaceState.route.inspect) renderSavedInspector();
+            updateSelection(); return;
+        }
         const library = workspaceState.route.task === "library";
         const publication = api.publicationToken(), inventory = workspaceState.evidence.exports;
-        const listCurrent = () => savedListOwner === listCurrent && api.isCurrent(publication)
+        const owner = { events: new AbortController(), current: () => savedListOwner === owner && api.isCurrent(publication)
             && workspaceState.evidence?.exports === inventory && workspaceState.route.view === "reports"
-            && !$("savedReportsPanel").hidden && library === (workspaceState.route.task === "library");
-        savedListOwner = listCurrent;
+            && !$("savedReportsPanel").hidden && library === (workspaceState.route.task === "library") };
+        savedListOwner = owner;
+        const listCurrent = owner.current, listeners = { signal: owner.events.signal };
         const savedCount = workspaceState.evidence.exports?.length || 0;
         const reportCount = (workspaceState.evidence.exports || []).filter(bundle => (bundle.kind ?? "report") === "report").length;
         const comparisonCount = savedCount - reportCount;
@@ -7484,12 +7498,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!library) {
             const all = button(`View all ${count(savedCount)}`, () => {
                 if (listCurrent() && all.isConnected) navigate(routeFor("reports", { task: "library", request: undefined }));
-            }, "quiet");
+            }, "quiet", listeners);
             all.id = "viewAllSavedReports"; all.append(ux.icon("next"));
             $("savedShelfAction").append(all);
             const recent = el("div", "saved-shelf-rows");
             for (const { bundle } of ordered.slice(0, 2)) {
-                const control = savedTitleControl(bundle, listCurrent, true);
+                const control = savedTitleControl(bundle, listCurrent, true, listeners);
                 control.append(ux.icon("next")); recent.append(control);
             }
             $("bundleList").append(recent);
@@ -7525,19 +7539,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
         if (!matching.length) { $("bundleList").append(empty("No saved reports match", "Try a title, date or file format, or clear this search.")); return; }
         pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true, pagerAfter: true,
-            isCurrent: listCurrent, beforeReplace: erasePreparedNodes, onPage: () => leaveSavedInspectorContext(), wrapList: list => {
+            signal: owner.events.signal, isCurrent: listCurrent, beforeReplace: erasePreparedNodes, onPage: () => leaveSavedInspectorContext(), wrapList: list => {
                 const host = el("div", "saved-report-table"), columns = el("div", "saved-library-columns");
                 columns.setAttribute("aria-hidden", "true");
                 columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Actions"));
                 list.classList.add("saved-report-rows");
                 host.append(columns, list); return host;
-            }, renderItem: ({ bundle, preparedLabel }) => {
+            }, renderItem: ({ bundle, preparedLabel }, rowListeners) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
             outer.toggleAttribute("data-detail-active", workspaceState.route.inspect === bundle.bundleId);
             const current = () => listCurrent() && outer.isConnected && outer.dataset.bundleId === bundle.bundleId && indexedSaved(bundle);
-            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, preparedLabel);
+            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, rowListeners, preparedLabel);
             const identity = el("span", "saved-report-identity");
             const privacy = savedPrivacyStatus(bundle);
             identity.append(summary);
@@ -7549,14 +7563,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             savedReportMenu(files, fileEntries.map(format => ({
                 label: reportFileLabel(format),
                 action: () => openSavedReport(bundle, files, format),
-            })), outer, current);
+            })), outer, current, rowListeners);
             const actions = el("div", "saved-report-actions");
             const inspect = viewKey(button("Inspect details", () => {
                 if (current()) inspectSavedReport(bundle, inspect);
-            }, "quiet"), "inspect-bundle:" + bundle.bundleId);
+            }, "quiet", rowListeners), "inspect-bundle:" + bundle.bundleId);
             const remove = viewKey(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", () => {
                 if (current()) savedArtifactUI.open({ artifactKind: bundle.kind ?? "report", artifactId: bundle.bundleId, label: title }, remove);
-            }, "quiet danger"), "delete-bundle:" + bundle.bundleId);
+            }, "quiet danger", rowListeners), "delete-bundle:" + bundle.bundleId);
             remove.disabled = workspaceState.stale && !workspaceState.loading || bundle.canDelete === false;
             actions.append(files, inspect, remove);
             outer.prepend(identity, privacy, actions);
@@ -7574,10 +7588,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.inspect) renderSavedInspector();
         updateSelection();
     }
-    function savedTitleControl(bundle, current, shelf, preparedLabel) {
+    function savedTitleControl(bundle, current, shelf, listeners, preparedLabel) {
         const summary = viewKey(button("", () => {
             if (current() && summary.isConnected && indexedSaved(bundle)) openSavedReport(bundle, summary);
-        }, "saved-report-title"), "open-bundle:" + bundle.bundleId);
+        }, "saved-report-title", listeners), "open-bundle:" + bundle.bundleId);
         summary.disabled = !savedReadableFormat(bundle);
         const caption = el("span", "saved-report-caption");
         const name = bundle.title?.trim() || assessmentFactories.reportIdentity.defaultTitle(bundle);
@@ -7616,7 +7630,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         menu.style.left = Math.max(12, Math.min(innerWidth - bounds.width - 12, box.right - bounds.width)) + "px";
         menu.style.top = (box.bottom + bounds.height + 8 <= innerHeight ? box.bottom + 8 : Math.max(12, box.top - bounds.height - 8)) + "px";
     }
-    function savedReportMenu(trigger, entries, host, current) {
+    function savedReportMenu(trigger, entries, host, current, listeners) {
         const menu = el("div", "saved-report-menu");
         menu.setAttribute("popover", "auto"); menu.setAttribute("role", "dialog");
         menu.setAttribute("aria-label", trigger.getAttribute("aria-label"));
@@ -7624,27 +7638,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const control = button(entry.label, () => {
                 if (!current() || !control.isConnected) return;
                 menu.hidePopover(); ux.hideTooltip(); entry.action();
-            }, entry.danger ? "quiet danger" : "quiet");
+            }, entry.danger ? "quiet danger" : "quiet", listeners);
             control.disabled = entry.disabled === true;
             menu.append(control);
         }
-        bindSavedMenu(menu, trigger, current);
+        bindSavedMenu(menu, trigger, current, listeners);
         host.append(menu);
     }
-    function bindSavedMenu(menu, trigger, current) {
+    function bindSavedMenu(menu, trigger, current, listeners) {
         menu.setAttribute("role", "dialog"); menu.setAttribute("aria-label", trigger.getAttribute("aria-label"));
         trigger.setAttribute("aria-haspopup", "dialog"); trigger.setAttribute("aria-expanded", "false");
         menu.addEventListener("beforetoggle", event => {
             if (event.newState === "closed" && menu.contains(document.activeElement) && current() && trigger.isConnected) ux.restoreFocus(trigger);
-        });
+        }, listeners);
         trigger.addEventListener("click", () => {
             if (!current() || !trigger.isConnected) return;
             ux.hideTooltip();
             if (menu.matches(":popover-open")) { menu.hidePopover(); return; }
             menu.showPopover(); positionSavedMenu(menu, trigger);
             menu.querySelector("button:not(:disabled)")?.focus();
-        });
-        menu.addEventListener("toggle", () => trigger.setAttribute("aria-expanded", String(menu.matches(":popover-open"))));
+        }, listeners);
+        menu.addEventListener("toggle", () => trigger.setAttribute("aria-expanded", String(menu.matches(":popover-open"))), listeners);
     }
     function savedReadableFormat(bundle) {
         const prefix = bundle.kind === "comparison" ? "comparison-report" : "product-report";
@@ -7682,7 +7696,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function savedEntry(kind, bundle, trigger, extra = {}) {
         const key = crypto.randomUUID();
-        savedEntries.set(key, { kind, bundleId: bundle.bundleId, origin: sessionJourney.savedOrigin(workspaceState.route),
+        savedEntries.set(key, { kind, bundleId: bundle?.bundleId, origin: sessionJourney.savedOrigin(workspaceState.route),
             originEntry: workspaceState.route.savedEntry, reading: captureReading(), focusKey: trigger?.dataset.viewKey,
             navigationKey: window.navigation?.currentEntry?.key, inspectorTop: savedInspector ? contextBody.scrollTop : 0, ...extra });
         return key;
@@ -10154,6 +10168,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
+        if (id === "reportCompareLink" && workspaceState.route.task === "library" && savedListOwner?.current()) {
+            const key = savedEntry("library-comparison", null, event.currentTarget);
+            navigate({ ...linkTargets.get(event.currentTarget), savedEntry: key });
+            return;
+        }
+        if (id === "reportLibraryLink" && workspaceState.route.task === "compare"
+            && savedEntries.get(workspaceState.route.savedEntry)?.kind === "library-comparison") { backSaved(); return; }
         if (id === "reportLibraryLink" && workspaceState.route.task === "library") {
             navigate(routeFor("reports", { task: undefined, order: undefined, request: undefined }), false, { restorePosition: true });
             return;
@@ -10302,7 +10323,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     if (assessmentFactories.bindRefresh) assessmentFactories.bindRefresh(control => checkActivity({ currentTarget: control }));
     else $("analyzeRefresh").addEventListener("click", checkActivity);
     $("deleteAllReports").addEventListener("click", () => {
-        if (!savedListOwner?.() || workspaceState.route.task !== "library" || $("deleteAllReports").disabled) return;
+        if (!savedListOwner?.current() || workspaceState.route.task !== "library" || $("deleteAllReports").disabled) return;
         $("savedLibraryManagement").hidePopover();
         ux.hideTooltip();
         savedArtifactUI.open({ scope: "all-reports" }, $("savedLibraryOptions"));
@@ -10553,7 +10574,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const libraryOptions = button("", () => {}, "quiet");
     libraryOptions.id = "savedLibraryOptions";
     ux.utility(libraryOptions, "report-options", "Saved-report options");
-    bindSavedMenu($("savedLibraryManagement"), libraryOptions, () => savedListOwner?.() && workspaceState.route.task === "library");
+    bindSavedMenu($("savedLibraryManagement"), libraryOptions, () => savedListOwner?.current() && workspaceState.route.task === "library");
     savedTools.append(libraryOptions);
     ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {

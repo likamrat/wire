@@ -6,6 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { selectReportFocus, prepareReportPreview, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -126,7 +127,7 @@ test("capture documentation through the normal renderer with isolated light-them
         images: [], files: [], completed: false,
     };
     assert.equal(receipt.sourceChanges, "", "Capture only an immutable product source candidate.");
-    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs"]) {
+    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs", "tests/report-journey-helpers.mjs"]) {
         receipt.fixtureHelpers[file] = sha256(await readFile(file));
     }
     await writeFile(path.join(proof, "fixture.json"), JSON.stringify(records, null, 2));
@@ -242,8 +243,9 @@ test("capture documentation through the normal renderer with isolated light-them
 
     await page.locator('nav [data-nav=reports]').click();
     await ready();
+    await selectReportFocus(page, "errors");
     await capture("report-choices", { fullPage: true });
-    let prepared = await preparedChange(() => page.locator('[data-report-preset="errors"]').click());
+    let prepared = await preparedChange(() => prepareReportPreview(page));
     assert.equal(prepared.snapshot.reportPopulation.reference.length, 12);
     assert.equal(prepared.records.length, 4);
     const report = page.frameLocator(".report-contained-frame");
@@ -268,12 +270,12 @@ test("capture documentation through the normal renderer with isolated light-them
     await report.getByLabel("Your note", { exact: true }).first()
         .fill("Expected a list of review messages. Check how the mailbox access error was explained.");
     prepared = await preparedChange(() => report.getByRole("button", { name: "Update note", exact: true }).first().click());
-    await report.locator(".wire-reading-interaction>summary").first().click();
-    await report.locator(".wire-example-editor>summary").first().click();
+    await expect(report.locator(".wire-reading-interaction").first()).toHaveAttribute("open", "");
+    await expect(report.locator(".wire-example-editor").first()).toHaveAttribute("open", "");
     await capture("report-example", { locator: report.locator(".wire-example-editor").first() });
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
     await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         prepared = await preparedChange(() => page.locator(`#formatOptions input[value="${format}"]`).check());
     }
@@ -327,12 +329,13 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("saved-report");
     if (reportsOnly) { await finish(); return; }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Launch review");
     await page.getByRole("button", { name: "View report: Launch review", exact: true }).click();
     await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Launch review");
     await capture("saved-json-only", { privateOnly: true });
 
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("link", { name: "Compare saved reports", exact: true }).click();
     const comparison = page.locator("#comparisonWorkspace");
     for (const [label, title] of [["Earlier report", "Earlier release checklist"], ["Later report", "Call results"]]) {

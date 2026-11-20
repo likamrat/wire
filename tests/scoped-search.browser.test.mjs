@@ -8,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { chooseReportScope, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_SEARCH_PROOFS;
@@ -353,7 +353,7 @@ test("unapproved and paused Settings results accurately locate permission bounda
 test("saved reports and report membership search the entire retained list without expanding selection", { timeout: 45000 }, async t => {
     const { page, requests } = await setup(t);
     await navigateMain(page, "reports");
-    await page.locator("#savedLibraryTitle").click();
+    await viewAllSavedReports(page);
     await expect(page.locator("#bundleList")).toContainText("1-6 of 15 saved reports");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await expect(page.locator("#bundleList")).toContainText("7-12 of 15 saved reports");

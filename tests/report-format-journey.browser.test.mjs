@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { chooseLandingReportDates, prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -45,11 +46,11 @@ test("the React review fixture prepares, edits and saves real formats through th
     }
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#reportGallery").getByRole("button", { name: "Custom dates", exact: true }).click();
+    await chooseLandingReportDates(page, "Custom dates");
     await page.locator("#reportDatefrom").fill("2026-11-10");
     await page.locator("#reportDateto").fill("2026-11-16");
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
-    let prepared = await prepare(() => page.locator('[data-report-preset="all"]').click());
+    let prepared = await prepare(() => prepareLandingReport(page, "all"));
     assert.equal(prepared.records.length, 241);
     prepared = await prepare(() => page.getByLabel("Report name", { exact: true }).fill("Cedar review fixture"));
     const picker = page.locator("#reportActivityOptions");
@@ -69,7 +70,7 @@ test("the React review fixture prepares, edits and saves real formats through th
         assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), chosen);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) prepared = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     await selectActivityOption(page, "preparedReportView", "text");
@@ -163,7 +164,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         const heading = documentView.locator("h1");
         await expect(heading).toHaveText(title);
         await expect(heading).toBeInViewport({ ratio: 1 });
-        await expect(documentView.getByText("Retained activity", { exact: true })).toBeInViewport();
+        await expect(documentView.locator("dl").first().getByText("Retained activity", { exact: true })).toBeInViewport();
         await expect.poll(() => heading.evaluate(() => document.fonts.status)).toBe("loaded");
         let screenshot;
         await expect.poll(async () => {
@@ -191,9 +192,9 @@ test("all file viewers preserve the edited report through regeneration, reading 
     }
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    let prepared = await regenerate(() => page.locator('[data-report-preset="all"]').click());
+    let prepared = await regenerate(() => prepareLandingReport(page, "all"));
     prepared = await regenerate(() => page.getByLabel("Report name", { exact: true }).fill("Cedar format review"));
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) prepared = await regenerate(() => page.locator(`#formatOptions input[value=${format}]`).check());
     await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     await selectActivityOption(page, "preparedReportView", "text");
@@ -241,7 +242,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
             }
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             assert.ok((await file.boundingBox()).height >= 200);
-            const view = await page.getByRole("combobox", { name: "Prepared report view", exact: true }).boundingBox();
+            const view = await page.getByRole("combobox", { name: "Viewing", exact: true }).boundingBox();
             const header = await page.getByRole("banner").boundingBox();
             assert.ok(view.y >= header.y + header.height, "The View control must not be covered by the sticky header.");
             const label = await page.locator(".report-reading-toolbar .select-field>label").evaluate(node => {
@@ -316,7 +317,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
             await page.setViewportSize({ width: 768, height: 1000 });
             await file.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
             await capture("pdf-tablet-toolbar");
-            const select = await reader.getByRole("combobox", { name: "Saved report view", exact: true }).boundingBox();
+            const select = await reader.getByRole("combobox", { name: "Viewing", exact: true }).boundingBox();
             const info = await reader.getByRole("button", { name: "About this file", exact: true }).boundingBox();
             assert.ok(Math.abs(select.y + select.height / 2 - info.y - info.height / 2) < 2,
                 "File selection and its info action must share a row above PDF controls.");
@@ -384,6 +385,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const reader = page.locator("#savedReportReader"), output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
+    await viewAllSavedReports(page);
     for (const [index, format] of ["pdf", "json", "markdown"].entries()) {
         await page.getByRole("button", { name: `View report: Cedar ${format}-only report`, exact: true }).click();
         if (format === "pdf") await reader.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
@@ -401,7 +403,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
         const download = page.waitForEvent("download");
         await reader.getByRole("button", { name: "Download", exact: true }).click();
         assert.deepEqual(await readFile(await (await download).path()), originals.get(bundles[index].files[name]));
-        await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     }
     const target = bundles[1].files["product-report.json"];
     await writeFile(target, Buffer.concat([originals.get(target), Buffer.from("\n")]));
@@ -412,7 +414,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
         await expect(reader.getByRole("button", { name: "Download", exact: true })).toBeHidden();
         await expect(reader.getByRole("button", { name: "Expand sections", exact: true })).toBeHidden();
         if (output) await page.screenshot({ path: path.join(output, "altered-file-refused.png"), animations: "disabled" });
-        await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     } finally { await writeFile(target, originals.get(target)); }
     assert.deepEqual(await loadBoardState(context), before);
     for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);

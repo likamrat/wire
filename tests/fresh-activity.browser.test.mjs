@@ -1808,12 +1808,12 @@ test("pending and failed activity updates remain discoverable off-task without r
     }, { times: 1 });
     await page.locator("#checkActivity").click(); await readPending;
     await navigateMain(page, "reports");
-    await page.locator("#savedReportSearch").focus();
+    await page.locator("#prepareReportPreview").focus();
     assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*Reading stored activity/s);
     await capture("reports-reading");
     releaseRead();
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
-    assert.equal(await page.locator("#savedReportSearch").evaluate(node => node === document.activeElement), true);
+    await expect(page.locator("#prepareReportPreview")).toBeFocused();
     assert.equal(await page.locator("#checkActivity").isVisible(), false);
     assert.equal(await page.locator("#message").isVisible(), false, "F05 still avoids duplicate global presentation");
     assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*Check finished; view not updated/s);

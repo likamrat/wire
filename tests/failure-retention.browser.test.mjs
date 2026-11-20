@@ -6,6 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { createCollector, retainEvent } from "../lib/collector.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -133,7 +134,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
     await chooseTheme(page, "light");
     await navigateMain(page, "reports");
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const response = await prepared;
     let preview = await response.json();
     assert.equal(response.status(), 200, preview.error);
@@ -141,7 +142,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
     assert.equal(preview.records.length, 1);
     assert.equal(preview.snapshot.reportPopulation.reference.length, 1);
     assert.match(JSON.stringify(preview.snapshot.resultText), /SourcePolicyUnavailable/);
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();

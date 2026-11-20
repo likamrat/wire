@@ -5,6 +5,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { selectReportFocus, prepareReportPreview, prepareLandingReport, chooseLandingReportDates, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { time } from "../lib/time.mjs";
@@ -25,7 +26,7 @@ function records() {
         return record;
     });
 }
-async function setup(t, { source = records(), route = "#reports", enforced = false, frontend, now, hasTouch = false, contextFixture = false } = {}) {
+async function setup(t, { source = records(), route = "#reports", enforced = false, frontend = "bundled", now, hasTouch = false, contextFixture = false } = {}) {
     const cleanup = [], lifetime = { after: work => cleanup.push(work) };
     const { context } = contextFixture ? await reportContextFixture(lifetime) : await privateFixture(lifetime, source);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
@@ -45,8 +46,12 @@ async function setup(t, { source = records(), route = "#reports", enforced = fal
     return { page, context, source, errors, requests, runtime };
 }
 async function prepare(page, preset = "errors") {
+    await selectReportFocus(page, preset);
+    return prepareSelectedFocus(page);
+}
+async function prepareSelectedFocus(page) {
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator(`[data-report-preset="${preset}"]`).click();
+    await prepareReportPreview(page);
     const result = await response, body = await result.json();
     assert.equal(result.status(), 200, body.error);
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
@@ -59,7 +64,7 @@ async function openReviewPicker(t) {
     app.before = await loadBoardState(app.context);
     await chooseTheme(app.page, "light");
     await navigateMain(app.page, "reports");
-    await app.page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await chooseLandingReportDates(app.page, "Last 14 days");
     app.prepared = await prepare(app.page, "all");
     await app.page.getByRole("button", { name: "Change what's included", exact: true }).click();
     await app.page.getByRole("button", { name: "Change activity selection", exact: true }).click();
@@ -98,7 +103,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     const source = reviewRecords().slice(0, 2);
     source[1].sourceSessionId = source[0].sourceSessionId;
     const { page, context, errors } = await setup(t, { source, frontend: "react", now: "2026-11-18T16:00:00Z" });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await chooseLandingReportDates(page, "Last 14 days");
     const initial = await prepare(page, "all");
     const origin = initial.promptReview.find(copy => copy.kind === "origin");
     const tool = initial.promptReview.find(copy => copy.kind === "tool");
@@ -142,7 +147,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     const copies = updated.records.flatMap(record => record.prompts);
     assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
     assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
@@ -167,7 +172,7 @@ test("linked context changes preserve ordinary edited and omitted report copies"
 test("Reports author pointer drafts stay inside their popover until Apply or Cancel", { timeout: 60000 }, async t => {
     const { page, requests, errors } = await setup(t, { source: reviewRecords().slice(0, 4), frontend: "react",
         now: "2026-11-18T16:00:00Z", hasTouch: true });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await chooseLandingReportDates(page, "Last 14 days");
     await prepare(page, "all");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     const trigger = page.getByRole("combobox", { name: "Authors in report", exact: true });
@@ -266,7 +271,7 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
     await replyCopy.getByRole("button", { name: "Update report copy", exact: true }).click();
     updated = await (await editingReply).json();
     await captureReport(page, "shared-context-before-save");
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
@@ -569,7 +574,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.keyboard.press("Escape");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await prepare(page, "all");
-    await page.getByRole("button", { name: /^Save as:/ }).click();
+    await page.getByRole("button", { name: /^Files to save:/ }).click();
     await inspectRows("#reportFileOptions .format-choices label");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
@@ -673,11 +678,20 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
     assert.deepEqual(errors, []);
 });
 
-test("gallery opens a real report and direct Save preserves the frozen failure cohort", { timeout: 60000 }, async t => {
+test("focus selection leaves Reports unprepared; explicit preview and Save preserve the frozen failure cohort", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
     await expect(page.locator("[data-report-preset]")).toHaveCount(5);
     await expect(page.locator(".report-progress")).toBeHidden();
-    const initial = await prepare(page);
+    const address = page.url();
+    await selectReportFocus(page, "errors");
+    await expect(page.locator("#reportPreset-errors")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".report-outline h3")).toHaveText("Errors & failures");
+    await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Prepare preview");
+    await expect(page.locator(".report-frame")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeHidden();
+    assert.equal(page.url(), address);
+    assert.equal(requests.filter(request => request.path === "/api/preview" || request.path === "/api/export").length, 0);
+    const initial = await prepareSelectedFocus(page);
     assert.equal(initial.snapshot.reportPopulation.reference.length, 8);
     assert.equal(initial.records.length, 2);
     assert.equal(initial.promptMode, "masked");
@@ -693,7 +707,7 @@ test("gallery opens a real report and direct Save preserves the frozen failure c
     const updated = await (await rebuilt).json();
     assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     let preparedFiles = updated.files;
     for (const format of ["pdf", "json", "markdown"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -717,7 +731,7 @@ test("gallery opens a real report and direct Save preserves the frozen failure c
     await selectActivityOption(page, "savedReaderFormat", "html");
     for (const [format, name] of [["html", "product-report.html"], ["pdf", "product-report.pdf"], ["json", "product-report.json"], ["markdown", "product-report.md"]]) {
         if (format !== "html") {
-            await page.getByRole("combobox", { name: "Saved report view", exact: true }).click();
+            await page.getByRole("combobox", { name: "Viewing", exact: true }).click();
             await page.locator(`.select-popup [data-value="${format}"]`).click();
         }
         const download = page.waitForEvent("download");
@@ -769,12 +783,61 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.deepEqual(errors, []);
 });
 
+test("Files to save changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
+    const { page, context, source, requests, errors } = await setup(t);
+    const chooser = page.getByRole("dialog", { name: "Files to save", exact: true });
+    const effects = () => requests.filter(({ path }) => ["/api/preview", "/api/export"].includes(path));
+    await page.clock.install();
+    await page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true }).click();
+    const html = chooser.getByRole("checkbox", { name: "HTML Web page", exact: true });
+    await html.uncheck();
+    await expect(chooser.getByRole("alert")).toBeVisible();
+    await expect(chooser.getByRole("checkbox", { name: "PDF Print document", exact: true })).not.toBeChecked();
+    await chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true }).check();
+    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.clock.runFor(1000);
+    assert.deepEqual(effects(), [], "Choosing files on landing must not start a debounced preview or write.");
+    const initial = await prepare(page, "all");
+    assert.deepEqual(initial.formats, ["json"]);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: Structured data (JSON)", exact: true }).click();
+    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).check();
+    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.clock.runFor(1000);
+    assert.equal(effects().length, 1, "A resumed draft stays unprepared until requested.");
+    const state = await loadBoardState(context), added = fixture("after-file-choice");
+    added.capturedAt = new Date().toISOString(); added.toolCalls[0].startedAt = added.capturedAt;
+    await replaceEvidence(context, () => ({ records: [...source, added], importCoverage: state.importCoverage }));
+    const rebuilding = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.getByRole("button", { name: "Resume preview", exact: true }).click();
+    const result = await rebuilding, resumed = await result.json();
+    assert.equal(result.status(), 200, resumed.error);
+    assert.deepEqual(resumed.formats, ["json", "markdown"]);
+    assert.equal(effects().at(-1).body.rebuildFrom, initial.previewId);
+    assert.deepEqual(resumed.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    await selectActivityOption(page, "preparedReportView", "product-report.md");
+    await expect(page.locator("#reportFileInspection .saved-markdown")).toBeVisible();
+    await page.getByRole("button", { name: "Files to save: JSON, Markdown", exact: true }).click();
+    await expect(html).not.toBeChecked();
+    await expect(chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true })).toBeChecked();
+    assert.equal(effects().length, 2, "Viewing a prepared file must neither change the output inventory nor prepare or save it.");
+    const removing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).uncheck();
+    const remaining = await (await removing).json();
+    await chooser.getByRole("button", { name: "Done" }).click();
+    assert.deepEqual(remaining.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    await expect(page.locator("#preparedReportView")).toHaveValue("report");
+    await expect(page.locator('#preparedReportView option[value="product-report.md"]')).toHaveCount(0);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    assert.deepEqual(errors, []);
+});
+
 test("JSON-only saved reports open as readable reports independently of their files", { timeout: 30000 }, async t => {
     const { page, context, requests, errors } = await setup(t);
     const downloads = [];
     page.on("download", download => downloads.push(download));
     await prepare(page);
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const [format, selected] of [["json", true], ["html", false]]) {
         const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).setChecked(selected); await ready;
@@ -784,11 +847,15 @@ test("JSON-only saved reports open as readable reports independently of their fi
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const before = await loadBoardState(context), saved = before.exports[0];
     assert.deepEqual(saved.formats, ["json"]);
+    await expect(page.getByRole("button", { name: /^Files to save:/ })).toBeHidden();
     const bytes = await readFile(saved.files["product-report.json"]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
-    const row = page.locator(".saved-library-row");
-    await row.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
+    await page.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
     const reader = page.locator("#savedReportReader");
+    await expect(reader.getByRole("combobox", { name: "Viewing", exact: true })).toBeVisible();
+    assert.deepEqual(await reader.locator("#savedReaderFormat option").evaluateAll(options => options.map(o => [o.value, o.label])), [
+        ["report", "Report in WIRE"], ["json", "Structured data (JSON)"], ["manifest", "File list (manifest)"],
+    ], "The reader lists this bundle’s files, not all the formats a new report could save.");
     await expect(reader.frameLocator("iframe").locator("h1")).toHaveText("Errors & failures");
     await expect(reader.frameLocator("iframe").locator("body")).toContainText("2 of 8 interactions had recorded errors.");
     await expect(reader.locator(".saved-json-tree")).toHaveCount(0);
@@ -837,6 +904,23 @@ test("withdrawal clears a hidden cached report while an original file is being v
     await expect(page.locator("#workspace")).toBeHidden();
     assert.deepEqual(await page.evaluate(() => [heldReportFrame.isConnected, heldReportFrame.srcdoc]), [false, ""]);
     assert.deepEqual(errors, []);
+});
+
+test("the desk distinguishes an owner-matched pre-publication refusal from a lost Save response", async t => {
+    const { page, context, requests } = await setup(t, { enforced: true, frontend: "react" });
+    const preview = await prepare(page);
+    // Exercise the refusal delivered by the native pre-writer gate without damaging a source.
+    await page.route("**/api/export", route => route.fulfill({ status: 409, json: {
+        error: "The original source is unavailable.", code: "NATIVE_REPORT_SOURCE_STALE",
+        reportSave: { outcome: "not-published", kind: "report", previewId: preview.previewId, bundleId: preview.bundleId },
+    } }), { times: 1 });
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportJourneyError")).toContainText("No report was saved.");
+    await expect(page.getByRole("button", { name: "Check save status", exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await expect(page.locator("#reportGallery")).toBeVisible();
+    assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
 });
 
 for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direct-Save response recovers the original exact-content receipt without a second write`, { timeout: 60000 }, async t => {
@@ -896,7 +980,7 @@ test("prepared Reports leaves useful first-screen reading space at narrow and en
 test("new actual HTML keeps exact tool names intact in a keyboard-scrollable narrow table", { timeout: 30000 }, async t => {
     const all = reviewRecords(), { page } = await setup(t, { source: [all[0], all[1], all.at(-1)], frontend: "react",
         now: "2026-11-18T16:00:00Z" });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await chooseLandingReportDates(page, "Last 14 days");
     await prepare(page, "all");
     await page.setViewportSize({ width: 390, height: 844 });
     await selectActivityOption(page, "preparedReportView", "product-report.html");
@@ -933,9 +1017,10 @@ test("new library metadata and saved comparisons use frozen files and direct loc
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
+    await expect(page.locator("[data-report-preset]")).toHaveCount(5);
+    await viewAllSavedReports(page);
     await expect(page.locator(".saved-report-privacy").first()).toContainText("Detected personal details hidden");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
-    await expect(page.locator("[data-report-preset]")).toHaveCount(5);
     await page.locator("#reportCompareLink").click();
     const entries = (await loadBoardState(context)).exports;
     for (const [label, id] of [["Earlier report", entries[0].bundleId], ["Later report", entries[1].bundleId]]) {
@@ -970,18 +1055,22 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await page.getByRole("button", { name: "Timeline", exact: true }).click();
     await page.getByRole("button", { name: "By tool", exact: true }).click();
-    const comparison = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    const comparison = new URL(page.url()).searchParams;
     await page.locator('nav [data-nav="reports"]').click();
     await expect(page.locator("#reportGallery")).toBeVisible();
-    const period = await page.locator("#reportGallery .report-period-caption").textContent();
+    const dates = page.locator("#reportDeskDates"), period = await dates.innerText();
+    await dates.click();
+    const periodCaption = page.locator("#reportPeriodChoices .report-period-caption");
+    const acceptedDates = await periodCaption.innerText();
+    await page.keyboard.press("Escape");
     const prepared = await prepare(page);
     assert.equal(prepared.snapshot.periodComparison, undefined);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to Reports");
     if (resumePrepared) {
         await page.locator("#reportLibraryLink").click();
         await expect(page.locator("#reportGallery")).toBeVisible();
-        await expect(page.locator("#reportGallery .report-period-caption")).toHaveText(period);
-        await page.locator('[data-report-preset="errors"]').click();
+        await expect(dates).toHaveText(period);
+        await prepareLandingReport(page, "errors");
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
     }
     await page.getByRole("button", { name: "Save report", exact: true }).click();
@@ -992,17 +1081,20 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
     await page.locator(".saved-reader-heading .document-back").click();
     await expect(page.locator("#reportGallery")).toBeVisible();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
-    await expect(page.locator("#reportGallery .report-period-caption")).toHaveText(period);
+    await expect(dates).toHaveText(period);
     await expect(page.locator('nav [data-nav="reports"]')).toHaveAttribute("aria-current", "page");
-    const [view, query] = new URL(page.url()).hash.split("?");
-    assert.equal(view, "#reports");
+    await dates.click();
+    await expect(periodCaption).toHaveText(acceptedDates);
+    await page.keyboard.press("Escape");
+    const address = new URL(page.url());
+    assert.equal(address.pathname, "/reports");
     for (const key of ["compare", "comparisonView", "comparisonFocus", "aFrom", "aTo", "bFrom", "bTo", "task", "bundle"]) {
-        assert.equal(new URLSearchParams(query).has(key), false, key);
+        assert.equal(address.searchParams.has(key), false, key);
     }
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.getByRole("button", { name: "By tool", exact: true })).toHaveAttribute("aria-pressed", "true");
-    const restored = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    const restored = new URL(page.url()).searchParams;
     for (const key of ["aFrom", "aTo", "bFrom", "bTo", "comparisonView"]) assert.equal(restored.get(key), comparison.get(key), key);
     assert.deepEqual(errors, []);
 });
@@ -1018,7 +1110,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.getByRole("button", { name: "Timing", exact: true }).click();
-    const origin = new URL(page.url()).hash;
+    const origin = page.url();
     const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
     const response = await pending;
@@ -1031,7 +1123,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     const acceptedComparison = prepared.snapshot.periodComparison.comparison;
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    assert.equal(new URL(page.url()).hash, origin);
+    assert.equal(page.url(), origin);
     await expect(page.getByRole("button", { name: "Timing", exact: true })).toHaveAttribute("aria-pressed", "true");
     const repeated = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
@@ -1041,7 +1133,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.deepEqual(prepared.snapshot.periodComparison.comparison, acceptedComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -1067,7 +1159,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     await selectActivityOption(page, "savedReaderFormat", "html");
     for (const [format, name] of [["html", "product-report.html"], ["pdf", "product-report.pdf"], ["json", "product-report.json"], ["markdown", "product-report.md"]]) {
         if (format !== "html") {
-            await page.getByRole("combobox", { name: "Saved report view", exact: true }).click();
+            await page.getByRole("combobox", { name: "Viewing", exact: true }).click();
             await page.locator(`.select-popup [data-value="${format}"]`).click();
         }
         const downloaded = page.waitForEvent("download");
@@ -1078,7 +1170,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     }
     await page.locator(".saved-reader-heading .document-back").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    assert.equal(new URL(page.url()).hash, origin);
+    assert.equal(page.url(), origin);
     await expect(page.getByRole("button", { name: "Timing", exact: true })).toHaveAttribute("aria-pressed", "true");
     assert.deepEqual(errors, []);
 });
@@ -1124,7 +1216,7 @@ test("access withdrawal erases held example editors and never resumes their old 
 test("changing report scope retires prior ordinary copies and their detached edit callbacks", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, { source: reviewRecords().slice(0, 4), frontend: "react",
         now: "2026-11-18T16:00:00Z" });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await chooseLandingReportDates(page, "Last 14 days");
     await prepare(page, "all");
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
@@ -1188,7 +1280,7 @@ test("returning to the gallery during preparation retires that result and leaves
     const { page, context, errors } = await setup(t);
     const held = Promise.withResolvers();
     await page.route("**/api/preview", async route => { const response = await route.fetch(); await held.promise; await route.fulfill({ response }); }, { times: 1 });
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "scanning");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     held.resolve();
@@ -1199,7 +1291,7 @@ test("returning to the gallery during preparation retires that result and leaves
     assert.deepEqual(errors, []);
 });
 
-test("one Reports entry retains an edited frozen draft across Back, same-tile resume and browser history", { timeout: 30000 }, async t => {
+test("one Reports entry retains an edited frozen draft across Back, explicit resume and browser history", { timeout: 30000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t, { route: "#reports?task=create" });
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     await expect(page.locator("#pageAction")).toBeHidden();
@@ -1223,8 +1315,10 @@ test("one Reports entry retains an edited frozen draft across Back, same-tile re
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#reportGallery")).toBeVisible();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
-    await expect(page.locator("#reportPreset-errors")).toBeFocused();
-    await page.locator("#reportPreset-errors").click();
+    await expect(page.locator("#prepareReportPreview")).toBeFocused();
+    await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Resume preview");
+    await expect(page.locator("#reportPreset-errors")).toHaveAttribute("aria-pressed", "true");
+    await prepareReportPreview(page);
     await expect(page.getByLabel("Report name", { exact: true })).toHaveValue("Unfinished mailbox report");
     await expect(page.frameLocator(".report-frame").locator("body")).toContainText("Check this permission boundary.");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, requestCount);
@@ -1250,6 +1344,7 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
+    await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Return report");
     await page.locator("#savedReportOrder-control").click();
     await page.locator('.select-popup [data-value="oldest"]').click();
@@ -1264,7 +1359,7 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
     const y = await page.evaluate(() => scrollY);
     await title.click();
     await expect(page.locator("#savedReportReader")).toBeVisible();
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await expect(page.locator("#savedReportSearch")).toHaveValue("Return report");
     await expect(page.locator("#savedReportOrder")).toHaveValue("oldest");
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
@@ -1273,14 +1368,14 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
     const row = page.locator(".saved-library-row").first();
     await row.locator(".saved-report-files").click();
     await expect(row.getByRole("dialog", { name: "Files for Return report 7", exact: true })).toBeVisible();
-    await row.getByRole("button", { name: "HTML", exact: true }).click();
+    await row.getByRole("button", { name: "Web page (HTML)", exact: true }).click();
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download", exact: true }).click();
     const file = await download, saved = (await loadBoardState(context)).exports.find(entry => entry.title === "Return report 7");
     assert.ok(saved);
     const bytes = await readFile(await file.path());
     assert.deepEqual(bytes, expectedFile);
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await expect(row.locator(".saved-report-files")).toBeFocused();
     await row.getByRole("button", { name: "Inspect details", exact: true }).click();
     await expect(page.locator("#contextSidebar")).toBeVisible();
@@ -1296,6 +1391,9 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
     await expect(page.getByRole("button", { name: "Delete all saved reports", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("#savedLibraryManagement")).toBeHidden();
+    // Reload a public library address, not a private Search selection from the previous page.
+    await page.locator("#clearSavedReportSearch").click();
+    await expect(page.locator("#savedReportSearch")).toHaveValue("");
     let legacyId;
     await updateBoardState(context, state => {
         const entry = state.exports.find(entry => entry.title === "Return report 8");
@@ -1318,23 +1416,25 @@ test("one-chat and explicit Selected entry keep their complete scope and context
         record.sourceSessionId = index < 3 ? "first-chat" : "second-chat";
         record.sourceSessionName = index < 3 ? "First chat" : "Second chat";
     });
-    const { page, errors } = await setup(t, { source, route: "#analyze?session=first-chat" });
+    const { page, requests, errors } = await setup(t, { source, route: "#analyze?session=first-chat" });
     await page.locator("#createSessionReport").click();
     const chat = await prepare(page, "all");
     assert.equal(chat.records.length, 3);
     await page.getByRole("link", { name: "Back to Analyze", exact: true }).click();
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("session"), "first-chat");
+    await expect(page.locator("#chatFilter")).toHaveValue("first-chat");
     await page.locator('[data-nav="reports"]').click();
-    await page.locator("#reportPreset-all").click();
-    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
-    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    const previewCount = requests.filter(request => request.path === "/api/preview").length;
+    await selectReportFocus(page, "all");
+    await page.locator("#reportDeskActivity").click();
     await page.locator('[name=reportScope][value=selected]').check();
     const picks = page.locator("#reportActivityOptions input[data-report-request]");
     await expect(picks.first()).toBeVisible();
     await picks.first().uncheck();
-    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#reportActivityOptions").getByRole("button", { name: "Show report", exact: true }).click();
-    const selected = await (await preparing).json();
+    await page.locator("#reportActivityOptions").getByRole("button", { name: "Use activity", exact: true }).click();
+    await expect(page.locator("#reportDeskActivity")).toBeFocused();
+    await expect(page.locator("#reportDeskActivity")).toContainText("Selected interactions");
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, previewCount);
+    const selected = await prepareSelectedFocus(page);
     assert.equal(selected.records.length, 2);
     assert.ok(selected.records.every(record => chat.records.some(original => original.scenarioId === record.scenarioId)));
     assert.deepEqual(errors, []);
@@ -1348,6 +1448,7 @@ test("withdrawal scrubs retained saved-row titles and menu labels and blocks the
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await viewAllSavedReports(page);
     await page.locator(".saved-report-files").click();
     await page.evaluate(() => {
         window.heldSavedTitle = document.querySelector(".saved-report-name").firstChild;
@@ -1369,8 +1470,8 @@ test("withdrawal scrubs retained saved-row titles and menu labels and blocks the
     assert.deepEqual(errors, []);
 });
 
-test("report-first controls retain equal geometry, readable themes and narrow enlarged-text access", { timeout: 60000 }, async t => {
-    const { page, errors } = await setup(t);
+test("Reports keeps the selected focus explanation beside the list or below the narrow picker", { timeout: 60000 }, async t => {
+    const { page, requests, errors } = await setup(t);
     const proofs = process.env.WIRE_REPORT_FIRST_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
     async function capture(name) {
@@ -1379,37 +1480,47 @@ test("report-first controls retain equal geometry, readable themes and narrow en
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, name);
         if (proofs) await page.screenshot({ path: path.join(proofs, name + ".png") });
     }
-    await page.locator('[data-report-preset="errors"]').hover();
-    await expect(page.getByRole("tooltip")).toBeHidden();
-    for (const label of ["all activity", "errors & failures", "completed calls", "human prompts", "agent prompts"]) {
-        const control = page.getByRole("button", { name: "About " + label, exact: true });
-        await control.focus();
-        await expect(page.getByRole("tooltip")).toBeVisible();
-        assert.ok((await page.getByRole("tooltip").textContent()).length > 20);
-        await page.keyboard.press("Escape");
-        await control.click();
-        await expect(page.getByRole("tooltip")).toBeVisible();
-        await page.keyboard.press("Escape");
-    }
-    await page.getByRole("button", { name: "About errors & failures", exact: true }).click();
-    await expect(page.getByRole("tooltip")).toBeVisible();
-    const help = await page.getByRole("button", { name: "About errors & failures", exact: true }).boundingBox();
-    const tip = await page.getByRole("tooltip").boundingBox();
-    const distance = Math.hypot(Math.max(tip.x - help.x - help.width, help.x - tip.x - tip.width, 0),
-        Math.max(tip.y - help.y - help.height, help.y - tip.y - tip.height, 0));
-    assert.ok(distance <= help.height, JSON.stringify({ help, tip, distance }));
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("tooltip")).toBeHidden();
+    const focuses = [
+        ["all", "All activity", /author was not recorded/i],
+        ["errors", "Errors & failures", /other calls .* may have completed/i],
+        ["completed", "Completed calls", /answer can still be wrong or incomplete/i],
+        ["mine", "Human prompts", /calls made by an agent .* stay included/i],
+        ["agent", "Agent prompts", /unknown author .* not included/i],
+    ];
+    const list = page.getByRole("group", { name: "Report focus", exact: true });
+    const compact = page.getByRole("combobox", { name: "Report focus", exact: true });
+    const outline = page.locator(".report-outline");
     for (const [theme, width, size] of [["light", 1280, 100], ["dark", 375, 200]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
-        const heights = await page.locator(".report-tile").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
-        assert.ok(heights.every(height => Math.abs(height - heights[0]) < 1));
+        const narrow = width === 375;
+        await expect(narrow ? compact : list).toBeVisible();
+        await expect(narrow ? list : compact).toBeHidden();
+        for (const [preset, title, explanation] of focuses) {
+            if (narrow) {
+                await compact.selectOption({ label: title });
+                await expect(compact).toHaveValue(preset);
+            } else {
+                const control = list.getByRole("button", { name: title, exact: true });
+                await control.press("Enter");
+                await expect(control).toBeFocused();
+                await expect(control).toHaveAttribute("aria-pressed", "true");
+                await expect(list.getByRole("button", { pressed: true })).toHaveCount(1);
+            }
+            await expect(outline.getByRole("heading", { name: title, exact: true })).toBeVisible();
+            await expect(outline.locator(".report-outline-description")).toBeVisible();
+            await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
+        }
+        const selectorBox = await (narrow ? compact : list).boundingBox(), sheet = await outline.boundingBox();
+        assert.ok(narrow ? sheet.y >= selectorBox.y + selectorBox.height - 1
+            : sheet.x >= selectorBox.x + selectorBox.width - 1, JSON.stringify({ selectorBox, sheet }));
+        await expect(outline.getByRole("button", { name: "Prepare preview", exact: true })).toBeEnabled();
         await capture(`gallery-${theme}-${width}-${size}`);
     }
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await page.locator("#reportGallery [data-report-range=custom]").click();
+    await chooseLandingReportDates(page, "Custom dates");
     await expect(page.locator("#reportCustomDates")).toBeVisible();
     await capture("calendar-dark-1280");
     await page.keyboard.press("Escape");

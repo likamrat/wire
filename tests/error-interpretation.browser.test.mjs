@@ -7,6 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 
@@ -128,7 +129,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
     }
     await navigateMain(page, "reports");
     const waiting = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     let response = await waiting, preview = await response.json();
     assert.equal(response.status(), 200, preview.error);
     assert.equal(preview.snapshot.resultFacts.calls.length, cases.length - 1);
@@ -162,7 +163,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
         await capture("interpreted-report-" + theme);
     }
     await page.setViewportSize({ width: 1380, height: 1080 });
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
     for (const format of ["json", "markdown", "pdf"]) {
         const wait = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -185,7 +186,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
     await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     const completedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="completed"]').click();
+    await prepareLandingReport(page, "completed");
     const completed = await (await completedResponse).json();
     assert.equal(completed.snapshot.resultFacts.calls.length, 1);
     assert.equal(completed.snapshot.resultFacts.calls[0].completion, "succeeded");

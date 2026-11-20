@@ -12,6 +12,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
 import { privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -170,7 +171,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.locator("#closeContextSidebar").click(); await expect(page.locator("#wireSearch")).toHaveValue("both original dates");
     await page.keyboard.press("Escape");
     await navigateMain(page, "reports");
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });

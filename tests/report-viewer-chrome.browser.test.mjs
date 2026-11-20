@@ -5,6 +5,7 @@ import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
@@ -151,7 +152,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
         await capture("current-" + format + "-dark-shell");
     }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     const prepared = page.frameLocator(".report-contained-frame");
     await expect(prepared.locator("h1")).toHaveText("All activity");
     const mark = prepared.locator(".report-brand .brand-logo:visible");
@@ -179,6 +180,7 @@ test("v1 Markdown file previews keep frozen artwork while application chrome use
     await updateBoardState(context, state => { state.exports.push(entry); });
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(page);
     await page.getByRole("button", { name: "View report: Frozen Human Path v1", exact: true }).click();
     await selectActivityOption(page, "savedReaderFormat", "markdown");
     const lettering = svg => svg.match(/id="wire-light-wire-lettering"[^>]* d="([^"]+)"/)[1];
@@ -250,15 +252,16 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     for (const entry of before.exports) for (const file of Object.values(entry.files)) bytes.set(file, await readFile(file));
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(page);
     const rows = page.locator(".saved-library-row");
     const current = rows.filter({ hasText: "Cedar current report" });
     await expect(current.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
     await expect(current.locator(".saved-report-period")).toHaveText("Report period: All retained dates");
     await expect(current.locator(".saved-report-title")).toHaveAccessibleDescription(/Prepared .+ Report period: All retained dates/);
     await expect(rows.filter({ hasText: "Cedar older report" }).locator(".saved-report-period")).toHaveCount(0);
-    await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-period")).toHaveText("Report period: Oct 1, 2026 to Nov 30, 2026");
+    await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-period")).toHaveText("Report period: Oct 1–Nov 30, 2026");
     await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-title"))
-        .toHaveAccessibleDescription(/Prepared .+ Report period: Oct 1, 2026 to Nov 30, 2026/);
+        .toHaveAccessibleDescription(/Prepared .+ Report period: Oct 1–Nov 30, 2026/);
     await expect(rows.filter({ hasText: "Report comparison" }).locator(".saved-report-period")).toHaveCount(0);
     await expect(rows.filter({ hasText: "Cedar older report" }).locator(".saved-report-privacy")).toContainText("Text treatment not recorded");
     await expect(rows.filter({ hasText: "Cedar planning decisions" }).locator(".saved-report-privacy")).toContainText("Chat details kept");
@@ -299,6 +302,7 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     const touch = await browser.newPage({ viewport: { width: 390, height: 900 }, hasTouch: true });
     await touch.goto(url + "#reports");
     await expect(touch.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(touch);
     const touchRow = touch.locator(".saved-library-row").filter({ hasText: "Cedar current report" });
     await touchRow.getByRole("button", { name: "Inspect details", exact: true }).tap();
     await expect(touch.locator("#contextSidebar[open]")).toBeVisible();
@@ -332,6 +336,7 @@ test("six older saved rows keep names, preparation dates and actions balanced wi
     const before = await loadBoardState(context), bytes = new Map();
     for (const entry of before.exports) for (const file of Object.values(entry.files)) bytes.set(file, await readFile(file));
     await page.reload(); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(page);
     const rows = page.locator(".saved-library-row");
     await expect(rows).toHaveCount(6);
     for (const theme of ["dark", "light"]) {

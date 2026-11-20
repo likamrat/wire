@@ -159,6 +159,7 @@ test("ordinary interaction card URL opens the exact retained request on copy and
 test("saved report library URLs reopen exactly; Search-owned copy and reload refuse without an implicit library open", async t => {
     const fixture = await readingFixture(t, "reports"), { page, origin } = fixture;
     await page.locator('nav [data-nav="reports"]').click();
+    await page.locator("#viewAllSavedReports").click();
     await page.locator(".saved-library-row button.saved-report-title").filter({ hasText: reportTitle }).click();
     assert.equal(await outcome(page, "report"), "exact");
     assert.deepEqual(await copyAndReload(fixture, "report"), {

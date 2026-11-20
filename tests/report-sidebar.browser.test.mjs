@@ -306,7 +306,7 @@ test("real preparation leaves the sidebar for wide Report/Text/Files, copy edits
     await capture(page, "actual-prepared-main-document");
     assert.equal(await page.locator(".report-frame").getAttribute("sandbox"), "allow-same-origin");
     await page.getByRole("tab", { name: /^Files \(/ }).click();
-    await expect(page.locator("#reportFileInspection").getByRole("navigation", { name: "Files to be saved", exact: true })).toBeVisible();
+    await expect(page.locator("#reportFileInspection").getByRole("navigation", { name: "Viewing", exact: true })).toBeVisible();
     await expect(page.locator("#reportFileInspection .report-frame")).toBeVisible();
     await expect(page.locator("#reportFileInspection>h3")).toHaveCount(0);
     await capture(page, "actual-prepared-files");

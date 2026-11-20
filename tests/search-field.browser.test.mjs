@@ -8,7 +8,7 @@ import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { chooseReportScope, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 
 const proofs = process.env.WIRE_SEARCH_FIELD_PROOFS;
@@ -161,7 +161,7 @@ test("search entries keep their corpus and Escape while Settings uses compact fi
         for (const [id, query, open, matched] of [
             ["settingsSearch", "theme", () => navigateMain(page, "settings"), () => expect(page.locator("#settingsSearchResults a[data-setting=theme]")).toBeVisible()],
             ["issueSearch", "Orchard", () => navigateMain(page, "collection-status"), () => expect(page.locator("#issueSearchCount")).toHaveText("1 of 19 chats")],
-            ["savedReportSearch", "Hospital workflow", () => navigateMain(page, "reports"), () => expect(page.locator(".saved-library-row")).toHaveAttribute("data-bundle-id", bundles[0].bundleId)],
+            ["savedReportSearch", "Hospital workflow", async () => { await navigateMain(page, "reports"); await viewAllSavedReports(page); }, () => expect(page.locator(".saved-library-row")).toHaveAttribute("data-bundle-id", bundles[0].bundleId)],
             ["reportRequestSearch", "physician", () => chooseReportScope(page, "all"), () => expect(page.locator("#reportRequestSearchCount")).toContainText("All 19 remain included")],
             ["recollectSearch", "Orchard", async () => { await navigateMain(page, "settings"); await navigateSettings(page, "data"); await page.locator("#recollectActivity").click(); },
                 () => expect(page.locator("#recollectSources input")).toHaveCount(1)],
@@ -263,6 +263,7 @@ test("clearing local library and picker fields preserves other queries, history 
     await navigateMain(page, "settings");
     await page.locator("#settingsSearch").fill("theme");
     await navigateMain(page, "reports");
+    await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Hospital");
     await chooseReportScope(page, "all");
     const summary = await page.locator("#scopeSummary").innerText();
