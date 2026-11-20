@@ -61,7 +61,7 @@ test("comparison peers align at narrow enlarged text and menu combinations stay 
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
     await selectActivityOption(page, "comparisonQuickChoice", "completed"); await ready(page);
     await selectActivityOption(page, "comparisonQuickChoice", "mine"); await ready(page);
-    await expect(page.locator("#comparisonQuickChoice-control")).toContainText("Completed calls + My prompts");
+    await expect(page.locator("#comparisonQuickChoice-control")).toContainText("Completed calls + Human prompts");
     assert.deepEqual(comparisons.at(-1).options.filters.promptAuthors, ["user"]);
     assert.match(page.url(), /comparisonFocus=completed/);
     await selectActivityOption(page, "comparisonQuickChoice", "all"); await ready(page);

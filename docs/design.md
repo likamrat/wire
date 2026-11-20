@@ -51,9 +51,12 @@ with its task. Missing optional facts need no empty row. Missing or conflicting
 evidence that limits a conclusion must remain explicit. Do not repeat the same
 fact in a badge, paragraph, warning and disclosure.
 
-On interaction cards, identify the prompt author with a labeled icon. Put a
-scoped tool failure count and its own icon beside it, not a verdict on the
-prompt. Keep provenance in Source details; name a source on the card when
+On interaction cards, identify the prompt author with a high-contrast label
+and its Human, Agent or unverified icon. Put recorded tool outcomes in the
+same second header slot, above the prompt, for every author. Green/check
+indicates recorded tool completion; red/cross marks failed calls. Neither
+is a verdict on the prompt or the task. Returned issues keep a separate link.
+Keep provenance in Source details; name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
 the glyph beside its label. Separate the identity key from the prompt with a
@@ -86,8 +89,8 @@ each call leads with its ordinal, tool and outcome. Its returned entries form a
 subordinate group with aligned facts; call service, result service and their
 separate duration evidence retain their own meanings.
 
-Outcome words/icons accompany color. The Petrol & coral screen scheme uses
-blue-cyan for recorded completion and coral for failure; partial states retain
+Outcome words/icons accompany color. Card, reader and Analyze tool outcomes
+use green for recorded completion and red for failure; partial states retain
 a separate gold warning role and missing evidence stays neutral. Completion
 does not establish answer quality. Service colors identify services, not health.
 Agent and user authorship use their own roles, not service or quality colors.

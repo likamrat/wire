@@ -87,7 +87,7 @@ test("compact cards name the prompt author without inferring from text or replac
     const { page, browserContext } = await setup(t);
     await revealAnalyzeRecords(page);
     for (const [id, actor] of cases) {
-        const row = card(page, id), label = actor === "user" ? "My prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
+        const row = card(page, id), label = actor === "user" ? "Human prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
         await expect(row.locator(".request-card-author")).toHaveText(label);
         await expect(row.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
         await expect(row.locator("a,button,input")).toHaveCount(1);
@@ -107,11 +107,11 @@ test("compact cards name the prompt author without inferring from text or replac
     const opened = browserContext.waitForEvent("page");
     await link.click({ modifiers: ["Control"] });
     const popup = await opened;
-    await expect(popup.locator(".request-original h2")).toHaveText("My prompt");
+    await expect(popup.locator(".request-original h2")).toHaveText("Human prompt");
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await popup.close();
     await link.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator(".request-original h2")).toHaveText("My prompt");
+    await expect(page.locator(".request-original h2")).toHaveText("Human prompt");
     await page.goBack(); await ready(page);
     await expect(link).toBeFocused();
     for (const actors of [["user"], ["agent"], ["unknown"], ["user", "agent"], ["user", "unknown"], ["agent", "unknown"], "all"]) {
@@ -119,9 +119,9 @@ test("compact cards name the prompt author without inferring from text or replac
         assert.deepEqual((await page.locator(".request-card-author").evaluateAll(nodes => nodes.map(node => node.dataset.promptActor))).sort(),
             cases.filter(([, actor]) => actors === "all" || actors.includes(actor)).map(([, actor]) => actor).sort());
     }
-    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
+    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Author unverified"]);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
-    await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("My prompts");
+    await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("Human prompts");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.locator('label[for="promptAuthorFilter-control"]')).toHaveText("Prompt author");
     await expect(page.getByRole("button", { name: "About Prompt author", exact: true })).toHaveCount(0);
@@ -164,7 +164,7 @@ test("My, Agent and unverified origins agree across compact card, sidebar, repor
             }
             for (const [id, actor] of cases) {
                 const record = evidence.find(record => record.scenarioId === "author-" + id);
-                const expected = actor === "user" ? "My prompt" : actor === "agent" ? "Agent prompt" : "Copilot chat prompt";
+                const expected = actor === "user" ? "Human prompt" : actor === "agent" ? "Agent prompt" : "Copilot chat prompt";
                 await card(page, id).locator(".request-card-open").click();
                 const reader = page.locator(".request-original");
                 await expect(reader.locator("h2")).toHaveText(expected);
@@ -186,7 +186,7 @@ test("My, Agent and unverified origins agree across compact card, sidebar, repor
                 const technical = page.locator(".request-support details");
                 await technical.locator("summary").click();
                 await expect(technical).toContainText(promptAuthorship.reason(record.userPrompt));
-                if (actor === "user") await expect(technical).toContainText("My prompt.");
+                if (actor === "user") await expect(technical).toContainText("Human prompt.");
                 await expect(page.locator("#requestContent")).not.toContainText("Your prompt");
                 if (["mine", "agent", "conflict"].includes(id)) {
                     await reader.locator("h2").scrollIntoViewIfNeeded();
@@ -201,7 +201,7 @@ test("My, Agent and unverified origins agree across compact card, sidebar, repor
                 await expect(entry.locator("input")).toBeChecked();
                 await expect(entry.locator(".full-text-preview-label")).toContainText(expected);
                 await expect(entry.locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", actor);
-                assert.deepEqual(await page.locator("#reportPromptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
+                assert.deepEqual(await page.locator("#reportPromptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Author unverified"]);
                 if (["mine", "agent", "conflict"].includes(id)) {
                     await entry.scrollIntoViewIfNeeded();
                     await capture(page, `${theme}-${width}-${scale}-${id}-picker`);

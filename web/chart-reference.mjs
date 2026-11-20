@@ -379,7 +379,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 section.append(el("p", `${number(total)} matching ${total === 1 ? "interaction" : "interactions"}. Each belongs to one author category.`));
                 host.append(section);
             }
-            list.append(definition("My prompts", "Recorded user origin, not verified account identity."),
+            list.append(definition("Human prompts", "Recorded user origin, not verified account identity."),
                 definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
                 definition("Author unverified", "Missing, conflicting, system or unsupported author evidence. These interactions stay in the denominator."),
                 definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));

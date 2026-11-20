@@ -807,7 +807,7 @@ test("a retained-evidence detail error cannot leave the response falsely busy or
 
 test("composed author helpers give truthful readable source and actor cues on the normal detail page", { timeout: 60000 }, async t => {
     const colors = {};
-    for (const [actor, label] of [["user", "My prompt"], ["agent", "Agent prompt"], ["unknown", "Author unverified"]]) {
+    for (const [actor, label] of [["user", "Human prompt"], ["agent", "Agent prompt"], ["unknown", "Author unverified"]]) {
         const { page } = await setup(t, { actor });
         const heading = section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]");
         assert.equal(await heading.textContent(), label);
@@ -838,7 +838,7 @@ test("composed author helpers give truthful readable source and actor cues on th
     assert.match(await (await openSource(page)).innerText(), /No project associated/);
 });
 
-test("canonical host-envelope normalization reaches My prompt without copying wrapper metadata", { timeout: 30000 }, async t => {
+test("canonical host-envelope normalization reaches Human prompt without copying wrapper metadata", { timeout: 30000 }, async t => {
     const body = "COPIED_BODY_ONLY\r\nCheck the synthetic MCP guide.\n";
     const timestamp = "2026-09-30T12:00:00.000Z";
     const sourceEvent = {
@@ -849,7 +849,7 @@ test("canonical host-envelope normalization reaches My prompt without copying wr
     const { page, record, requests } = await setup(t, { sourceEvent });
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
-    assert.equal(await section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]").textContent(), "My prompt");
+    assert.equal(await section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]").textContent(), "Human prompt");
     await openSource(page);
     await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
     await expect(page.locator(".reader-source dd")).toHaveText("Synthetic coordinator chat");

@@ -255,8 +255,8 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         const problem = node("p", undefined, "request-card-problem"), labels = outcomeLabels(view.aggregates.layer);
         const recorded = Object.entries(item.outcomes).filter(([, count]) => count);
-        const toolFailures = view.aggregates.layer === "tool" && item.outcomes.failure;
-        for (const [key, count] of recorded.filter(([key]) => (key !== "success" || recorded.length === 1) && !(toolFailures && key === "failure"))) {
+        const toolOutcome = view.aggregates.layer === "tool" && results.toolCardOutcome({ ...item.outcomes, count: item.selectedRows });
+        for (const [key, count] of recorded.filter(([key]) => !toolOutcome && (key !== "success" || recorded.length === 1))) {
             const label = view.aggregates.layer === "tool" ? ({ failure: "failed", unknown: "unverified" }[key] ?? labels[key].toLowerCase())
                 : labels[key].toLowerCase();
             const part = node("span", `${number(count)} ${label}`, "result-tone-" + key
@@ -275,17 +275,15 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         facts.append(node("span", date, "request-card-time"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
         const orientation = node("div", undefined, "card-orientation"); orientation.append(author);
-        if (toolFailures) {
-            const failure = node("span", `${number(toolFailures)} tool ${toolFailures === 1 ? "call" : "calls"} failed`, "card-failure");
-            failure.prepend(ux.icon("result-failure-compact")); orientation.append(failure);
-        }
+        if (toolOutcome) orientation.append(ux.cardOutcome(toolOutcome));
         facts.prepend(node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
         context.append(orientation, action, facts);
         body.append(context, key);
         if (selection) article.append(selection);
         const foot = node("div", undefined, "card-reading-actions");
         foot.append(problem);
-        article.append(body, foot);
+        article.append(body);
+        if (problem.textContent) article.append(foot);
         cardNodes.set(article, () => {
             if (retired) return;
             retired = true; events.abort();
@@ -554,6 +552,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                 const outcome = node("span", `Call ${number(callNumber)}: ` + {
                     success: results.labels("tool").success, failure: "failed", unknown: "result unverified" }[call.outcome],
                     "reader-call-summary result-tone-" + call.outcome + (call.outcome === "failure" ? " request-card-failure-text" : ""));
+                outcome.prepend(ux.icon(results.icon(call.outcome)), document.createTextNode(" "));
                 toggle.append(line, outcome); heading.append(toggle); row.append(heading);
                 const body = node("div", undefined, "reader-call-detail");
                 let open = presentation.isOpen(key("call:" + call.id), false);

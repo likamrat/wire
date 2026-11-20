@@ -286,7 +286,7 @@ test("all filter kinds retain canonical rows, drafts, counts, Back and report me
     await choose("promptAuthorFilter", ["user", "agent"]);
     assert.deepEqual(reads.at(-1).filters.promptAuthors, ["user", "agent"]);
     await choose("promptAuthorFilter", ["user"]);
-    await choose("outcomeFilter", ["failure"]); await check("AND failed outcome and My prompts", ["missingUser"]);
+    await choose("outcomeFilter", ["failure"]); await check("AND failed outcome and Human prompts", ["missingUser"]);
     await choose("outcomeFilter", ["success", "failure"]); await check("OR within Outcome", ["multiFiles", "partialFiles", "missingUser"]);
     await choose("projectFilter", app.projectId);
     await choose("chatFilter", app.chatId);

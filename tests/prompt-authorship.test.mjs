@@ -128,7 +128,7 @@ test("source-reference origins survive collection, restart and append without up
         assert.equal(author.actor, expected[i]);
         const detail = model.details.get(model.catalog.find(row => row.scenarioId === record.scenarioId).interactionRef);
         assert.deepEqual(detail.interaction.message.authorship, author);
-        if (i < 2) assert.equal(promptAuthorship.display(record.userPrompt).label, i === 0 ? "My prompt" : "Agent prompt");
+        if (i < 2) assert.equal(promptAuthorship.display(record.userPrompt).label, i === 0 ? "Human prompt" : "Agent prompt");
         else assert.match(promptAuthorship.reason(record.userPrompt), /supported host message layout/);
         const filtered = buildActivityAnalytics(records, { filters: { scope: "all", promptAuthors: [expected[i]] } });
         assert.deepEqual(filtered.rows.map(row => row.scenarioId), [record.scenarioId]);

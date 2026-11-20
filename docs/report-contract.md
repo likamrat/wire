@@ -42,7 +42,7 @@ Fresh creation opens five built-in choices with a Last 7 days period, inclusive
 of today in the selected IANA zone. It does not inherit Analyze restrictions.
 Explicit Selected and Current entries retain their own membership. Scope and
 author choices remain panel memory, not persisted across reload. **Authors in
-report** filters whole originating interactions; My plus Agent excludes
+report** filters whole originating interactions; Human plus Agent excludes
 unverified. Calls executed by agents stay with their originating interaction.
 Leaving out prompts and replies removes those copies, not membership.
 
@@ -60,6 +60,11 @@ unmarked schema-3 snapshots retain the historical origin explanations, including
 their former conflict wording. Markdown-backed views read the saved Markdown.
 Opening either format must preserve the frozen reading, not only file hashes.
 Report explanation versions are independent of live screen wording.
+
+New ordinary reports declare `presentation.authorLabelVersion: 1` for the
+“Human prompt” vocabulary. Reports without that marker keep their original
+author captions when rendered from JSON. The marker changes neither actor
+classification nor membership; previously saved titles, text and files stay frozen.
 
 New focused product reports declare `presentation.productVersion: 1` alongside
 presentation schema 3 and the existing origin/brand versions. This changes

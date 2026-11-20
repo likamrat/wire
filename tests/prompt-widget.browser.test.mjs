@@ -60,19 +60,19 @@ async function exact(page, widget, counts, calls) {
     const rows = await widget.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
         actor: node.dataset.promptActor, count: Number(node.dataset.count), value: node.querySelector(".percentage-value").textContent,
         fraction: Number(node.querySelector(".percentage-bar").dataset.fraction), width: parseFloat(node.querySelector(".percentage-bar").style.width),
-        label: node.querySelector(".percentage-label").textContent,
+        label: node.querySelector(".percentage-label").textContent.trim(),
     })));
     if (total) {
         assert.deepEqual(rows.map(row => row.actor), ["user", "agent", "unknown"]);
         assert.deepEqual(rows.map(row => row.count), counts);
-        assert.deepEqual(rows.map(row => row.label), ["My prompts", "Agent prompts", "Author unverified"]);
+        assert.deepEqual(rows.map(row => row.label), ["Human prompts", "Agent prompts", "Author unverified"]);
         for (const row of rows) {
             assert.equal(row.value, `${Number((row.count / total * 100).toFixed(1))}% (${row.count})`);
             assert.equal(row.fraction, row.count / total);
             assert.ok(Math.abs(row.width - row.fraction * 100) < .0001, "CSS percentage serialization keeps its available precision");
         }
     } else assert.deepEqual(rows, []);
-    assert.equal(await widget.locator("a,button,svg").count(), 0, "Compact static facts do not invent a drilldown or pie");
+    assert.equal(await widget.locator("a,button,svg:not([aria-hidden=true])").count(), 0, "The author glyphs are decorative; the legend is not a new drilldown.");
     return rows;
 }
 async function reset(page) {
@@ -170,7 +170,7 @@ test("ordinary Analyze shows complete prompt origins through filters, paging, gu
     await page.keyboard.press("Enter");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("One originating prompt per matching interaction, across all pages.");
     await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["My prompts", "Agent prompts", "Author unverified"]);
+    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
     await expect(page.locator("#chartReferenceData tbody td")).toHaveText(["6", "33.3%", "6", "33.3%", "6", "33.3%"]);
     await page.locator("#chartReferenceData summary").click();
     await expect(page.locator("#chartReferenceData")).toContainText("missing text alone does not change authorship");

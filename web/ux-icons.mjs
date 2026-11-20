@@ -31,6 +31,7 @@ export const uxIconSources = Object.freeze({
     "navigation-trends": "chart-no-axes-combined",
     "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
     "navigation-collapse": "panel-left", "navigation-expand": "panel-left",
+    "activity-panel": "panel-right-open", "activity-panel-close": "panel-right-close",
     "search-analysis": "chart-no-axes-combined",
     "search-interaction": "message-square", "search-context": "messages-square", "search-reply": "message-square-reply",
     "search-action": "workflow", "search-tool": "wrench",

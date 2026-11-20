@@ -64,7 +64,7 @@ test("paired restrictions reuse canonical labels and captured names without inve
     Object.defineProperty(pair, "requested", { get() { throw Error("Do not read newer controls."); } });
     const value = scope.describePair(pair);
     assert.equal(value.text, "Both collections; Tool: fetch; Service: Files; Missing-service context allowed"
-        + "; Category: Files; Outcome: HTTP 4xx/5xx; Author: My and agent prompts"
+        + "; Category: Files; Outcome: HTTP 4xx/5xx; Author: Human and agent prompts"
         + "; Copilot project: Accepted project, Project not recorded, Project unavailable"
         + "; Recorder source: Accepted recorder, Source unavailable; API path: Accepted path, Selected path unavailable"
         + "; Files within current scope; Mail within current scope; Search applied");
@@ -144,13 +144,13 @@ test("accepted captions retain non-date restrictions and known versus context-on
     });
     assert.equal(value.text, "Jan 12 - Jan 26; Both collections; Tool: workiq-fetch; Service: Files"
         + "; Includes missing-service context: 3 known matches; 1 context-only; Category: Multiple workloads"
-        + "; Outcome: Tool failed; Author: My and agent prompts; Copilot project: Invented project"
+        + "; Outcome: Tool failed; Author: Human and agent prompts; Copilot project: Invented project"
         + "; Copilot chat: Invented chat; API path: workiq-fetch; Search applied");
     assert.equal(value.activeCount, 12);
     assert.deepEqual(value.restrictions, [
         "Jan 12 - Jan 26", "Both collections", "Tool: workiq-fetch", "Service: Files",
         "Includes missing-service context: 3 known matches; 1 context-only", "Category: Multiple workloads",
-        "Outcome: Tool failed", "Author: My and agent prompts", "Copilot project: Invented project",
+        "Outcome: Tool failed", "Author: Human and agent prompts", "Copilot project: Invented project",
         "Copilot chat: Invented chat", "API path: workiq-fetch", "Search applied",
     ]);
     assert.deepEqual(value.parts, value.restrictions);

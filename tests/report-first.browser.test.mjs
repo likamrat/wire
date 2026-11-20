@@ -183,7 +183,7 @@ test("Reports author pointer drafts stay inside their popover until Apply or Can
     assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node =>
         [...node.selectedOptions].map(option => option.value)), ["user", "agent", "unknown"]);
     await trigger.click();
-    await page.getByRole("option", { name: "My prompts", exact: true }).click();
+    await page.getByRole("option", { name: "Human prompts", exact: true }).click();
     await page.getByRole("option", { name: "Author unverified", exact: true }).click();
     const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator(".select-popup").getByRole("button", { name: "Apply", exact: true }).click();
@@ -199,7 +199,7 @@ test("Reports author pointer drafts stay inside their popover until Apply or Can
     assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node =>
         [...node.selectedOptions].map(option => option.value)), ["agent"]);
     await trigger.tap();
-    await page.getByRole("option", { name: "My prompts", exact: true }).tap();
+    await page.getByRole("option", { name: "Human prompts", exact: true }).tap();
     await page.locator(".select-popup").getByRole("button", { name: "Cancel", exact: true }).tap();
     await expect(trigger).toBeFocused();
     await trigger.press("ArrowDown");
@@ -1357,7 +1357,7 @@ test("report-first controls retain equal geometry, readable themes and narrow en
     }
     await page.locator('[data-report-preset="errors"]').hover();
     await expect(page.getByRole("tooltip")).toBeHidden();
-    for (const label of ["all activity", "errors & failures", "completed calls", "my prompts", "agent prompts"]) {
+    for (const label of ["all activity", "errors & failures", "completed calls", "human prompts", "agent prompts"]) {
         const control = page.getByRole("button", { name: "About " + label, exact: true });
         await control.focus();
         await expect(page.getByRole("tooltip")).toBeVisible();

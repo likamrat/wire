@@ -81,11 +81,8 @@ test("the built workbench carries each palette through screens and nested readin
         await inspect("analyze", theme);
         const counts = await page.locator("#outcomeChart .percentage-legend-row").evaluateAll(nodes =>
             nodes.map(node => ({ category: node.dataset.category, count: node.dataset.count, percentage: node.dataset.percentage })));
-        const expected = palette === "petrol" ? mode === "light"
-            ? { success: "#006677", failure: "#af3e37", partial: "#7e6116", unknown: "#536171" }
-            : { success: "#75c6d3", failure: "#f0a097", partial: "#dcc080", unknown: "#b4c0cf" }
-            : Object.fromEntries(await page.locator("html").evaluate((node) =>
-                [["success","--success"],["failure","--danger"],["partial","--warning"],["unknown","--unknown"]]
+        const expected = Object.fromEntries(await page.locator("html").evaluate((node) =>
+                [["success","--tool-positive"],["failure","--tool-negative"],["partial","--warning"],["unknown","--unknown"]]
                     .map(([id,role]) => [id, getComputedStyle(node).getPropertyValue(role).trim()])));
         const colors = await page.locator("#outcomeChart .percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
             category: node.dataset.category, ink: getComputedStyle(node.querySelector(".percentage-label")).color,

@@ -25,10 +25,10 @@ by pointer, keyboard or touch.
 
 | Report | Includes |
 | --- | --- |
-| All activity | Your prompts and agent prompts, with Work IQ calls and results. Eligible interactions with an unverified author remain included. |
+| All activity | Recorded prompts, Work IQ calls and results. Eligible interactions with an unverified author remain included. |
 | Errors & failures | Interactions with any recorded failed call or explicit application/API error, including mixed results. |
 | Completed calls | Interactions with at least one recorded call, all calls completed and no recorded errors. This does not establish task success. |
-| My prompts | Interactions whose originating prompt is recorded as user-authored. |
+| Human prompts | Interactions whose originating prompt is recorded as user-authored. |
 | Agent prompts | Interactions whose originating prompt is recorded as agent-authored. |
 
 If a returned status and its diagnostic disagree, both remain visible. Recorded
@@ -268,12 +268,12 @@ days. **Cancel** leaves the accepted comparison unchanged. Unequal or overlappin
 ranges are allowed and remain labeled.
 
 The compact activity choice offers All activity, Errors & failures, Completed
-calls, My prompts and Agent prompts. **More options** retains source, tool,
+calls, Human prompts and Agent prompts. **More options** retains source, tool,
 service, category, author, outcome, project, chat, evidence-layer and collection
 choices, plus path, service-intersection and timing-interval controls. Choices
 apply directly. **Use Analyze view** deliberately imports Analyze's non-date
 filters and authorized Search selection; it replaces only the dates.
-Choosing My prompts or Agent prompts keeps an existing error/completion focus;
+Choosing Human prompts or Agent prompts keeps an existing error/completion focus;
 the menu names the combined choice. All activity clears those menu choices.
 
 Switch **Outcomes**, **Timeline**, **By tool** or **Timing** inside the chart.

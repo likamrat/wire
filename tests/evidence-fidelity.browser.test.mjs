@@ -41,7 +41,7 @@ test("cards, reader and author filters explain fresh and retained failures witho
     const card = id => page.locator(`.request-row[data-view-key="request:${id}"] .request-card-open`);
     const reason = "Work IQ reported HTTP 503 (Service unavailable). No further error details are retained.";
     for (const [index, actor] of ["user", "agent", "unknown"].entries()) {
-        await expect(card(records[index].scenarioId)).toContainText({ user: "My prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+        await expect(card(records[index].scenarioId)).toContainText({ user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
         await expect(card(records[index].scenarioId)).toContainText(reason);
     }
     await expect(card("invented-legacy")).toContainText("The tool reported HTTP 503 (Service unavailable). No further error details are retained.");
@@ -51,7 +51,7 @@ test("cards, reader and author filters explain fresh and retained failures witho
         await card(records[0].scenarioId).click();
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
         const reader = page.locator("#requestContent");
-        await expect(reader).toContainText("My prompt");
+        await expect(reader).toContainText("Human prompt");
         await expect(reader).toContainText(reason);
         await expect(reader).not.toContainText(/unsupported format|Request timed out|try again/i);
         await expect(reader).toContainText("The recorded path does not identify a named app. The call still counts; its result is shown separately.");

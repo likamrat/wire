@@ -9,10 +9,10 @@ export function reportWorkspacePresentation(route, journey = {}) {
 export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, current, createCalendar }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
-        ["all", "All activity", "Your prompts and agent prompts, with Work IQ calls and results.", "report-all"],
+        ["all", "All activity", "Recorded prompts, Work IQ calls and their results.", "report-all"],
         ["errors", "Errors & failures", "Find prompts whose Work IQ calls hit errors.", "warning"],
         ["completed", "Completed calls", "Prompts whose calls finished without recorded errors.", "check"],
-        ["mine", "My prompts", "Your requests and the Work IQ calls that followed.", "account"],
+        ["mine", "Human prompts", "Human-authored requests and their recorded Work IQ calls.", "account"],
         ["agent", "Agent prompts", "Requests written by your agents.", "report-agent"],
     ];
     const help = {

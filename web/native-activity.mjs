@@ -143,10 +143,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const facts = node("div", "request-card-summary");
         facts.append(node("span", "request-card-time", "Captured: " + capturedAt(record.nativeConversation.observations[0]?.capture.capturedAt)));
         const orientation = node("div", "card-orientation"); orientation.append(origin);
-        if (layer === "tool" && summary?.failure) {
-            const cue = node("span", "card-failure", `${summary.failure} tool ${summary.failure === 1 ? "call" : "calls"} failed`);
-            cue.prepend(ux.icon("result-failure-compact")); orientation.append(cue); foot.textContent = "";
-        }
+        const status = layer === "tool" && results.toolCardOutcome(summary);
+        if (status) { orientation.append(ux.cardOutcome(status)); foot.textContent = ""; }
         facts.prepend(node("span", "request-card-source", "Source: " + sourceLabel(record.sourceId)));
         context.append(orientation, action, facts);
         body.append(context);
@@ -158,7 +156,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             event.preventDefault();
             onOpen(record.scenarioId);
         }, { signal: events.signal });
-        row.append(body, foot);
+        row.append(body);
+        if (foot.textContent) row.append(foot);
         cards.add(() => { events.abort(); record = null; rows = null; onOpen = null; clear(row, true); });
         return row;
     }
@@ -445,7 +444,9 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             chevron.classList.add("reader-call-disclosure");
             line.append(chevron);
             const result = node("span", "reader-call-summary", outcome[call.outcome.state]);
-            if (call.outcome.state === "failed") result.classList.add("result-tone-failure");
+            const state = {succeeded:"success", failed:"failure", cancelled:"other", unknown:"unknown"}[call.outcome.state];
+            result.classList.add("result-tone-" + state);
+            result.prepend(ux.icon(results.icon(state)), document.createTextNode(" "));
             toggle.append(line, result); identity.append(toggle); heading.append(identity);
             item.append(heading);
             for (const conflict of call.conflicts) item.append(node("p", "reader-state",

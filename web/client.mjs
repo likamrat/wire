@@ -1147,6 +1147,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const node of document.querySelectorAll(".request-card-open,.card-evidence-link")) {
             const active = sidebarIdentity !== null && node.closest(".request-row")?.dataset.viewKey === key;
             node.setAttribute("aria-expanded", String(active));
+            if (node.classList.contains("card-panel-link")) labelPanelLink(node, active);
             node.closest(".request-row").toggleAttribute("data-detail-active", active);
         }
     }
@@ -2145,7 +2146,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             receipt: null, scenarioIds: [], actionIds: [], parentScenarioIds: [] };
     }
     liveSearchUI = assessmentFactories.liveSearch.mount({
-        api, ux, searchFields, results, createState: assessmentFactories.liveSearch.createState,
+        api, ux, searchFields, results, authorship, createState: assessmentFactories.liveSearch.createState,
         nativeSearch: {
             active: () => sourceCollection.active,
             changed: value => boundedNative.searchChanged({ ...value,
@@ -4953,6 +4954,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText(optionNotice, includesNative && !native && !setupCovered ? restriction : "");
     }
     function renderHome() {
+        $("homeView").toggleAttribute("data-tool-outcomes", workspaceState.scope?.layer === "tool");
         const layer = workspaceState.scope.layer;
         $("homeView").dataset.revision = String(workspaceState.evidence.revision);
         const chartType = workspaceState.route.chart || "time";
@@ -5641,6 +5643,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return group;
     }
     const cardOwners = new WeakMap();
+    function labelPanelLink(node, active) {
+        const label = `${active ? "Close" : "Open"} activity panel: ${node.textContent.trim()}`;
+        node.setAttribute("aria-label", label);
+        node.title = label;
+    }
     function requestCard(scenario, { reportPicker = false, eventSignal } = {}) {
         const authority = api.publicationToken();
         if (!authority || clearingAccess || !workspaceState.evidence) return null;
@@ -5667,6 +5674,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!window.getSelection()?.isCollapsed && row.contains(window.getSelection()?.anchorNode)) return;
                 row.querySelector("[data-card-origin]")?.removeAttribute("data-card-origin");
                 link.dataset.cardOrigin = "";
+                if (link.classList.contains("card-panel-link") && link.getAttribute("aria-expanded") === "true"
+                    && workspaceState.route.view === "request" && workspaceState.route.request === target.request) {
+                    closeContextSidebar(); return;
+                }
                 if (focus === "prompt") textAccess.setOpen("request:" + target.request, true);
                 navigate(target, false, { cardTarget: { target: exact, revision: workspaceState.evidence.revision, focus } });
             }, { signal });
@@ -5683,7 +5694,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);
         author.dataset.promptActor = actor;
-        author.prepend(ux.icon(actor === "user" ? "account" : actor === "agent" ? "report-agent" : "unobserved"));
+        author.prepend(ux.icon(authorship.iconRole(actor)));
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
         const summary = results.summarize(rows);
         const facts = el("div", "request-card-summary");
@@ -5706,13 +5717,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const failure = layer === "tool" && summary?.failure && callInvestigation.firstFailure(workspaceState.evidence.requestActivity,
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
-        if (failure) {
-            const failed = open(exception, "record", failure, "card-evidence-link request-card-exception card-failure result-tone-failure");
-            const face = el("span", "card-failure-face");
-            face.append(ux.icon("result-failure-compact"), ...failed.childNodes);
-            failed.append(face);
-            orientation.append(failed);
-        }
+        const outcome = layer === "tool" ? results.toolCardOutcome(summary) : null;
+        if (outcome) orientation.append(ux.cardOutcome(outcome, failure ? open("", "record", failure) : undefined));
         const parentIds = new Set(rows?.map(row => row.id));
         const apis = layer === "tool" ? fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => parentIds.has(r.parentCallId)) : null;
         const issue = apis?.find(r => {
@@ -5728,12 +5734,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));
         if (reported) foot.append(open("Reported result issue", "record", exact(reported, layer), "card-evidence-link request-card-exception returned-issue-ink"));
-        if (!failure && exception !== "Reported result issue") {
+        if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
             if (cue) foot.append(el("span", "request-card-exception", cue));
         }
-        foot.append(open(full?.count ? `Inspect ${count(full.count)} ${results.unit(layer, full.count)}` : "Open interaction",
-            "activity", target, "card-evidence-link request-card-open-label"));
+        const panel = open(full?.count ? `${count(full.count)} ${layer === "tool" ? full.count === 1 ? "tool call" : "tool calls" : results.unit(layer, full.count)}` : "Interaction",
+            "activity", target, "card-evidence-link request-card-open-label card-panel-link");
+        panel.prepend(ux.icon("activity-panel"), ux.icon("activity-panel-close"));
+        labelPanelLink(panel, panel.getAttribute("aria-expanded") === "true");
+        foot.append(panel);
         row.append(body, foot);
         cardOwners.set(row, events);
         return row;
@@ -5989,6 +5998,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const label = promptSection.toggle.querySelector("span");
                 label.textContent = heading.textContent;
                 label.dataset.promptActor = heading.dataset.promptActor;
+                label.classList.add("reader-prompt-origin");
+                label.prepend(ux.icon(authorship.iconRole(heading.dataset.promptActor)));
                 const accessible = el("span", "visually-hidden reader-prompt-role-label", heading.textContent);
                 accessible.id = heading.id;
                 accessible.dataset.promptActor = heading.dataset.promptActor;
@@ -5998,6 +6009,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const secondary = el("h3", "reader-context-heading", options.contextTitle + " \u00b7 ");
                 const author = el("span", "", heading.textContent);
                 author.dataset.promptActor = heading.dataset.promptActor;
+                author.classList.add("reader-prompt-origin");
+                author.prepend(ux.icon(authorship.iconRole(heading.dataset.promptActor)));
                 secondary.id = heading.id;
                 secondary.append(author);
                 heading.replaceWith(secondary);
@@ -7597,7 +7610,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             add("Prompts", ({ none: "None", masked: "Masked", original: "Original" })[bundle.promptMode]);
             add("Report period", savedPeriodLabel(bundle));
             add("Purpose", ({ all: "All activity", errors: "Errors & failures", completed: "Completed calls",
-                mine: "My prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose]);
+                mine: "Human prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose]);
             if (bundle.timeContext) add("Timezone", time.label(bundle.timeContext));
             body.append(facts);
             if (bundle.kind !== "comparison" && !savedPeriodLabel(bundle)) body.append(el("p", "saved-period-availability",
@@ -10380,7 +10393,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 return;
             }
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {
-                if (authorship.actors.includes(value)) node.dataset.promptActor = value;
+                if (authorship.actors.includes(value)) {
+                    node.dataset.promptActor = value;
+                    node.classList.add("author-option-value");
+                    replacePrivateChoices(node, ux.icon(authorship.iconRole(value)), el("span", "", label));
+                }
                 else delete node.dataset.promptActor;
                 return;
             }

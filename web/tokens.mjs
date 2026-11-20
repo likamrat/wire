@@ -80,6 +80,7 @@ export const screenLight = `
  --accent-hover:#edf2f2;--accent-pressed:#d9e5e5;--pill-pressed:#d9e5e5;
  --primary-hover:#28454e;--primary-pressed:#15252c;
  --success:#006677;--danger:#af3e37;--warning:#7e6116;--unknown:#536171;
+ --tool-positive:#17613b;--tool-negative:#a93232;
  --delete-fill:var(--danger);--delete-ink:#ffffff;
  --performance-red:var(--danger);--performance-orange:#8c5518;--performance-gold:var(--warning);--performance-teal:var(--success);
  --chart-success:var(--success);--screen-success-high:var(--success);--screen-success-low:var(--success);
@@ -111,6 +112,7 @@ export const screenDark = `
  --accent-hover:#293a40;--accent-pressed:#324247;--pill-pressed:#324247;
  --primary-hover:#d3eaee;--primary-pressed:#c0d9df;
  --success:#75c6d3;--danger:#f0a097;--warning:#dcc080;--unknown:#b4c0cf;
+ --tool-positive:#8ad6a3;--tool-negative:#ffa59a;
  --delete-fill:var(--danger);--delete-ink:#281210;
  --performance-red:var(--danger);--performance-orange:#e1ac74;--performance-gold:var(--warning);--performance-teal:var(--success);
  --chart-success:var(--success);--screen-success-high:var(--success);--screen-success-low:var(--success);

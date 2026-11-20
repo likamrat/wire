@@ -70,7 +70,7 @@ test("prompt shares separate native conversations and erase exact authorship fac
     await expect(card.locator(".percentage-exact .percentage-empty")).toHaveCount(1);
     await render([record]);
     await expect(card.locator(".percentage-denominator")).toBeVisible();
-    await expect(card.locator(".percentage-table tbody th")).toHaveText(["My prompts", "Agent prompts", "Author unverified"]);
+    await expect(card.locator(".percentage-table tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
     await page.evaluate(() => window.view.withdrawAccess());
     await expect(card.locator(".percentage-legend,.percentage-table,[data-count]")).toHaveCount(0);
     assert.equal(await card.getAttribute("data-total"), null);

@@ -371,7 +371,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const chartControls = el("div", undefined, "comparison-chart-controls"), quick = el("select");
     quick.id = "comparisonQuickChoice"; quick.setAttribute("aria-label", "Comparison starting point");
     for (const [value, label] of [["all", "All activity"], ["errors", "Errors & failures"], ["completed", "Completed calls"],
-        ["mine", "My prompts"], ["agent", "Agent prompts"], ["custom", "Custom activity"]]) {
+        ["mine", "Human prompts"], ["agent", "Agent prompts"], ["custom", "Custom activity"]]) {
         const option = el("option", label); option.value = value; option.hidden = value === "custom"; quick.append(option);
     }
     quick.addEventListener("change", () => {
@@ -579,7 +579,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const combination = [
             route.comparisonFocus === "completed" ? "Completed calls" : route.comparisonFocus === "errors" ? "Errors & failures" : "",
             ...(options.filters.outcomes ?? []).map(outcome => results.labels(options.layer)[outcome]),
-            ...(authors ?? []).map(author => author === "user" ? "My prompts" : author === "agent" ? "Agent prompts" : "Author unverified"),
+            ...(authors ?? []).map(author => author === "user" ? "Human prompts" : author === "agent" ? "Agent prompts" : "Author unverified"),
         ].filter(Boolean);
         quick.querySelector('[value="custom"]').textContent = combination.join(" + ") || "Custom activity";
         quick.dataset.preset = quick.value;

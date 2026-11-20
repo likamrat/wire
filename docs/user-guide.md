@@ -79,7 +79,7 @@ percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
 
 **Prompt authors** counts each originating interaction once across all matching
-pages: **My prompts**, **Agent prompts**, or **Author unverified**. Calls and
+pages: **Human prompts**, **Agent prompts**, or **Author unverified**. Calls and
 follow-ups do not add prompts. Unverified authors stay in the denominator;
 missing prompt text alone does not make its author unknown. Microsoft 365
 conversations without comparable prompt provenance are shown as unavailable,
@@ -148,7 +148,7 @@ daily numbers and period totals, including series hidden in the chart.
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
-| Prompt authors | Matching originating interactions, split into My prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
+| Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
 | Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; shaded partial weeks include only selected dates. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
@@ -222,8 +222,8 @@ the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
 
 Analyze cards show a short preview. Open the prompt to read and copy the
-retained original, including text after the ellipsis. **Inspect** goes to the
-recorded activity in the right-hand reader. **My prompt**, **Agent prompt** or
+retained original, including text after the ellipsis. The panel icon beside the tool count opens the
+recorded activity in the right-hand reader. **Human prompt**, **Agent prompt** or
 **Author unverified** describes the prompt’s origin, not its app. A label such
 as **1 tool call failed** opens the failed call; it does not mean the whole
 request failed. Repeated tools show a count with its unit. Tools, requested targets and operations
@@ -250,8 +250,8 @@ uses a single-pane reader and hides the sizing controls.
 
 ![An interaction reader with a compact prompt preview, recorded calls and timing, and a returned HTTP 403 explanation.](images/interaction.png)
 
-**My prompt**, **Agent prompt** and **Author unverified** describe supported
-origin evidence, not who executed or authorized every call. Choosing My and
+**Human prompt**, **Agent prompt** and **Author unverified** describe supported
+origin evidence, not who executed or authorized every call. Choosing Human and
 Agent is not the same as All, which also includes unverified authors.
 The reader explains retained origin gaps separately from call results. For
 example, WIRE may not recognize the host's message format even when the prompt

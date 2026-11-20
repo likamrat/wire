@@ -477,6 +477,16 @@ export function createEvidenceUX(icons) {
         node.removeAttribute("id");
         return node;
     }
+    function cardOutcome(outcome, target = document.createElement("span")) {
+        target.classList.add("request-card-exception", "card-outcome", `result-tone-${outcome.key}`);
+        if (outcome.key === "failure") target.classList.add("card-failure");
+        const face = document.createElement("span"), label = document.createElement("span");
+        face.className = "card-outcome-face" + (outcome.key === "failure" ? " card-failure-face" : "");
+        label.textContent = outcome.label;
+        face.append(icon(outcome.icon), label);
+        target.replaceChildren(face);
+        return target;
+    }
     function helpButton(label, text) {
         const control = document.createElement("button");
         control.type = "button";
@@ -691,7 +701,7 @@ export function createEvidenceUX(icons) {
         }
         return value;
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute,
+    return { icon, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute,
         destroy() {
             clearTooltip();
             observer.disconnect();

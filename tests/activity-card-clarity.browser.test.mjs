@@ -113,7 +113,7 @@ async function capture(page, name, metrics) {
 test("the prompt, scoped tools and targets identify each interaction before reading exact evidence", async t => {
     const { page } = await setup(t);
     const first = page.locator('.request-card-open[href*="card-clarity-0"]');
-    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("My prompt");
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Human prompt");
     await expect(first.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
     await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
     const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
@@ -380,7 +380,7 @@ test("home prompt previews are bounded while exact copied prompts and independen
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
                 await expect(card.locator(".request-card-read-more")).toHaveCount(0);
-                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toContainText("Inspect");
+                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toHaveAccessibleName(/^Open activity panel:/);
                 assert.ok(geometry.height <= geometry.lineHeight * (geometry.cardWidth <= 36 * geometry.rootSize ? 4 : 3) + 1, JSON.stringify(geometry));
                 if (card === second) assert.equal(omitted, true, "The complete long prompt must not occupy the card.");
                 await expect(prompt).not.toContainText("\u2026");
@@ -1255,7 +1255,7 @@ test("unavailable and empty nonautomatic records retain their own identity witho
     evidence[1].userPrompt = { ...evidence[1].userPrompt, text: "EXCLUDED_TEXT_MUST_NOT_APPEAR", status: "unavailable" };
     evidence[2].userPrompt = { ...evidence[2].userPrompt, text: "", authorship: { actor: "unknown", basis: "conflicting-source" } };
     const { page } = await setup(t, evidence);
-    for (const [index, label, notice] of [[0, "My activity", "Prompt text unavailable"],
+    for (const [index, label, notice] of [[0, "Human activity", "Prompt text unavailable"],
         [1, "Agent activity", "Prompt text unavailable"], [2, "Author unverified", "No prompt text retained"]]) {
         const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
         await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText(label);

@@ -32,7 +32,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return {
             hasText: false, automatic,
             label: automatic ? display?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Author unverified"} (automatic continuation)`
-                : author?.actor === "user" ? "My activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
+                : author?.actor === "user" ? "Human activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
             notice: automatic ? "Work continued without a new message." : availability?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable"),
         };
     }

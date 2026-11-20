@@ -51,6 +51,15 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         const names = labels(layer);
         return keys.filter(key => summary[key] > 0).map(key => ({ key, label: names[key], count: summary[key], icon: icon(key) }));
     }
+    // Tool execution only: returned API errors have a separate owner and destination.
+    function toolCardOutcome(summary) {
+        if (!valid(summary) || !summary.count) return null;
+        const key = ["failure", "transport", "partial", "unknown", "other", "success"].find(key => summary[key] > 0);
+        const n = summary[key], calls = `${n.toLocaleString()} tool ${n === 1 ? "call" : "calls"}`;
+        const label = key === "success" ? `${calls} completed` : key === "failure" ? `${calls} failed`
+            : key === "unknown" && n < summary.count ? `${calls} without a recorded result` : labels("tool")[key];
+        return { key, label, icon: icon(key) };
+    }
     function primaryFailureCause(call, contextual = false) {
         const evidence = call?.failureEvidence;
         if (evidence?.version !== 1) return null;
@@ -637,5 +646,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

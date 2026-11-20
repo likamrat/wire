@@ -646,12 +646,33 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .read-in-place[data-detail-active] .card-reading-body,.read-in-place[data-detail-active] .card-reading-actions {background:var(--accent-soft)}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
 .card-request-context {min-width:0;max-width:78ch}.card-request-context .request-card-summary {margin-top:4px;gap:2px 12px}
-.card-orientation {display:flex;flex-wrap:wrap;align-items:center;gap:2px 16px;margin-block-end:3px}
-.card-orientation .request-card-author,.card-orientation .card-failure {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
-.card-orientation .request-card-author {font-weight:var(--weight-medium)}
+.card-orientation {display:grid;grid-template-columns:minmax(0,min(10em,42%)) minmax(0,1fr);align-items:center;gap:0 12px;margin-block-end:3px}
+.card-orientation .request-card-author,.card-orientation .card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
+.card-orientation .request-card-author {font-weight:var(--weight-strong);color:var(--ink)}
+.author-option-value,.reader-prompt-origin {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%}
+.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {inline-size:1.05em;block-size:1.05em;flex:none;color:var(--prompt-author-ink,currentColor)}
+#requestContent .reader-prompt-origin {color:var(--ink);font-weight:var(--weight-strong)}
+#requestContent .reader-call-summary .result-tone-success .result-status,#requestContent .reader-call-summary.result-tone-success {color:var(--tool-positive)}
+#requestContent .reader-call-summary .result-tone-failure .result-status,#requestContent .reader-call-summary.result-tone-failure {color:var(--tool-negative)}
+#requestContent .reader-call-summary .recorded-result:is(.success,.failure):not(.result-explained) {color:var(--call-status-ink)}
+.reader-call-summary .success,.wire-search-outcome.result-tone-success {--call-status-ink:var(--tool-positive)}
+.reader-call-summary .failure,.wire-search-outcome.result-tone-failure {--call-status-ink:var(--tool-negative)}
+.wire-search-outcome:is(.result-tone-success,.result-tone-failure) {color:var(--call-status-ink)}
+#homeView[data-tool-outcomes],#percentageCharts[data-layer=tool] {
+ --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive);--chart-teal-mid:var(--tool-positive);--chart-teal-base:var(--tool-positive);--chart-teal-side:var(--tool-positive);--chart-teal-cap:var(--tool-positive);
+ --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative);--chart-pink-mid:var(--tool-negative);--chart-pink-base:var(--tool-negative);--chart-pink-side:var(--tool-negative);--chart-pink-cap:var(--tool-negative);
+}
+#requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
+.card-orientation [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
 .card-orientation .wire-icon {width:1.05em;height:1.05em;flex:none}
-.card-orientation .card-failure {font-weight:var(--weight-strong);color:var(--danger);min-height:44px;text-underline-offset:3px}
-.card-failure-face {display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-inline-start:2px solid currentColor;background:color-mix(in srgb,var(--danger) 7%,var(--paper));font:inherit}
+.card-orientation .card-outcome {justify-self:start;min-height:44px;font-weight:var(--weight-medium);overflow-wrap:anywhere}
+.card-outcome-face {display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-inline-start:2px solid currentColor;font:inherit}
+.card-orientation .result-tone-success {color:var(--tool-positive)}
+.card-orientation .card-failure {color:var(--tool-negative);font-weight:var(--weight-strong);text-underline-offset:3px}
+.card-orientation :is(.result-tone-success,.result-tone-failure) .card-outcome-face {background:color-mix(in srgb,currentColor 7%,var(--paper))}
+.card-orientation :is(.result-tone-unknown,.result-tone-other) {color:var(--muted)}
+.card-orientation .result-tone-partial {color:var(--warning)}
+@container(max-width:21rem) {.card-orientation {grid-template-columns:minmax(0,1fr);justify-items:start}}
 .card-orientation a.card-failure {text-decoration:none}.card-orientation a.card-failure:is(:hover,:focus-visible) .card-failure-face {text-decoration:underline}
 .card-request-context .request-card-open {display:block;min-block-size:44px;padding:0;border:0;text-decoration:none;color:var(--ink);font:inherit;white-space:pre-wrap}
 .card-request-context .request-card-open:hover {text-decoration:underline;text-underline-offset:3px}
@@ -674,6 +695,12 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
 .card-evidence-link {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
 .card-evidence-link:hover {background:var(--hover)}.card-reading-actions .request-card-open-label {margin-inline-start:auto}
+.card-reading-actions .card-panel-link {min-height:44px;gap:8px;padding-inline:6px;border-radius:4px;color:var(--ink);text-decoration:none}
+.card-reading-actions .card-panel-link:is(:hover,:active) {background:none;text-decoration:none}
+.card-panel-link>.wire-icon {flex:none;width:1.75rem;height:1.75rem;padding:5px;border-radius:4px;background:var(--canvas);box-shadow:inset 0 0 0 1px var(--surface-edge)}
+.card-panel-link:is(:hover,:focus-visible)>.wire-icon {background:var(--hover);box-shadow:inset 0 0 0 1px var(--control)}
+.card-panel-link:is(:active,[aria-expanded=true])>.wire-icon {background:var(--accent-soft)}
+.card-panel-link[aria-expanded=false]>.wire-icon:nth-of-type(2),.card-panel-link[aria-expanded=true]>.wire-icon:first-of-type {display:none}
 .card-reading-actions .result-tone-failure {color:var(--danger)}
 .reader-call-secondary .card-identities {padding:0;border:0}
 .reader-section-jumps {display:flex;flex-wrap:wrap;gap:4px;padding-block-end:6px;border-bottom:1px solid var(--rule)}

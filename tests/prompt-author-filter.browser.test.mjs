@@ -79,12 +79,12 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.match(page.url(), /authors=user/);
     assert.equal(app.snapshot().analytics.totals.count, 3);
     await openActivitySessions(page);
-    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label === "My prompt"));
+    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label === "Human prompt"));
     await setAuthors(page, ["agent"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await setAuthors(page, ["user", "agent"]);
     assert.equal(app.snapshot().analytics.totals.count, 5);
-    assert.match(await page.locator("#filterChips").innerText(), /My and agent prompts/);
+    assert.match(await page.locator("#filterChips").innerText(), /Human and agent prompts/);
     await setAuthors(page, ["unknown"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await openActivitySessions(page);
@@ -152,7 +152,7 @@ test("author choice composes with dates, result, service and chat scope before I
     const data = app.snapshot();
     assert.equal(data.analytics.totals.count, 1);
     assert.deepEqual(data.analytics.rows.map(row => row.scenarioId), [app.cases.ownMail.scenarioId]);
-    assert.equal(data.sessionAnalysis.totals.count, 2, "Conversation context retains the full result scope, still narrowed to My prompts");
+    assert.equal(data.sessionAnalysis.totals.count, 2, "Conversation context retains the full result scope, still narrowed to Human prompts");
     assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["user"]);
     assert.deepEqual(app.requests.at(-1).filters.outcomes, ["failure"]);
     assert.deepEqual(app.requests.at(-1).filters.workloads, ["Mail"]);
@@ -211,7 +211,7 @@ test("author cues and Apply controls remain readable in light/navy and narrow la
             while (parent && (!background || background === "rgba(0, 0, 0, 0)")) { background = getComputedStyle(parent).backgroundColor; parent = parent.parentElement; }
             return { actor: node.dataset.promptActor, text: node.textContent, color: getComputedStyle(node).color, background };
         }));
-        assert.ok(cues.some(cue => cue.actor === "user" && cue.text === "My prompt"));
+        assert.ok(cues.some(cue => cue.actor === "user" && cue.text === "Human prompt"));
         assert.ok(cues.some(cue => cue.actor === "agent" && cue.text === "Agent prompt"));
         for (const cue of cues) assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${width}/${cue.actor} contrast`);
         assert.notEqual(cues.find(cue => cue.actor === "user").color, cues.find(cue => cue.actor === "agent").color);

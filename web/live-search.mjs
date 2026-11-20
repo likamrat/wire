@@ -193,7 +193,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, presentHit, serviceIcon, nativeSearch }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, authorship, presentHit, serviceIcon, nativeSearch }) {
     if (typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function" || typeof api.accessState !== "function") {
         throw new TypeError("Search requires the shared access publication fence.");
     }
@@ -472,6 +472,15 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             if (icon?.localName !== "svg") throw new TypeError("Search result icon is unavailable.");
             const slot = el("span", undefined, "wire-search-type-icon");
             slot.setAttribute("aria-hidden", "true"); slot.append(icon); target.append(slot);
+            let origin = "";
+            if (authorship && ["interaction", "context"].includes(hit.type) && hit.coverage?.authorBasis) {
+                const actor = authorship.read({ authorship: { actor: hit.coverage.author, basis: hit.coverage.authorBasis } }).actor;
+                origin = actor === "unknown" ? "Author unverified" : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
+                const cue = el("span", origin, "author-option-value");
+                cue.dataset.promptActor = actor;
+                cue.prepend(ux.icon(authorship.iconRole(actor)));
+                meta.append(cue);
+            }
             if (layer) meta.append(el("span", kindLabel, "wire-search-kind"));
             if (format && context.formats.size > 1) meta.append(el("span", format, "wire-search-format"));
             if (outcome) {
@@ -499,7 +508,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             target.setAttribute("aria-label", [`${destination}: ${shorten(primary)}; ${kindLabel}`,
                 sourceTitle ? "Source match" : shown.source.map(part => part.text).join(""),
                 shown.excerpt.map(part => part.text).join("").replace(/\s+/gu, " "),
-                format, outcome?.label, limitation].filter(Boolean).join("; "));
+                origin, format, outcome?.label, limitation].filter(Boolean).join("; "));
             if (limitation) body.append(el("span", limitation, "wire-search-limitation"));
             target.append(body);
             if (!isPublished(authority)) return;

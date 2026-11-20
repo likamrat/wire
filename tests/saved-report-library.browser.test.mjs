@@ -130,7 +130,7 @@ test("report metadata groups preserve scope, authors, counts and saved identity 
     assert.equal(await page.locator("#reportActivitySummary").textContent(), "1 chat 4 interactions included");
     await sizes("activity", "#reportCreatePanel");
     await reportContents(page);
-    assert.equal(await page.locator(".report-content-authors").textContent(), "Authors: My prompts");
+    assert.equal(await page.locator(".report-content-authors").textContent(), "Authors: Human prompts");
     assert.equal(await page.locator(".report-content-scope").textContent(), "All collected activity");
     assert.equal(await page.locator(".report-content-scope").evaluate(node => getComputedStyle(node, "::after").content), "none");
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 4 interactions");

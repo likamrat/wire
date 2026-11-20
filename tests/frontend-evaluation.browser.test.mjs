@@ -182,7 +182,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     const row = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const count = row.locator(".card-tool-count"), failure = row.locator(".card-failure"), author = row.locator(".request-card-author");
     await expect(count).toHaveText("(13 calls)"); await expect(failure).toHaveAccessibleName("1 tool call failed");
-    await expect(author).toContainText("My prompt"); await expect(author.locator("svg")).toHaveCount(1);
+    await expect(author).toContainText("Human prompt"); await expect(author.locator("svg")).toHaveCount(1);
     await expect(failure.locator("svg")).toHaveCount(1); await expect(row.locator(".returned-issue-ink")).toBeVisible();
     await expect(row.locator(".request-card-source")).toHaveCount(0);
     await expect(page.locator("#activityList .request-card-author").filter({hasText:"Agent prompt"}).first()).toBeVisible();
@@ -190,6 +190,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     const resultOnly = page.locator("#activityList .activity-card").filter({has:page.locator(".request-card-author").filter({hasText:"Author unverified"})})
         .filter({has:page.locator(".returned-issue-ink")});
     await expect(resultOnly).toHaveCount(1); await expect(resultOnly.locator(".card-failure")).toHaveCount(0);
+    await expect(resultOnly.locator(".card-orientation .result-tone-success")).toContainText("1 tool call completed");
     await expect(partial.locator(".card-quotation")).toHaveCount(0);
     let wrapped = false;
     for (const palette of Object.keys(palettes)) for (const mode of ["dark","light"]) {
@@ -220,9 +221,49 @@ test("wrapped card identities keep their value edge, named counts and distinct o
                 && contrast(measured.failure,measured.failPaper)>=4.5, JSON.stringify(measured));
             const clipped = await partial.locator(".card-excerpt").evaluate(n => n.clientHeight < n.scrollHeight && n.clientHeight <= parseFloat(getComputedStyle(n).lineHeight)*4+1);
             assert.ok(clipped, "An incomplete URL and quotation cannot grow past the home preview.");
+            const slots = await page.locator("#activityList .card-orientation:has(.card-outcome)").evaluateAll(nodes => nodes.map(n => {
+                const r=n.getBoundingClientRect(), status=n.querySelector(".card-outcome"), face=status.firstElementChild, b=face.getBoundingClientRect();
+                return {x:b.x-r.x, y:b.y-r.y, ink:getComputedStyle(face).color, paper:getComputedStyle(face).backgroundColor, key:status.className};
+            }));
+            const success = slots.find(s=>s.key.includes("result-tone-success")), failed = slots.find(s=>s.key.includes("result-tone-failure"));
+            assert.ok(Math.abs(success.x-failed.x)<1 && Math.abs(success.y-failed.y)<1, `${palette}/${mode}: stable outcome slot at ${width}`);
+            assert.ok(contrast(success.ink,success.paper)>=4.5 && contrast(failed.ink,failed.paper)>=4.5);
         }
     }
     assert.ok(wrapped, "Exercise an actual wrapped value group, not just a wide row.");
+});
+
+test("the activity panel cue retains its painted size on hover and restores focus on toggle and Back", {timeout:60000}, async t => {
+    const {page} = await setup(t,"react",compactCardRecords());
+    const row=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    const panel=row.locator(".card-panel-link"), issue=row.locator(".returned-issue-ink");
+    const settle=()=>page.waitForFunction(()=>document.getAnimations().every(a=>a.playState!=="running" || a.effect?.getTiming().iterations===Infinity));
+    await panel.scrollIntoViewIfNeeded(); await settle(); await expect(panel).toHaveAccessibleName("Open activity panel: 4 tool calls");
+    const initial=await panel.boundingBox(); await panel.hover(); await page.mouse.down();
+    assert.deepEqual(await panel.boundingBox(),initial);
+    await page.mouse.up(); await expect(panel).toHaveAttribute("aria-expanded","true"); await settle();
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    const calls=page.locator('[data-reader-section="activity"] .reader-call-row');
+    for (const [ordinal,key] of [[0,"success"],[1,"failure"],[2,"partial"],[3,"unknown"]]) {
+        const toggle=calls.nth(ordinal).locator(".reader-call-toggle");
+        await expect(toggle.locator(".reader-call-identity-line + .reader-call-summary")).toHaveCount(1);
+        await expect(toggle.locator(`.recorded-result[data-outcome="${key}"]`)).toHaveCount(1);
+    }
+    await expect(panel).toHaveAccessibleName("Close activity panel: 4 tool calls");
+    await panel.focus(); await page.keyboard.press("Enter"); await expect(panel).toHaveAttribute("aria-expanded","false");
+    await expect(panel).toBeFocused(); await settle();
+    await issue.focus(); await page.keyboard.press("Enter"); await expect(page.locator(".api-result-entry:focus")).toContainText("403");
+    await page.goBack(); await expect(issue).toBeFocused();
+    const cdp=await page.context().newCDPSession(page);
+    try {
+        await cdp.send("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
+        await page.setViewportSize({width:390,height:844}); await panel.scrollIntoViewIfNeeded(); await settle();
+        const box=await panel.boundingBox();
+        await cdp.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+        await cdp.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        await page.locator("#closeContextSidebar").click(); await expect(panel).toBeFocused();
+    } finally {await cdp.detach();}
 });
 
 test("partial outcome opens the exact retained call and explains its limited provenance", async t => {
