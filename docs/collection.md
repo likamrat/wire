@@ -503,6 +503,28 @@ approved day, only records inside the original window can be proposed. If
 any proposed record leaves the rolling window before saving, the whole
 selection is refused rather than silently shortened.
 
+**Verified records only (isolated qualification; not enabled in normal startup).**
+This is a separate choice for one chat and one day, not a fallback from a
+failed full-day preview. It lists up to 32 missing calls whose original
+identities, explicit message and tool links, and recorded completions can be
+checked independently. A completion with no reported outcome stays **unknown**.
+No completion is inferred from a neighboring event. An unidentified region
+that could hide another matching identity prevents the preview, even if it is
+outside the proposed calls.
+
+Confirmation rereads the same bounded originals, using the same two-minute
+deadline and explicit reading steps. A changed mapping, file, checkpoint,
+approval, selection or review basis refuses the operation. The writer preserves
+other records, consent, checkpoints and saved reports. Its original receipt
+identifies each added call and always says **verified records only; day
+incomplete**. Proposed and added are calls, excluded counts observed candidates
+not admitted, and unknown counts proposed calls without a recorded outcome.
+None estimates the number of missing calls in the day. Byte-span witnesses
+are not stored. If WIRE refused the original confirmation before writing,
+the panel says nothing was saved and gives the reason. A lost response or a
+response for a different operation is not that proof: check the original
+receipt instead of confirming again.
+
 Restored prompts need exact source-qualified selected prompt/call associations.
 Host envelopes cannot promote an agent kickoff to User. Anonymous local records
 and owned HTTP diagnostics cannot be recovered through this source reread.
