@@ -76,6 +76,18 @@ function otherLifecycle(family) {
         line("surface-close", "session.canvas.removed", data, 0, "surface-open")];
 }
 
+test("a disjoint lifecycle pair needs unambiguous original fields throughout a direct-call journal", async () => {
+    for (const kind of ["external", "canvas"]) {
+        const [open, close] = otherLifecycle(kind);
+        const claimedId = kind === "external" ? open.data.requestId : open.data.instanceId;
+        const parsed = line("outside", "assistant.message", { apiCallId: "unrelated" }, 86400001);
+        const ambiguous = JSON.stringify(parsed).replace('"apiCallId":', `"apiCallId":"${claimedId}","apiCallId":`);
+        const direct = [open, close, p, a, s, e];
+        assert.equal((await scan([...direct, parsed])).records.length, 1);
+        for (const events of [[ambiguous, ...direct], [...direct, ambiguous]]) await assert.rejects(scan(events), unverified);
+    }
+});
+
 test("paired unrelated external requests and canvas records cannot become tool outcomes or user origins", async () => {
     const baseline = (await scan([p, a, s, e])).records;
     for (const kind of ["external", "canvas"]) {

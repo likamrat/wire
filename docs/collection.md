@@ -539,7 +539,9 @@ the receipt's incomplete-day coverage.
 An unrelated external-tool request or canvas record can be classified when
 its matching close is the next original event. The supported forms carry no
 tool arguments or canvas input; an empty arguments object is also allowed.
-Their IDs must be disjoint from the reviewed activity. Neither an external
+Their IDs must be disjoint across the whole journal, including original
+fields that JSON parsing could hide. Even separate canvas lifecycles reusing
+an extension or canvas ID are currently refused. Neither an external
 completion nor a canvas close can supply a missing call outcome.
 
 A compact, text-free post-tool hook may close directly after its matching
