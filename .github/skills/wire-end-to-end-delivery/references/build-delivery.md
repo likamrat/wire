@@ -28,9 +28,11 @@ Run focused checks for the actual composition and its compatibility seams.
 Feature corrections return to their owners. Independent work continues while
 the batch is building, failing or waiting for a real prerequisite.
 
-Verify the normal application entry and affected composed journeys, including
-loaded client version and relevant settings. Server source and a stale browser
-tab can disagree. Isolated previews are review surfaces, not live replacement.
+Open the requested browser or canvas entry and try the action the user needs.
+Record the server build, loaded client and renderer, access binding, and whether
+the store is a disposable fixture or the authorized delivery store. A tab may
+still have the previous client loaded. A test that supplies its own client cannot
+qualify the registered canvas adapter. Report fixture results as such.
 
 ## Replace only under actual authority
 

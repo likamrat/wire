@@ -1,6 +1,6 @@
 ---
 name: wire-end-to-end-delivery
-description: Deliver working WIRE capabilities through existing product paths with proportionate proof. Use for feature implementation, collector or source fixes, Search or report changes, retained-data recovery, and composing or shipping a qualified build. Distinguish source readiness from real integration and the running experience.
+description: Diagnose a reported WIRE bug, fix a regression, implement a feature, or qualify a combined build. Follow the normal product entry and distinguish a source fix from a working delivery.
 license: MIT
 ---
 
@@ -59,9 +59,12 @@ for, and any missing producer contract is explicit.
 
 ## 3. Implement and prove the requested behavior
 
-Keep diagnosis, implementation, related documentation, focused validation and
-corrections with the same owner. Routine failures start diagnosis inside the
-brief, not a micro-approval round. Escalate only a genuine boundary or blocker.
+For a bug, use the entry where the failure was reported. Get a check that fails
+on that symptom before the fix and passes on the candidate. For missing or
+incorrect data, follow one invented record from source to store to screen to
+find the first disagreement, including the projection the screen reads. If you
+cannot observe a step, say which one. A fixture can reproduce a defect without
+establishing why an earlier request failed.
 
 Reuse existing modules, tests and tooling. Start with the smallest command that
 covers the changed behavior and its coupled regressions. Expand only for a
@@ -75,9 +78,8 @@ private-data reads, authentication, disclosure and destructive operations retain
 their actual permission gates; this skill supplies none. Prove ordinary product
 entry when that is the acceptance criterion, rather than seeding backend state.
 
-Record baseline failures separately and verify they reproduce before calling
-them inherited. Reuse evidence only when input, candidate and route still match.
-Do not add a new diagnostic framework or broad testing campaign by default.
+Call a failure inherited only after reproducing it on the baseline with the same
+input and route. Keep diagnosis and routine corrections with the feature owner.
 
 **Ready:** the exact candidate satisfies the relevant behavior, error and
 preservation criteria; unrun real-data or UI criteria remain visibly pending.

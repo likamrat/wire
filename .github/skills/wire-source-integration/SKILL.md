@@ -74,6 +74,12 @@ namespaces.
 
 ## Prove the actual requirement
 
+For a bounded reader, put an eligible record beyond the first read budget.
+Follow it through continuation, or show where coverage stops. A completed
+request with unread history cannot establish an empty selection. Cancel or
+withdraw access between reads and check that the stopped operation can neither
+read the next part nor commit.
+
 Use disposable fixtures to prove decoder, lifecycle and integration mechanics.
 Where genuine acquisition is required, qualify the normal source path under
 actual permission and read back its committed results. Fixture success,

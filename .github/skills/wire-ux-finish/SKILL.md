@@ -52,9 +52,8 @@ surfaces actually affected. Keep unrelated redesign opportunities out of scope.
   recovery actions keep their effects and boundaries even when prose is reduced.
 - Preserve screen/report style isolation and the current shared Search behavior.
 
-Use existing WIRE components and browser automation for observation. This
-workflow needs no personal design skill, new design system, reference hunt
-or component framework.
+Use existing WIRE components and observe them in the browser. Personal design
+tools are optional unless the user requests one for this task.
 
 **Ready:** the candidate fixes the shared cause while preserving meaning, exact
 content, accessibility and existing product behavior.
@@ -83,8 +82,10 @@ obviously confusing layout. Fix observed defects with the existing owner and
 retest that scenario; do not commission another review team or broad campaign.
 Respect permission gates for private data, clipboard effects and live operations.
 
-**Ready:** the relevant user action works and the resulting information is
-readable without new clutter, layout shifts or broken return behavior.
+**Ready:** say what someone can learn on first opening the view, before choosing
+controls. Follow one visible summary or chart value to its exact authorized
+evidence and back when that is part of the task. Changing what is visible must
+remain distinguishable from changing the measured population.
 
 ## 4. Finish honestly
 

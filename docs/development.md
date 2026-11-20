@@ -193,9 +193,11 @@ Trends, Reports, Compare and Settings still use their existing feature
 controllers. Omitting the flag retains the bundled established renderer; this
 development selection is not authorization to replace a live runtime.
 
-For an isolated synthetic check without starting a normal store:
+For an isolated synthetic check without starting a normal store, install the
+Chromium build for this checkout's Playwright version if it is missing:
 
 ```text
+npx playwright install chromium
 npm run test:frontend
 ```
 
@@ -207,7 +209,8 @@ and stable connected DOM/listener counts. Raw heap/DOM-counter samples are also
 recorded; browser-native input edit history is not application-owned DOM leakage.
 `WIRE_FRONTEND_PROOFS` can name a private output directory for screenshots and
 delivery measurements. `WIRE_FRONTEND_BROWSER=msedge` selects an already installed
-Edge for that fixture; it does not download a browser. Measurements are samples,
+Edge for the evaluation fixture only; the bundle test still uses Playwright's
+Chromium. Neither test downloads a browser. Measurements are samples,
 not proof that adding React is faster. Numerical acceptance budgets remain
 separate from the existing behavioral checks.
 

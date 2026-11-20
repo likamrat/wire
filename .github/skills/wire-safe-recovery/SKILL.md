@@ -57,7 +57,8 @@ cases with focused existing tests. A safer error label alone does not close
 broken collection; a missing retained cause does not justify unapproved rereads.
 Give the actual result or one precise blocked action and next actor.
 
-Use [source integration](../wire-source-integration/SKILL.md) when collection's
-source contract is affected and [report integrity](../wire-report-integrity/SKILL.md)
+For partial scans and continuation, use the
+[bounded-reader check](../wire-source-integration/SKILL.md#prove-the-actual-requirement).
+Use [report integrity](../wire-report-integrity/SKILL.md)
 for report-save/frozen-artifact boundaries. Keep the recovery outcome with its
 existing owner and avoid another diagnostic framework.

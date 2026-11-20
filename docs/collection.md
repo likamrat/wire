@@ -18,7 +18,7 @@ provider. Microsoft 365 Chat and Cowork are not supported sources.
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
-| Read history again | Separately previews and confirms rereading selected approved chats/dates, including an independent original-prompt restoration choice. |
+| Read history again | Preview missing, nondeleted activity in selected approved chats and dates. Confirm separately to save it. |
 | Sign out of this instance | Stops collection and hides private retained content across this instance's tabs, without deleting it or signing out of GitHub, Copilot or other independent WIRE instances. |
 
 View dates, Search, opening an interaction, report selection and report
@@ -452,8 +452,7 @@ operation does not use manual Refresh's Pause exception. A panel can preview
 its selected scope without writing evidence; only a separate confirmation of
 that still-current preview can publish it. It cannot restore suppressed calls
 or deleted prompts. Reading an existing receipt does not require another
-source read. Older compatibility-mode previews can explicitly include deleted
-records; that is not authority for the normal runtime.
+source read.
 
 **Also review source-verified corrections to saved calls** is off by default.
 The preview names each proposed change (up to 32). An unknown can become a
@@ -472,10 +471,9 @@ postimage, the separately reviewed maintenance path is required.
 2. Read the preview's deleted, newly available, already-present and unavailable
    counts. Bounds are 128 chats, 32 MiB per read, the last 64 MiB per file
    and 20,000 candidate records.
-3. Choose separately whether to **Also restore original prompts for these
-   requests**. It starts unchecked; without it, deleted prompt text stays unavailable.
-4. Confirm. If the result is uncertain, use **Check recollection result**,
-   including after reload/restart, rather than confirming again.
+3. Confirm only the changes you reviewed. If the result is uncertain, use
+   **Check recollection result**, including after reload/restart, rather than
+   confirming again.
 
 An edit in a different Copilot chat does not invalidate your preview by
 itself. WIRE rechecks the physical source database and the selected chats,
@@ -529,8 +527,11 @@ the panel says nothing was saved and gives the reason. A lost response or a
 response for a different operation is not that proof: check the original
 receipt instead of confirming again.
 
-Restored prompts need exact source-qualified selected prompt/call associations.
-Host envelopes cannot promote an agent kickoff to User. Anonymous local records
+Older compatibility-mode previews can include deleted records. Only those
+previews offer **Also restore original prompts for these requests**; it starts
+unchecked and requires an exact association between the selected call and
+its source prompt. Neither normal recovery mode offers that choice. Host
+envelopes cannot promote an agent kickoff to User. Anonymous local records
 and owned HTTP diagnostics cannot be recovered through this source reread.
 
 Confirmation rechecks source stamps, mapping, approval, revision, expiry and

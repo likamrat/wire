@@ -50,6 +50,12 @@ Children need standalone context, including original feedback and attachments
 when relevant and authorized. Transfer the underlying principle across affected
 surfaces, not just a screenshot treatment or a command to load a skill.
 
+Read the send receipt. Rejection leaves the assignment undispatched; a stale
+user relay needs fresh, relevant user input through the supported route.
+Admission confirms delivery was accepted, not that work started. If delivery
+is uncertain, check the recipient's state; retry only if non-delivery is
+established and the original authority still applies.
+
 Use [end-to-end delivery](../wire-end-to-end-delivery/SKILL.md) for implementation
 and delivery; use [UX finish](../wire-ux-finish/SKILL.md) for affected interface
 acceptance. Load only their relevant branches. A single-owner fix does not
@@ -73,8 +79,9 @@ batch builds.
 Serialize only real conflicts: overlapping integration hunks, the same live
 writer/process, same-runtime checks versus restart, source/profile custody,
 or a concrete producer prerequisite. A build failure or unrelated unfinished
-feature is not a global hold. Record each hold's release condition and next actor;
-release it when satisfied.
+feature is not a global hold. Record each hold's release condition and next actor.
+On a qualified handoff, release satisfied holds and name the integration owner's
+next action or the correction that returns to the feature owner.
 
 **Ready:** each ready outcome is moving, and every blocked outcome has a concrete
 dependency rather than a general "waiting for the build."
