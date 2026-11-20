@@ -66,6 +66,8 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         if (preservation) db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(otherId, "Invented earlier chat", "general_chat", null, "local");
     });
     const boot = event("boot", "session.start", at(day, 0), { sessionId: sourceId, version: 1 });
+    if (causalHooks) Object.assign(boot, { parentId: null, data: { ...boot.data, startTime: boot.timestamp, producer: "invented-client",
+        copilotVersion: "1.2.3", context: { cwd: "/invented/work" }, githubMcpToolConfig: { enableAllTools: false } } });
     const hook = event("other-hook", "hook.start", at(day, 1), { hookType: "postToolUse", hookInvocationId: "other-invocation",
         input: { sessionId: sourceId, toolCallId: "other-call", toolName: "other-tool", toolArgs: {},
             toolResult: { content: "x".repeat(TAIL_LIMITS.maxLineBytes + 100) } } }, "boot");

@@ -66,6 +66,28 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("a verified SDK startup header is source context, never a recovered identity or authorization", async () => {
+    const header = { ...boot, parentId: null, data: { ...boot.data, startTime: since, producer: "invented-client", copilotVersion: "1.2.3",
+        selectedModel: "invented-model", reasoningEffort: "high", remoteSteerable: true, alreadyInUse: false, contextTier: "default",
+        context: { cwd: "/invented/directory", branch: "example" }, githubMcpToolConfig: { enableAllTools: true, additionalToolsets: ["invented-set"] } } };
+    const read = async h => decide(await parts(encode([h, p, a, s, e])));
+    const baseline = await scan([p, a, s, e]), accepted = await read(header);
+    assert.deepEqual(accepted.records, baseline.records); assert.notEqual(accepted.witness, baseline.witness);
+    assert.doesNotMatch(JSON.stringify(accepted), /invented-model|invented-client|invented-set|invented\/directory/);
+    for (const bad of [change(header, { version: 2 }), change(header, { sessionId: "other-chat" })]) {
+        await assert.rejects(read(bad), { code: "HISTORY_IDENTITY_UNSUPPORTED" });
+    }
+    for (const bad of [{ ...header, parentId: p.id }, { ...header, checkpoint: true }, change(header, { detachedFromSpawningParentSessionId: "other" }),
+        change(header, { context: { cwd: "/invented", originatingMessageId: "other" } }),
+        change(header, { context: { cwd: "/invented", pendingGitContext: "false" } }),
+        change(header, { githubMcpToolConfig: { additionalTools: [{ toolCallId: s.data.toolCallId }] } }),
+        change(header, { githubMcpToolConfig: { additionalTools: [s.data.toolCallId] } }),
+        change(header, { context: { cwd: "/invented", branch: "api_key=invented-value" } }),
+        JSON.stringify(header).replace('"parentId":null', `"parentId":"${a.id}","parentId":null`)]) {
+        await assert.rejects(read(bad), unverified);
+    }
+});
+
 test("six causal originals link an app-mapped start only to its independently recorded completion", async () => {
     for (const [success, outcome] of [[true, "succeeded"], [false, "failed"], [undefined, "unknown"]]) {
         const rows = withCausalHooks([p, a, s, change(e, { success })], sessionId);

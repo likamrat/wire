@@ -514,6 +514,11 @@ No completion is inferred from a neighboring event. An unidentified region
 that could hide another matching identity prevents the preview, even if it is
 outside the proposed calls.
 
+A supported SDK startup header can contain typed workspace, model and tool
+settings. WIRE still requires the source's mapped session identity and
+supported version. The header grants no access and its values are not copied
+into the recovered call or its receipt.
+
 A separate assistant turn or a text-free Copilot mode or permission notice
 need not rule out an otherwise verified call. WIRE checks the notice's
 declared fields and identifiers against the whole source and its checkpoint.
