@@ -17,6 +17,7 @@ export function describeRecollection(phase, { preview, result, busy = false, err
             : phase === "blocked" ? "Recollection recovery unavailable"
             : phase === "uncertain" ? busy ? "Checking recollection result..." : "Result not yet confirmed"
             : phase === "pending" ? records === null ? "Reading confirmed history..." : `Reading ${records.toLocaleString()} record${records === 1 ? "" : "s"} again...`
+            : phase === "reading" ? "More history to preview" : phase === "verifying" ? "Finish checking the confirmed selection"
             : phase === "preview" ? records === null ? "Preview record count unavailable" : records === 0 ? "No records available in this scope"
                 : records === 1 ? "Read this record again?" : `Read these ${records.toLocaleString()} records again?`
             : "Choose history to read again",
@@ -56,7 +57,7 @@ export const recollectionMarkup = `
   </div>
   <p id="recollectStatus" class="decision-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
   </div>
-  <div class="delete-actions"><button id="recollectClose" type="button">Cancel</button><button id="recollectPreview" type="submit" form="recollectForm" data-decision-action="check" aria-describedby="recollectSelected recollectSourceHelp" disabled>Preview available evidence</button><button id="recollectCheck" type="button" data-decision-action="check" hidden>Check recollection result</button><button id="recollectConfirm" type="button" data-decision-action="commit" hidden>Read selected history again</button></div>
+  <div class="delete-actions"><button id="recollectClose" type="button">Cancel</button><button id="recollectPreview" type="submit" form="recollectForm" data-decision-action="check" aria-describedby="recollectSelected recollectSourceHelp" disabled>Preview available evidence</button><button id="recollectContinue" type="button" hidden>Read next part</button><button id="recollectCheck" type="button" data-decision-action="check" hidden>Check recollection result</button><button id="recollectConfirm" type="button" data-decision-action="commit" hidden>Read selected history again</button></div>
 </dialog>`;
 
 export const recollectionStyles = `
@@ -90,7 +91,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     }
     const $ = id => document.getElementById(id), dialog = $("recollectDialog");
     const storageKey = "workiq-evidence.recollection-operation";
-    let phase = "editing", token = 0, preview, expiryTimer, receipt, trigger, busy = false, sourcesReady = false;
+    let phase = "editing", token = 0, preview, part, expiryTimer, receipt, trigger, busy = false, sourcesReady = false;
     let result, statusError = false, viewNeedsRead = false, mounted = false;
     let sources = [], sourceMatches = [], selectedOnly = false;
     let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
@@ -178,8 +179,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         ux.setOwnedText($("recollectTitle"), view.title);
         dialog.dataset.decisionPhase = view.decisionPhase;
         dialog.dataset.operationId = receipt?.operationId || preview?.operationId || "";
-        $("recollectForm").inert = busy || locked();
-        $("recollectForm").hidden = ["preview", "complete", "not-started"].includes(phase) || locked();
+        const continuing = phase === "reading" || phase === "verifying";
+        $("recollectForm").inert = busy || locked() || continuing;
+        $("recollectForm").hidden = ["preview", "complete", "not-started"].includes(phase) || locked() || continuing;
         $("recollectBoundary").hidden = phase !== "editing";
         $("recollectScopeUnavailable").hidden = view.scopeAvailable || !["pending", "uncertain", "complete"].includes(phase);
         $("recollectConfirmation").hidden = !view.scopeAvailable || phase === "editing";
@@ -190,6 +192,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             || !$("recollectFrom").value || !$("recollectTo").value || locked() || Boolean(reason);
         $("recollectConfirm").hidden = phase !== "preview" && phase !== "pending";
         $("recollectConfirm").disabled = !view.canConfirm || Boolean(reason);
+        $("recollectContinue").hidden = !continuing;
+        $("recollectContinue").disabled = !continuing || busy || Boolean(reason);
+        $("recollectContinue").textContent = phase === "verifying" ? "Continue verification and save if complete" : "Read next part";
         ux.setOwnedText($("recollectConfirm"), view.confirmLabel);
         $("recollectChange").hidden = phase !== "preview";
         $("recollectChange").disabled = busy || locked();
@@ -211,8 +216,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     function cancelPreview() {
         clearTimeout(expiryTimer);
         const access = publication();
-        if (!current(access) || !preview) return;
-        const operationId = preview.operationId;
+        if (!current(access) || !preview && !part) return;
+        const operationId = part?.operationId ?? preview.operationId;
+        part = undefined;
         preview = undefined;
         api("/api/recollection/cancel", { operationId }).catch(error => {
             if (!current(access)) return;
@@ -228,11 +234,14 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         update();
     }
     function expirePreview() {
-        if (phase !== "preview" || !preview || !current(publication()) || Date.parse(preview.expiresAt) > Date.now()) return false;
-        preview = undefined;
-        phase = "editing";
+        const expiring = part ?? preview;
+        if (!["preview", "reading", "verifying"].includes(phase) || !expiring || !current(publication()) || Date.parse(expiring.expiresAt) > Date.now()) return false;
+        const verification = phase === "verifying";
+        preview = part = undefined;
+        phase = verification ? "uncertain" : "editing";
         erasePreviewValues();
-        status("The preview expired. Nothing was saved. Preview again.", true);
+        status(verification ? "Verification expired. Check the original receipt; do not repeat confirmation."
+            : "The preview expired. Nothing was saved. Preview again.", true);
         update();
         return true;
     }
@@ -298,29 +307,54 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             status("No committed recollection was found. Nothing was replayed. Close this panel and choose history again if you still want to reread.");
         } else {
             phase = "uncertain";
-            status("The result is not yet confirmed. Check this operation's receipt; do not repeat recollection.", true);
+            status(next.phase === "verification-incomplete"
+                ? "No records saved yet. The original panel is waiting for another verification step. Check this receipt after completion or expiry."
+                : "The result is not yet confirmed. Check this operation's receipt; do not repeat recollection.", true);
         }
         update();
     }
-    $("recollectForm").addEventListener("submit", async event => {
-        event.preventDefault();
+    function showPart(value, expected, original) {
+        if (value.phase !== expected || !/^[a-f0-9-]{36}$/.test(value.operationId) || !/^[a-f0-9-]{36}$/.test(value.continuation)
+            || !Number.isFinite(Date.parse(value.expiresAt)) || original && (value.operationId !== original.operationId || value.expiresAt !== original.expiresAt)
+            || !Number.isSafeInteger(value.progress?.remainingBytes) || value.progress.remainingBytes < 1
+            || !Number.isSafeInteger(value.progress.bytesRead) || value.progress.bytesRead < 1 || value.progress.bytesRead > 32 * 1024 ** 2
+            || !Number.isSafeInteger(value.progress.totalBytesRead) || value.progress.totalBytesRead < value.progress.bytesRead
+            || value.progress.totalBytesRead > 96 * 1024 ** 2) {
+            throw new Error("The runtime did not return a valid bounded reading step.");
+        }
+        part = value; phase = expected;
+        clearTimeout(expiryTimer);
+        if (expirePreview()) return;
+        expiryTimer = setTimeout(expirePreview, Date.parse(value.expiresAt) - Date.now());
+        status(`${value.progress.remainingBytes.toLocaleString()} bytes remain in this chat. Nothing has been saved. `
+            + (expected === "reading" ? "Read the next part before reviewing any changes." : "Continue to finish verifying the selection you confirmed."));
+    }
+    async function readPreview(continuation) {
         const access = publication();
         if (busy || locked() || !allowed("preview")) return;
         if (!selectedSources.size) { status("Choose at least one chat.", true); $("recollectSearch").focus(); return; }
-        edit();
+        if (continuation ? expirePreview() || phase !== "reading" : phase !== "editing") return;
+        if (!continuation) edit();
         const version = token;
         busy = true; update();
         status("Reading available source events for this preview. Nothing is being recollected.");
         try {
-            const result = await api("/api/recollection/preview", scope());
-            if (!current(access) || version !== token || !dialog.open) return;
+            const result = await api("/api/recollection/preview", continuation
+                ? { operationId: continuation.operationId, continuation: continuation.continuation } : scope());
+            if (!current(access)) return;
+            if (version !== token || !dialog.open) {
+                if (typeof result?.operationId === "string") await api("/api/recollection/cancel", { operationId: result.operationId });
+                return;
+            }
+            if (result.phase === "reading") { showPart(result, "reading", continuation); return; }
             if (!validReceipt(result) || !Number.isFinite(Date.parse(result.expiresAt))
+                || continuation && (result.operationId !== continuation.operationId || result.expiresAt !== continuation.expiresAt)
                 || !result.scope?.timeContext || !Array.isArray(result.availability)
                 || !["from", "to", "since", "until"].every(key => Number.isFinite(Date.parse(result.scope?.[key])))
                 || !Number.isFinite(Date.parse(result.scope?.bounds?.from)) || !Number.isFinite(Date.parse(result.scope?.bounds?.to))) {
                 throw new Error("The runtime did not return a complete reviewed scope and receipt. Nothing can be confirmed.");
             }
-            erasePreviewValues();
+            part = undefined; clearTimeout(expiryTimer); erasePreviewValues();
             const c = result.counts;
             const view = describe("preview", { preview: result });
             const kinds = [[c?.reauthorized, "previously deleted"], [c?.newRecords, "newly available"], [c?.promptOnly, "existing with prompt restoration"],
@@ -347,7 +381,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                 || Date.parse(result.scope.until) < Date.parse(result.scope.bounds.to) - 1;
             $("recollectClipped").hidden = !clipped;
             $("recollectClipped").textContent = clipped ? `Only approved history from ${time.formatMoment(result.scope.since, context)} to ${time.formatMoment(result.scope.until, context)} is included.` : "";
-            $("recollectBounds").textContent = `Exact approved bounds: ${time.formatTime(result.scope.since, context)} through ${time.formatTime(result.scope.until, context)}. Reads are limited to 32 MiB across this selection and the last 64 MiB of each file.`;
+            $("recollectBounds").textContent = `Exact approved bounds: ${time.formatTime(result.scope.since, context)} through ${time.formatTime(result.scope.until, context)}. `
+                + (result.continued ? "Each step reads at most 32 MiB. Confirming this review also requires stepped verification of the same chat."
+                    : "Reads are limited to 32 MiB across this selection and the last 64 MiB of each file.");
             $("recollectPromptSummary").textContent = result.scope.restorePrompts
                 ? Number.isSafeInteger(c?.restoredPrompts) && c.restoredPrompts >= 0
                     ? `${c.restoredPrompts.toLocaleString()} original prompt${c.restoredPrompts === 1 ? "" : "s"} selected for restoration.`
@@ -375,19 +411,33 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                 : view.records ? (partial ? "Some history is unavailable or incomplete. Only the records shown will be recollected. See source details."
                     : "") : "No eligible records are available in this scope. Nothing can be recollected.", view.records === null);
             dialog.querySelector(".decision-body").scrollTop = 0; $("recollectClose").focus();
-        } catch (error) { if (current(access) && version === token) status(`Preview failed. Nothing changed. ${error.message}`, true); }
+        } catch (error) {
+            if (current(access) && version === token) {
+                if (continuation) { busy = false; edit(); }
+                status(`Preview failed. Nothing changed. ${error.message}`, true);
+            }
+        }
         finally { if (current(access) && version === token) { busy = false; update(); } }
+    }
+    $("recollectForm").addEventListener("submit", event => {
+        event.preventDefault(); void readPreview();
     });
-    $("recollectConfirm").addEventListener("click", async () => {
+    async function confirmPreview(continuation) {
         const access = publication();
-        if (expirePreview() || !describe(phase, { preview, busy }).canConfirm || !allowed("confirm")) return;
-        receipt = { operationId: preview.operationId, receiptToken: preview.receiptToken };
+        if (busy || expirePreview() || !allowed("confirm") || (continuation ? phase !== "verifying" : !describe(phase, { preview, busy }).canConfirm)) return;
+        if (!continuation) receipt = { operationId: preview.operationId, receiptToken: preview.receiptToken };
         try { sessionStorage.setItem(storageKey, JSON.stringify(receipt)); }
         catch { status("This browser cannot save the recovery receipt. Nothing recollected. Allow session storage before confirming.", true); return; }
         clearTimeout(expiryTimer);
-        phase = "pending"; update(); status("Re-reading and committing only the confirmed source records. Keep this panel open.");
+        part = undefined; phase = "pending"; update(); status("Re-reading and committing only the confirmed source records. Keep this panel open.");
         $("recollectStatus").focus();
-        try { await showResult(await api("/api/recollection/confirm", { operationId: receipt.operationId, confirmed: true }), access); }
+        try {
+            const next = await api("/api/recollection/confirm", continuation
+                ? { operationId: receipt.operationId, continuation: continuation.continuation } : { operationId: receipt.operationId, confirmed: true });
+            if (!current(access)) return;
+            if (next.phase === "verifying") showPart(next, "verifying", preview);
+            else await showResult(next, access);
+        }
         catch (error) {
             if (!current(access)) return;
             if (error.recollection?.outcome === "not-saved" && error.recollection.operationId === receipt?.operationId
@@ -407,6 +457,11 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             phase = "uncertain";
             status(`${error.message} Use Check recollection result. No mutation will be replayed.`, true);
         } finally { if (current(access)) update(); }
+    }
+    $("recollectConfirm").addEventListener("click", () => { void confirmPreview(); });
+    $("recollectContinue").addEventListener("click", () => {
+        if (part && phase === "reading") void readPreview(part);
+        else if (part && phase === "verifying") void confirmPreview(part);
     });
     $("recollectCheck").addEventListener("click", async () => {
         const access = publication();
@@ -436,8 +491,12 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         token++;
         if (!locked()) busy = false;
         if (!locked()) {
+            if (phase === "verifying") {
+                cancelPreview(); phase = "uncertain";
+                status("Verification stopped. Check the original receipt before starting another review.", true);
+            }
             erasePreviewValues();
-            if (!["complete", "not-started"].includes(phase)) { cancelPreview(); phase = "editing"; }
+            if (!["complete", "not-started", "uncertain"].includes(phase)) { cancelPreview(); phase = "editing"; }
         }
         if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger.disabled ? trigger.closest(".ux-disabled-help") || trigger : trigger);
         notify();
@@ -489,7 +548,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (phase === "pending") phase = "uncertain";
         if (!["uncertain", "blocked", "complete", "not-started"].includes(phase)) phase = "editing";
         sources.length = 0; sourceMatches.length = 0; selectedSources.clear(); selectedOnly = false;
-        preview = undefined; result = undefined; trigger = null; busy = false; sourcesReady = false; viewNeedsRead = false;
+        preview = part = undefined; result = undefined; trigger = null; busy = false; sourcesReady = false; viewNeedsRead = false;
         eraseSourceRows($("recollectSources"));
         erasePreviewValues();
         for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectStatus", "recollectConfirm"]) {

@@ -470,8 +470,8 @@ postimage, the separately reviewed maintenance path is required.
    chats. Selection survives paging. Inclusive dates intersect the approved
    window; they do not grant wider history or a new source.
 2. Read the preview's deleted, newly available, already-present and unavailable
-   counts. Bounds are 128 chats, 32 MiB per preview/confirmation, the last
-   64 MiB per file and 20,000 candidate records.
+   counts. Bounds are 128 chats, 32 MiB per read, the last 64 MiB per file
+   and 20,000 candidate records.
 3. Choose separately whether to **Also restore original prompts for these
    requests**. It starts unchecked; without it, deleted prompt text stays unavailable.
 4. Confirm. If the result is uncertain, use **Check recollection result**,
@@ -483,6 +483,25 @@ their histories and the proposed changes before saving. A changed selection
 or expired preview requires a fresh review. The panel distinguishes a known
 refusal before saving from a lost response: only the latter needs a receipt
 check. Neither is automatically retried.
+
+For **one chat, one day, missing records only**, a large log can take more
+than one read. **Read next part** continues from the verified byte boundary;
+it does not start another scan or show partial counts as the final selection.
+After confirmation, **Continue verification and save if complete** checks the
+same original selection before any write. Each phase allows at most three
+32 MiB reads (including repeated partial lines and source checks). The file
+must fit the 64 MiB source window. A continued read with an unfinished,
+malformed or oversized entry, or an unqualified prompt or credential-bearing
+entry excluded by retention, cannot certify that day and offers no save.
+
+Only one large-chat read is held in memory at once, with bounded screened
+event context and no raw partial-line buffer on disk. Cancellation, access
+withdrawal, restart or the original two-minute deadline retires it. Continued
+steps do not extend the deadline. The collector's normal source cursor and
+other stored receipts are not used to resume a review. On the oldest partly
+approved day, only records inside the original window can be proposed. If
+any proposed record leaves the rolling window before saving, the whole
+selection is refused rather than silently shortened.
 
 Restored prompts need exact source-qualified selected prompt/call associations.
 Host envelopes cannot promote an agent kickoff to User. Anonymous local records
