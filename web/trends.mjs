@@ -707,6 +707,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         for (const member of data.members.filter(row => ids.has(row.id))) {
             const row = el("div", "trends-evidence-row"), link = recordLink(member);
             if (!current()) { for (const attribute of [...link.attributes]) { attribute.value = ""; link.removeAttributeNode(attribute); } scrub(link); return; }
+            link.append(ux.icon("forward"));
             const open = event => {
                 if (!current() || data !== source || !dialog.open || !link.isConnected) { event.preventDefault(); event.stopImmediatePropagation(); return; }
                 if (event.type !== "click" || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -922,7 +923,7 @@ export const trendsStyles = `
 .trends-value-name{display:flex;align-items:center;gap:8px;min-width:0}.trends-value{text-align:right;font-variant-numeric:tabular-nums}
 .trends-paging{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0}
 .trends-exact{overflow:auto;max-height:65dvh;overscroll-behavior:contain;container-type:inline-size}
-.trends-exact:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.trends-exact:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 .trends-exact table{min-width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
 .trends-exact th,.trends-exact td{font-weight:400;text-align:right;padding:10px;border-bottom:1px solid var(--surface-divider);white-space:nowrap}
 .trends-exact th:first-child{text-align:left;position:sticky;left:0;background:var(--paper)}
@@ -930,11 +931,18 @@ export const trendsStyles = `
 .trends-dialog{width:min(560px,calc(100dvw - 32px));max-height:calc(100dvh - 48px);overflow:hidden;background:var(--floating-paper);color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius);padding:24px}
 .trends-dialog[open]{display:flex;flex-direction:column}
 .trends-dialog-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;flex:none;gap:12px;margin-bottom:20px}.trends-dialog-heading h2{font-size:1.25rem;margin:0;min-width:0;overflow-wrap:anywhere}
-.trends-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain}
+.trends-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain;container:trend-dialog / inline-size}
 .trends-dialog .trends-control{display:flex;flex-direction:column;align-items:stretch;margin:16px 0}
+.trends-dialog .trends-control .select-control{width:100%}
+.trends-dialog input[type=date]:enabled:hover{border-color:var(--ink)}
 .trends-dialog .trends-control select{width:100%;min-height:44px}.trends-dialog-actions{justify-content:flex-end;margin-top:20px}
 .trends-evidence-row{display:flex;flex-direction:column;gap:6px;padding:14px 0;border-bottom:1px solid var(--surface-divider)}
-.trends-evidence-row>a{display:grid;gap:4px;min-width:0;min-height:44px}
+.trends-evidence-row>a{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;min-width:0;min-height:44px;padding-inline:4px;overflow-wrap:anywhere}
+.trends-evidence-row>a:is(:hover,:active){background:transparent;text-decoration:none}
+.trends-evidence-row>a:focus-visible{outline-offset:-2px}
+.trends-evidence-row [data-icon-role=forward]{grid-column:2;grid-row:1 / span 3;align-self:start;width:1.55em;height:1.55em;padding:.22em;border-radius:4px}
+.trends-evidence-row>a:is(:hover,:focus-visible)>[data-icon-role=forward]{background:color-mix(in srgb,currentColor 12%,transparent)}
+.trends-evidence-row>a:active>[data-icon-role=forward]{background:color-mix(in srgb,currentColor 24%,transparent)}
 .trends-evidence-context{color:var(--ink);font:var(--weight-regular) var(--type-body)/1.5 var(--font);overflow-wrap:anywhere}
 .trends-evidence-time{color:var(--muted);font:var(--weight-regular) var(--type-small)/1.5 var(--font)}
 .trends-tooltip{position:fixed;z-index:var(--layer-tooltip);width:max-content;max-width:20.625rem;overflow:auto;background:var(--floating-paper);color:var(--ink);border:1px solid var(--surface-divider);border-radius:10px;box-shadow:var(--surface-shadow);padding:14px 16px;opacity:0;transition:opacity 110ms ease-out;font-variant-numeric:tabular-nums}
@@ -942,6 +950,15 @@ export const trendsStyles = `
 .trends-tip-series{display:flex;align-items:center;gap:6px}
 .trends-tip-caption{color:var(--muted);margin-top:4px}.trends-tip-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 20px;margin:10px 0 0}.trends-tip-facts dt{color:var(--muted);overflow-wrap:anywhere}.trends-tip-facts dd{margin:0;text-align:right}
 .trends-tip-table{border-collapse:collapse}.trends-tip-table th,.trends-tip-table td{font-weight:400;text-align:right;padding:5px 8px}.trends-tip-table th:first-child,.trends-tip-table td:first-child{text-align:left;padding-left:0}
+@container trend-dialog (max-width:21rem){
+ .trends-dialog .report-date-fields{grid-template-columns:minmax(0,1fr)}
+ .trends-dialog .report-date-fields .report-field{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
+ .trends-dialog .report-calendar{overflow-x:auto}
+ .trends-dialog .report-calendar-grid{grid-template-columns:repeat(7,minmax(max-content,1fr));column-gap:2px}
+}
+@container (max-width:22rem){
+ .trends-dialog .trends-exact :is(th,td):first-child{min-width:36cqi;width:36cqi;max-width:36cqi;white-space:normal}
+}
 @container trend-card (max-width:52rem){
  .trends-chart-body{grid-template-columns:minmax(0,1fr);gap:12px}
  .trends-plot{grid-row:1}
@@ -961,16 +978,15 @@ export const trendsStyles = `
  .trends-panel[data-collapsed=true] .trends-title-group h2{min-height:calc(2 * var(--type-section) * var(--leading-section))}
 }
 @media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}.trends-toolbar{gap:4px}}
+@media(max-width:440px){.trends-dialog{width:calc(100dvw - 24px);max-width:calc(100dvw - 24px);padding:16px}.trends-dialog-heading{margin-bottom:12px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}
 @media(prefers-reduced-motion:reduce){.trends-tooltip{transition:none}}
 .trends-workspace{min-width:0;display:grid;grid-template-columns:clamp(10rem,16%,13rem) minmax(0,1fr);gap:clamp(12px,2vw,28px);align-items:start}
 .trends-primary-column{min-width:0}.trends-measure-index{display:grid;gap:2px;align-content:start;padding-inline-end:12px;border-inline-end:1px solid var(--surface-divider)}
 .trends-measure-index .trends-measure{display:flex;align-items:center;text-align:start;justify-content:flex-start;background:transparent;color:var(--ink);border:0;box-shadow:none;border-radius:var(--radius-small);min-height:44px;padding:6px 12px;width:100%;font:inherit;text-decoration:none}
-.trends-measure-index .trends-measure:is(:hover,:active){background:var(--hover)}.trends-measure-index .trends-measure[aria-current=page]{background:var(--accent-soft);font-weight:var(--weight-medium)}
 .trends-measure:focus-visible,.trends-choice:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
 .trends-index-modes,.trends-switch,.trends-secondary{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.trends-switch{border:1px solid var(--surface-edge);border-radius:var(--radius-small);padding:2px;gap:2px}
 .trends-switch .trends-choice{background:transparent;color:var(--ink);box-shadow:none;border:0;border-radius:var(--radius-small);font:inherit;min-height:36px;padding:4px 8px}
-.trends-switch .trends-choice[aria-pressed=true]{background:var(--accent-soft);font-weight:var(--weight-medium)}.trends-switch .trends-choice:hover{background:var(--hover)}
 .trends-index-scope{margin:4px 0 0;color:var(--muted);font-size:var(--type-small);overflow-wrap:anywhere}
 #trendsView[data-layout=index] .trends-panel{--trends-plot-height:clamp(13rem,29vh,19rem);border-radius:var(--radius);padding:16px 20px}
 #trendsView[data-layout=index] .trends-heading{display:flex;justify-content:space-between;align-items:start;gap:8px 12px;flex-wrap:wrap;cursor:default}
@@ -979,7 +995,7 @@ export const trendsStyles = `
 #trendsView[data-layout=index] .trends-summary{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;max-height:none;overflow:visible}
 #trendsView[data-layout=index] .trends-legend{display:flex;flex:1;align-items:center;flex-wrap:wrap;gap:0 6px;max-height:none;overflow:visible}
 #trendsView[data-layout=index] .trends-legend-row{display:block;padding:0;max-width:100%}#trendsView[data-layout=index] .trends-legend-row>.trends-value-track,#trendsView[data-layout=index] .trends-legend-value{display:none}
-#trendsView[data-layout=index] .trends-series{padding:4px;max-width:100%;width:auto;min-height:36px;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:5px}
+#trendsView[data-layout=index] .trends-series{padding:4px 8px;max-width:100%;width:auto;min-height:44px;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:6px}
 #trendsView[data-layout=index] .trends-series input{accent-color:var(--series-color,var(--toggle-on));margin:0}#trendsView[data-layout=index] .trends-series .trends-sample{display:none}
 #trendsView[data-layout=index] .trends-series-label{white-space:normal;overflow-wrap:anywhere}
 #trendsView[data-layout=index] [data-family=authors] .trends-series{grid-template-columns:auto auto minmax(0,1fr)}
@@ -987,7 +1003,14 @@ export const trendsStyles = `
 #trendsView[data-layout=index] .trends-point-actions{margin-left:auto}#trendsView[data-layout=index] .trends-point-space{display:none}
 .trends-secondary{border-top:1px solid var(--surface-divider);justify-content:space-between;padding-top:4px;margin-top:8px}.trends-secondary>button{--pill-border:transparent;--pill-fill:transparent;color:var(--muted)}
 .trends-secondary>button:last-child{margin-inline-start:auto}.trends-chart-types{margin-inline-start:auto}.trends-index-modes .trends-control{font-size:var(--type-small);gap:4px}
-.trends-index-modes .trends-control select{width:auto}.trends-compare-choices{display:grid;gap:4px}.trends-compare-choices label{display:flex;gap:8px;align-items:center;min-height:44px}
+.trends-index-modes .trends-control select{width:auto}.trends-compare-choices{display:grid;gap:4px}
+.trends-compare-choices label{display:grid;grid-template-columns:auto minmax(0,1fr);align-content:center;align-items:start;gap:8px;min-height:44px;padding:6px 12px;border-radius:var(--radius-small);cursor:pointer}
+.trends-compare-choices input{width:18px;height:18px;margin:0;margin-block-start:max(0px,calc((1lh - 18px)/2));font:inherit}
+.trends-compare-choices label:where(:has(input:checked)){background:var(--accent-soft);--choice-hover:var(--trends-selected-hover)}
+.trends-compare-choices label:hover{background:var(--choice-hover,var(--hover))}
+.trends-compare-choices label:active{background:var(--accent-pressed)}
+.trends-compare-choices label:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:-2px}
+.trends-compare-choices input:focus-visible{outline:none}
 .trends-toolbar [hidden],#trendsView [hidden]{display:none!important}
 #trendsView[data-layout=all] .trends-workspace{display:block}#trendsView[data-layout=all] .trends-measure-index{display:flex;flex-wrap:wrap;border:0;margin-bottom:12px}#trendsView[data-layout=all] .trends-measure{width:auto}
 #trendsView[data-layout=all] .trends-plot{contain:layout paint}
@@ -995,10 +1018,11 @@ export const trendsStyles = `
 #trendsView[data-layout=index] .trends-toolbar{justify-content:flex-end;margin-bottom:12px}
 .trends-read-feedback .trends-pending,.trends-read-feedback .trends-qualification{min-height:0;margin:8px 0 0;overflow-wrap:anywhere}
 .trends-read-feedback .trends-pending:empty{display:none}
-#trendsView{position:relative}#trendsView[data-layout=index] .trends-toolbar button:disabled{visibility:hidden}
+#trendsView{position:relative;--trends-selected-hover:color-mix(in srgb,var(--accent-soft),var(--accent-pressed))}#trendsView[data-layout=index] .trends-toolbar button:disabled{visibility:hidden}
 #trendsView .trends-measure::before,#trendsView .trends-choice::before{display:none}
-#trendsView .trends-choice[aria-pressed=true]{background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium)}
-#trendsView .trends-choice:active,#trendsView .trends-measure:active{background:var(--accent-pressed)}
+#trendsView :is(.trends-choice[aria-pressed=true],.trends-measure[aria-current=page]){--choice-hover:var(--trends-selected-hover);background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium);box-shadow:inset 0 0 0 1px var(--control)}
+#trendsView :is(.trends-choice,.trends-measure):enabled:hover{background:var(--choice-hover,var(--hover))}
+#trendsView :is(.trends-choice,.trends-measure):enabled:active{background:var(--accent-pressed)}
 #trendsView[data-layout=index] .trends-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
 @container trend-card (max-width:34rem){#trendsView[data-layout=index] .trends-heading{grid-template-columns:minmax(0,1fr)}}
 @container trend-card (max-width:34rem){
@@ -1007,5 +1031,9 @@ export const trendsStyles = `
 }
 @container (max-width:52rem){.trends-workspace{grid-template-columns:minmax(0,1fr);gap:8px}.trends-measure-index{display:flex;flex-wrap:wrap;gap:2px;border-inline-end:0;border-bottom:1px solid var(--surface-divider);padding:0 0 8px}.trends-measure-index .trends-measure{width:auto}.trends-heading .trends-identity{flex:1 1 17rem}}
 @container (max-width:27rem){.trends-measure-index{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.trends-measure-index .trends-measure{padding:4px 8px;white-space:normal}#trendsView[data-layout=index] .trends-panel{padding:12px}.trends-switch{max-width:100%}}
-@media(forced-colors:active){.trends-measure[aria-current=page],.trends-choice[aria-pressed=true]{outline:1px solid SelectedItem;outline-offset:-2px}}
+@media(forced-colors:active){
+ .trends-evidence-row>a:is(:hover,:active)>[data-icon-role=forward]{outline:1px solid LinkText}
+ #trendsView :is(.trends-measure[aria-current=page],.trends-choice[aria-pressed=true]){border:1px solid SelectedItem}
+ #trendsView :is(.trends-measure,.trends-choice):focus-visible{outline:2px solid Highlight;outline-offset:-3px}
+}
 `;

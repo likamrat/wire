@@ -128,6 +128,9 @@ ordinary initial chart. A contextual Analyze entry opens the corresponding
 measure with supported scope; related rather than equivalent views name the
 difference before switching. Return restores the widget and its reading context.
 Changing measure, chart type, series or unit is not a new population read.
+The current measure and selected unit or chart type remain identifiable while
+hovered or pressed. Comparison choices and legend entries focus as labelled
+rows; keep their checkbox and text inside the same hit target.
 Compare measures adds qualifying charts for the same period. In the optional
 **All charts** workspace the seven charts occupy full-width rows with sizing
 controls. Short author/service labels stay whole rather than being squeezed.

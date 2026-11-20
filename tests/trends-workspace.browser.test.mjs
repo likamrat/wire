@@ -188,6 +188,14 @@ test("compiled Trends uses the exact daily populations on both chart types and k
     await page.keyboard.press("Escape"); await services.getByRole("button", { name: "View 2 calls" }).click();
     const links = page.locator(".trends-evidence-row a");
     await expect(links).toHaveCount(2);
+    const cue = links.first().locator('[data-icon-role="forward"]');
+    await page.mouse.move(0,0);
+    const linkFace = (await links.first().evaluate(measureControlSurface)).face, idleCue = await cue.evaluate(measureControlSurface);
+    await links.first().hover(); await expect.poll(async () => (await cue.evaluate(measureControlSurface)).face).not.toBe(idleCue.face);
+    const hoveredCue = await cue.evaluate(measureControlSurface);
+    assert.equal((await links.first().evaluate(measureControlSurface)).face, linkFace, "Hover the cue without tinting the call and its prompt");
+    await page.mouse.down(); await expect.poll(async () => (await cue.evaluate(measureControlSurface)).face).not.toBe(hoveredCue.face);
+    await page.mouse.move(1,1); await page.mouse.up(); await page.evaluate(() => getSelection().removeAllRanges());
     for (const link of await links.all()) {
         assert(!new URL(await link.getAttribute("href"), page.url()).searchParams.has("call"));
         await expect(link).toContainText("Review the invented harbor notes mon-a.");
@@ -336,6 +344,18 @@ test("compiled Trends is readable in all five palettes, both modes, narrow and e
             assert(geometry.plot < geometry.h, `${width}/${scale}/${label}: ${JSON.stringify(geometry)}`);
         }
         await screenshot(page, `product-narrow-${width}-${scale}`);
+        if (scale === 2) {
+            const duration = panelOf(page, "timing");
+            await duration.getByRole("button", { name: "Data table" }).tap();
+            const region = page.getByRole("dialog").locator(".trends-exact");
+            const sizes = await region.evaluate(node => {
+                const heading = node.querySelector("th"), range = document.createRange();
+                range.selectNodeContents(heading);
+                return { lines: range.getClientRects().length, date: heading.getBoundingClientRect().width, total: node.clientWidth };
+            });
+            assert(sizes.lines === 1 && sizes.date < sizes.total * .55, `Date and values must both fit: ${JSON.stringify(sizes)}`);
+            await page.keyboard.press("Escape");
+        }
     }
     await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
     const duration = panelOf(page, "timing"), lines = duration.getByRole("button", { name: "Lines", exact: true });
@@ -344,4 +364,53 @@ test("compiled Trends is readable in all five palettes, both modes, narrow and e
     assert.equal(await lines.evaluate(n => getComputedStyle(n).outlineStyle), "solid");
     await duration.locator('[data-trend-mark][data-series="timing"]').nth(4).focus();
     await expect(page.locator("#trendsTooltip")).toContainText("0 ms");
+});
+
+test("Trends choices keep their selected state distinct from hover and press without moving the label", {timeout:150000}, async t => {
+    const { page, index } = await setup(t), view = page.locator("#trendsView"), card = panelOf(page, "authors");
+    await index.getByRole("button", { name: "Prompt authors", exact: true }).click();
+    const failures = [], measured = [];
+    async function states(control, name, input = control) {
+        const paint = async () => {
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+            await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
+            return control.evaluate(measureControlSurface);
+        };
+        await page.mouse.move(1,1); const idle = await paint();
+        await control.hover(); const hover = await paint();
+        await page.mouse.down(); const press = await paint(); await page.mouse.move(1,1); await page.mouse.up();
+        await page.evaluate(() => getSelection().removeAllRanges());
+        await page.keyboard.press("Tab"); await input.focus();
+        const focus = await paint();
+        measured.push({ name, idle, hover, press, focus });
+        if (idle.face === hover.face || hover.face === press.face) failures.push(`${name}: idle/hover/pressed ${idle.face}, ${hover.face}, ${press.face}`);
+        if (idle.box.height < 44 || hover.box.height !== idle.box.height || Math.abs(press.box.x-idle.box.x)>1) failures.push(`${name}: hit area ${idle.box.width} x ${idle.box.height}`);
+        if (!focus.focus || focus.focusWidth < 2) failures.push(`${name}: no visible keyboard focus on target`);
+    }
+    for (const id of Object.keys(palettes)) {
+      await navigateMain(page,"settings"); await navigateSettings(page,"themes");
+      await page.locator(`.palette-option:has(#palette-${id})`).click();
+      await navigateMain(page,"trends"); await index.getByRole("button",{name:"Prompt authors",exact:true}).click();
+      for (const mode of ["light", "dark"]) {
+        await chooseTheme(page, mode);
+        for (const [label,control] of [
+            ["current measure", index.getByRole("button",{name:"Prompt authors",exact:true})],
+            ["other measure", index.getByRole("button",{name:"Services",exact:true})],
+            ["selected unit",card.getByRole("button",{name:"Count",exact:true})],
+            ["other unit",card.getByRole("button",{name:"Percentage",exact:true})],
+            ["selected encoding",card.getByRole("button",{name:"Columns",exact:true})],
+            ["other encoding",card.getByRole("button",{name:"Lines",exact:true})],
+        ]) await states(control,`${id}/${mode} ${label}`);
+        const series = card.locator(".trends-series").first();
+        await states(series,`${id}/${mode} series`,series.locator("input"));
+        await card.getByRole("button",{name:"Compare measures"}).click();
+        const row = view.getByRole("dialog").locator(".trends-compare-choices label").first(), check = row.locator("input");
+        await states(row,`${id}/${mode} comparison unchecked`,check);
+        await check.check(); await states(row,`${id}/${mode} comparison checked`,check);
+        if (proof && id === "petrol") { await row.hover(); await screenshot(page,`compare-choice-${mode}`); }
+        await page.keyboard.press("Escape");
+      }
+    }
+    if (proof) { await mkdir(proof,{recursive:true}); await writeFile(path.join(proof,"trends-choice-paint.json"),JSON.stringify(measured)); }
+    assert.deepEqual(failures,[]);
 });
