@@ -66,6 +66,74 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+function originJournal() {
+    const info = line("info", "session.info", { infoType: "timing", message: "Invented private timeline notice." }, 1, p.id);
+    const usage = line("usage", "session.usage_checkpoint", { totalNanoAiu: 17 }, 1, info.id);
+    const turn = line("run", "assistant.turn_start", { turnId: a.data.turnId }, 2, usage.id);
+    return [p, info, usage, turn, { ...a, parentId: turn.id }, s, e];
+}
+
+test("the originating message and the preceding journal event can be different originals", async () => {
+    const rows = originJournal(), baseline = await scan([p, a, s, e]);
+    const close = line("run-end", "assistant.turn_end", { turnId: a.data.turnId }, 4, e.id);
+    for (const events of [rows, [...rows, close]]) {
+        const checkpointEvents = events.map(ev => retainEvent(ev, { credentialExclusions: 0 }, {
+            managedWorkIqEventIds: new Set(source.managedWorkIqEventIds),
+        })).filter(Boolean);
+        const out = await scan(events, { state: { checkpointEvents } });
+        assert.deepEqual(out.records, baseline.records);
+        assert.equal(out.records[0].promptAssociationEvidence.method, "explicit-message");
+        assert.notEqual(out.witness, baseline.witness);
+        assert.doesNotMatch(JSON.stringify(out), /private timeline notice|totalNanoAiu/);
+    }
+});
+
+test("a journal chain alone cannot attribute a call or bridge unknown, private or conflicting originals", async () => {
+    const rows = originJournal(), [, info, usage, turn, answer] = rows;
+    for (const [at, bad] of [
+        [1, { ...info, parentId: "other-prompt" }], [1, change(info, { originatingMessageId: "another" })],
+        [1, change(info, { tip: "api_key=invented-value" })], [1, { ...info, agentId: "other-agent" }],
+        [2, change(usage, { totalNanoAiu: -1 })], [2, change(usage, { usageAccountingWatermarks: { unknown: 1 } })],
+        [2, { ...usage, type: "session.usage_record" }], [2, { ...usage, timestamp: since }],
+        [3, change(turn, { parentToolCallId: s.data.toolCallId })], [3, change(turn, { turnId: "foreign-turn" })],
+        [4, { ...answer, parentId: info.id }], [4, change(answer, { originatingMessageId: undefined })],
+        [4, change(answer, { originatingMessageId: "another-user" })],
+    ]) await assert.rejects(scan(rows.with(at, bad)), unverified);
+    for (const extra of [{ ...p, id: "another-user" }, { ...a, id: "second-answer" }, { ...s, id: "unmapped", data: {
+        ...s.data, toolCallId: "foreign", mcpServerName: "foreign", mcpToolName: "other", turnId: a.data.turnId,
+    } }]) assert.deepEqual((await scan([...rows, extra])).records, []);
+    for (const extra of [line("other", "assistant.message", { apiCallId: turn.id }, 5), { ...info, id: s.id, parentId: boot.id }]) {
+        await assert.rejects(scan([...rows, extra]), unverified);
+    }
+    for (const member of [info, usage, turn]) {
+        await assert.rejects(scan(rows, { state: { deletion: { events: [eventIdentity(sessionId, member.id)] } } }), unverified);
+    }
+    const reads = await parts(encode([boot, ...rows]));
+    assert.throws(() => decide(reads, { state: { checkpointEvents: [{ data: { unexpected: usage.id } }] } }), unverified);
+    assert.throws(() => decide(reads, { state: { checkpointEvents: [change(turn, { turnId: "changed" })] } }), unverified);
+    const shadowed = JSON.stringify(info).replace('"parentId":', '"parentId":"other","parentId":');
+    await assert.rejects(scan(rows.with(1, shadowed)), unverified);
+});
+
+test("fully screened timeline notices survive a read boundary without carrying text or inventing a prompt", async () => {
+    const rows = originJournal();
+    const warning = line("warning", "session.warning", { warningType: "mcp", message: "Invented private warning." }, 1, rows[1].id);
+    const system = line("system", "system.message", { role: "developer", content: "Invented private control text." }, 1, warning.id);
+    rows.splice(2, 1, warning, system, { ...rows[2], parentId: system.id });
+    const pad = line("pad", "assistant.message", { content: "x".repeat(68000) }, 0);
+    const all = [boot, pad, ...rows], bytes = encode(all), split = encode(all.slice(0, 6)).length;
+    const reads = await parts(bytes, [65536 + 256 + split + 5]);
+    assert.equal(reads[0].cursor.offset, split);
+    const accepted = decide(reads);
+    assert.deepEqual(accepted, decide(await parts(bytes)));
+    assert.deepEqual(accepted.records[0].userPrompt.sourceEventId, p.id);
+    assert.doesNotMatch(JSON.stringify(accepted), /private warning|private control text/i);
+    for (const [at, patch] of [[2, { originatingMessageId: p.data.messageId }], [3, { role: "user" }],
+        [3, { interactionId: a.id }], [3, { metadata: { origin: p.id } }]]) {
+        await assert.rejects(scan(rows.with(at, change(rows[at], patch))), unverified);
+    }
+});
+
 test("a verified SDK startup header is source context, never a recovered identity or authorization", async () => {
     const header = { ...boot, parentId: null, data: { ...boot.data, startTime: since, producer: "invented-client", copilotVersion: "1.2.3",
         selectedModel: "invented-model", reasoningEffort: "high", remoteSteerable: true, alreadyInUse: false, contextTier: "default",

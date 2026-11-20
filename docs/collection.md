@@ -522,9 +522,19 @@ into the recovered call or its receipt.
 A separate assistant turn or a text-free Copilot mode or permission notice
 need not rule out an otherwise verified call. WIRE checks the notice's
 declared fields and identifiers against the whole source and its checkpoint.
-It never uses a notice to link separated events or to grant access. Unknown
+Notice content never supplies attribution or grants access. Unknown
 fields, ambiguous identifiers, and unclassified oversized entries still
 prevent a verified-record preview.
+
+The assistant's `originatingMessageId` identifies the initiating user
+message; `parentId` identifies the preceding journal event. They need not
+point to the same event. A review can verify the user's message across up
+to 32 typed, consecutively linked timeline notices and a matching turn
+start. It requires the explicit origin, request, turn and call to agree;
+chronological order alone is never enough. Intervening system or developer
+text is not a user prompt and is not copied into the call. A linked turn
+end is checked against the completion and changes neither its outcome nor
+the receipt's incomplete-day coverage.
 
 A compact, text-free post-tool hook may close directly after its matching
 unrelated hook start. Its success flag describes the hook, not the tool call.

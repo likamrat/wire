@@ -91,7 +91,17 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
     ]));
     const known = chain(day, "known", 10, true);
-    await appendFile(file, encode([...(causalHooks ? withCausalHooks(known, sourceId) : known), ...chain(day, "unknown", 20, undefined),
+    let knownOriginals = known;
+    if (causalHooks) {
+        const [prompt, assistant, start, completion] = known;
+        const info = event("source-notice", "session.info", prompt.timestamp, { infoType: "timing", message: "Invented private timeline text." }, prompt.id);
+        const usage = event("usage-note", "session.usage_checkpoint", prompt.timestamp, { totalNanoAiu: 123 }, info.id);
+        const turn = event("request-turn", "assistant.turn_start", assistant.timestamp, { turnId: assistant.data.turnId }, usage.id);
+        knownOriginals = withCausalHooks([prompt, { ...assistant, parentId: turn.id }, start, completion], sourceId);
+        knownOriginals.splice(1, 0, info, usage, turn);
+        knownOriginals.push(event("request-turn-end", "assistant.turn_end", completion.timestamp, { turnId: assistant.data.turnId }, completion.id));
+    }
+    await appendFile(file, encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]));
     if (preservation) {
         await mkdir(path.dirname(otherFile));
