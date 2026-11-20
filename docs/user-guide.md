@@ -285,7 +285,9 @@ of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
-Open **Reports**, check **Report text**, then choose a ready-made report.
+Open **Reports**. Select a recent saved report by name, or choose **View all**
+to search older copies. To make a report, select its focus under **New report**
+and check the activity, dates and text treatment in the outline.
 The default, **Mask detected details**, keeps the wording with local masking.
 Change it before opening the report or while reading it. Keeping chat details
 shows a red warning; masking can still miss names or sensitive wording.
@@ -293,14 +295,15 @@ Choose **Leave out prompts and replies** to omit chat wording. Notes and selecte
 error messages remain. The period starts at **Last 7 days**, independently of
 your Analyze filters.
 
-Read its patterns and supporting interactions, then optionally add a note or
-edit a report copy. **Save as** chooses HTML, PDF, JSON or Markdown files;
-**View** previews them. **Save report** keeps those files on this device.
+Select **Prepare preview** to read the patterns and supporting interactions.
+You can add a note or edit a report copy. **Files to save** chooses the HTML,
+PDF, JSON or Markdown files to write; **Viewing** only changes what you read.
+**Save report** keeps the chosen files on this device.
 If you keep chat details, the warning lets you hide details and save, save
 with those details, or go back without writing anything.
 
-Saved reports appear below the report choices. Select a name to read it, or use
-**Files** to choose a format. **Back to Reports** returns to that workspace.
+Select a saved name to read it, or use **Files** in the full library to open a
+specific format. **Back to Reports** returns to that workspace.
 Saved files preserve their original facts and text. The
 [report guide](reporting.md) explains each template's membership, how edits
 affect an unfinished copy, and how to save, reopen or compare reports.

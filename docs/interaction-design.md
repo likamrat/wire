@@ -399,23 +399,27 @@ result authority.
 
 ### Landing and saved list
 
-Reports is one workspace: report choices first, saved reports directly below.
-There is no separate Create report navigation entry. Choosing a tile or a saved
-name replaces the landing with full-area reading. Reports-origin reading has one
+Reports is one workspace: recent saved reports first, a new report outline below.
+There is no separate Create report navigation entry. Opening a saved name or
+preparing the outline replaces the landing with full-area reading. Reports-origin reading has one
 Back to Reports action; context-qualified entries retain their own origin.
 
-The landing has five compact, equal-sized full-width tile rows: All activity,
+The outline has five focus choices: All activity,
 Errors & failures, Completed calls, Human prompts and Agent prompts. Compare
-has its own primary destination. The report period is visible, defaults to
+has its own primary destination. A narrow outline uses one focus selector.
+Changing focus shows what the report includes; it never prepares or saves.
+The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar
 directly. A fresh report ignores old Analyze restrictions.
 Report text is visible before the choices and defaults to Mask detected details.
 Changing it updates the draft without preparing or saving. The same control moves
 into the report toolbar; its choice reaches the initial preparation unchanged.
-Selected and Current remain available through inclusion
-controls and their original context-qualified entries.
+Selected and Current are available before preparation through Activity, after
+preparation through inclusion controls, and through their contextual entries.
 
-Saved rows align Report, Report text and Actions. The name and its leading document
+Recent entries show their names and compact saved periods. Date ranges share
+month/year only where accurate; longer ranges wrap instead of losing endpoints.
+View all opens the full library. Its rows align Report, Report text and Actions. The name and its leading document
 icon open in-app reading. Preparation time is a secondary line under the name,
 not part of a generated title. Known saved periods appear there separately.
 A single list note identifies missing period metadata instead of repeating
@@ -428,7 +432,7 @@ anonymization guarantee, and missing metadata is not inferred.
 Delete uses a quiet text treatment; its confirmation retains the destructive action.
 The header menu preserves bulk deletion with its existing confirmation.
 Inspection alone does not read, download or delete a file.
-Every report choice has accessible help. Saved-report paging follows the rows
+The outline explains its selected focus. Saved-report paging follows the rows
 in visual and keyboard order. Privacy and file actions keep their separate
 meaning. Rows share column widths; narrow layouts stack identity/dates, text
 treatment and actions without shortening their contents.
@@ -436,13 +440,13 @@ treatment and actions without shortening their contents.
 ### Returning to an unfinished report
 
 Back restores saved search, order, paging, scroll and activating control.
-It preserves the authorized unfinished copy without another visible resume
-entry: choosing the same type with unchanged dates resumes that copy.
+It preserves the authorized unfinished copy. The preparation action becomes
+Resume preview when the selected focus can reopen it.
 An unresolved Save remains visible and uses its original recovery owner.
 
 ### Preparation and reading
 
-Choosing a tile prepares the report and shows pending feedback until it is ready.
+Prepare preview freezes the report and shows pending feedback until it is ready.
 A compact toolbar owns its name, period, personal-detail choice and formats,
 with Save beside the name.
 The name updates the document heading without remounting its input. Optional
@@ -467,7 +471,7 @@ and the existing navigation owners.
 
 ### Formats
 
-Save as chooses output files. View chooses Report or an actual format preview,
+Files to save chooses output files. Viewing chooses Report or an actual format preview,
 with PDF pages, a JSON tree or HTML/Markdown Preview/Source. Returning from a file
 to the same authorized HTML report keeps its open sections and reading position.
 JSON-only saves can render a readable page from their verified frozen snapshot.

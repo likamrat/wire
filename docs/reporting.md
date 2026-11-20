@@ -12,16 +12,16 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports**, choose a period and check **Report text** before opening a report.
+Open **Reports** and choose a saved name to read that copy, or use **View all**
+to search the library. Under **New report**, choose a focus and check the outline:
+**Activity**, **Dates**, **Report text** and **Files to save**.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
-Choose a tile to open the report in the main reading area. **Save report** saves
-its current files locally without a required setup or text-review checklist.
-Saved reports sit below the five choices. Each choice has a help icon available
-by pointer, keyboard or touch.
+**Prepare preview** opens the report in the main reading area without writing
+files. **Save report** saves its current files locally.
 
-![Report text is available before the five report choices; saved reports appear below.](images/report-choices.png)
+![Recent saved reports above a new report outline with activity, dates, text and file choices.](images/report-choices.png)
 
 | Report | Includes |
 | --- | --- |
@@ -51,8 +51,9 @@ report's period and activity explicitly. To narrow an open report, use
 | Current Analyze view | Every matching interaction across pages, with its complete eligible evidence, not just the individual calls matching a chart. |
 | All collected activity | Retained reportable activity independently of Analyze dates, filters, Search and paging. It does not collect new history or include complete original chat transcripts. |
 
-Choose the scope, select interactions if needed, then use **Show report**.
-The activity picker keeps **Close** and **Show report** visible while its
+From the outline, choose **Activity**, select the scope and use **Use activity**
+to return without preparing. From an open report use **Show report** to update it.
+The activity picker keeps its actions visible while its
 contents scroll together, without a second scroll area inside the interaction list.
 Failure summaries keep the recorded tool name; open an interaction to read its
 exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
@@ -60,8 +61,8 @@ You can also use **Add to report > Continue to report** in an interaction reader
 Reading or selecting an interaction alone does not save a report.
 
 **Back to Reports** returns to the choices and saved list. It keeps an unfinished
-copy in memory. Choose the same tile again without changing its dates to resume
-that copy, including its name and notes. Choosing another type replaces the
+copy in memory. Use **Resume preview** with the same focus and unchanged dates to
+return to that copy, including its name and notes. Preparing another focus replaces the
 unfinished copy. Reports entered from Analyze keep their contextual return.
 
 **Selected interactions** initially includes your picks across all dates.
@@ -105,7 +106,7 @@ can say, for example, that 4 of 12 interactions contained a recorded error.
 Only those 4 cases contribute prompt or diagnostic copies. The other
 interactions supply the frozen reference count, not additional disclosed text.
 
-![An error report with its frozen frequency, section links and separate Save as and View controls.](images/report-preview.png)
+![An error report with its frozen frequency, section links and separate file selection and viewing controls.](images/report-preview.png)
 
 Use the section links to jump to patterns, interactions, timing or coverage.
 Open a section or interaction to read its full evidence. **Expand sections**
@@ -132,12 +133,12 @@ or sensitive wording.
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **Authors in report** keeps your choices as a draft until
 **Apply**; **Cancel** leaves the accepted authors unchanged.
-**View > Report text** opens optional text inspection.
+**Viewing > Report text** opens optional text inspection.
 It shows one **Report copy** at a time, with its interaction and recorded author.
 **Local original** switches to the retained source; it is not an extra copy
 included in the report. **Edit or omit this report copy**, then **Update report
 copy**, changes only that report copy. The original stays unchanged.
-Return to **Report** or a file through **View**.
+Return to **Report** or a file through **Viewing**.
 
 ![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
 
@@ -161,8 +162,9 @@ Masking, edits and omissions still control the diagnostic copies. A fixed WIRE
 interpretation can remain when you leave out error-message text; it does not
 restore the omitted wording or read prompts, replies or arguments.
 
-**Save as** chooses HTML, PDF, JSON or Markdown files; you can select more than
-one. **View** changes what you are reading: **Report** is the readable page,
+**Files to save** chooses a web page (HTML), print document (PDF), structured
+data (JSON) or editable text (Markdown); you can select more than one.
+**Viewing** changes only what you are reading: **Report** is the readable page,
 while a file choice shows that actual format in its own reading pane. Text
 inspection stays out of the file view. PDF has page controls, JSON has
 a field tree, and HTML and Markdown offer Preview/Source. Switching views does
@@ -179,7 +181,7 @@ text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Your selected file and
 Preview/Source mode stay selected during these updates and after changing the
 report period or call filters. Removing that file
-from **Save as** returns to **Report**. Save is unavailable until the update finishes.
+from **Files to save** returns to **Report**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
 
@@ -192,7 +194,7 @@ that remain included. Only copies removed with the linked context lose their edi
 If the same recorded message appears as both an originating prompt and a follow-up,
 it shares one copy choice with context enabled. Conflicting choices are refused,
 not silently replaced.
-Changing the choice on Reports does not prepare a report until you open a tile.
+Changing choices in the outline does not prepare a report until you select **Prepare preview**.
 Reopening the same unfinished report keeps its frozen activity.
 
 <a id="approve-save-and-reopen"></a>
@@ -291,7 +293,7 @@ experience with the same formats, masking, optional notes and local Save.
 **Back to comparison** restores its dates, choices and reading position while
 access remains valid.
 
-For existing reports, open **Reports > Compare saved reports**, choose
+For existing reports, open **Reports > View all > Compare saved reports**, choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses
 their frozen facts, not current history. Different definitions, missing facts
 or incompatible identities can prevent a comparison. A saved two-period report
@@ -307,7 +309,8 @@ per-call coverage. Older saved comparisons keep their original presentation.
 
 ## Remove a saved copy
 
-Choose **Delete report** or **Delete saved comparison** on its row.
+Open the full library with **View all** and choose **Delete report** or
+**Delete saved comparison** on its row.
 Its confirmation removes that managed bundle, not original source
 activity or external downloads. **Saved-report options > Delete all saved
 reports** previews all report bundles across pages and search, not just visible
