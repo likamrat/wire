@@ -117,16 +117,12 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 ## Trends
 
-See which Work IQ tools appear in your recorded activity and how their use
-varies by day. **Trends** gives each daily chart the full workspace width:
-tool usage, prompt authors, tool calls, services, errors, response models
-and call duration. Every widget has its own measure controls.
-
-[![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
-
-Choose 7, 14, 30 or custom days and select a dated point in place. Maximize its
-chart to open the supporting calls. The [Trends guide](docs/user-guide.md#trends)
-explains reach versus call share, overlapping services and evidence gaps.
+Pick one of seven visible measures to see daily Work IQ activity. Trends opens
+on tool calls; **Errors & failures** is first in the index. Switch between
+columns and lines, compare measures for the same dates, or select a mark to
+open its supporting calls. From Analyze, a widget's trend action opens the
+corresponding measure. The [Trends guide](docs/user-guide.md#trends) explains
+scope changes, percentages and evidence gaps.
 
 ## Reports
 

@@ -12,6 +12,7 @@ import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createCopilotAccountBridge } from "../lib/copilot-account-snapshot.mjs";
 import { profilePNG } from "./source-profile-fixture.mjs";
 import { randomUUID, createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 async function capture(page, name) {
     if (!process.env.WIRE_TRENDS_PROOFS) return;
@@ -65,7 +66,7 @@ function boundary(options) {
     return owner;
 }
 
-async function setup(t, withBoundary = false, options = {}) {
+async function setupIndex(t, withBoundary = false, options = {}) {
     let cleanup;
     const fixtures = options.records ?? records();
     const { context } = await privateFixture({ after: value => { cleanup = value; } }, fixtures);
@@ -80,36 +81,41 @@ async function setup(t, withBoundary = false, options = {}) {
     } };
     const bridge = options.profile ? createCopilotAccountBridge(() => host, { expectedSessionId: host.sessionId, binding: "copilot-app" }) : null;
     const before = await loadBoardState(context), errors = [], denied = [], reads = [];
-    const server = await startServer(context, createExportController(context), {
-        port: 0, access, frontend: process.env.WIRE_TEST_FRONTEND, collector: { timers: false },
+    // Only the inline fixture can interpose on the controller publication boundary.
+    const frontend = withBoundary ? undefined : process.env.WIRE_TEST_FRONTEND;
+    let server, browser, page;
+    const trace = process.env.WIRE_TRENDS_PROOFS && options.trace;
+    t.after(async () => {
+        try {
+            if (trace && page) await page.context().tracing.stop({ path: path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}.zip`) });
+            await browser?.close(); await server?.close();
+            const after = await loadBoardState(context);
+            if (trace && page) {
+                const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+                await writeFile(path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}-receipt.json`), JSON.stringify({
+                    test: t.name, browser: browser.version(), frontend: frontend ?? "inline", url: server.url,
+                    fixtureHash: hash(fixtures), before: hash(before), after: hash(after), errors, denied,
+                    build: frontend ? JSON.parse(await readFile(new URL("../dist/client/wire-build.json", import.meta.url), "utf8")) : null,
+                    stopped: true,
+                }, null, 2));
+            }
+            assert.deepEqual(errors, []); assert.deepEqual(denied, []);
+            assert.ok(isDeepStrictEqual(after, before), "Browsing Trends must not mutate the fixture board");
+        }
+        finally { bridge?.close(); await access?.close(); await cleanup(); }
+    });
+    server = await startServer(context, createExportController(context), {
+        port: 0, access, frontend, collector: { timers: false },
         ...(bridge ? { githubProfile: { copilot: bridge.copilot, fetch: async url => url.startsWith("https://api.github.com/")
             ? Response.json({ type: "User", id: 70001, login: "synthetic-riley", name: "Riley Chen",
                 avatar_url: "https://avatars.githubusercontent.com/u/70001" })
             : new Response(profilePNG, { headers: { "content-type": "image/png" } }) } } : {}),
         evaluation: { evaluatorFactory() { throw new Error("No providers in Trends proof."); }, readSource() { throw new Error("No history reads in Trends proof."); } },
     });
-    const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER });
-    const trace = process.env.WIRE_TRENDS_PROOFS && options.trace;
-    t.after(async () => {
-        try {
-            if (trace) await page.context().tracing.stop({ path: path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}.zip`) });
-            await browser.close(); await server.close();
-            const after = await loadBoardState(context);
-            if (trace) {
-                const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-                await writeFile(path.join(process.env.WIRE_TRENDS_PROOFS, `${options.trace}-receipt.json`), JSON.stringify({
-                    test: t.name, browser: browser.version(), frontend: process.env.WIRE_TEST_FRONTEND, url: server.url,
-                    fixtureHash: hash(fixtures), before: hash(before), after: hash(after), errors, denied,
-                    build: JSON.parse(await readFile(new URL("../dist/client/wire-build.json", import.meta.url), "utf8")),
-                    stopped: true,
-                }, null, 2));
-            }
-            assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(after, before);
-        }
-        finally { bridge?.close(); await access?.close(); await cleanup(); }
-    });
-    const page = await browser.newPage({ viewport: options.viewport ?? { width: 1440, height: 1000 }, timezoneId: "UTC",
+    browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER });
+    page = await browser.newPage({ viewport: options.viewport ?? { width: 1440, height: 1000 }, timezoneId: "UTC",
         reducedMotion: options.motion ?? "reduce", hasTouch: options.touch ?? false, deviceScaleFactor: options.scale ?? 1 });
+    page.setDefaultTimeout(5000);
     if (trace) {
         await mkdir(process.env.WIRE_TRENDS_PROOFS, { recursive: true });
         await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
@@ -128,22 +134,58 @@ async function setup(t, withBoundary = false, options = {}) {
         }
         return route.continue();
     });
-    await page.goto(server.url + (options.direct ? "#trends" : "#analyze"));
+    await page.goto(new URL(options.direct ? "/trends" : "/", server.url).href);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     if (!options.direct) await navigateMain(page, "trends");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator(".trends-period-label").first()).not.toBeEmpty();
+    await expect(page.locator("#trendsPeriod")).toBeVisible();
+    await expect(page.locator("#trendsPlot-rhythm svg")).toBeVisible();
     if (options.profile) await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     return { page, reads, url: server.url };
 }
 
+async function openAllCharts(page) {
+    await page.getByRole("button", { name: "Compare measures", exact: true }).click();
+    await page.getByRole("dialog", { name: "Compare measures" }).getByRole("button", { name: "All charts", exact: true }).click();
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+}
+
+async function setupAllCharts(t, withBoundary = false, options = {}) {
+    const fixture = await setupIndex(t, withBoundary, options);
+    await openAllCharts(fixture.page);
+    return fixture;
+}
+
+test("Trends opens one count chart with an errors-first visible index and compares named measures without changing the period", async t => {
+    const { page, reads } = await setupIndex(t);
+    const index = page.getByRole("navigation", { name: "Trend measures" });
+    await expect(index.getByRole("button")).toHaveText(["Errors & failures", "Tool calls", "Tool usage", "Services", "Call duration", "Prompt authors", "Response models"]);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
+    await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "rhythm");
+    await expect(page.getByRole("button", { name: "Count", exact: true })).toHaveAttribute("aria-pressed", "true");
+    const period = await page.locator("#trendsPeriod").innerText();
+    const before = reads.length;
+    await index.getByRole("button", { name: "Services", exact: true }).click();
+    await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "services");
+    await page.getByRole("button", { name: "Compare measures", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Call duration", exact: true }).check();
+    await page.getByRole("button", { name: "Apply comparison", exact: true }).click();
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(2);
+    await expect(page.locator("[data-family=services]")).toBeVisible();
+    await expect(page.locator("[data-family=timing]")).toBeVisible();
+    assert.equal(await page.locator("#trendsPeriod").innerText(), period);
+    assert.equal(reads.length, before, "Presentation changes must not read or change the accepted population");
+});
+
 test("lower selected-date values keep their own visible scope after scrolling past the chart context", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { trace: "lower-scope-trace" });
+    const { page } = await setupAllCharts(t, false, { trace: "lower-scope-trace" });
     await dates(page);
     const panel = page.locator('[data-family="tools"]');
     await panel.getByRole("button", { name: /Aug 15, 2026: fetch,/ }).focus();
     await page.keyboard.press("Enter");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    // The full daily table gives the reader content below the selected values to scroll into.
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
     const measurements = [];
     for (const [theme, width, scale, mode, scope] of [
         ["light", 390, 1, "reach", "Interactions % · 2 interactions"],
@@ -154,8 +196,9 @@ test("lower selected-date values keep their own visible scope after scrolling pa
         await page.setViewportSize({ width, height: scale === 2 ? 1000 : 844 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await selectMode(page, mode);
-        await page.mouse.move(width - 5, 400);
-        await page.mouse.wheel(0, 10000);
+        await page.locator(".trends-inspection-caption").evaluate(node => {
+            window.scrollBy(0, node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom - 4);
+        });
         await settle(page);
         const inspection = page.locator(".trends-inspection");
         const caption = inspection.getByRole("heading", { name: `Aug 15, 2026 · ${scope}`, exact: true });
@@ -166,7 +209,8 @@ test("lower selected-date values keep their own visible scope after scrolling pa
                 upper: box(document.querySelector(".trends-inspection-heading")),
                 header: box(document.querySelector(".app-header")), viewport: innerHeight };
         });
-        assert.ok(geometry.upper.bottom <= geometry.header.bottom, "The upper context is outside the visible reading area");
+        assert.ok(geometry.upper.bottom <= geometry.header.bottom,
+            `${theme}/${width}/${scale}: upper context ends at ${geometry.upper.bottom}, fixed header ends at ${geometry.header.bottom}`);
         assert.ok(geometry.caption.top >= geometry.header.bottom && geometry.caption.bottom <= geometry.values.top,
             "The local scope is visible above the values, not hidden under the fixed header");
         assert.ok(geometry.values.bottom <= geometry.viewport, "Scope and selected-date values fit in the same viewport");
@@ -186,7 +230,7 @@ test("lower selected-date values keep their own visible scope after scrolling pa
 });
 
 test("exact Trends numbers keep date and value text separate and scroll by keyboard at narrow and enlarged sizes", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords() });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords() });
     await dates(page, "2026-08-01", "2026-08-01");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
@@ -225,14 +269,14 @@ test("supporting calls keep Close available and restore the nineteenth call afte
             completedAt: "2026-08-01T12:00:02Z" });
         return record;
     });
-    const { page } = await setup(t, false, { records: many, touch: true, trace: "evidence-return-trace" });
+    const { page } = await setupAllCharts(t, false, { records: many, touch: true, trace: "evidence-return-trace" });
     await dates(page, "2026-08-01", "2026-08-01");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     await page.getByRole("button", { name: "View evidence", exact: true }).click();
     await expect(page.locator(".trends-evidence-row a")).toHaveCount(23);
     const call = page.locator(".trends-evidence-row a").nth(18);
     await call.scrollIntoViewIfNeeded();
-    const identity = await call.getAttribute("href");
+    const identity = await call.innerText();
     const close = await page.locator(".trends-dialog").getByRole("button", { name: "Close", exact: true }).boundingBox();
     const failures = [];
     if (close.y < 0 || close.y + close.height > 1000) failures.push("Close left the viewport");
@@ -246,7 +290,7 @@ test("supporting calls keep Close available and restore the nineteenth call afte
     await settle(page);
     const returned = await call.boundingBox();
     if (returned.y < 0 || returned.y + returned.height > 1000) failures.push("Nineteenth call was not restored");
-    assert.equal(await call.getAttribute("href"), identity);
+    assert.equal(await call.innerText(), identity);
     await capture(page, "usability-evidence-return");
     assert.deepEqual(failures, []);
     await page.evaluate(() => { window.retiredTrendLink = document.querySelectorAll(".trends-evidence-row a")[18]; });
@@ -278,7 +322,7 @@ test("supporting calls keep Close available and restore the nineteenth call afte
 });
 
 test("selected overview evidence is available without resizing", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 }, touch: true });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 }, touch: true });
     await dates(page, "2026-08-01", "2026-08-01");
     const panel = page.locator('[data-family="tools"]'), mark = panel.locator('[data-trend-mark][data-series="workiq-fetch"]');
     await mark.focus(); await settle(page);
@@ -296,7 +340,7 @@ test("selected overview evidence is available without resizing", { timeout: 4500
 });
 
 test("short Trends legend pairs stay together at narrow widths", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 } });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords(), viewport: { width: 390, height: 844 } });
     await dates(page, "2026-08-01", "2026-08-01");
     for (const [family, label] of [["tools", "fetch"], ["timing", "Median"]]) {
         const row = page.locator(`[data-family="${family}"] .trends-legend-row`).filter({ has: page.getByRole("checkbox", { name: `Show ${label}`, exact: true }) });
@@ -316,7 +360,7 @@ test("short Trends legend pairs stay together at narrow widths", { timeout: 3000
 });
 
 test("duration shortcuts and checkboxes describe the same drawn series", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords() });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords() });
     await dates(page, "2026-08-01", "2026-08-01");
     const panel = page.locator('[data-family="timing"]');
     await panel.getByRole("button", { name: "Median", exact: true }).click();
@@ -332,10 +376,10 @@ test("duration shortcuts and checkboxes describe the same drawn series", { timeo
 });
 
 test("weekly shares name clipped calendar windows", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
+    const { page } = await setupIndex(t);
     await dates(page, "2026-08-01", "2026-08-03");
     const panel = page.locator('[data-family="rhythm"]');
-    await panel.getByRole("button", { name: "Share within week", exact: true }).click();
+    await panel.getByRole("button", { name: "Percentage", exact: true }).click();
     const mark = panel.locator("[data-trend-mark]").last();
     await mark.focus();
     await expect(page.locator("#trendsTooltip")).toBeVisible();
@@ -343,13 +387,16 @@ test("weekly shares name clipped calendar windows", { timeout: 30000 }, async t 
     await expect(page.locator("#trendsTooltip")).toContainText("Aug 9");
     await expect(page.locator("#trendsTooltip")).toContainText(/partial week/i);
     await page.keyboard.press("Enter"); await page.keyboard.press("Escape");
-    await expect(panel).toContainText(/partial week/i);
+    await expect(panel.locator(".trends-point")).toContainText("Aug 3");
+    await expect(panel.getByRole("button", { name: "View 2 calls", exact: true })).toBeVisible();
+    await openAllCharts(page);
+    await expect(panel.locator(".trends-point")).toContainText(/partial week/i);
     await panel.scrollIntoViewIfNeeded();
     await capture(page, "usability-weekly-window");
 });
 
 test("pending Trends ranges visibly name the request and leave accepted facts intact", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
+    const { page } = await setupAllCharts(t);
     await dates(page, "2026-08-01", "2026-08-03");
     const accepted = await page.locator(".trends-period-label").allTextContents();
     const held = [];
@@ -397,7 +444,7 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
 });
 
 test("withdrawal scrubs selected context and evidence return while a built Trends range is pending", { timeout: 30000 }, async t => {
-    const { page, url } = await setup(t, false, { records: measureRecords(), enforced: true });
+    const { page, url } = await setupAllCharts(t, false, { records: measureRecords(), enforced: true });
     await dates(page, "2026-08-01", "2026-08-01");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     let release;
@@ -443,6 +490,7 @@ test("withdrawal scrubs selected context and evidence return while a built Trend
     await send("/api/session/release", {}, session.capability);
 });
 async function dates(page, from = "2026-08-01", to = "2026-08-30") {
+    if (await page.locator("#trendsPeriod").isVisible()) await page.locator("#trendsPeriod").click();
     await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Trends from", { exact: true }).fill(from);
     await page.getByLabel("Trends to", { exact: true }).fill(to);
@@ -467,9 +515,10 @@ function measureRecords() {
         record.toolCalls = Array.from({ length: index === 0 ? 3 : 1 }, () => {
             const id = callIndex++, duration = [100, 200, null, 900, 0][id];
             const paths = id === 0 ? ["/me/messages", "/me/drive/root"] : id === 1 ? ["/me/messages"] : id < 4 ? ["/me/drive/root"] : [];
+            const start = Date.parse(stamp) + id * 1000;
             return { ...structuredClone(base), toolCallId: `measure-call-${id}`, startEventId: `measure-start-${id}`,
-                tool: id === 4 ? "workiq-retrieve" : "workiq-fetch", startedAt: stamp,
-                completedAt: duration === null ? null : new Date(Date.parse(stamp) + duration).toISOString(),
+                tool: id === 4 ? "workiq-retrieve" : "workiq-fetch", startedAt: new Date(start).toISOString(),
+                completedAt: duration === null ? null : new Date(start + duration).toISOString(),
                 durationMs: duration, completionEventId: duration === null ? null : `measure-end-${id}`,
                 toolSucceeded: id !== 0, reportedOutcome: id === 0 ? "failed" : "succeeded",
                 requestArgs: { entityUrls: paths }, requestedApiPath: paths.length === 1 ? paths[0] : null,
@@ -498,14 +547,36 @@ async function inspectionBars(page) {
 
 async function expectEvidence(page, calls) {
     await page.getByRole("button", { name: "View evidence", exact: true }).click();
-    const ids = await page.locator(".trends-evidence-row a").evaluateAll(nodes => nodes.map(node =>
-        new URLSearchParams(node.hash.split("?")[1]).get("call")));
+    const ids = await evidenceCallIds(page, measureRecords());
     assert.deepEqual(ids.sort(), calls.map(id => `call:["measure-chat","measure-call-${id}"]`).sort());
     await expect(page.locator(".trends-dialog")).toContainText("Opening a call shows its full interaction.");
 }
 
+async function evidenceCallIds(page, records) {
+    // Call identifiers are private route state. Distinct fixture timestamps let us identify
+    // each actual call shown to the reader, even for repeated calls in the same interaction.
+    const byStart = new Map();
+    for (const record of records) for (const call of record.toolCalls) {
+        const stamp = Date.parse(call.startedAt);
+        assert.ok(!byStart.has(stamp), "Evidence fixtures need distinct visible call times");
+        byStart.set(stamp, `call:${JSON.stringify([record.sourceSessionId, call.toolCallId])}`);
+    }
+    const links = await page.locator(".trends-evidence-row a").evaluateAll(nodes => nodes.map(link => ({
+        path: link.pathname, query: link.search, time: link.querySelector(".trends-evidence-time").textContent,
+    })));
+    return links.map(({ path, query, time }) => {
+        assert.equal(path, "/request");
+        const params = new URLSearchParams(query);
+        assert.equal(params.get("privateView"), "required");
+        assert.ok(!params.has("call") && !params.has("request"));
+        const id = byStart.get(Date.parse(time.replace(/^Call started: /, "")));
+        assert.ok(id, `Unrecognized supporting call: ${time}`);
+        return id;
+    });
+}
+
 test("reach, call-share and count bars use their chart scale while selected tool evidence keeps exact membership", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords() });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords() });
     const data = await dates(page, "2026-08-01", "2026-08-01");
     assert.equal(data.totals.calls, 5); assert.equal(data.totals.interactions, 3);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
@@ -514,6 +585,7 @@ test("reach, call-share and count bars use their chart scale while selected tool
         assert.deepEqual(rows.map(row => row.text), texts);
         rows.forEach((row, index) => assert.ok(Math.abs(row.percent - widths[index]) < .1, `${row.label}: ${row.percent}, expected ${widths[index]}`));
     };
+    await selectMode(page, "reach");
     await check(["66.7% (2)", "33.3% (1)"], [200 / 3, 100 / 3]);
     await page.locator(".trends-panel[data-maximized=true] .trends-plot").getByRole("button", { name: /fetch,/ }).focus();
     await page.keyboard.press("Enter");
@@ -525,7 +597,7 @@ test("reach, call-share and count bars use their chart scale while selected tool
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
     await expect(page.locator(".trends-inspection-heading")).toContainText("fetch · Interactions %");
     await selectMode(page, "count");
-    await check(["4", "1"], [80, 20]); // The stacked count axis spans all five calls.
+    await check(["4", "1"], [100, 25]); // Grouped columns share the scale of the largest individual count.
     await expect(page.locator(".trends-inspection-heading")).toContainText("fetch · Calls");
     await expectEvidence(page, [0, 1, 2, 3]);
     await page.getByRole("button", { name: "Close", exact: true }).click();
@@ -544,16 +616,16 @@ test("reach, call-share and count bars use their chart scale while selected tool
     await expectEvidence(page, [0, 1, 2, 3]);
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await selectMode(page, "count");
-    await check(["1"], [20]);
+    await check(["1"], [25]);
 });
 
 test("author, overlapping service/model, error, timing and calendar marks open only their supporting calls", { timeout: 60000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords() });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords() });
     await dates(page, "2026-08-01", "2026-08-01");
     await page.locator('.trends-panel[data-family="authors"] .trends-sizing button:first-child').click();
     const cases = [
         ["authors", "share", "My prompts", [0, 1, 2], "33.3% (1)", 100 / 3],
-        ["authors", "count", "My prompts", [0, 1, 2], "1", 100 / 3],
+        ["authors", "count", "My prompts", [0, 1, 2], "1", 100],
         ["services", "share", "Mail", [0, 1], "40% (2)", 40],
         ["services", "count", "Mail", [0, 1], "2", 200 / 3],
         ["services", "share", "Files", [0, 2, 3], "60% (3)", 60],
@@ -563,7 +635,7 @@ test("author, overlapping service/model, error, timing and calendar marks open o
         ["problems", "count", "Errors & failures", [0, 1], "1", 100],
         ["timing", "median", "Median", [0, 1, 3, 4], "100 ms", null],
         ["timing", "p95", "95th percentile", [0, 1, 3, 4], "900 ms", null],
-        ["rhythm", "count", "Call activity", [0, 1, 2, 3, 4], "5", 100],
+        ["rhythm", "count", "Call activity", [0, 1, 2, 3, 4], "5", 500 / 6], // Count axis ticks 0, 2, 4, 6.
         ["rhythm", "share", "Call activity", [0, 1, 2, 3, 4], "100% (5)", 100],
     ];
     for (const [family, mode, label, calls, text, width] of cases) {
@@ -591,7 +663,7 @@ test("author, overlapping service/model, error, timing and calendar marks open o
 });
 
 test("Trends opens normally, keeps 30 daily points and connects exact selected evidence to the existing reader", { timeout: 45000 }, async t => {
-    const { page, reads } = await setup(t);
+    const { page, reads } = await setupAllCharts(t);
     await expect(page.locator(".trends-panel")).toHaveCount(7);
     await expect(page.locator(".trends-plot svg:visible")).toHaveCount(7);
     const data = await dates(page);
@@ -601,10 +673,11 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
     const marks = page.locator(".trends-panel[data-maximized=true] .trends-plot [data-trend-mark]");
     await expect(marks).toHaveCount(60);
+    await selectMode(page, "reach");
     await capture(page, "trends-tools-light");
     await marks.first().focus();
     await expect(page.locator("#trendsTooltip")).toBeVisible();
-    await expect(page.locator("#trendsTooltip")).toContainText("Reach");
+    await expect(page.locator("#trendsTooltip")).toContainText("1 of 2 interactions");
     await capture(page, "trends-reach-hover");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
@@ -613,16 +686,17 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await page.locator(".trends-evidence-row a").first().click();
     await expect(page.locator("#requestContent")).toContainText("Cedar release notes");
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
-    await expect(page).toHaveURL(/#trends$/);
+    await expect(page).toHaveURL(/\/trends$/);
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
     await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
     assert.ok(reads.every(read => !("scenarioIds" in read) && read.timeContext.timeZone === "UTC"));
 });
 
 test("series visibility does not rebase percentages, recreate controls or shift the chart at the page bottom", { timeout: 45000 }, async t => {
-    const { page, reads } = await setup(t);
+    const { page, reads } = await setupAllCharts(t);
     const value = await dates(page);
     await page.locator('.trends-panel[data-family="services"] .trends-sizing button:first-child').click();
+    await selectMode(page, "share");
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     const checkbox = page.getByRole("checkbox", { name: "Show Files", exact: true });
     await checkbox.focus();
@@ -648,7 +722,7 @@ test("series visibility does not rebase percentages, recreate controls or shift 
 });
 
 test("the seven simultaneous charts, daily activity and population filters work through ordinary controls", { timeout: 45000 }, async t => {
-    const { page, reads } = await setup(t);
+    const { page, reads } = await setupAllCharts(t);
     await dates(page);
     await page.locator('.trends-panel[data-family=rhythm] .trends-sizing button:first-child').click();
     await expect(page.locator(".trends-panel[data-family=rhythm] [data-trend-mark]")).toHaveCount(30);
@@ -690,7 +764,7 @@ test("the seven simultaneous charts, daily activity and population filters work 
 });
 
 test("withdrawal clears held chart content and refuses late Trends publication", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, true);
+    const { page } = await setupAllCharts(t, true);
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     await page.locator(".trends-panel[data-maximized=true] .trends-plot [data-trend-mark]").first().focus();
@@ -711,7 +785,7 @@ test("withdrawal clears held chart content and refuses late Trends publication",
 });
 
 test("leaving a pending range read returns to the last accepted trend without a stuck loading state", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, true);
+    const { page } = await setupAllCharts(t, true);
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     await page.evaluate(() => window.trendsBoundary.hold());
@@ -782,7 +856,7 @@ async function pointerMark(page, index = 0) {
 }
 
 test("real pointer inspection supplies specific values for every chart and never activates blank plot space", { timeout: 60000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords(), motion: "no-preference" });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords(), motion: "no-preference" });
     await dates(page);
     await page.locator('.trends-panel[data-family="authors"] .trends-sizing button:first-child').click();
     const cases = [
@@ -822,7 +896,7 @@ test("real pointer inspection supplies specific values for every chart and never
 });
 
 test("the left sidebar opens every peer and preserves Trends through collapse, expansion, drawer and reader transitions", { timeout: 90000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords(), motion: "no-preference" });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords(), motion: "no-preference" });
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     for (const mode of ["expanded", "collapsed", "drawer"]) {
@@ -862,7 +936,7 @@ test("the left sidebar opens every peer and preserves Trends through collapse, e
 });
 
 test("series and measure changes stay stable in both themes and enlarged narrow text remains readable", { timeout: 60000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords() });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords() });
     await dates(page);
     await page.locator('.trends-panel[data-family="services"] .trends-sizing button:first-child').click();
     for (const theme of ["light", "dark"]) {
@@ -903,7 +977,7 @@ test("series and measure changes stay stable in both themes and enlarged narrow 
 });
 
 test("enlarged chart text and long recorded model labels fit the working view", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords() });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords() });
     await dates(page);
     await page.locator('.trends-panel[data-family="models"] .trends-sizing button:first-child').click();
     await page.setViewportSize({ width: 440, height: 1000 });
@@ -930,7 +1004,7 @@ test("enlarged chart text and long recorded model labels fit the working view", 
 });
 
 test("daily activity bars retain contrast and gap dates have no invented bars in either theme", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords() });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords() });
     await dates(page);
     await page.locator('.trends-panel[data-family=rhythm] .trends-sizing button:first-child').click();
     await selectMode(page, "count");
@@ -940,18 +1014,20 @@ test("daily activity bars retain contrast and gap dates have no invented bars in
         const paint = await plot.evaluate(node => ({
             ink: getComputedStyle(node.querySelector("rect[data-trend-bar]")).fill,
             paper: getComputedStyle(node.closest(".trends-panel")).backgroundColor,
-            gap: node.querySelector('[aria-label^="Aug 15, 2026:"]').tagName,
+            gap: node.querySelector('[data-trend-mark][aria-label^="Aug 15, 2026:"]')?.getAttribute("aria-label"),
+            gapBars: node.querySelector('[data-trend-mark][aria-label^="Aug 15, 2026:"]')?.querySelectorAll("[data-trend-bar]").length,
             dates: node.querySelectorAll("[data-date-tick]").length,
         }));
         assert.ok(contrast(paint.ink, paint.paper) >= 3, `${theme}: ${JSON.stringify(paint)}`);
-        assert.equal(paint.gap, "circle", "A gap keeps keyboard reading without positive activity paint");
+        assert.match(paint.gap, /0 calls/i, "The empty day remains readable");
+        assert.equal(paint.gapBars, 0, "A gap has no positive activity paint");
         assert.equal(paint.dates, 30);
         await capture(page, `qualified-calendar-counts-${theme}`);
     }
 });
 
 test("sidebar glide keeps the Trends plot and legend vertically steady through collapse and expansion", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords(), motion: "no-preference" });
+    const { page } = await setupAllCharts(t, false, { records: journeyRecords(), motion: "no-preference" });
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     await page.evaluate(() => scrollTo(0, 0)); await settle(page);
@@ -985,10 +1061,14 @@ test("sidebar glide keeps the Trends plot and legend vertically steady through c
 });
 
 test("touch selects exact line and calendar dates without depending on hover", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords(), touch: true, viewport: { width: 440, height: 1000 } });
+    const { page } = await setupIndex(t, false, { records: journeyRecords(), touch: true, viewport: { width: 440, height: 1000 } });
     await dates(page);
+    await page.getByRole("navigation", { name: "Trend measures" }).getByRole("button", { name: "Tool usage" }).tap();
+    await page.getByRole("button", { name: "Lines", exact: true }).tap();
+    await openAllCharts(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').tap();
     const mark = page.locator(".trends-panel[data-maximized=true] .trends-plot [data-trend-mark]").first();
+    await expect(page.locator("#trendsPlot-tools svg")).toHaveAttribute("data-chart-type", "lines");
     await mark.scrollIntoViewIfNeeded(); await settle(page);
     const box = await mark.boundingBox();
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
@@ -1002,7 +1082,7 @@ test("touch selects exact line and calendar dates without depending on hover", {
 });
 
 test("unchanged parent renders do not remount a chart or dismiss its inspected value", { timeout: 45000 }, async t => {
-    const { page, reads } = await setup(t, true);
+    const { page, reads } = await setupAllCharts(t, true);
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     await settle(page);
@@ -1021,7 +1101,8 @@ test("unchanged parent renders do not remount a chart or dismiss its inspected v
 });
 
 test("long ranges open at their latest daily page and page without rebasing full-period membership", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: journeyRecords() });
+    const { page } = await setupIndex(t, false, { records: journeyRecords() });
+    await page.getByRole("navigation", { name: "Trend measures" }).getByRole("button", { name: "Tool usage" }).click();
     const data = await dates(page, "2026-01-01", "2026-09-10");
     assert.equal(data.window.offset, 180);
     await expect(page.locator(".trends-paging")).toContainText("181–253 of 253 days");
@@ -1048,9 +1129,10 @@ function currentRecords({ emptyToday = false, many = false } = {}) {
             const stamp = new Date(end - (30 - day) * 86400000).toISOString();
             record.userPrompt.sourceTimestamp = stamp;
             record.userPrompt.text = `Find the Cedar release evidence for ${stamp.slice(0, 10)}.`;
-            for (const call of record.toolCalls) {
-                call.startedAt = stamp;
-                if (call.completedAt) call.completedAt = new Date(Date.parse(stamp) + call.durationMs).toISOString();
+            for (const [ordinal, call] of record.toolCalls.entries()) {
+                const start = Date.parse(stamp) + (index * 2 + ordinal) * 1000;
+                call.startedAt = new Date(start).toISOString();
+                if (call.completedAt) call.completedAt = new Date(start + call.durationMs).toISOString();
                 if (many) call.tool = "workiq-" + tools[(day * 3 + index % 6 * 5) % tools.length];
             }
             if (!many) {
@@ -1092,13 +1174,16 @@ async function assertDailyAxes(page, count, scale = 1) {
     }
 }
 
-test("chart-first entry retains useful period facts with empty Today and offers sizing, filters and every daily date immediately", { timeout: 60000 }, async t => {
-    const { page, reads } = await setup(t, false, { records: currentRecords({ emptyToday: true }), viewport: { width: 1600, height: 1100 }, direct: true });
+test("chart-first entry retains period facts with empty Today and All charts preserves sizing, filters and daily dates", { timeout: 60000 }, async t => {
+    const { page, reads } = await setupIndex(t, false, { records: currentRecords({ emptyToday: true }), viewport: { width: 1600, height: 1100 }, direct: true });
     await settle(page);
     assert.equal(await page.evaluate(() => scrollY), 0, "First publication does not compensate an anchor that was still hidden");
     const heading = await page.locator("#pageTitle").boundingBox(), header = await page.locator(".app-header").boundingBox();
     assert.ok(heading.y >= header.y + header.height, "Direct Trends entry keeps its heading below the header");
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
+    await expect(page.locator("#trendsPlot-rhythm [data-date-tick]").last()).toHaveText("Today");
+    await expect(page.locator("[data-family=rhythm] .trends-index-scope")).toContainText(/[1-9][\d,]* dated calls in this period/);
+    await openAllCharts(page);
     await expect(page.locator("#trendsView")).not.toContainText("No supported changes");
     await expect(page.locator("#trendsView")).not.toContainText("No comparable change");
     assert.ok(Number((await page.locator('[data-family=tools] .trends-stat-value').textContent()).replaceAll(",", "")) > 0);
@@ -1163,7 +1248,7 @@ test("chart-first entry retains useful period facts with empty Today and offers 
 });
 
 test("series identities scale beyond four tools and stay fixed across visibility, filters, modes and themes", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 1600, height: 1100 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords({ many: true }), viewport: { width: 1600, height: 1100 } });
     await page.locator('[data-trend-period="30"]').click();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     const identities = () => page.locator('[data-family=tools] .trends-legend-row').evaluateAll(nodes => nodes.map(node => ({
@@ -1217,7 +1302,7 @@ test("series identities scale beyond four tools and stay fixed across visibility
 });
 
 test("shared main headings keep the same focus node, use navigation icons and leave Settings undecorated", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), motion: "no-preference" });
+    const { page } = await setupIndex(t, false, { records: currentRecords(), motion: "no-preference" });
     await page.evaluate(() => window.originalPageHeading = document.getElementById("pageTitle"));
     for (const [destination, label, icon] of [["analyze", "Analyze", "chart-column"], ["trends", "Trends", "chart-no-axes-combined"],
         ["reports", "Reports", "clipboard-list"], ["compare", "Compare", "scale"], ["settings", "Settings", null]]) {
@@ -1234,7 +1319,7 @@ test("shared main headings keep the same focus node, use navigation icons and le
 });
 
 test("wide Trends uses the available Analyze workspace rather than a capped half-width column", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords().slice(-1), viewport: { width: 3440, height: 1440 }, direct: true });
+    const { page } = await setupIndex(t, false, { records: currentRecords().slice(-1), viewport: { width: 3440, height: 1440 }, direct: true });
     await settle(page);
     const measure = selector => page.locator(selector).evaluate(node => {
         const box = node.getBoundingClientRect();
@@ -1242,28 +1327,36 @@ test("wide Trends uses the available Analyze workspace rather than a capped half
     });
     const trends = await measure("#trendsView");
     await capture(page, "wide-trends-width");
-    await navigateMain(page, "analyze"); await settle(page);
+    await navigateMain(page, "analyze");
+    await expect(page.locator("#homeView")).toBeVisible();
+    await settle(page);
     const analyze = await measure("#homeView");
-    console.log("Wide workspace comparison", { trends, analyze });
     assert.ok(trends.width >= analyze.width * .98 && Math.abs(trends.right - analyze.right) < 3,
         `Trends uses ${trends.width}px of Analyze's ${analyze.width}px workspace; empty right region ${analyze.right - trends.right}px`);
 });
 
 test("Trends charts use ordinary solid lines and solid activity bars rather than a symbol code", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 2560, height: 1200 } });
+    const { page } = await setupIndex(t, false, { records: currentRecords({ many: true }), viewport: { width: 2560, height: 1200 } });
+    await expect(page.locator("#trendsPlot-rhythm [data-trend-bar]").first()).toBeVisible();
+    await page.getByRole("navigation", { name: "Trend measures" }).getByRole("button", { name: "Tool usage" }).click();
+    await page.getByRole("button", { name: "Lines", exact: true }).click();
+    await openAllCharts(page);
     await settle(page);
+    const line = page.locator("#trendsPlot-tools line[data-series]").first();
+    assert.ok(await line.evaluate(node => node.getTotalLength() > 0 && getComputedStyle(node).stroke !== "none"),
+        "A painted line segment is present (horizontal SVG lines have a zero-height bounding box)");
     const marks = await page.locator(".trends-plot svg").evaluateAll(nodes => ({
         dashed: nodes.flatMap(svg => [...svg.querySelectorAll("line[data-series]")]).filter(line => {
             const dash = line.getAttribute("stroke-dasharray"); return dash && dash !== "none";
         }).length,
         shapes: nodes.flatMap(svg => [...svg.querySelectorAll("[data-series-marker]")]).length,
-        hatch: nodes.flatMap(svg => [...svg.querySelectorAll("rect[data-trend-mark]")]).some(rect => rect.getAttribute("fill")?.startsWith("url(")),
+        hatch: nodes.flatMap(svg => [...svg.querySelectorAll("rect[data-trend-bar]")]).some(rect => rect.getAttribute("fill")?.startsWith("url(")),
     }));
     assert.deepEqual(marks, { dashed: 0, shapes: 0, hatch: false });
 });
 
 test("source-wide read metadata remains separate from the selected Trends period", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), roster: [
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), roster: [
         { sessionId: "older-chat-outside-selected-members", eligible: true, error: "PRIVATE_RETAINED_ERROR", errorCode: "ENOENT",
             lastAttemptAt: "2025-01-01T12:00:00Z" },
     ] });
@@ -1281,7 +1374,7 @@ test("source-wide read metadata remains separate from the selected Trends period
 });
 
 test("wide populated Trends stays readable through resizing, zoom, chart sizing and filtering", { timeout: 60000 }, async t => {
-    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true, emptyToday: true }),
+    const { page, reads } = await setupAllCharts(t, false, { records: currentRecords({ many: true, emptyToday: true }),
         viewport: { width: 3440, height: 1440 }, motion: "no-preference", scale: 2, direct: true });
     const geometry = async () => {
         await settle(page);
@@ -1289,7 +1382,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
             const view = document.getElementById("trendsView").getBoundingClientRect();
             const main = document.getElementById("main"), bounds = main.getBoundingClientRect(), style = getComputedStyle(main);
             const zoom = Number(getComputedStyle(document.documentElement).zoom);
-            const control = document.querySelector(".trends-date-range");
+            const control = document.querySelector("[data-trend-period=custom]");
             return { width: innerWidth, dpr: devicePixelRatio, zoom, view: { left: view.left, right: view.right },
                 expected: { left: bounds.left + parseFloat(style.paddingLeft) * zoom, right: bounds.right - parseFloat(style.paddingRight) * zoom },
                 namedCustomControl: control.textContent.trim() === "Custom dates",
@@ -1309,7 +1402,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
     for (const [width, theme] of [[3440, "light"], [2560, "light"], [1920, "dark"], [3440, "dark"]]) {
         await page.setViewportSize({ width, height: 1440 }); await chooseTheme(page, theme);
         await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
-        console.log("Responsive CSS geometry", await geometry());
+        await geometry();
         const samples = await page.locator('[data-family=tools] .trends-legend-row svg line').evaluateAll(nodes => nodes.map(node => ({
             ink: getComputedStyle(node).stroke, paper: getComputedStyle(node.closest(".trends-panel")).backgroundColor,
         })));
@@ -1339,7 +1432,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     for (const zoom of [.8, 1.25]) {
         await page.evaluate(value => document.documentElement.style.zoom = String(value), zoom);
-        console.log("Responsive CSS zoom geometry", await geometry());
+        await geometry();
         await capture(page, `responsive-css-zoom-${zoom}`);
     }
     await page.evaluate(() => document.documentElement.style.zoom = "");
@@ -1357,7 +1450,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
 });
 
 test("every trend widget spans the workspace in landscape and portrait", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 }, direct: true });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 }, direct: true });
     for (const viewport of [{ width: 3440, height: 1440 }, { width: 1080, height: 1920 }]) {
         await page.setViewportSize(viewport); await settle(page);
         const layout = await page.locator(".trends-panel:visible").evaluateAll(nodes => {
@@ -1374,7 +1467,7 @@ test("every trend widget spans the workspace in landscape and portrait", { timeo
 });
 
 test("every overview chart exposes its measures without redundant subheaders", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await settle(page);
     await expect(page.locator(".trends-modes:visible")).toHaveCount(7);
     await expect(page.locator(".trends-unit:visible")).toHaveCount(0);
@@ -1383,7 +1476,7 @@ test("every overview chart exposes its measures without redundant subheaders", {
 });
 
 test("author names stay whole in overview and maximized reading without a vertical label column", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 3440, height: 1440 } });
     const check = async state => {
         await settle(page);
         const labels = await page.locator('[data-family=authors] .trends-series-label').evaluateAll(nodes => nodes.map(node => ({
@@ -1401,7 +1494,7 @@ test("author names stay whole in overview and maximized reading without a vertic
 });
 
 test("all seven full-width widgets retain readable labels and measures across sizing and orientation", { timeout: 90000 }, async t => {
-    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true, emptyToday: true }),
+    const { page, reads } = await setupAllCharts(t, false, { records: currentRecords({ many: true, emptyToday: true }),
         viewport: { width: 3440, height: 1440 }, motion: "no-preference", direct: true });
     await page.locator('[data-trend-period="30"]').click();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
@@ -1479,7 +1572,7 @@ test("all seven full-width widgets retain readable labels and measures across si
 });
 
 test("collapsed Trends rows contain only their title and applied range", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await page.getByRole("button", { name: "Collapse all", exact: true }).click(); await settle(page);
     await capture(page, "collapsed-title-only");
     const rows = await page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => ({
@@ -1491,7 +1584,7 @@ test("collapsed Trends rows contain only their title and applied range", { timeo
 });
 
 test("sizing glyphs are centered in separated hover targets", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1440, height: 1000 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1440, height: 1000 } });
     await page.getByRole("button", { name: "Collapse all", exact: true }).click(); await settle(page);
     for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1080, 1], ["light", 440, 2]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: width === 1080 ? 1920 : 1000 });
@@ -1531,7 +1624,7 @@ test("sizing glyphs are centered in separated hover targets", { timeout: 45000 }
 });
 
 test("the entire collapsed row expands and the expanded header collapses without hijacking controls", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
     const panel = page.locator('[data-family=services]');
     await panel.click({ position: { x: 600, y: 20 } });
@@ -1552,7 +1645,8 @@ test("the entire collapsed row expands and the expanded header collapses without
 });
 
 test("every widget control works for 7, 14, 30 and custom days through the normal renderer", { timeout: 180000 }, async t => {
-    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true, emptyToday: true }),
+    const records = currentRecords({ many: true, emptyToday: true });
+    const { page, reads } = await setupAllCharts(t, false, { records,
         viewport: { width: 1920, height: 1080 }, motion: "no-preference", direct: true });
     const ids = ["tools", "authors", "rhythm", "services", "problems", "models", "timing"];
     const evidence = { periods: 0, widgets: 0, measures: 0, seriesToggles: 0, exactSelections: 0, sizingActions: 0 };
@@ -1633,8 +1727,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             await page.keyboard.press("Enter");
             const expected = data.days.find(day => day.date === date).values[id].find(value => value.id === (id === "timing" ? "timing" : series));
             await page.getByRole("button", { name: "View evidence", exact: true }).click();
-            const actual = await page.locator(".trends-evidence-row a").evaluateAll(nodes =>
-                nodes.map(node => new URLSearchParams(node.hash.split("?")[1]).get("call")));
+            const actual = await evidenceCallIds(page, records);
             assert.deepEqual(actual.sort(), [...expected.rowIds].sort(), `${period}/${id}: exact selected calls`);
             await page.locator(".trends-evidence-row a").first().click();
             await expect(page.locator("#requestContent")).toContainText("Cedar");
@@ -1677,13 +1770,13 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
         assert.deepEqual((await (await response).json()).totals, data.totals);
         await expect(page.locator(".trends-restrictions")).toBeHidden();
     }
-    console.log("Every-control matrix", evidence);
+    t.diagnostic(`Exercised ${evidence.widgets} widget/period combinations and ${evidence.exactSelections} exact evidence selections`);
     assert.equal(evidence.widgets, 28);
     assert.equal(evidence.exactSelections, 28);
 });
 
 test("mixed saved-chat read gaps do not become a Trends scope warning", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), roster: [
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), roster: [
         { sessionId: "missing", eligible: true, error: "PRIVATE_MISSING", errorCode: "ENOENT" },
         { sessionId: "permission", eligible: true, error: "PRIVATE_PERMISSION", errorCode: "EACCES" },
     ] });
@@ -1694,8 +1787,8 @@ test("mixed saved-chat read gaps do not become a Trends scope warning", { timeou
 });
 
 test("Custom dates is visibly named and every widget names its applied range", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
-    await expect(page.locator(".trends-date-range")).toHaveText("Custom dates");
+    const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
+    await expect(page.getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
     const expectRange = async text => {
         await expect(page.locator(".trends-period-label")).toHaveCount(7);
         for (const label of await page.locator(".trends-period-label").all()) await expect(label).toHaveText(text);
@@ -1727,7 +1820,7 @@ test("Custom dates is visibly named and every widget names its applied range", {
 });
 
 test("widget dates retain the accepted range during drafts, pending reads and failed reads, and clear on withdrawal", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, true, { records: currentRecords() });
+    const { page } = await setupAllCharts(t, true, { records: currentRecords() });
     await dates(page, "2026-10-28", "2026-11-04");
     const accepted = await page.locator(".trends-period-label").allTextContents();
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
@@ -1759,7 +1852,7 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
 });
 
 test("clicking an overview data point never maximizes or moves the workspace", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 1440, height: 1000 } });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords(), viewport: { width: 1440, height: 1000 } });
     await dates(page, "2026-08-01", "2026-08-01");
     const plot = page.locator("#trendsPlot-tools");
     await plot.scrollIntoViewIfNeeded(); await settle(page);
@@ -1789,12 +1882,12 @@ test("clicking an overview data point never maximizes or moves the workspace", {
     assert.deepEqual(await geometry(), before, "Blank plot space cannot resize the workspace either");
     await expect(mark).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
-    await expect(page.locator(".trends-inspection-heading")).toContainText("retrieve · Interactions %");
+    await expect(page.locator(".trends-inspection-heading")).toContainText("retrieve · Calls");
     await expectEvidence(page, [4]);
 });
 
 test("touch and keyboard select every chart in place and preserve its point through explicit sizing", { timeout: 60000 }, async t => {
-    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 1080, height: 1920 }, touch: true });
+    const { page } = await setupAllCharts(t, false, { records: measureRecords(), viewport: { width: 1080, height: 1920 }, touch: true });
     await dates(page, "2026-08-01", "2026-08-01"); await chooseTheme(page, "dark");
     for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
         const panel = page.locator(`.trends-panel[data-family="${id}"]`), plot = panel.locator(".trends-plot");
@@ -1868,7 +1961,11 @@ async function measureSidebarMotion(page, { keyboard = false, reverse = false } 
         };
         trigger.addEventListener("click", click, true);
     });
-    if (keyboard) await page.keyboard.press("Enter"); else await button.click();
+    if (keyboard) await page.keyboard.press("Enter");
+    else {
+        const box = await button.boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    }
     if (reverse) {
         await page.waitForTimeout(110);
         if (keyboard) await page.keyboard.press("Enter");
@@ -1893,6 +1990,7 @@ async function measureSidebarMotion(page, { keyboard = false, reverse = false } 
                 && frame.width < Math.max(...frames.map(frame => frame.width)) - 1).length,
             widthSpan: Math.max(...frames.map(frame => frame.width)) - Math.min(...frames.map(frame => frame.width)),
             initialWidth: first.width, finalWidth: last.width, inputCount: result.inputTimes.length,
+            secondInputMs: result.inputTimes.length > 1 ? result.inputTimes[1] - first.at : null,
             avatarPreserved: frames.every(frame => frame.avatarSame !== false),
             focusPreserved: document.activeElement === document.getElementById("navigationCollapse"),
             motionDurations: [...new Set(frames.flatMap(frame => frame.durations ?? []))],
@@ -1902,7 +2000,7 @@ async function measureSidebarMotion(page, { keyboard = false, reverse = false } 
 }
 
 test("populated Trends sidebar motion stays responsive without rebuilding seven plots every animation frame", { timeout: 60000 }, async t => {
-    const { page } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 1920, height: 1080 },
+    const { page } = await setupAllCharts(t, false, { records: currentRecords({ many: true }), viewport: { width: 1920, height: 1080 },
         motion: "no-preference", direct: true, profile: true });
     const results = [];
     for (const route of ["analyze", "reports", "trends7", "trends30"]) {
@@ -1936,16 +2034,16 @@ test("populated Trends sidebar motion stays responsive without rebuilding seven 
     for (const phase of ["collapse", "expand", "reversal"])
         results.push({ route: "trends30-portrait", phase, ...await measureSidebarMotion(page, { keyboard: true, reverse: phase === "reversal" }) });
     await capture(page, "sidebar-motion-portrait-30");
-    console.log("Sidebar motion benchmark", JSON.stringify(results));
     if (process.env.WIRE_TRENDS_PERFORMANCE) await writeFile(process.env.WIRE_TRENDS_PERFORMANCE, JSON.stringify(results, null, 2));
     for (const result of results.filter(row => row.route.startsWith("trends"))) {
+        assert.equal(result.inputCount, result.phase === "reversal" ? 2 : 1, "The real toggle must receive each activation");
         assert.ok(result.widthSpan > 100 && result.intermediateFrames >= 8, "Sidebar must actually animate through intermediate widths");
         assert.equal(result.plotRebuilds, 0, `${result.route}/${result.phase}: width changes must reuse mounted charts`);
         assert.ok(result.avatarPreserved && result.focusPreserved, "The selected avatar and active sidebar control remain mounted");
         assert.deepEqual(result.motionDurations, [320], "The native sidebar duration is preserved, not shortened or disabled");
         assert.ok(result.firstMotionMs < 120, `${result.route}/${result.phase}: ${result.firstMotionMs}ms to first motion`);
         assert.ok(result.maxFrameGapMs < 100, `${result.route}/${result.phase}: ${result.maxFrameGapMs}ms frame gap`);
-        assert.ok(result.completionMs < 650, `${result.route}/${result.phase}: ${result.completionMs}ms to complete the unchanged sidebar animation`);
+        assert.ok(result.completionMs < 650, `${result.route}/${result.phase}: ${result.completionMs}ms to complete; second input at ${result.secondInputMs}ms`);
     }
     const latest = await page.locator(".trends-plot").evaluateAll(nodes => nodes.map(node => ({
         id: node.id, remaining: node.scrollWidth - node.clientWidth - node.scrollLeft,
@@ -1954,7 +2052,8 @@ test("populated Trends sidebar motion stays responsive without rebuilding seven 
 });
 
 test("sidebar reflow keeps all chart nodes, evidence text, selection and reading while updating hit geometry", { timeout: 60000 }, async t => {
-    const { page, reads } = await setup(t, false, { records: currentRecords({ many: true }), viewport: { width: 1440, height: 1080 },
+    const records = currentRecords({ many: true });
+    const { page, reads } = await setupAllCharts(t, false, { records, viewport: { width: 1440, height: 1080 },
         motion: "no-preference", direct: true });
     const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
     await page.locator('[data-trend-period="30"]').click();
@@ -1981,7 +2080,11 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     for (const phase of ["collapse", "expand", "reversal"]) {
         const result = await measureSidebarMotion(page, { reverse: phase === "reversal" });
         assert.equal(result.plotRebuilds, 0);
-        assert.deepEqual(await snapshot(), before);
+        const after = await snapshot();
+        assert.deepEqual(after.map(card => card.id), before.map(card => card.id));
+        for (const [index, card] of after.entries()) for (const key of Object.keys(card)) {
+            assert.ok(isDeepStrictEqual(card[key], before[index][key]), `${phase}/${card.id}: ${key} changed during sidebar reflow`);
+        }
         assert.equal(reads.length, readCount);
         const mounted = await page.evaluate(() => ({
             same: window.keptTrendSvgs.every((node, index) => node === document.querySelectorAll(".trends-plot>svg")[index]),
@@ -1990,6 +2093,10 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         assert.equal(mounted.same, true); assert.ok(mounted.scrolls.every(value => Math.abs(value - 120) < 1), JSON.stringify(mounted));
     }
     const toolPlot = page.locator("#trendsPlot-tools");
+    // Tool usage is no longer the top row. Put the wheel over the plot before
+    // starting the glide; clicking the sidebar first leaves the pointer there.
+    await page.locator("#navigationCollapse").focus();
+    await toolPlot.scrollIntoViewIfNeeded();
     await toolPlot.evaluate(node => {
         node.scrollLeft = 300;
         window.userPlotScroll = null;
@@ -1999,10 +2106,11 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         });
     });
     await settle(page);
-    await page.locator("#navigationCollapse").click();
-    await page.waitForTimeout(50);
     const toolBox = await toolPlot.boundingBox();
     await page.mouse.move(toolBox.x + toolBox.width / 2, toolBox.y + 40);
+    assert.ok(await toolPlot.evaluate(node => node.matches(":hover")), "Horizontal wheel must reach the visible Tool usage plot");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
     await page.mouse.wheel(-100, 0);
     await page.waitForFunction(() => window.userPlotScroll !== null);
     await settle(page);
@@ -2014,8 +2122,7 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     await page.getByRole("button", { name: "View evidence", exact: true }).click();
     const day = new Date(selected.split(":")[0].replace(/^Today · /, "")).toISOString().slice(0, 10);
     const expected = data.days.find(value => value.date === day).values.tools.find(value => value.id === selectedSeries).rowIds;
-    const actual = await page.locator(".trends-evidence-row a").evaluateAll(nodes => nodes.map(node =>
-        new URLSearchParams(node.hash.split("?")[1]).get("call")));
+    const actual = await evidenceCallIds(page, records);
     assert.deepEqual(actual.sort(), [...expected].sort());
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Back to overview", exact: true }).click();
@@ -2023,22 +2130,31 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
         const plot = page.locator(`#trendsPlot-${id}`);
-        const mark = plot.locator("[data-trend-mark]").first();
+        // A middle date stays in the drawable area at both widths. The first
+        // date can be visually covered by the pinned y axis when scrolled.
+        const marks = plot.locator("[data-trend-mark]");
+        const mark = marks.nth(Math.floor(await marks.count() / 2));
+        const glyph = mark.locator("rect[data-trend-bar], circle").first();
         await plot.scrollIntoViewIfNeeded(); await settle(page);
-        const prior = await mark.evaluate(node => ({ node: node.getAttribute("aria-label"), rect: node.getBoundingClientRect().toJSON() }));
+        const prior = await plot.boundingBox();
         await page.locator("#navigationCollapse").click(); await settle(page);
         await mark.scrollIntoViewIfNeeded(); await settle(page);
-        const box = await mark.boundingBox();
-        assert.notEqual(box.x, prior.rect.x, `${id}: geometry moves with the real workspace`);
+        const box = await glyph.boundingBox();
+        const resized = await plot.boundingBox();
+        assert.ok(Math.abs(resized.width - prior.width) > 100, `${id}: sidebar must resize the actual plot`);
         const hit = await page.evaluate(({ x, y }) => {
-            const node = document.elementFromPoint(x, y);
-            return { tag: node?.tagName, label: node?.getAttribute("aria-label"), id: node?.id, cls: node?.getAttribute("class"), x, y, height: innerHeight };
+            const node = document.elementFromPoint(x, y), plot = node?.closest(".trends-plot");
+            return { tag: node?.tagName, label: node?.closest("[data-trend-mark]")?.getAttribute("aria-label"),
+                plot: plot?.id, within: plot && x - plot.getBoundingClientRect().left, scroll: plot?.scrollLeft, x, y, height: innerHeight };
         }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
         assert.ok(hit.y > 76 && hit.y < hit.height, `${id}: pointer proof must reach a visible mark: ${JSON.stringify(hit)}`);
+        assert.equal(hit.label, await mark.getAttribute("aria-label"), `${id}: ${JSON.stringify(hit)}`);
+        await page.mouse.move(8, 8);
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
         await expect(page.locator("#trendsTooltip"), `${id}: ${JSON.stringify(hit)}`).toBeVisible();
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
         await expect(plot.locator("[data-trend-mark][aria-pressed=true]")).toHaveCount(1);
+        await expect(mark).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator(`.trends-panel[data-family="${id}"]`)).toHaveAttribute("data-maximized", "false");
         await page.keyboard.press("Escape");
     }

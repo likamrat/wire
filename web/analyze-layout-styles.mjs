@@ -68,6 +68,12 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main .view-switch>button {flex:0 1 auto;overflow-wrap:normal}
 #homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:12px 20px 8px;flex:1}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
+.analyze-chart-main .chart-heading,.percentage-card-heading:has(>.analyze-trend-link){display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px}
+.percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator:not(.visually-hidden){order:1;flex-basis:100%}
+.analyze-trend-link{margin-inline-start:auto;display:inline-flex;align-items:center;min-height:32px;font-size:var(--type-caption);white-space:nowrap}
+.analyze-trend-decision{max-width:min(32rem,calc(100vw - 2rem))}
+.analyze-trend-decision ul{padding-inline-start:1.3em;margin:0 0 1rem}
+.analyze-trend-decision li+li{margin-block-start:.5em}
 #homeView #chart>.empty-state {padding:8px 0 12px;background:none;border:0;border-radius:0;text-align:start}
 #homeView #chart>.empty-state>h3 {font:inherit;color:var(--muted)}
 #homeView #chart>.empty-state>p {margin:8px 0 0}

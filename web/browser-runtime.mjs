@@ -59,6 +59,7 @@ import { createSearchWireContract } from "../lib/search-wire-protocol.mjs";
 import { createReportIdentity } from "../lib/report-identity.mjs";
 import { createSearchFields } from "./search-field.mjs";
 import { createAnalyzeScope } from "./analyze-scope.mjs";
+import { createAnalyzeTrendsEntry } from "./analyze-trends-entry.mjs";
 import { mountAnalyzeReferenceEntry } from "./analyze-reference-entry.mjs";
 import { mountChartReference, chartReferenceFacts } from "./chart-reference.mjs";
 import { createChartReferenceState } from "./chart-reference-state.mjs";
@@ -86,7 +87,7 @@ function factories() {
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
         timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
-        createPagePaths, createSearchFields, createAnalyzeScope, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
+        createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),

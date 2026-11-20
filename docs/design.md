@@ -28,7 +28,7 @@ Evidence definitions and frozen-file requirements remain in the
 | Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
-| Trends | Full-width daily charts in one vertical stack, each with its own visible measure controls |
+| Trends | Seven visible measure names beside one daily chart; optional aligned charts share the accepted period |
 | Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
 
@@ -177,25 +177,21 @@ Do not apply current branding globally to historical report snapshots.
 The [Chart guide behavior](interaction-design.md#chart-guide) connects each
 visualization to its definitions and exact values.
 
-Every Trends widget occupies the full workspace width in landscape and portrait.
-One shared chart layout places period figures beside the title, a readable
-legend beside the plot, and the same measure controls in every header.
-On narrower surfaces the legend moves below the plot instead of squeezing its
-names. Short label/value pairs stay on one row; longer pairs wrap when their
-actual content needs the space. Do not nest the author legend beside a ring or
-clamp short names to two lines. Single-measure plots do not reserve an empty
-legend column.
-Name the calendar control **Custom dates**. Show the accepted range in
-parentheses beside every widget title, including collapsed and maximized views.
-Do not relabel an accepted chart with calendar drafts or pending read dates. Ordinary
-solid lines lead the reading; do not make people decode dashes, shapes or hatches.
-Series keep stable colors and named legends through filters and visibility
-changes. Author and service colors use the existing WIRE roles. Hover or focus
-can emphasize one series without changing its values or the other series.
-Selecting a mark stays in place. Do not resize a chart or hide its neighbors
-as a side effect of a pointer, touch or keyboard data selection.
-Keep the selected date, subject and View evidence above the plot in reserved
-space, in overview as well as maximized reading. Sizing must not gate evidence.
+Trends places a visible measure index beside the working chart. At narrow widths
+the names wrap above the chart, not into a chooser. Errors & failures comes
+first; a fresh sidebar entry starts on Tool calls. Keep the dated population
+beside the measure name. An incomplete service name is a limit on that count,
+not a general warning below every chart. Put the counting details in Data table.
+Named legend controls change what is drawn without changing the population.
+Columns use a zero baseline and a separate bar for each series, even when
+services or models overlap. Straight lines use the same observations; a missing
+measurement breaks the line. Chart type, unit, population and selection are
+independent. Select a value to reach its exact calls without maximizing.
+
+Period opens the 7/14/30/custom choices. Never substitute a pending date or
+filter for the last accepted facts. Compare measures adds charts on the same
+dates without copying a second scope. **All charts**, available within the
+comparison chooser, retains the full-width overview and its sizing controls.
 
 The same chart owner serves overview and maximized reading. Every daily date
 is labeled with month and day, except Today; hover supplies the exact date.

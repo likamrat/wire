@@ -86,7 +86,7 @@ test("context rows retain the exact full-analytics attribution without building 
     for (const layer of ["tool", "reported-api", "direct-request", "recorded-http", "http"]) assert.ok(context[layer].length > 0, layer);
     for (const [layer, rows] of Object.entries(context)) {
         const complete = buildActivityAnalytics(records, { layer, bucket: "month", filters: { scope: "all", includeMetadata: true } }).rows;
-        const fields = ["id", "scenarioId", "scenarioIds", "sourceSessionId", "sourceId", "sourceScope", "toolCallId", "activityId",
+        const fields = ["id", "scenarioId", "scenarioIds", "sourceSessionId", "sourceId", "sourceScope", "toolCallId", "tool", "activityId",
             "recordId", "parentCallId", "observationKey", "resultIndex", "outcome", "status", "workload", "endpoint", "serviceAssociation",
             "countUnit", "nativeToolNames", "nativeOutcome", "nativeConflicts"];
         assert.deepEqual(rows, complete.map(row => Object.fromEntries(fields.map(key => [key, row[key]]))), layer);

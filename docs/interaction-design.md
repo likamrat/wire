@@ -122,26 +122,31 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 
 ## Trends
 
-Trends is a peer destination, not another Analyze widget. Opening it immediately
-shows the chosen period's charts, not a marketplace or a supported-change gate.
-Tool usage, prompt authors, tool calls, services, errors, models and duration
-each occupy a full-width row. All seven show their daily chart and measure
-controls immediately. The same layout serves overview and maximized reading;
-short author/service labels stay whole rather than being squeezed beside a ring.
+Trends is a peer destination. The index lists Errors & failures first and keeps
+all seven measures visible, including on narrow screens. Tool calls is the
+ordinary initial chart. A contextual Analyze entry opens the corresponding
+measure with supported scope; related rather than equivalent views name the
+difference before switching. Return restores the widget and its reading context.
+Changing measure, chart type, series or unit is not a new population read.
+Compare measures adds qualifying charts for the same period. In the optional
+**All charts** workspace the seven charts occupy full-width rows with sizing
+controls. Short author/service labels stay whole rather than being squeezed.
 Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
 Use the full workspace in both orientations without scaling text. Narrow
-layouts move the legend below the chart; the plot scrolls only horizontally.
-The **Custom dates** button opens the existing calendar. Each widget title
-shows its accepted range in parentheses. Presets and Apply update all seven
-headers together; drafts, Cancel, pending reads and failed reads retain the
+layouts wrap the legend; the plot scrolls horizontally. **Period → Custom
+dates** opens the existing calendar. The period control (or the title in
+All charts) names the accepted range. Presets and Apply update the charts
+together; drafts, Cancel, pending reads and failed reads retain the
 accepted range. Today remains a current-day label, not a claim of full-day coverage.
 Delayed reads show the requested range separately, without relabeling accepted
 facts. Success, failure, superseding intent, departure and withdrawal clear it.
 
-Every expanded widget reserves a selected-date/subject row above its plot with
-View evidence. Selection updates that row without changing widget height, even
-for long recorded names. Maximize uses the same chart and controls, adding the
+In the index, hover/focus previews a mark; click, tap or Enter pins its reading
+and exposes the matching calls. **Data table** includes hidden series and the
+full period, not only the drawn window. **Columns / Lines** retains exact
+selection and denominators. In All charts, selection updates the selected-day
+and subject row. Maximize uses the same chart and controls, adding the
 selected-date breakdown and View numbers. Back to overview restores the activating
 control and reading position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available

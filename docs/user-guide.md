@@ -112,17 +112,17 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 
 ## Trends
 
-Choose **Trends** in the sidebar for full-width daily charts: tool usage,
-prompt authors, tool calls, services, errors & failures, response models and
-call duration. They use the available width in either monitor orientation.
-The whole chosen period stays useful even when there are no calls today.
-
-![Full-width Trends charts with measure controls in every header.](images/trends-overview.png)
+Choose **Trends** in the sidebar to see tool calls by day. The seven measure
+names stay visible. Choose **Errors & failures** at the top to find affected
+interactions, or **Services** to compare named services immediately. On Analyze,
+an applicable widget offers a direct trend action. A related view that changes
+the population or unit explains the difference before opening; **Back to
+Analyze** restores the original widget.
 
 ### Choose the period and activity
 
-Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
-The applied range appears in parentheses beside every widget title.
+Open **Period** for **Last 7 days**, **Last 14 days**, **Last 30 days** or
+**Custom dates**. The control names the applied range.
 While a new range loads, its pending label appears above the charts; the dates
 and values stay on the last accepted range until the read succeeds.
 Every date is labeled, including all 30 days: past dates show month and day,
@@ -134,14 +134,16 @@ include both endpoints; choosing older dates does not collect older history.
 **Filters** changes the activity included, even while a chart is maximized.
 Apply author, tool and service choices together; Cancel leaves the scope alone,
 and **Clear filters** restores the unrestricted period. The series checkboxes only
-show or hide lines; they do not recalculate percentage denominators.
+show or hide series; they do not recalculate percentage denominators.
 
 ### Read the measures
 
 Period breakdowns summarize the whole chosen range. A dated point uses that
-day's matching population. Every chart's header lets you switch its measure
-without maximizing it. **Chart guide** and **View numbers** explain the measures
-and exact values.
+day's matching population. **Count / Percentage** changes compatible measures;
+tool percentages can use calls or originating interactions. Duration remains
+in milliseconds. **Columns / Lines** changes the drawing, not the values.
+**Compare measures** adds charts for the same dates. **Data table** includes
+daily numbers and period totals, including series hidden in the chart.
 
 | Chart | Measure |
 | --- | --- |
@@ -165,23 +167,24 @@ which dates are affected. Limits specific to the chart remain beside its values.
 ### Inspect a change
 
 Hover or focus a dated mark to read its values. Arrow keys move between dates
-and series. Select a point, then choose **View evidence** beside its date and
-subject above the chart. There is no need to maximize first. Selection
+and series. Select a point, then choose the action showing its matching call
+count. There is no need to maximize first. Selection
 keeps the chart in place; maximizing retains the selected point. Other series'
 calls are not added to this list.
 Hover a legend entry to emphasize its line without filtering the activity.
 
 Open a call to read its result and full parent interaction. That parent context
 can contain calls outside the chart selection. Closing the reader returns focus
-to **View evidence**; reopening the list returns to the call you were inspecting.
+to the supporting-calls action; reopening the list returns to the call you were inspecting.
 Changing the scope retires that return position. Hiding the selected series does
 not change its evidence. The list's title and Close stay available while it scrolls.
 
-Maximize a chart and choose **View numbers** for its daily table, including hidden
-series. On a narrow screen, scroll within the table; keyboard users can focus it
+Choose **Data table** below the chart. On a narrow screen, scroll within
+the table; keyboard users can focus it
 and use the arrow keys. Dates and column headers stay attached to the values.
 
-**Back to overview** returns to the same place. Collapse or restore charts
+For the full-width stack choose **Compare measures → All charts**. In that
+workspace, **Back to overview** returns to the same place. Collapse or restore charts
 without losing their measure, series choices or horizontal reading position.
 Collapsed widgets show their names and applied dates. Click anywhere on a collapsed row to
 open it, or the open widget's header to close it. The arrow button does the same

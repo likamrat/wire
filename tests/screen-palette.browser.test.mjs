@@ -133,6 +133,7 @@ test("the built workbench carries each palette through screens and nested readin
         await expect(page.locator(".wire-search-hit").first()).toBeVisible();
         await inspect("search", theme); await page.keyboard.press("Escape");
         await navigateMain(page, "trends");
+        await page.locator("#trendsPeriod").click();
         await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
         await page.getByLabel("Trends from", { exact: true }).fill("2026-11-10");
         await page.getByLabel("Trends to", { exact: true }).fill("2026-11-16");
