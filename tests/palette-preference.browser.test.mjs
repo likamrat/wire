@@ -3,6 +3,54 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { selectActivityOption } from "./helpers.mjs";
+import { contrast } from "./color-measurements.mjs";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+
+for (const frontend of ["bundled", "react"]) test(`${frontend} navigation rows distinguish hover, current location and keyboard focus from prose links`, async t => {
+    const { runtime } = await searchFixture(t, { frontend, records: [], reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ reducedMotion: "reduce" });
+    const paint = node => { const s = getComputedStyle(node); return { line: s.textDecorationLine, fill: s.backgroundColor, ink: s.color, ring: s.outlineStyle }; };
+    for (const [mode, width, scale, palette] of [["light", 1440, 100, "petrol"], ["dark", 390, 200, "midnight"]]) {
+        await page.setViewportSize({width,height:900});
+        await page.goto(new URL("/settings?section=themes",runtime.url).href);
+        await page.locator(`.palette-option:has(#palette-${palette})`).click();
+        if (await page.locator("html").getAttribute("data-evidence-theme") !== mode) await page.locator("#settingsThemePreference").click();
+        await page.evaluate(s => document.documentElement.style.fontSize = s+"%",scale);
+        const category = page.locator('#settingsCategoryNav [data-category=regional]');
+        if (!await category.isVisible()) await page.locator("#settingsCategorySummary").click();
+        await category.hover();
+        const hovered = await category.evaluate(paint);
+        if (process.env.WIRE_NAV_STATE_PROOFS) {
+            await mkdir(process.env.WIRE_NAV_STATE_PROOFS,{recursive:true});
+            await page.screenshot({path:path.join(process.env.WIRE_NAV_STATE_PROOFS,`${frontend}-${mode}-hover.png`)});
+        }
+        assert.equal(hovered.line,"none");
+        assert.notEqual(hovered.fill,"rgba(0, 0, 0, 0)");
+        assert.ok(contrast(hovered.ink,hovered.fill)>=4.5);
+        await page.mouse.down(); const pressed=await category.evaluate(paint); await page.mouse.up();
+        assert.equal(pressed.line,"none"); assert.notEqual(pressed.fill,hovered.fill);
+        await expect(page.locator("#regionalTitle")).toBeFocused();
+        if (!await category.isVisible()) await page.locator("#settingsCategorySummary").click();
+        await category.focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+        await expect(category).toBeFocused(); await expect(category).toHaveAttribute("aria-current","page");
+        assert.equal((await category.evaluate(paint)).ring,"solid");
+        assert.equal(await category.evaluate(n=>getComputedStyle(n,"::before").width),"2px");
+        await page.locator("#settingsSearch").fill("Midnight");
+        const result=page.locator('#settingsSearchResults a[data-setting=palette]');
+        await result.hover(); const hit=await result.evaluate(paint); assert.equal(hit.line,"none"); assert.ok(contrast(hit.ink,hit.fill)>=4.5);
+        await result.click(); await expect(page.locator(`#palette-${palette}`)).toBeFocused();
+        await page.goBack(); await expect(result).toBeFocused();
+        const sidebar=page.locator('a[data-nav=reports]');
+        if (!await sidebar.isVisible()) await page.locator("#navigationToggle").click();
+        await sidebar.hover(); assert.equal((await sidebar.evaluate(paint)).line,"none");
+        await page.goto(new URL("/settings?section=troubleshooting",runtime.url).href);
+        await page.locator("#serviceProvenanceHelp summary").click();
+        const prose=page.locator("#serviceProvenanceHelp a"); await prose.hover();
+        assert.equal((await prose.evaluate(paint)).line,"underline");
+    }
+});
 
 for (const frontend of [undefined, "bundled", "react"]) {
     test(`${frontend ?? "serialized"} shell applies the stored palette before mount and recovers failed writes`, async t => {

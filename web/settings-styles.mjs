@@ -58,8 +58,6 @@ export const settingsStyles = `
 .settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
 .settings-categories a>.wire-icon {width:20px;height:20px;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
-.settings-categories a:hover {background:transparent;color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
-.settings-categories a:active {background:transparent;color:var(--ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.25em}
 .settings-categories a[aria-current=page] {background:transparent;color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
 .settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
@@ -87,9 +85,9 @@ export const settingsStyles = `
 .settings-search-heading>span {min-width:0;overflow-wrap:anywhere}
 .settings-search-results ul {margin:4px 0 0 1.125rem}
 .settings-search-results a {position:relative;display:grid;align-content:center;gap:2px;min-height:44px;padding:8px 8px 8px 10px;border-radius:var(--settings-nav-radius);color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-regular);overflow-wrap:anywhere}
-.settings-search-results a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
-.settings-search-results a:active {color:var(--ink);text-decoration-thickness:2px}
 .settings-search-results a[aria-current=location] {color:var(--ink)}
+.settings-rail :is(.settings-categories,.settings-search-results) a:hover {background:var(--accent-soft);color:var(--ink)}
+.settings-rail :is(.settings-categories,.settings-search-results) a:active {background:var(--accent-pressed);color:var(--ink)}
 .settings-search-results a[aria-current=location]::before {content:"";position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-search-availability {font-size:var(--type-caption);color:var(--muted)}
 .settings-search-results mark {color:inherit;background:var(--accent-soft);font-weight:var(--weight-medium)}

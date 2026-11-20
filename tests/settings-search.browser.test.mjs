@@ -131,10 +131,11 @@ test("Settings search reference layouts use the normal renderer and invented act
         const result = page.locator('[data-setting="recollect-activity"]');
         const bounds = await result.boundingBox();
         await result.hover();
-        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationLine), "underline");
-        assert.equal(await result.evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)");
+        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationLine), "none");
+        const hoveredFill = await result.evaluate(node => getComputedStyle(node).backgroundColor);
+        assert.notEqual(hoveredFill, "rgba(0, 0, 0, 0)");
         await page.mouse.down();
-        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationThickness), "2px");
+        assert.notEqual(await result.evaluate(node => getComputedStyle(node).backgroundColor), hoveredFill);
         assert.deepEqual(await result.boundingBox(), bounds, "Hover/press cannot shift a destination");
         await page.mouse.up();
         await expect(page.locator("#recollectActivity")).toBeFocused();

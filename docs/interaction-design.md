@@ -581,13 +581,15 @@ gets a short status, but its result remains a link to the setting and explanatio
 Use a flat, compact field face inside a full input target, scoped to Settings.
 Keep the global retained-content Search field unchanged.
 Results use regular Asta Sans, plain Lucide category icons and no filled cards.
-Distinguish hover underline, selected-location mark and keyboard outline.
+Give category and result rows a quiet whole-row hover and a distinct pressed fill.
+The location mark persists independently of the pointer; keyboard focus outlines
+the target. Reserve underlines for links within prose or evidence.
 Tab and Enter reach the existing control; Clear or Escape restores the category
 list. Back restores the query and activating link, including after visiting
 Collection status.
 
-Settings categories use a compact neutral selection mark and transient text
-hover/press feedback, not competing full-row gray blocks.
+Settings categories use a compact neutral selection mark, not a second filled
+selection tile.
 
 ### Account and profile
 
