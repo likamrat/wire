@@ -118,7 +118,8 @@ test("stale source, settings, preview expiry and unconfirmed requests cannot aut
     await assert.rejects(controller.confirm("panel", { operationId: preview.operationId, confirmed: true }), /history.*changed/);
     preview = await controller.preview("panel", scope(f));
     clock += 120001;
-    await assert.rejects(controller.confirm("panel", { operationId: preview.operationId, confirmed: true }), /preview changed/);
+    await assert.rejects(controller.confirm("panel", { operationId: preview.operationId, confirmed: true }),
+        { code: "RECOLLECTION_PREVIEW_EXPIRED", status: 409 });
     clock = Date.now();
     preview = await controller.preview("panel", scope(f));
     await f.collector.setEnabled(true);

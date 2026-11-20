@@ -90,7 +90,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     }
     const $ = id => document.getElementById(id), dialog = $("recollectDialog");
     const storageKey = "workiq-evidence.recollection-operation";
-    let phase = "editing", token = 0, preview, receipt, trigger, busy = false, sourcesReady = false;
+    let phase = "editing", token = 0, preview, expiryTimer, receipt, trigger, busy = false, sourcesReady = false;
     let result, statusError = false, viewNeedsRead = false, mounted = false;
     let sources = [], sourceMatches = [], selectedOnly = false;
     let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
@@ -209,6 +209,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         notify();
     }
     function cancelPreview() {
+        clearTimeout(expiryTimer);
         const access = publication();
         if (!current(access) || !preview) return;
         const operationId = preview.operationId;
@@ -225,6 +226,15 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         erasePreviewValues();
         phase = "editing";
         update();
+    }
+    function expirePreview() {
+        if (phase !== "preview" || !preview || !current(publication()) || Date.parse(preview.expiresAt) > Date.now()) return false;
+        preview = undefined;
+        phase = "editing";
+        erasePreviewValues();
+        status("The preview expired. Nothing was saved. Preview again.", true);
+        update();
+        return true;
     }
     function scope() {
         return { sourceSessionIds: [...selectedSources],
@@ -304,7 +314,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         try {
             const result = await api("/api/recollection/preview", scope());
             if (!current(access) || version !== token || !dialog.open) return;
-            if (!validReceipt(result)
+            if (!validReceipt(result) || !Number.isFinite(Date.parse(result.expiresAt))
                 || !result.scope?.timeContext || !Array.isArray(result.availability)
                 || !["from", "to", "since", "until"].every(key => Number.isFinite(Date.parse(result.scope?.[key])))
                 || !Number.isFinite(Date.parse(result.scope?.bounds?.from)) || !Number.isFinite(Date.parse(result.scope?.bounds?.to))) {
@@ -359,6 +369,8 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             }));
             const partial = result.availability.some(row => row.problem || row.droppedBytes || row.unreadBytes || row.malformedLines || row.oversizedLines || row.credentialExclusions || row.unsupportedPromptContents || row.missingResults);
             preview = result; phase = "preview";
+            if (expirePreview()) return;
+            expiryTimer = setTimeout(expirePreview, Date.parse(result.expiresAt) - Date.now());
             status(view.records === null ? "The preview did not return a usable record count. Change scope and preview again; nothing was recollected."
                 : view.records ? (partial ? "Some history is unavailable or incomplete. Only the records shown will be recollected. See source details."
                     : "") : "No eligible records are available in this scope. Nothing can be recollected.", view.records === null);
@@ -368,15 +380,30 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     });
     $("recollectConfirm").addEventListener("click", async () => {
         const access = publication();
-        if (!describe(phase, { preview, busy }).canConfirm || !allowed("confirm")) return;
+        if (expirePreview() || !describe(phase, { preview, busy }).canConfirm || !allowed("confirm")) return;
         receipt = { operationId: preview.operationId, receiptToken: preview.receiptToken };
         try { sessionStorage.setItem(storageKey, JSON.stringify(receipt)); }
         catch { status("This browser cannot save the recovery receipt. Nothing recollected. Allow session storage before confirming.", true); return; }
+        clearTimeout(expiryTimer);
         phase = "pending"; update(); status("Re-reading and committing only the confirmed source records. Keep this panel open.");
         $("recollectStatus").focus();
         try { await showResult(await api("/api/recollection/confirm", { operationId: receipt.operationId, confirmed: true }), access); }
         catch (error) {
             if (!current(access)) return;
+            if (error.recollection?.outcome === "not-saved" && error.recollection.operationId === receipt?.operationId
+                && error.outcome !== "unknown") {
+                // Only the server can prove this operation refused before the writer.
+                try { sessionStorage.removeItem(storageKey); }
+                catch {
+                    phase = "uncertain";
+                    status(`Nothing was saved. ${error.message} The saved receipt could not be cleared. Use Check recollection result.`, true);
+                    return;
+                }
+                phase = "not-started"; preview = receipt = result = undefined;
+                erasePreviewValues();
+                status(`Nothing was saved. ${error.message}`, true);
+                return;
+            }
             phase = "uncertain";
             status(`${error.message} Use Check recollection result. No mutation will be replayed.`, true);
         } finally { if (current(access)) update(); }
@@ -457,6 +484,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     restoreReceipt(); update(); mounted = true;
     function withdrawAccess() {
         if (!accessAvailable) return;
+        clearTimeout(expiryTimer);
         accessAvailable = false; accessEpoch++; token++;
         if (phase === "pending") phase = "uncertain";
         if (!["uncertain", "blocked", "complete", "not-started"].includes(phase)) phase = "editing";

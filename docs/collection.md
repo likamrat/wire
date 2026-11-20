@@ -477,6 +477,13 @@ postimage, the separately reviewed maintenance path is required.
 4. Confirm. If the result is uncertain, use **Check recollection result**,
    including after reload/restart, rather than confirming again.
 
+An edit in a different Copilot chat does not invalidate your preview by
+itself. WIRE rechecks the physical source database and the selected chats,
+their histories and the proposed changes before saving. A changed selection
+or expired preview requires a fresh review. The panel distinguishes a known
+refusal before saving from a lost response: only the latter needs a receipt
+check. Neither is automatically retried.
+
 Restored prompts need exact source-qualified selected prompt/call associations.
 Host envelopes cannot promote an agent kickoff to User. Anonymous local records
 and owned HTTP diagnostics cannot be recovered through this source reread.
