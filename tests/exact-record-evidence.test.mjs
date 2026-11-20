@@ -65,6 +65,99 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("SDK session-mode metadata is a boundary, not a call, grant or source of missing links", async () => {
+    const changeMode = line("mode-event", "session.mode_changed", { previousMode: "interactive", newMode: "plan" }, 5, boot.id);
+    const permission = line("permission-event", "session.permissions_changed", { mode: "manual" }, 6, changeMode.id);
+    const notice = line("notice-event", "session.mode_notice_delivered", { mode: "plan", instructionUpdatePersisted: true }, 7, permission.id);
+    const metadata = [changeMode, permission, notice], baseline = await scan([p, a, s, e]);
+    for (const pos of [0, 4]) {
+        const out = await scan([p, a, s, e].toSpliced(pos, 0, ...metadata));
+        assert.deepEqual(out.records, baseline.records);
+        assert.notEqual(out.witness, baseline.witness);
+    }
+    assert.deepEqual((await scan([p, a, ...metadata, s, e])).records, []);
+    for (const bad of [change(changeMode, { parentToolCallId: s.data.toolCallId }), change(changeMode, { newMode: "undeclared" }),
+        { ...permission, parentId: s.id }, { ...changeMode, id: p.data.messageId }, { ...changeMode, agentId: "foreign-agent" },
+        { ...changeMode, checkpoint: true }, { ...notice, parentId: boot.id, data: { mode: "plan", content: "Unexpected free text" } }]) {
+        for (const pos of [0, 2, 4]) await assert.rejects(scan([p, a, s, e].toSpliced(pos, 0, bad)), unverified);
+    }
+    await assert.rejects(scan([changeMode, p, a, s, e], { state: { checkpointEvents: [
+        line("foreign", "assistant.message", { wireToolRequestIds: [changeMode.id] }, 8),
+    ] } }), unverified);
+});
+
+// Root timing metadata as consumed/produced by retainResponseTimingEvent (not an
+// assertion about other Copilot envelope versions). No parent link is inferred.
+const begin = line("boundary-open", "assistant.turn_start", { turnId: "other-turn" }, 5);
+const end = line("boundary-close", "assistant.turn_end", { turnId: "other-turn" }, 6);
+test("fully read disjoint turn boundaries leave the same exact call, never bridge its chain", async () => {
+    const baseline = await scan([p, a, s, e]);
+    for (const context of [[begin], [end], [begin, end]]) {
+        for (const at of [0, 4]) {
+            const rows = at ? context : context.map(x => ({ ...x, timestamp: since }));
+            const out = await scan([p, a, s, e].toSpliced(at, 0, ...rows), { state: { checkpointEvents: rows } });
+            assert.deepEqual(out.records, baseline.records);
+            assert.deepEqual([out.records[0].toolCalls[0].toolCallId, out.excluded, out.omittedRegions], ["call-one", 0, 0]);
+            assert.notEqual(out.witness, baseline.witness);
+        }
+    }
+    const inside = await scan([p, a, begin, end, s, e]);
+    assert.deepEqual([inside.records, inside.excluded, inside.omittedRegions], [[], 1, 0]);
+});
+
+test("turn identity must be disjoint across the whole original and retained checkpoint", async () => {
+    for (const extra of [
+        change(begin, { turnId: s.data.turnId }), change(begin, { turnId: a.data.messageId }),
+        { ...begin, id: e.id }, change(begin, { turnId: s.data.toolCallId }),
+    ]) {
+        for (const at of [0, 4]) await assert.rejects(scan([p, a, s, e].toSpliced(at, 0, extra)), unverified);
+    }
+    // Neither an unmapped, out-of-day start nor an earlier proposal makes a late alias harmless.
+    const other = line("shell-start", "tool.execution_start", {
+        turnId: begin.data.turnId, toolCallId: "shell-call", toolName: "shell",
+    }, 86400000);
+    for (const events of [[begin, other], [begin, { ...end, id: begin.id }], [begin, { ...begin, id: "another-open" }],
+        [begin, { ...end, timestamp: since }], [end, begin], [begin, ...chain("two"), end]]) {
+        await assert.rejects(scan([p, a, s, e, ...events]), unverified);
+    }
+    const reads = await parts(encode([boot, p, a, s, e, begin, end]));
+    for (const checkpointEvents of [[begin, begin], [change(begin, { turnId: "elsewhere" })],
+        [line("unknown", "unknown.kind", { nested: { alias: begin.data.turnId } }, 8)]]) {
+        assert.throws(() => decide(reads, { state: { checkpointEvents } }), unverified);
+    }
+});
+
+test("turn context must be complete, unlinked, credential-free and not deleted", async () => {
+    const raw = JSON.stringify(begin);
+    for (const extra of [
+        { ...begin, agentId: "other-agent" }, { ...end, parentId: begin.id },
+        change(begin, { parentToolCallId: "other-call" }), change(end, { turnId: undefined }),
+        { ...begin, type: "session.usage_record" }, { ...end, metadata: {} },
+        { ...end, id: "ghp_" + "Z".repeat(24) }, change(begin, { turnId: "api_key:invented" }),
+        raw.replace('"other-turn"', '"turn-one","turnId":"other-turn"'),
+        raw.slice(0, -1), raw + " ".repeat(TAIL_LIMITS.maxLineBytes),
+    ]) await assert.rejects(scan([p, a, s, e, extra]), unverified);
+    const reads = await parts(encode([boot, p, a, s, e, begin, end]));
+    for (const deletion of [{ events: [eventIdentity(sessionId, end.id)] },
+        { contextCalls: [callIdentity(sessionId, begin.data.turnId)] }]) {
+        assert.throws(() => decide(reads, { state: { deletion } }), unverified);
+    }
+});
+
+test("a disjoint turn can close across committed reads, but never across a missing read or index overflow", async () => {
+    const prefix = encode([boot, hook, begin]), bytes = Buffer.concat([prefix, encode([end, p, a, s, e])]);
+    const reads = await parts(bytes, [65536 + 256 + prefix.length + 3]);
+    assert.equal(reads[0].cursor.offset, prefix.length);
+    assert.deepEqual(decide(reads), decide(await parts(bytes)));
+    assert.throws(() => decide(reads.slice(0, 1)), unverified);
+
+    // Two identities per singleton, including the last one: never drop an old key
+    // to make room for a later one, even when a candidate was already proposed.
+    const boundaries = Array.from({ length: 2049 }, (_, i) =>
+        line(`boundary-${i}`, "assistant.turn_start", { turnId: `other-${i}` }, 5));
+    await assert.rejects(scan([p, a, s, e, ...boundaries]), { code: "EXACT_EVIDENCE_LIMIT" });
+});
+
 test("qualified calls are canonical individual records; only disjoint projected regions count", async () => {
     const unlinked = change({ ...s, id: "unlinked", parentId: "missing-parent" }, { toolCallId: "call-unlinked" });
     for (const events of [[hook, p, a, s, e, unlinked], [p, a, s, e, unlinked, hook]]) {

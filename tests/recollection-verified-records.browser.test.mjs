@@ -39,7 +39,7 @@ const ids = state => state.evidence.flatMap(r => r.toolCalls.map(c => c.toolCall
 const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptToken });
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
-async function fixture(t, { preservation = false, opaque = false, large = false } = {}) {
+async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -76,6 +76,13 @@ async function fixture(t, { preservation = false, opaque = false, large = false 
             ...hook.data, hookInvocationId: `other-invocation-${i}`, input: { ...hook.data.input, toolCallId: `other-call-${i}` },
         } }]));
     }
+    if (disjointTurns) await appendFile(file, encode([
+        event("mode-switch", "session.mode_changed", at(day, 2), { previousMode: "interactive", newMode: "plan" }, "boot"),
+        event("permission-notice", "session.permissions_changed", at(day, 3), { previousMode: "manual", mode: "assisted" }, "mode-switch"),
+        event("mode-notice", "session.mode_notice_delivered", at(day, 4), { mode: "plan", instructionUpdatePersisted: true }, "permission-notice"),
+        event("other-turn-open", "assistant.turn_start", at(day, 5), { turnId: "other-turn" }),
+        event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
+    ]));
     await appendFile(file, encode([...chain(day, "known", 10, true), ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]));
     if (preservation) {
@@ -161,7 +168,7 @@ test("a bound exact preview reviews only identified members, never the full day"
 });
 
 test("the reviewed subset and original receipts survive ordinary incremental collection and restart", async t => {
-    const f = await fixture(t, { preservation: true });
+    const f = await fixture(t, { preservation: true, disjointTurns: true });
     await f.start();
     // A real, older strict receipt must not acquire the new mode or its membership.
     await appendFile(f.otherFile, encode(chain(f.day, "earlier", 5, true, { literal: true })));
@@ -431,7 +438,7 @@ test("the normal panel reports a proved exact refusal without offering to check 
 });
 
 test("the normal panel switches reviews explicitly and recovers a lost exact confirmation without replay", async t => {
-    const f = await fixture(t);
+    const f = await fixture(t, { disjointTurns: true });
     await f.start({ exactRecords: true, frontend: "bundled" });
     const browser = await chromium.launch();
     try {

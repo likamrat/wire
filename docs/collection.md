@@ -514,6 +514,13 @@ No completion is inferred from a neighboring event. An unidentified region
 that could hide another matching identity prevents the preview, even if it is
 outside the proposed calls.
 
+A separate assistant turn or a text-free Copilot mode or permission notice
+need not rule out an otherwise verified call. WIRE checks the notice's
+declared fields and identifiers against the whole source and its checkpoint.
+It never uses a notice to link separated events or to grant access. Unknown
+fields, ambiguous identifiers, and unclassified oversized entries still
+prevent a verified-record preview.
+
 Confirmation rereads the same bounded originals, using the same two-minute
 deadline and explicit reading steps. A changed mapping, file, checkpoint,
 approval, selection or review basis refuses the operation. The writer preserves
