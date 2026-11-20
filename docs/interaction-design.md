@@ -271,6 +271,9 @@ the original; tool failure and
 returned-result links resolve their own evidence. Report selection is separate.
 Keep the native links, text selection, focus return and disclosure controls
 independent. Opening the reader does not alter report membership.
+Back from a card opened in **Change activity selection** returns to the
+chooser at its previous scroll position and focuses the same action, provided
+that report, membership and action are still current.
 
 ### Call results
 

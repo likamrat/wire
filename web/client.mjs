@@ -584,6 +584,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     let reportSetupReturn = null;
+    let reportPickerOrigin = null;
     const savedEntries = new Map();
     let savedInspector = null;
     const contextSidebar = $("contextSidebar"), contextBody = $("contextSidebarBody");
@@ -3632,6 +3633,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             announce("Wait for the current local save to finish before leaving this view.", "pending-save");
             return false;
         }
+        const pickerOrigin = reportPickerOrigin;
+        reportPickerOrigin = workspaceState.route.view === "reports" && next.view === "request"
+            ? reportExperience?.selectionReturn(keyed("report:" + next.request))
+            : workspaceState.route.view === "request" && next.view === "request" && next.request === workspaceState.route.request ? pickerOrigin : null;
         if (workspaceState.route.view === "reports" && (next.view !== "reports" || next.task !== workspaceState.route.task || next.bundle !== workspaceState.route.bundle)) reportExperience?.closeOptions();
         // A new navigation can precede ResizeObserver delivery for the current motion frame.
         retainSidebarColumnAnchor();
@@ -3663,7 +3668,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (savedReportView && (next.bundle !== workspaceState.route.bundle || next.savedEntry !== workspaceState.route.savedEntry || next.view !== "reports")) clearSavedReader();
         if (savedInspector && (!next.inspect || next.view !== "reports" || next.bundle)) closeSavedInspector(false, true);
-        let searchReturn = null, returnReading = null, comparisonReturn = null, sidebarClosed = true, navigationFinished = false, recordsRevealed = false;
+        let searchReturn = null, returnReading = null, comparisonReturn = null, pickerReturn = null, sidebarClosed = true, navigationFinished = false, recordsRevealed = false;
+        function finishPickerReturn() {
+            if (!pickerReturn || !sidebarClosed || !navigationFinished || !api.isCurrent(publication)
+                || navigation !== workspaceState.navigationGeneration || intent !== workspaceState.readingIntent) return;
+            pickerReturn();
+            pickerReturn = null;
+        }
         function finishRecordsReveal() {
             if (!revealReferenceRecords || recordsRevealed || !sidebarClosed || !navigationFinished
                 || !api.isCurrent(publication) || navigation !== workspaceState.navigationGeneration || intent !== workspaceState.readingIntent || workspaceState.route.view !== "analyze"
@@ -3719,6 +3730,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.view === "request" && next.view !== "request") {
             const sameOrigin = readingKey(underlyingRoute()) === readingKey(next);
             const unchanged = sameOrigin && !workspaceState.loading && !workspaceState.stale && JSON.stringify(workspaceState.scope) === JSON.stringify(query(next));
+            pickerReturn = unchanged && restorePosition && next.view === "reports" && !reportSetup && !requestInvalidated ? pickerOrigin : null;
             searchReturn = sameOrigin && !revealReferenceRecords && workspaceState.route.request === searchOpenedRequest && liveSearchUI.canRestore(searchReturnMarker) ? searchReturnMarker : null;
             returnReading = searchReturn ? workspaceState.positions.get(readingKey(underlyingRoute())) : null;
             // Same-scope comparison links return to their roster, not a hidden Activity card.
@@ -3742,12 +3754,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     sidebarExit = { request: workspaceState.route.request, cleanup };
                     ux.hideTooltip(); selectControls?.close();
                 }
-                hideContextSidebar({ restoreFocus: unchanged && !searchReturn && !comparisonReturn && !revealReferenceRecords, preserveAnchor: !searchReturn,
+                hideContextSidebar({ restoreFocus: unchanged && !searchReturn && !comparisonReturn && !pickerReturn && !revealReferenceRecords, preserveAnchor: !searchReturn && !pickerReturn,
                     onClosed: () => {
                         clearSidebarExit();
                         sidebarClosed = true;
                         finishSearchReturn();
                         finishComparisonReturn();
+                        finishPickerReturn();
                         finishRecordsReveal();
                     } });
                 if (!retainPaint) { cleanup(); finishSidebarMotion(); }
@@ -3763,6 +3776,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 navigationFinished = true;
                 finishSearchReturn();
                 finishComparisonReturn();
+                finishPickerReturn();
                 finishRecordsReveal();
                 return true;
             }
@@ -10529,7 +10543,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         cancelAnimationFrame(sidebarColumnFrame);
         sidebarColumnFrame = null;
         sidebarAnimation = sidebarColumnAnimation = sidebarColumnAnchor = null;
-        sidebarIdentity = sidebarOrigin = sidebarReadingFocus = contextOwner = cardEntry = null;
+        sidebarIdentity = sidebarOrigin = sidebarReadingFocus = contextOwner = cardEntry = reportPickerOrigin = null;
         sidebarExit = null; requestRenderKey = null; requestInvalidated = true;
         for (const node of document.querySelectorAll("iframe")) { node.removeAttribute("src"); node.srcdoc = ""; node.title = ""; node.remove(); }
         clearReaderSections();

@@ -409,6 +409,10 @@ test("the normal Reports picker has one reading scroller and retains paging, sel
 
 test("the normal Reports picker preserves the exact known tool identity when opening its reader", { timeout: 60000 }, async t => {
     const { page, context, before, errors } = await openReviewPicker(t);
+    const picker = page.locator("#reportActivityOptions");
+    await picker.locator('[name=reportScope][value=selected]').check();
+    const check = picker.locator("#report-select-search-0");
+    await check.check();
     const row = page.locator("#report-select-search-0").locator("xpath=ancestor::article[1]");
     await capturePicker(page, "picker-known-tool");
     await expect(row.locator(".card-identities")).toContainText("workiq-retrieve");
@@ -416,15 +420,24 @@ test("the normal Reports picker preserves the exact known tool identity when ope
     await expect(row.locator(".request-card-exception").last()).toHaveText("Mail result: HTTP 403");
     await expect(row).not.toContainText(/Access was denied|WIRE interpretation/);
     const origin = page.url();
-    await row.locator(".request-card-open").click();
+    const prompt = row.locator(".request-card-open");
+    const body = picker.locator(".report-selection-body");
+    await prompt.scrollIntoViewIfNeeded();
+    const top = await body.evaluate(node => node.scrollTop);
+    await prompt.focus(); await page.keyboard.press("Enter");
     const reader = page.locator("#requestContent");
     await expect(reader).toContainText("Find the decisions from the Cedar launch review.");
     await expect(reader.locator(".reader-call-identity-line")).toContainText("workiq-retrieve");
     await expect(reader).toContainText("Access was denied");
     await expect(reader).toContainText("403");
     await capturePicker(page, "picker-known-tool-reader");
-    await page.locator("#closeContextSidebar").click();
+    await page.goBack();
     await expect(page).toHaveURL(origin);
+    await expect(prompt).toBeFocused();
+    await expect(picker).toBeVisible();
+    await expect(check).toBeChecked();
+    await expect.poll(() => body.evaluate(node => node.scrollTop)).toBe(top);
+    await picker.getByRole("button", {name:"Close",exact:true}).click();
     await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeVisible();
     assert.deepEqual(await loadBoardState(context), before);
     assert.deepEqual(errors, []);

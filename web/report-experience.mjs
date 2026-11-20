@@ -166,6 +166,19 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         selection.showPopover();
         selection.querySelector('input[name="reportScope"]:checked')?.focus();
     }
+    function selectionReturn(row) {
+        if (!selection.matches(":popover-open") || !row || !selection.contains(row)) return null;
+        const origin = row.querySelector("[data-card-origin]") ?? row.querySelector(".request-card-open");
+        if (!origin) return null;
+        const target = new WeakRef(origin), top = selectionBody.scrollTop;
+        return () => {
+            const link = target.deref();
+            if (!current() || read().locked || !refineButton.checkVisibility() || !link || !selection.contains(link)) return;
+            selection.showPopover();
+            selectionBody.scrollTop = top;
+            ux.restoreFocus(link);
+        };
+    }
     function labelDates(value) {
         if (value.range === "capture") return "All retained dates";
         return `${time.formatDate(value.from, read().timeContext, true)} to ${time.formatDate(value.to, read().timeContext, true)}`;
@@ -218,7 +231,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         for (const input of byId("formatOptions").querySelectorAll("input")) input.checked = value.options.formats.includes(input.value);
     }
     return {
-        sync, openCalendar, showSelection,
+        sync, openCalendar, showSelection, selectionReturn,
         closeOptions,
         withdrawAccess() {
             closeOptions();
