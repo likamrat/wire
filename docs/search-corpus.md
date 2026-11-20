@@ -89,6 +89,9 @@ delivery revalidates retained inputs. Artifact checks run inside the existing
 board serialization boundary; up to eight reply payload reads share a before/after
 state and source check outside the writer queue. A changed grant or cancellation
 discards the group before delivery and prevents the next group from starting.
+Each check rereads the store. For file-backed evidence it uses the SHA-256
+verified against those bytes by that read, rather than serializing all parsed
+records again. Inline evidence still compares the records themselves.
 A final state/source stamp check linearizes publication
 against owned changes.
 

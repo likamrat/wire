@@ -144,3 +144,34 @@ test("in-place source replacement discards an in-flight reply group before readi
     assert.equal(replaced, true);
     assert.ok(!opened.has(replies.length - 1), "Source replacement must stop further reply reads");
 });
+
+for (const inline of [false, true]) test(`reply checks detect changed ${inline ? "inline" : "file-backed"} evidence without a revision change`, async t => {
+    const { context } = await privateFixture(t);
+    const reply = await seedRetainedReply(context);
+    const boardPath = path.join(context.dataDir, `${BOARD_ID}.state.json`);
+    const board = JSON.parse(await fs.readFile(boardPath, "utf8"));
+    const evidencePath = path.join(context.dataDir, "private-evidence", board.evidenceFile);
+    const evidence = JSON.parse(await fs.readFile(evidencePath, "utf8"));
+    if (inline) {
+        delete board.evidenceFile;
+        board.evidence = evidence.records;
+        await fs.writeFile(boardPath, JSON.stringify(board));
+    }
+    const read = fs.readFile;
+    let replaced = false;
+    const mock = t.mock.method(fs, "readFile", async (file, ...args) => {
+        const bytes = await read(file, ...args);
+        if (file === reply.payloadFile && !replaced) {
+            replaced = true;
+            evidence.records[0].userPrompt.text += " Changed invented text.";
+            await fs.writeFile(inline ? boardPath : evidencePath, JSON.stringify(inline ? board : evidence));
+        }
+        return bytes;
+    });
+    syncBuiltinESMExports();
+    try {
+        await assert.rejects(createCorpusSources(context, { source: inventedSource }).scan(),
+            inline ? { code: "stale" } : /evidence snapshot integrity/);
+        assert.ok(replaced);
+    } finally { mock.mock.restore(); syncBuiltinESMExports(); }
+});
