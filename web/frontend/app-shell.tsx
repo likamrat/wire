@@ -156,7 +156,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
                     <button id="navigationToggle" className="navigation-toggle quiet" type="button"
                         aria-label="Open navigation" aria-expanded="false" aria-controls="navigationDrawer" hidden />
                     <Search />
-                    <div className="workspace-utilities"><div className="theme-control">
+                    <div className="workspace-utilities"><a id="openEvidenceHelp" className="header-help" href="/settings?section=troubleshooting" aria-label="Help" data-settings-link /><div className="theme-control">
                         <button type="button" id="themePreference" className="theme-trigger" role="switch" aria-label="Dark theme" aria-checked="false" />
                     </div></div>
                 </div></div>
@@ -180,10 +180,8 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <section id="analyzeTools" className="analyze-tools" aria-label="Analyze tools" hidden>
                 <h2 className="navigation-group-label">Analyze tools</h2><div id="analyzeReturnActions" /><div id="analyzeToolActions" />
             </section>
-            <div className="navigation-bottom"><nav className="primary-navigation" aria-label="Help navigation">
-                <a id="openEvidenceHelp" href="/settings?section=troubleshooting" aria-label="Help & status" data-settings-link><span className="navigation-label">Help &amp; status</span></a>
-            </nav><div id="navigationFooter" className="navigation-footer">
-                <div id="wireAccountEntry" hidden /><nav className="primary-navigation" aria-label="Utility navigation">{nav("settings", "Settings")}</nav>
+            <div className="navigation-bottom"><div id="navigationFooter" className="navigation-footer">
+                <nav className="primary-navigation" aria-label="Utility navigation">{nav("settings", "Settings")}</nav><div id="wireAccountEntry" hidden />
             </div></div>
         </>, ports.navigation)}
         {createPortal(<>

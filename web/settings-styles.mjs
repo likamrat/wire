@@ -271,7 +271,7 @@ export const settingsStyles = `
 .settings-view .settings-advanced>summary {color:var(--ink);font-weight:var(--weight-medium)}
 .settings-view .settings-advanced>p {margin:0 0 8px;color:var(--muted)}
 .settings-view [data-settings-section=troubleshooting]>.settings-group {padding-top:0;border:0}
-.settings-view [data-settings-section=display]>.settings-theme-row {padding-top:0;border:0}
+.settings-view [data-settings-section=themes]>.settings-theme-row,.settings-view [data-settings-section=regional]>.settings-display-field {padding-top:0;border:0}
 .settings-view .settings-theme-row {align-items:center}
 .settings-view .settings-theme-row .theme-trigger {border-radius:var(--radius-pill)}
 .settings-view .settings-section>:nth-last-child(1 of :not([hidden])) {padding-bottom:0}

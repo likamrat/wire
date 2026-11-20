@@ -397,7 +397,7 @@ test("source read/edit targets retain drafts across search, categories, time zon
     await navigateSettings(page, "collection");
     await page.locator("#collectionSourceDraft a").click();
     await selectActivityOption(page, "collectionCadence", "15");
-    await navigateSettings(page, "display");
+    await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
     for (const query of ["source", "path", "change", "permission"]) {
         await page.locator("#settingsSearch").fill(query);

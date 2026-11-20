@@ -241,7 +241,7 @@ test("Settings choices stay concise with field-level limitations and explicit ti
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     assert.equal(await page.locator("#eventCadenceHelp").count(), 0);
     assert.equal(await page.locator("#collectionPreferenceDetails").count(), 0);
-    await navigateSettings(page, "display");
+    await navigateSettings(page, "regional");
     await triggerFor(page, "displayTimeZone").click();
     const automatic = page.getByRole("option", { name: "Device default (America/Los_Angeles)", exact: true });
     assert.equal(await automatic.locator(".select-option-detail").count(), 0);

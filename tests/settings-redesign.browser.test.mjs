@@ -11,7 +11,7 @@ import { navigateMain, navigateSettings, chooseTheme, selectActivityOption, open
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_SETTINGS_REDESIGN_PROOFS;
-const categories = ["connection", "privacy", "display", "troubleshooting"];
+const categories = ["connection", "privacy", "themes", "regional", "troubleshooting"];
 
 async function setup(t, { unknownBilling = false, preferenceSave = false, announcementProbe = false } = {}) {
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -666,7 +666,7 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
         await capture(page, `settings-empty-search-${width}-${theme}`);
         await page.locator("#settingsSearch").press("Escape");
         await expect(page.locator("#settingsSearch")).toHaveValue("");
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
         for (const id of ["displayTimeZone"]) {
             const trigger = page.locator(`#${id}-control`);
             await trigger.focus();
@@ -913,7 +913,7 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     assert.equal((await observe("Collection status")).helpHidden, false);
     if (!await page.locator("#freshHelp").evaluate(node => node.open)) await page.locator("#freshHelp > summary").click();
     await page.goBack();
-    await expect(page.locator("[data-settings-section=display]")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     await page.goBack();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     const restored = await observe("Back to Connection");
@@ -1024,7 +1024,7 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
     await navigateSettings(page, "display");
     await navigateMain(page, "analyze");
     await page.goBack();
-    await expect(page.locator("[data-settings-section=display]")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     await page.goBack();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     assert.equal(sourceChecks, original.sourceChecks);

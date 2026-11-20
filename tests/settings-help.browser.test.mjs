@@ -109,7 +109,7 @@ test("benign Settings messages stay with their originating section while uncerta
         await page.locator("[data-settings-section=privacy]:visible").waitFor();
         assert.equal(await page.locator("#settingsMessage").isVisible(), false, "Back cannot revive an unrelated discard message");
         await page.goForward();
-        await page.locator("[data-settings-section=display]:visible").waitFor();
+        await page.locator("[data-settings-section=themes]:visible").waitFor();
         await navigateSettings(page, "data");
         await page.reload();
         await page.locator("#workspace[aria-busy=false]").waitFor();

@@ -95,6 +95,8 @@ async function captureSwitchState(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
 }
 async function category(page, value) {
+    if (value === "troubleshooting") { await page.locator("#openEvidenceHelp").click(); return; }
+    if (value === "display") value = "themes";
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const anchor = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
     if (!await anchor.isVisible()) await page.locator("#settingsCategorySummary").click();
@@ -138,7 +140,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
     assert.equal(await page.locator(".settings-search .wire-search-icon svg").getAttribute("aria-hidden"), "true");
-    for (const value of ["connection", "display", "troubleshooting", "privacy"]) {
+    for (const value of ["connection", "themes", "regional", "privacy"]) {
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
@@ -172,7 +174,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-            for (const value of ["connection", "privacy", "display", "troubleshooting"]) {
+            for (const value of ["connection", "privacy", "themes", "regional"]) {
                 await category(page, value);
                 if (value === "privacy") await page.locator("#assessmentSetup input[type=checkbox]").waitFor();
                 await page.evaluate(() => document.fonts.ready);
@@ -212,7 +214,7 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
     }
     await page.getByRole("searchbox", { name: "Search settings", exact: true }).fill("time zone");
     await page.locator('#settingsSearchResults a[data-setting="time-zone"]').click();
-    await page.locator('[data-settings-section="display"]').waitFor({ state: "visible" });
+    await page.locator('[data-settings-section="regional"]').waitFor({ state: "visible" });
     assert.equal(await page.locator("#displayTimeZone-control").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#settingsSearch").inputValue(), "time zone");
     assert.doesNotMatch(page.url(), /time%20zone|time\+zone/);
@@ -571,7 +573,7 @@ test("Display and header share switch artwork, native activation, storage update
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await page.locator("#displayTimeZone-control").focus();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "display");
+    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "regional");
     const proofs = process.env.WIRE_RESPONSE_SETTINGS_PROOFS;
     if (proofs) await writeFile(path.join(proofs, "theme-switch-geometry.json"), JSON.stringify(evidence, null, 2));
 });

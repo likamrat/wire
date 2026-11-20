@@ -238,7 +238,7 @@ test("search entries keep their corpus and Escape while Settings uses compact fi
             } else if (id === "settingsSearch") {
                 await input.fill("theme");
                 await page.locator("#settingsSearchResults a[data-setting=theme]").click();
-                await expect(page.locator("[data-settings-section=display]")).toBeVisible();
+                await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
                 await page.goBack(); await expect(input).toHaveValue("theme");
                 await clear.click();
             }

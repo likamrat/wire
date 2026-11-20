@@ -6,8 +6,10 @@ import { createLocalSearch } from "./local-search.mjs";
 test("settings canonical routes preserve legacy display/history/issues and explicit fallback", () => {
     const model = createSettingsNavigation(createLocalSearch());
     assert.deepEqual(model.resolve({}), { section: "connection", setting: undefined, warning: "" });
-    assert.equal(model.resolve({ section: "display" }).section, "display");
-    assert.equal(model.categories.find(category => category.id === "display").title, "Display");
+    for (const section of ["display","theme","themes"]) assert.equal(model.resolve({ section }).section, "themes");
+    assert.equal(model.categories.find(category => category.id === "themes").title, "Themes");
+    assert.equal(model.resolve({ section: "display", setting: "time-zone" }).section,"regional");
+    assert.ok(model.find("Midnight").some(result => result.id === "palette" && result.section === "themes"));
     assert.equal(model.resolve({ section: "history" }).setting, "history-window");
     assert.deepEqual(model.resolve({ section: "display", issues: "1" }), { view: "collection-status", section: undefined, setting: "issues", warning: "" });
     assert.match(model.resolve({ section: "absent" }).warning, /Unknown.*Collection/);
@@ -34,7 +36,7 @@ test("retired sidebar motion has no current setting, search result or deep-link 
     assert.deepEqual(model.find("sidebar motion"), []);
     assert.deepEqual(model.find("glide"), []);
     assert.deepEqual(model.resolve({ section: "display", setting: "sidebar-motion" }), {
-        section: "display", setting: undefined, warning: "Unknown setting. Showing the category instead.",
+        section: "themes", setting: undefined, warning: "Unknown setting. Showing the category instead.",
     });
 });
 
@@ -47,7 +49,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
     assert.equal(model.resolve({ setting: "advanced" }).setting, "collection-details");
     assert.equal(model.find("missing history").find(entry => entry.id === "issues").view, "collection-status");
     assert.equal(model.find("status").find(entry => entry.id === "collection-details").category, "Collection status");
-    assert.deepEqual(model.categories.map(row => row.title), ["Collection", "Source access", "Display", "Privacy & saved data", "Help & status"]);
+    assert.deepEqual(model.categories.filter(row => !row.headerEntry).map(row => row.title), ["Collection", "Source access", "Themes", "Regional", "Privacy & saved data"]);
     assert.deepEqual(model.find("automatic scores"), []);
     assert.equal(model.resolve({ section: "ai", setting: "automatic-scores" }).section, "connection");
     assert.match(model.resolve({ section: "ai", setting: "automatic-scores" }).warning, /Unknown/);
@@ -63,7 +65,7 @@ test("settings search finds control descriptions and synonyms across categories 
     assert.equal(model.find("not-a-real-setting <img>").length, 0);
     assert.equal(model.find("PRIVATE_SOURCE_PATH").length, 0);
     assert.equal(model.find("cadence").find(entry => entry.id === "cadence").category, "Collection");
-    assert.equal(model.find("display").find(entry => entry.id === "time-zone").category, "Display");
+    assert.equal(model.find("display").find(entry => entry.id === "time-zone").category, "Regional");
 });
 
 test("old optional-evidence links resolve to response saving in Privacy and saved data", () => {
@@ -79,7 +81,7 @@ test("retained setting IDs and explicit category aliases keep their actual desti
     const old = {
         "assessment-evidence": ["privacy", "assessmentSetupTitle"],
         "delete-activity": ["privacy", "deleteActivity"], "recollect-activity": ["privacy", "recollectActivity"],
-        "time-zone": ["display", "displayTimeZone"], source: ["source-access", "reviewSource"],
+        "time-zone": ["regional", "displayTimeZone"], source: ["source-access", "reviewSource"],
         "collection-state": ["connection", "pauseCollection"], "collect-now": ["connection", "checkActivity"],
         "source-paths": ["source-access", "approvedSourceDetails"], "history-window": ["connection", "collectionWindow"],
         cadence: ["connection", "collectionCadence"], "save-preferences": ["connection", "saveCollection"],
@@ -94,7 +96,7 @@ test("retained setting IDs and explicit category aliases keep their actual desti
         assert.equal(resolved.warning, "");
     }
     for (const [section, expected] of Object.entries(model.sectionAliases)) {
-        assert.deepEqual(model.resolve({ section }), { ...expected, warning: "" });
+        assert.deepEqual(model.resolve({ section }), { setting: undefined, ...expected, warning: "" });
     }
     assert.equal(new Set(model.entries.map(entry => entry.id)).size, model.entries.length);
     for (const entry of model.entries) {

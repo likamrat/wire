@@ -270,22 +270,21 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await expect(page.locator("#firstConnection")).toBeHidden();
 });
 
-test("the footer opens the same help task as the Settings rail without collecting, including from the drawer", async t => {
+test("header Help opens the one help destination without collecting and returns focus on Back", async t => {
     const { page, runtime, mutations } = await setup(t);
     await page.goto(runtime.url); await ready(page);
     await page.keyboard.press("Escape");
     await page.locator("#openEvidenceHelp").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#troubleshootingTitle")).toBeFocused();
-    await expect(page.locator('[data-category="troubleshooting"]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('[data-category="troubleshooting"]')).toHaveCount(0);
     await page.locator("#activityCountHelp summary").click();
     await expect(page.locator("#activityCountHelp p")).toBeVisible();
     await page.goBack();
     await expect(page.locator("#firstConnection")).toBeVisible();
     await expect(page.locator("#openEvidenceHelp")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator("#navigationToggle").click();
-    await page.locator("#navigationDrawer #openEvidenceHelp").click();
+    await page.locator(".workspace-utilities #openEvidenceHelp").click();
     await expect(page.locator("#navigationDrawer")).toBeHidden();
     await expect(page.locator("#troubleshootingTitle")).toBeFocused();
     assert.equal(mutations.length, 0);

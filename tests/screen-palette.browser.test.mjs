@@ -39,11 +39,11 @@ test("the built workbench carries each palette through screens and nested readin
         proof.push({ name, theme, textCount: ink.length, minimum: Math.min(...ink.map(value => contrast(value.ink, value.background))) });
         if (output) await page.screenshot({ path: path.join(output, `${theme}-${name}.png`) });
     }
-    for (const palette of ["petrol", "linen", "blue", "field"]) for (const mode of ["light", "dark"]) {
+    for (const palette of ["petrol", "linen", "blue", "field", "midnight"]) for (const mode of ["light", "dark"]) {
         const theme = `${palette}-${mode}`;
         await page.goto(app.runtime.url + "#analyze?range=custom&from=2026-11-10&to=2026-11-16");
         await ready(); await chooseTheme(page, mode);
-        await navigateMain(page, "settings"); await navigateSettings(page, "display");
+        await navigateMain(page, "settings"); await navigateSettings(page, "themes");
         const option = page.locator(`.palette-option:has(#palette-${palette})`);
         await option.click();
         await expect(page.locator("html")).toHaveAttribute("data-evidence-palette", palette);
@@ -168,7 +168,7 @@ test("the built workbench carries each palette through screens and nested readin
         assert.equal(await editorBody.innerText(),previous);
         await control.locator(`.palette-option:has(#palette-${palette})`).click(); await control.close();
         await navigateMain(page, "settings");
-        for (const category of ["connection", "privacy", "display", "troubleshooting"]) {
+        for (const category of ["connection", "privacy", "themes", "regional", "troubleshooting"]) {
             await navigateSettings(page, category);
             await inspect(`settings-${category}`, theme);
         }
@@ -176,7 +176,7 @@ test("the built workbench carries each palette through screens and nested readin
         await page.locator("#deleteActivity").click();
         await expect(page.locator("#deleteDialog")).toBeVisible();
         await inspect("settings-dialog", theme); await page.locator("#deleteCancel").click();
-        await navigateSettings(page, "display"); await page.setViewportSize({ width: 390, height: 844 });
+        await navigateSettings(page, "themes"); await page.setViewportSize({ width: 390, height: 844 });
         await page.evaluate(() => document.documentElement.style.fontSize = "200%");
         await inspect("settings-narrow", theme);
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));

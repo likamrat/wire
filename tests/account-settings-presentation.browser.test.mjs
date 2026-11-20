@@ -284,8 +284,8 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
                 return { bottom: rect.bottom, railBottom: rail.bottom, settings: settings.toJSON(), account: account.toJSON() };
             });
             assert.equal(footer.bottom, footer.railBottom - 16);
-            assert.ok(footer.settings.left >= footer.account.right + 8, "Settings has its own target to the right of the account");
-            assert.ok(Math.abs(footer.settings.top + footer.settings.height / 2 - footer.account.top - footer.account.height / 2) < 1);
+            assert.ok(footer.settings.bottom + 4 <= footer.account.top, "Settings and account have separate rows");
+            assert.equal(footer.settings.left, footer.account.left);
         }
         await capture(page, theme + "-account-footer");
         await page.locator("#wireAccountTrigger").click();
@@ -348,13 +348,10 @@ test("compact footer keeps account and Settings independent through identity, ra
     }
     await expect(settings).toHaveAccessibleName("Settings");
     await expect(page.locator('[data-nav="settings"]')).toHaveCount(1);
-    await settings.hover();
-    await expect(page.getByRole("tooltip", { name: "Settings", exact: true })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(settings.locator(".navigation-label")).toHaveText("Settings");
     await page.locator("#wireAccountTrigger").focus();
-    await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
-    await page.keyboard.press("Enter");
-    assert.match(page.url(), /#settings$/);
+    await page.keyboard.press("Shift+Tab"); await expect(settings).toBeFocused();
+    await expect(settings).toHaveAttribute("href", "/settings");
     for (const [width, scale] of [[1440, 1], [768, 2], [390, 1], [390, 2]]) {
         await page.setViewportSize({ width, height: 900 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
@@ -377,19 +374,14 @@ test("compact footer keeps account and Settings independent through identity, ra
                     assert.ok(target.width >= 44 && target.height >= 44);
                     assert.ok(target.left >= geometry.parent.left && target.right <= geometry.parent.right);
                 }
-                if (mode === "collapsed") {
-                    assert.ok(geometry.account.bottom + 8 <= geometry.settings.top);
-                    assert.equal(geometry.account.left, geometry.settings.left);
-                } else {
-                    assert.ok(geometry.account.right + 8 <= geometry.settings.left);
-                    assert.ok(Math.abs(geometry.account.top + geometry.account.height / 2 - geometry.settings.top - geometry.settings.height / 2) < 1);
-                }
+                assert.ok(geometry.settings.bottom + 4 <= geometry.account.top);
+                assert.equal(geometry.account.left, geometry.settings.left);
                 assert.equal(await host.evaluate(node => node === document.querySelector("#navigationFooter #wireAccountEntry")), true);
                 assert.equal(await trigger.evaluate(node => node === document.getElementById("wireAccountTrigger")), true);
                 await page.locator("#wireAccountTrigger").click();
                 await expect(page.locator("#wireAccountMenu")).toBeFocused();
                 await page.keyboard.press("Escape"); await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-                await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
+                await page.keyboard.press("Shift+Tab"); await expect(settings).toBeFocused();
                 const overflow = await page.locator(width < 700 ? "#navigationDrawer" : "#sidebar").evaluate(node => ({
                     client: node.clientWidth, scroll: node.scrollWidth, left: node.scrollLeft,
                 }));
@@ -405,8 +397,8 @@ test("compact footer keeps account and Settings independent through identity, ra
     await page.evaluate(() => fixturePresentation.dispose());
     await expect(page.locator("#wireAccountEntry")).toBeHidden();
     await page.locator("#navigationToggle").click();
-    await settings.click();
-    assert.match(page.url(), /#settings$/, "Settings is independent of a mounted account presenter");
+    await expect(settings).toBeVisible();
+    await expect(settings).toHaveAttribute("href", "/settings");
 });
 
 test("compact footer glides and reverses without overlapping account and Settings targets", async t => {
@@ -609,13 +601,14 @@ test("withdrawal clears captured profile presentation and focus cannot restore t
     await expect(page.locator("#wireAccountTrigger")).not.toContainText("Riley");
     await expect(page.locator("#wireAccountMenu")).not.toContainText("riley-chen");
     await expect(page.locator("#wireAccountTrigger img")).toHaveCount(0);
-    assert.equal(await page.evaluate(() => profileBefore.text.length), 6);
+    const retained = await page.evaluate(() => profileBefore.text);
+    assert.ok(retained.includes("Riley Chen") && retained.some(text => text.includes("riley-chen")));
     assert.match(await page.evaluate(() => profileBefore.label), /Riley Chen/);
-    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), ["", "", "", "", "", ""]);
+    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), retained.map(() => ""));
     assert.equal(await page.evaluate(() => heldProfileLabel.value), "");
     await receive(page, presentationFixture("connected", verifiedGitHubProfile));
     await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Chen");
-    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), ["", "", "", "", "", ""]);
+    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), retained.map(() => ""));
     assert.equal(await page.evaluate(() => heldProfileLabel.value), "");
     const replacement = structuredClone(verifiedGitHubProfile);
     replacement.generation = "fixture-newer";

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
+import { selectActivityOption } from "./helpers.mjs";
 
 for (const frontend of [undefined, "bundled", "react"]) {
     test(`${frontend ?? "serialized"} shell applies the stored palette before mount and recovers failed writes`, async t => {
@@ -13,7 +14,7 @@ for (const frontend of [undefined, "bundled", "react"]) {
             if (!sessionStorage.seededPalette) {
                 sessionStorage.seededPalette = "yes";
                 localStorage.setItem("workiq-evidence.theme", "light");
-                localStorage.setItem("workiq-evidence.palette.v1", "blue");
+                localStorage.setItem("workiq-evidence.palette.v1", "midnight");
             }
             // This microtask runs just after the synchronous head bootstrap, before client mounting.
             const watch = new MutationObserver(() => {
@@ -25,9 +26,13 @@ for (const frontend of [undefined, "bundled", "react"]) {
             watch.observe(document, { subtree: true, attributes: true, attributeFilter: ["data-evidence-palette"] });
         });
         const page = await context.newPage(), url = new URL("/settings?section=display",runtime.url).href;
-        await page.goto(url); await expect(page.locator("#palette-blue")).toBeChecked();
-        assert.deepEqual(await page.evaluate(() => window.firstPalette), ["blue","light",false,false]);
-        const first = page.locator("#palette-blue"), earlier = await first.elementHandle();
+        await page.goto(url); await expect(page.locator("#palette-midnight")).toBeChecked();
+        await expect(page).toHaveURL(/\/settings\?section=themes$/);
+        await expect(page.locator(".palette-scene").first()).toHaveText("");
+        await expect(page.getByRole("radio", { name: "Midnight", exact: true })).toBeVisible();
+        await expect(page.locator("#displayTimeZone-control")).toBeHidden();
+        assert.deepEqual(await page.evaluate(() => window.firstPalette), ["midnight","light",false,false]);
+        const first = page.locator("#palette-midnight"), earlier = await first.elementHandle();
         await page.evaluate(() => {
             const set = Storage.prototype.setItem;
             Storage.prototype.setItem = function(key, value) {
@@ -37,7 +42,7 @@ for (const frontend of [undefined, "bundled", "react"]) {
         });
         await page.locator("label:has(>#palette-linen)").click();
         await expect(page.locator("#paletteStorageNotice")).toBeVisible();
-        assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.palette.v1")), "blue");
+        assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.palette.v1")), "midnight");
         await page.evaluate(() => { window.allowPalette = true; });
         await page.locator("#retryPalette").click();
         await expect(page.locator("#paletteStorageNotice")).toBeHidden();
@@ -55,5 +60,14 @@ for (const frontend of [undefined, "bundled", "react"]) {
         await page.locator("label:has(>#palette-linen)").click();
         await page.locator("#resetPalette").click(); await expect(other.locator("#palette-petrol")).toBeChecked();
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme","dark");
+        await page.goto(new URL("/settings?section=display&setting=time-zone",runtime.url).href);
+        await expect(page).toHaveURL(/section=regional&setting=time-zone/);
+        await expect(page.locator("#displayTimeZone-control")).toBeVisible();
+        await selectActivityOption(page,"displayTimeZone","UTC");
+        assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "UTC");
+        await page.locator("#settingsSearch").fill("Midnight");
+        await page.locator("#settingsSearchResults a[data-setting=palette]").click();
+        await expect(page).toHaveURL(/section=themes&setting=palette/);
+        await expect(page.locator("#palette-petrol")).toBeFocused();
     });
 }

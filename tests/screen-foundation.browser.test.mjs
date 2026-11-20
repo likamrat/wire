@@ -140,7 +140,7 @@ test("populated screens retain painted Asta roles and coherent Fluent disclosure
         await paintedFonts(page, "#reportsView h2");
         await iconInventory(page);
         await navigateMain(page, "settings");
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
         await paintedFonts(page, "#settingsView h2");
         await page.locator('[data-select-id="displayTimeZone"]').click();
         await paintedFonts(page, ".select-popup .select-option-label");

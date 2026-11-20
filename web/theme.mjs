@@ -1,4 +1,4 @@
-export const palettes = Object.freeze({ petrol: "Petrol & coral", linen: "Linen & graphite", blue: "Blueprint", field: "Field notes" });
+export const palettes = Object.freeze({ petrol: "Petrol & coral", linen: "Linen & graphite", blue: "Blueprint", field: "Field notes", midnight: "Midnight" });
 
 // Serialized into the head so saved preferences apply before the first paint.
 export function initializeTheme(paletteIds) {

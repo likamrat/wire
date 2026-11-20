@@ -558,13 +558,15 @@ action after confirmed first approval.
 ### Categories and setting search
 
 Settings opens in **Collection**. Its category rail switches between Collection,
-Source access, Display, Privacy & saved data, and Help & status. Keep one
+Source access, Themes, Regional, and Privacy & saved data. Keep one
 focused pane; on narrow screens the same categories collapse into a chooser.
 Source access owns approval and paths; Collection owns cadence, Pause and
 one-time checks. Opening either area never approves a source. Search finds fixed setting
 metadata and navigates; it never clicks an action or reads private path values.
 
-The Help & status link just above Account and Settings opens that same category.
+The Help icon beside the header mode switch opens the single Help destination.
+Keep Settings as a labeled navigation row above the full-width account control;
+the account menu shows the complete bound identity even if a long name is clipped in the rail.
 Keep static explanations of counts and recorded tool outcomes there. Coverage
 warnings belong with the affected activity and link to Collection status.
 

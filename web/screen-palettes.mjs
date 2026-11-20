@@ -43,6 +43,16 @@ function paint(material, control, status, identity, categories) {
     return Object.entries(roles).map(([name,value]) => `--${name}:${value};`).join("");
 }
 const materials = {
+    midnight: {
+        light: paint("#e6f0fa #ffffff #f0f6fc #cfe3f2 #112b43 #425d76 #bfd3e4 #597b94 #004c73 #dcebf7 #c7e2f2",
+            "#006585 #ffffff #00536f #064860 #005f82 #f2f8fd #647e94 #102f49 #edf8ff",
+            "#106143 #9b3046 #745509 #4c5a73 #893f21", "#2e6078 #71506e #85426b",
+            "#80511b #245899 #674598 #764473 #1c596c #4c611e #733c82 #345338 #175766 #3f4b83 #515777 #3c595f #32445a #60583c"),
+        dark: paint("#070f1c #101e31 #192a40 #14263d #ebf4ff #a9bfd5 #364c65 #819eb9 #aceaff #21364e #294561",
+            "#55d5f9 #062536 #88e5ff #34bfeb #79deff #10243a #8ca8bc #c2eeff #082638",
+            "#6cddaf #ff9c9b #efc674 #b4c3dd #f6b08c", "#96cce1 #d5b9dd #efa5d7",
+            "#ebb681 #8ebeff #c4acfb #e4abda #80c7dc #c6d88c #dcb0ef #9dd5bc #8bced0 #afb8fa #c0c6e1 #a9cdca #d6e0f0 #cfc7ab"),
+    },
     petrol: {
         light: `${screenLight}--screen-rail:#e4ecec;--screen-plot:#f5f8f8;`,
         dark: `${screenDark}--screen-rail:#26383c;--screen-plot:#222e32;`,

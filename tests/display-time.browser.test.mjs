@@ -50,7 +50,7 @@ async function setup(t, init, sourceRecords = records) {
 async function selectZone(page, zone) {
     if (!await page.locator("#displayTimeZone-control").isVisible()) {
         await navigateMain(page, "settings"); await ready(page);
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
     }
     await selectActivityOption(page, "displayTimeZone", zone);
     await ready(page);
@@ -65,8 +65,8 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), ["1", "4", "1"]);
     const homeUrl = page.url();
     await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "display");
-    assert.match(page.url(), /section=display/);
+    await navigateSettings(page, "regional");
+    assert.match(page.url(), /section=regional/);
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await selectZone(page, "UTC");
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC");
@@ -191,7 +191,7 @@ test("blocked preference storage warns and keeps the explicit choice panel-local
 
 test("pending and failed zone reads keep Settings tied to the old applied snapshot and retry atomically", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
-    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
+    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "regional");
     let release, begun;
     const started = new Promise(resolve => { begun = resolve; });
     await page.route("**/api/snapshot", async route => {
@@ -252,7 +252,7 @@ test("invalid saved zone and unavailable list are visible; controls use existing
     });
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
     await expect(page.locator("#timeZoneNotice")).toContainText("invalid or unavailable");
-    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
+    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "regional");
     await expect(page.locator("#displayTimeHelp")).toContainText("full time zone list");
     await page.locator("#displayTimeZone-control").focus();
     await page.keyboard.type("UTC");

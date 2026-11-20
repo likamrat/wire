@@ -633,8 +633,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         node.prepend(ux.icon(`navigation-${node.dataset.nav}`));
     });
     $("openEvidenceHelp").prepend(ux.icon("navigation-help"));
-    ux.tooltip($("openEvidenceHelp"), () => $("openEvidenceHelp").querySelector(".navigation-label").getBoundingClientRect().width ? "" : "Help & status",
-        { placement: "right", tone: "contrast" });
+    ux.tooltip($("openEvidenceHelp"), "Help", { placement: "bottom", tone: "contrast" });
     for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", closeDialog: "close" })) {
         ux.utility($(id), icon, $(id).getAttribute("aria-label") || $(id).textContent);
     }
@@ -9967,6 +9966,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
     for (const category of settingsNavigation.categories) {
+        if (category.headerEntry) continue;
         const anchor = el("a");
         setRouteLink(anchor, routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
         // Static shell links use live navigation guards, not a pre-admission data publication.

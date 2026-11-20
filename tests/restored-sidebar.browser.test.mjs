@@ -588,7 +588,7 @@ test("header keeps only the theme control beside centered Search, with time zone
     assert.ok(measurements.every(entry => entry.utilityChildren === 1), "The theme control has no redundant time-zone sibling or placeholder");
     await expect(page.locator(".display-time-zone")).toHaveCount(0);
     await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "display");
+    await navigateSettings(page, "regional");
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await expect(page.locator("#displayTimeZone option:checked")).not.toBeEmpty();
 });

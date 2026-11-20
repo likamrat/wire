@@ -105,7 +105,7 @@ test("chart grouping, category states and report identity remain readable at enl
         assert.notEqual(chart.bg, "rgba(0, 0, 0, 0)"); assert.equal(chart.shadow, "none");
     }
     await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "privacy");
-    const privacy = page.locator('#settingsCategoryNav [data-category=privacy]'), display = page.locator('#settingsCategoryNav [data-category=display]');
+    const privacy = page.locator('#settingsCategoryNav [data-category=privacy]'), display = page.locator('#settingsCategoryNav [data-category=themes]');
     await display.hover();
     assert.notEqual(await privacy.evaluate(n => getComputedStyle(n, "::before").content), "none");
     assert.equal(await display.evaluate(n => getComputedStyle(n, "::before").content), "none");

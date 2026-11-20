@@ -15,6 +15,9 @@ export const sidebarStyles = `
 .app-header .wire-search-entry {grid-column:2;min-width:0;width:100%;max-width:none}
 .workspace-utilities {grid-column:3;display:flex;align-items:center;justify-content:flex-end;min-width:0}
 .workspace-utilities .theme-control {flex:none}
+.workspace-utilities .header-help {display:grid;place-items:center;flex:0 0 44px;min-height:44px;color:var(--muted);border-radius:var(--radius-control)}
+.header-help .wire-icon {width:var(--icon-utility-size);height:var(--icon-utility-size)}
+.workspace-utilities .header-help:hover {background:var(--hover);color:var(--ink)}.workspace-utilities .header-help:active {background:var(--pill-pressed)}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .app-sidebar {position:fixed;display:flex;flex-direction:column;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:216px;padding:12px 10px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
@@ -25,12 +28,11 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .navigation-bottom {margin-top:auto;min-width:0}
 .navigation-bottom>.navigation-footer {margin:0;padding-top:4px}
 .app-sidebar #analyzeTools .analyze-tool-action {white-space:nowrap}
-.navigation-footer {position:relative;display:grid;grid-template-columns:minmax(44px,1fr) 44px;align-items:center;gap:8px;contain:inline-size;margin-top:auto;padding-top:12px;border-top:0}
-.navigation-footer>#wireAccountEntry {grid-column:1;grid-row:1;min-width:0;margin:0}
-.navigation-footer>.primary-navigation {grid-column:2;grid-row:1}
+.navigation-footer {position:relative;display:grid;grid-template-columns:minmax(44px,1fr);align-items:center;gap:4px;contain:inline-size;margin-top:auto;padding-top:12px;border-top:0}
+.navigation-footer>#wireAccountEntry {min-width:0;margin:0;padding-top:6px;border-top:1px solid var(--surface-divider)}
 .navigation-footer .wire-account-entry {width:100%;padding-top:0}
-.navigation-footer .primary-navigation a {width:44px;gap:0;grid-template-columns:minmax(0,1fr) 0}
-.navigation-footer .navigation-label {width:0;opacity:0}
+.navigation-footer .primary-navigation a[aria-current=page]:not(:hover,:active) {background:transparent;box-shadow:none}
+.navigation-footer .primary-navigation a[aria-current=page]::after {content:"";position:absolute;inset-inline-start:2px;inset-block:14px;width:2px;background:currentColor;border-radius:2px}
 .navigation-collapse {position:relative;z-index:1;display:flex;grid-area:1/2;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0;padding:0;border:1px solid transparent;border-radius:var(--radius-control);background:transparent;color:var(--muted);box-shadow:none}
 .navigation-collapse:hover {--pill-hover-border:transparent;background:var(--hover);border-color:transparent;color:var(--ink)}
 .navigation-collapse:active {background:var(--pill-pressed);border-color:transparent}
@@ -40,8 +42,6 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 :root[data-navigation=collapsed] .app-sidebar .navigation-label {width:0;opacity:0}
 :root[data-navigation=collapsed] .app-sidebar .navigation-group-label {width:0;height:0;padding-block:0;opacity:0}
 :root[data-navigation=collapsed] .app-sidebar .navigation-footer {grid-template-columns:44px}
-:root[data-navigation=collapsed] .app-sidebar .navigation-footer>.primary-navigation {grid-column:1;grid-row:2}
-:root[data-navigation=collapsed] .app-sidebar .navigation-footer:has(>#wireAccountEntry[hidden])>.primary-navigation {grid-row:1}
 .navigation-label,.navigation-group-label {overflow:hidden}
 .app-sidebar[data-navigation-moving] {overflow-x:hidden}
 :root .app-sidebar[data-navigation-moving] .primary-navigation a {width:auto}
@@ -123,7 +123,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
  html {scroll-padding-top:calc(var(--app-header-height,148px) + 16px)}
  .app-header .header-inner {grid-template-columns:minmax(0,1fr);min-height:0}
  .app-header .brand {display:none}
- .workspace-toolbar-inner {grid-template-columns:44px minmax(0,1fr) 80px;gap:6px 8px;padding:6px 12px}
+ .workspace-toolbar-inner {grid-template-columns:44px minmax(0,1fr) max-content;gap:6px 8px;padding:6px 12px}
  .workspace-utilities {grid-column:3;grid-row:1}
  .app-header .wire-search-entry {grid-column:1/-1;grid-row:2}
  .header-inner .navigation-toggle {grid-column:1;grid-row:1;min-height:44px;padding:8px}

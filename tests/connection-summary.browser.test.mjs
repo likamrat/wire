@@ -199,7 +199,7 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
     const { page, requests } = await setup(t), measurements = [];
     for (const context of dropdownContexts) {
         await dropdownContext(page, context);
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
         const zone = page.locator("#displayTimeZone-control");
         await zone.click(); await zone.press("End");
         const long = await dropdownGeometry(page, "displayTimeZone", "time-zone-" + context.name);

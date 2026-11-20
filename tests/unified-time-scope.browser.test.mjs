@@ -125,13 +125,13 @@ test("one visible calendar range changes every widget, headline, row and current
     assert.deepEqual(sorted(await page.locator(".matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId))),
         ['call:["unified-chat-A","a-0"]', 'call:["unified-chat-A","a-1"]']);
     await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
-    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
     assert.deepEqual(sorted(app.snapshot().analytics.rows.map(row => row.toolCallId)), ["a-1", "h-0"],
         "An equal-size cohort in another zone must still replace exact membership.");
     await navigateMain(page, "home"); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("2 Work IQ tool calls (Mar 9, 2026)");
-    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", ""); await ready(page);
     await navigateMain(page, "home"); await ready(page);
     await scope(["a-0", "a-1"], 1, 1);

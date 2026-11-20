@@ -88,7 +88,12 @@ export async function restoreLegacySearch(page, search) {
 }
 
 export async function navigateSettings(page, category) {
-    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy" }[category] || category;
+    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy", display: "themes" }[category] || category;
+    if (category === "troubleshooting") {
+        await page.locator("#openEvidenceHelp").click();
+        await page.locator('[data-settings-section="troubleshooting"]').waitFor({ state: "visible" });
+        return;
+    }
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const link = page.locator(`#settingsCategoryNav [data-category=${category}]`);
     if (!await link.isVisible()) await page.locator("#settingsCategorySummary").click();

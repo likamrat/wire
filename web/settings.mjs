@@ -39,12 +39,15 @@ export const settingsMarkup = `
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
     <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="/reports" data-settings-link>Open saved reports</a></div>
   </section>
-  <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
-    <h2 id="displayTitle" tabindex="-1">Display</h2>
+  <section class="settings-section" data-settings-section="themes" aria-labelledby="themesTitle" hidden>
+    <h2 id="themesTitle" tabindex="-1">Themes</h2>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
       <h3>Appearance mode</h3><span id="settingsModeLabel"></span>
     </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
     ${paletteGallery}
+  </section>
+  <section class="settings-section" data-settings-section="regional" aria-labelledby="regionalTitle" hidden>
+    <h2 id="regionalTitle" tabindex="-1">Regional</h2>
     <div class="settings-field settings-display-field display-time-field">
       <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
@@ -110,7 +113,7 @@ export const settingsMarkup = `
     </section>
   </div>
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
-    <h2 id="troubleshootingTitle" tabindex="-1">Help &amp; status</h2>
+    <h2 id="troubleshootingTitle" tabindex="-1">Help</h2>
     <section class="settings-evidence-guide" aria-labelledby="evidenceHelpTitle"><h3 id="evidenceHelpTitle">Reading your activity</h3>
       <details id="activityCountHelp" class="settings-advanced"><summary>What do the counts include?</summary><p>Counts include matching saved activity across all pages. A request group links calls to a recorded Copilot message. One group can contain several calls; Insights can include the rest of that interaction.</p></details>
       <details id="activityResultHelp" class="settings-advanced"><summary>What does a successful result mean?</summary><p>The tool reported success. That does not tell you whether the answer was correct or the whole task finished. Graph requests inside hosted Work IQ are not visible in local chat logs.</p></details>
@@ -136,7 +139,7 @@ export const settingsMarkup = `
     <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
     <p id="collectionCoveragePending" class="settings-help" hidden></p>
-    <div class="collection-status-actions"><a id="collectionSourceLink" href="/settings?section=source-access&setting=source-paths" data-settings-link>Source access</a><a id="collectionHistoryLink" href="/settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="/settings?section=troubleshooting" data-settings-link>Help &amp; status</a><a href="/" data-settings-link>Go to Analyze</a></div>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="/settings?section=source-access&setting=source-paths" data-settings-link>Source access</a><a id="collectionHistoryLink" href="/settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="/" data-settings-link>Go to Analyze</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
     <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>

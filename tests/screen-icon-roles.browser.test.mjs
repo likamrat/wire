@@ -132,7 +132,7 @@ test("screen service, Settings, reader and report-control icons use coherent opt
         assert.ok(metrics.length === 5 && metrics.every(row => row.label && row.targetHeight >= 44 && row.fits), JSON.stringify(metrics));
         await capture(page, `settings-${theme}-${width}-text${textScale}`);
         if (proofs) await writeFile(path.join(proofs, `settings-${theme}-${width}.json`), JSON.stringify(metrics, null, 2));
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
         await page.locator('[data-select-id="displayTimeZone"]').click();
         await opticalSize(page.locator('.select-popup .select-option[aria-selected=true] .select-check'), 16);
         await capture(page, `single-select-${theme}-${width}`);

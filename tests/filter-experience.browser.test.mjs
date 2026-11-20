@@ -437,8 +437,8 @@ test("joined Search reaches current Display settings independently of filters", 
     await choose("promptAuthorFilter", ["user"]);
     await page.locator("#wireSearch").fill("Time zone");
     const setting = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: /^Time zone$/ }) });
-    await setting.click(); await page.waitForURL(/section=display/); await ready(page);
-    assert.match(page.url(), /section=display/);
+    await setting.click(); await page.waitForURL(/section=regional/); await ready(page);
+    assert.match(page.url(), /section=regional/);
     assert.equal(await page.evaluate(() => document.activeElement.id), "displayTimeZone-control");
     await choose("displayTimeZone", "UTC");
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "UTC");

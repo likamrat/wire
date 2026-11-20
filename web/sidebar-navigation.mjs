@@ -190,8 +190,7 @@ export function mountSidebarNavigation(ux, preference) {
     for (const node of content.querySelectorAll("[data-nav]")) {
         const name = node.textContent.trim();
         node.setAttribute("aria-label", name);
-        const utility = Boolean(node.closest(".navigation-footer"));
-        ux.tooltip(node, () => utility || !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
+        ux.tooltip(node, () => !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
     }
     preference.subscribe(state => {
         ux.hideTooltip();

@@ -87,7 +87,7 @@ not included in these shares.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
-**Settings > Display > Time zone**. Missing history and records without qualified
+**Settings > Regional > Time zone**. Missing history and records without qualified
 times remain explicit. No matches means
 no matching retained evidence, not proof that no activity occurred.
 
@@ -330,14 +330,14 @@ This search runs on-device over fixed setting information. It is separate from
 the main Search field for saved activity and reports, and does not read private
 path values.
 
-In **Display**, choose Light or Dark, a color palette and a time zone for this
-browser. The toolbar switch changes only Light/Dark. Select a palette card to
+In **Themes**, choose Light or Dark and a color palette for this browser.
+Change the time zone separately in **Regional**. The toolbar switch changes only Light/Dark. Select a palette card to
 change the screen immediately; **Compare Light and Dark** shows the selected
 palette in both modes. **Reset palette** restores Petrol & coral without
 changing mode. If storage is unavailable, the choice applies to this panel
 only. Changing appearance does not rewrite saved reports or their original time zone.
 
-![Display with four palette previews. Petrol & coral is active in Light mode.](images/settings-display.png)
+![Themes with five compact palette previews. Petrol & coral is active in Light mode.](images/settings-display.png)
 
 ## Keep collection and saved data separate
 
@@ -364,7 +364,7 @@ default. This display profile does not control access to history. A neutral
 icon means the profile is unavailable, not that collection needs a different
 GitHub CLI login.
 
-Use **Help & status** above Account and Settings for the meaning of counts
+Use **Help** beside the toolbar mode switch for the meaning of counts
 and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.

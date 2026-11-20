@@ -94,12 +94,12 @@ Light screens use quiet cool-neutral surfaces; Dark uses separately designed
 petrol-neutral surfaces. Controls, selection and focus remain neutral rather
 than borrowing outcome colors. Dark service inks retain their identity hues
 with added lightness for contrast on selected surfaces.
-Petrol & coral remains the default. Settings > Display separately chooses
-Linen & graphite, Blueprint or Field notes in either Light or Dark.
+Petrol & coral remains the default. Settings > Themes separately chooses
+Linen & graphite, Blueprint, Field notes or Midnight in either Light or Dark.
 The screen palette catalog (`web/screen-palettes.mjs`) maps materials,
 control states, widget marks, series, services and authors to CSS roles;
 names, result glyphs and count geometry are not color-derived. The same
-roles paint the static miniature cards without reading a user's activity.
+roles paint compact, unbranded material samples without reading a user's activity.
 Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 
