@@ -82,7 +82,6 @@
     border-inline-start: 1px solid var(--surface-divider);
     border-radius: 0;
 }
-.wire-frontend-react #homeView .analyze-chart-main .chart-panel { padding-block: 8px; }
 .wire-frontend-react #chart .dimensional-scroll { padding-bottom: 8px; }
 .wire-frontend-react #chart .dimensional-time-labels { min-height: 32px; padding-top: 8px; }
 .wire-frontend-react #frontendAnalyzeQualification { margin-top: 8px; }
@@ -94,7 +93,7 @@
 .wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary p { margin-block: 4px; }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
-.wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: 20px; }
+.wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 20px; }
 .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
     grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
     gap: 0 16px;
@@ -104,7 +103,8 @@
     background: var(--paper);
     border: 1px solid var(--surface-edge);
     border-radius: var(--radius-small);
-    padding: 16px;
+    padding: var(--widget-heading-inset) 16px 16px;
+    container: breakdown-card / inline-size;
 }
 .wire-frontend-react #frontendBreakdowns .percentage-panels {
     display: grid;
@@ -140,13 +140,6 @@
     }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) { display: block; }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-visual { display: none; }
-    .wire-frontend-react #outcomeChart .percentage-card:has(> .percentage-content:not([data-unit-mode=separate])) .percentage-card-heading {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 4px 16px;
-    }
     .wire-frontend-react #outcomeChart .percentage-card:has(> .percentage-content:not([data-unit-mode=separate])) .percentage-denominator {
         position: static;
         width: auto;
@@ -176,8 +169,7 @@
     }
 }
 @container analyze-view (max-width: 26rem) {
-    .wire-frontend-react #outcomeChart > .percentage-card { padding: 12px 16px; }
-    .wire-frontend-react #homeView .analyze-chart-main .chart-panel { padding-block: 4px; }
+    .wire-frontend-react #outcomeChart > .percentage-card { padding-inline: 16px; }
     .wire-frontend-react #outcomeChart .percentage-legend-row .percentage-value { font-size: var(--type-small); }
 }
 @media (max-width: 48rem) {

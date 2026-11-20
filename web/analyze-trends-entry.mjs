@@ -59,10 +59,10 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
             const node = document.createElement(tag); if (text) node.textContent = text; if (cls) node.className = cls; return node;
         };
         function link(family) {
-            const label = family === "problems" ? "Related errors trend" : "View trend";
+            const label = "View trend";
             const node = create("a", label, "text-link analyze-trend-link");
             node.href = "/trends"; node.id = `analyze-trend-${family}`;
-            node.setAttribute("aria-label", family === "problems" ? label : `${label}: ${subjects[family]}`);
+            node.setAttribute("aria-label", `${label}: ${subjects[family]}`);
             function activate(event) {
                 if (event.type === "auxclick" && event.button !== 1) return;
                 event.preventDefault();

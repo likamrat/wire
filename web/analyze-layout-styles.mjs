@@ -42,6 +42,7 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #collectionNotice p {font-size:var(--type-small)}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
+.analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px}
 .analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(32rem,36rem) minmax(0,1fr);grid-auto-rows:1px;gap:0 16px;align-items:start}
 .analyze-dashboard[data-dashboard-layout=packed] .analyze-chart-grid,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts,
@@ -49,13 +50,14 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-panels {display:contents}
 .analyze-dashboard[data-dashboard-layout=packed] :is(.analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card) {align-self:start;grid-column:auto}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-legend {row-gap:0}
-.analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] {padding-block:8px}
+.analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] {padding-block-end:8px}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] .percentage-label {min-height:1.5rem}
 .analyze-chart-grid {display:grid;grid-template-columns:minmax(32rem,36rem) minmax(0,1fr);gap:16px;align-items:start;min-width:0}
 .analyze-outcome-summary {min-width:0;display:flex;flex-direction:column}
 :is(#outcomeChart,.native-outcome-chart) {min-width:0;display:flex;flex:1}
 :is(#outcomeChart,.native-outcome-chart)>.percentage-card {width:100%;padding:20px 20px 0;border:0;background:none;display:flex;flex-direction:column;container:outcome-card / inline-size}
 #outcomeChart .percentage-card-heading {margin:0 0 4px;min-height:0}
+#outcomeChart>.percentage-card {padding-block-start:var(--widget-heading-inset)}
 :is(#outcomeChart,.native-outcome-chart) .percentage-content:not([data-unit-mode=separate]) {display:grid;grid-template-columns:minmax(0,var(--outcome-ring-size,13rem)) minmax(0,1fr);gap:0 16px;align-items:center;align-content:center;flex:1;padding-bottom:8px}
 #outcomeChart .percentage-content:has(>.percentage-empty:only-child) {display:block}
 :is(#outcomeChart,.native-outcome-chart) .percentage-visual {width:var(--outcome-ring-size,13rem);margin-inline:auto}
@@ -66,11 +68,17 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main>.insight-header {padding:8px 16px;margin:0;border-bottom:1px solid transparent}
 .analyze-chart-main .view-switch {display:flex;flex-wrap:wrap;gap:4px}
 .analyze-chart-main .view-switch>button {flex:0 1 auto;overflow-wrap:normal}
-#homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:12px 20px 8px;flex:1}
+#homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:var(--widget-heading-inset) 20px 8px;flex:1}
 .analyze-chart-main .chart-heading {margin:0 0 8px;align-items:center}
-.analyze-chart-main .chart-heading,.percentage-card-heading:has(>.analyze-trend-link){display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px}
-.percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator:not(.visually-hidden){order:1;flex-basis:100%}
-.analyze-trend-link{margin-inline-start:auto;display:inline-flex;align-items:center;min-height:32px;font-size:var(--type-caption);white-space:nowrap}
+:is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
+:is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
+.percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-column:1/-1;grid-row:2}
+.analyze-trend-link:not([hidden]){grid-area:1 / 2;align-self:start;justify-self:end;display:inline-flex;align-items:center;min-height:44px;font-size:var(--type-caption);white-space:nowrap}
+@container (max-width:16rem){
+ :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){grid-template-columns:minmax(0,1fr)}
+ .analyze-trend-link:not([hidden]){grid-area:2 / 1;justify-self:start}
+ .percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-row:3}
+}
 .analyze-trend-decision{max-width:min(32rem,calc(100vw - 2rem))}
 .analyze-trend-decision ul{padding-inline-start:1.3em;margin:0 0 1rem}
 .analyze-trend-decision li+li{margin-block-start:.5em}
@@ -84,7 +92,7 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main #chartFooter .chart-size-note {font-size:var(--type-caption)}
 #percentageCharts .percentage-section {margin-block:20px 16px}
 #percentageCharts .percentage-panels {gap:16px;align-items:start}
-#percentageCharts .percentage-card {padding:16px 20px}
+#percentageCharts .percentage-card {padding:var(--widget-heading-inset) 20px 16px}
 #percentageCharts .percentage-card-heading {margin-bottom:4px;min-height:0}
 #percentageCharts .percentage-card {container:breakdown-card / inline-size}
 #percentageCharts .percentage-legend {gap:4px}

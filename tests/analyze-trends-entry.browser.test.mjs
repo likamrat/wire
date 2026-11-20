@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { currentStatePayload } from "../lib/server.mjs";
@@ -153,7 +154,7 @@ for (const frontend of ["react", "bundled"]) {
 test("qualified outcome transition cancels in place, accepts only supported scope, never carries data into a copied URL", async t => {
     const { page, url, reads } = await setup(t, "react", records());
     await page.goto(url + "/?result=success&authors=user,unknown&services=Calendar,Mail&bucket=week"); await ready(page);
-    const link = page.getByRole("link", { name: "Related errors trend" });
+    const link = page.getByRole("link", { name: "View trend: Errors & failures", exact: true });
     await link.click();
     const decision = page.getByRole("dialog"), original = page.url();
     for (const text of ["affected interactions", "Outcome filter does not carry over", "all prompt authors", "all services", "last 7 days"]) {
@@ -173,6 +174,46 @@ test("qualified outcome transition cancels in place, accepts only supported scop
     await page.goto(url + "/?layer=reported-api"); await ready(page);
     await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(0);
 });
+
+for (const frontend of ["react", "bundled"]) {
+    test(`${frontend}: home widget trend links share a header row and remain readable with wrapped titles`, async t => {
+        const { page, url } = await setup(t, frontend, records());
+        await page.goto(`${url}/?range=custom&from=${day}&to=${day}&source=github-copilot`); await ready(page);
+        const links = page.locator("a.analyze-trend-link:visible"), proof = process.env.WIRE_TRENDS_PROOFS, checks = [], issues = [];
+        await expect(links).toHaveCount(6);
+        for (const [width, scale] of [[1600,1],[900,1],[390,2]]) {
+            await page.setViewportSize({width,height:900});
+            await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; },scale);
+            await page.evaluate(() => document.fonts.ready); await frames(page);
+            const rows = await links.evaluateAll(links => links.map(link => {
+                const heading = link.parentElement.querySelector("h2,h3");
+                const box = n => {const b=n.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height};};
+                const range = document.createRange(); range.selectNodeContents(heading);
+                return {id:link.id, text:link.innerText, accessible:link.getAttribute("aria-label"),
+                    title:box(heading), link:box(link), header:box(link.parentElement),
+                    card:box(link.closest(".percentage-card,.chart-panel")), titleLines:range.getClientRects().length};
+            }));
+            checks.push({width,scale,rows});
+            const activity = rows.find(row=>row.id === "analyze-trend-rhythm"), result = rows.find(row=>row.id === "analyze-trend-problems");
+            if (activity.card.x + activity.card.w <= result.card.x + 2 && Math.abs(activity.card.y-result.card.y)<2)
+                if (Math.abs(activity.link.y-result.link.y)>1) issues.push(`${width}: adjacent action tops differ by ${activity.link.y-result.link.y}px`);
+            for (const row of rows) {
+                if (row.text !== "View trend" || !row.accessible?.startsWith("View trend: ")) issues.push(`${row.id} wording: ${row.text}`);
+                if (row.link.h<44 || row.link.x<row.header.x-1 || row.link.x+row.link.w>row.header.x+row.header.w+1)
+                    issues.push(`${width} ${row.id}: action outside header or less than 44px tall`);
+                if (row.title.x+row.title.w>row.link.x+1 && row.title.y+row.title.h>row.link.y+1 && row.link.y+row.link.h>row.title.y+1)
+                    issues.push(`${width} ${row.id}: overlapping title/action`);
+            }
+            if (proof) {
+                await mkdir(proof,{recursive:true});
+                await page.locator("#analyze-trend-rhythm").scrollIntoViewIfNeeded();
+                await page.screenshot({path:path.join(proof,`home-actions-${frontend}-${width}-${scale}.png`)});
+            }
+        }
+        if (proof) await writeFile(path.join(proof,`home-actions-${frontend}.json`),JSON.stringify(checks));
+        assert.deepEqual(issues,[]);
+    });
+}
 test("no retained supported calls: unbounded Analyze offers no widget transfer, ordinary Trends honestly shows an empty period", async t => {
     const { page, url, reads } = await setup(t, "react", []);
     await page.goto(url); await ready(page);

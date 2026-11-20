@@ -115,9 +115,10 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 Choose **Trends** in the sidebar to see tool calls by day. The seven measure
 names stay visible. Choose **Errors & failures** at the top to find affected
 interactions, or **Services** to compare named services immediately. On Analyze,
-an applicable widget offers a direct trend action. A related view that changes
-the population or unit explains the difference before opening; **Back to
-Analyze** restores the original widget.
+choose **View trend** on a widget to open its corresponding measure. From
+**Tool call results**, WIRE asks before showing **Errors & failures**: that
+chart counts affected interactions, not call outcomes. **Back to Analyze**
+restores the original widget.
 
 ### Choose the period and activity
 
