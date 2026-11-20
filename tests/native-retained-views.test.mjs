@@ -317,6 +317,61 @@ test("bounded reader joins a call start to its original complete call outcome wi
     assert.equal(query.aggregates.calls, 3);
 });
 
+for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} completed detail pages exactly the successful calls offered by the card, in parent numbering`, async t => {
+    const app = await committedNativeReportFixture(t, { segmented, envelopes: coworkFixture() });
+    const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
+    t.after(() => views.close());
+    const owner = app.services.nativeReportAdmission;
+    const full = await views.query(input(), owner);
+    const conversationId = full.page.items[0].id, sources = [full.page.items[0].sourceId];
+    const base = { schemaVersion: 1, revision: full.revision, sourceRevision: full.sourceRevision,
+        sources, conversationId, page: { limit: 1, after: null } };
+    const complete = await views.detail({ ...base, section: "calls", page: { limit: 100, after: null } }, owner);
+    const expected = complete.page.items.map((row, i) => ({ call: row.callSummaries[0], number: i + 1 }))
+        .filter(row => row.call.outcome === "success");
+    const selected = await views.query({ ...input(), analytics: { layer: "tool", filters: { outcomes: ["success"] } } }, owner);
+    assert.equal(selected.page.items[0].selectedRows, 2);
+    assert.equal(selected.page.items[0].completedRef, selected.selectionRef);
+    assert.equal(full.page.items[0].completedRef, undefined);
+    const scoped = view => ({ ...base, section: "completed", completedRef: view.selectionRef, viewId: view.viewId });
+    const model = createBoundedNativeState();
+    const read = async input => {
+        model.receive(model.begin(input, owner), await views.detail(input, owner), owner);
+        return model.snapshot().value;
+    };
+    const first = await read(scoped(selected));
+    assert.equal(first.sectionCount, 2);
+    const next = await read(model.next());
+    assert.equal(next.page.nextCursor, null);
+    assert.deepEqual([first, next].flatMap(page => page.page.items.map(item => [item.id, item.callNumber])),
+        expected.map(({ call, number }) => [call.id, number]));
+    const text = await views.analyze({ schemaVersion: 1, revision: full.revision, viewId: full.viewId,
+        query: "CallGraph", types: ["action"], page: base.page }, owner);
+    const narrowed = await read(scoped(text));
+    assert.equal(narrowed.sectionCount, 1);
+    assert.equal(narrowed.page.items[0].id, expected.find(row => row.call.tool.includes("CallGraph")).call.id);
+    assert.doesNotMatch(JSON.stringify(narrowed), /viewId|RAW_ERROR_PROSE|UNRELATED_RAW_PAYLOAD|rootHash|tenantId|subjectId|pseudonymKey/);
+    const groupBase = await views.query({ ...input(), analytics: { groupBy: "tool" } }, owner);
+    const group = await views.drilldown({ schemaVersion: 1, revision: full.revision, viewId: groupBase.viewId,
+        groupId: groupBase.grouping.groups.find(group => group.label.includes("SearchM365")).id, page: base.page }, owner);
+    const grouped = await read(scoped(group));
+    assert.equal(grouped.sectionCount, 1);
+    assert.equal(grouped.page.items[0].id, expected.find(row => row.call.tool.includes("SearchM365")).call.id);
+    const wrong = { ...scoped(text), page: { limit: 1, after: first.page.nextCursor } };
+    await assert.rejects(views.detail(wrong, owner), { code: "NATIVE_VIEW_CURSOR_STALE" });
+    for (const [request, guard] of [[scoped(full), owner], [{ ...scoped(text), completedRef: selected.selectionRef }, owner],
+        [{ ...scoped(text), viewId: text.allViewId }, owner], [{ ...scoped(text), revision: text.revision + 1 }, owner],
+        [{ ...scoped(text), sourceRevision: "f".repeat(64) }, owner], [scoped(text), { ...owner, owner: "not-the-view-owner" }]]) {
+        await assert.rejects(views.detail(request, guard), { code: "NATIVE_VIEW_SELECTION_STALE" });
+    }
+    const forged = structuredClone(narrowed);
+    forged.page.items[0].callSummaries[0].outcome = "unknown";
+    assert.throws(() => model.decode(forged, scoped(text)));
+    assert.throws(() => model.decode(narrowed, scoped(selected)));
+    await updateBoardState(app.context, state => { state.nativeRetention.privacyRevision++; });
+    await assert.rejects(views.detail({ ...scoped(selected), page: { ...base.page, after: first.page.nextCursor } }, owner), /STALE/);
+});
+
 test("native Search Open seeks an exact admitted ordinal without loading earlier detail pages", async t => {
     const app = await committedNativeReportFixture(t, { segmented: true, envelopes: [...chatFixture(), ...coworkFixture()] });
     const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);

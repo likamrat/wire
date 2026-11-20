@@ -226,7 +226,9 @@ retained original, including text after the ellipsis. The panel icon beside the 
 recorded activity in the right-hand reader. **Human prompt**, **Agent prompt** or
 **Author unverified** describes the prompt’s origin, not its app. A label such
 as **1 tool call failed** opens the failed call; it does not mean the whole
-request failed. Repeated tools show a count with its unit. Tools, requested targets and operations
+request failed. **4 tool calls completed** opens those four calls. If filters
+exclude other calls, they stay out of that list. A completed call can still
+contain a returned API error. Repeated tools show a count with its unit. Tools, requested targets and operations
 are separate; a search or Copilot request does not confirm which apps were used.
 When a tool fails and another call returns an issue, use their separate links.
 Long prompts start with a six-line preview so recorded activity stays close.

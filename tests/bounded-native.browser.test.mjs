@@ -8,6 +8,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
+import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { createBoundedNativeState } from "../web/bounded-native-state.mjs";
@@ -26,7 +27,7 @@ import { SEARCH_MATCH_POLICY_ID } from "../lib/search-text.mjs";
 import { openAnalyzeFilters, closeAnalyzeFilters, selectActivityOption, fixture, chooseTheme } from "./helpers.mjs";
 
 const root = process.env.WIRE_BOUNDED_BACKEND_ROOT;
-const backend = async file => import(pathToFileURL(path.join(root, file)).href);
+const externalBackend = async file => import(pathToFileURL(path.join(root, ...file.split("\\"))).href);
 function html() {
     const nonce = "bounded-native-ui";
     let page = renderHtmlShell("a".repeat(64), nonce);
@@ -53,9 +54,11 @@ window.ui=(${mountBoundedNative.toString()})({api,ux,results,createState:${creat
  createReaderSections:${createReaderSections.toString()},presentation:(${createDisclosureState.toString()})(),
  renderText:text=>{const p=document.createElement("p");p.textContent=text;return p;},
  sourceLabel:source.sourceLabel,presentHit:${searchHitPresentation.toString()},matchPolicyId:${JSON.stringify(SEARCH_MATCH_POLICY_ID)},active:()=>true,
- openConversation:target=>{
+ conversationHref:target=>"#request?parent="+target.conversationId+(target.completedRef?"&completed="+target.completedRef:""),
+ openConversation:(target,focus)=>{
  opened.push(target);reader?.dispose();
  $("overlay").showModal();reader=ui.mountReader({root:$("detail"),...target,isCurrent:()=>allowed&&$("overlay").open});
+ reader.revealTarget(focus)?.focus();
  }});
 window.filters={layer:"tool",groupBy:"workload",filters:{scope:"all"},limit:1};
 window.load=async()=>{
@@ -83,11 +86,18 @@ $("wireSearchPanel").hidden=false;
 load().then(()=>document.body.dataset.ready="true").catch(error=>{document.body.dataset.error=error.message;});
 </script></body>`);
 }
-async function setup(t, { mainClient = false, github = false, timed = false, long = false, returned = false, extraConversations = 0 } = {}) {
+async function setup(t, { mainClient = false, github = false, timed = false, long = false, returned = false,
+    extraConversations = 0, extraSuccesses = 0, localBackend = false, compiled = false } = {}) {
+    const backend = localBackend ? file => import(new URL("../" + file.replaceAll("\\", "/"), import.meta.url)) : externalBackend;
     const { committedNativeReportFixture } = await backend("tests\\native-report-controller-fixture.mjs");
     const { createNativeRetainedViews } = await backend("lib\\native-retained-views.mjs");
     const { chatFixture, coworkFixture } = await backend("tests\\native-read-model-fixtures.mjs");
     const envelopes = [...chatFixture(), ...coworkFixture()];
+    for (let index = 0; index < extraSuccesses; index++) {
+        const row = structuredClone(envelopes.find(row => row.record.data?.tid === "invented-search"));
+        row.record.id = `seq:${20 + index}`; row.record.data.tid += `-${index}`;
+        row.ordering.recordOrdinal = 20 + index; envelopes.push(row);
+    }
     for (let index = 0; index < extraConversations; index++) for (const row of chatFixture()) {
         row.scope.conversationId += `-${index}`;
         envelopes.push(row);
@@ -139,12 +149,15 @@ async function setup(t, { mainClient = false, github = false, timed = false, lon
                         windowDays: microsoft.configuration.settings.windowDays }, basis: "committed-native", blockers: [] } } } };
     }
     const calls = [];
+    const assets = compiled ? await loadBrowserAssets({renderer:"react"}) : null;
     const server = createServer(async (req, res) => {
         try {
             if (req.method === "GET" && req.url === "/") {
                 res.setHeader("Content-Type", "text/html");
-                return res.end(mainClient ? renderHtmlShell("a".repeat(64), "bounded-main-protocol", bootstrap) : html());
+                return res.end(mainClient ? renderHtmlShell("a".repeat(64), "bounded-main-protocol", bootstrap, assets) : html());
             }
+            const asset = req.method === "GET" && assets?.get(req.url);
+            if (asset) { res.setHeader("Content-Type",asset.type); return res.end(asset.bytes); }
             if (req.url === "/favicon.ico") return res.writeHead(204).end();
             let body = ""; for await (const part of req) body += part;
             const input = body ? JSON.parse(body) : {}, method = req.url.split("/").at(-1);
@@ -214,6 +227,69 @@ test("bounded cards replace pages while full totals stay fixed, and Dates/source
         await expect(page.locator("#activityList")).toContainText("Use All dates to include undated activity");
         await page.evaluate(() => { allowed=false;ui.withdrawAccess(); });
         await expect(page.locator("#activityList .activity-card")).toHaveCount(0);
+    });
+
+test("compiled workspace keeps the bounded completed selector private and restores its link on Back", async t => {
+    const {page,calls} = await setup(t,{mainClient:true,compiled:true,extraSuccesses:11,localBackend:true});
+    await selectActivityOption(page,"sourceFilter","microsoft-365-cowork");
+    await selectActivityOption(page,"toolFilter","mcp__m365_search__SearchM365");
+    await closeAnalyzeFilters(page);
+    const link=page.locator("#activityList").getByRole("link",{name:"12 tool calls completed"});
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href",/privateView=required/);
+    await link.focus();await page.keyboard.press("Enter");
+    const reader=page.locator("#requestContent");
+    await expect(reader.getByRole("heading",{name:/Completed calls in this selection/})).toBeFocused();
+    await expect(reader.locator("[data-native-call-id]")).toHaveCount(10);
+    assert.ok(calls.some(c=>c.method==="detail" && c.input.section==="completed"));
+    assert.doesNotMatch(page.url(),/[a-f0-9]{64}|mcp__|nativeCompletedRef/);
+    await page.goBack();await expect(link).toBeFocused();
+});
+
+test("completed native card opens only its counted calls across pages, with one arrow and group focus",
+    async t => {
+        const { page, calls } = await setup(t, { extraSuccesses: 11, localBackend: true });
+        const cards = page.locator("#activityList");
+        await page.evaluate(async () => { filters.filters.sources = ["microsoft-365-cowork"]; await load(); });
+        await expect(cards.locator(".card-outcome")).toContainText("failed");
+        await expect(cards.locator(".card-evidence-link")).toHaveCount(0);
+        await page.evaluate(async () => { filters.filters.tools = ["mcp__m365_search__SearchM365"]; await load(); });
+        const link = cards.getByRole("link", { name: "12 tool calls completed" });
+        assert.equal(await page.evaluate(() => {
+            const view = structuredClone(ui.presentation().value), item = view.page.items[0];
+            delete item.completedRef; // A legacy producer has a real count, but no scoped detail offer.
+            const card = ui.card({ view, item }), passive = Boolean(card.querySelector("span.card-outcome"))
+                && !card.querySelector("a.card-evidence-link");
+            ui.clearCards(card);
+            return passive;
+        }), true);
+        await expect(link).toBeVisible();
+        await expect(link.locator(":scope > svg")).toHaveCount(1);
+        await expect(link).toHaveAttribute("href", /completed=[a-f0-9]{64}/);
+        await link.focus();
+        await link.press("Enter");
+        const reader = page.locator("#detail"), callsOnPage = reader.locator("[data-native-call-id]");
+        await expect(reader.getByRole("heading", { name: /Completed calls in this selection/ })).toBeFocused();
+        await expect(callsOnPage).toHaveCount(10);
+        const ids = await callsOnPage.evaluateAll(nodes => nodes.map(node => node.dataset.nativeCallId));
+        await expect(reader).not.toContainText(/MoveMessage|CallGraph|invented question/);
+        await reader.getByRole("button", { name: "Next", exact: true }).click();
+        await expect(callsOnPage).toHaveCount(2);
+        assert.equal(new Set([...ids, ...await callsOnPage.evaluateAll(nodes => nodes.map(node => node.dataset.nativeCallId))]).size, 12);
+        await reader.getByRole("button", { name: "Previous", exact: true }).click();
+        await expect(callsOnPage).toHaveCount(10);
+        assert.deepEqual(await callsOnPage.evaluateAll(nodes => nodes.map(node => node.dataset.nativeCallId)), ids);
+        assert.deepEqual(calls.filter(call => call.method === "detail").map(call => call.input.section), ["completed", "completed", "completed"]);
+        await page.evaluate(() => { reader.dispose(); document.getElementById("overlay").close(); });
+        await expect(link).toBeFocused();
+        await expect(link).toHaveAttribute("data-card-origin", "");
+        await page.evaluate(() => {
+            const root = document.getElementById("detail"); document.getElementById("overlay").showModal();
+            reader = ui.mountReader({ root, ...opened[0], completedRef: "0".repeat(64), isCurrent: () => true });
+        });
+        await expect(reader).toContainText("These exact completed calls are unavailable.");
+        await expect(callsOnPage).toHaveCount(0);
+        assert.equal(calls.filter(call => call.method === "detail").length, 3);
     });
 
 test("native literal Search opens its exact original ordinal in one detail request and never creates membership",

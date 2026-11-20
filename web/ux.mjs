@@ -485,6 +485,10 @@ export function createEvidenceUX(icons) {
         label.textContent = outcome.label;
         face.append(icon(outcome.icon), label);
         target.replaceChildren(face);
+        if (target.matches("a[href]")) {
+            target.classList.add("card-evidence-link");
+            target.append(icon("forward"));
+        }
         return target;
     }
     function helpButton(label, text) {

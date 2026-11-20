@@ -437,6 +437,17 @@ test("the normal Reports picker preserves the exact known tool identity when ope
     await expect(picker).toBeVisible();
     await expect(check).toBeChecked();
     await expect.poll(() => body.evaluate(node => node.scrollTop)).toBe(top);
+    const successRow = picker.locator(".request-row").filter({has:page.locator("a.card-outcome.result-tone-success")}).first();
+    const completed = successRow.locator("a.card-outcome"), choice = successRow.locator("input[type=checkbox]");
+    await expect(completed).toHaveText("1 tool call completed");
+    const selectedBefore = await choice.isChecked();
+    await completed.focus(); await page.keyboard.press("Enter");
+    const calls = reader.locator('[data-reader-section="activity"]');
+    await expect(calls.locator("h2")).toContainText("1 completed call");
+    await expect(calls.locator(".reader-call-row")).toHaveCount(1);
+    await page.goBack(); await expect(completed).toBeFocused();
+    assert.equal(await choice.isChecked(),selectedBefore);
+    await expect(check).toBeChecked();
     await picker.getByRole("button", {name:"Close",exact:true}).click();
     await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeVisible();
     assert.deepEqual(await loadBoardState(context), before);

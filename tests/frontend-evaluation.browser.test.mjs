@@ -94,6 +94,63 @@ function compactCardRecords() {
     });
 }
 
+test("completed status opens every counted call and no uncounted sibling", {timeout:60000}, async t => {
+    const records=compactCardRecords(), group=records[0];
+    for (const call of group.toolCalls) {
+        call.toolSucceeded=true; call.reportedOutcome="succeeded"; delete call.failureEvidence;
+    }
+    const {page}=await setup(t,"react",records);
+    const unknown=page.locator('#activityList [data-view-key="request:search-5"] .card-outcome');
+    await expect(unknown).toContainText("No result recorded");await expect(unknown.locator("[data-icon-role=forward]")).toHaveCount(0);
+    const card=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    const link=card.locator(".card-orientation a.card-outcome");
+    const activity=page.locator('#requestContent [data-reader-section=activity]');
+    const list=activity.locator(".reader-call-row");
+    if (proofs) {await mkdir(proofs,{recursive:true}); await card.screenshot({path:path.join(proofs,"completed-card.png")});}
+    await expect(link).toHaveAccessibleName("4 tool calls completed",{timeout:1500});
+    await expect(link.locator('[data-icon-role=forward]')).toBeVisible();
+    await link.hover();const size=await link.boundingBox();await page.mouse.down();
+    assert.deepEqual(await link.boundingBox(),size);
+    await expect(link).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+    await page.mouse.up();
+    async function check(ids) {
+        await expect(activity.locator(".reader-section-heading")).toContainText(`${ids.length} completed ${ids.length===1?"call":"calls"}`);
+        assert.deepEqual(await list.evaluateAll(ns=>ns.map(n=>n.dataset.toolCallId)),ids);
+        assert.doesNotMatch(page.url(),/review-call|review-plural/);
+        assert.doesNotMatch(await page.evaluate(()=>JSON.stringify(history.state)),/review-call|review-plural/);
+    }
+    await check(group.toolCalls.map(c=>c.toolCallId));
+    await page.goBack();await expect(link).toBeFocused();
+    for(const [tool,wanted] of [["workiq-fetch",[0,2,3]],["workiq-retrieve",[1]]]) {
+        await selectActivityOption(page,"toolFilter",tool);await ready(page);await closeAnalyzeFilters(page);
+        await expect(link).toHaveText(`${wanted.length} tool ${wanted.length===1?"call":"calls"} completed`);
+        await link.focus();await page.keyboard.press("Enter");
+        await check(wanted.map(i=>group.toolCalls[i].toolCallId));
+        await expect(activity).not.toContainText("The full recorded interaction follows");
+        if(wanted.length===3)await expect(activity).not.toContainText("Call #2 (Search");
+        if(proofs)await capture(page,`completed-reader-${wanted.length}`);
+        if(wanted.length===3){
+            await activity.getByRole("link",{name:"Show full activity"}).click();
+            await expect(list).toHaveCount(4);
+        }
+        await page.goBack();await expect(link).toBeFocused();
+        if(wanted.length===1) {
+            await page.goForward();await check([group.toolCalls[1].toolCallId]);
+            await page.goBack();await expect(link).toBeFocused();
+        }
+    }
+    await chooseTheme(page,"dark");await page.setViewportSize({width:390,height:844});
+    const cdp=await page.context().newCDPSession(page);
+    try {
+        await cdp.send("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
+        await link.scrollIntoViewIfNeeded();const box=await link.boundingBox();
+        await cdp.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+        await cdp.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+        await check([group.toolCalls[1].toolCallId]);
+        await page.locator("#closeContextSidebar").click();await expect(link).toBeFocused();
+    } finally {await cdp.detach();}
+});
+
 test("compact summaries keep diagnostic prose in the right reader while exact filtered calls remain reachable", { timeout: 60000 }, async t => {
     const { page } = await setup(t, process.env.WIRE_TEST_FRONTEND ?? "react", compactCardRecords());
     const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";

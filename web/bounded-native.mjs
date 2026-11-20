@@ -54,7 +54,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
     searchHost.id = "wireNativeSearch"; $("wireSearchPanel").append(searchHost);
     searchHost.hidden = true;
     const number = value => value.toLocaleString();
-    const targetKey = target => JSON.stringify([target.conversationId, target.sourceId, target.revision, target.sourceRevision, target.ordinal ?? null]);
+    const targetKey = target => JSON.stringify([target.conversationId, target.sourceId, target.revision, target.sourceRevision,
+        target.ordinal ?? null, target.completedRef ?? null]);
+    const hash = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+    const completedCard = (view, item) => view.aggregates?.layer === "tool" && hash(view.viewId) && hash(view.selectionRef)
+        && item?.completedRef === view.selectionRef && item.selectedRows > 0 && item.selectedRows === item.outcomes.success;
     function authorityBasis(value) {
         const current = value?.readback?.current ?? value?.current, deletion = value?.readback?.deletionVersion ?? value?.deletionVersion;
         if (!current || !Number.isSafeInteger(deletion) || deletion < 0 || !Number.isSafeInteger(current.generation)
@@ -85,12 +89,16 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         if (value?.revision !== target.revision || value?.sourceRevision !== target.sourceRevision
             || !state.sourceIds.includes(target.sourceId) || !/^[a-f0-9]{64}$/.test(target.conversationId)
             || !authorityBasis(value)) return false;
+        const scoped = target.completedRef !== undefined;
+        const item = scoped && value.page?.items.find(item => item.id === target.conversationId && item.sourceId === target.sourceId);
+        if (scoped && (target.ordinal !== undefined || target.completedRef !== value.selectionRef || !completedCard(value, item))) return false;
         state.readback(value.readback);
         observeReaderAuthority(value);
         const owner = api.publicationToken(), authority = authorityBasis(value);
         if (!owner || readingAuthority?.owner !== owner || readingAuthority.basis !== authority) return false;
         const key = targetKey(target);
-        readingOrigins.delete(key); readingOrigins.set(key, { owner, authority });
+        readingOrigins.delete(key); readingOrigins.set(key, { owner, authority,
+            ...(scoped ? { viewId: value.viewId, count: item.selectedRows } : {}) });
         while (readingOrigins.size > 8) readingOrigins.delete(readingOrigins.keys().next().value);
         return true;
     }
@@ -227,14 +235,25 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         let retired = false;
         article.dataset.sourceId = item.sourceId; article.dataset.viewKey = "request:" + item.id;
         let target = { conversationId: item.id, sourceId: item.sourceId, revision: view.revision, sourceRevision: view.sourceRevision };
-        const action = node("a", undefined, "request-card-open recognition-row");
-        action.href = conversationHref(target, action); action.setAttribute("aria-controls", "contextSidebar");
-        action.addEventListener("click", event => {
-            if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
-            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-            if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
-            event.preventDefault(); acceptReaderTarget(target, view); onOpen(target);
-        }, { signal: events.signal });
+        function link(className, focus) {
+            const action = node("a", undefined, className);
+            const destination = () => focus ? { ...target, completedRef: view.selectionRef } : target;
+            action.href = conversationHref(destination(), action, focus); action.setAttribute("aria-controls", "contextSidebar");
+            if (focus) action.dataset.cardFocus = focus;
+            action.addEventListener("click", event => {
+                if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                if (!window.getSelection()?.isCollapsed && article.contains(window.getSelection()?.anchorNode)) return;
+                const exact = destination();
+                if (!acceptReaderTarget(exact, view)) return;
+                article.querySelector("[data-card-origin]")?.removeAttribute("data-card-origin");
+                action.dataset.cardOrigin = "";
+                onOpen(exact, focus);
+            }, { signal: events.signal });
+            return action;
+        }
+        const action = link("request-card-open recognition-row");
         const kind = item.presentation?.kind, author = node("span",
             { prompt: "Recorded user message", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation", "request-card-author");
         author.prepend(ux.icon("search-interaction"));
@@ -275,7 +294,8 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         facts.append(node("span", date, "request-card-time"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
         const orientation = node("div", undefined, "card-orientation"); orientation.append(author);
-        if (toolOutcome) orientation.append(ux.cardOutcome(toolOutcome));
+        if (toolOutcome) orientation.append(ux.cardOutcome(toolOutcome, toolOutcome.key === "success" && completedCard(view, item)
+            && view.page.items.includes(item) ? link("card-evidence-link", "completed") : undefined));
         facts.prepend(node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
         context.append(orientation, action, facts);
         body.append(context, key);
@@ -351,19 +371,29 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         requests.get(model)?.abort(); requests.delete(model); model.withdraw();
         inventoryPaint(dimension);
     }
-    function mountReader({ root, conversationId, sourceId, revision, sourceRevision, ordinal, scope, isCurrent }) {
+    function mountReader({ root, conversationId, sourceId, revision, sourceRevision, ordinal, completedRef, scope, isCurrent }) {
         for (const dimension of inventories.keys()) cancelInventory(dimension);
         const owner = api.publicationToken(), held = [], releases = [];
         let disposed = false, rawTarget = ordinal;
         const current = () => !disposed && root.isConnected && api.isCurrent(owner) && isCurrent();
         const sections = createReaderSections({ root, presentation, ux, isCurrent: current });
-        const key = name => JSON.stringify(["native-reader", sourceRevision, conversationId, name]);
+        const target = { conversationId, sourceId, revision, sourceRevision, ordinal, completedRef };
+        const completed = completedRef !== undefined;
+        const origin = completed && hasReaderTarget(target) && readingOrigins.get(targetKey(target));
+        if (completed && (!origin?.viewId || !hash(completedRef) || ordinal !== undefined)) {
+            root.append(node("p", "These exact completed calls are unavailable. Reopen them from a current activity card.", "reader-state"));
+            const dispose = () => { disposed = true; sections.dispose(); clear(root); readers.delete(dispose); };
+            readers.add(dispose);
+            return { ...sections, dispose, retains: () => false, revealTarget: () => null };
+        }
+        const key = name => JSON.stringify(["native-reader", sourceRevision, conversationId, ...(completed ? [completedRef] : []), name]);
         const memoryKey = key(JSON.stringify([revision, ordinal ?? null]));
         for (const [identity, saved] of readerPages) if (saved.owner !== owner || saved.sourceRevision !== sourceRevision) {
             forgetReading(saved); readerPages.delete(identity);
         }
-        const remembered = readerPages.get(memoryKey);
+        let remembered = readerPages.get(memoryKey);
         readerPages.delete(memoryKey);
+        if (completed && remembered && remembered.viewId !== origin.viewId) { forgetReading(remembered); remembered = null; }
         if (ordinal === undefined) rawTarget = remembered?.rawTarget ?? rawTarget;
         else if (remembered?.pages.observations) {
             const { model } = remembered.pages.observations;
@@ -371,23 +401,29 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             delete remembered.pages.observations;
         }
         const prompt = sections.add("prompt", "Messages", { key: key("prompt"), collapsible: false });
-        const activity = sections.add("activity", "Recorded activity", { key: key("activity"), collapsible: false, metadata: "Call order unverified" });
+        const activity = sections.add("activity", completed ? "Completed calls in this selection" : "Recorded activity",
+            { key: key("activity"), collapsible: false, metadata: "Call order unverified" });
+        const completedHeading = completed ? activity.element.querySelector(".reader-section-heading") : null;
+        if (completed) completedHeading.tabIndex = -1;
         const callOrder = activity.element.querySelector(".reader-section-context");
         callOrder.hidden = true;
         const context = sections.add("context", "Context", { key: key("context"), initialOpen: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: ordinal !== undefined });
-        root.append(prompt.element, activity.element, context.element, source.element);
+        if (completed) root.append(activity.element);
+        else root.append(prompt.element, activity.element, context.element, source.element);
         // An exact target owns the reveal; set it before subscriptions can start a read.
         if (ordinal !== undefined) source.apply(true, false);
         const request = section => ({ schemaVersion: 1, revision, sources: [sourceId], conversationId,
-            sourceRevision, section, page: { limit: 10, after: null } });
+            sourceRevision, section, page: { limit: completed && section === "observations" ? 1 : 10, after: null },
+            ...(section === "completed" ? { completedRef, viewId: origin.viewId } : {}) });
         const restoreModel = name => remembered?.pages[name]?.model ?? createState();
         const messages = restoreModel("messages"), calls = restoreModel("calls"), contextual = restoreModel("context"), raw = restoreModel("observations");
         for (const model of [messages, calls, contextual, raw]) { held.push(model); models.add(model); }
         const syncBusy = () => root.setAttribute("aria-busy", String(held.some(model => model.snapshot().loading)));
         function verified(model, error) {
             const state = model.snapshot(), value = state.value;
-            if (value && (value.revision !== revision || value.sourceRevision !== sourceRevision)) {
+            if (value && (value.revision !== revision || value.sourceRevision !== sourceRevision
+                || completed && model === calls && (value.section !== "completed" || value.sectionCount !== origin.count))) {
                 model.withdraw(); return { value: null, loading: false, error: "The saved conversation changed. Reopen its current activity card." };
             }
             return error ? { ...state, error: error.message } : state;
@@ -425,6 +461,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         function inspect(at) {
             rawTarget = at;
+            if (completed && !source.element.isConnected) root.append(source.element);
             if (!source.isOpen()) source.apply(true, false);
             else void loadRaw(at);
             source.element.scrollIntoView({ block: "nearest", behavior: "auto" });
@@ -539,7 +576,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             callOrder.hidden = !state.value || state.value.sectionCount < 2;
             if (!state.value) { status(activity.body, state, loadCalls); return; }
             const list = node("ol", undefined, "reader-call-list");
-            list.setAttribute("aria-label", "Recorded calls in this conversation");
+            list.setAttribute("aria-label", completed ? "Completed calls in this selection" : "Recorded calls in this conversation");
             for (const [index, item] of state.value.page.items.entries()) {
                 const call = item.callSummaries[0], row = node("li", undefined, "reader-call reader-call-row");
                 row.dataset.nativeCallId = call.id;
@@ -548,7 +585,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                 const line = node("span", undefined, "reader-call-identity-line");
                 const chevron = ux.icon("disclosure"); chevron.classList.add("reader-call-disclosure");
                 line.append(node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
-                const callNumber = calls.snapshot().pageOffset + index + 1;
+                const callNumber = item.callNumber ?? state.pageOffset + index + 1;
                 const outcome = node("span", `Call ${number(callNumber)}: ` + {
                     success: results.labels("tool").success, failure: "failed", unknown: "result unverified" }[call.outcome],
                     "reader-call-summary result-tone-" + call.outcome + (call.outcome === "failure" ? " request-card-failure-text" : ""));
@@ -657,7 +694,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                     queueMicrotask(() => { if (current() && source.isOpen() && block.isConnected) { block.focus({ preventScroll: true }); block.scrollIntoView({ block: "nearest" }); } });
                 }
             }
-            pager(source.body, raw, "/api/retained/microsoft/detail", request("observations"), paintRaw, state.value.aggregates.variants);
+            if (!completed) pager(source.body, raw, "/api/retained/microsoft/detail", request("observations"), paintRaw, state.value.aggregates.variants);
         }
         function loadSection(name, model, paint, input = request(name)) {
             const resume = remembered?.pages[name]?.receipt;
@@ -665,7 +702,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             return read(model, "/api/retained/microsoft/detail", input, paint, undefined, false, resume);
         }
         const loadMessages = () => loadSection("messages", messages, paintMessages);
-        const loadCalls = () => loadSection("calls", calls, paintCalls);
+        const loadCalls = () => loadSection("calls", calls, paintCalls, request(completed ? "completed" : "calls"));
         const loadContext = () => loadSection("context", contextual, paintContext);
         function loadRaw(at) {
             const body = request("observations");
@@ -673,19 +710,20 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             return loadSection("observations", raw, paintRaw, body);
         }
         releases.push(source.visibility.subscribe(open => {
-            if (open && !raw.snapshot().value && !raw.snapshot().loading) void loadRaw(rawTarget);
+            if (open && (!completed || rawTarget !== undefined) && !raw.snapshot().value && !raw.snapshot().loading) void loadRaw(rawTarget);
             else if (!open) { requests.get(raw)?.abort(); raw.withdraw(); clear(source.body); syncBusy(); }
         }));
         releases.push(context.visibility.subscribe(() => paintContext()));
-        void loadMessages(); void loadCalls(); void loadContext();
-        if (source.isOpen()) void loadRaw(rawTarget);
+        if (!completed) { void loadMessages(); void loadContext(); }
+        void loadCalls();
+        if (source.isOpen() && !completed) void loadRaw(rawTarget);
         function dispose(remember = true) {
             if (disposed) return;
             disposed = true; releases.forEach(release => release()); sections.dispose();
             const pages = {};
             for (const [name, model] of Object.entries({ messages, calls, context: contextual, observations: raw })) {
                 requests.get(model)?.abort(); requests.delete(model);
-                const receipt = remember && api.isCurrent(owner) ? model.suspend(owner) : null;
+                const receipt = remember && (!completed || name === "calls") && api.isCurrent(owner) ? model.suspend(owner) : null;
                 if (receipt) pages[name] = { model, receipt };
                 else { model.withdraw(); models.delete(model); }
             }
@@ -694,14 +732,13 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                     const [identity, saved] = readerPages.entries().next().value;
                     forgetReading(saved); readerPages.delete(identity);
                 }
-                readerPages.set(memoryKey, { owner, sourceRevision, rawTarget, pages });
+                readerPages.set(memoryKey, { owner, sourceRevision, rawTarget, pages, ...(completed ? { viewId: origin.viewId } : {}) });
             }
             clear(root); root.removeAttribute("aria-busy"); readers.delete(dispose);
         }
         readers.add(dispose);
-        return { ...sections, dispose, revealTarget: () => null,
-            retains: nextScope => nextScope === scope && current()
-                && hasReaderTarget({ conversationId, sourceId, revision, sourceRevision, ordinal }) };
+        return { ...sections, dispose, revealTarget: focus => focus === "completed" && current() ? completedHeading : null,
+            retains: nextScope => nextScope === scope && current() && hasReaderTarget(target) };
     }
     function paintSearch(error) {
         clear(searchHost);

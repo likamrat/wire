@@ -625,8 +625,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         dimensional, formatDate: value => date(value),
         createReaderSections: assessmentFactories.readerSections, presentation, renderText: value => renderDocument(value),
         onPage: () => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) queueMicrotask(() => { if (workspaceState.evidence && !workspaceState.loading && !clearingAccess) render(); }); },
-        conversationHref: (target, link) => setRouteLink(link, routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
-            nativeRevision: String(target.revision), nativeSourceRevision: target.sourceRevision })),
+        conversationHref: (target, link) => setRouteLink(link, nativeTargetRoute(target)),
         onFilter: values => navigate(routeFor("analyze", { ...values, request: undefined, page: undefined })),
         onInventories: dimension => {
             pendingInventoryUpdates.add(dimension);
@@ -642,13 +641,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             });
         },
         openConversation: target => {
-            const native = {
-                request: target.conversationId, nativeSource: target.sourceId, nativeRevision: String(target.revision),
-                nativeSourceRevision: target.sourceRevision,
-                nativeOrdinal: target.ordinal === undefined ? undefined : String(target.ordinal),
-            };
             liveSearchUI?.hide?.();
-            navigate(routeFor("request", native));
+            navigate(nativeTargetRoute(target));
         },
     });
     const requestContext = createRequestContext();
@@ -784,7 +778,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return origin.view === "reports" && origin.task === "create";
     }
     function requestIdentity(value = workspaceState.route) { return JSON.stringify([value.request, value.call, value.callRevision,
-        value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal]); }
+        value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal, value.completedCalls?.key, value.nativeCompletedRef]); }
     function sidebarAnchor() {
         if (underlyingRoute().view === "trends") return trendsUI.evidenceOrigin()?.closest(".trends-panel") ?? null;
         return (workspaceState.route.inspect ? savedInspector?.anchor || keyed("bundle:" + workspaceState.route.inspect) : null)
@@ -1254,10 +1248,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             restoreSidebarPosition(saved, valid);
             return;
         }
-        const anchor = $("selectedCall") || $("unavailableCall") || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
+        const completedHeading = workspaceState.route.nativeCompletedRef ? readerSections?.revealTarget?.("completed")
+            : workspaceState.route.completedCalls && contextBody.querySelector('[data-reader-section="activity"] .reader-section-heading');
+        const anchor = $("selectedCall") || $("unavailableCall") || completedHeading || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
         readerSections?.reveal(anchor);
         contextBody.scrollTop = anchor ? contextBody.scrollTop + anchor.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - timingInset(anchor) : 0;
-        const target = workspaceState.route.call ? $("selectedCall") || $("unavailableCall") : $("contextSidebarTitle");
+        if (completedHeading) completedHeading.tabIndex = -1;
+        const target = workspaceState.route.call ? $("selectedCall") || $("unavailableCall") : completedHeading || $("unavailableCall") || $("contextSidebarTitle");
         (target || $("contextSidebarTitle")).focus({ preventScroll: true });
         if (workspaceState.route.call) revealSessionResult();
     }
@@ -2585,7 +2582,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         next = sessionJourney.savedRoute(filterState.canonical(sessionJourney.canonical(next)));
         if (next.view !== "trends" && next.trendEntry) delete next.trendEntry;
         if (next.view !== "request") {
-            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, bookmark, searchOwned, ...rest } = next;
+            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, nativeCompletedRef, completedCalls, bookmark, searchOwned, ...rest } = next;
             next = rest;
         }
         if (next.view !== "request" && Object.hasOwn(next, "call")) next = { ...next, call: undefined };
@@ -2688,7 +2685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const next = linkTargets.get(anchor);
         if (!next || target.origin !== location.origin || !paths.isPagePath(target.pathname) || target.searchParams.get("privateView") !== "required") return;
         event.preventDefault();
-        if (next.savedAuthority === "search" || next.nativeGroup || searchOpenedRequest && searchOpenedRequest === next.request) {
+        if (next.savedAuthority === "search" || next.nativeGroup || next.nativeCompletedRef || searchOpenedRequest && searchOpenedRequest === next.request) {
             privateNavigationNotice("Open this selection in its original tab; another tab must verify its own Search or group.", "stale");
             return;
         }
@@ -2721,6 +2718,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
             ...workspaceState.route, view, bookmark: undefined, searchOwned: undefined,
+            completedCalls: undefined,
+            nativeCompletedRef: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
             returnToResults: view === "request" ? workspaceState.route.returnToResults : undefined,
             request: ["request", "reports"].includes(view) ? workspaceState.route.request : undefined,
@@ -2937,6 +2936,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function fullRowsFor(scenarioId, layer = workspaceState.scope.layer) {
         const rows = workspaceState.evidence.requestActivity?.[layer];
         return results.summarize(rows) ? rows.filter(row => idsFor(row).includes(scenarioId)) : undefined;
+    }
+    // Keep counted IDs in the existing publication-fenced private route, never its URL.
+    function completedCallView(rows, request) {
+        if (!rows?.length || rows.some(row => row.outcome !== "success" || !idsFor(row).includes(request))) return null;
+        return { key: crypto.randomUUID(), revision: workspaceState.evidence.revision, ids: [...new Set(rows.map(row => row.id))] };
+    }
+    function currentCompletedCalls(route) {
+        const view = route.completedCalls;
+        if (!view || view.revision !== workspaceState.evidence.revision || !Array.isArray(view.ids) || !view.ids.length) return null;
+        const expected = new Set(view.ids);
+        const rows = route.origin === "reports" ? fullRowsFor(route.request, "tool") : rowsFor(route.request);
+        if (!rows || rows.some(row => row.outcome !== "success" || !expected.has(row.id)) || new Set(rows.map(row => row.id)).size !== expected.size) return null;
+        return expected;
     }
     function sourceCallFor(row) {
         const scenario = workspaceState.evidence.scenarios.find(item => item.scenarioId === row?.scenarioId);
@@ -5666,13 +5678,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!authority || clearingAccess || !workspaceState.evidence) return null;
         const layer = reportPicker ? "tool" : workspaceState.scope.layer;
         const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) : rowsFor(scenario.scenarioId);
+        const target = routeFor("request", { request: scenario.scenarioId });
+        const summary = results.summarize(rows), outcome = layer === "tool" ? results.toolCardOutcome(summary) : null;
+        const completed = outcome?.key === "success" ? completedCallView(rows, scenario.scenarioId) : null;
+        const completedTarget = completed ? { ...target, completedCalls: completed } : null;
         if (nativeActivity.isNative(scenario)) return nativeActivity.card({
-            record: scenario, setHref: link => setRouteLink(link, routeFor("request", { request: scenario.scenarioId })), rows: rows ?? [], layer,
-            contextDateBasis: nativeContextDateBasis(scenario.scenarioId),
-            onOpen: id => navigate(routeFor("request", { request: id })),
+            record: scenario, setHref: (link, done) => setRouteLink(link, done ? completedTarget : target), rows: rows ?? [], layer,
+            contextDateBasis: nativeContextDateBasis(scenario.scenarioId), canOpenCompleted: Boolean(completedTarget),
+            onOpen: (id, done) => navigate(done ? completedTarget : target),
         });
         const row = viewKey(el("article", "request-row activity-card read-in-place"), "request:" + scenario.scenarioId);
-        const target = routeFor("request", { request: scenario.scenarioId });
         const events = new AbortController();
         const signal = eventSignal ? AbortSignal.any([events.signal, eventSignal]) : events.signal;
         function open(label, focus, exact = target, cls = "card-evidence-link") {
@@ -5692,7 +5707,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     closeContextSidebar(); return;
                 }
                 if (focus === "prompt") textAccess.setOpen("request:" + target.request, true);
-                navigate(target, false, { cardTarget: { target: exact, revision: workspaceState.evidence.revision, focus } });
+                if (exact.completedCalls) navigate(exact);
+                else navigate(target, false, { cardTarget: { target: exact, revision: workspaceState.evidence.revision, focus } });
             }, { signal });
             return link;
         }
@@ -5710,7 +5726,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         author.dataset.promptActor = actor;
         author.prepend(ux.icon(authorship.iconRole(actor)));
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
-        const summary = results.summarize(rows);
         const facts = el("div", "request-card-summary");
         if (sourceIdentity && sharedNativeView()?.aggregates.conversations)
             facts.append(el("span", "request-card-source", `Source: ${sourceIdentity.label}`));
@@ -5731,15 +5746,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const failure = layer === "tool" && summary?.failure && callInvestigation.firstFailure(workspaceState.evidence.requestActivity,
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
-        const outcome = layer === "tool" ? results.toolCardOutcome(summary) : null;
         function evidenceLink(label, destination, status) {
             const link = open(label, "record", destination);
-            if (status) ux.cardOutcome(status, link);
-            else link.classList.add("request-card-exception", "returned-issue-ink");
+            if (status) return ux.cardOutcome(status, link);
+            link.classList.add("request-card-exception", "returned-issue-ink");
             link.append(ux.icon("forward"));
             return link;
         }
-        if (outcome) orientation.append(failure ? evidenceLink("", failure, outcome) : ux.cardOutcome(outcome));
+        if (outcome) orientation.append(failure || completedTarget ? evidenceLink("", failure || completedTarget, outcome) : ux.cardOutcome(outcome));
         const parentIds = new Set(rows?.map(row => row.id));
         const apis = layer === "tool" ? fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => parentIds.has(r.parentCallId)) : null;
         const issue = apis?.find(r => {
@@ -5810,6 +5824,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return checkbox;
     }
     function nativeReaderScope() { return JSON.stringify([requestIdentity(), workspaceState.route.origin, fromReportCreation()]); }
+    function nativeTargetRoute(target) {
+        return routeFor("request", { request: target.conversationId, nativeSource: target.sourceId, nativeRevision: String(target.revision),
+            nativeSourceRevision: target.sourceRevision, nativeOrdinal: target.ordinal === undefined ? undefined : String(target.ordinal),
+            nativeCompletedRef: target.completedRef });
+    }
     function nativeReaderSelectionBlock() {
         return workspaceState.route.nativeSource && (Number(workspaceState.route.nativeRevision) !== workspaceState.evidence?.revision
             || workspaceState.route.nativeSourceRevision !== workspaceState.evidence?.nativeRead?.sourceRevision
@@ -5876,12 +5895,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         detailOwner = "request:" + workspaceState.route.request;
         viewKey(body, detailOwner);
+        const completedIds = workspaceState.route.completedCalls ? currentCompletedCalls(workspaceState.route) : null;
+        if (workspaceState.route.completedCalls && !completedIds) {
+            const notice = empty("These completed calls are unavailable", "The matching evidence changed. Return to the card to open its current calls.");
+            notice.id = "unavailableCall"; notice.tabIndex = -1; body.append(notice);
+            return;
+        }
+        const completedTitle = completedIds ? `${count(completedIds.size)} completed ${completedIds.size === 1 ? "call" : "calls"}` : "";
         if (sourceCollection.active && workspaceState.route.nativeSource !== undefined) {
             const ordinal = workspaceState.route.nativeOrdinal === undefined ? undefined : Number(workspaceState.route.nativeOrdinal);
             const revision = Number(workspaceState.route.nativeRevision);
             const exposed = nativeReportItem(workspaceState.route.request);
             const nativeTarget = { conversationId: workspaceState.route.request, sourceId: workspaceState.route.nativeSource,
-                revision, sourceRevision: workspaceState.route.nativeSourceRevision, ordinal };
+                revision, sourceRevision: workspaceState.route.nativeSourceRevision, ordinal, completedRef: workspaceState.route.nativeCompletedRef };
             const currentRoot = workspaceState.evidence.nativeRead?.status === "bounded" && revision === workspaceState.evidence.revision
                 && workspaceState.evidence.nativeRead.sourceRevision === workspaceState.route.nativeSourceRevision;
             if (currentRoot) boundedNative.acceptReaderTarget(nativeTarget, workspaceState.evidence.nativeRead);
@@ -5893,13 +5919,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 || !Number.isSafeInteger(revision) || revision < 0
                 || ordinal !== undefined && (!Number.isSafeInteger(ordinal) || ordinal < 0)
                 || !/^[a-f0-9]{64}$/.test(workspaceState.route.nativeSourceRevision ?? "")
-                || !currentRoot && !originalRoot) {
+                || (nativeTarget.completedRef !== undefined ? !originalRoot : !currentRoot && !originalRoot)) {
                 body.append(empty("This exact Microsoft record is unavailable", "The source or saved revision changed. Reopen it from a current page or Search result."));
                 return;
             }
             if (ordinal !== undefined) sidebarPositions.delete(requestIdentity());
-            readerSections = boundedNative.mountReader({ root: body, conversationId: workspaceState.route.request, sourceId: workspaceState.route.nativeSource,
-                revision, sourceRevision: workspaceState.route.nativeSourceRevision, ordinal, scope: nativeReaderScope(),
+            readerSections = boundedNative.mountReader({ root: body, ...nativeTarget, scope: nativeReaderScope(),
                 isCurrent: () => workspaceState.route.view === "request" && requestRenderKey === renderKey && !requestInvalidated });
             $("contextSidebarFooter").replaceChildren(el("p", "context-help-note",
                 "Reports include the complete saved conversation."),
@@ -5918,7 +5943,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const native = workspaceState.evidence.scenarios.find(record => record.scenarioId === workspaceState.route.request && nativeActivity.isNative(record));
         if (native) {
-            readerSections = nativeActivity.mountReader({ root: body, record: native, target,
+            readerSections = nativeActivity.mountReader({ root: body, record: native, target, completedIds, completedTitle,
                 contextDateBasis: nativeContextDateBasis(native.scenarioId),
                 isCurrent: () => workspaceState.route.view === "request" && requestRenderKey === renderKey && !requestInvalidated });
             if (!api.isCurrent(publication) || !readerSections) return;
@@ -5951,7 +5976,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         readerSections = sections;
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
-        const activitySection = sections.add("activity", "Recorded activity", { key: sectionKey("activity"), collapsible: false });
+        const activitySection = sections.add("activity", completedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         body.append(promptSection.element, activitySection.element, sourceSection.element);
@@ -6226,7 +6251,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const source = sessionSource(scenario.sourceSessionId);
         const sourceProject = source || scenario;
         const originKind = authorship.originKind?.(scenario);
-        if (!sameScope) intro.append(el("p", "reader-scope", full
+        if (completedIds && isSelected) {
+            const allCalls = results.summarize(fullRowsFor(scenario.scenarioId, "tool"))?.count;
+            if (allCalls > completedIds.size) {
+                intro.append(el("p", "reader-scope", `${count(completedIds.size)} of ${count(allCalls)} recorded calls match this view.`));
+                const parent = routeFor("request", { request: scenario.scenarioId });
+                activitySection.actions.append(routeLink("Show full activity", parent, "button-link quiet", {
+                    cardTarget: { target: parent, revision: workspaceState.evidence.revision, focus: "activity" },
+                }));
+            }
+        } else if (!sameScope) intro.append(el("p", "reader-scope", full
             ? `${count(rows.length)} of ${count(full.length)} ${results.unit(workspaceState.scope.layer, full.length)} match the current view. The full recorded interaction follows.`
             : "Matching context unavailable. The retained interaction follows."));
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
@@ -6345,7 +6379,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : undefined);
         for (const [toolIndex, tool] of (scenario.toolCalls || []).entries()) {
             const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
-            if (row && (seen.has(row.id) || row.id === target.actionId && !isSelected)) continue;
+            if (row && (seen.has(row.id) || !isSelected && (row.id === target.actionId || completedIds?.has(row.id)))) continue;
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || ["unidentified", workspaceState.evidence.revision, toolIndex]]);
             const sourceCall = sourceCallFor(row) || tool;
@@ -6386,7 +6420,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 context.dataset.attributionKind = attribution.kind;
                 item.append(context);
             }
-            if (!sameScope) {
+            if (!sameScope && !(isSelected && completedIds)) {
                 actionContext(item, workspaceState.scope.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : workspaceState.scope.layer === "reported-api" ? apiRows : []);
                 const scope = item.querySelector(".action-context");
                 if (workspaceState.scope.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
@@ -6533,11 +6567,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : ({ reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + ordinal;
             entryLabels.set(entry.key, label);
             const home = sourceHomes.get(entry.scenarioId);
-            if (entry.operation) home.operationEntries.push({ ordinal, ...entry.operation });
+            if (entry.operation && (!completedIds || entry.scenarioId !== workspaceState.route.request || completedIds.has(entry.actionId))) {
+                home.operationEntries.push({ ordinal, ...entry.operation });
+            }
             home.identifiers.push(...(entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
                 .map(([kind, value]) => [label + " " + kind, value]));
         });
-        if (commonToolTiming) activitySection.toggle.querySelector("span").textContent =
+        if (commonToolTiming && !completedIds) activitySection.toggle.querySelector("span").textContent =
             `${count(selectedActions.length)} recorded ${selectedActions.length === 1 ? "call" : "calls"}`;
         for (const [scenarioId, home] of sourceHomes) {
             if (home.operationEntries.length) {
@@ -6559,7 +6595,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             sections.detail({ key: sectionKey("identifiers:" + scenarioId), toggle, body: detail,
                 visibility: sourceSection.visibility, render: () => fields(home.identifiers.map(([name, value]) => [name, identifier(value)])) });
         }
-        for (const entry of entries) insertEntry(entry);
+        for (const entry of entries) {
+            if (completedIds && entry.scenarioId === workspaceState.route.request && entry.kind === "action"
+                && !(entry.recordKind === "tool" && completedIds.has(entry.actionId))) continue;
+            insertEntry(entry);
+        }
         const jumps = el("nav", "reader-section-jumps");
         jumps.setAttribute("aria-label", "In this interaction");
         for (const [section, label] of [[promptSection, "Prompt"], [activitySection, "Activity"],
@@ -7224,8 +7264,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     selection.htmlFor = control.id; selection.append(control);
                 }
                 const row = nativeItem ? boundedNative.card({ item: nativeItem, view: nativeView, selection,
-                    onOpen: target => navigate(routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
-                        nativeRevision: String(target.revision), nativeSourceRevision: target.sourceRevision })) })
+                    onOpen: target => navigate(nativeTargetRoute(target)) })
                     : requestCard(scenario, { reportPicker: true });
                 if (!row) return el("p", "context-help-note", "This interaction is no longer authorized.");
                 row.classList.add("report-entry");

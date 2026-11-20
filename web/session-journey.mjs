@@ -81,9 +81,10 @@ export function createSessionJourney() {
         if (typeof value.request !== "string" || !value.request) return null;
         const origin = { ...returnRoute({ ...value, view: "analyze" }, true), view: "request", request: value.request,
             returnToResults: underlying(value) };
-        for (const key of ["call", "callRevision", "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal"]) {
+        for (const key of ["call", "callRevision", "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeCompletedRef"]) {
             if (typeof value[key] === "string") origin[key] = value[key];
         }
+        if (value.completedCalls) origin.completedCalls = structuredClone(value.completedCalls);
         return origin;
     }
     return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin,

@@ -117,7 +117,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             text: message ? message.value.text.trim() ? complete ? message.value.text : excerpt(message.value) : "Recorded message is empty." : "No recorded message text",
             author: message?.value.author === "user" ? "user" : "unknown" };
     }
-    function card({ record, setHref, rows, layer, onOpen, contextDateBasis }) {
+    function card({ record, setHref, rows, layer, onOpen, contextDateBasis, canOpenCompleted }) {
         const revision = cardRevision;
         const publication = api.publicationToken(), events = new AbortController();
         if (!authorized(publication) || revision !== cardRevision) return null;
@@ -144,18 +144,31 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         facts.append(node("span", "request-card-time", "Captured: " + capturedAt(record.nativeConversation.observations[0]?.capture.capturedAt)));
         const orientation = node("div", "card-orientation"); orientation.append(origin);
         const status = layer === "tool" && results.toolCardOutcome(summary);
-        if (status) { orientation.append(ux.cardOutcome(status)); foot.textContent = ""; }
+        if (status) {
+            const link = status.key === "success" && canOpenCompleted ? node("a") : undefined;
+            if (link) {
+                setHref(link, true);
+                link.setAttribute("aria-controls", "contextSidebar");
+                bindOpen(link, true);
+            }
+            orientation.append(ux.cardOutcome(status, link)); foot.textContent = "";
+        }
         facts.prepend(node("span", "request-card-source", "Source: " + sourceLabel(record.sourceId)));
         context.append(orientation, action, facts);
         body.append(context);
         if (activityIdentities) body.append(activityIdentities(rows, layer));
-        action.addEventListener("click", event => {
-            if (!record || !authorized(publication) || revision !== cardRevision || !record) { event.preventDefault(); return; }
-            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-            if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
-            event.preventDefault();
-            onOpen(record.scenarioId);
-        }, { signal: events.signal });
+        function bindOpen(link, completed = false) {
+            link.addEventListener("click", event => {
+                if (!record || !authorized(publication) || revision !== cardRevision) { event.preventDefault(); return; }
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                if (!window.getSelection()?.isCollapsed && link.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
+                event.preventDefault();
+                row.querySelector("[data-card-origin]")?.removeAttribute("data-card-origin");
+                link.dataset.cardOrigin = "";
+                onOpen(record.scenarioId, completed);
+            }, { signal: events.signal });
+        }
+        bindOpen(action);
         row.append(body);
         if (foot.textContent) row.append(foot);
         cards.add(() => { events.abort(); record = null; rows = null; onOpen = null; clear(row, true); });
@@ -166,7 +179,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         for (const release of cards) release();
         cards.clear();
     }
-    function mountReader({ root, record, target, isCurrent, contextDateBasis }) {
+    function mountReader({ root, record, target, isCurrent, contextDateBasis, completedIds, completedTitle }) {
         const token = api.publicationToken(), events = new AbortController();
         let active = true, conversation = record.nativeConversation;
         const current = () => active && root.isConnected && authorized(token) && active && isCurrent();
@@ -184,7 +197,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             : responses.length === 1 ? "Assistant reply" : "Assistant replies";
         const prompt = sections.add("prompt", promptTitle,
             { key: key("prompt"), collapsible: false });
-        const activity = sections.add("activity", "Recorded activity", { key: key("activity"), collapsible: false });
+        const activity = sections.add("activity", completedTitle || "Recorded activity", { key: key("activity"), collapsible: false });
         const replies = sections.add("response", replyTitle, { key: key("response"), collapsible: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: false });
         const updatesSection = updates.length ? sections.add("updates", "Recorded updates", { key: key("updates") }) : null;
@@ -394,6 +407,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         }
         const messageLists = [], messagePageSize = 50;
         for (const section of [prompt, activity, replies]) {
+            if (completedIds && section === activity) continue;
             const messages = conversation.messages.filter(message => messagePresentation(message).section === section.name);
             if (!messages.length) continue;
             const host = node("div", "reader-native-messages");
@@ -432,6 +446,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         }
         const details = new Set();
         for (const [index, call] of conversation.calls.entries()) {
+            if (completedIds && !completedIds.has(call.key)) continue;
             const item = node("article", "journey-item reader-call-row");
             item.dataset.actionId = call.key;
             item.dataset.nativeCallId = call.nativeCallId;
@@ -513,11 +528,11 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             item.append(body); activity.body.append(item);
             paint();
         }
-        for (const returned of conversation.returnedResults.filter(result => result.callKeys.length !== 1)) {
+        for (const returned of conversation.returnedResults.filter(result => !completedIds && result.callKeys.length !== 1)) {
             activity.body.append(node("p", "context-help-note", "These returned results have no single verified parent call."));
             for (const result of returned.observed) activity.body.append(returnedEntry(returned.observationKey, result));
         }
-        for (const reference of conversation.resultReferences.filter(reference => reference.callKeys.length !== 1)) {
+        for (const reference of conversation.resultReferences.filter(reference => !completedIds && reference.callKeys.length !== 1)) {
             activity.body.append(fields([["Source references", present(reference) ? reference.value.cardinality : "Unavailable"]]),
                 node("p", "context-help-note", "References are not executed API requests or successful results."));
         }

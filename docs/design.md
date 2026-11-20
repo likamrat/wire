@@ -131,8 +131,10 @@ beside the compact mark without widening the collapsed rail or reserving an
 empty navigation row.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established 44px targets, focus indications and wrapping labels.
-On activity cards, a trailing arrow opens the exact failed call or returned
-result. Hover and press tint only the arrow; keyboard focus outlines the link.
+On activity cards, a trailing arrow opens supporting evidence. A completed
+count opens all the calls it counts, preserving any filter and original call
+numbers. A failure opens its recorded call; a returned issue opens its own
+entry. Hover and press tint only the arrow; keyboard focus outlines the link.
 Noninteractive outcome labels have no arrow.
 Prompt openers keep the passage itself unpainted and selectable. Their eye
 cue signals reading; hover and press change the cue, not the text. Do not put
