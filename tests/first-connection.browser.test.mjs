@@ -90,7 +90,7 @@ async function capture(page, name, fullPage = false) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage });
 }
 
-test("enforced React activity keeps the full request, matched identities, exact return and scoped report selection", { timeout: 90000 }, async t => {
+test("enforced React activity caps the home preview while keeping the full request, exact return and scoped report selection", { timeout: 90000 }, async t => {
     const prompt = "Compare the room booking with the invitation for the Willow workshop.\n\n> Monday: library\n> Wednesday: west stairs\n\nKeep both original dates. Do not send an invitation.";
     const longPath = "/me/drive/root:/Workshop materials/Willow session/Facilitator seating and accessibility instructions.docx:/content";
     const start = (id, tool, args) => ({ type: "tool.execution_start", data: { toolCallId: id, toolName: tool, arguments: args } });
@@ -120,11 +120,10 @@ test("enforced React activity keeps the full request, matched identities, exact 
     const card = page.locator("#activityList .read-in-place").filter({ hasText: "Keep both original dates." });
     await expect(card.locator(".card-tool-name").first()).toContainText(/workiq-/);
     await expect(card).toContainText("Asked Copilot"); await expect(card).toContainText("Underlying services not recorded");
-    const quote = card.locator(".card-quotation");
-    await quote.locator("summary").focus(); await page.keyboard.press("Enter");
-    await expect(quote).toHaveAttribute("open", ""); await expect(quote).toContainText("> Wednesday: west stairs");
-    await page.keyboard.press("Enter"); await expect(quote).not.toHaveAttribute("open", "");
-    const fail = card.getByRole("link", { name: /workiq-retrieve failed/ }), issue = card.getByRole("link", { name: /result: HTTP 403/i });
+    await expect(card.locator(".card-quotation")).toHaveCount(0);
+    await expect(page.locator("#activityView").getByText("Scope details", { exact: true })).toHaveCount(0);
+    await expect(page.locator("#activityListSummary")).toContainText("2 interactions");
+    const fail = card.getByRole("link", { name: "1 tool call failed" }), issue = card.getByRole("link", { name: /result: HTTP 403/i });
     await expect(fail).toBeVisible(); await expect(issue).toBeVisible();
     for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1440, 1], ["dark", 390, 1], ["light", 390, 2], ["light", 1024, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
@@ -145,6 +144,7 @@ test("enforced React activity keeps the full request, matched identities, exact 
         assert.ok(box.inset >= 10 && box.end >= 10 && box.hit >= 44 && box.leading <= 1.65 && box.fits, JSON.stringify(box));
         await expect(page.locator('#requestContent [data-reader-section="activity"] .reader-call-row')).toHaveCount(4);
         await capture(page, `bound-reader-${theme}-${width}`);
+        await page.waitForFunction(() => !document.getAnimations().some(a => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity));
         await batchHelp.focus(); await page.keyboard.press("Enter");
         await expect(page.getByRole("tooltip")).toContainText("position does not identify");
         if (width === 390 && scale === 2) await capture(page, "bound-returned-target-help-enlarged");
@@ -175,6 +175,9 @@ test("enforced React activity keeps the full request, matched identities, exact 
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });
     await expect(picker.locator(".card-identities")).toContainText("People");
+    const quote = picker.locator(".card-quotation");
+    await quote.locator("summary").focus(); await page.keyboard.press("Enter");
+    await expect(quote).toHaveAttribute("open", ""); await expect(quote).toContainText("> Wednesday: west stairs");
     const selected = await picker.locator("input[type=checkbox]").isChecked();
     await capture(page, "bound-picker");
     await picker.locator(".request-card-open").click(); await expect(page.locator("#selectedContext")).toContainText(prompt);
@@ -188,9 +191,11 @@ test("enforced React activity keeps the full request, matched identities, exact 
     });
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
     await navigateMain(page, "analyze");
-    await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#activityView details#coverage")).toHaveCount(0);
+    await page.locator("#openEvidenceHelp").click();
+    await page.getByRole("link", { name: "Open collection status", exact: true }).click(); await ready(page);
+    await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
     await expect(page.locator("#coverageBody")).toContainText("2 interactions");
-    await page.locator("#coverage [data-settings-link]").click(); await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
     await page.locator("#wireAccountTrigger").click(); await page.locator("#wireAccountGate").click();
     await expect(page.locator("#accessShell")).toBeVisible();
     assert.deepEqual(await page.evaluate(() => window.heldCard.map(n => n.nodeValue)), ["", ""]);

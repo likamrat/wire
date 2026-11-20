@@ -90,13 +90,8 @@ function Activity() {
             </label>
             <button id="clearActivitySearch" type="button" className="quiet" hidden>Clear legacy search</button>
         </div>
-        <div className="activity-evidence-context">
-            <details id="coverage"><summary>Scope details</summary><p id="coverageBody" />
-                <a href="/collection-status?setting=collection-details" data-settings-link="">Collection status</a>
-            </details>
-            <div id="coverageNotice" hidden><span id="activityCoverageGap" />{" "}
-                <a href="/collection-status?setting=collection-details" data-settings-link="">Collection status</a>
-            </div>
+        <div id="coverageNotice" className="activity-evidence-context" hidden><span id="activityCoverageGap" />{" "}
+            <a href="/collection-status?setting=collection-details" data-settings-link="">Collection status</a>
         </div>
         <div id="activityList" /><div id="analyzeResultActions" className="analyze-result-actions" />
         <div id="activityPager" className="pager" />

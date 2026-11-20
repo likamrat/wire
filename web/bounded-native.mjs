@@ -235,10 +235,9 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
             event.preventDefault(); acceptReaderTarget(target, view); onOpen(target);
         }, { signal: events.signal });
-        const kind = item.presentation?.kind, author = node("p", sourceLabel(item.sourceId) + " \u00b7 "
-            + ({ prompt: "My prompt", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation"),
-        "request-card-origin request-card-author");
-        author.dataset.promptActor = kind === "prompt" ? "user" : "unknown";
+        const kind = item.presentation?.kind, author = node("span",
+            { prompt: "Recorded user message", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation", "request-card-author");
+        author.prepend(ux.icon("search-interaction"));
         // This paged source deliberately supplies recognition text, not an unrestricted
         // conversation body. Don't shorten or Markdown-rewrite it again in the browser.
         action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"));
@@ -256,7 +255,8 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         const problem = node("p", undefined, "request-card-problem"), labels = outcomeLabels(view.aggregates.layer);
         const recorded = Object.entries(item.outcomes).filter(([, count]) => count);
-        for (const [key, count] of recorded.filter(([key]) => key !== "success" || recorded.length === 1)) {
+        const toolFailures = view.aggregates.layer === "tool" && item.outcomes.failure;
+        for (const [key, count] of recorded.filter(([key]) => (key !== "success" || recorded.length === 1) && !(toolFailures && key === "failure"))) {
             const label = view.aggregates.layer === "tool" ? ({ failure: "failed", unknown: "unverified" }[key] ?? labels[key].toLowerCase())
                 : labels[key].toLowerCase();
             const part = node("span", `${number(count)} ${label}`, "result-tone-" + key
@@ -274,7 +274,13 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             + (dates.undatedRows ? ` / ${number(dates.undatedRows)} undated` : "") : "Activity date unavailable";
         facts.append(node("span", date, "request-card-time"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
-        context.append(action, author, facts);
+        const orientation = node("div", undefined, "card-orientation"); orientation.append(author);
+        if (toolFailures) {
+            const failure = node("span", `${number(toolFailures)} tool ${toolFailures === 1 ? "call" : "calls"} failed`, "card-failure");
+            failure.prepend(ux.icon("result-failure-compact")); orientation.append(failure);
+        }
+        facts.prepend(node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
+        context.append(orientation, action, facts);
         body.append(context, key);
         if (selection) article.append(selection);
         const foot = node("div", undefined, "card-reading-actions");
@@ -432,7 +438,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             const message = item.fields.message, author = message?.value?.author;
             const partsLabel = `Text fragment${item.messageParts.length === 1 ? "" : "s"} (author unverified)`;
             const partsOnly = !message && !item.outcomes.task && item.messageParts.length > 0;
-            const label = author === "user" ? message.value.representation === "follow-up" ? "Follow-up" : "My prompt"
+            const label = author === "user" ? message.value.representation === "follow-up" ? "Follow-up" : "Recorded user message"
                 : author === "assistant" ? "Assistant reply" : item.outcomes.task ? "Task: " + item.outcomes.task.state
                     : partsOnly ? partsLabel : "Recorded context";
             const block = node("section", undefined, "reader-message"), heading = node("header", undefined, "reader-message-header");

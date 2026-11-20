@@ -114,7 +114,7 @@ test("the prompt, scoped tools and targets identify each interaction before read
     const { page } = await setup(t);
     const first = page.locator('.request-card-open[href*="card-clarity-0"]');
     await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("My prompt");
-    await expect(first.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
     await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
     const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
     await expect(mixed.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
@@ -278,7 +278,7 @@ test("opening an explicit prompt link starts at its original and restores the li
     }
 });
 
-test("full prompt text reflows and independent evidence links open their own reading target", { timeout: 90000 }, async t => {
+test("home prompt previews are bounded while exact copied prompts and independent evidence targets remain intact", { timeout: 90000 }, async t => {
     const identifier = "13579bdf-2468-4ace-9bdf-0123456789ab";
     const opening = `You own the workshop reference pack under rehearsal coordinator${identifier}. This is a standalone preparation task. `;
     const fitting = opening + "Read the available briefing notes, preserve the existing schedule, and identify the files needed by the rehearsal team before preparing the handout.";
@@ -328,8 +328,8 @@ test("full prompt text reflows and independent evidence links open their own rea
     });
     const phase = process.env.WIRE_READABLE_PHASE ?? "after", proof = process.env.WIRE_READABLE_PROOFS, measures = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const first = page.locator('.request-card-open[href*="readable-download"]');
-    const second = page.locator('.request-card-open[href*="readable-partial"]');
+    const first = page.locator('[data-view-key="request:readable-download"] .request-card-open');
+    const second = page.locator('[data-view-key="request:readable-partial"] .request-card-open');
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1920, 1], [1440, 1], [768, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -348,7 +348,7 @@ test("full prompt text reflows and independent evidence links open their own rea
                 try {
                     const { root } = await session.send("DOM.getDocument");
                     const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId,
-                        selector: '.request-card-open[href*="readable-partial"]' });
+                        selector: '[data-view-key="request:readable-partial"] .request-card-open' });
                     const { nodes } = await session.send("Accessibility.getPartialAXTree", { nodeId, fetchRelatives: false });
                     accessibleName = nodes.find(node => node.role?.value === "link")?.name?.value;
                 } finally { await session.detach(); }
@@ -356,10 +356,11 @@ test("full prompt text reflows and independent evidence links open their own rea
                     accessibleName, length: accessibleName?.length, originalPromptLength: long.length,
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
-                assert.equal(accessibleName, long, "All visible request words remain readable to assistive technology.");
+                assert.match(accessibleName, /^Read retained prompt: You are checking the workshop/);
+                assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"));
             }
             for (const card of [first, second]) {
-                const prompt = card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt");
+                const prompt = card.locator(".card-excerpt");
                 const geometry = await prompt.evaluate(node => {
                     const css = getComputedStyle(node), box = node.getBoundingClientRect(), lines = new Map();
                     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -373,18 +374,20 @@ test("full prompt text reflows and independent evidence links open their own rea
                     }
                     const last = [...lines.values()].at(-1);
                     return { width: node.clientWidth, height: node.clientHeight, naturalHeight: node.scrollHeight,
+                        cardWidth: node.closest(".activity-card").clientWidth, rootSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
                         lineHeight: parseFloat(css.lineHeight), visibleLines: lines.size,
                         lastLineUse: last ? (last.right - last.left) / node.clientWidth : 0, text: node.textContent };
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
                 await expect(card.locator(".request-card-read-more")).toHaveCount(0);
                 await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toContainText("Inspect");
-                assert.equal(omitted, false, "Ordinary prompt prose is not clipped.");
+                assert.ok(geometry.height <= geometry.lineHeight * (geometry.cardWidth <= 36 * geometry.rootSize ? 4 : 3) + 1, JSON.stringify(geometry));
+                if (card === second) assert.equal(omitted, true, "The complete long prompt must not occupy the card.");
                 await expect(prompt).not.toContainText("\u2026");
                 measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted });
             }
             await expect(second.locator(".returned-coverage,.call-reason-list")).toHaveCount(0);
-            await expect(second.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
             await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
             await expect(second.locator("a,button,[role=button]")).toHaveCount(0, "Read more belongs to the real card link, not a nested control.");
         }
@@ -499,7 +502,7 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
             await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
             await expect(card).not.toContainText(message);
             await expect(page.locator('.activity-card:has(.request-card-open[href*="grouped-multiple"]) .result-tone-failure')).toHaveText("2 tool calls failed");
@@ -634,7 +637,7 @@ test("card and reader keep neutral explanations under owning statuses without re
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
             await expect(card).not.toContainText(message);
-            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
             await expect(card).not.toContainText(/1 of 5|Recorded error:|5 recorded calls/);
             const paint = await card.locator("xpath=ancestor::article[1]").evaluate(node => {
                 const status = node.querySelector(".request-card-exception");
@@ -755,7 +758,7 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
     });
     const proof = process.env.WIRE_IDENTIFIER_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const joined = page.locator('.request-card-open[href*="identifier-joined"]');
+    const joined = page.locator('[data-view-key="request:identifier-joined"] .request-card-open');
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -763,14 +766,14 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         for (const [name, text, count] of cases) {
-            const prompt = page.locator(`.request-card-open[href*="identifier-${name}"]`);
+            const prompt = page.locator(`[data-view-key="request:identifier-${name}"] .request-card-open`);
             await expect(prompt.locator(".text-preview-identifier")).toHaveCount(count);
             assert.equal(await prompt.textContent(), text);
             assert.equal(await prompt.evaluate(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
                 const text = selection.toString(); selection.removeAllRanges(); return text;
-            }), text, "Selection still contains the original preview characters only.");
+            }), text.replace(/\s+/g, " "), "Visual selection uses reflowed whitespace without changing identifier characters.");
         }
         await joined.scrollIntoViewIfNeeded();
         const geometry = await joined.locator(".text-preview-identifier").evaluate(node => {
@@ -789,7 +792,7 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         if (proof) {
             await page.mouse.move(0, 0);
             await joined.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-joined.png`) });
-            await page.locator('.request-card-open[href*="identifier-separated"]').screenshot({
+            await page.locator('[data-view-key="request:identifier-separated"] .request-card-open').screenshot({
                 path: path.join(proof, `${theme}-${width}-${scale}-separated.png`),
             });
         }
@@ -870,7 +873,7 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
         await expect(card).not.toContainText(/Returned item|rehearsal item is locked|503|Call #|response body excluded/);
         await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveCount(0);
-        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText(/workiq-.* failed/);
+        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
         await card.scrollIntoViewIfNeeded();
         await page.mouse.move(0, 0);
         if (proof) {

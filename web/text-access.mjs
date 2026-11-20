@@ -75,11 +75,22 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         fragment.append(text.slice(cursor));
         return fragment;
     }
-    function renderCardPreview(source, { openPrompt } = {}) {
+    function renderCardPreview(source, { openPrompt, home = false } = {}) {
         const node = document.createElement("div");
         node.className = "request-card-prompt";
         node.dataset.cardPreview = "";
         const original = retained(source) ?? "";
+        if (home) {
+            const link = openPrompt(original), passage = document.createElement("span");
+            passage.className = "card-excerpt";
+            passage.append(exactFragment(original));
+            link.replaceChildren(passage);
+            link.setAttribute("aria-label", `Read retained prompt: ${excerpt(source, 96)}`);
+            link.title = "Read retained prompt";
+            node.append(link);
+            bindings.set(node, () => clearOwnedContent(node));
+            return node;
+        }
         // Only a single blank-line-delimited block of explicitly quoted lines, between
         // ordinary passages. Don't interpret code, indentation or a partial record.
         const blocks = original.split(/(\r?\n[ \t]*\r?\n)/u);

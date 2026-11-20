@@ -51,10 +51,15 @@ with its task. Missing optional facts need no empty row. Missing or conflicting
 evidence that limits a conclusion must remain explicit. Do not repeat the same
 fact in a badge, paragraph, warning and disclosure.
 
-On interaction cards, put source, author and time with the prompt. Group tool
+On interaction cards, identify the prompt author with a labeled icon. Put a
+scoped tool failure count and its own icon beside it, not a verdict on the
+prompt. Keep provenance in Source details; name a source on the card when
+it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
-the glyph beside its label, with dividers between adjacent identities. Repeated
-tool names may share a count; the reader still lists every distinct call.
+the glyph beside its label. Separate the identity key from the prompt with a
+rule; inside a field, grouped names wrap back to one value edge without
+separators. Show repeats with a readable unit such as “2 calls.” On a returned
+result layer the unit is results, not calls. The reader retains every record.
 
 ### Surfaces and color
 

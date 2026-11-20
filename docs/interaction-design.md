@@ -243,10 +243,12 @@ cannot republish withdrawn data.
 
 ### Cards
 
-On Work IQ cards, keep ordinary retained prompt text in full, including its
-paragraphs and final instruction. A single explicitly marked quotation between
-two ordinary passages may fold in place. Ambiguous text, code or a retained
-fragment is not a candidate. Missing text has an availability label, not a
+On Analyze, show the beginning of the request as a short wrapping excerpt.
+The prompt is a link to the full retained text, not an inline expander. Quotes,
+URLs and paragraphs share the same visual bound. Do not truncate the source,
+Copy, Search or report text. In the report picker, ordinary prompt text remains
+whole; a single explicitly marked quotation between two ordinary passages may
+fold in place. Missing text has an availability label, not a
 title inferred from the arguments. A bounded source preview is not a full
 conversation; opening it uses its own authorized reader.
 

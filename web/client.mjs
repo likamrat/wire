@@ -4255,7 +4255,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("filterHeading").hidden = false;
         $("appliedFilters").hidden = $("filters").hidden;
         $("filterChips").hidden = configurationOrStatus || ["reports", "request", "trends"].includes(workspaceState.route.view);
-        $("coverage").hidden = configurationOrStatus || ["request", "trends"].includes(workspaceState.route.view);
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
         renderSettingsNavigation();
         finishRecoveryPresentation?.();
@@ -4381,7 +4380,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && (comparing || filePanel.parentElement === $("reportReviewBody")));
         if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
         $("reportTaskNav").hidden = workspaceState.route.view !== "reports" || reading || view.landing;
-        if (workspaceState.route.view === "reports") $("coverage").hidden = true;
         if (workspaceState.route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
             ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
                 : current.saveUnconfirmed ? "Report save status" : "Your report" : "Reports");
@@ -5542,8 +5540,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (includeTools && ["tool", "reported-api"].includes(layer)) field(tools.size > 1 ? "Tools" : "Tool",
             tools.size ? [...tools].map(([n, total]) => {
-                const item = el("span", "card-tool-name", n);
-                if (total > 1) item.append(el("span", "muted", ` ×${count(total)}`));
+                const item = el("span", "card-tool-item");
+                item.append(el("span", "card-tool-name", n));
+                if (total > 1) item.append(document.createTextNode(" "), el("span", "card-tool-count",
+                    `(${count(total)} ${layer === "tool" ? "calls" : "results"})`));
                 return item;
             }) : rows?.length ? [el("span", "muted", "Not recorded")] : []);
         const cues = entries => [...entries.values()].map(item => serviceCue("span", item.id, item));
@@ -5551,7 +5551,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (values.length > 3 && includeTools) {
             const extra = el("details", "card-more-targets");
             const more = values.length - 3;
-            extra.append(el("summary", "", `${more} more ${more === 1 ? "target" : "targets"}`), ...values.splice(3));
+            const remainder = el("span", "card-identity-values"); remainder.append(...values.splice(3));
+            extra.append(el("summary", "", `${more} more ${more === 1 ? "target" : "targets"}`), remainder);
             values.push(extra);
         }
         field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values);
@@ -5597,25 +5598,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const authorLabel = actor === "unknown" && !description.automatic ? "Author unverified" : description.label;
         const moment = requestTiming.entry(scenario, workspaceState.scope.timeContext);
         const openPrompt = text => open(text, "prompt", target, "request-card-open recognition-row");
-        const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt }) : el("p", "request-card-prompt");
+        const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt, home: !reportPicker }) : el("p", "request-card-prompt");
         if (!description.hasText) prompt.append(openPrompt((description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice));
         const sourceIdentity = filterState.sourceIdentity(rows);
-        const sourceLabel = sourceIdentity?.label ?? (workspaceState.evidence.nativeRead ? "Source unavailable" : null);
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);
         author.dataset.promptActor = actor;
+        author.prepend(ux.icon(actor === "user" ? "account" : actor === "agent" ? "report-agent" : "unobserved"));
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
         const summary = results.summarize(rows);
         const facts = el("div", "request-card-summary");
-        facts.append(author);
-        if (sourceLabel) facts.append(el("span", "request-card-source", sourceLabel));
+        if (sourceIdentity && sharedNativeView()?.aggregates.conversations)
+            facts.append(el("span", "request-card-source", `Source: ${sourceIdentity.label}`));
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         }
+        if (description.hasText && ["partial", "truncated"].includes(scenario.userPrompt.status))
+            facts.append(el("span", "request-card-availability", "Part of the prompt was retained."));
         if (description.hasText && description.notice) facts.append(el("span", "request-card-availability", description.notice));
         const body = el("div", "card-reading-body"), context = el("div", "card-request-context");
-        context.append(prompt, facts);
+        const orientation = el("div", "card-orientation");
+        orientation.append(author);
+        context.append(orientation, prompt, facts);
         body.append(context, activityIdentities(rows, layer));
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
@@ -5623,8 +5628,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         if (failure) {
-            const name = summary.failure === 1 ? sourceCallFor(rows.find(r => r.id === failure.call))?.tool : null;
-            foot.append(open(name ? name + " failed" : exception, "record", failure, "card-evidence-link request-card-exception result-tone-failure"));
+            const failed = open(exception, "record", failure, "card-evidence-link request-card-exception card-failure result-tone-failure");
+            const face = el("span", "card-failure-face");
+            face.append(ux.icon("result-failure-compact"), ...failed.childNodes);
+            failed.append(face);
+            orientation.append(failed);
         }
         const parentIds = new Set(rows?.map(row => row.id));
         const apis = layer === "tool" ? fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => parentIds.has(r.parentCallId)) : null;
@@ -6128,8 +6136,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         modelFact.append(model);
         const readerFacts = el("div", "reader-facts");
         const sourceFacts = el("dl", "reader-fields reader-source");
-        if (workspaceState.evidence.nativeRead) {
-            const identity = filterState.sourceIdentity(rows);
+        const identity = filterState.sourceIdentity(rows);
+        if (identity || workspaceState.evidence.nativeRead) {
             sourceFacts.append(cardFact("Source", identity?.label ?? "Source unavailable"));
             if (identity) sourceFacts.dataset.sourceId = identity.id;
         }
@@ -7977,8 +7985,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let coverageDetailsKey;
     function renderCoverage() {
         detailOwner = "coverage";
-        const body = $("coverageBody"), coverage = workspaceState.evidence.coverage || {};
-        const c = workspaceState.analytics.coverage, http = workspaceState.scope.layer === "http";
+        const coverage = workspaceState.evidence.coverage || {};
+        const c = workspaceState.analytics.coverage;
+        const gaps = [];
+        if (c.unknownSessionRows) gaps.push(`${count(c.unknownSessionRows)} matching records have no known source chat.`);
+        if (!coverage.graphHistory && ["direct-request", "recorded-http", "code-reference"].includes(workspaceState.scope.layer))
+            gaps.push("Graph history has not been scanned; coverage is unknown.");
+        setText($("activityCoverageGap"), gaps.join(" "));
+        $("coverageNotice").hidden = !gaps.length;
+        renderCoverageDetails();
+    }
+    function renderCoverageDetails() {
+        if (!workspaceState.evidence || !workspaceState.analytics || !workspaceState.scope) return;
+        const host = $("collectionEvidenceDetails"), coverage = workspaceState.evidence.coverage || {}, c = workspaceState.analytics.coverage;
+        const http = workspaceState.scope.layer === "http";
         const sources = http ? `${count(c.sessionCount)} recorder source${c.sessionCount === 1 ? "" : "s"}` : chatCopy.count(c.sessionCount);
         const unscoped = c.unscopedSessionCount
             ? ` ${count(c.unscopedSessionCount)} ${http ? "source" : "chat"}${c.unscopedSessionCount === 1 ? " has" : "s have"} no project.` : "";
@@ -7991,27 +8011,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (withGitHub) membership.push(`${scope}: ${count(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
         if (native) membership.push(`Microsoft: ${count(native.aggregates.conversations)} retained ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}.`);
         else if (boundedIncludesMicrosoft()) membership.push("Microsoft membership unavailable.");
-        setText(body, membership.join(" "));
-        const gaps = [];
-        if (c.unknownSessionRows) gaps.push(`${count(c.unknownSessionRows)} matching records have no known source chat.`);
-        if (!coverage.graphHistory && ["direct-request", "recorded-http", "code-reference"].includes(workspaceState.scope.layer))
-            gaps.push("Graph history has not been scanned; coverage is unknown.");
-        setText($("activityCoverageGap"), gaps.join(" "));
-        $("coverageNotice").hidden = !gaps.length;
-        renderCoverageDetails();
-    }
-    function renderCoverageDetails() {
-        if (!workspaceState.evidence || !workspaceState.analytics || !workspaceState.scope) return;
-        const host = $("collectionEvidenceDetails"), coverage = workspaceState.evidence.coverage || {}, c = workspaceState.analytics.coverage;
         const checked = collection?.config?.approved ? collection.checkedWindow : coverage;
-        const key = JSON.stringify([workspaceState.evidence.revision, workspaceState.scope, c.firstAt, c.lastAt, coverage, checked, workspaceState.analytics.warnings, collectionReadError, collection?.config?.approved, collection?.config?.windowDays]);
+        const key = JSON.stringify([workspaceState.evidence.revision, workspaceState.scope, membership, c.firstAt, c.lastAt, coverage, checked, workspaceState.analytics.warnings, collectionReadError, collection?.config?.approved, collection?.config?.windowDays]);
         if (key === coverageDetailsKey) return;
         coverageDetailsKey = key;
         const range = (from, to) => from && to ? `${date(from, true)} to ${date(to, true)}` : null;
         const selectedDates = workspaceState.scope.filters.from || workspaceState.scope.filters.to
             ? `${workspaceState.scope.filters.from ? date(workspaceState.scope.filters.from, true) : "Earliest saved date"} to ${workspaceState.scope.filters.to ? date(workspaceState.scope.filters.to, true) : "Latest saved date"}`
             : "All retained dates";
-        host.replaceChildren(el("h3", "", "Evidence scope"), facts([
+        const membershipLine = $("coverageBody") ?? el("p");
+        setText(membershipLine, membership.join(" "));
+        membershipLine.id = "coverageBody";
+        host.replaceChildren(el("h3", "", "Evidence scope"), membershipLine, facts([
             ["Collection shown", scopeLabels[workspaceState.scope.filters.scope]],
             ["Selected date filter", selectedDates],
             ["Dated records in this view", range(c.firstAt, c.lastAt) || "No dated matching records"],
@@ -10583,7 +10594,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || value.mode !== "enforced" || value.state?.wire !== "signed-in"
             || !value.readable && value.reason !== "generation-changed") return false;
         for (const id of ["homeView", "activityView", "requestView", "reportsView", "collectionStatusView",
-            "filters", "appliedFilters", "filterChips", "coverage", "coverageNotice", "pagePrimaryActions",
+            "filters", "appliedFilters", "filterChips", "coverageNotice", "pagePrimaryActions",
             "pageIntro", "pageIdentity", "pageProject", "analyzeTools", "analyzeToolbar"]) $(id).hidden = true;
         $("settingsView").hidden = false;
         setText($("pageTitle"), "Settings");
