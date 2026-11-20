@@ -5718,7 +5718,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         const outcome = layer === "tool" ? results.toolCardOutcome(summary) : null;
-        if (outcome) orientation.append(ux.cardOutcome(outcome, failure ? open("", "record", failure) : undefined));
+        function evidenceLink(label, destination, status) {
+            const link = open(label, "record", destination);
+            if (status) ux.cardOutcome(status, link);
+            else link.classList.add("request-card-exception", "returned-issue-ink");
+            link.append(ux.icon("forward"));
+            return link;
+        }
+        if (outcome) orientation.append(failure ? evidenceLink("", failure, outcome) : ux.cardOutcome(outcome));
         const parentIds = new Set(rows?.map(row => row.id));
         const apis = layer === "tool" ? fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => parentIds.has(r.parentCallId)) : null;
         const issue = apis?.find(r => {
@@ -5730,10 +5737,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const service = issue.serviceAssociation?.services?.length === 1 ? serviceLabel(issue.serviceAssociation.services[0]) : "Returned";
             const label = diagnostic != null && issue.status != null && diagnostic !== issue.status ? "statuses disagree"
                 : issue.status != null ? `HTTP ${issue.status}` : "reported error";
-            foot.append(open(`${service} result: ${label}`, "record", exact(issue, "reported-api"), "card-evidence-link request-card-exception returned-issue-ink"));
+            foot.append(evidenceLink(`${service} result: ${label}`, exact(issue, "reported-api")));
         }
         const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));
-        if (reported) foot.append(open("Reported result issue", "record", exact(reported, layer), "card-evidence-link request-card-exception returned-issue-ink"));
+        if (reported) foot.append(evidenceLink("Reported result issue", exact(reported, layer)));
         if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
             if (cue) foot.append(el("span", "request-card-exception", cue));

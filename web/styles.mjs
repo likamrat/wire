@@ -673,7 +673,6 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-orientation :is(.result-tone-unknown,.result-tone-other) {color:var(--muted)}
 .card-orientation .result-tone-partial {color:var(--warning)}
 @container(max-width:21rem) {.card-orientation {grid-template-columns:minmax(0,1fr);justify-items:start}}
-.card-orientation a.card-failure {text-decoration:none}.card-orientation a.card-failure:is(:hover,:focus-visible) .card-failure-face {text-decoration:underline}
 .card-request-context .request-card-open {display:block;min-block-size:44px;padding:0;border:0;text-decoration:none;color:var(--ink);font:inherit;white-space:pre-wrap}
 .card-request-context .request-card-open:hover {text-decoration:underline;text-underline-offset:3px}
 #activityList .request-card-open>:is(.card-excerpt,.request-card-prompt) {
@@ -693,8 +692,13 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
-.card-evidence-link {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
-.card-evidence-link:hover {background:var(--hover)}.card-reading-actions .request-card-open-label {margin-inline-start:auto}
+.card-evidence-link {display:inline-flex;align-items:center;gap:.3em;min-height:44px;max-width:100%;overflow-wrap:anywhere;color:var(--ink)}
+.request-row .card-evidence-link:any-link {background:transparent;text-decoration:none}
+.card-evidence-link>[data-icon-role=forward] {flex:none;width:1.55em;height:1.55em;padding:.22em;border-radius:4px}
+.card-evidence-link:is(:hover,:focus-visible)>[data-icon-role=forward] {background:color-mix(in srgb,currentColor 12%,transparent)}
+.card-evidence-link:active>[data-icon-role=forward] {background:color-mix(in srgb,currentColor 24%,transparent)}
+@media(forced-colors:active) {.card-evidence-link:is(:hover,:active)>[data-icon-role=forward] {outline:1px solid LinkText}}
+.card-reading-actions .request-card-open-label {margin-inline-start:auto}
 .card-reading-actions .card-panel-link {min-height:44px;gap:8px;padding-inline:6px;border-radius:4px;color:var(--ink);text-decoration:none}
 .card-reading-actions .card-panel-link:is(:hover,:active) {background:none;text-decoration:none}
 .card-panel-link>.wire-icon {flex:none;width:1.75rem;height:1.75rem;padding:5px;border-radius:4px;background:var(--canvas);box-shadow:inset 0 0 0 1px var(--surface-edge)}

@@ -183,7 +183,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     const count = row.locator(".card-tool-count"), failure = row.locator(".card-failure"), author = row.locator(".request-card-author");
     await expect(count).toHaveText("(13 calls)"); await expect(failure).toHaveAccessibleName("1 tool call failed");
     await expect(author).toContainText("Human prompt"); await expect(author.locator("svg")).toHaveCount(1);
-    await expect(failure.locator("svg")).toHaveCount(1); await expect(row.locator(".returned-issue-ink")).toBeVisible();
+    await expect(failure.locator(".card-failure-face svg")).toHaveCount(1); await expect(row.locator(".returned-issue-ink")).toBeVisible();
     await expect(row.locator(".request-card-source")).toHaveCount(0);
     await expect(page.locator("#activityList .request-card-author").filter({hasText:"Agent prompt"}).first()).toBeVisible();
     const partial = page.locator("#activityList .activity-card").filter({hasText:"Part of the prompt was retained."});
@@ -233,6 +233,51 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     assert.ok(wrapped, "Exercise an actual wrapped value group, not just a wide row.");
 });
 
+test("exact evidence links keep hover and press paint off the full hit target", async t => {
+    const { page } = await setup(t, "react", compactCardRecords());
+    const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    for (const [mode, width, scale] of [["light", 1440, 1], ["dark", 390, 2]]) {
+        await page.setViewportSize({width, height: 900});
+        await chooseTheme(page, mode);
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        for (const [selector, name] of [[".returned-issue-ink", "Mail result: HTTP 403"], [".card-failure", "1 tool call failed"]]) {
+            const link = card.locator(selector);
+            await link.scrollIntoViewIfNeeded();
+            await page.mouse.move(0, 0);
+            await expect(link).toHaveAccessibleName(name);
+            await expect(link.locator('[data-icon-role="forward"]')).toBeVisible();
+            await link.hover();
+            if (proofs && selector === ".returned-issue-ink") {
+                await mkdir(proofs, {recursive:true});
+                await card.screenshot({path:path.join(proofs, `evidence-hover-${mode}.png`)});
+                await link.hover(); // Capturing a card taller than the viewport can move the pointer off its link.
+            }
+            const box = await link.boundingBox();
+            assert.ok(box.height >= 44 && box.width >= 44);
+            await expect(link).toHaveCSS("background-color", "rgba(0, 0, 0, 0)", {timeout: 1000});
+            await expect(link).toHaveCSS("text-decoration-line", "none");
+            const cue = link.locator('[data-icon-role="forward"]');
+            await expect(cue).toBeVisible();
+            const hover = await cue.evaluate(n => getComputedStyle(n).backgroundColor);
+            assert.notEqual(hover, "rgba(0, 0, 0, 0)");
+            await page.mouse.down();
+            try {
+                assert.notEqual(await cue.evaluate(n => getComputedStyle(n).backgroundColor), hover);
+                assert.deepEqual(await link.boundingBox(), box);
+                await expect(link).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+            } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
+            await link.focus(); await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
+            await expect(link).toBeFocused();
+            assert.ok(await link.evaluate(n => n.matches(":focus-visible") && parseFloat(getComputedStyle(n).outlineWidth) >= 2));
+            if (selector === ".returned-issue-ink") {
+                await page.keyboard.press("Enter");
+                await expect(page.locator(".api-result-entry:focus")).toContainText("403");
+                await page.goBack(); await expect(link).toBeFocused();
+            }
+        }
+    }
+});
+
 test("the activity panel cue retains its painted size on hover and restores focus on toggle and Back", {timeout:60000}, async t => {
     const {page} = await setup(t,"react",compactCardRecords());
     const row=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
@@ -258,11 +303,18 @@ test("the activity panel cue retains its painted size on hover and restores focu
     try {
         await cdp.send("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
         await page.setViewportSize({width:390,height:844}); await panel.scrollIntoViewIfNeeded(); await settle();
-        const box=await panel.boundingBox();
-        await cdp.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
-        await cdp.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+        async function tap(target) {
+            await target.scrollIntoViewIfNeeded();
+            const box=await target.boundingBox();
+            await cdp.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
+            await cdp.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+        }
+        await tap(panel);
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
         await page.locator("#closeContextSidebar").click(); await expect(panel).toBeFocused();
+        await settle(); await tap(issue);
+        await expect(page.locator(".api-result-entry:focus")).toContainText("403");
+        await page.goBack(); await expect(issue).toBeFocused();
     } finally {await cdp.detach();}
 });
 

@@ -131,6 +131,9 @@ beside the compact mark without widening the collapsed rail or reserving an
 empty navigation row.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established 44px targets, focus indications and wrapping labels.
+On activity cards, a trailing arrow opens the exact failed call or returned
+result. Hover and press tint only the arrow; keyboard focus outlines the link.
+Noninteractive outcome labels have no arrow.
 
 The main Analyze, Trends, Reports and Compare headings use their existing
 navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node mounted
