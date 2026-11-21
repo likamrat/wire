@@ -65,8 +65,8 @@ test("headline captions preserve exact applied dates, open bounds, cross-year sp
     const caption = (filters, context = timeContext) => describe({ rows, filters, timeContext: context }).caption;
     assert.equal(caption({}), "All dates");
     assert.equal(caption({ from: "2026-10-13", to: "2026-10-13" }), "Oct 13, 2026");
-    assert.equal(caption({ from: "2026-10-01", to: "2026-10-31" }), "Oct 1 - Oct 31, 2026");
-    assert.equal(caption({ from: "2026-12-28", to: "2027-01-03" }), "Dec 28, 2026 - Jan 3, 2027");
+    assert.equal(caption({ from: "2026-10-01", to: "2026-10-31" }), "Oct 1–31, 2026");
+    assert.equal(caption({ from: "2026-12-28", to: "2027-01-03" }), "Dec 28, 2026–Jan 3, 2027");
     assert.equal(caption({ from: "2026-10-01" }), "From Oct 1, 2026");
     assert.equal(caption({ to: "2026-10-31" }), "Through Oct 31, 2026");
     const instants = { from: "2026-11-01T08:30:00Z", to: "2026-11-01T09:30:00Z" };

@@ -1028,8 +1028,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const membershipKey = JSON.stringify([value.definitions.layer, a.rowIds, b.rowIds]);
         if (membershipKey !== rosterKey) { if (rosterKey !== null) selectedPeriod = "baseline"; rosterKey = membershipKey; }
         const dayCount = side => Math.round((Date.parse(side.range.to) - Date.parse(side.range.from)) / 86400000) + 1;
-        const dateRange = side => side.range.from === side.range.to ? time.formatDate(side.range.from, value.timeContext, true)
-            : `${time.formatDate(side.range.from, value.timeContext, true)} – ${time.formatDate(side.range.to, value.timeContext, true)}`;
+        const dateRange = side => time.formatCivilRange(side.range.from, side.range.to, value.timeContext);
         const pair = el("div", undefined, "compare-period-key");
         for (const [index, [, side]] of sides.entries()) {
             const line = el("p");

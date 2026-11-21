@@ -1,5 +1,5 @@
 // Presentation only. Existing controls retain their nodes, listeners and state owners.
-export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming, toolbarHost, scopeHost, sharedPeriod = false }) {
+export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming, toolbarHost, scopeHost }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Analyze controls require the shared publication token interface.");
     }
@@ -150,7 +150,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         referenceAvailable = ordinary;
         document.body.classList.toggle("analyze-reading", active);
         $("analyzeTools").hidden = false;
-        $("analyzeToolbar").hidden = !active;
+        $("analyzeToolbar").hidden = !active || comparing;
         const toolbar = $("analyzeToolbar");
         const entryFocus = toolbar.contains(document.activeElement) ? document.activeElement : null;
         if (comparing) place($("pagePrimaryActions"), toolbar);
@@ -247,8 +247,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         place(host, scope);
         $("analyzeEmptyScope").hidden = !empty;
         // Dates and collection defaults already have global controls; keep actual qualifications.
-        const parts = value.parts.filter((part, index) => (!sharedPeriod || index !== 0)
-            && (empty || !Array.isArray(value.restrictions) || index > 1 || value.restrictions.includes(part)));
+        const parts = value.parts.filter((part, index) => empty || !Array.isArray(value.restrictions) || index > 1 || value.restrictions.includes(part));
         scopeCaption($("analyzeScopeCaption"), { ...value, parts, text: parts.join("; ") });
         $("analyzeScopeCaption").hidden = !parts.length;
         if ($("analyzeScopeStatus").textContent !== status) $("analyzeScopeStatus").textContent = status;

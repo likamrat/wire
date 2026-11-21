@@ -392,6 +392,7 @@ textarea:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 @media(max-width:760px) {.report-options,.prompt-pair{grid-template-columns:minmax(0,1fr)}.report-options{gap:16px}.report-options fieldset{padding:16px}.report-frame{height:440px}}
 ${uxStyles}
 .wire-section-nav{display:flex;align-items:stretch;flex-wrap:wrap;gap:0 1.25rem;margin:0 0 1rem;border-bottom:1px solid var(--surface-divider)}
+#workspace:has(>#compareSections:not([hidden]),>#trendsView:not([hidden]),>#reportsView:not([hidden]) #reportSections:not([hidden]))>.page-heading{margin-bottom:var(--space-lg)}
 .wire-section-nav>:is(a,button){display:inline-flex;align-items:center;justify-content:flex-start;gap:.5em;min-height:44px;padding:.375em .25em;max-width:100%;box-sizing:border-box;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font:inherit;text-decoration:none}
 .wire-section-nav>:is(a,button)::before{display:none}
 .wire-section-nav>:is(a,button)[aria-current=page]{border-bottom-color:var(--accent);color:var(--ink);font-weight:var(--weight-medium)}

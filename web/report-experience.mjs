@@ -215,7 +215,12 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     function labelDates(value) {
         if (value.range === "capture") return "All retained dates";
-        return `${time.formatDate(value.from, read().timeContext, true)} to ${time.formatDate(value.to, read().timeContext, true)}`;
+        const context = read().timeContext, civil = bound => bound?.length === 10;
+        const label = bound => civil(bound) ? time.formatDate(bound, context, true) : time.formatTime(bound, context);
+        if (!value.from) return value.to ? `Through ${label(value.to)}` : "All retained dates";
+        if (!value.to) return `From ${label(value.from)}`;
+        return civil(value.from) && civil(value.to) ? time.formatCivilRange(value.from, value.to, context)
+            : value.from === value.to ? label(value.from) : `${label(value.from)} to ${label(value.to)}`;
     }
     function sync() {
         if (!current()) return;
@@ -235,7 +240,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         useActivity.hidden = value.prepared;
         byId("additionalMasking").hidden = !value.prepared;
         if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
-        periodCaption.textContent = labelDates(value.dates);
+        periodCaption.textContent = `Calendar dates include both endpoints in ${value.timeContext.timeZone}.`;
         for (const control of period.querySelectorAll("button")) {
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
@@ -262,7 +267,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         prepareHint.hidden = !prepareHint.textContent;
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
         const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
-        setLabel(dateButton, value.dates.range === "capture" ? "All retained dates" : value.dates.range === "custom" ? "Custom dates" : `Last ${value.dates.range} days`);
+        setLabel(dateButton, labelDates(value.dates));
         dateButton.hidden = value.paired;
         const mode = value.options.promptMode;
         if (privacyMode !== mode) {
@@ -286,7 +291,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
         scopeCaption.textContent = value.paired ? "Two periods with the same filters."
-            : `${labelDates(value.dates)} · ${value.scopeLabel}`;
+            : value.scopeLabel;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
         dateButton.disabled = formatButton.disabled = value.locked || value.unavailable;
         privacyButton.disabled = value.locked || value.unavailable;

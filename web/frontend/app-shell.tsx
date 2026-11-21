@@ -88,7 +88,7 @@ function Activity() {
     return <>
         <h2 id="activityTitle" className="visually-hidden" tabIndex={-1}>Activity</h2>
         <div id="activityListContext" className="section-heading activity-list-context">
-            <p id="activityListSummary" className="list-summary" role="status" tabIndex={-1} aria-describedby="pageIntro analyzeScopeCaption" />
+            <p id="activityListSummary" className="list-summary" role="status" tabIndex={-1} aria-describedby="analyzeScopeCaption" />
             <p id="activityListScope" className="activity-list-scope" hidden />
             <label className="search-label" hidden>Legacy private search
                 <input id="activitySearch" type="search" placeholder="Search" autoComplete="off" />

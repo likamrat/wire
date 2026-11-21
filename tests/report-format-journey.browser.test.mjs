@@ -256,7 +256,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         }
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+        await page.locator("#reportDeskDates").click();
         await file.click({ position: { x: 25, y: 25 } });
         await expect(page.locator("#reportPeriodChoices")).toBeHidden();
         receipts.push({ format, prepared: true, regeneration: true, keyboard: true, themesAndNarrow: true });
@@ -280,7 +280,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     if (output) await writeFile(path.join(output, "edited-pdf-extracted.txt"), pages.join("\n\n"));
     // Changing population still regenerates the selected real file, never a substitute Report view.
     await inspection.getByRole("button", { name: "Source", exact: true }).click();
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     prepared = await regenerate(() => page.locator("#reportPeriodChoices [data-report-range='14']").click());
     await expect(page.locator("#preparedReportView")).toHaveValue(filenames[4]);
     assert.equal(await inspection.locator("pre:visible").textContent(), prepared.files[filenames[4]]);

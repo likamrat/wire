@@ -763,14 +763,14 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Show report", exact: true }).click();
     const current = await (await preparing).json();
     assert.equal(current.records.length, 2);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await page.locator("#reportPeriodChoices [data-report-range=custom]").click();
     await expect(page.locator("#reportCustomDates")).toBeVisible();
     assert.equal(await page.locator("#reportCustomDates [data-report-range]").count(), 0);
     await page.locator("#reportCustomDates").getByLabel("From", { exact: true }).fill("2026-01-01");
     await page.locator("#reportCustomDates").getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(await page.frameLocator(".report-frame").locator("[data-report-scenario]").count(), 2);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await page.locator("#reportPeriodChoices [data-report-range=custom]").click();
     await page.locator("#reportCustomDates").getByLabel("From", { exact: true }).fill("2026-01-01");
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -1102,7 +1102,7 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
 test("retained-period comparison opens its report directly and saves the accepted pair", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t, { source: periodFixture().records, route: "#analyze" });
     await page.locator("#comparePeriods").click();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     for (const [label, value] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) {
         await page.getByLabel(label, { exact: true }).fill(value);

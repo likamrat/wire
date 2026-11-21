@@ -21,6 +21,7 @@
 }
 .wire-frontend-react .frontend-heading-copy { min-width: 0; flex: 1 1 14rem; }
 .wire-frontend-react #frontendHeadingActions { align-self: center; }
+.wire-frontend-react #frontendHeadingActions:not(:has(> :not([hidden]))) { display: none; }
 .wire-frontend-react #frontendHeadingActions .analyze-toolbar { margin: 0; padding: 0; container: none; flex-wrap: wrap; }
 .wire-frontend-react #pagePrimaryActions:not(:has(> :not([hidden]))) { display: none; }
 .wire-frontend-react .page-heading p { margin-top: 4px; font-size: var(--type-small); }

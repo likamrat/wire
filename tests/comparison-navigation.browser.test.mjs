@@ -80,7 +80,7 @@ test("Compare sections keep the period view and saved report choices across keyb
     await page.goBack(); await ready(page);
     await expect(reports).toBeFocused();
     await expect(page.getByRole("button", { name: "By tool", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator(".compare-period-key")).toContainText(/Mar 7.*Mar 9/s);
+    await expect(page.locator(".compare-period-key")).toContainText(/Mar 7, 2026.*Mar 8–9, 2026/s);
     await reports.click();
     await expect(picker.getByRole("combobox", { name: "Earlier report", exact: true })).toContainText("Earlier weekly review");
     await expect(picker.getByRole("combobox", { name: "Later report", exact: true })).toContainText("Later weekly review");

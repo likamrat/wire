@@ -740,7 +740,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analyzeControls = assessmentFactories.mountAnalyzeControls(ux, {
         api, motionTiming: sidebar.timing,
         closeSelect: () => selectControls?.close(), closeNavigation: () => sidebar.close(false),
-        toolbarHost: $("frontendHeadingActions"), scopeHost: $("frontendAnalyzeQualification"), sharedPeriod: Boolean(frontendActivity),
+        toolbarHost: $("frontendHeadingActions"), scopeHost: $("frontendAnalyzeQualification"),
     });
     $("meaningScopeTitle").parentElement.append($("periodHint"));
     const chartReferenceKeys = new Map();
@@ -4483,8 +4483,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
         const selectedRequest = workspaceState.evidence.scenarios.find(scenario => scenario.scenarioId === workspaceState.route.request);
         const titles = {
-            analyze: [workspaceState.route.compare === "periods" ? "Compare" : "Analyze",
-                frontendActivity && workspaceState.route.compare !== "periods" ? acceptedAnalyzePeriod().caption : ""],
+            analyze: [workspaceState.route.compare === "periods" ? "Compare" : "Analyze", ""],
             trends: ["Trends", ""],
             request: [selectedRequest ? workspaceState.route.call ? "Call in context" : "Interaction" : "Interaction unavailable", ""],
             reports: [workspaceState.route.bundle ? savedReportView?.bundleId === workspaceState.route.bundle && savedReportView.entryKey === workspaceState.route.savedEntry
@@ -4862,7 +4861,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (frontendActivity && workspaceState.route.compare !== "periods") {
             host.replaceChildren();
             host.hidden = true;
-            $("activityListSummary").setAttribute("aria-describedby", "pageIntro analyzeScopeCaption");
+            $("activityListSummary").setAttribute("aria-describedby", "analyzeScopeCaption");
             return;
         }
         // Defaults are already described by the global Dates and collection controls.
@@ -7659,10 +7658,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!period?.from || !period.to) return null;
         const context = bundle.timeContext || viewerTime;
         // Calendar boundaries are civil dates, not instants in the browser's zone.
-        const civil = value => new Date((value.length === 10 ? time.calendar(value) : time.day(value, context.timeZone)) + "T12:00:00Z");
+        const civil = value => value.length === 10 ? value : time.day(value, context.timeZone);
         try {
-            const fmt = new Intl.DateTimeFormat(context.locale, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-            return fmt.formatRange(civil(period.from), civil(period.to)).replace(/\s*–\s*/u, "–");
+            return time.formatCivilRange(civil(period.from), civil(period.to), context);
         } catch (error) { if (error instanceof RangeError) return null; throw error; }
     }
     function positionSavedMenu(menu, trigger) {

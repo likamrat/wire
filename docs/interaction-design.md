@@ -18,6 +18,14 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 
 ## Navigation and return
 
+Reports, Trends and Compare use one page-title scale, icon alignment and gap
+before their section links. A page title names the destination. Put the applied
+dates with what they govern: the Analyze results, Trends chart control, report
+outline, or each side of Compare. Don't repeat a date or time zone beside the
+page title. Keep civil dates in their selected calendar; preserve the time and
+offset for instant boundaries. A saved report's period is not its preparation
+time, and an unknown period stays unknown.
+
 The WIRE logo remains a link to Analyze, with **WorkIQ Request Explorer** help
 on hover or keyboard focus, including the compact mark and narrow drawer.
 Escape, activation and leaving the target dismiss that help without taking

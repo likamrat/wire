@@ -604,6 +604,32 @@ test("Trends exact evidence is recognizable before opening and Compare keeps bot
     await capture(page, "visual-compare-mobile");
 });
 
+test("analytics destinations keep date context in the task and align the title with its section links", async t => {
+    const { page, runtime } = await setup(t);
+    for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const headers = [];
+        for (const target of ["reports", "trends?period=custom&from=2026-11-10&to=2026-11-16",
+            "compare?aFrom=2026-11-03&aTo=2026-11-09&bFrom=2026-11-10&bTo=2026-11-16"]) {
+            await page.goto(runtime.url + target);
+            await ready(page);
+            const links = page.locator("nav.wire-section-nav:visible");
+            await expect(links).toBeVisible();
+            if (target === "reports") await expect(page.locator("#reportDeskDates")).toHaveText(/\d.*\d{4}/);
+            if (target.startsWith("trends")) await expect(page.locator("#trendsPeriod")).toContainText("Nov 10–16, 2026");
+            if (target.startsWith("compare")) await expect(page.locator(".compare-period-key")).toContainText(/Nov 3–9, 2026.*Nov 10–16, 2026/);
+            await expect(page.locator("#pageIntro")).toBeHidden();
+            headers.push(await links.evaluate(nav => {
+                const title = document.querySelector("#pageTitle"), r = title.getBoundingClientRect(), active = nav.querySelector('[aria-current=page]');
+                return { x: r.x, y: r.y, font: getComputedStyle(title).fontSize, gap: nav.getBoundingClientRect().y - r.bottom,
+                    icon: title.querySelector("svg").getBoundingClientRect().width, activeColor: getComputedStyle(active).borderBottomColor };
+            }));
+        }
+        assert.deepEqual(headers[0], headers[1]);
+        assert.deepEqual(headers[0], headers[2]);
+    }
+});
+
 test("the selected evaluation layout retains complete membership, native reading, paging and peer routes", { timeout: 60000 }, async t => {
     const { page, requests } = await setup(t);
     await expect(page.locator("#activityListSummary")).toContainText("240 interactions");
@@ -615,7 +641,8 @@ test("the selected evaluation layout retains complete membership, native reading
     });
     assert.ok(order.overview < order.rows && order.rows < order.breakdowns);
     await expect(page.locator("#frontendHeadingActions #openAnalyzeFilters")).toBeVisible();
-    await expect(page.locator("#analyzeScopeCaption")).not.toContainText("Nov 10");
+    await expect(page.locator("#pageIntro")).toBeHidden();
+    await expect(page.locator("#analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
     await expect(page.locator("#activityListScope")).toBeHidden();
     await expect(page.locator("#analyzeScopeStatus")).toContainText("Checked history is unknown");
     await capture(page, "react-analyze-light");

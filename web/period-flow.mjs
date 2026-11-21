@@ -14,7 +14,7 @@ export function createPeriodFlow(time, copy = chatCopy) {
         const caption = filters.from && filters.to
             ? filters.from === filters.to ? boundLabel(filters.from)
                 : calendarDate(filters.from) && calendarDate(filters.to)
-                    ? `${time.formatDate(filters.from, timeContext, filters.from.slice(0, 4) !== filters.to.slice(0, 4))} - ${format(filters.to)}`
+                    ? time.formatCivilRange(filters.from, filters.to, timeContext)
                     : `${boundLabel(filters.from)} - ${boundLabel(filters.to)}`
             : filters.from ? `From ${boundLabel(filters.from)}`
                 : filters.to ? `Through ${boundLabel(filters.to)}` : "All dates";

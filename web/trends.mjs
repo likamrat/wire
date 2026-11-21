@@ -846,8 +846,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     function formatRange() {
         const end = axisDate(range.to) === "Today" ? "Today" : time.formatDate(range.to, data.timeContext, true);
         if (range.from === range.to) return end;
-        const differentYears = range.from.slice(0, 4) !== range.to.slice(0, 4);
-        return `${time.formatDate(range.from, data.timeContext, differentYears)} – ${end}`;
+        if (end !== "Today") return time.formatCivilRange(range.from, range.to, data.timeContext);
+        return `${time.formatDate(range.from, data.timeContext, range.from.slice(0, 4) !== range.to.slice(0, 4))} – ${end}`;
     }
     function paint() {
         if (!current()) return;
