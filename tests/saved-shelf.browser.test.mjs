@@ -47,7 +47,9 @@ async function setup(t, count, { enforced = false } = {}) {
     await navigateMain(page, "reports");
     return { page, context, runtime, bundles, requests };
 }
-const allSaved = page => page.getByRole("button", { name: /^View all \d+$/ });
+const sections = page => page.getByRole("navigation", { name: "Report sections", exact: true });
+const allSaved = page => sections(page).getByRole("link", { name: "Saved library", exact: true });
+const overview = page => sections(page).getByRole("link", { name: "Overview", exact: true });
 const recent = page => page.locator(".saved-shelf .saved-report-title");
 async function holdTitle(page, key) {
     await recent(page).first().evaluate((control, key) => {
@@ -66,6 +68,7 @@ async function expectRetired(page, key) {
 test("Reports starts with two recent saved names; full-library controls retain the activated item and page", { timeout: 60000 }, async t => {
     const { page, requests, bundles } = await setup(t, 9);
     const shelf = page.locator("#savedReportsPanel");
+    await expect(overview(page)).toHaveAttribute("aria-current", "page");
     await expect(recent(page).locator(".saved-report-name")).toHaveText(["Fir field notes 9", "Fir field notes 8"]);
     await expect(recent(page).locator(".saved-report-period")).toHaveText(["Nov 7–19, 2026", "Oct 28–Nov 9, 2026"]);
     assert.ok(await shelf.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector("#reportCreatePanel")) & Node.DOCUMENT_POSITION_FOLLOWING)));
@@ -77,11 +80,14 @@ test("Reports starts with two recent saved names; full-library controls retain t
     await holdTitle(page, "oldShelf");
     await page.keyboard.press("Enter");
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(sections(page)).toBeHidden();
     await expectRetired(page, "oldShelf");
     await page.getByRole("button", { name: "Back to Reports" }).click();
     await expect(recent(page).first()).toBeFocused();
     const all = allSaved(page);
     await all.click();
+    await expect(all).toHaveAttribute("aria-current", "page");
+    await expect(overview(page)).not.toHaveAttribute("aria-current", "page");
     await expect(page.locator("#pageTitle")).toHaveText("Saved report library");
     await expect(page.locator("#reportCreatePanel")).toBeHidden();
     await expect(page.locator("#savedReportSearch")).toBeVisible();
@@ -124,7 +130,7 @@ test("Reports starts with two recent saved names; full-library controls retain t
     await expect(page.locator("#savedInspectorTitle")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(inspect).toBeFocused();
-    await page.getByRole("link", { name: "Back to Reports" }).click();
+    await overview(page).click();
     await expect(all).toBeFocused();
     await expect(recent(page).first()).toContainText("Fir field notes 9");
     // Alter only a disposable original: the shelf must surface the reader's actual refusal.
@@ -143,6 +149,11 @@ test("compact shelf reflows at doubled text, Search opens the full library, and 
         await page.setViewportSize({ width, height: 920 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
         await page.evaluate(() => document.fonts.ready);
+        await expect(overview(page)).toHaveCSS("border-bottom-style", "solid");
+        assert.ok(await sections(page).getByRole("link").evaluateAll(links => links.every(link => {
+            const rect = link.getBoundingClientRect();
+            return rect.left >= 0 && rect.right <= innerWidth && rect.height >= 44;
+        })));
         const bounds = await recent(page).evaluateAll(nodes => nodes.map(node => {
             const rect = node.getBoundingClientRect();
             return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, clipped: node.scrollWidth > node.clientWidth + 1 };
@@ -163,7 +174,7 @@ test("compact shelf reflows at doubled text, Search opens the full library, and 
     await page.locator("#wireSearchResults button").filter({ hasText: "Saved reports" }).first().click();
     await expect(page.locator("#savedReportSearch")).toBeVisible();
     await expectRetired(page, "oldShelf");
-    await page.getByRole("link", { name: "Back to Reports" }).click();
+    await overview(page).click();
     await holdTitle(page, "activeShelf");
     const controller = await page.context().newPage();
     await controller.goto(runtime.url);
@@ -200,9 +211,9 @@ test("the public library reloads, a lost private filter requires explicit recove
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.keyboard.press("Escape");
     await expect(confirm).toBeHidden();
-    await page.getByRole("link", { name: "Back to Reports" }).click();
+    await overview(page).click();
     await expect(page.locator("#bundleList")).toContainText("No saved reports yet.");
-    await expect(allSaved(page)).toHaveCount(0);
+    await expect(allSaved(page)).toBeVisible();
     const shelf = await page.locator("#savedReportsPanel").boundingBox(), creation = await page.locator("#reportCreatePanel").boundingBox();
     assert.ok(creation.y - (shelf.y + shelf.height) >= 16);
 });

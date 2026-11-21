@@ -1318,6 +1318,12 @@ test("one Reports entry retains an edited frozen draft across Back, explicit res
     await expect(page.locator("#prepareReportPreview")).toBeFocused();
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Resume preview");
     await expect(page.locator("#reportPreset-errors")).toHaveAttribute("aria-pressed", "true");
+    const sections = page.getByRole("navigation", { name: "Report sections", exact: true });
+    await sections.getByRole("link", { name: "Saved library" }).click();
+    await expect(sections.getByRole("link", { name: "Saved library" })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#reportCreatePanel")).toBeHidden();
+    await sections.getByRole("link", { name: "Overview" }).click();
+    await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Resume preview");
     await prepareReportPreview(page);
     await expect(page.getByLabel("Report name", { exact: true })).toHaveValue("Unfinished mailbox report");
     await expect(page.frameLocator(".report-frame").locator("body")).toContainText("Check this permission boundary.");

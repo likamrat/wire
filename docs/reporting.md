@@ -12,7 +12,7 @@ Contributors changing report behavior should also read the
 
 ## Open a report
 
-Open **Reports** and choose a saved name to read that copy, or use **View all**
+Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
 to search the library. Under **New report**, choose a focus and check the outline:
 **Activity**, **Dates**, **Report text** and **Files to save**.
 The default, **Mask detected details**, keeps the wording with local masking.
@@ -243,7 +243,7 @@ Later collection, browsing filters or screen-theme changes do not rewrite them.
 file views and downloads keep their saved artwork, even if an older logo has poor contrast.
 Reopening an older report does not add newer interpretations. New reports need a
 compatible WIRE reader; an older version may refuse to open them.
-In **View all**, search for a report name, its displayed period, a start or end
+In **Saved library**, search for a report name, its displayed period, a start or end
 date (such as `2026-11-07`), a file format or its text treatment. This searches
 saved metadata. Use global Search to find text inside supported files.
 **Back to Reports** restores the list's search, order, page
@@ -295,7 +295,7 @@ experience with the same formats, masking, optional notes and local Save.
 **Back to comparison** restores its dates, choices and reading position while
 access remains valid.
 
-For existing reports, open **Compare > Saved reports** (or **Reports > View all >
+For existing reports, open **Compare > Saved reports** (or **Reports > Saved library >
 Compare saved reports**), choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses
 their frozen facts, not current history. Different definitions, missing facts
@@ -312,7 +312,7 @@ per-call coverage. Older saved comparisons keep their original presentation.
 
 ## Remove a saved copy
 
-Open the full library with **View all** and choose **Delete report** or
+Open **Saved library** and choose **Delete report** or
 **Delete saved comparison** on its row.
 Its confirmation removes that managed bundle, not original source
 activity or external downloads. **Saved-report options > Delete all saved

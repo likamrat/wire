@@ -419,7 +419,9 @@ preparation through inclusion controls, and through their contextual entries.
 
 Recent entries show their names and compact saved periods. Date ranges share
 month/year only where accurate; longer ranges wrap instead of losing endpoints.
-View all opens the full library. Its rows align Report, Report text and Actions. The name and its leading document
+Overview and Saved library are the two Reports section links. The current link is underlined.
+Prepared reports, saved readers and comparisons keep their contextual Back action instead.
+Library rows align Report, Report text and Actions. The name and its leading document
 icon open in-app reading. Preparation time is a secondary line under the name,
 not part of a generated title. Known saved periods appear there separately.
 A single list note identifies missing period metadata instead of repeating
