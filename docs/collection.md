@@ -543,6 +543,10 @@ text is not a user prompt and is not copied into the call. A linked turn
 end is checked against the completion and changes neither its outcome nor
 the receipt's incomplete-day coverage.
 
+A prompt can also follow an independently verified session notice in the
+selected interval if the prompt names that immediately preceding event. This
+checks journal order only; the assistant must still name the prompt explicitly.
+
 If the original prompt exactly matches a single saved parent in this chat,
 WIRE can keep that parent and its recorded author, including an agent author,
 without writing a new prompt. The explicit request and call must agree on
