@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectOversizedCompletion, COMPLETION_PROJECTION_LIMITS } from "../lib/completion-projection.mjs";
+import { projectOversizedCompletion, projectVerifiedSourceEvent, COMPLETION_PROJECTION_LIMITS } from "../lib/completion-projection.mjs";
 
 const limits = { maxInputBytes: 4 * 1024 ** 2, maxOutputBytes: 1024 ** 2 };
 const entry = data => Buffer.from(JSON.stringify({
@@ -168,6 +168,25 @@ test("validates escape-heavy discarded strings without allocating their discarde
         const damaged = Buffer.from(text.trimEnd() + tail + "\n");
         assert.equal(projectOversizedCompletion(damaged, limits).reason, "invalid-json");
     }
+});
+
+test("exact parser continuation requires a fresh page and validates the remainder before returning metadata", async () => {
+    const raw = entry({ toolCallId: "call", success: true, result: Array(80000).fill(0) });
+    assert.equal(projectOversizedCompletion(raw, limits).reason, "token-limit");
+    let pages = 0;
+    const complete = await projectVerifiedSourceEvent(raw, limits, async () => ++pages <= 2);
+    assert.equal(pages, 2);
+    assert.equal(complete.event.data.toolCallId, "call");
+    assert.equal(complete.work.generatedTokens, complete.work.consumedTokens);
+    const limited = await projectVerifiedSourceEvent(raw, limits, async () => false);
+    assert.equal(limited.reason, "token-limit");
+    assert.equal(limited.event, undefined);
+    const changed = new Error("access changed");
+    await assert.rejects(projectVerifiedSourceEvent(raw, limits, async () => { throw changed; }), e => e === changed);
+    const badTail = Buffer.from(raw.toString().replace(/\]\}\}\n$/, '],"toolCallId":"different"}}\n'));
+    assert.equal((await projectVerifiedSourceEvent(badTail, limits, async () => true)).kind, "unavailable");
+    const malformed = Buffer.from(raw.toString().replace(/\]\}\}\n$/, ",]}}\n"));
+    assert.equal((await projectVerifiedSourceEvent(malformed, limits, async () => true)).reason, "invalid-json");
 });
 
 test("bounds giant discarded keys, strings and numbers without relying on a 256-character chunk assumption", () => {
