@@ -416,9 +416,11 @@ test("reply-saving pending and uncertain state survives the rail without repeati
     await category(page, "display");
     release();
     await category(page, "privacy");
-    await expect(page.locator("#assessmentSetup [role=alert]")).toContainText("do not repeat the update");
+    const alert = page.locator("#assessmentSetup").getByRole("alert");
+    await expect(alert).toHaveCount(1);
+    await expect(alert).toContainText("do not repeat the update");
     await expect(choice).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Check update result", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Check response-saving result", exact: true })).toBeEnabled();
     await category(page, "connection");
     await category(page, "privacy");
     await expect(choice).toBeDisabled();

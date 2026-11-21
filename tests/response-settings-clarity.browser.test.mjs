@@ -81,7 +81,7 @@ test("response settings has one explained switch row, native draft semantics and
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const choice = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
-        await expect(choice).toHaveAccessibleDescription(/Keep recorded Copilot replies on this device.*Turning this off deletes/);
+        await expect(choice).toHaveAccessibleDescription("Turning this off deletes saved replies, not activity or reports.");
         await choice.focus();
         await page.keyboard.press("Space");
         await expect(choice).toBeChecked();
