@@ -116,7 +116,8 @@ async function actionBoundary(control) {
         const outside = background(node.parentElement), fill = blend(rgba(surface.backgroundColor), outside);
         const border = blend(rgba(surface.borderTopColor), fill), rect = node.getBoundingClientRect();
         const rgb = value => `rgb(${value.join(",")})`;
-        return { label: node.textContent.trim(), boundary: rgb(border), outside: rgb(outside), fill: rgb(fill), ink: style.color,
+        return { label: node.textContent.trim(), directional: node.matches("a.quiet") && !!node.querySelector("[data-icon-role=forward]"),
+            boundary: rgb(border), outside: rgb(outside), fill: rgb(fill), ink: style.color,
             borderWidth: parseFloat(surface.borderTopWidth), target: rect.height, focus: node.matches(":focus-visible"),
             outline: surface.outlineStyle !== "none" ? surface.outlineStyle : style.outlineStyle,
             bounds: { x: rect.x + scrollX, y: rect.y + scrollY, width: rect.width, height: rect.height } };
@@ -259,7 +260,8 @@ test("Settings action boundaries remain clearly visible against their surface in
         await chooseTheme(page, theme);
         for (const [category, selectors] of [
             ["privacy", ["#recollectActivity", '[data-settings-section=privacy] a.button-link']],
-            ["connection", ["#editSource", "#pauseCollection"]],
+            ["connection", ["#pauseCollection"]],
+            ["source-access", ["#editSource"]],
             ["troubleshooting", ['[data-settings-section=troubleshooting] a.button-link']],
         ]) {
             await navigateSettings(page, category);
@@ -270,7 +272,7 @@ test("Settings action boundaries remain clearly visible against their surface in
         }
     }
     if (proofs) await writeFile(path.join(proofs, "action-boundaries.json"), JSON.stringify(measurements, null, 2));
-    const faint = measurements.filter(value => value.borderWidth < 1 || contrast(value.boundary, value.outside) < 3);
+    const faint = measurements.filter(value => !value.directional && (value.borderWidth < 1 || contrast(value.boundary, value.outside) < 3));
     assert.deepEqual(faint.map(value => ({ theme: value.theme, label: value.label,
         boundaryContrast: contrast(value.boundary, value.outside), borderWidth: value.borderWidth })), [],
     "Enabled action shapes need a visible boundary, not a near-invisible shadow");
@@ -308,7 +310,8 @@ test("Settings action edges stay visible through real hover, press, focus and na
             assert.notEqual(states[0].fill, states[1].fill, "Hover remains distinct from rest");
             assert.notEqual(states[1].fill, states[2].fill, "Pressed remains distinct from hover");
             for (const state of states) {
-                assert.ok(contrast(state.boundary, state.outside) >= 3, `${theme}/${width}/${scale}/${state.label}/${state.state}`);
+                if (state.directional) assert.equal(state.boundary, state.fill, "A navigation shortcut keeps its arrow, not a command border");
+                else assert.ok(contrast(state.boundary, state.outside) >= 3, `${theme}/${width}/${scale}/${state.label}/${state.state}`);
                 assert.ok(contrast(state.ink, state.fill) >= 4.5, state.label);
                 assert.deepEqual(state.bounds, states[0].bounds, "Interaction must not resize or move the button");
             }
@@ -334,10 +337,7 @@ test("Settings action edges stay visible through real hover, press, focus and na
         await expect(page.locator("#saveCollection")).toBeDisabled();
         const disabled = await actionBoundary(page.locator("#saveCollection"));
         assert.ok(contrast(disabled.boundary, disabled.outside) < 3, "Disabled actions do not borrow an enabled boundary");
-        await page.locator("#saveCollection").locator("..").focus();
-        await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
-        await expect(page.locator("#saveCollection").locator("..")).toBeFocused();
-        assert.equal(await page.locator("#saveCollection").evaluate(node => getComputedStyle(node, "::before").outlineStyle), "solid");
+        await expect(page.locator("#preferenceActions")).toBeHidden();
         await openSourceEditor(page);
         const cancel = await actionBoundary(page.locator("#cancelSource"));
         assert.equal(contrast(cancel.boundary, cancel.outside), 1, "Quiet cancellation stays unboxed");
@@ -345,7 +345,7 @@ test("Settings action edges stay visible through real hover, press, focus and na
         await navigateSettings(page, "display");
         assert.deepEqual(await page.locator("#settingsThemePreference .theme-track").evaluate(node => {
             const box = node.getBoundingClientRect(); return { width: box.width, height: box.height };
-        }), { width: 76, height: 36 });
+        }), { width: 44, height: 26 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     await page.emulateMedia({ forcedColors: "active" });
@@ -401,8 +401,8 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
         assert.ok(value.centering <= 1);
         assert.ok(value.symbol.ink / value.text.ink >= .9 && value.symbol.ink / value.text.ink <= 1.5,
             "Painted Lucide ink stays proportional to the real label ink");
-        assert.ok(value.gap >= 5 * scale && value.gap <= 6 * scale);
-        for (const padding of value.horizontalPadding) assert.ok(padding >= 9 && padding <= 11);
+        assert.ok(Math.abs(value.gap - 8) <= .5);
+        for (const padding of value.horizontalPadding) assert.ok(Math.abs(padding - 12) <= .5);
         assert.equal(value.descriptionInsideButton, false);
         assert.deepEqual(value.footer, { gap: 16, padding: 0 }, "Form actions use one deliberate gap, not stacked padding");
         if (width === 1440) {

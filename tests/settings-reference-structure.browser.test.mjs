@@ -515,7 +515,7 @@ test("Display and header share switch artwork, native activation, storage update
         for (const control of controls) {
             await expect(control).toHaveAttribute("role", "switch");
             await expect(control).toHaveAttribute("aria-checked", String(theme === "dark"));
-            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 36 : 0}, 0)`);
+            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 18 : 0}, 0)`);
         }
         const geometry = [];
         for (const control of controls) geometry.push(await control.evaluate(node => {
@@ -530,10 +530,10 @@ test("Display and header share switch artwork, native activation, storage update
                 })), artwork: node.querySelector(".theme-track").outerHTML };
         }));
         assert.deepEqual(geometry[0], geometry[1], "Same painted glyphs, thumb/track and target, not just matching SVG names");
-        assert.deepEqual(geometry[0].target, { width: 80, height: 44 });
-        assert.equal(geometry[0].track.width, 76);
-        assert.equal(geometry[0].thumb.width, 32);
-        assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 20, 20], ["moon", 20, 20]]);
+        assert.deepEqual(geometry[0].target, { width: 44, height: 44 });
+        assert.equal(geometry[0].track.width, 44);
+        assert.equal(geometry[0].thumb.width, 18);
+        assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 16, 16], ["moon", 16, 16]]);
         for (const control of controls) for (const action of ["click", "Space", "Enter"]) {
             const wasDark = await control.getAttribute("aria-checked") === "true";
             if (action === "click") await control.click();
@@ -613,8 +613,8 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await expect(choice).toBeDisabled();
     await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toHaveCount(0);
     await captureSwitchState(page, `${theme}-reply-unknown`);
-    await pane.getByRole("button", { name: "Check update result", exact: true }).click();
-    await expect(pane.getByRole("button", { name: "Check update result", exact: true })).toBeDisabled();
+    await pane.getByRole("button", { name: "Check response-saving result", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Checking update...", exact: true })).toBeDisabled();
     await captureSwitchState(page, `${theme}-reply-checking`);
     await expect.poll(() => reads.length).toBe(1);
     assert.equal(reads[0].mutationRef, writes[0].mutationRef);

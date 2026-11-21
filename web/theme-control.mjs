@@ -1,10 +1,10 @@
 export function mountThemeControl(theme, ux) {
     const trigger = document.getElementById("themePreference");
     const track = document.createElement("span");
-    track.className = "theme-track";
+    track.className = "switch-track theme-track";
     track.setAttribute("aria-hidden", "true");
     const thumb = document.createElement("span");
-    thumb.className = "theme-thumb";
+    thumb.className = "switch-thumb theme-thumb";
     track.append(thumb);
     for (const name of ["sun", "moon"]) {
         const glyph = ux.icon(name);

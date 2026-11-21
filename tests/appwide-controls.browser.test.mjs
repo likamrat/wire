@@ -12,6 +12,38 @@ import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_VISUAL_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+test("the report primary, Settings commands and directional shortcut share a face without sharing a meaning", async t => {
+    const app = await searchFixture(t, { records: records(), frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(app.runtime.url + "reports"); await ready(page);
+    const primary = page.getByRole("button", { name: "Prepare preview", exact: true });
+    async function face(control) {
+        return control.evaluate(node => {
+            const css = getComputedStyle(node), paint = getComputedStyle(node, "::before");
+            return { height: node.getBoundingClientRect().height, inset: paint.top, radius: paint.borderRadius,
+                padding: css.paddingInlineStart, font: css.fontSize, gap: css.columnGap, fill: paint.backgroundColor,
+                ink: css.color, border: paint.borderColor };
+        });
+    }
+    const reference = await face(primary);
+    assert.notEqual(reference.fill, "rgba(0, 0, 0, 0)");
+    assert.equal(reference.gap, "8px");
+    await page.locator('nav [data-nav=settings]').click(); await ready(page); await navigateSettings(page, "privacy");
+    const shortcut = page.getByRole("link", { name: "Open saved reports", exact: true });
+    const [review, choose, open] = await Promise.all([page.locator("#deleteActivity"), page.locator("#recollectActivity"), shortcut].map(face));
+    for (const value of [review, choose, open]) for (const key of ["height","inset","radius","padding","font"]) {
+        assert.equal(value[key], reference[key], key);
+    }
+    assert.notEqual(review.ink, choose.ink);
+    assert.notEqual(choose.border, open.border);
+    assert.equal(open.fill, "rgba(0, 0, 0, 0)");
+    await expect(shortcut.locator("[data-icon-role=forward]")).toBeVisible();
+    await shortcut.hover(); await expect(shortcut).toHaveCSS("text-decoration-line", "none");
+    await shortcut.focus(); await shortcut.press("Enter");
+    await expect(primary).toBeVisible();
+});
+
 async function capture(page, name) {
     if (!proofDir) return;
     await mkdir(proofDir, { recursive: true });

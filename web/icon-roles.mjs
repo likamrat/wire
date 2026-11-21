@@ -44,7 +44,7 @@ export const serviceIconSources = Object.freeze({
 
 export function iconSize(role) {
     return role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24
-        : role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small"].includes(role) ? 16 : 20;
+        : role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small", "sun", "moon"].includes(role) ? 16 : 20;
 }
 
 // Lucide's canonical names have changed since the family shipped in React Icons.

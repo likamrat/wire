@@ -155,6 +155,30 @@ navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node moun
 and update its text separately. These icons are decorative, not extra controls.
 Settings, contextual readers and saved report headings do not acquire one.
 
+Choose the button treatment by what happens **here**, not by its label or HTML
+tag. Fill the main next step (for example **Prepare preview**); fill does not
+mean a file was saved. Outline a secondary command such as **Choose chats**.
+Use a quiet link with a trailing arrow for a shortcut to another workspace.
+**Review deletion** is a cautionary outline; reserve the filled destructive
+treatment for the final deletion. Green on an eligible update means an update
+is available, not that it has run. Tabs, switches, icon-only utilities and
+chart marks keep their own interaction patterns.
+
+Ordinary text actions share an 8px corner, 12px side padding and an 8px
+icon-to-label gap. At default text size a 32px face sits inside a 44px target;
+let the target grow with wrapped or enlarged text. Keep widths content-sized
+and preserve geometry when focus, hover, press or pending paint changes.
+For a directional row, keep its arrow visible and tint its surface or ink on
+hover/press; don't underline or embolden the label. Keyboard focus keeps an
+outline. The underline below an active section marks location; an underline
+inside prose or evidence identifies a link even without hovering.
+
+Use the same 44×26px track and round, sliding thumb for a binary setting.
+Keep its target at least 44px high. On/off is visible in position and
+theme-aware contrast. The theme switch retains its sun and moon. Disabled
+inputs retain their state, with a dashed boundary; pending copy stays with
+the setting. A list option, radio, disclosure or section link is not a switch.
+
 Toolbar buttons, selects and numeric fields use a compact painted face inside
 their full target. Keep text/icon baselines aligned and let targets grow with
 enlarged text. Number fields size to their page digits rather than taking a

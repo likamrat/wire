@@ -380,7 +380,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }), button("Cancel", () => dialog.close()), button("Apply comparison", () => {
             compared = new Set([...choices.querySelectorAll("input:checked")].map(check => check.value));
             dialog.close(); paintStable(card);
-        }));
+        }, "primary"));
         dialogBody.append(choices, actions);
     }
     function openPeriod() {
@@ -540,7 +540,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         actions.append(button("Cancel", () => dialog.close()), button("Apply dates", () => {
             if (!calendar.valid()) return;
             const selected = calendar.value(); dialog.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
-        }));
+        }, "primary"));
         dialogBody.append(host, actions);
     }
     function openFilters() {
@@ -554,7 +554,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         actions.append(button("Cancel", () => dialog.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
             dialog.close(); void read({ range, period, filters: next, offset, remember: "filters" });
-        })); dialogBody.append(actions);
+        }, "primary")); dialogBody.append(actions);
     }
     function valueText(value, card) {
         const amount = card.chart.metric(value, card.id, card.mode);

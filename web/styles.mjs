@@ -112,10 +112,15 @@ p {max-width:72ch}
 .quiet {--pill-fill:transparent;--pill-border:transparent;--pill-hover-border:transparent;--action-shadow:none;border-color:transparent;background:transparent;color:var(--muted);font-weight:var(--weight-regular)}
 .quiet:hover:not(:disabled) {background:var(--pill-hover);color:var(--pill-ink)}
 .quiet:active:not(:disabled) {background:var(--pill-pressed);color:var(--pill-ink)}
-.primary {--action-radius:var(--radius-primary);--pill-fill:var(--accent-fill);--pill-ink:var(--on-accent);--pill-border:transparent;--pill-hover-border:transparent;--pill-hover:var(--primary-hover);--pill-pressed:var(--primary-pressed);--action-shadow:var(--control-shadow);color:var(--pill-ink);font-weight:var(--weight-strong)}
+.primary {--pill-fill:var(--accent-fill);--pill-ink:var(--on-accent);--pill-border:transparent;--pill-hover-border:transparent;--pill-hover:var(--primary-hover);--pill-pressed:var(--primary-pressed);--action-shadow:var(--control-shadow);color:var(--pill-ink);font-weight:var(--weight-strong)}
 button.danger {--pill-fill:transparent;--pill-ink:var(--danger);--pill-border:var(--danger);--pill-hover-border:var(--danger);--pill-hover:color-mix(in srgb,var(--danger) 6%,var(--paper));--pill-pressed:color-mix(in srgb,var(--danger) 10%,var(--paper));white-space:normal;overflow-wrap:anywhere}
 button.danger:not(:disabled) {color:var(--danger)}
 .text-link {font-weight:var(--weight-medium);text-decoration:none}
+a.text-link.icon-action {min-height:24px;padding-inline:4px;border-radius:var(--radius-control);text-decoration:none}
+a.text-link.icon-action:is(:hover,:focus-visible) {background:var(--hover);color:var(--ink)}
+a.text-link.icon-action:focus-visible {outline-offset:-2px}
+a.text-link.icon-action:active {background:var(--pill-pressed)}
+@media(pointer:coarse) {a.text-link.icon-action {min-height:44px}}
 .button-link {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap);min-height:var(--pill-height);white-space:normal;overflow-wrap:anywhere}
 :is(a.button-link,a.result-link,.primary-navigation a,.app-header nav a,.footer-utilities a,.settings-categories a,.settings-search-results a):any-link {text-decoration:none}
 [hidden] {display:none!important}
@@ -602,7 +607,7 @@ ${textAction}::before {
 ${textAction}:hover:not(:disabled)::before {background:var(--pill-hover);border-color:var(--pill-hover-border,var(--control))}
 ${textAction}:active:not(:disabled)::before {background:var(--pill-pressed)}
 ${textAction}[aria-pressed=true]::before {background:var(--accent-soft);border-color:var(--control)}
-${textAction}:not(.primary,.danger,[data-decision-action]):hover:not(:disabled)::before {border:1px solid var(--ink)}
+${textAction}:not(.primary,.quiet,.danger,[data-decision-action]):hover:not(:disabled)::before {border-color:var(--ink)}
 ${textAction}:disabled::before {background:transparent;border-color:var(--rule);box-shadow:none}
 ${textAction}.quiet:disabled::before {border-color:transparent}
 .number-field {position:relative;display:inline-grid;isolation:isolate;align-items:center;inline-size:max(3.75rem,calc(var(--number-digits,2)*1ch + 2.25rem));min-height:44px;flex:none}

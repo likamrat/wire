@@ -91,7 +91,7 @@ async function metadataAlignment(page) {
 }
 test("screen service, Settings, reader and report-control icons use coherent optical roles", async t => {
     const page = await setup(t);
-    await opticalSize(page.locator("#themePreference .wire-icon"), 20);
+    await opticalSize(page.locator("#themePreference .wire-icon"), 16);
     await opticalSize(page.locator("#percentageCharts [data-breakdown=services] .percentage-cue .wire-icon"), 24);
     await serviceGeometry(page);
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();

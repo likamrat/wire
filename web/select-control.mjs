@@ -265,8 +265,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             allCaption.textContent = entry.select.dataset.allLabel || "All results";
             footer.className = "select-footer";
             apply.textContent = "Apply";
-            apply.className = entry.filter ? "select-apply" : "primary select-apply";
+            apply.className = "primary select-apply";
             cancel.textContent = "Cancel";
+            cancel.className = "quiet";
             hint.className = entry.filter ? "select-validation" : "select-draft-hint";
             hint.id = entry.trigger.id + "-draft-hint";
             hint.setAttribute("role", "status");

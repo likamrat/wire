@@ -93,7 +93,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const focusHeading = el("h3", "", "Report focus"); rail.append(focusHeading, tiles, compactLabel);
     const outlineTitle = el("h3"), outlineDescription = el("p", "report-outline-description");
     const outlineChoices = el("div", "report-outline-choices"), outlineAction = el("div", "report-outline-action");
-    const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary"); prepare.id = "prepareReportPreview";
+    const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
     const prepareLabel = prepare.firstChild;
     prepare.prepend(ux.icon("read"));
     const prepareHint = el("p", "report-desk-hint"); prepareHint.id = "reportDeskHint"; prepareHint.setAttribute("role", "status");

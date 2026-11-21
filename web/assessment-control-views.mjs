@@ -26,8 +26,9 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     input.type = "checkbox";
     input.setAttribute("role", "switch");
     input.setAttribute("aria-describedby", `${summary.id} ${applied.id}`);
-    const target = el("label", undefined, "settings-switch"), track = el("span", undefined, "select-toggle");
+    const target = el("label", undefined, "settings-switch"), track = el("span", undefined, "switch-track");
     track.setAttribute("aria-hidden", "true");
+    track.append(el("span", undefined, "switch-thumb"));
     target.append(input, track);
     option.append(copy, target);
     const revoke = el("p", "Turning this off stops future capture and removes saved response text and dependent retained annotations. Saved reports and ordinary recorded activity stay available.");

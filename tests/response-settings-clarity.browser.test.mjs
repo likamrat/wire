@@ -51,7 +51,7 @@ test("response settings has one explained switch row, native draft semantics and
         await page.mouse.move(0, 0);
         evidence.push(await page.evaluate(() => {
             const root = document.getElementById("assessmentSetup"), input = root.querySelector("input[type=checkbox]");
-            const title = root.querySelector("h3"), track = root.querySelector(".select-toggle");
+            const title = root.querySelector("h3"), track = root.querySelector(".switch-track");
             return {
                 unrelatedNotice: document.getElementById("settingsMessage").checkVisibility(),
                 label: title.textContent,
@@ -69,7 +69,7 @@ test("response settings has one explained switch row, native draft semantics and
     for (const value of evidence) {
         assert.equal(value.unrelatedNotice, false, "Connection draft cancellation cannot describe this separate response setting");
         assert.equal(value.label, "Save Copilot replies locally");
-        assert.deepEqual(value.track, { width: 32, height: 20 }, "Reuse filter switch geometry, not an oversized control");
+        assert.deepEqual(value.track, { width: 44, height: 26 }, "Settings uses the binary switch face, not a multi-select marker");
         assert.ok(value.alignment <= 1, "Painted track centers on the label line, not the description");
         assert.equal(value.visibleParagraphs, 1, "The local saving and off/deletion consequence stays visible before editing");
         assert.deepEqual(value.visibleButtons, [], "No idle Save/Cancel actions when there is no change");
@@ -89,16 +89,16 @@ test("response settings has one explained switch row, native draft semantics and
         await expect(pane.locator(".assessment-applied")).toHaveText("Response saving is off. This change is not saved yet.");
         await expect(pane.getByText(/Saves recorded Copilot replies locally, excluding detected credentials/)).toBeVisible();
         await expect(pane.getByText(/Replies may be incomplete or not final/)).toBeVisible();
-        await expect.poll(() => pane.locator(".select-toggle").evaluate(node => getComputedStyle(node, "::after").transform))
-            .toBe("matrix(1, 0, 0, 1, 12, 0)");
+        await expect.poll(() => pane.locator(".switch-thumb").evaluate(node => getComputedStyle(node).transform))
+            .toBe("matrix(1, 0, 0, 1, 18, 0)");
         const boundaryOrder = await pane.evaluate(root => {
             const boundary = root.querySelector(".assessment-capture-details"), submit = root.querySelector("button[type=submit]");
             return Boolean(boundary.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING);
         });
         assert.equal(boundaryOrder, true, "Capture scope and limitations precede explicit confirmation");
         const layout = await pane.evaluate(root => {
-            const choice = root.querySelector(".settings-switch"), input = choice.querySelector("input"), track = choice.querySelector(".select-toggle");
-            const paint = getComputedStyle(track), thumb = getComputedStyle(track, "::after");
+            const choice = root.querySelector(".settings-switch"), input = choice.querySelector("input"), track = choice.querySelector(".switch-track");
+            const paint = getComputedStyle(track), thumb = getComputedStyle(track.querySelector(".switch-thumb"));
             return {
                 target: choice.getBoundingClientRect().height,
                 nativeTarget: { width: input.getBoundingClientRect().width, height: input.getBoundingClientRect().height },
@@ -135,15 +135,15 @@ test("response settings has one explained switch row, native draft semantics and
     }
     await page.emulateMedia({ forcedColors: "active" });
     const choice = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
-    const paint = () => pane.locator(".select-toggle").evaluate(node => ({
-        fill: getComputedStyle(node).backgroundColor, thumb: getComputedStyle(node, "::after").backgroundColor,
+    const paint = () => pane.locator(".switch-track").evaluate(node => ({
+        fill: getComputedStyle(node).backgroundColor, thumb: getComputedStyle(node.firstElementChild).backgroundColor,
         focus: getComputedStyle(node).outlineStyle,
     }));
     const off = await paint();
     await choice.focus(); await page.keyboard.press("Space");
     await expect(choice).toBeChecked();
-    await expect.poll(() => pane.locator(".select-toggle").evaluate(node => getComputedStyle(node, "::after").transform))
-        .toBe("matrix(1, 0, 0, 1, 12, 0)");
+    await expect.poll(() => pane.locator(".switch-thumb").evaluate(node => getComputedStyle(node).transform))
+        .toBe("matrix(1, 0, 0, 1, 18, 0)");
     const on = await paint();
     assert.notEqual(off.fill, on.fill);
     assert.ok(contrast(on.fill, on.thumb) >= 3);

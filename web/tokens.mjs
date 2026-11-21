@@ -141,6 +141,7 @@ export const screenTokens = `${tokens}
  --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
  --radius:12px;--radius-small:8px;--radius-dialog:12px;--radius-field:8px;
  --pill-weight:var(--weight-regular);
+ --action-radius:var(--radius-small);
  --icon-navigation-size:1.125rem;--icon-utility-size:18px;
  --choice-row-inset:var(--space-md);
  --control-face-inset:6px;--control-hover-duration:160ms;--control-reveal-duration:140ms;

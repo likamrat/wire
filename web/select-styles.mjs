@@ -150,11 +150,6 @@ export const selectStyles = `
 .select-all>.select-toggle {flex:none}
 .select-popup-filter.select-popup-multiple [role=listbox] {border-top:1px solid var(--rule);padding-top:4px}
 .select-popup-filter .select-footer {gap:8px;padding:10px 12px 4px}
-.select-popup-filter .select-footer>button {
- --pill-fill:var(--paper);--pill-hover:var(--paper);--pill-pressed:var(--paper);--canvas:var(--paper);
- --pill-border:var(--control);min-height:44px;border-radius:24px;font-weight:var(--weight-regular);
-}
-.select-popup-filter .select-footer>.select-apply,.select-popup-filter .select-footer>button:hover {--pill-border:var(--control)}
 .select-popup-filter .select-validation {margin:10px 12px;color:var(--muted);font-size:var(--type-caption);line-height:1.5}
 .filter-chip {min-height:44px;padding:4px var(--pill-inset);gap:var(--pill-gap);line-height:20px;border-radius:var(--radius-control)}
 .view-switch {padding:0;gap:var(--pill-gap);border-radius:var(--radius-control);background:transparent;flex-wrap:wrap;max-width:100%;flex-shrink:1}

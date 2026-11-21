@@ -46,9 +46,8 @@ export const deletionStyles = `
 #deleteDialog.decision-frame #deleteConfirmation {margin:0;padding:0;border:0}
 #deleteDialog.decision-frame #deleteSummary {font-size:var(--type-reading);line-height:var(--leading-reading)}
 :is(#deleteDialog,.deletion-dialog).decision-frame>.delete-actions {margin:0;padding:12px 24px;gap:8px;border-top:1px solid var(--rule);background:var(--paper);justify-content:flex-end}
-:is(#deleteDialog,.deletion-dialog).decision-frame button {--pill-inset:10px;--action-radius:8px;--pill-border:var(--control)}
+:is(#deleteDialog,.deletion-dialog).decision-frame button {--pill-border:var(--control)}
 :is(#deleteDialog,.deletion-dialog).decision-frame button.quiet {--pill-border:transparent}
-:is(#deleteDialog,.deletion-dialog).decision-frame button::before {inset-block:6px}
 :is(#deleteDialog,.deletion-dialog).decision-frame button:focus-visible {outline:none}
 :is(#deleteDialog,.deletion-dialog).decision-frame button:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .decision-frame .decision-status:not(:empty) {margin-top:16px;padding:12px;border:1px solid var(--control);border-radius:8px;background:var(--canvas);color:var(--ink)}

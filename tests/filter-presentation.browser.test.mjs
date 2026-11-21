@@ -104,9 +104,9 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
                 const first = popup.getByRole("option").first();
                 assert.equal(await first.getAttribute("aria-selected"), "true");
                 assert.ok(["rgba(0, 0, 0, 0)", paper].includes(await first.evaluate(node => getComputedStyle(node).backgroundColor)));
-                assert.equal(await popup.locator(".select-apply").evaluate(node => getComputedStyle(node, "::before").backgroundColor), paper);
-                assert.notEqual(await popup.locator(".select-apply").evaluate(node => getComputedStyle(node, "::before").borderColor),
-                    await popup.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => getComputedStyle(node, "::before").borderColor));
+                assert.notEqual(await popup.locator(".select-apply").evaluate(node => getComputedStyle(node, "::before").backgroundColor), paper);
+                assert.equal(await popup.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => getComputedStyle(node, "::before").backgroundColor),
+                    "rgba(0, 0, 0, 0)");
                 if (proofDir && id === "outcomeFilter") await page.screenshot({ path: path.join(proofDir, `partial-${name}.png`) });
                 await popup.getByRole("button", { name: "Cancel", exact: true }).click();
             } else {

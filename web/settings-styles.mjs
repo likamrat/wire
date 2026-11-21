@@ -10,7 +10,7 @@ export const settingsStyles = `
 .app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
 .app-update-actions {display:flex;align-items:center;gap:var(--space-sm)}
 button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--update-ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--update-ink))}
-#appUpdateApply {display:inline-flex;align-items:center;gap:.375rem}
+#appUpdateApply {display:inline-flex;align-items:center;gap:var(--pill-gap)}
 #appUpdateApply[hidden] {display:none}
 [data-settings-section=general] .settings-actions {margin-top:0}
 [data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
@@ -21,7 +21,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:1.5rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
- --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:8px;
+ --settings-field-radius:10px;--settings-nav-radius:8px;
 }
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
 .settings-view {--pill-border:var(--control);max-width:70rem;container:settings / inline-size}
@@ -130,14 +130,11 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view,.settings-view p,.settings-view summary {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view label {font-size:var(--type-small);line-height:var(--leading-control)}
 .settings-view :is(input,select,button,.select-trigger) {font-size:var(--type-control);line-height:var(--leading-control)}
-.settings-view :is(button:not(.ux-help,.ux-copy,.select-trigger),a.button-link) {--action-radius:var(--settings-action-radius)}
-.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy) {--pill-inset:10px}
-.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {inset-block:6px}
 .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible {outline:none}
 .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .settings-view .ux-disabled-help:focus-visible:has(>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)) {outline:none}
 .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline:2px solid var(--focus);outline-offset:2px}
-.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:.375em}
+.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:var(--pill-gap)}
 .settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead)>.wire-icon {width:1rem;height:1rem}
 .settings-view #reloadSettings {margin-bottom:16px}
 .settings-view :is(input[type=text],.select-trigger) {border-radius:var(--settings-field-radius)}
@@ -248,17 +245,6 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view #assessmentSetup .settings-row-copy h3 {display:flex;align-items:center;min-height:44px}
 .settings-view #assessmentSetup .settings-row-copy h3 label {cursor:pointer}
 .settings-view #assessmentSetup .settings-reply-help {margin-top:0}
-.settings-view .settings-switch {position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;cursor:pointer}
-.settings-view .settings-switch input {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}
-.settings-view .settings-switch .select-toggle {pointer-events:none}
-.settings-view .settings-switch:has(input:checked) .select-toggle {border-color:var(--toggle-on);background:var(--toggle-on)}
-.settings-view .settings-switch:has(input:checked) .select-toggle::after {transform:translateX(12px);background:var(--toggle-thumb)}
-.settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
-.settings-view .settings-switch:has(input:disabled) {cursor:not-allowed}
-.settings-view .settings-switch:has(input:disabled) .select-toggle {box-shadow:none;border-color:var(--muted);border-style:dashed}
-.settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:var(--muted)}
-.settings-view .settings-switch:hover:has(input:enabled) .select-toggle {outline:1px solid var(--control);outline-offset:2px}
-.settings-view .settings-switch:hover:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
 .settings-view #assessmentSetup .assessment-applied {font-weight:var(--weight-regular);color:var(--muted)}
 .settings-view #assessmentSetup .assessment-control-actions {justify-content:flex-start;margin:12px 0 0}
 .settings-view #assessmentSetup .assessment-control-actions:not(:has(>button:not([hidden]))) {display:none}
@@ -268,20 +254,13 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 @media(forced-colors:active) {
  .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before,
  .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline-color:Highlight}
- .settings-view .settings-switch .select-toggle {background:Canvas;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}
- .settings-view .settings-switch .select-toggle::after {background:ButtonText}
- .settings-view .settings-switch:has(input:checked) .select-toggle {background:Highlight;border-color:Highlight}
- .settings-view .settings-switch:has(input:checked) .select-toggle::after {background:HighlightText}
- .settings-view .settings-switch:has(input:disabled) .select-toggle {border-color:GrayText}
- .settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:GrayText}
- .settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline-color:Highlight}
 }
 .settings-view .settings-automatic-row {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0;margin:0;border:0}
 .settings-view .settings-automatic-row>h3,.settings-view .settings-automatic-row>p {margin:0}
 .settings-view .settings-automatic-actions {display:flex;flex-wrap:wrap;align-items:start;gap:8px;min-width:0}
 .settings-view .settings-automatic-row[data-scoring-state=paused]>p {border-inline-start:3px solid var(--warning);padding-inline-start:12px}
-.settings-view .settings-content a:not(.button-link),.settings-status-link a {text-decoration:underline;text-underline-offset:3px}
-.settings-view .settings-content a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+.settings-content :is(p,.notice,.settings-advanced)>a:not(.button-link) {text-decoration:underline;text-underline-offset:3px}
+.settings-content .settings-advanced>a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
 #settingsGeneralBack {margin-bottom:var(--space-sm)}
 #settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
 .general-appearance {border-top:1px solid var(--rule);padding-block:1.25rem .85rem}
