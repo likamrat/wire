@@ -139,6 +139,21 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
             knownOriginals.push(priorStart, priorEnd);
         }
     }
+    if (taskPrompt?.startsWith("template-")) {
+        const [prompt, request, start, end] = known;
+        const context = event("model-input", "system.message", prompt.timestamp, { role: "system",
+            content: "Invented model instructions. ".repeat(3100), interactionId: prompt.data.interactionId,
+            metadata: { variables: { invented: { enabled: true, version: 4, label: "example" } } } }, prompt.id);
+        knownOriginals = [prompt, context, { ...request, parentId: context.id }, start, end];
+        if (taskPrompt === "template-competing") {
+            const [otherPrompt, otherRequest] = chain(day, "rival", 15, true);
+            otherRequest.data.toolRequests = [{ toolCallId: start.data.toolCallId }];
+            knownOriginals.push(otherPrompt, otherRequest);
+        }
+        if (taskPrompt === "template-foreign") context.data.interactionId = prompt.data.parentAgentTaskId;
+        if (taskPrompt === "template-undeclared") context.data.metadata.originatingMessageId = prompt.data.messageId;
+        if (taskPrompt === "template-private") context.data.content += " api_key=invented-template-secret";
+    }
     const originalBytes = encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]);
     await appendFile(file, causalHooks ? originalBytes.replace('"totalNanoAiu":123', '"totalNanoAiu": 123.0') : originalBytes);
@@ -286,6 +301,26 @@ test("verified preview keeps the source, parent task, interaction and originatin
             const p = ok(r);
             assertReview(f, p);
             assert.doesNotMatch(JSON.stringify(p), /parentAgentTaskId|interactionId|invented-model/);
+        }
+        assert.deepEqual(await loadBoardState(f.context), before);
+    });
+});
+
+test("history compatibility: model input belongs to an interaction but cannot choose the call's owner", async t => {
+    for (const variant of ["linked", "competing", "foreign", "undeclared", "private"]) await t.test(variant, async t => {
+        const f = await fixture(t, { taskPrompt: "template-" + variant });
+        await f.start();
+        const before = await loadBoardState(f.context), response = await f.post("preview", { ...f.scope, mode });
+        if (["foreign", "undeclared", "private"].includes(variant)) {
+            assert.equal(response.status, 422);
+            assert.equal(response.body.code, "EXACT_EVIDENCE_UNVERIFIED");
+            assert.equal(response.body.operationId, undefined);
+        } else {
+            const review = ok(response);
+            assert.deepEqual(review.exactMembers.map(m => [m.startedAt, m.outcome]).sort(), [
+                ...(variant === "linked" ? [[at(f.day, 12), "succeeded"]] : []), [at(f.day, 22), "unknown"],
+            ]);
+            assert.doesNotMatch(JSON.stringify(review), /Invented model instructions|model-input|variables/);
         }
         assert.deepEqual(await loadBoardState(f.context), before);
     });
