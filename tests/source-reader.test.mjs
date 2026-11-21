@@ -7,6 +7,9 @@ import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { readMetadataProjection, readMetadataSnapshot, validateMetadataProjection, metadataReadVersion,
     SOURCE_METADATA_MAX_BYTES, SOURCE_METADATA_READER_VERSION } from "../lib/source-metadata.mjs";
 import { readSourceMetadata, sourceMetadataStamp } from "../lib/source-reader.mjs";
@@ -212,17 +215,77 @@ test("changes inside the actual SQL read still invalidate the source-native snap
             statement.get = () => {
                 const result = get();
                 changed = true;
-                writer.exec("UPDATE sessions SET title='Changed during read'");
+                writer.exec("UPDATE sessions SET title=title||'!'");
                 return result;
             };
         }
         return statement;
     });
+
     try {
         assert.throws(() => readMetadataSnapshot(app.file), { code: "COLLECTION_SOURCE_CHANGED" });
         assert.equal(changed, true);
+        const observation = readMetadataSnapshot(app.file, { observeChange: true });
+        assert.equal(observation.changedDuringRead, true);
+        assert.notEqual(observation.readVersion, metadataReadVersion(app.file));
+        assert.equal(observation.projection.roster[0].name, "Before read!");
     } finally { writer.close(); }
 });
+
+const selectedRow = value => {
+    const { checkedAt, ...row } = value.roster.find(row => row.sessionId === "00000000-0000-4000-8000-000000000001");
+    return JSON.stringify([value.adapter, value.schemaVersion, value.sourceIdentity, row]);
+};
+
+test("a selected read returns only the fresh Windows helper roster and its verified stamp", { skip: process.platform !== "win32" }, async t => {
+    const app = await fixture(t), execute = promisify(execFile);
+    const files = { ...app.files, windowsDatabase: app.file };
+    const script = fileURLToPath(new URL("../scripts/read-copilot-metadata.mjs", import.meta.url));
+    const writer = new DatabaseSync(app.file);
+    try {
+        writer.exec("PRAGMA journal_mode=WAL");
+        let reads = 0;
+        const result = await readSourceMetadata(files, { selection: { proof: selectedRow, verify() {} }, run: async (command, args, options) => {
+            if (command === "wslpath") return { stdout: script };
+            const response = await execute(process.execPath, args, options);
+            if (++reads === 1) writer.exec("INSERT INTO sessions VALUES('00000000-0000-4000-8000-000000000002','Other','chat',NULL,'local')");
+            return response;
+        } });
+        assert.equal(reads, 2);
+        assert.equal(result.counts.enumerated, 2, "Do not attach a current stamp to the first roster.");
+        assert.equal(result.metadataStamp, sourceMetadataStamp(files));
+    } finally { writer.close(); }
+});
+
+for (const cause of ["revoked", "replacement", "unreadable", "wrong-host", "stale-version"]) {
+    test(`selected revalidation cannot return a first observation after ${cause}`, async t => {
+        const app = await fixture(t), replacement = await fixture(t);
+        const writer = new DatabaseSync(app.file);
+        let reads = 0, revoked = false, file = app.file;
+        const files = { ...app.files, databaseFile: () => file };
+        const verify = () => { if (revoked) throw Object.assign(new Error("Retired acquisition generation."), { code: "wire_access_revoked" }); };
+        try {
+            writer.exec("PRAGMA journal_mode=WAL; INSERT INTO projects VALUES('initial','Initial WAL state')");
+            const failure = readSourceMetadata(files, { selection: { proof: selectedRow, verify }, run: async command => {
+                if (command === "wslpath") {
+                    if (reads === 1 && cause === "revoked") revoked = true;
+                    if (reads === 1 && cause === "replacement") file = replacement.file;
+                    return { stdout: "C:\\owned\\read-copilot-metadata.mjs" };
+                }
+                reads++;
+                if (reads === 2 && cause === "unreadable") throw Object.assign(new Error("Timed out"), { killed: true });
+                const reply = await fixtureResponse(file);
+                if (reads === 1) writer.exec("INSERT INTO projects VALUES('unselected','Other')");
+                if (reads === 2 && cause === "wrong-host") reply.platform = "linux";
+                if (reads === 2 && cause === "stale-version") reply.readVersion = "0".repeat(64);
+                return { stdout: JSON.stringify(reply) };
+            } });
+            await assert.rejects(failure, { code: { revoked: "wire_access_revoked", unreadable: "source_reader_unavailable",
+                "wrong-host": "source_metadata_invalid" }[cause] ?? "COLLECTION_SOURCE_CHANGED" });
+            assert.equal(reads, ["revoked", "replacement"].includes(cause) ? 1 : 2);
+        } finally { writer.close(); }
+    });
+}
 
 test("helper timeout, missing runtime, excessive output and unsuccessful exit never fall back to local SQLite", async t => {
     const app = await fixture(t);

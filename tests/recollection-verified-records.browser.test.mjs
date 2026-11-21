@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
 import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
-import { appendFile, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+import fs, { appendFile, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { createCollector } from "../lib/collector.mjs";
@@ -214,6 +215,59 @@ test("a bound exact preview reviews only identified members, never the full day"
     assertReview(f, review);
     assert.doesNotMatch(JSON.stringify(review), /Invented discarded reply/);
     assert.deepEqual(ids(await loadBoardState(f.context)), []);
+});
+
+for (const change of ["unrelated", "selected membership", "managed event", "repeated churn"]) test(`guarded prefix metadata revalidation: ${change}`, async t => {
+    const f = await fixture(t, { large: change === "unrelated" });
+    await f.start();
+    const before = await loadBoardState(f.context);
+    const writer = new DatabaseSync(f.dbPath);
+    writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE activity_counter(n INTEGER); INSERT INTO activity_counter VALUES(0)");
+    const bump = () => writer.exec("UPDATE activity_counter SET n=n+1");
+    let readingHistory = false, checks = 0;
+    const open = fs.open, prepare = DatabaseSync.prototype.prepare;
+    const openHook = t.mock.method(fs, "open", function (file, ...args) {
+        if (file === f.file && !readingHistory) { readingHistory = true; bump(); }
+        return open.call(this, file, ...args);
+    });
+    syncBuiltinESMExports();
+    t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+        const statement = prepare.call(this, sql);
+        if (readingHistory && sql === "PRAGMA user_version") {
+            const get = statement.get.bind(statement);
+            statement.get = () => {
+                const result = get();
+                checks++;
+                if (checks === 1 && change === "selected membership") {
+                    writer.prepare("UPDATE sessions SET archived_at=? WHERE id=?").run(at(f.day, 0), f.sourceId);
+                } else if (checks === 1 && change === "managed event") {
+                    writer.prepare("DELETE FROM session_managed_mcp_event_display_names WHERE session_id=? AND event_id='start-known'").run(f.sourceId);
+                } else if (checks === 1 || change === "repeated churn") bump();
+                return result;
+            };
+        }
+        return statement;
+    });
+    try {
+        const response = await f.post("preview", { ...f.scope, mode });
+        assert.equal(checks, 2, "One observed SQL snapshot and one fully fenced verification");
+        if (change === "unrelated") {
+            const part = ok(response);
+            assert.equal(part.phase, "reading");
+            assert.ok(part.progress.remainingBytes > 0);
+            assert.equal(part.exactMembers, undefined);
+            const review = ok(await f.post("preview", { operationId: part.operationId, continuation: part.continuation, mode }));
+            assertReview(f, review, 33);
+            assert.equal(review.operationId, part.operationId);
+            assert.equal(review.expiresAt, part.expiresAt);
+        } else {
+            assert.equal(response.status, 409);
+            assert.equal(response.body.code, change === "repeated churn" ? "COLLECTION_SOURCE_CHANGED" : "RECOLLECTION_SELECTION_CHANGED");
+            assert.equal(response.body.operationId, undefined);
+            assert.equal(response.body.exactMembers, undefined);
+        }
+        assert.deepEqual(await loadBoardState(f.context), before);
+    } finally { openHook.mock.restore(); syncBuiltinESMExports(); writer.close(); }
 });
 
 test("exact preview can finish validating a dense, disjoint hook without changing ordinary collection", async t => {

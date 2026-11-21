@@ -97,7 +97,7 @@ image requests alone do not renew it.
 If unrelated metadata changes during a profile read, WIRE makes one fresh
 read-only check of the selected profile. It accepts matching profile facts from
 the same database, not an old cached identity; changed or unreadable results
-remain unavailable. History collection keeps its whole-metadata change checks.
+remain unavailable. Ordinary roster discovery keeps its whole-metadata change checks.
 The display association neither grants access nor assigns ownership of history.
 
 ### Native metadata reads
@@ -118,6 +118,11 @@ The source reader preserves these checks:
 - Metadata changes during publication require a fresh bounded projection and
   unchanged selected-source eligibility, membership and provenance. Source-file,
   authority or store conflicts still refuse.
+- During an authorized selected-chat read, a concurrent metadata commit can
+  trigger one fresh read-only transaction. WIRE requires the same database,
+  selected mappings and managed event identities. Only the fresh transaction's
+  fully checked stamp can advance the read. If metadata changes again during
+  that check, or access is withdrawn, WIRE refuses rather than using the first result.
 - Final pre-write validation allows one fresh membership check before the
   same rename. A second freshness change refuses; no write is repeated or
   interrupted write relabeled as success.
