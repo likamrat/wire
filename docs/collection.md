@@ -545,6 +545,10 @@ retained fields. It neither truncates the prompt to fit nor retains the
 assistant's discarded text. This does not make an unresolved reference safe.
 If multiple saved parents claim the original prompt, or its saved parent is
 ineligible, WIRE does not treat that prompt as missing to recover the call.
+For a newly verified human prompt, the assistant request may exceed the
+individual-record limit because of reply text alone. WIRE screens the full
+original, keeps only the bounded request, and requires an app-mapped start.
+The prompt, call and completion still have to qualify independently.
 
 An unrelated external-tool request or canvas record can be classified when
 its matching close is the next original event. The supported forms carry no
