@@ -136,7 +136,9 @@ Every civil day is available in **Data table**. Long single-series charts
 space out date labels to show more of the period at once. If the chart
 scrolls, the dates in view are shown below it; the index initially shows
 the span with the most calls. Custom ranges over 90 days page through
-days without changing full-period totals. Dates use the display time zone and
+days without changing full-period totals. The table caption identifies the daily
+rows shown. Use **Earlier days** or **Later days** to change pages; at either
+end, keyboard focus moves to the direction still available. Dates use the display time zone and
 include both endpoints; choosing older dates does not collect older history.
 
 **Filters** changes the activity included, even while a chart is maximized.

@@ -9,7 +9,7 @@ import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildTrends } from "../lib/trends.mjs";
 import { assessmentOverview, cachedAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
+import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, fulfillFixtureUpdateStatus, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const visiblePanel = page => page.locator(".trends-panel:visible");
@@ -39,6 +39,7 @@ async function setup(t, frontend, records) {
     page.setDefaultTimeout(5000);
     // Nothing connects to the address: use the real build and both production projections entirely in memory.
     await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route, url)) return;
         const request = route.request(), address = new URL(request.url()), p = address.pathname;
         if (address.origin === url && request.method() === "GET") {
             if (request.isNavigationRequest()) return route.fulfill({ contentType: "text/html", body: renderHtmlShell(capability, "fixture", UNBOUND_FIXTURE_BOOTSTRAP, assets) });

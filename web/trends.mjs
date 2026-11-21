@@ -141,6 +141,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     primaryColumn.append(toolbar, overview); workspace.append(index, primaryColumn);
     const tooltip = el("aside", "trends-tooltip"); tooltip.id = "trendsTooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
     const paging = el("div", "trends-paging"), inspection = el("section", "trends-inspection");
+    const earlierDays = button("Earlier days", () => { if (current()) void read({ range, period, filters, offset: Math.max(0, offset - 90) }); });
+    const laterDays = button("Later days", () => { if (current()) void read({ range, period, filters, offset: offset + 90 }); });
+    const pageSpan = el("span", "muted");
+    paging.append(earlierDays, pageSpan, laterDays);
+    paging.hidden = true;
     const exactButton = button("View numbers", () => {
         exact.hidden = !exact.hidden; exactButton.textContent = exact.hidden ? "View numbers" : "Hide numbers";
         if (!exact.hidden) paintExact();
@@ -775,10 +780,14 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         scrub(exact); if (!family || exact.hidden) return;
         drawTable(cards.get(family), exact, false);
     }
+    function dayPage() {
+        return `${offset + 1}–${offset + data.window.count} of ${data.window.totalDays} days`;
+    }
     function drawTable(card, target, includePeriod) {
         const family = card.id, source = viewData(card), table = el("table", "exact-data-table"), header = el("tr");
         const head = el("thead"), body = el("tbody");
-        table.append(el("caption", "", `${families[family].label} · ${formatRange()}`));
+        const windowLabel = source.window.count < source.window.totalDays ? ` · Daily rows: ${dayPage()}` : "";
+        table.append(el("caption", "", `${families[family].label} · ${formatRange()}${windowLabel}`));
         for (const label of ["Date", ...source.definitions[family].map(value => value.label), "Interactions", "Calls"]) {
             const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
         }
@@ -833,12 +842,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         for (const card of cards.values()) paintCard(card, dateRange);
         const feedbackHost = cards.get(family ?? (allCharts ? order[0] : activeMeasure)).panel;
         if (feedback.parentElement !== feedbackHost) feedbackHost.append(feedback);
-        paging.replaceChildren(); paging.hidden = data.window.totalDays <= 90;
+        paging.hidden = data.window.totalDays <= 90;
         if (!paging.hidden) {
-            const previous = button("Earlier days", () => void read({ range, period, filters, offset: Math.max(0, offset - 90) }));
-            const next = button("Later days", () => void read({ range, period, filters, offset: offset + 90 }));
-            previous.disabled = offset === 0; next.disabled = offset + data.window.count >= data.window.totalDays;
-            paging.append(previous, el("span", "muted", `${offset + 1}–${offset + data.window.count} of ${data.window.totalDays} days`), next);
+            const focused = doc.activeElement;
+            earlierDays.disabled = offset === 0; laterDays.disabled = offset + data.window.count >= data.window.totalDays;
+            pageSpan.textContent = dayPage();
+            if (focused === earlierDays && earlierDays.disabled) laterDays.focus({ preventScroll: true });
+            else if (focused === laterDays && laterDays.disabled) earlierDays.focus({ preventScroll: true });
         }
         paintInspection(); paintExact();
     }
@@ -860,7 +870,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const selectedText = doc.getSelection();
         if (selectedText && (root.contains(selectedText.anchorNode) || root.contains(selectedText.focusNode))) selectedText.removeAllRanges();
         if (dialog.open) dialog.close(); scrub(dialogBody); scrub(dialogTitle); dialogOrigin = null;
-        for (const node of [qualification, inspectionCaption, inspectionBody, exact, paging, status, restrictionText]) scrub(node);
+        paging.hidden = true; earlierDays.disabled = laterDays.disabled = true;
+        for (const node of [qualification, inspectionCaption, inspectionBody, exact, pageSpan, status, restrictionText]) scrub(node);
         inspectionBody.style.minHeight = ""; inspectionKey = ""; root.setAttribute("aria-busy", "false");
     }
     function update() {

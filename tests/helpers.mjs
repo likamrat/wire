@@ -5,6 +5,18 @@ import { replaceEvidence } from "../lib/store.mjs";
 import { buildExportCatalog } from "../lib/export-selection.mjs";
 import { collectorFor } from "../lib/collector.mjs";
 import { AUTOMATIC_SCORE_METHOD, planAutomaticScore } from "../lib/automatic-score-policy.mjs";
+import { createUpdateBridge } from "../lib/update-bridge.mjs";
+
+// Exercise the normal startup status read without connecting a fixture to an updater.
+const unmanagedUpdates = createUpdateBridge({ channel: {} });
+export async function fulfillFixtureUpdateStatus(route, origin) {
+    const request = route.request();
+    if (request.method() !== "POST" || request.url() !== `${origin}/api/app-update`) return false;
+    const body = request.postDataJSON();
+    if (body?.action !== "status" || Object.keys(body).length !== 1) return false;
+    await route.fulfill({ json: await unmanagedUpdates.request(body) });
+    return true;
+}
 
 // Fake-HTTP UI fixtures only; real runtimes must provide their own handshake descriptor.
 export const UNBOUND_FIXTURE_BOOTSTRAP = Object.freeze({
