@@ -587,7 +587,9 @@ action after confirmed first approval.
 ### Categories and setting search
 
 Settings opens in **General**, with the installed WIRE build, last check and
-**Check for updates** together above the automatic-check switch. Below updates,
+**Check for updates** together above the automatic-check switch. The check button
+turns green when an update is available, even after the notice is dismissed.
+It still only checks; **Update** installs the build. Below updates,
 the current palette and mode link to Themes, and the effective time zone links
 to Regional. Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and

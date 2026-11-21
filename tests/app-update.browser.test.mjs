@@ -208,8 +208,10 @@ test("a managed launcher reporting manual-only shows instructions and never sche
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
-test("the Update action stays green and accessible in dark and narrow light Settings", async t => {
-    const { page } = await workspace(t);
+test("Check for updates signals availability in both themes and stays check-only after Dismiss", async t => {
+    const { page, state, actions } = await workspace(t);
+    const check = page.getByRole("button", { name: "Check for updates" });
+    const fill = button => button.evaluate(node => getComputedStyle(node, "::before").backgroundColor);
     for (const [theme, width] of [["dark", 1280], ["light", 390]]) {
         await page.setViewportSize({ width, height: 900 });
         await chooseTheme(page, theme);
@@ -222,6 +224,8 @@ test("the Update action stays green and accessible in dark and narrow light Sett
                 height: node.getBoundingClientRect().height };
         });
         assert.ok(paint.rgb && paint.rgb[1] > paint.rgb[0] && paint.rgb[1] > paint.rgb[2], `${theme}: ${paint.rgb}`);
+        await expect(check).toBeVisible();
+        assert.equal(await fill(check), await fill(page.locator("#appUpdateApply")));
         assert.ok(paint.height >= 44);
         assert.equal(paint.overflow, false);
         if (process.env.WIRE_APP_UPDATE_PROOFS) {
@@ -229,6 +233,18 @@ test("the Update action stays green and accessible in dark and narrow light Sett
             await page.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, `${theme}-${width}.png`) });
         }
     }
+    const availableFill = await fill(check);
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect(page.locator("#appUpdateNotice")).toBeHidden();
+    assert.equal(await fill(check), availableFill);
+    for (const phase of ["current", "error", "unknown", "manual"]) {
+        Object.assign(state, { phase, message: `Fixture ${phase}` });
+        await check.click();
+        await page.mouse.move(0, 0);
+        await expect(page.locator("#appUpdateStatus")).toContainText(state.message);
+        await expect.poll(() => fill(check)).not.toBe(availableFill);
+    }
+    assert.deepEqual(actions.map(a => a.action), ["status", "dismiss", "check", "check", "check", "check"]);
 });
 
 test("unfinished settings and report selection block activation from the normal React shell", async t => {

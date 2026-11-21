@@ -30,6 +30,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     }
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
+        manual.classList.toggle("app-update-action", Boolean(available));
         const shown = available && state.candidate !== state.dismissed;
         notice.hidden = !shown && !success && !result;
         $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
