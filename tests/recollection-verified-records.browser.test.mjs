@@ -153,6 +153,7 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         if (taskPrompt === "template-foreign") context.data.interactionId = prompt.data.parentAgentTaskId;
         if (taskPrompt === "template-undeclared") context.data.metadata.originatingMessageId = prompt.data.messageId;
         if (taskPrompt === "template-private") context.data.content += " api_key=invented-template-secret";
+        if (taskPrompt === "template-budget") context.data.metadata.variables.invented.label = "z".repeat(18 * 1024);
     }
     const originalBytes = encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]);
@@ -307,13 +308,17 @@ test("verified preview keeps the source, parent task, interaction and originatin
 });
 
 test("history compatibility: model input belongs to an interaction but cannot choose the call's owner", async t => {
-    for (const variant of ["linked", "competing", "foreign", "undeclared", "private"]) await t.test(variant, async t => {
+    const reasons = { foreign: "not linked to the same prompt", undeclared: "unsupported role or template layout",
+        private: "excluded by the privacy check", budget: "template fields exceed the individual-record limit" };
+    for (const variant of ["linked", "competing", ...Object.keys(reasons)]) await t.test(variant, async t => {
         const f = await fixture(t, { taskPrompt: "template-" + variant });
         await f.start();
         const before = await loadBoardState(f.context), response = await f.post("preview", { ...f.scope, mode });
-        if (["foreign", "undeclared", "private"].includes(variant)) {
+        if (Object.hasOwn(reasons, variant)) {
             assert.equal(response.status, 422);
             assert.equal(response.body.code, "EXACT_EVIDENCE_UNVERIFIED");
+            assert.ok(response.body.error.includes(reasons[variant]), response.body.error);
+            assert.doesNotMatch(response.body.error, /api_key|invented-template-secret|Invented model instructions/);
             assert.equal(response.body.operationId, undefined);
         } else {
             const review = ok(response);

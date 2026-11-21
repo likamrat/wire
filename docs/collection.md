@@ -573,6 +573,9 @@ prompt, WIRE can verify their shared interaction ID and bounded template
 metadata (`promptVersion` and JSON `variables`). It screens the complete
 instruction but does not keep it or use it to choose a call's owner. A
 second request claiming the same call still excludes the call.
+If an instruction prevents the review, WIRE distinguishes an unverified
+prompt link, an unsupported template, excess template size, incomplete
+original verification and a privacy exclusion without showing the contents.
 
 If the original prompt exactly matches a single saved parent in this chat,
 WIRE can keep that parent and its recorded author, including an agent author,
