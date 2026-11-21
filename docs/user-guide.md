@@ -333,7 +333,9 @@ placed in URLs or saved as a persistent Search index.
 Open **Settings** at the bottom of the left sidebar and type in **Search
 settings**. Matching destinations appear under their categories.
 Settings opens in **General**. **Check for updates** checks WIRE itself, not
-your Copilot history. Turning off automatic checks leaves manual checks available.
+your Copilot history. On [supported installations](development.md#updating-wire),
+you can check with automatic checks off. If WIRE says this copy is managed
+manually, use its usual update process instead.
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network
 diagnostic; `city` finds Time zone.

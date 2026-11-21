@@ -24,13 +24,13 @@ export const settingsMarkup = `
     <h2 id="generalTitle" tabindex="-1">General</h2>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
-      <p id="appUpdateManual" hidden>Update this installation manually: finish drafts and resolve pending operations, then stop only this WIRE instance. Follow the update instructions in the README for your checkout and restart at the same address.</p>
+      <p id="appUpdateManual" hidden>Use this installation's usual update process. Finish drafts and resolve pending saves or deletions first. Keep the same data folder and address.</p>
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy"><h3 id="appUpdateAutoLabel">Automatically check for updates</h3>
-      <p id="appUpdateAutoHelp">Check when WIRE opens and daily while it stays open. When off, you can still check manually.</p></div>
+      <p id="appUpdateAutoHelp"></p></div>
       <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="select-toggle" aria-hidden="true"></span></label>
     </div>
   </section>

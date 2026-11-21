@@ -19,7 +19,8 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
-    const state = { supported, automatic, installed: old, candidate: next, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
+    const state = { supported, automatic, installed: supported ? old : null, ...(supported ? {} : { packageVersion: "1.0.0" }),
+        candidate: manual ? null : next, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
         phase: manual ? "manual" : "available", message: manual ? "This copy is managed manually." : "A newer build is available." };
     const setup = { entry: assets.entry, runtimeId: originalRuntime, capability, health: { service: "workiq-evidence", protocol: 1, runtimeId: originalRuntime, build: old, clientEntry: assets.entry },
         apply: route => route.fulfill({ status: 409, json: { error: "Close the other WIRE panel first." } }) };
@@ -130,7 +131,11 @@ test("General owns the update card, legacy links and searchable controls without
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {
     const { page, actions } = await workspace(t, { renderer: "bundled", automatic: true, supported: false });
     await expect(page.locator("#appUpdateStatus")).toHaveText(/manually/);
-    await expect(page.locator("#appUpdateManual")).toContainText("README");
+    await expect(page.locator("#appUpdateVersion")).toHaveText(/Package version 1\.0\.0/);
+    await expect(page.locator("#appUpdateManual")).toContainText("this installation's usual update process");
+    await expect(page.locator("#appUpdateCheck")).toBeDisabled();
+    await expect(page.locator("#appUpdateAuto")).not.toBeChecked();
+    await expect(page.locator("#appUpdateAuto")).toHaveAccessibleDescription(/cannot check for updates in WIRE/);
     await expect(page.locator("#settingsAppUpdate")).toBeHidden(); await expect(page.locator("#appUpdateApply")).toBeHidden();
     await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     assert.deepEqual(actions, [{ action: "status" }]);
