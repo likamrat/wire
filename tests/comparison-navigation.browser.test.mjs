@@ -46,6 +46,49 @@ async function dates(page, a, b) {
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
     await ready(page);
 }
+test("Compare sections keep the period view and saved report choices across keyboard navigation and Back", async t => {
+    const app = await searchFixture(t, { records: periodFixture().records.slice(1, 5), frontend: "react", reply: false,
+        formats: ["json", "html"], reportTitles: ["Earlier weekly review", "Later weekly review"] });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, timezoneId: "UTC" });
+    await page.goto(app.runtime.url + "compare?aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");
+    await ready(page);
+    const nav = page.getByRole("navigation", { name: "Compare sections" });
+    const periods = nav.getByRole("link", { name: "Periods" }), reports = nav.getByRole("link", { name: "Saved reports" });
+    await page.getByRole("button", { name: "By tool", exact: true }).click();
+    await ready(page);
+    await expect(periods).toHaveAttribute("aria-current", "page");
+    await periods.focus(); await page.keyboard.press("Tab"); await expect(reports).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(reports).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#reportTaskNav")).toBeHidden();
+    const picker = page.locator("#comparisonWorkspace");
+    for (const [label, bundle] of [["Earlier report", app.bundles[0]], ["Later report", app.bundles[1]]]) {
+        await picker.getByRole("combobox", { name: label, exact: true }).click();
+        await page.locator(`.select-popup [data-value="${bundle.bundleId}"]`).click();
+    }
+    await page.goBack(); await ready(page);
+    await expect(reports).toBeFocused();
+    await expect(page.getByRole("button", { name: "By tool", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".compare-period-key")).toContainText(/Mar 7.*Mar 9/s);
+    await reports.click();
+    await expect(picker.getByRole("combobox", { name: "Earlier report", exact: true })).toContainText("Earlier weekly review");
+    await expect(picker.getByRole("combobox", { name: "Later report", exact: true })).toContainText("Later weekly review");
+    await periods.click(); await ready(page);
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Exact numbers" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(page.getByRole("button", { name: "View numbers", exact: true })).toBeFocused();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('nav [data-nav="reports"]').click();
+    await page.locator("#viewAllSavedReports").click();
+    const libraryEntry = page.getByRole("link", { name: "Compare saved reports", exact: true });
+    await libraryEntry.click();
+    await expect(reports).toHaveAttribute("aria-current", "page");
+    await page.getByRole("link", { name: "Back to saved reports", exact: true }).click();
+    await expect(libraryEntry).toBeFocused();
+});
 test("exact-call captions follow narrowed membership", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await page.locator("#comparePeriods").click(); await ready(page);
