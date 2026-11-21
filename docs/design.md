@@ -99,6 +99,23 @@ does not establish answer quality. Service colors identify services, not health.
 Agent and user authorship use their own roles, not service or quality colors.
 Forced colors retain explicit words, shapes and system focus.
 
+Carry the role with the fact, not the page. Recorded **tool completion** and
+**tool failure** use `--tool-positive` and `--tool-negative` in the chart,
+card, search result and reader. A **returned API issue** uses
+`--screen-returned-issue` even when its parent call completed. Partial or
+unconfirmed is `--warning`; unknown is `--unknown`. A count of interactions
+with *either* kind of problem uses a neutral chart ink, not a failure verdict.
+Service and author colors identify the subject; selected, pending and disabled
+controls use interaction roles rather than success or failure colors.
+
+**Keep chat details** uses `--disclosure-risk` (red), **Mask detected details**
+uses `--disclosure-masked` (blue), and omitted text is neutral. Use the same
+ink for the label, icon and action edge through the choice, preview and
+confirmation. Tint a disclosure action with 7% risk ink mixed into its own
+paper. A modal scrim dims only the background; never compensate by brightening
+the underlying warning. A destructive commit has its own filled danger action.
+These are screen roles, not new inks for saved documents.
+
 Current palette, material roles, font scale and geometry live in
 [`web/tokens.mjs`](../web/tokens.mjs) and the existing component styles.
 Light screens use quiet cool-neutral surfaces; Dark uses separately designed

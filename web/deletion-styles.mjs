@@ -52,9 +52,11 @@ export const deletionStyles = `
 :is(#deleteDialog,.deletion-dialog).decision-frame button:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .decision-frame .decision-status:not(:empty) {margin-top:16px;padding:12px;border:1px solid var(--control);border-radius:8px;background:var(--canvas);color:var(--ink)}
 .decision-frame .decision-status:empty {display:none}
-:is(#deleteDialog,.deletion-dialog).decision-frame[data-decision-kind=destructive]:is([data-decision-phase=confirm],[data-decision-phase=unknown])>.delete-heading {background:color-mix(in srgb,var(--danger) 8%,var(--paper));border-bottom-color:var(--danger)}
+:is(#deleteDialog,.deletion-dialog).decision-frame[data-decision-kind=destructive][data-decision-phase=confirm]>.delete-heading {background:color-mix(in srgb,var(--danger) 8%,var(--paper));border-bottom-color:var(--danger)}
 :is(#deleteDialog,.deletion-dialog).decision-frame[data-decision-kind=destructive] :is(#deleteWarningIcon,.delete-warning-icon) {color:var(--danger)}
 .decision-frame[data-decision-kind=destructive] .decision-status.error {border-color:var(--danger);color:var(--ink)}
+:is(#deleteDialog,.deletion-dialog).decision-frame[data-decision-phase=unknown] :is(#deleteWarningIcon,.delete-warning-icon) {color:var(--warning)}
+.decision-frame[data-decision-phase=unknown] .decision-status:not(:empty) {border-color:var(--warning)}
 :is(#deleteDialog,.deletion-dialog).decision-frame[data-decision-phase=complete] :is(#deleteWarningIcon,.delete-warning-icon) {color:var(--success)}
 :is(#deleteDialog,.deletion-dialog).decision-frame:is([data-decision-phase=pending],[data-decision-phase=checking]) :is(#deleteWarningIcon,.delete-warning-icon) {color:var(--muted)}
 :is(#deleteDialog,.deletion-dialog).decision-frame [data-decision-action]:enabled {--pill-fill:var(--accent-fill);--pill-ink:var(--on-accent);--pill-border:var(--accent-fill);--pill-hover-border:var(--accent-fill);--pill-hover:var(--primary-hover);--pill-pressed:var(--primary-pressed);color:var(--on-accent)}

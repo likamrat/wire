@@ -10,6 +10,68 @@ import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast, rgb, measureChartPaint, measureControlSurface, visibleInk } from "./color-measurements.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
+test("tool, returned issue and disclosure inks follow the evidence through each screen palette", {timeout:180000}, async t => {
+    const app = await searchFixture(t, {records:reviewRecords(), reply:false, frontend:"react"});
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({viewport:{width:1440,height:1000}, reducedMotion:"reduce", timezoneId:"UTC"});
+    await page.clock.setFixedTime(new Date("2026-11-18T16:00:00Z"));
+    const minimums = [], output = process.env.WIRE_ROLE_COLOR_PROOFS;
+    if (output) await mkdir(output, {recursive:true});
+    for (const palette of ["petrol","blue","linen","midnight","field"]) for (const mode of ["light","dark"]) {
+        await page.goto(app.runtime.url+"settings?section=themes");
+        await chooseTheme(page,mode); await page.locator(`.palette-option:has(#palette-${palette})`).click();
+        await expect(page.locator("html")).toHaveAttribute("data-evidence-palette",palette);
+        const paint = async (locator,role,property="color") => {
+            if (property === "stroke") {
+                // Horizontal SVG lines have no bounding-box height but still paint a stroke.
+                assert.ok(await locator.evaluate(line => line.ownerSVGElement.checkVisibility()
+                    && line.ownerSVGElement.getBoundingClientRect().height > 0 && line.getTotalLength() > 0
+                    && parseFloat(getComputedStyle(line).strokeWidth) > 0));
+            } else await expect(locator).toBeVisible();
+            const expected=await locator.evaluate((n,role)=>getComputedStyle(n).getPropertyValue(role).trim(),role);
+            const ink=await locator.evaluate((n,p)=>getComputedStyle(n)[p],property);
+            assert.deepEqual(rgb(ink),rgb(expected),`${palette}/${mode} ${role}: ${await locator.textContent()}`);
+            const p=await locator.evaluate(measureControlSurface);
+            if(property==="color"){
+                const ratio=contrast(p.ink,p.face);minimums.push({palette,mode,role,ratio});
+                assert.ok(ratio>=4.5,`${palette}/${mode} ${role} ${ratio}`);
+            } else assert.ok(contrast(ink,p.backdrop)>=3,`${palette}/${mode} ${role} against ${p.backdrop}`);
+        };
+        await page.goto(app.runtime.url+"#analyze?range=custom&from=2026-11-10&to=2026-11-16");
+        const card=page.locator('[data-view-key="request:review-plural-activity"]');
+        await paint(page.locator(".card-outcome.result-tone-success").first(),"--tool-positive");
+        await paint(card.locator(".card-failure"),"--tool-negative");
+        await paint(card.locator(".returned-issue-ink").first(),"--screen-returned-issue");
+        await card.locator(".card-failure").click();
+        await paint(page.locator("#requestContent .reader-call-summary .result-status.result-tone-failure, #requestContent .reader-call-summary .recorded-result.failure:not(.result-explained)").first(),"--tool-negative");
+        await page.locator("#closeContextSidebar").click();
+        await page.goto(app.runtime.url+"trends?section=overview");
+        await paint(page.locator("#trendsOverviewPlot [data-trend-line]").first(),"--chart-mark-high","stroke");
+        await page.goto(app.runtime.url+"compare?aFrom=2026-11-10&aTo=2026-11-12&bFrom=2026-11-14&bTo=2026-11-16");
+        await paint(page.locator(".compare-outcome-paint.compare-mark-success").first(),"--tool-positive","backgroundColor");
+        await paint(page.locator(".compare-outcome-paint.compare-mark-failure").first(),"--tool-negative","backgroundColor");
+        await page.getByRole("button",{name:"View calls",exact:true}).click();
+        await paint(page.locator(".compare-record-failure:visible").first(),"--tool-negative");
+        await navigateMain(page,"reports");
+        const choice=page.locator("#reportPrivacyChoice"); await choice.click();
+        const option=page.locator('#reportPrivacyOptions .prompt-choice:has(input[value=original])');
+        await option.click(); await paint(option.locator("strong"),"--disclosure-risk");
+        await page.getByRole("button",{name:"Done",exact:true}).click();
+        await paint(choice,"--disclosure-risk");
+        await prepareLandingReport(page,"all");
+        const save=page.getByRole("button",{name:"Save report",exact:true});
+        await expect(save).toBeEnabled();await paint(choice,"--disclosure-risk");
+        await save.click();
+        const warning=page.getByRole("dialog",{name:"Save details from your chats?"});
+        await paint(warning.locator("h2 svg"),"--disclosure-risk");
+        await paint(warning.getByRole("button",{name:"Save with chat details"}),"--disclosure-risk");
+        if(output && palette==="blue")await page.screenshot({path:path.join(output,`disclosure-${mode}.png`)});
+        await warning.getByRole("button",{name:"Go back"}).click();
+        assert.equal((await loadBoardState(app.context)).exports.length,0);
+    }
+    if(output)await writeFile(path.join(output,"role-contrast.json"),JSON.stringify(minimums,null,2));
+});
+
 test("the built workbench carries each palette through screens and nested reading states", { timeout: 360000 }, async t => {
     const cleanups = [], errors = [], proof = [], output = process.env.WIRE_PALETTE_PROOFS;
     const app = await searchFixture({ after: work => cleanups.push(work) }, { records: reviewRecords(), reply: false, frontend: "react" });

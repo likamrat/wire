@@ -100,6 +100,5 @@ export const paletteTokens = Object.entries(materials).flatMap(([id, modes]) => 
    .trends-grid {stroke:var(--screen-grid)}
    .wire-search-panel {--wire-search-match:var(--accent)}
    .ux-tooltip {background:var(--screen-tip);color:var(--screen-tip-ink)}
-   .returned-issue-ink,.reader-returned-cue {color:var(--screen-returned-issue)}
  }
 }`;

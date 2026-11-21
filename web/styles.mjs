@@ -610,7 +610,7 @@ ${textAction}::before {
 ${textAction}:hover:not(:disabled)::before {background:var(--pill-hover);border-color:var(--pill-hover-border,var(--control))}
 ${textAction}:active:not(:disabled)::before {background:var(--pill-pressed)}
 ${textAction}[aria-pressed=true]::before {background:var(--accent-soft);border-color:var(--control)}
-${textAction}:not(.primary,.quiet,.danger,[data-decision-action]):hover:not(:disabled)::before {border-color:var(--ink)}
+${textAction}:not(.primary,.quiet,.danger,.chat-details-kept,[data-prompt-mode],[data-decision-action]):hover:not(:disabled)::before {border-color:var(--ink)}
 ${textAction}:disabled::before {background:transparent;border-color:var(--rule);box-shadow:none}
 ${textAction}.quiet:disabled::before {border-color:transparent}
 .number-field {position:relative;display:inline-grid;isolation:isolate;align-items:center;inline-size:max(3.75rem,calc(var(--number-digits,2)*1ch + 2.25rem));min-height:44px;flex:none}
@@ -671,12 +671,17 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 #requestContent .reader-call-summary .result-tone-success .result-status,#requestContent .reader-call-summary.result-tone-success {color:var(--tool-positive)}
 #requestContent .reader-call-summary .result-tone-failure .result-status,#requestContent .reader-call-summary.result-tone-failure {color:var(--tool-negative)}
 #requestContent .reader-call-summary .recorded-result:is(.success,.failure):not(.result-explained) {color:var(--call-status-ink)}
-.reader-call-summary .success,.wire-search-outcome.result-tone-success {--call-status-ink:var(--tool-positive)}
-.reader-call-summary .failure,.wire-search-outcome.result-tone-failure {--call-status-ink:var(--tool-negative)}
-.wire-search-outcome:is(.result-tone-success,.result-tone-failure) {color:var(--call-status-ink)}
-#homeView[data-tool-outcomes],#percentageCharts[data-layer=tool] {
+.reader-call-summary .success {--call-status-ink:var(--tool-positive)}
+.reader-call-summary .failure {--call-status-ink:var(--tool-negative)}
+:is([data-result-layer=tool] .result-tone-success,.wire-search-outcome[data-result-layer=tool].result-tone-success) {--cue-color:var(--tool-positive)}
+:is([data-result-layer=tool] .result-tone-failure,.wire-search-outcome[data-result-layer=tool].result-tone-failure) {--cue-color:var(--tool-negative)}
+:is([data-result-layer=reported-api] .result-tone-failure,.wire-search-outcome[data-result-layer=reported-api].result-tone-failure) {--cue-color:var(--screen-returned-issue)}
+#homeView[data-result-layer=tool],#percentageCharts[data-layer=tool] {
  --chart-teal-label:var(--tool-positive);--chart-teal-top:var(--tool-positive);--chart-teal-mid:var(--tool-positive);--chart-teal-base:var(--tool-positive);--chart-teal-side:var(--tool-positive);--chart-teal-cap:var(--tool-positive);
  --chart-pink-label:var(--tool-negative);--chart-pink-top:var(--tool-negative);--chart-pink-mid:var(--tool-negative);--chart-pink-base:var(--tool-negative);--chart-pink-side:var(--tool-negative);--chart-pink-cap:var(--tool-negative);
+}
+#homeView[data-result-layer=reported-api],#percentageCharts[data-layer=reported-api] {
+ --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--screen-returned-issue);--chart-pink-mid:var(--screen-returned-issue);--chart-pink-base:var(--screen-returned-issue);--chart-pink-side:var(--screen-returned-issue);--chart-pink-cap:var(--screen-returned-issue);
 }
 #requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
 .card-orientation [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
@@ -685,7 +690,8 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-orientation .result-tone-success {color:var(--tool-positive)}
 .card-orientation .card-failure {color:var(--tool-negative);font-weight:var(--weight-strong);text-underline-offset:3px}
 .card-orientation :is(.result-tone-success,.result-tone-failure) .card-outcome-face {background:color-mix(in srgb,currentColor 7%,var(--paper))}
-.card-orientation :is(.result-tone-unknown,.result-tone-other) {color:var(--muted)}
+.card-orientation .result-tone-unknown {color:var(--unknown)}
+.card-orientation .result-tone-other {color:var(--muted)}
 .card-orientation .result-tone-partial {color:var(--warning)}
 @container(max-width:21rem) {.card-orientation {grid-template-columns:minmax(0,1fr);justify-items:start}}
 .card-request-context .request-card-open {position:relative;display:block;min-block-size:44px;padding:0;padding-inline-end:2em;border:0;background:transparent;text-decoration:none;color:var(--ink);font:inherit;white-space:pre-wrap}
@@ -723,7 +729,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-panel-link:is(:hover,:focus-visible)>.wire-icon {background:var(--hover);box-shadow:inset 0 0 0 1px var(--control)}
 .card-panel-link:is(:active,[aria-expanded=true])>.wire-icon {background:var(--accent-soft)}
 .card-panel-link[aria-expanded=false]>.wire-icon:nth-of-type(2),.card-panel-link[aria-expanded=true]>.wire-icon:first-of-type {display:none}
-.card-reading-actions .result-tone-failure {color:var(--danger)}
+.card-reading-actions .returned-issue-ink,.reader-returned-cue {color:var(--screen-returned-issue)}
 .reader-call-secondary .card-identities {padding:0;border:0}
 .reader-section-jumps {display:flex;flex-wrap:wrap;gap:4px;padding-block-end:6px;border-bottom:1px solid var(--rule)}
 .reader-section-jumps button,.reader-returned-facts>summary {min-height:44px}
@@ -865,6 +871,8 @@ ${screenServiceInkStyles}
 .percentage-card[data-breakdown=outcomes] .percentage-legend-row .percentage-label {color:var(--column-label)}
 .select-option:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label,
 .select-trigger:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label {color:var(--chart-failure)}
+.result-option-value[data-result-layer=tool]:has(.result-tone-failure) .result-option-label {color:var(--tool-negative)}
+.result-option-value[data-result-layer=reported-api]:has(.result-tone-failure) .result-option-label {color:var(--screen-returned-issue)}
 @media(forced-colors:active) {
  button::before,.button-link::before {border-color:ButtonText}
  button:disabled::before {border-color:GrayText}

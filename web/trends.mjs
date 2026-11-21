@@ -46,7 +46,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     function color(id, family) {
         if (family === "authors") return authorColors[id];
         if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
-        if (family === "problems") return "var(--danger)";
+        if (family === "problems") return "var(--chart-mark-high)";
         if (family === "rhythm") return "var(--trends-series-1)";
         if (family === "timing") return id === "timing" ? "var(--trends-series-1)" : "var(--trends-series-3)";
         const key = `${family}:${id}`;

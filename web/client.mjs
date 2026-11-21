@@ -5100,8 +5100,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText(optionNotice, includesNative && !native && !setupCovered ? restriction : "");
     }
     function renderHome() {
-        $("homeView").toggleAttribute("data-tool-outcomes", workspaceState.scope?.layer === "tool");
         const layer = workspaceState.scope.layer;
+        $("homeView").dataset.resultLayer = layer;
         $("homeView").dataset.revision = String(workspaceState.evidence.revision);
         const chartType = workspaceState.route.chart || "time";
         const native = sharedNativeView();
@@ -10718,6 +10718,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (id !== "outcomeFilter") return;
             node.classList.add("result-option-value");
+            node.dataset.resultLayer = workspaceState.scope?.layer ?? "tool";
             replacePrivateChoices(node, el("span", "result-option-label", label));
             if (resultKeys.includes(value) && (workspaceState.scope?.layer !== "code-reference" || value === "unknown")) {
                 const icon = el("span", `result-legend-icon result-tone-${value}`);

@@ -773,6 +773,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         labels = focusedLabels(labels);
         const tool = value.definitions.layer === "tool";
         const node = panel(tool ? "Call results" : "Recorded results", "compare-outcomes"), finding = el("p", undefined, "compare-finding");
+        node.dataset.resultLayer = value.definitions.layer;
         const a = sides[0][1], b = sides[1][1], noun = results.columnUnit(value.definitions.layer, 2);
         const denominators = [a, b].map(side => side.analytics.resultFacet.totals.count);
         const rates = Object.fromEntries(Object.keys(results.labels(value.definitions.layer)).map(key => [key,
@@ -887,6 +888,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     function recordPanel(value, sides, labels, membershipKey, names, started, publication) {
         const node = panel(value.definitions.layer === "tool" ? "Calls in each period" : "Records in each period", "compare-evidence");
+        node.dataset.resultLayer = value.definitions.layer;
         node.dataset.viewKey = "period-evidence:" + membershipKey;
         const tabs = el("div", undefined, "compare-evidence-tabs"); tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Exact period records");
         const entries = [], records = new Map(getContext().snapshot.scenarios.map(record => [record.scenarioId, record]));
@@ -1053,7 +1055,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const outcomes = item.unit === "message-representation-observation" ? [] : ["success", "failure", "unknown", "other"]
                     .filter(key => item.baseline[key] || item.later[key]).map(key => {
                         const label = el("span", `${source}: ${unit} / ${key}`);
-                        if (key === "failure") label.style.color = "var(--danger)";
+                        if (key === "failure") label.style.color = item.unit === "native-tool-call" ? "var(--tool-negative)" : "var(--screen-returned-issue)";
+                        if (key === "success" && item.unit === "native-tool-call") label.style.color = "var(--tool-positive)";
                         return [label, number(item.baseline[key]), number(item.later[key]), signed(item.later[key] - item.baseline[key]), "-"];
                     });
                 return [[`${source}: ${unit}`, number(item.baseline.count), number(item.later.count),
@@ -1453,7 +1456,9 @@ export const periodComparisonStyles = `
 .compare-outcome-row{min-width:0}
 .compare-bar-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
 .compare-outcome-bar{height:12px;display:flex;background:var(--canvas);border-radius:2px;overflow:hidden;margin-top:6px}
-.compare-mark-success{background:var(--chart-success)}.compare-mark-failure{background:var(--chart-failure)}
+.compare-outcomes[data-result-layer=tool],.compare-evidence[data-result-layer=tool]{--compare-success:var(--tool-positive);--compare-failure:var(--tool-negative)}
+.compare-outcomes[data-result-layer=reported-api],.compare-evidence[data-result-layer=reported-api]{--compare-failure:var(--screen-returned-issue)}
+.compare-mark-success{background:var(--compare-success,var(--chart-success))}.compare-mark-failure{background:var(--compare-failure,var(--chart-failure))}
 .compare-mark-partial{background:var(--chart-partial)}.compare-mark-unknown{background:var(--chart-unknown)}
 .compare-mark-other{background:var(--warning)}.compare-mark-transport{background:var(--danger)}
 .compare-values-table,.compare-whole-table{width:100%;table-layout:fixed;border-collapse:collapse;margin:14px 0 0;font-size:.875rem}
@@ -1490,7 +1495,8 @@ export const periodComparisonStyles = `
 .compare-record-identity{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
 .compare-record-identity>a{flex-shrink:0;max-width:100%}
 .compare-record-context{font-size:.8125rem;color:var(--muted);font-weight:var(--weight-regular);min-width:0;max-width:100%}
-.compare-record-failure,.compare-record-transport{color:var(--chart-failure)}.compare-record-success{color:var(--chart-success)}
+.compare-record-failure{color:var(--compare-failure,var(--chart-failure))}.compare-record-transport{color:var(--danger)}.compare-record-success{color:var(--compare-success,var(--chart-success))}
+.compare-record-partial{color:var(--warning)}.compare-record-unknown{color:var(--unknown)}
 .compare-full-timing{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px}
 .compare-full-timing>h3,.compare-full-timing>.compare-caption{grid-column:1/-1}
 .compare-whole-measure{padding:10px 0 0;border-top:1px solid var(--surface-divider);margin-top:12px;min-width:0}
@@ -1594,17 +1600,10 @@ export const periodComparisonStyles = `
 .comparison-time-bar{display:block;width:24px;background:var(--chart-mark-high)}
 .comparison-timeline-series:last-child .comparison-time-bar{background:var(--chart-mark-low)}
 .comparison-time-date{font-size:var(--type-caption);white-space:nowrap;color:var(--muted)}
-.comparison-chart-controls:has(#comparisonQuickChoice[data-preset=errors]){--comparison-focus:var(--chart-failure)}
-.comparison-chart-controls:has(#comparisonQuickChoice[data-preset=completed]){--comparison-focus:var(--chart-success)}
-.comparison-chart-controls:has(#comparisonQuickChoice[data-preset=mine]){--comparison-focus:var(--screen-prompt-user)}
-.comparison-chart-controls:has(#comparisonQuickChoice[data-preset=agent]){--comparison-focus:var(--screen-prompt-agent)}
-#comparisonQuickChoice-control{color:var(--comparison-focus,var(--copilot-chat-title))}
-.comparison-preset-option{color:var(--copilot-chat-title)}
-.comparison-preset-option[data-preset=errors]{color:var(--chart-failure)}
-.comparison-preset-option[data-preset=completed]{color:var(--chart-success)}
-.comparison-preset-option[data-preset=mine]{color:var(--screen-prompt-user)}
-.comparison-preset-option[data-preset=agent]{color:var(--screen-prompt-agent)}
-.comparison-preset-option[data-preset=custom]{color:var(--ink)}
+.comparison-preset-option{color:var(--ink)}
+.comparison-preset-option[data-preset=completed]>.wire-icon{color:var(--tool-positive)}
+.comparison-preset-option[data-preset=mine]>.wire-icon{color:var(--screen-prompt-user)}
+.comparison-preset-option[data-preset=agent]>.wire-icon{color:var(--screen-prompt-agent)}
 .period-comparison .comparison-chart-mark{padding:0;border:0;background:transparent;box-shadow:none;color:var(--ink);border-radius:0}
 .period-comparison .comparison-chart-mark:hover{background:var(--report-note)}
 .period-comparison .comparison-chart-mark::before{display:none}

@@ -618,7 +618,7 @@ test("privacy choices have distinct readable state colors and labels in both the
                 sample.style.color = `var(${variable})`;
                 const ink = getComputedStyle(sample).color; sample.remove();
                 return { ink, paper };
-            }, ({ masked: "--search-interaction", original: "--danger", none: "--muted" })[mode]);
+            }, ({ masked: "--disclosure-masked", original: "--disclosure-risk", none: "--muted" })[mode]);
             await expect(choice).toHaveCSS("color", ink);
             colors.add(ink);
             const values = [ink, paper].map(color => luminance(color.match(/\d+/g).slice(0, 3).map(Number))).sort((a, b) => a - b);

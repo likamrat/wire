@@ -485,6 +485,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             if (format && context.formats.size > 1) meta.append(el("span", format, "wire-search-format"));
             if (outcome) {
                 const cue = el("span", undefined, "wire-search-outcome result-tone-" + outcome.key);
+                cue.dataset.resultLayer = layer;
                 cue.append(ux.icon(outcome.icon + "-compact"), document.createTextNode(outcome.label)); meta.append(cue);
             }
             const sourceTitle = !shown.title.length;

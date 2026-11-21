@@ -406,6 +406,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         if (gateScope.hidden) gate.removeAttribute("aria-describedby");
         else gate.setAttribute("aria-describedby", gateScope.id);
         gateMessage.textContent = feedback; gateMessage.hidden = !feedback;
+        gateMessage.dataset.tone = operation ? "unconfirmed" : "error";
         if (menu.matches(":popover-open")) position();
         paintNativeConnection();
     }
@@ -622,6 +623,8 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         setText(status, ms ? states[ms.state][0] : "Connection result unconfirmed");
         setText(action, label);
         setText(explanation, feedback || ""); explanation.hidden = !feedback;
+        explanation.dataset.tone = model.phase === "owner-lost" || model.phase === "unconfirmed" ? "unconfirmed"
+            : model.error?.code === "failed" || statusError ? "error" : "";
         action.disabled = !available || actionBusy || !intent && !(statusError && !model.pending.length);
         return true;
     }
@@ -843,6 +846,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             const state = ms?.state || "unavailable";
             const [label, help, actionLabel] = states[state];
             setText(status, label); setText(action, actionLabel); action.disabled = true;
+            delete explanation.dataset.tone;
             setText(explanation, ms?.reason ? connectionReason(ms.reason, lifecycle.wire) : help);
             explanation.hidden = !explanation.textContent;
         }

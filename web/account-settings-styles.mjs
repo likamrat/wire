@@ -36,6 +36,8 @@ export const accountSettingsStyles = `
 .wire-connection-account {color:var(--muted)}
 .wire-connection-row>button {max-width:18rem;margin-top:-6px}
 .wire-connection-effect {color:var(--muted)}
+:is(.wire-account-error,.wire-connection-effect)[data-tone=unconfirmed] {color:var(--warning)}
+:is(.wire-account-error,.wire-connection-effect)[data-tone=error] {color:var(--danger)}
 .wire-microsoft-enrollment {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;max-width:18rem;margin:0}
 .wire-microsoft-enrollment p {margin:0;overflow-wrap:anywhere}
 .wire-microsoft-enrollment button {justify-self:start;max-width:100%}
