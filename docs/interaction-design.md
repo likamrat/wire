@@ -601,9 +601,12 @@ Source access owns approval and paths; Collection owns cadence, Pause and
 one-time checks. Opening either area never approves a source. Search finds fixed setting
 metadata and navigates; it never clicks an action or reads private path values.
 
-The Help icon beside the header mode switch opens the single Help destination.
-Keep Settings as a labeled navigation row above the full-width account control;
-the account menu shows the complete bound identity even if a long name is clipped in the rail.
+The sidebar footer pairs the account avatar and name with Help, Feedback and
+Settings icons. The icons have accessible names and on-demand tooltips. Help
+opens the existing Help destination. Feedback opens a field for a WIRE bug or
+feature suggestion, not a rating of a recorded interaction. Only the typed text
+goes to a GitHub issue draft; posting is a separate action on GitHub. The
+account menu shows the complete bound identity even if the name is clipped.
 Keep static explanations of counts and recorded tool outcomes there. Coverage
 warnings belong with the affected activity and link to Collection status.
 
@@ -646,7 +649,7 @@ The [collection contract](collection.md#account-profile) defines the profile's
 source mapping and qualified reads.
 
 The account avatar keeps the same internal horizontal alignment throughout
-sidebar motion. Its image, name and chevron stay mounted; fade and clip the
+sidebar motion. Its image and name stay mounted; fade and clip the
 copy with the moving footer rather than switching its grid to a centered
 alignment before the rail has moved. Reversals start at the painted position.
 

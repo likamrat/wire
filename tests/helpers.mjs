@@ -102,6 +102,7 @@ export async function restoreLegacySearch(page, search) {
 export async function navigateSettings(page, category) {
     category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy", display: "themes" }[category] || category;
     if (category === "troubleshooting") {
+        if (!await page.locator("#openEvidenceHelp").isVisible()) await page.locator("#navigationToggle").click();
         await page.locator("#openEvidenceHelp").click();
         await page.locator('[data-settings-section="troubleshooting"]').waitFor({ state: "visible" });
         return;

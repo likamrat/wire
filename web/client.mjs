@@ -663,11 +663,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let reportScope = "selected";
     let reportAuthors = authorship.selection();
     mountThemeControl(theme, ux);
-    document.querySelectorAll(".primary-navigation [data-nav]").forEach(node => {
+    document.querySelectorAll("nav [data-nav]").forEach(node => {
         node.prepend(ux.icon(`navigation-${node.dataset.nav}`));
     });
     $("openEvidenceHelp").prepend(ux.icon("navigation-help"));
-    ux.tooltip($("openEvidenceHelp"), "Help", { placement: "bottom", tone: "contrast" });
+    $("wireFeedback").prepend(ux.icon("navigation-feedback"));
     for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", closeDialog: "close" })) {
         ux.utility($(id), icon, $(id).getAttribute("aria-label") || $(id).textContent);
     }
@@ -10938,6 +10938,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function navigateAccessShell(view) {
         if (!["analyze", "compare", "reports", "settings", "trends"].includes(view) || clearingAccess) return;
+        sidebar.close(false);
         initialRoute = null;
         const url = view === "analyze" ? "/" : "/" + view;
         if (api.publicationToken()) return navigate(readRoute(url, null));

@@ -72,18 +72,11 @@ export function mountSidebarNavigation(ux, preference) {
             })),
         };
     }
-    function captureFooter() {
-        const footer = $("navigationFooter");
-        const capture = node => node?.checkVisibility() ? { node, bounds: node.getBoundingClientRect() } : null;
-        return { ...capture(footer), account: capture($("wireAccountTrigger")),
-            utility: capture(footer.querySelector("[data-nav]")), gap: parseFloat(getComputedStyle(footer).columnGap) };
-    }
     function captureGeometry() {
         return {
             width: rail.getBoundingClientRect().width,
             brand: captureBrand(),
-            footer: captureFooter(),
-            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label,.wire-account-copy,.wire-account-trigger>svg")].map(node => {
+            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label,.wire-account-copy")].map(node => {
                 const style = getComputedStyle(node), bounds = node.getBoundingClientRect();
                 return { node, width: bounds.width, height: bounds.height, opacity: style.opacity,
                     paddingTop: style.paddingTop, paddingBottom: style.paddingBottom };
@@ -100,7 +93,7 @@ export function mountSidebarNavigation(ux, preference) {
     }
     content.addEventListener("click", event => {
         if (rail.hasAttribute("data-navigation-moving") && event.target instanceof Element
-            && event.target.closest("#wireAccountTrigger")) finishMotion();
+            && event.target.closest("#wireAccountTrigger,#wireFeedback")) finishMotion();
     }, { capture: true });
     function glide(from) {
         const to = captureGeometry();
@@ -112,26 +105,6 @@ export function mountSidebarNavigation(ux, preference) {
         };
         rail.dataset.navigationMoving = "";
         const width = animate(rail, [{ width: from.width + "px", minWidth: "0px" }, { width: to.width + "px", minWidth: "0px" }]);
-        const originFooter = from.footer, targetFooter = to.footer;
-        const placed = (item, footer) => ({ position: "absolute", left: item.bounds.x - footer.bounds.x + "px",
-            bottom: footer.bounds.bottom - item.bounds.bottom + "px", width: item.bounds.width + "px",
-            height: item.bounds.height + "px", maxWidth: "none", overflow: "hidden" });
-        let split = null;
-        if (originFooter.account && targetFooter.account && originFooter.account.node === targetFooter.account.node) {
-            const start = originFooter.utility.bounds.x - originFooter.account.bounds.x;
-            const end = targetFooter.utility.bounds.x - targetFooter.account.bounds.x;
-            const clearance = Math.min(originFooter.account.bounds.width, targetFooter.account.bounds.width) + targetFooter.gap;
-            split = Math.max(0, Math.min(1, (clearance - start) / (end - start)));
-            const first = placed(originFooter.account, originFooter), last = placed(targetFooter.account, targetFooter);
-            // Keep the account above Settings until the rail has room for two full targets.
-            animate(targetFooter.account.node, [{ ...first, offset: 0 },
-                { ...(collapsed ? last : first), offset: split }, { ...last, offset: 1 }]);
-        }
-        const firstFooter = { height: originFooter.bounds.height + "px" }, lastFooter = { height: targetFooter.bounds.height + "px" };
-        animate(targetFooter.node, split === null ? [firstFooter, lastFooter] : [
-            { ...firstFooter, offset: 0 }, { ...(collapsed ? lastFooter : firstFooter), offset: split }, { ...lastFooter, offset: 1 },
-        ]);
-        animate(targetFooter.utility.node, [placed(originFooter.utility, originFooter), placed(targetFooter.utility, targetFooter)]);
         const originBrand = from.brand, targetBrand = to.brand;
         animate(targetBrand.link, [
             { width: originBrand.bounds.width + "px", marginLeft: originBrand.inset + "px",
@@ -187,11 +160,55 @@ export function mountSidebarNavigation(ux, preference) {
         anchor: brand, placement: "right", tone: "contrast", avoid: headerHelpAvoid,
     });
     ux.tooltip(collapse, label, { placement: "right", tone: "contrast", avoid: headerHelpAvoid });
-    for (const node of content.querySelectorAll("[data-nav]")) {
+    for (const node of content.querySelectorAll(".primary-navigation [data-nav]")) {
         const name = node.textContent.trim();
         node.setAttribute("aria-label", name);
         ux.tooltip(node, () => !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
     }
+    const feedback = $("wireFeedback");
+    const panel = document.createElement("section");
+    panel.id = "wireFeedbackPanel";
+    panel.className = "wire-feedback-panel";
+    panel.popover = "auto";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-labelledby", "wireFeedbackTitle");
+    panel.innerHTML = `<label id="wireFeedbackTitle" for="wireFeedbackText">Report a bug or suggest a feature</label>
+        <textarea id="wireFeedbackText" placeholder="What feedback would you like to share?" aria-describedby="wireFeedbackNotice" autofocus></textarea>
+        <p id="wireFeedbackNotice">Review your draft on GitHub before posting a public issue.</p>
+        <p id="wireFeedbackError" role="alert" hidden></p>
+        <div class="wire-feedback-actions"><button type="button" id="wireFeedbackCancel">Cancel</button><button type="button" id="wireFeedbackDraft" class="primary" disabled>Open GitHub draft</button></div>`;
+    feedback.parentElement.after(panel);
+    const field = $("wireFeedbackText"), draft = $("wireFeedbackDraft"), error = $("wireFeedbackError");
+    let toggling = false;
+    for (const node of content.querySelectorAll(".footer-utilities > *")) {
+        ux.tooltip(node, () => !toggling && !panel.matches(":popover-open") ? node.getAttribute("aria-label") : "", {
+            placement: "top", tone: "contrast", avoid: () => [...node.parentElement.children].filter(sibling => sibling !== node),
+        });
+    }
+    panel.addEventListener("beforetoggle", event => {
+        toggling = true;
+        ux.hideTooltip();
+        if (event.newState === "closed") {
+            field.value = "";
+            draft.disabled = true;
+            error.hidden = true;
+        }
+    });
+    panel.addEventListener("toggle", () => { toggling = false; });
+    field.addEventListener("input", () => { draft.disabled = !field.value.trim(); error.hidden = true; });
+    $("wireFeedbackCancel").addEventListener("click", () => { panel.hidePopover(); ux.restoreFocus(feedback); });
+    draft.addEventListener("click", () => {
+        if (!field.value.trim()) return;
+        const url = new URL("https://github.com/likamrat/wire/issues/new");
+        url.searchParams.set("body", field.value);
+        if (url.href.length > 8192) {
+            error.textContent = "This draft is too long for a link. Shorten it, then add the rest on GitHub.";
+            error.hidden = false;
+            return;
+        }
+        // Only the text deliberately shared here crosses the boundary. Keep the draft if the host blocks new tabs.
+        window.open(url.href, "_blank", "noopener,noreferrer");
+    });
     preference.subscribe(state => {
         ux.hideTooltip();
         finishMotion();
@@ -266,7 +283,7 @@ export function mountSidebarNavigation(ux, preference) {
     drawer.addEventListener("cancel", event => { event.preventDefault(); close(); });
     window.addEventListener("keydown", event => {
         if (!drawer.open || event.key !== "Escape") return;
-        if (event.defaultPrevented || drawer.querySelector("#wireAccountMenu:popover-open")) return;
+        if (event.defaultPrevented || drawer.querySelector("#wireAccountMenu:popover-open,#wireFeedbackPanel:popover-open")) return;
         ux.hideTooltip();
         event.preventDefault();
         event.stopPropagation();

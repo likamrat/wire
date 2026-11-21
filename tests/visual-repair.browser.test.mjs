@@ -8,7 +8,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
 
-async function setup(t, { reports = false, rosterCount = 0 } = {}) {
+async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         Array.from({ length: 60 }, (_, index) => {
             const record = fixture("visual-repair-" + index);
@@ -35,7 +35,7 @@ async function setup(t, { reports = false, rosterCount = 0 } = {}) {
         await browser?.close(); await runtime?.close(); await access.close(); source.db.close();
         for (const work of cleanup.reverse()) await work();
     });
-    runtime = await startServer(context, exports, { port: 0, access, collector: { timers: false },
+    runtime = await startServer(context, exports, { port: 0, access, frontend, collector: { timers: false },
         githubProfile: { fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) } });
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
@@ -62,6 +62,58 @@ async function setup(t, { reports = false, rosterCount = 0 } = {}) {
     await page.evaluate(() => document.fonts.ready);
     return { page, context, records, roster };
 }
+
+for (const frontend of ["bundled", "react"])
+test(`${frontend}: sidebar feedback opens only a user-written GitHub draft`, async t => {
+    const { page } = await setup(t, { frontend });
+    const feedback = page.getByRole("button", { name: "Feedback", exact: true });
+    const help = page.getByRole("link", { name: "Help", exact: true });
+    const panel = page.getByRole("dialog", { name: "Report a bug or suggest a feature" });
+    const field = panel.getByRole("textbox"), draft = panel.getByRole("button", { name: "Open GitHub draft" });
+    const example = "Please keep the filter visible.\nA&B #1 + 👋";
+    const opens = [];
+    // Fulfill the new tab's navigation locally. No request reaches GitHub.
+    await page.context().route(url => url.hostname === "github.com", route => {
+        opens.push(route.request());
+        return route.fulfill({ contentType: "text/html", body: "<title>Intercepted issue draft</title>" });
+    });
+    await expect(help).toHaveCount(1);
+    await expect(page.locator("#navigationFooter #wireAccountTrigger img")).toBeVisible();
+    for (const [theme, layout] of [["light", "expanded"], ["dark", "collapsed"], ["dark", "drawer"]]) {
+        await chooseTheme(page, theme);
+        if (layout === "collapsed") await page.getByRole("button", { name: "Collapse navigation" }).click();
+        if (layout === "drawer") {
+            await page.setViewportSize({ width: 375, height: 800 });
+            await page.locator("#navigationToggle").click();
+        }
+        await feedback.focus(); await page.keyboard.press("Enter");
+        await expect(field).toBeFocused(); await expect(draft).toBeDisabled();
+        const bounds = await panel.boundingBox(), anchor = await feedback.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width + 1);
+        assert.ok(Math.abs(anchor.y - bounds.y - bounds.height - 6) < 2, JSON.stringify({ bounds, anchor }));
+        await field.fill("   "); await expect(draft).toBeDisabled();
+        await field.fill(example); await expect(draft).toBeEnabled();
+        if (layout === "expanded") {
+            const [tab] = await Promise.all([page.context().waitForEvent("page"), draft.click()]);
+            await expect(tab).toHaveTitle("Intercepted issue draft");
+            const url = new URL(tab.url());
+            assert.equal(url.origin + url.pathname, "https://github.com/likamrat/wire/issues/new");
+            assert.deepEqual([...url.searchParams], [["body", example]]);
+            assert.equal(opens[0].method(), "GET"); assert.equal(opens[0].headers().referer, undefined);
+            assert.equal(await tab.evaluate(() => window.opener === null), true);
+            await tab.close();
+            await panel.getByRole("button", { name: "Cancel" }).click();
+        } else await page.keyboard.press("Escape");
+        await expect(panel).toBeHidden(); await expect(feedback).toBeFocused();
+        await page.keyboard.press("Space"); await expect(field).toHaveValue("");
+        await page.keyboard.press("Escape"); await expect(feedback).toBeFocused();
+        if (layout === "drawer") {
+            await expect(page.locator("#navigationDrawer")).toBeVisible();
+            await page.keyboard.press("Escape"); await expect(page.locator("#navigationToggle")).toBeFocused();
+        }
+    }
+    assert.equal(opens.length, 1);
+});
 
 test("the loaded avatar keeps its horizontal position at collapse, reversal and settle", async t => {
     const { page } = await setup(t);

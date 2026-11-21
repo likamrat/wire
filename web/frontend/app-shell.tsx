@@ -156,7 +156,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
                     <button id="navigationToggle" className="navigation-toggle quiet" type="button"
                         aria-label="Open navigation" aria-expanded="false" aria-controls="navigationDrawer" hidden />
                     <Search />
-                    <div className="workspace-utilities"><a id="openEvidenceHelp" className="header-help" href="/settings?section=troubleshooting" aria-label="Help" data-settings-link /><div className="theme-control">
+                    <div className="workspace-utilities"><div className="theme-control">
                         <button type="button" id="themePreference" className="theme-trigger" role="switch" aria-label="Dark theme" aria-checked="false" />
                     </div></div>
                 </div></div>
@@ -181,7 +181,13 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
                 <h2 className="navigation-group-label">Analyze tools</h2><div id="analyzeReturnActions" /><div id="analyzeToolActions" />
             </section>
             <div className="navigation-bottom"><div id="navigationFooter" className="navigation-footer">
-                <nav className="primary-navigation" aria-label="Utility navigation">{nav("settings", "Settings")}</nav><div id="wireAccountEntry" hidden />
+                <div id="wireAccountEntry" hidden />
+                <nav className="footer-utilities" aria-label="Utility navigation">
+                    <a id="openEvidenceHelp" href="/settings?section=troubleshooting" aria-label="Help" data-settings-link />
+                    <button type="button" id="wireFeedback" className="icon-only" aria-label="Feedback" aria-haspopup="dialog" popoverTarget="wireFeedbackPanel" />
+                    <a href="/settings" data-nav="settings" aria-label="Settings" aria-current={state.active === "settings" ? "page" : undefined}
+                        onClick={event => navigate(event.currentTarget, event.nativeEvent)} />
+                </nav>
             </div></div>
         </>, ports.navigation)}
         {createPortal(<>
