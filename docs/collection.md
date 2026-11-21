@@ -536,6 +536,14 @@ text is not a user prompt and is not copied into the call. A linked turn
 end is checked against the completion and changes neither its outcome nor
 the receipt's incomplete-day coverage.
 
+If the original prompt exactly matches a single saved parent in this chat,
+WIRE can keep that parent and its recorded author, including an agent author,
+without writing a new prompt. The explicit request and call must agree on
+their turn; the originating prompt can be from an earlier turn. WIRE screens
+the complete original prompt and assistant request before using their bounded
+retained fields. It neither truncates the prompt to fit nor retains the
+assistant's discarded text. This does not make an unresolved reference safe.
+
 An unrelated external-tool request or canvas record can be classified when
 its matching close is the next original event. The supported forms carry no
 tool arguments or canvas input; an empty arguments object is also allowed.
@@ -552,6 +560,9 @@ supply that link.
 For an app-mapped Work IQ start already linked to the user's prompt and the
 assistant's request, the completion's parent can instead lead back through
 three adjacent hook pairs: `preToolUse`, `preMcpToolCall`, then `postToolUse`.
+For an app-mapped managed start, the MCP hook can name the exact same
+managed server as the original start instead of the literal `workiq`.
+An unrelated server name or an unmapped identifier does not establish this link.
 The start, all six original hook records and the original completion must fit
 in one read part. WIRE checks every parent link and event time, the distinct
 event and invocation IDs across the source and checkpoint, the hook session,

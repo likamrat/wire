@@ -40,7 +40,7 @@ const ids = state => state.evidence.flatMap(r => r.toolCalls.map(c => c.toolCall
 const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptToken });
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
-async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false } = {}) {
+async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -99,12 +99,22 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
     let knownOriginals = known;
     if (causalHooks) {
         const [prompt, assistant, start, completion] = known;
+        if (anchored) {
+            Object.assign(prompt.data, { source: "agent-fixture", turnId: "earlier-turn", transformedContent: "x".repeat(18000) });
+            assistant.data.content = "y".repeat(18000);
+        }
         const info = event("source-notice", "session.info", prompt.timestamp, { infoType: "timing", message: "Invented private timeline text." }, prompt.id);
         const usage = event("usage-note", "session.usage_checkpoint", prompt.timestamp, { totalNanoAiu: 123 }, info.id);
         const turn = event("request-turn", "assistant.turn_start", assistant.timestamp, { turnId: assistant.data.turnId }, usage.id);
         knownOriginals = withCausalHooks([prompt, { ...assistant, parentId: turn.id }, start, completion], sourceId);
+        if (anchored) knownOriginals[5].data.input.serverName = start.data.mcpServerName;
         knownOriginals.splice(1, 0, info, usage, turn);
         knownOriginals.push(event("request-turn-end", "assistant.turn_end", completion.timestamp, { turnId: assistant.data.turnId }, completion.id));
+        if (anchored) {
+            const [, , priorStart, priorEnd] = chain(day, "prior", 14, true, { literal: true });
+            delete priorStart.parentId;
+            knownOriginals.push(priorStart, priorEnd);
+        }
     }
     const originalBytes = encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]);
@@ -139,7 +149,7 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
     const index = JSON.parse(await readFile(indexFile));
     const checkpoint = path.join(context.dataDir, "collector", index.fingerprint, `${sourceId}.json`);
     assert.equal(JSON.parse(await readFile(checkpoint)).cursor.offset, (await stat(file)).size);
-    assert.deepEqual((await loadBoardState(context)).evidence, []);
+    assert.deepEqual(ids(await loadBoardState(context)), anchored ? ["call-prior"] : []);
     edit(db => {
         const insert = db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)");
         for (const key of ["known", "unknown", "unfinished", "unselected"]) insert.run(sourceId, "start-" + key, "Work IQ");
@@ -189,6 +199,23 @@ test("a bound exact preview reviews only identified members, never the full day"
     await f.start();
     assertReview(f, ok(await f.post("preview", { ...f.scope, mode })));
     assert.deepEqual(ids(await loadBoardState(f.context)), []);
+});
+
+test("a missing mapped call joins the existing agent prompt without rewriting it", async t => {
+    const f = await fixture(t, { causalHooks: true, anchored: true });
+    await f.start();
+    const [prior] = (await loadBoardState(f.context)).evidence;
+    assert.equal(prior.userPrompt.authorship.actor, "agent");
+    const p = ok(await f.post("preview", { ...f.scope, mode }));
+    assert.ok(p.exactMembers.some(m => m.startedAt === at(f.day, 12)));
+    assert.deepEqual(ids(await loadBoardState(f.context)), ["call-prior"]);
+    const receipt = ok(await f.post("confirm", confirm(p)));
+    await f.start();
+    assert.deepEqual(ok(await f.post("status", receiptFor(p))), receipt);
+    const parent = (await loadBoardState(f.context)).evidence.find(row => row.scenarioId === prior.scenarioId);
+    assert.deepEqual(parent.userPrompt, prior.userPrompt);
+    assert.deepEqual(parent.toolCalls.find(c => c.toolCallId === "call-prior"), prior.toolCalls[0]);
+    assert.equal(parent.toolCalls.find(c => c.toolCallId === "call-known")?.completionEventId, "end-known");
 });
 
 test("the reviewed subset and original receipts survive ordinary incremental collection and restart", async t => {

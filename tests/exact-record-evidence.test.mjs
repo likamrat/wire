@@ -66,6 +66,35 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("a mapped call can use a bounded original projection of its unchanged retained agent parent across turns", async () => {
+    const agent = change(p, { source: "agent-invented", turnId: "origin-turn", transformedContent: "x".repeat(18000) });
+    const answer = change(a, { content: "y".repeat(18000) });
+    const originals = withCausalHooks([agent, answer, s, e], sessionId);
+    originals[5].data.input.serverName = s.data.mcpServerName;
+    const { promptRecord } = await import("../lib/prompt-authorship.mjs");
+    const parent = { sourceSessionId: sessionId, scenarioId: `history-${sessionId}-${agent.id}`,
+        workloadKind: "recorded-history", userPrompt: promptRecord(retainEvent(agent, {})) };
+    const anchored = { state: { existingRecords: [parent] } };
+    const result = await scan(originals, anchored);
+    assert.equal(result.records.length, 1);
+    assert.deepEqual(result.records[0].userPrompt, parent.userPrompt);
+    assert.equal(result.records[0].promptAssociationEvidence.method, "explicit-message");
+    assert.equal(result.records[0].toolCalls[0].completionEventId, e.id);
+    for (const prior of [[], [parent, parent], [{ ...parent, sourceSessionId: "elsewhere" }],
+        [{ ...parent, userPrompt: { ...parent.userPrompt, text: "Another prompt" } }],
+        [{ ...parent, userPrompt: { ...parent.userPrompt, authorship: { actor: "user", basis: "source-user" } } }]]) {
+        await assert.rejects(scan(originals, { state: { existingRecords: prior } }), unverified);
+    }
+    const bad = structuredClone(originals); bad[5].data.input.serverName = "cc-elsewhere";
+    await assert.rejects(scan(bad, anchored), unverified);
+    await assert.rejects(scan(originals, { ...anchored, source: { ...source, managedWorkIqEventIds: [] } }), unverified);
+    await assert.rejects(scan(originals.with(0, { ...agent, checkpoint: true }), anchored), unverified);
+    await assert.rejects(scan(originals, { state: { ...anchored.state, deletion: {
+        events: [eventIdentity(sessionId, agent.id)] } } }), unverified);
+    const unknown = line("unknown-ref", "skill.context_delivered_ref", { interactionId: a.data.messageId }, 0);
+    await assert.rejects(scan([unknown, ...originals], anchored), unverified);
+});
+
 test("explicit original-record flags do not turn an ordinary source event into a replay copy", async () => {
     const direct = [p, a, s, e], baseline = await scan(direct);
     const marked = direct.map(event => ({ ...event, ephemeral: false, checkpoint: false }));
