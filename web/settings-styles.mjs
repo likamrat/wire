@@ -143,6 +143,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
 .settings-view .settings-section>h2 {margin:0}
+.settings-view [data-settings-section=general]>h2 {margin-block-end:1.5rem}
 .settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
