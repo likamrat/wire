@@ -70,7 +70,7 @@ test("Reports starts with two recent saved names; full-library controls retain t
     const shelf = page.locator("#savedReportsPanel");
     await expect(overview(page)).toHaveAttribute("aria-current", "page");
     const expectSectionIcons = async () => {
-        for (const [link, mark] of [[overview(page), "grid-2x2"], [allSaved(page), "files"]]) {
+        for (const [link, mark] of [[overview(page), "layout-grid"], [allSaved(page), "files"]]) {
             await expect(link.locator(`:scope > svg:first-child[data-lucide-icon="${mark}"][aria-hidden="true"]`)).toBeVisible();
         }
     };
