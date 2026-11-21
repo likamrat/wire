@@ -66,6 +66,24 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("an ambiguous or ineligible saved parent is not a missing prompt", async () => {
+    const originals = [p, a, s, e];
+    const { records } = await scan(originals);
+    const [record] = records;
+    const parent = { ...record, toolCalls: [{ ...record.toolCalls[0],
+        toolCallId: "prior-call", startEventId: "prior-start", completionEventId: "prior-end" }] };
+    const withParents = existingRecords => scan(originals, { state: { existingRecords } });
+    for (const existingRecords of [[parent, parent], [{ ...parent, assessmentMembershipPruned: true }],
+        [{ ...parent, userPrompt: { ...parent.userPrompt, capture: { ...parent.userPrompt.capture, conflict: true } } }]]) {
+        const result = await withParents(existingRecords);
+        assert.deepEqual([result.records.length, result.excluded], [0, 1]);
+    }
+    const other = { ...parent, sourceSessionId: "different-source", scenarioId: `history-different-source-${p.id}` };
+    for (const existingRecords of [[parent], [other]]) {
+        assert.deepEqual((await withParents(existingRecords)).records, records);
+    }
+});
+
 test("a mapped call can use a bounded original projection of its unchanged retained agent parent across turns", async () => {
     const agent = change(p, { source: "agent-invented", turnId: "origin-turn", transformedContent: "x".repeat(18000) });
     const answer = change(a, { content: "y".repeat(18000) });
