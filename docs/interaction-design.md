@@ -415,14 +415,15 @@ result authority.
 
 ### Landing and saved list
 
-Reports is one workspace: recent saved reports first, a new report outline below.
-There is no separate Create report navigation entry. Opening a saved name or
-preparing the outline replaces the landing with full-area reading. Reports-origin reading has one
+Reports opens with New report on the left and up to three recent reports on the
+right. At narrow widths the recent list follows creation. Saved library holds
+the full inventory. Preparing opens the working copy in a right-side drawer;
+opening a saved name reads the verified copy in the main workspace. Each has one
 Back to Reports action; context-qualified entries retain their own origin.
 
 The outline has five focus choices: All activity,
 Errors & failures, Completed calls, Human prompts and Agent prompts. Compare
-has its own primary destination. A narrow outline uses one focus selector.
+has its own primary destination. One focus selector works at every width.
 Changing focus shows what the report includes; it never prepares or saves.
 The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar

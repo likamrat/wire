@@ -133,7 +133,14 @@ export async function chooseTheme(page, value) {
     const filterOpen = await page.locator("#analyzeFilterDialog").count() && await page.locator("#analyzeFilterDialog").evaluate(node => node.open);
     if (filterOpen) await closeAnalyzeFilters(page);
     if (await page.locator("html").getAttribute("data-evidence-theme") !== theme) {
-        await page.getByRole("switch", { name: "Dark theme", exact: true }).click();
+        if (await page.locator("#reportPreviewDrawer:modal").count()) {
+            // On narrow screens the report owns focus. Change the shared preference in a second tab.
+            const other = await page.context().newPage();
+            try {
+                await other.goto(new URL("/reports", page.url()).href);
+                await other.getByRole("switch", { name: "Dark theme", exact: true }).click();
+            } finally { await other.close(); }
+        } else await page.getByRole("switch", { name: "Dark theme", exact: true }).click();
     }
     await page.waitForFunction((expected) => document.documentElement.dataset.evidenceTheme === expected, theme);
     if (filterOpen) await openAnalyzeFilters(page);

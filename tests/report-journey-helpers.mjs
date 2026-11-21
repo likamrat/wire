@@ -1,7 +1,5 @@
 export async function selectReportFocus(page, preset) {
-    const compact = page.locator("#reportDeskFocus");
-    if (await compact.isVisible()) return compact.selectOption(preset);
-    return page.locator(`#reportGallery [data-report-preset="${preset}"]`).click();
+    return page.locator("#reportDeskFocus").selectOption(preset);
 }
 
 export function prepareReportPreview(page) {

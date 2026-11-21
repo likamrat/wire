@@ -345,9 +345,10 @@ test("inline copy updates retain the outer screen anchor, not just iframe coordi
     const button = frame.getByRole("button", { name: "Update prompt copy", exact: true }).first();
     await frame.getByLabel("Prompt in this report", { exact: true }).first().fill("Outer reading stays here.");
     await button.scrollIntoViewIfNeeded();
-    await page.evaluate(() => scrollTo(0, 197));
+    const drawer = page.locator("#reportPreviewDrawer");
+    await drawer.evaluate(node => node.scrollTo(0, 197));
     await button.focus();
-    const position = async () => ({ outer: await page.evaluate(() => scrollY), button: await button.boundingBox() });
+    const position = async () => ({ outer: await drawer.evaluate(node => node.scrollTop), button: await button.boundingBox() });
     const before = await position();
     assert.ok(before.outer > 150);
     await expect(button).toBeInViewport();
@@ -423,7 +424,8 @@ test("the normal Reports picker preserves the exact known tool identity when ope
     await expect(row.locator(".card-identities")).toContainText("workiq-retrieve");
     await expect(row.locator(".request-card-exception").first()).toHaveText("1 tool call failed");
     await expect(row.locator(".request-card-exception").last()).toHaveText("Mail result: HTTP 403");
-    await expect(row).not.toContainText(/Access was denied|WIRE interpretation/);
+    await expect(row).toContainText("Access was denied");
+    await expect(row).not.toContainText("WIRE interpretation");
     const origin = page.url();
     const prompt = row.locator(".request-card-open");
     const body = picker.locator(".report-selection-body");
@@ -507,12 +509,9 @@ test("the normal Reports picker keeps long plural evidence readable in both them
 test("creation text choice applies to the first report without a setup or preview request", { timeout: 60000 }, async t => {
     const { page, context, requests, errors } = await setup(t);
     const choice = page.locator("#reportPrivacyChoice");
-    await expect(choice).toHaveAttribute("data-prompt-mode", "masked");
-    await expect(choice).toHaveAccessibleName("Report text: Mask detected details");
-    await choice.click();
+    await expect(page.locator('.report-before-prepare [value=masked]')).toBeChecked();
     await expect(page.locator("#additionalMasking")).toBeHidden();
     await page.locator('[name=promptMode][value=none]').check();
-    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await expect(page.locator("#reportStage1")).toBeVisible();
     const initial = await prepare(page);
@@ -560,8 +559,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
         }
         return rows;
     }
-    await page.locator("#reportPrivacyChoice").click();
-    const modes = await inspectRows("#reportPrivacyOptions .prompt-choice");
+    const modes = page.locator("#promptOptions .prompt-choice");
     const row = modes.first(), input = row.locator("input"), fill = () => row.evaluate(node => getComputedStyle(node).backgroundColor);
     await row.hover(); const hover = await fill(); assert.notEqual(hover, "rgba(0, 0, 0, 0)");
     await page.mouse.down(); assert.notEqual(await fill(), hover); await page.mouse.up();
@@ -571,6 +569,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await expect(next.locator("input")).toBeFocused();
     await expect(next.locator("input")).toBeChecked();
     await expect(next).toHaveCSS("outline-style", "solid");
+    await page.locator('#promptOptions [value=masked]').check();
     await page.keyboard.press("Escape");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await prepare(page, "all");
@@ -587,7 +586,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.keyboard.press("Escape");
     await page.locator("#reportPrivacyChoice").click();
     const omitted = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await modes.first().click(); await omitted;
+    await page.locator('#reportPrivacyOptions [value=none]').check(); await omitted;
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     const linked = page.locator("label:has(>#reportRecordedContext)");
@@ -604,12 +603,11 @@ test("privacy choices have distinct readable state colors and labels in both the
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const colors = new Set();
-        await page.locator("#reportPrivacyChoice").click();
         for (const [mode, glyph, label] of [["original", "triangle-alert", "Keep chat details"],
             ["none", "message-square-off", "Leave out prompts and replies"], ["masked", "eye-off", "Mask detected details"]]) {
             await page.locator(`[name=promptMode][value=${mode}]`).check();
-            const choice = page.locator("#reportPrivacyChoice");
-            await expect(choice).toHaveAccessibleName("Report text: " + label);
+            const choice = page.locator(`.report-before-prepare [data-prompt-mode=${mode}] strong`);
+            await expect(choice).toHaveText(label);
             await expect(choice.locator(`[data-lucide-icon=${glyph}]`)).toHaveCount(1);
             const { ink, paper } = await choice.evaluate((node, variable) => {
                 const sample = document.createElement("span");
@@ -625,11 +623,10 @@ test("privacy choices have distinct readable state colors and labels in both the
             assert.ok((values[1] + .05) / (values[0] + .05) >= 4.5, `${theme}/${mode}: ${ink} on ${paper}`);
         }
         assert.equal(colors.size, 3);
-        await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     }
     await page.emulateMedia({ forcedColors: "active" });
-    await expect(page.locator("#reportPrivacyChoice")).toHaveAccessibleName("Report text: Mask detected details");
-    await expect(page.locator("#reportPrivacyChoice [data-lucide-icon=eye-off]")).toBeVisible();
+    await expect(page.locator('.report-before-prepare [value=masked]')).toBeChecked();
+    await expect(page.locator('.report-before-prepare [data-lucide-icon=eye-off]')).toBeVisible();
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     assert.deepEqual(errors, []);
 });
@@ -652,9 +649,7 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
     await captureReport(page, "inline-copy-keeps-reading");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     const preparedCount = requests.filter(request => request.path === "/api/preview").length;
-    await page.locator("#reportPrivacyChoice").click();
     await page.locator('[name=promptMode][value=none]').check();
-    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
     assert.equal(requests.filter(request => request.path === "/api/preview").length, preparedCount);
     const state = await loadBoardState(context), added = fixture("later-private-report");
     added.capturedAt = new Date().toISOString(); added.toolCalls[0].startedAt = added.capturedAt;
@@ -680,12 +675,12 @@ test("changing privacy on the landing resumes frozen facts and keeps edited copi
 
 test("focus selection leaves Reports unprepared; explicit preview and Save preserve the frozen failure cohort", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
-    await expect(page.locator("[data-report-preset]")).toHaveCount(5);
+    await expect(page.locator("#reportDeskFocus option")).toHaveCount(5);
     await expect(page.locator(".report-progress")).toBeHidden();
     const address = page.url();
     await selectReportFocus(page, "errors");
-    await expect(page.locator("#reportPreset-errors")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator(".report-outline h3")).toHaveText("Errors & failures");
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("errors");
+    await expect(page.locator(".report-outline-description")).toContainText("Other calls");
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Prepare preview");
     await expect(page.locator(".report-frame")).toBeHidden();
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeHidden();
@@ -1017,7 +1012,7 @@ test("new library metadata and saved comparisons use frozen files and direct loc
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
-    await expect(page.locator("[data-report-preset]")).toHaveCount(5);
+    await expect(page.locator("#reportDeskFocus option")).toHaveCount(5);
     await viewAllSavedReports(page);
     await expect(page.locator(".saved-report-privacy").first()).toContainText("Detected personal details hidden");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
@@ -1102,7 +1097,7 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
 test("retained-period comparison opens its report directly and saves the accepted pair", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t, { source: periodFixture().records, route: "#analyze" });
     await page.locator("#comparePeriods").click();
-    await page.locator("#reportDeskDates").click();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     for (const [label, value] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) {
         await page.getByLabel(label, { exact: true }).fill(value);
@@ -1284,7 +1279,7 @@ test("returning to the gallery during preparation retires that result and leaves
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "scanning");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     held.resolve();
-    await expect(page.locator('[data-report-preset="errors"]')).toBeEnabled();
+    await expect(page.locator("#reportDeskFocus")).toBeEnabled();
     await expect(page.locator("#reportStage1")).toBeVisible();
     await prepare(page);
     assert.equal((await loadBoardState(context)).exports.length, 0);
@@ -1297,7 +1292,7 @@ test("one Reports entry retains an edited frozen draft across Back, explicit res
     await expect(page.locator("#pageAction")).toBeHidden();
     await expect(page.locator("#reportCreateLink")).toBeHidden();
     const initial = await prepare(page);
-    await expect(page.locator("#savedReportsPanel")).toBeHidden();
+    await expect(page.locator("#reportPreviewDrawer")).toHaveJSProperty("open", true);
     const renamed = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByLabel("Report name", { exact: true }).fill("Unfinished mailbox report"); await renamed;
     const frame = page.frameLocator(".report-frame");
@@ -1317,7 +1312,7 @@ test("one Reports entry retains an edited frozen draft across Back, explicit res
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     await expect(page.locator("#prepareReportPreview")).toBeFocused();
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Resume preview");
-    await expect(page.locator("#reportPreset-errors")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("errors");
     const sections = page.getByRole("navigation", { name: "Report sections", exact: true });
     await sections.getByRole("link", { name: "Saved library" }).click();
     await expect(sections.getByRole("link", { name: "Saved library" })).toHaveAttribute("aria-current", "page");
@@ -1476,7 +1471,7 @@ test("withdrawal scrubs retained saved-row titles and menu labels and blocks the
     assert.deepEqual(errors, []);
 });
 
-test("Reports keeps the selected focus explanation beside the list or below the narrow picker", { timeout: 60000 }, async t => {
+test("Reports keeps one focus selector with its explanation at compact and wide sizes", { timeout: 60000 }, async t => {
     const { page, requests, errors } = await setup(t);
     const proofs = process.env.WIRE_REPORT_FIRST_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -1493,15 +1488,13 @@ test("Reports keeps the selected focus explanation beside the list or below the 
         ["mine", "Human prompts", /calls made by an agent .* stay included/i],
         ["agent", "Agent prompts", /unknown author .* not included/i],
     ];
-    const list = page.getByRole("group", { name: "Report focus", exact: true });
     const compact = page.getByRole("combobox", { name: "Report focus", exact: true });
-    const outline = page.locator(".report-outline");
+    const outline = page.locator(".report-desk");
     for (const [theme, width, size] of [["light", 1280, 100], ["dark", 375, 200]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
         const narrow = width === 375;
-        await expect(narrow ? compact : list).toBeVisible();
-        await expect(narrow ? list : compact).toBeHidden();
+        await expect(compact).toBeVisible();
         if (narrow) {
             const arrow = compact.locator("..").locator('[data-icon-role="chevron"]');
             await expect(arrow).toHaveCount(1);
@@ -1515,23 +1508,13 @@ test("Reports keeps the selected focus explanation beside the list or below the 
             await expect(compact).toHaveValue("errors");
         }
         for (const [preset, title, explanation] of focuses) {
-            if (narrow) {
-                await compact.selectOption({ label: title });
-                await expect(compact).toHaveValue(preset);
-            } else {
-                const control = list.getByRole("button", { name: title, exact: true });
-                await control.press("Enter");
-                await expect(control).toBeFocused();
-                await expect(control).toHaveAttribute("aria-pressed", "true");
-                await expect(list.getByRole("button", { pressed: true })).toHaveCount(1);
-            }
-            await expect(outline.getByRole("heading", { name: title, exact: true })).toBeVisible();
+            await compact.selectOption({ label: title });
+            await expect(compact).toHaveValue(preset);
             await expect(outline.locator(".report-outline-description")).toBeVisible();
             await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
         }
-        const selectorBox = await (narrow ? compact : list).boundingBox(), sheet = await outline.boundingBox();
-        assert.ok(narrow ? sheet.y >= selectorBox.y + selectorBox.height - 1
-            : sheet.x >= selectorBox.x + selectorBox.width - 1, JSON.stringify({ selectorBox, sheet }));
+        const selectorBox = await compact.boundingBox(), description = await outline.locator(".report-outline-description").boundingBox();
+        assert.ok(description.y >= selectorBox.y + selectorBox.height - 1);
         await expect(outline.getByRole("button", { name: "Prepare preview", exact: true })).toBeEnabled();
         await capture(`gallery-${theme}-${width}-${size}`);
     }
@@ -1549,8 +1532,10 @@ test("Reports keeps the selected focus explanation beside the list or below the 
         const name = page.getByLabel("Report name", { exact: true });
         await name.focus();
         await expect(name).toHaveAccessibleName("Report name");
-        const field = await name.boundingBox(), save = await page.getByRole("button", { name: "Save report", exact: true }).boundingBox();
-        assert.ok(save.x >= field.x + field.width + 4, "Name and Save remain separate on their compact row.");
+        await page.waitForFunction(() => !document.querySelector("#reportPreviewDrawer").getAnimations().length);
+        const [field, save] = await Promise.all([name.boundingBox(), page.getByRole("button", { name: "Save report", exact: true }).boundingBox()]);
+        assert.ok(save.x >= field.x + field.width + 4 || save.y >= field.y + field.height + 4,
+            `Name and Save must remain separate (${width}/${size}): ${JSON.stringify({field,save})}`);
         await capture(`report-${theme}-${width}-${size}`);
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });

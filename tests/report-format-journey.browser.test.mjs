@@ -22,7 +22,7 @@ test("the React review fixture prepares, edits and saves real formats through th
     const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); for (const fn of cleanup) await fn(); });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" });
+    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" })).newPage();
     const errors = [], output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
@@ -127,7 +127,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); for (const fn of cleanup) await fn(); });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, colorScheme: "light" });
+    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1100 }, colorScheme: "light" })).newPage();
     page.setDefaultTimeout(10000);
     const errors = [], outside = [], receipts = [], output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
     page.on("pageerror", error => errors.push(error.message));
@@ -257,7 +257,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
         await page.locator("#reportDeskDates").click();
-        await file.click({ position: { x: 25, y: 25 } });
+        await page.keyboard.press("Escape");
         await expect(page.locator("#reportPeriodChoices")).toBeHidden();
         receipts.push({ format, prepared: true, regeneration: true, keyboard: true, themesAndNarrow: true });
     }

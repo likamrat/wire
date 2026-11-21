@@ -4588,21 +4588,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const current = reportJourney?.snapshot();
         const view = assessmentFactories.reportWorkspacePresentation(workspaceState.route, current);
         const reading = view.saved, creating = view.prepared, comparing = view.comparing;
+        const drawer = workspaceState.route.view === "reports" && creating && Boolean(api.publicationToken());
         $("reportsView").classList.toggle("report-workspace-landing", view.landing);
+        $("reportsView").classList.toggle("report-home", workspaceState.route.view === "reports" && (drawer || view.landing && workspaceState.route.task !== "library"));
         $("reportCreatePanel").hidden = reading || comparing;
-        $("savedReportsPanel").hidden = !view.landing;
+        $("savedReportsPanel").hidden = !view.landing && !drawer;
         $("comparisonWorkspace").hidden = !comparing;
         $("savedReportReader").hidden = !reading;
         const filePanel = creating && !$("reportStage3")?.hidden ? $("reportFileInspection")
             : comparing ? $("comparisonInspectionPanel1") : null;
-        $("reportsView").classList.toggle("report-file-stage", workspaceState.route.view === "reports" && Boolean(filePanel && !filePanel.hidden)
+        $("reportsView").classList.toggle("report-file-stage", !drawer && workspaceState.route.view === "reports" && Boolean(filePanel && !filePanel.hidden)
             && (comparing || filePanel.parentElement === $("reportReviewBody")));
-        if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
+        const taskHost = drawer && reportExperience ? reportExperience.backSlot : $("pagePrimaryActions");
+        if ($("reportTaskNav").parentElement !== taskHost) taskHost.append($("reportTaskNav"));
         $("reportTaskNav").hidden = workspaceState.route.view !== "reports" || reading || view.landing
             || comparing && savedEntries.get(workspaceState.route.savedEntry)?.kind !== "library-comparison";
-        if (workspaceState.route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
-            ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
-                : current.saveUnconfirmed ? "Report save status" : "Your report" : "Reports");
+        if (drawer) setText($("pageTitle"), "Reports");
         else if (workspaceState.route.view === "reports" && view.landing) setText($("pageTitle"), workspaceState.route.task === "library" ? "Saved report library" : "Reports");
         if (workspaceState.route.view === "reports" && comparing) setText($("pageTitle"), reportComparisonUI?.title() || "Compare saved reports");
         $("reportCreateLink").hidden = true;
@@ -4622,7 +4623,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const comparisonOrigin = comparing && savedEntries.get(workspaceState.route.savedEntry);
         if (comparisonOrigin?.kind === "library-comparison") setRouteLink($("reportLibraryLink"), comparisonOrigin.origin);
         syncSavedLibraryTask(view);
+        if (drawer) $("savedReportsPanel").classList.add("saved-shelf");
         reportExperience?.sync();
+        reportExperience?.syncDrawer(drawer, current?.saveUnconfirmed ? "Check save status" : current?.phase === "saved"
+            ? "Report saved" : current?.phase === "unavailable" ? "Report unavailable" : "Report preview");
     }
     function backToReports() {
         const current = reportJourney?.snapshot();
@@ -7552,9 +7556,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }).sort((a, b) => a.prepared === null ? b.prepared === null ? a.index - b.index : 1
             : b.prepared === null ? -1 : (library && workspaceState.route.order === "oldest" ? 1 : -1) * (a.prepared - b.prepared || a.index - b.index));
         if (!library) {
-            if (savedCount > 2) setText($("savedLibraryTitle"), `Recent saved reports (${count(savedCount)} total)`);
+            setText($("savedLibraryTitle"), `Recent reports (${count(savedCount)} total)`);
             const recent = el("div", "saved-shelf-rows");
-            for (const { bundle } of ordered.slice(0, 2)) {
+            for (const { bundle } of ordered.slice(0, 3)) {
                 const control = savedTitleControl(bundle, listCurrent, true, listeners);
                 control.append(ux.icon("next")); recent.append(control);
             }
@@ -9959,7 +9963,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             let keepChatDetailsConfirmed = false;
             if (localSave && activePreview.promptMode === "original") {
                 confirm.disabled = true;
-                const choice = await reportSaveWarning.choose();
+                const choice = await reportSaveWarning.choose(activePreview.formats.map(format => assessmentFactories.reportFileChoices[format].name));
                 if (!api.isCurrent(publication) || !draft.current(operation) || !activePreview || !confirm.isConnected) return;
                 confirm.disabled = false;
                 if (!choice) return;
@@ -10627,7 +10631,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     : reportScope === "selected" ? "Selected interactions" : "All retained activity",
             services: categories.entries.filter(entry => !["Multiple workloads", "Platform metadata", "Unknown"].includes(entry.id)).map(entry => entry.id),
         }),
-        choose: chooseReportPreset, changeDates: changeReportDates,
+        choose: chooseReportPreset, changeDates: changeReportDates, closePreview: backToReports,
         openDeskActivity: () => {
             if (reportSelectionBlock() || reportBaseExplicit || reportScope === "all") return;
             reportScope = "all";
@@ -10643,7 +10647,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     const savedTools = $("bundles").querySelector(".saved-library-tools");
     // Both presentations use the same panel and inventory; DOM order is also Tab order.
-    $("reportCreatePanel").before($("reportSections"), $("savedReportsPanel"));
+    $("reportCreatePanel").before($("reportSections"));
+    $("reportCreatePanel").after($("savedReportsPanel"));
     for (const [id, role] of [["reportOverviewLink", "section-overview"], ["viewAllSavedReports", "report-files"]]) {
         const link = $(id);
         link.prepend(ux.icon(role));

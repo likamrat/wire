@@ -65,7 +65,7 @@ async function expectRetired(page, key) {
     }, key), [false, "", "", ""]);
 }
 
-test("Reports starts with two recent saved names; full-library controls retain the activated item and page", { timeout: 60000 }, async t => {
+test("Reports starts with creation and three recent saved names; full-library controls retain the activated item and page", { timeout: 60000 }, async t => {
     const { page, requests, bundles } = await setup(t, 9);
     const shelf = page.locator("#savedReportsPanel");
     await expect(overview(page)).toHaveAttribute("aria-current", "page");
@@ -75,14 +75,15 @@ test("Reports starts with two recent saved names; full-library controls retain t
         }
     };
     await expectSectionIcons();
-    await expect(recent(page).locator(".saved-report-name")).toHaveText(["Fir field notes 9", "Fir field notes 8"]);
-    await expect(recent(page).locator(".saved-report-period")).toHaveText(["Nov 7–19, 2026", "Oct 28–Nov 9, 2026"]);
-    assert.ok(await shelf.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector("#reportCreatePanel")) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    await expect(recent(page).locator(".saved-report-name")).toHaveText(["Fir field notes 9", "Fir field notes 8", "Fir field notes 7"]);
+    await expect(recent(page).locator(".saved-report-period")).toHaveText(["Nov 7–19, 2026", "Oct 28–Nov 9, 2026", "Dec 29, 2025–Jan 3, 2026"]);
+    assert.ok(await shelf.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector("#reportCreatePanel")) & Node.DOCUMENT_POSITION_PRECEDING)));
     await expect(page.locator("#savedReportSearch")).toBeHidden();
     await expect(page.locator(".saved-library-row")).toHaveCount(0);
     await allSaved(page).focus();
     await page.keyboard.press("Tab");
-    await expect(recent(page).first()).toBeFocused();
+    await expect(page.locator('[name=promptMode]:checked')).toBeFocused();
+    await recent(page).first().focus();
     await holdTitle(page, "oldShelf");
     await page.keyboard.press("Enter");
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
@@ -165,10 +166,9 @@ test("compact shelf reflows at doubled text, Search opens the full library, and 
             const rect = node.getBoundingClientRect();
             return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, clipped: node.scrollWidth > node.clientWidth + 1 };
         }));
-        assert.equal(bounds.length, 2);
+        assert.equal(bounds.length, 3);
         assert.ok(bounds.every(r => r.left >= 0 && r.right <= width && !r.clipped));
-        if (width === 375) assert.ok(bounds[1].top >= bounds[0].bottom);
-        else assert.equal(bounds[1].top, bounds[0].top);
+        assert.ok(bounds[1].top >= bounds[0].bottom);
         if (process.env.WIRE_SHELF_PROOFS) {
             await mkdir(process.env.WIRE_SHELF_PROOFS, { recursive: true });
             await page.screenshot({ path: path.join(process.env.WIRE_SHELF_PROOFS, `reports-shelf-${theme}.png`) });
@@ -222,5 +222,5 @@ test("the public library reloads, a lost private filter requires explicit recove
     await expect(page.locator("#bundleList")).toContainText("No saved reports yet.");
     await expect(allSaved(page)).toBeVisible();
     const shelf = await page.locator("#savedReportsPanel").boundingBox(), creation = await page.locator("#reportCreatePanel").boundingBox();
-    assert.ok(creation.y - (shelf.y + shelf.height) >= 16);
+    assert.ok(shelf.x >= creation.x + creation.width);
 });

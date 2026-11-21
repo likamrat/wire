@@ -14,7 +14,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, current, createCalendar, fileLabel }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, fileLabel }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity", "report-all"], ["errors", "Errors & failures", "warning"],
@@ -37,12 +37,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     function button(label, action, cls = "quiet") {
         const node = el("button", cls, label); node.type = "button";
         node.addEventListener("click", event => { if (node.isConnected && current() && !node.disabled) action(event); });
-        return node;
-    }
-    function helpButton(key, label) {
-        const node = button("", () => {}, "report-help ux-help");
-        node.setAttribute("aria-label", label); node.append(ux.icon("info"));
-        ux.tooltip(node, help[key], { anchor: node.querySelector("svg"), helpOnActivate: true });
         return node;
     }
     function popover(id, title) {
@@ -76,24 +70,15 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         control.dataset.reportRange = range; period.append(control);
     }
     let deskFocus = "all";
-    const tiles = el("div", "report-tiles"); tiles.setAttribute("role", "group"); tiles.setAttribute("aria-label", "Report focus");
     const compactFocus = el("select"); compactFocus.id = "reportDeskFocus"; compactFocus.dataset.nativeSelect = "";
     const compactLabel = el("label", "report-desk-compact", "Report focus"), nativeChoice = el("span", "native-choice");
     const nativeChevron = ux.icon("chevron"); nativeChevron.classList.add("native-choice-chevron");
     nativeChoice.append(compactFocus, nativeChevron); compactLabel.append(nativeChoice);
     compactFocus.addEventListener("change", () => { if (current() && !read().locked) { deskFocus = compactFocus.value; sync(); } });
-    for (const [id, title, glyph] of presets) {
-        const row = el("article", "report-tile"); row.dataset.preset = id;
-        const control = button("", () => { deskFocus = id; sync(); }, "report-tile-open"); control.dataset.reportPreset = id;
-        control.id = "reportPreset-" + id;
-        control.append(ux.icon(glyph), el("strong", "", title));
+    for (const [id, title] of presets) {
         const option = el("option", "", title); option.value = id; compactFocus.append(option);
-        row.append(control);
-        tiles.append(row);
     }
-    const desk = el("div", "report-desk"), rail = el("div", "report-desk-focus"), sheet = el("div", "report-outline");
-    const focusHeading = el("h3", "", "Report focus"); rail.append(focusHeading, tiles, compactLabel);
-    const outlineTitle = el("h3"), outlineDescription = el("p", "report-outline-description");
+    const desk = el("div", "report-desk"), outlineDescription = el("p", "report-outline-description");
     const outlineChoices = el("div", "report-outline-choices"), outlineAction = el("div", "report-outline-action");
     const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
     const prepareLabel = prepare.firstChild;
@@ -106,17 +91,17 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const row = el("div", "report-outline-row"), caption = el("span", "report-outline-key", label);
         row.append(caption, node); return row;
     };
-    const outlineContext = el("p", "report-outline-label", "Report outline"); outlineContext.prepend(ux.icon("reports"));
-    const outlineContents = el("section", "report-outline-contents"), contentsTitle = el("h4", "", "In this report");
-    const contentsCopy = el("p"); outlineContents.append(contentsTitle, contentsCopy);
-    sheet.append(outlineContext, outlineTitle, outlineDescription, outlineChoices, outlineAction, prepareHint, outlineContents);
-    desk.append(rail, sheet); gallery.append(el("h2", "", "New report"), desk);
+    const treatment = el("div", "report-before-prepare");
+    const draftChoices = el("div", "report-draft-fields");
+    desk.append(treatment, draftChoices, outlineDescription, outlineChoices, outlineAction, prepareHint);
+    gallery.append(el("h2", "", "New report"), desk);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");
     const selectionHeader = el("header", "report-selection-header"), selectionBody = el("div", "report-selection-body");
-    const closeSelection = button("Close", () => {});
-    closeSelection.setAttribute("commandfor", selection.id);
-    closeSelection.setAttribute("command", "hide-popover");
+    const closeSelection = button("Close", () => {
+        selection.hidePopover();
+        (read().prepared ? refineButton : scopeChoice).focus({ preventScroll: true });
+    });
     selectionHeader.append(selection.firstElementChild, closeSelection);
     for (const node of [...stage.children]) if (node.id !== "reportStepTitle1" && node.id !== "reportActivityActions") selectionBody.append(node);
     selection.append(selectionHeader, selectionBody, byId("reportActivityActions"));
@@ -137,7 +122,13 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const dateButton = opener("Last 7 days", periodPanel);
     dateButton.id = "reportDeskDates";
     const privacy = popover("reportPrivacyOptions", "Report text");
-    privacy.append(byId("promptOptions"), byId("additionalMasking")); done(privacy);
+    const promptOptions = byId("promptOptions"), legend = promptOptions.querySelector("legend");
+    legend.after(promptOptions.querySelector('[value="masked"]').closest("label"));
+    for (const input of promptOptions.querySelectorAll("input")) {
+        const row = input.closest("label"); row.dataset.promptMode = input.value;
+        row.querySelector("strong").prepend(ux.icon(({masked:"hide",none:"report-no-text",original:"warning"})[input.value]));
+    }
+    privacy.append(byId("additionalMasking")); done(privacy);
     const privacyButton = opener("Mask detected details", privacy);
     privacyButton.id = "reportPrivacyChoice";
     privacyButton.setAttribute("aria-describedby", "reportPrivacyHint");
@@ -170,17 +161,47 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     refine.append(scope); done(refine);
     const refineButton = opener("Change what's included", refine);
     const formatGroup = el("div", "report-toolbar-group");
-    formatGroup.append(formatButton, helpButton("formats", "About report file formats"));
+    formatGroup.append(formatButton);
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
-    const datesRow = optionsRow("Dates", dateButton), textRow = el("div", "report-outline-row"), fileRow = optionsRow("Files to save", formatGroup);
-    outlineChoices.append(optionsRow("Activity", scopeChoice), datesRow, textRow, fileRow);
-    outlineAction.append(prepare);
+    const datesRow = optionsRow("Activity period", dateButton), fileRow = optionsRow("Files to save", formatGroup);
+    draftChoices.append(compactLabel, datesRow);
+    outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
+    outlineAction.append(el("small","","Preparing does not save or send anything."), prepare);
     periodHost.append(period, periodCaption);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
     toolbar.append(nameRow, choices, scopeCaption);
     byId("reportStage3").prepend(toolbar);
+    // Keep the prepared reader mounted: moving its iframe between hosts would reload its document.
+    const drawer = el("dialog", "report-preview-drawer"); drawer.id = "reportPreviewDrawer";
+    const drawerHeader = el("header", "report-drawer-header"), drawerTitle = el("h2", "", "Report preview");
+    drawerTitle.id = "reportDrawerTitle"; drawerTitle.tabIndex = -1;
+    drawer.setAttribute("aria-labelledby", drawerTitle.id);
+    const backSlot = el("div", "report-drawer-back");
+    drawerHeader.append(drawerTitle, backSlot);
+    const previewStage = byId("reportStage3"), errors = byId("reportJourneyError"), retry = errors.nextElementSibling;
+    const messageAnchor = doc.createComment("report messages"); errors.before(messageAnchor);
+    const background = el("section", "report-draft-background");
+    background.append(el("h2", "", "New report"));
+    const backgroundScope = el("p"); background.append(backgroundScope);
+    background.hidden = true;
+    previewStage.before(background);
+    previewStage.before(drawer); drawer.append(drawerHeader, previewStage);
+    drawer.addEventListener("cancel", event => {
+        event.preventDefault();
+        if (current() && !read().locked) closePreview();
+    });
+    const narrow = doc.defaultView.matchMedia("(max-width: 62em)");
+    const openDrawer = () => narrow.matches ? drawer.showModal() : drawer.show();
+    narrow.addEventListener("change", () => {
+        if (!drawer.open || drawer.matches(":modal") === narrow.matches) return;
+        const focus = drawer.contains(doc.activeElement) ? doc.activeElement : drawerTitle;
+        const openPanels = [...drawer.querySelectorAll(":popover-open")];
+        drawer.close(); openDrawer();
+        for (const panel of openPanels) panel.showPopover();
+        focus.focus({ preventScroll: true });
+    });
 
     const calendar = popover("reportCustomDates", "Custom dates");
     const calendarEditor = createCalendar({ root: calendar, id: "reportDate", inputIds: { from: "reportDatefrom", to: "reportDateto" }, time, ux,
@@ -229,8 +250,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const value = read();
         toolbar.hidden = !value.prepared;
         gallery.hidden = value.paired && value.prepared;
-        const privacyHost = value.prepared ? choices : textRow;
-        if (privacyGroup.parentElement !== privacyHost) privacyHost.append(privacyGroup);
+        if (privacyGroup.parentElement !== choices) choices.append(privacyGroup);
+        const privacyHost = value.prepared ? privacy : treatment;
+        if (promptOptions.parentElement !== privacyHost) privacyHost.prepend(promptOptions);
+        legend.classList.toggle("visually-hidden", value.prepared);
+        legend.textContent = value.prepared ? "Report text" : "What will the product group see?";
         if (value.prepared) {
             if (dateButton.parentElement !== choices) choices.prepend(dateButton);
             if (formatGroup.parentElement !== choices) dateButton.after(formatGroup);
@@ -247,15 +271,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
         }
-        for (const control of tiles.querySelectorAll("[data-report-preset]")) {
-            control.disabled = value.locked || value.loading;
-            control.setAttribute("aria-pressed", String(control.dataset.reportPreset === deskFocus));
-        }
         compactFocus.disabled = value.locked || value.loading; compactFocus.value = deskFocus;
-        const preset = presets.find(([id]) => id === deskFocus);
-        outlineTitle.textContent = preset[1]; outlineDescription.textContent = help[deskFocus];
-        contentsCopy.textContent = (deskFocus === "errors" ? "Recorded failures and returned API errors" : "Recorded call outcomes and returned API results")
-            + (value.options.promptMode === "none" ? ", with prompts and replies left out." : ", with the available prompt copies beside their calls.");
+        outlineDescription.textContent = help[deskFocus];
         scopeName.textContent = value.scopeLabel;
         scopeChoice.setAttribute("aria-label", "Activity: " + value.scopeLabel);
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
@@ -272,6 +289,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         setLabel(dateButton, labelDates(value.dates));
         dateButton.hidden = value.paired;
         const mode = value.options.promptMode;
+        backgroundScope.textContent = `${value.paired ? "Two-period comparison" : compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
         if (privacyMode !== mode) {
             privacyMode = mode;
             privacyButton.replaceChildren(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[mode]),
@@ -299,19 +317,38 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         privacyButton.disabled = value.locked || value.unavailable;
         const save = byId("reportSaveActions");
         if (save && save.parentElement !== saveSlot) saveSlot.append(save);
-        for (const input of doc.querySelectorAll("[name=promptMode]")) input.checked = input.value === value.options.promptMode;
+        promptOptions.disabled = value.locked || value.unavailable;
+        for (const input of promptOptions.querySelectorAll("input")) input.checked = input.value === value.options.promptMode;
         for (const input of byId("formatOptions").querySelectorAll("input")) input.checked = value.options.formats.includes(input.value);
     }
+    function syncDrawer(open, title) {
+        background.hidden = !open;
+        if (open) {
+            drawerTitle.textContent = title;
+            if (!drawer.open) {
+                drawerHeader.after(errors, retry);
+                for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) drawer.append(panel);
+                openDrawer();
+                drawerTitle.focus({ preventScroll: true });
+            }
+        } else if (drawer.open) {
+            closeOptions(); drawer.close();
+            messageAnchor.after(errors, retry);
+            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) root.append(panel);
+        }
+    }
     return {
-        sync, openCalendar, showSelection, selectionReturn,
+        sync, syncDrawer, backSlot, openCalendar, showSelection, selectionReturn,
         hasDeskDraft: () => deskFocus !== "all" || calendar.matches(":popover-open"),
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
+            syncDrawer(false);
             closeOptions();
             deskFocus = "all";
             calendarEditor.clear();
             periodCaption.textContent = scopeCaption.textContent = scopeName.textContent = "";
+            backgroundScope.textContent = "";
             scopeChoice.removeAttribute("aria-label");
         },
         resumeAccess: sync,
@@ -403,7 +440,7 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
         trigger = null; resolve?.(choice);
     }
     return {
-        choose() {
+        choose(formats = []) {
             if (dialog || !current()) return Promise.resolve(null);
             trigger = doc.activeElement;
             dialog = doc.createElement("dialog"); dialog.className = "report-save-warning";
@@ -412,9 +449,10 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             const glyph = doc.createElement("span"); glyph.append(icon("warning"));
             title.append(glyph, doc.createTextNode("Save details from your chats?"));
             const copy = doc.createElement("p"); copy.id = "reportSaveWarningCopy";
-            copy.textContent = "Your prompts, chat replies and notes may include names, email addresses, project details or other sensitive information. WIRE can hide details it recognizes, but it may not catch everything sensitive.";
+            const files = formats.join(", ");
+            copy.textContent = `${files || "Your saved files"} will include original chat wording. Anyone you share the files with could read names, email addresses, project details or other sensitive information.`;
             const detail = doc.createElement("p"); detail.className = "muted";
-            detail.textContent = "Saved on this device. Detected passwords and other credentials are removed.";
+            detail.textContent = "Save writes on this device. It does not send the files to the product group. Detected passwords and other credentials are removed.";
             const actions = doc.createElement("div"); actions.className = "report-warning-actions";
             for (const [choice, label, cls] of [["masked", "Hide details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
                 const button = doc.createElement("button"); button.type = "button"; button.className = cls;

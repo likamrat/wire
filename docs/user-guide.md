@@ -307,7 +307,8 @@ Choose **Leave out prompts and replies** to omit chat wording. Notes and selecte
 error messages remain. The period starts at **Last 7 days**, independently of
 your Analyze filters.
 
-Select **Prepare preview** to read the patterns and supporting interactions.
+Select **Prepare preview** to read the patterns and supporting interactions in
+the right-side drawer. Preparing does not write files or send the report.
 You can add a note or edit a report copy. **Files to save** chooses the HTML,
 PDF, JSON or Markdown files to write; **Viewing** only changes what you read.
 **Save report** keeps the chosen files on this device.

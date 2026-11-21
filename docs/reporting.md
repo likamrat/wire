@@ -13,15 +13,16 @@ Contributors changing report behavior should also read the
 ## Open a report
 
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
-to search the library. Under **New report**, choose a focus and check the outline:
-**Activity**, **Dates**, **Report text** and **Files to save**.
+to search the library. Under **New report**, choose what text the recipient
+will see, then check **Report focus**, **Activity period**, **Activity** and
+**Files to save**.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
-**Prepare preview** opens the report in the main reading area without writing
-files. **Save report** saves its current files locally.
-
-![Recent saved reports above a new report outline with activity, dates, text and file choices.](images/report-choices.png)
+**Prepare preview** opens a right-side drawer without writing files. Check the
+report there, then choose **Save report** to write the selected files locally.
+If you kept chat details, the confirmation names those formats. Saving does
+not send the files to the product group.
 
 | Report | Includes |
 | --- | --- |
