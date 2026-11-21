@@ -21,7 +21,7 @@ that terminal to stop WIRE; closing the browser tab leaves it running.
 
 ### Updating WIRE
 
-For an older version without **Settings > Updates**, finish open work, stop
+For an older version without **Check for updates** under **Settings > General**, finish open work, stop
 only its own WIRE process, then run `git pull --ff-only`, `npm ci`,
 `npm run build` and `npm start` in the **same clean main clone** with the same
 OS user, data-folder override and port. A conflict is a reason to stop, not

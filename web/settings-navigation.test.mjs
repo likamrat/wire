@@ -5,7 +5,9 @@ import { createLocalSearch } from "./local-search.mjs";
 
 test("settings canonical routes preserve legacy display/history/issues and explicit fallback", () => {
     const model = createSettingsNavigation(createLocalSearch());
-    assert.deepEqual(model.resolve({}), { section: "connection", setting: undefined, warning: "" });
+    assert.deepEqual(model.resolve({}), { section: "general", setting: undefined, warning: "" });
+    assert.equal(model.resolve({ section: "updates", setting: "automatic-updates" }).section, "general");
+    assert.equal(model.find("Check for WIRE updates").find(row => row.id === "app-update").category, "General");
     for (const section of ["display","theme","themes"]) assert.equal(model.resolve({ section }).section, "themes");
     assert.equal(model.categories.find(category => category.id === "themes").title, "Themes");
     assert.equal(model.resolve({ section: "display", setting: "time-zone" }).section,"regional");
@@ -49,7 +51,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
     assert.equal(model.resolve({ setting: "advanced" }).setting, "collection-details");
     assert.equal(model.find("missing history").find(entry => entry.id === "issues").view, "collection-status");
     assert.equal(model.find("status").find(entry => entry.id === "collection-details").category, "Collection status");
-    assert.deepEqual(model.categories.filter(row => !row.headerEntry).map(row => row.title), ["Collection", "Source access", "Themes", "Regional", "Privacy & saved data", "Updates"]);
+    assert.deepEqual(model.categories.filter(row => !row.headerEntry).map(row => row.title), ["General", "Collection", "Source access", "Themes", "Regional", "Privacy & saved data"]);
     assert.deepEqual(model.find("automatic scores"), []);
     assert.equal(model.resolve({ section: "ai", setting: "automatic-scores" }).section, "connection");
     assert.match(model.resolve({ section: "ai", setting: "automatic-scores" }).warning, /Unknown/);

@@ -138,7 +138,7 @@ test("full WIRE clone updates on the original address and reopens the same saved
             const page = await browser.newPage();
             await page.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin
                 ? route.continue() : route.abort());
-            await page.goto(url + "settings?section=updates");
+            await page.goto(url + "settings?section=general");
             const check = page.getByRole("button", { name: "Check for updates" });
             await expect(check).toBeEnabled({ timeout: 30000 });
             await writeFile(path.join(origin, "lib", "update-proof-marker.mjs"), "export const marker = 'browser update';\n");

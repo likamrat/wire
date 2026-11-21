@@ -81,7 +81,7 @@ while you use WIRE.
 
 On Windows or WSL, choose **Update** when offered to restart this installation at the
 same address with your settings and reports. **Dismiss** hides that build's
-notice; **Settings > Updates** lets you check or install it later. Older
+notice; **Settings > General** lets you check or install it later. Older
 installs, macOS and standalone Linux use the [same-clone update instructions](docs/development.md#updating-wire).
 
 ### Connect your history

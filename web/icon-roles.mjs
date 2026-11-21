@@ -23,7 +23,7 @@ export const uxIconSources = Object.freeze({
     "report-files": "files", "report-options": "ellipsis", "report-masked": "shield-check",
     "report-original": "shield-alert", "report-no-text": "message-square-off",
     "settings-connection": "clock", "settings-source-access": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
-    "settings-themes": "palette", "settings-regional": "globe", "settings-updates": "download", "settings-troubleshooting": "circle-question-mark",
+    "settings-themes": "palette", "settings-regional": "globe", "settings-general": "settings", "settings-troubleshooting": "circle-question-mark",
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download", code: "file-code",
     "zoom-in": "plus", "zoom-out": "minus",
     "reader-maximize": "maximize-2", "reader-restore": "minimize-2",

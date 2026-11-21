@@ -1,15 +1,16 @@
 // Only fixed setting metadata is searchable here, never local paths or evidence.
 export function createSettingsNavigation(search, { updates = true } = {}) {
     const categories = [
+        ...(updates ? [{ id: "general", title: "General", heading: "generalTitle" }] : []),
         { id: "connection", title: "Collection", heading: "connectionTitle" },
         { id: "source-access", title: "Source access", heading: "sourceAccessTitle" },
         { id: "themes", title: "Themes", heading: "themesTitle" },
         { id: "regional", title: "Regional", heading: "regionalTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
-        ...(updates ? [{ id: "updates", title: "Updates", heading: "appUpdatesTitle" }] : []),
         { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle", headerEntry: true },
     ];
     const sectionAliases = {
+        ...(updates ? { updates: { section: "general" } } : {}),
         display: { section: "themes" },
         theme: { section: "themes" },
         help: { section: "troubleshooting" },
@@ -21,8 +22,8 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
     const settingAliases = { advanced: "collection-details" };
     const entries = [
         ...(updates ? [
-            { id: "app-update", section: "updates", title: "Check for WIRE updates", context: "Check for a newer build from main. Checking does not install it.", synonyms: "version application upgrade manual release", target: "appUpdateCheck" },
-            { id: "automatic-updates", section: "updates", title: "Automatic update checks", context: "Check on opening WIRE and daily while it stays open. Installing always requires choosing Update.", synonyms: "preferences enable disable scheduled", target: "appUpdateAuto" },
+            { id: "app-update", section: "general", title: "Check for WIRE updates", context: "Check for a newer build from main. Checking does not install it.", synonyms: "version application upgrade manual release", target: "appUpdateCheck" },
+            { id: "automatic-updates", section: "general", title: "Automatically check for updates", context: "Check on opening WIRE and daily while it stays open. Installing always requires choosing Update.", synonyms: "automatic update checks preferences enable disable scheduled", target: "appUpdateAuto" },
         ] : []),
         { id: "assessment-evidence", section: "privacy", title: "Save Copilot replies locally", context: "Keep recorded replies with your activity. Turning this off deletes saved response text and dependent retained annotations, not saved reports.", synonyms: "optional evidence answer response capture consent permission revoke", target: "assessmentSetupTitle" },
         { id: "delete-activity", section: "privacy", title: "Review deletion", context: "Preview and permanently delete all collected records or a date range. Saved reports and Copilot sources stay unchanged.", synonyms: "delete collected activity clear remove reset purge records data", target: "deleteActivity" },
@@ -53,7 +54,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "settings-search", section: "troubleshooting", title: "Missing search results", context: "Find text in saved activity and reports, and understand incomplete results.", synonyms: "search troubleshooting help no matches local text query partial results", target: "settingsSearchDetails" },
     ];
     function resolve(route) {
-        let section = route.section || "connection", setting = route.setting, warning = "";
+        let section = route.section || categories[0].id, setting = route.setting, warning = "";
         if (route.issues === "1") setting = "issues";
         else if (Object.hasOwn(sectionAliases, section)) {
             setting ||= sectionAliases[section].setting;

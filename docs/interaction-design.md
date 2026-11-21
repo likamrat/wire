@@ -586,7 +586,8 @@ action after confirmed first approval.
 
 ### Categories and setting search
 
-Settings opens in **Collection**. Its category rail switches between Collection,
+Settings opens in **General**, with the installed WIRE build, last check and
+**Check for updates** together above the automatic-check switch. The other categories are Collection,
 Source access, Themes, Regional, and Privacy & saved data. Keep one
 focused pane; on narrow screens the same categories collapse into a chooser.
 Source access owns approval and paths; Collection owns cadence, Pause and

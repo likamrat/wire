@@ -14,12 +14,12 @@ import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 const origin = "http://127.0.0.1:48197", capability = "c".repeat(64);
 const old = "1".repeat(40), next = "2".repeat(40);
 const originalRuntime = UNBOUND_FIXTURE_BOOTSTRAP.runtimeId, replacement = "00000000-0000-4000-8000-000000000002";
-async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, pending, open = "/settings?section=updates" } = {}) {
+async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, pending, open = "/settings" } = {}) {
     const assets = await loadBrowserAssets({ renderer }), browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
-    const state = { supported, automatic, installed: old, candidate: next, lastChecked: null, dismissed: null,
+    const state = { supported, automatic, installed: old, candidate: next, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
         phase: manual ? "manual" : "available", message: manual ? "This copy is managed manually." : "A newer build is available." };
     const setup = { entry: assets.entry, runtimeId: originalRuntime, capability, health: { service: "workiq-evidence", protocol: 1, runtimeId: originalRuntime, build: old, clientEntry: assets.entry },
         apply: route => route.fulfill({ status: 409, json: { error: "Close the other WIRE panel first." } }) };
@@ -37,6 +37,8 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
         const request = route.request(), url = new URL(request.url());
         assert.equal(url.origin, origin);
         const path = url.pathname;
+        if (path === "/favicon.svg") return route.fulfill({ contentType: "image/svg+xml",
+            body: await readFile(new URL("../assets/wire-icon.svg", import.meta.url)) });
         if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
             pages.push(setup.entry);
             return route.fulfill({ contentType: "text/html", body: renderHtmlShell(setup.capability, "updates", { ...UNBOUND_FIXTURE_BOOTSTRAP, runtimeId: setup.runtimeId },
@@ -78,7 +80,7 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
 
 test("React Settings checks, opts in and out, dismisses only this build, and schedules checks without applying", async t => {
     const { page, state, actions } = await workspace(t);
-    const auto = page.getByRole("switch", { name: "Automatic update checks" });
+    const auto = page.getByRole("switch", { name: "Automatically check for updates" });
     await expect(auto).not.toBeChecked(); assert.deepEqual(actions, [{ action: "status" }]);
     await page.getByRole("button", { name: "Check for updates" }).click();
     await page.locator("#appUpdateDismiss").click();
@@ -95,6 +97,34 @@ test("React Settings checks, opts in and out, dismisses only this build, and sch
     await page.clock.fastForward("24:00:00");
     assert.deepEqual(actions, ["status", "check", { action: "dismiss", candidate: next }, "status", { action: "preferences", enabled: true },
         "status", "auto-check", "auto-check", { action: "preferences", enabled: false }].map(a => typeof a === "string" ? { action: a } : a));
+});
+
+test("General owns the update card, legacy links and searchable controls without triggering an update", async t => {
+    const { page, actions } = await workspace(t);
+    const general = page.locator("#settingsCategoryNav [data-category=general]");
+    await expect(general).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#settingsCategoryNav [data-category=updates]")).toHaveCount(0);
+    await expect(page.locator("#generalTitle")).toBeVisible();
+    const check = page.getByRole("button", { name: "Check for updates" });
+    await expect(check).toBeVisible();
+    await expect(page.locator("#appUpdateVersion")).toContainText(old.slice(0, 8));
+    await expect(page.locator("#appUpdateStatus")).toContainText("Last checked");
+    await expect.poll(() => page.locator(".app-version-card img").evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+    await page.locator("#settingsCategoryNav [data-category=themes]").click();
+    await page.locator("#settingsSearch").fill("Check for WIRE updates");
+    const result = page.locator('#settingsSearchResults [data-setting="app-update"]');
+    await expect(page.locator(".settings-search-heading")).toContainText("General");
+    await result.focus(); await page.keyboard.press("Enter");
+    await expect(check).toBeFocused();
+    await expect(page).toHaveURL(/section=general&setting=app-update/);
+    await page.goBack();
+    await expect(result).toBeFocused();
+    await expect(page.locator("#settingsSearch")).toHaveValue("Check for WIRE updates");
+    await page.goto(origin + "/settings?section=updates&setting=automatic-updates");
+    await expect(page.locator("#generalTitle")).toBeVisible();
+    await expect(general).toHaveAttribute("aria-current", "page");
+    await expect(page).toHaveURL(/section=general&setting=automatic-updates/);
+    assert.ok(actions.every(({ action }) => action === "status"));
 });
 
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {

@@ -43,11 +43,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         manual.disabled = busy || Boolean(expected) || updating || Boolean(manualOnly(state));
         automatic.disabled = busy || Boolean(expected) || updating || !state?.supported || manualOnly(state);
         automatic.checked = pendingPreference ?? state?.automatic === true;
-        $("appUpdateStatus").textContent = feedback || success || result || state?.message || "Reading update status…";
-        const version = [state?.installed && `Installed ${state.installed.slice(0, 8)}`,
-            state?.lastChecked != null && `Last checked ${new Date(state.lastChecked).toLocaleString()}`].filter(Boolean).join(" · ");
-        $("appUpdateVersion").textContent = version;
-        $("appUpdateVersion").hidden = !version;
+        const status = feedback || success || result || state?.message || "Reading update status…";
+        $("appUpdateStatus").textContent = state?.lastChecked != null
+            ? `${status} Last checked ${new Date(state.lastChecked).toLocaleString()}.` : status;
+        $("appUpdateVersion").textContent = state?.installed ? `WIRE · Build ${state.installed.slice(0, 8)}` : "WIRE";
     }
     async function post(action, fields = {}) {
         const response = await fetch("/api/app-update", { ...fixed, method: "POST",

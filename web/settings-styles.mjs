@@ -12,7 +12,9 @@ export const settingsStyles = `
 button.primary.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--update-ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--update-ink))}
 #appUpdateApply {display:inline-flex;align-items:center;gap:.375rem}
 #appUpdateApply[hidden] {display:none}
-[data-settings-section=updates] .settings-actions {margin-top:0}
+[data-settings-section=general] .settings-actions {margin-top:0}
+[data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
+.app-version-card .settings-row-copy {flex:1 1 12rem}
 #appUpdateFence {max-width:min(29rem,calc(100vw - 2rem));padding:var(--space-xl);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section)}
 #appUpdateRecover {margin-top:var(--space-md)}
