@@ -113,6 +113,23 @@ test("a mapped call can use a bounded original projection of its unchanged retai
     await assert.rejects(scan([unknown, ...originals], anchored), unverified);
 });
 
+test("discarded assistant text does not disqualify an explicitly linked mapped call under a new human prompt", async () => {
+    const long = change(a, { content: "Invented discarded reply. ".repeat(1400) });
+    const rows = [p, long, s, e], result = await scan(rows);
+    assert.deepEqual(result.records, (await scan([p, a, s, e])).records);
+    assert.equal(result.records.length, 1);
+    assert.doesNotMatch(JSON.stringify(result), /Invented discarded reply/);
+
+    for (const bad of [change(long, { originatingMessageId: "other-message" }),
+        change(long, { content: long.data.content + " api_key=invented_secret_value" }),
+        JSON.stringify(long).replace('"turnId":', '"turnId":"other","turnId":')]) {
+        assert.deepEqual((await scan([p, bad, s, e])).records, []);
+    }
+    const literalStart = change(s, { toolName: "workiq-fetch", mcpServerName: "workiq" });
+    assert.deepEqual((await scan([p, long, literalStart, e], { source: { ...source, managedWorkIqEventIds: [] } })).records, []);
+    assert.deepEqual((await scan([p, long, s, e, { ...a, id: "another-request" }])).records, []);
+});
+
 test("explicit original-record flags do not turn an ordinary source event into a replay copy", async () => {
     const direct = [p, a, s, e], baseline = await scan(direct);
     const marked = direct.map(event => ({ ...event, ephemeral: false, checkpoint: false }));

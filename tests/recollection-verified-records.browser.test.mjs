@@ -40,7 +40,8 @@ const ids = state => state.evidence.flatMap(r => r.toolCalls.map(c => c.toolCall
 const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptToken });
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
-async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false } = {}) {
+async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false,
+    longRequest = false } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -96,6 +97,7 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
     ]));
     const known = chain(day, "known", 10, true);
+    if (longRequest) known[1].data.content = "Invented discarded reply. ".repeat(1400);
     let knownOriginals = known;
     if (causalHooks) {
         const [prompt, assistant, start, completion] = known;
@@ -195,9 +197,11 @@ function assertReceipt(p, r) {
 }
 
 test("a bound exact preview reviews only identified members, never the full day", async t => {
-    const f = await fixture(t);
+    const f = await fixture(t, { longRequest: true });
     await f.start();
-    assertReview(f, ok(await f.post("preview", { ...f.scope, mode })));
+    const review = ok(await f.post("preview", { ...f.scope, mode }));
+    assertReview(f, review);
+    assert.doesNotMatch(JSON.stringify(review), /Invented discarded reply/);
     assert.deepEqual(ids(await loadBoardState(f.context)), []);
 });
 
