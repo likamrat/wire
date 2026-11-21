@@ -30,6 +30,9 @@ actual origin only while its authority and reading intent remain current.
 Later user input wins over delayed navigation, reads and motion callbacks.
 Pointer presses must not trigger older scroll restoration that moves the
 targeted control before release.
+When filtering changes a long result list to an empty one, keep the workspace
+aligned. The viewport scrollbar and the Filters count must not move neighbouring
+controls; the Refresh action keeps its space when its label changes to Retry.
 Private Search state never becomes a copied public URL or a broader fallback.
 Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
 reading keeps one return to its actual origin. Entering Compare opens it rather

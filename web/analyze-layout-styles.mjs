@@ -206,6 +206,7 @@ export const analyzeLayoutStyles = `
 #openAnalyzeFilters>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
 #analyzeRefresh {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
 #analyzeRefresh>.wire-icon {width:1rem;height:1rem;flex:none}
+#analyzeRefreshLabel {min-inline-size:7ch;text-align:start}
 .analyze-toolbar>.ux-disabled-help {flex:none}
 #analyzeRefresh:focus-visible {outline:none}
 #analyzeRefresh:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
@@ -213,6 +214,8 @@ export const analyzeLayoutStyles = `
 #openChartReference:focus-visible::before,#openAnalyzeFilters:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .analyze-filter-count {display:inline-flex;align-items:center;justify-content:center;min-width:1.5em;padding:0 .25em;border-radius:4px;background:var(--accent-soft);color:var(--ink);font-size:var(--type-caption);line-height:1.5;pointer-events:none}
 .analyze-filter-count[hidden] {display:none}
+/* An applied filter must not move this trigger or its toolbar neighbours. */
+#openAnalyzeFilters:has(>.analyze-filter-count[hidden])::after {content:"";inline-size:1.5em;font-size:var(--type-caption);flex:none}
 @container analyze-entries (max-width:24rem) {
  #openChartReference,#openAnalyzeFilters,#analyzeRefresh {gap:6px;padding-inline:6px}
 }

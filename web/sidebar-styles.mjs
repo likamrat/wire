@@ -16,7 +16,7 @@ export const sidebarStyles = `
 .workspace-utilities {grid-column:3;display:flex;align-items:center;justify-content:flex-end;min-width:0}
 .workspace-utilities .theme-control {flex:none}
 .header-inner .theme-control {margin-left:0}
-html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
+html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gutter:stable}
 .app-sidebar {position:fixed;display:flex;flex-direction:column;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:216px;padding:12px 10px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
 .navigation-content {display:flex;flex:1 0 auto;flex-direction:column;gap:24px}
 .navigation-content>* {flex-shrink:0}

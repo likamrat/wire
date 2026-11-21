@@ -6,7 +6,9 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { time } from "../lib/time.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
+import { frontendRecords } from "./frontend-fixture.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_FILTER_STABILITY_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -63,10 +65,10 @@ async function setup(t, view = "home", { width = 1200, bucket = "week", spreadDa
     const expectedPeriod = `${time.formatDate(from, timeContext, from.slice(0, 4) !== today.slice(0, 4))} - ${time.formatDate(today, timeContext, true)}`;
     return { page, runtime, today, from, posts, expectedPeriod };
 }
-async function startProbe(page, triggerId) {
-    await page.evaluate(triggerId => {
+async function startProbe(page, triggerId, extra = []) {
+    await page.evaluate(({ triggerId, extra }) => {
         const selectors = ["#pageTitle", "#filters", "#periodFeedback", ".app-header", "#sidebar",
-            "#homeView .chart-panel", "#chart .dimensional-scroll", "#homeInsights", "#activityInsights", "#activityList", `#${triggerId}`];
+            "#homeView .chart-panel", "#chart .dimensional-scroll", "#homeInsights", "#activityInsights", "#activityList", `#${triggerId}`, ...extra];
         const originals = new Map(selectors.map(selector => [selector, document.querySelector(selector)]));
         const probe = { phase: "before", running: true, frames: [], changes: [], shifts: [] };
         const rect = node => {
@@ -108,7 +110,7 @@ async function startProbe(page, triggerId) {
             sample(); probe.running = false; mutations.disconnect(); shifts.disconnect();
             return { frames: probe.frames, changes: probe.changes, shifts: probe.shifts };
         };
-    }, triggerId);
+    }, { triggerId, extra });
 }
 async function phase(page, value) { await page.evaluate(value => { window.filterFrameProbe.phase = value; }, value); }
 async function picture(page, name) {
@@ -124,6 +126,57 @@ async function finishProbe(page, name) {
     }
     return trace;
 }
+
+for (const width of [1440, 760, 390]) test(`built shared filter: ${width}px pending, empty and reset preserve the control under the pointer`, { timeout: 45000 }, async t => {
+    const records = frontendRecords(16), stamp = new Date(Date.now() - 10 * 86400000).toISOString();
+    for (const [index, row] of records.entries()) {
+        row.capturedAt = row.userPrompt.sourceTimestamp = row.toolCalls[0].startedAt = row.toolCalls[0].completedAt = stamp;
+        row.userPrompt.text = index % 2 ? "Find the notes." : "Find the Cedar workshop notes. ".repeat(20);
+    }
+    const { runtime } = await searchFixture(t, { records, frontend: "react", reply: false });
+    const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined,
+        ignoreDefaultArgs: ["--hide-scrollbars"] });
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width, height: 760 }, timezoneId: "UTC" });
+    await page.route(url => url.origin !== new URL(runtime.url).origin, route => route.abort());
+    await page.goto(runtime.url); await ready(page);
+    await page.evaluate(() => document.fonts.ready);
+    const shell = [".app-header", "#sidebar", "#openAnalyzeFilters", "#analyzeRefresh", "#openChartReference", "#wireSearch", "#navigationFooter"];
+    const controls = ["#dateFilter-control", "#closeAnalyzeFilters"];
+    await startProbe(page, "openAnalyzeFilters", [...shell, ...controls]);
+    await page.locator("#openAnalyzeFilters").hover(); await frames(page);
+    await page.mouse.move(2, 2); await frames(page);
+    await openAnalyzeFilters(page);
+    await page.waitForFunction(() => !document.querySelector("#analyzeFilterDialog").getAnimations().length);
+    await phase(page, "open"); await frames(page);
+    for (const [choice, label] of [["day", "empty"], ["capture", "clear"]]) {
+        const hold = deferred(), entered = deferred();
+        await page.route("**/api/snapshot", async route => {
+            const response = await route.fetch();
+            entered.resolve(); await hold.promise; await route.fulfill({ response });
+        }, { times: 1 });
+        try {
+            await selectActivityOption(page, "dateFilter", choice);
+            await entered.promise; await phase(page, `${label}-pending`); await frames(page);
+        } finally { hold.resolve(); }
+        await ready(page); await phase(page, label); await frames(page);
+        await expect(page.locator("#activityList .request-card-open")).toHaveCount(choice === "day" ? 0 : 8);
+        await expect(page.locator("#dateFilter-control")).toBeFocused();
+    }
+    await phase(page, "close"); await closeAnalyzeFilters(page); await frames(page);
+    const trace = await finishProbe(page, `built-filter-${width}`);
+    const open = trace.frames.filter(row => row.phase !== "before" && row.phase !== "close");
+    assert.ok(open.some(row => row.phase === "empty-pending" && row.busy === "true"));
+    for (const selector of [...shell, ...controls]) {
+        const boxes = (controls.includes(selector) ? open : trace.frames).map(row => row.nodes[selector].box).filter(Boolean);
+        for (const key of ["x", "y", "width", "height"]) {
+            const values = boxes.map(box => box[key]);
+            if (values.length) assert.ok(Math.max(...values) - Math.min(...values) <= 1, `${selector} ${key}: ${[...new Set(values)]}`);
+        }
+    }
+    assert.ok(trace.frames.every(row => row.scrollY === trace.frames[0].scrollY));
+    await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
+});
 
 for (const view of ["home", "activity"]) for (const position of ["scrolled", "top"]) test(`${view} ${position} date refinement preserves visible filter anchor through pending and accepted frames`, { timeout: 20000 }, async t => {
     const { page } = await setup(t, view);
