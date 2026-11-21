@@ -137,7 +137,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:var(--pill-gap)}
 .settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead)>.wire-icon {width:1rem;height:1rem}
 .settings-view #reloadSettings {margin-bottom:16px}
-.settings-view :is(input[type=text],.select-trigger) {border-radius:var(--settings-field-radius)}
+.settings-view input[type=text] {border-radius:var(--settings-field-radius)}
 .settings-section {padding:24px;background:var(--paper);border-radius:var(--radius);margin-bottom:20px}
 .settings-section h2 {font-size:var(--type-section);line-height:var(--leading-section)}
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}

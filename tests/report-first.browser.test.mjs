@@ -1502,6 +1502,18 @@ test("Reports keeps the selected focus explanation beside the list or below the 
         const narrow = width === 375;
         await expect(narrow ? compact : list).toBeVisible();
         await expect(narrow ? list : compact).toBeHidden();
+        if (narrow) {
+            const arrow = compact.locator("..").locator('[data-icon-role="chevron"]');
+            await expect(arrow).toHaveCount(1);
+            await expect(arrow).toHaveCSS("pointer-events", "none");
+            await expect(compact).toHaveCSS("appearance", "none");
+            const [field, ink] = await Promise.all([compact.boundingBox(), arrow.boundingBox()]);
+            const inset = await compact.evaluate(node => parseFloat(getComputedStyle(node).paddingInlineStart));
+            assert.equal(field.x + field.width - ink.x - ink.width, inset);
+            assert.equal(field.y + field.height / 2, ink.y + ink.height / 2);
+            await compact.focus(); await compact.press("Home"); await compact.press("ArrowDown");
+            await expect(compact).toHaveValue("errors");
+        }
         for (const [preset, title, explanation] of focuses) {
             if (narrow) {
                 await compact.selectOption({ label: title });

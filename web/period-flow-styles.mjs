@@ -26,7 +26,6 @@ export const periodFlowStyles = `
 #filters .period-controls .filter-clear-slot {grid-area:2/2;justify-self:end;align-self:start}
 #filters .period-controls .filter-clear-slot:has(>button[hidden]) {display:none}
 #filters .period-controls .select-control {grid-column:1;grid-row:2;width:100%;max-width:none}
-#filters .period-controls .select-trigger {grid-template-columns:minmax(0,1fr) 16px;padding:8px var(--select-value-inset);justify-content:space-between}
 #filters .period-controls .select-value,#filters .period-controls .result-option-label {overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
 .more-filters {margin:4px;padding:0;border:0;background:transparent}
 .more-filters>summary {min-height:44px;width:fit-content;padding:10px 4px;color:var(--accent);font-size:var(--type-control)}

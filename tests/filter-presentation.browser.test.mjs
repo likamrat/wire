@@ -167,13 +167,18 @@ test("native opt-in outside Analyze reuses the filter presentation without chang
             for (const id of ["scope", "type"]) document.getElementById(id).selectedIndex = 0;
             window.controlChanges = []; window.controls.sync();
         }, theme);
-        const paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 44, 59)";
-        const controlPaper = theme === "light" ? paper : "rgb(25, 35, 48)";
+        const surfaceColor = name => page.evaluate(name => {
+            const node = document.createElement("span");
+            node.style.color = `var(${name})`; document.body.append(node);
+            const color = getComputedStyle(node).color; node.remove(); return color;
+        }, name);
+        const paper = await surfaceColor("--floating-paper");
+        const controlPaper = await surfaceColor("--paper");
         for (const [id, value] of [["scope", "analysis"], ["type", "setting"]]) {
             const trigger = page.locator(`#${id}-control`);
             assert.equal(await trigger.evaluate(node => node.classList.contains("select-trigger-filter")), true);
             assert.equal(await trigger.evaluate(node => getComputedStyle(node, "::before").backgroundColor), controlPaper);
-            assert.equal(await trigger.evaluate(node => getComputedStyle(node).borderRadius), "24px");
+            assert.equal(await trigger.evaluate(node => getComputedStyle(node).borderRadius), "8px");
             assert.equal(await trigger.evaluate(node => getComputedStyle(node).fontWeight), "400");
             await trigger.click();
             const popup = page.locator(".select-popup:visible");

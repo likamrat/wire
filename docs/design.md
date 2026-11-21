@@ -151,7 +151,11 @@ cue signals reading; hover and press change the cue, not the text. Do not put
 a tooltip over the passage. Call disclosures similarly emphasize the chevron.
 In a choice field, align the leading icon to the *first line* of the value;
 use the same glyph slot and text gap in the popup and closed field. The
-trailing chevron belongs at the field edge, not next to the last word.
+trailing chevron belongs at the field edge, not next to the last word. Reserve
+one centered 16px Lucide chevron, an 8px gap and a 12px trailing inset.
+Choice fields use the screen field radius. A native picker keeps its native
+input, keyboard and touch behavior; replace only its painted arrow, never
+display both. An open listbox points up; a dialog opener is still a button.
 
 The main Analyze, Trends, Reports and Compare headings use their existing
 navigation glyph, at 24px with a 10px text gap. Keep the heading/focus node mounted

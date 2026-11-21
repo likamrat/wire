@@ -78,7 +78,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     let deskFocus = "all";
     const tiles = el("div", "report-tiles"); tiles.setAttribute("role", "group"); tiles.setAttribute("aria-label", "Report focus");
     const compactFocus = el("select"); compactFocus.id = "reportDeskFocus"; compactFocus.dataset.nativeSelect = "";
-    const compactLabel = el("label", "report-desk-compact", "Report focus"); compactLabel.append(compactFocus);
+    const compactLabel = el("label", "report-desk-compact", "Report focus"), nativeChoice = el("span", "native-choice");
+    const nativeChevron = ux.icon("chevron"); nativeChevron.classList.add("native-choice-chevron");
+    nativeChoice.append(compactFocus, nativeChevron); compactLabel.append(nativeChoice);
     compactFocus.addEventListener("change", () => { if (current() && !read().locked) { deskFocus = compactFocus.value; sync(); } });
     for (const [id, title, glyph] of presets) {
         const row = el("article", "report-tile"); row.dataset.preset = id;

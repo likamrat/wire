@@ -1,5 +1,5 @@
 export const selectStyles = `
-:root {--layer-select:6;--select-radius:var(--radius);--select-value-inset:max(12px,.5rem);--select-field-gap:4px;--select-help-target:var(--help-target)}
+:root {--layer-select:6;--select-radius:var(--radius);--select-value-inset:max(12px,.5rem);--select-chevron-size:16px;--select-field-gap:4px;--select-help-target:var(--help-target)}
 .select-source {display:none!important}
 .select-control {display:inline-flex;width:fit-content;min-width:0;max-width:100%;align-self:start;vertical-align:middle}
 :is(.select-field:not(.bucket-control),.filter-field:has(>.select-control)) {
@@ -19,7 +19,7 @@ export const selectStyles = `
 .collection-tools>.select-field {flex:1 1 130px;max-width:240px}
 .collection-tools .select-field>label {flex:initial;max-width:none}
 .select-trigger {
- position:relative;isolation:isolate;display:inline-grid;grid-template-columns:minmax(0,1fr) 16px;
+ position:relative;isolation:isolate;display:inline-grid;grid-template-columns:minmax(0,1fr) var(--select-chevron-size);
  align-items:center;column-gap:var(--pill-gap);width:100%;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px var(--select-value-inset);
  border:0;border-radius:var(--radius-field);background:transparent;color:var(--pill-ink);
  font-size:var(--type-control);font-weight:var(--pill-weight);line-height:var(--leading-control);text-align:left;
@@ -38,8 +38,16 @@ export const selectStyles = `
 .select-trigger:disabled {color:var(--muted)}
 .select-trigger:disabled::before {background:transparent;border-color:var(--rule);box-shadow:none}
 .select-trigger .select-value {display:block;white-space:normal;overflow-wrap:anywhere;min-width:0}
-.select-trigger .select-chevron {display:block;width:16px;height:16px;flex:none;fill:none;transition:transform var(--control-hover-duration) cubic-bezier(.2,0,0,1)}
+.select-trigger .select-chevron,.report-toolbar-choice>[data-icon-role=chevron],.trends-date-range>[data-icon-role=chevron],.native-choice>.native-choice-chevron {display:block;width:var(--select-chevron-size);height:var(--select-chevron-size);flex:none;align-self:center;margin-inline-start:auto;pointer-events:none}
+.select-trigger .select-chevron {transition:transform var(--control-hover-duration) cubic-bezier(.2,0,0,1)}
 .select-trigger[aria-expanded=true] .select-chevron {transform:rotate(180deg)}
+.native-choice {position:relative;display:inline-flex;max-width:100%;min-width:0}
+.native-choice>.native-choice-chevron {display:none}
+@supports (appearance:none) {
+ .native-choice>select {appearance:none;padding-inline:var(--select-value-inset) calc(var(--select-value-inset) + var(--select-chevron-size) + var(--pill-gap))}
+ .native-choice>.native-choice-chevron {position:absolute;inset-inline-end:var(--select-value-inset);top:50%;transform:translateY(-50%);display:block}
+ .native-choice:has(select:disabled)>.native-choice-chevron {color:var(--muted)}
+}
 .filters .filter-field {flex:0 1 auto;min-width:min(100%,9rem);max-width:100%}
 .filters .filter-field:has(#dateFilter) {width:9.5rem}
 .filters .filter-field:has(#serviceFilter),.filters .filter-field:has(#outcomeFilter) {width:9.75rem}
@@ -48,7 +56,7 @@ export const selectStyles = `
 .filters {align-items:end;gap:8px 12px}
 .chart-heading .select-control {width:max-content;flex:none}
 .chart-heading #bucketControl>.select-control {align-self:baseline}
-.chart-heading .select-trigger {padding:0 6px;column-gap:4px;font-weight:var(--weight-medium);border-radius:8px}
+.chart-heading .select-trigger {padding-block:0;font-weight:var(--weight-medium)}
 .chart-heading .select-value,.select-option-sizer {grid-area:1/1}
 .chart-heading .select-value {overflow:visible;text-overflow:clip}
 .chart-heading .select-chevron {grid-area:1/2}
@@ -63,8 +71,8 @@ export const selectStyles = `
 .select-popup {
  position:fixed;inset:auto;margin:0;z-index:var(--layer-select);box-sizing:border-box;
  width:max-content;max-width:min(36em,var(--select-available-width,calc(100vw - 16px)));max-height:20rem;overflow:auto;overscroll-behavior:contain;
- padding:6px;border:1px solid var(--rule);border-radius:var(--select-radius);
- background:var(--paper);color:var(--ink);box-shadow:var(--shadow);
+ padding:var(--space-sm);border:1px solid var(--rule);border-radius:var(--select-radius);
+ background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);
  font:var(--type-control)/var(--leading-control) var(--font);scrollbar-width:thin;scrollbar-color:var(--control) transparent;
 }
 .select-popup::backdrop {background:transparent}
@@ -72,7 +80,7 @@ export const selectStyles = `
 @keyframes select-reveal {from {opacity:0} to {opacity:1}}
 .select-option {
  display:grid;grid-template-columns:minmax(0,1fr) 20px;align-items:center;column-gap:10px;
- min-height:44px;padding:7px 10px;border-radius:var(--radius-field);cursor:pointer;overflow-wrap:anywhere;
+ min-height:44px;padding:var(--space-sm) var(--choice-row-inset);border-radius:var(--radius-field);cursor:pointer;overflow-wrap:anywhere;
 }
 .select-option+.select-option {margin-top:2px}
 .select-option[aria-selected=true] {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-medium)}
@@ -100,7 +108,7 @@ export const selectStyles = `
 .select-all {width:100%;justify-content:flex-start;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--rule);border-radius:0;margin-bottom:4px}
 .select-draft-hint {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:8px 10px}
 .select-footer {display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;border-top:1px solid var(--rule)}
-.select-trigger.select-trigger-filter {border-radius:24px;font-weight:var(--weight-regular)}
+.select-trigger.select-trigger-filter {font-weight:var(--weight-regular)}
 .select-trigger.select-trigger-filter::before {inset:var(--control-face-inset) 0;border-color:var(--control);background:var(--paper);box-shadow:none}
 .select-trigger.select-trigger-filter:is([data-filter-active=true],[aria-expanded=true])::before {border-color:var(--control);background:var(--paper);box-shadow:var(--control-shadow)}
 .select-trigger.select-trigger-filter:hover:not(:disabled)::before {border-color:var(--ink);background:var(--pill-hover)}
@@ -110,7 +118,6 @@ export const selectStyles = `
 .select-popup-filter {
  min-width:min(max(16rem,var(--select-anchor-width)),var(--select-available-width));
  max-width:min(28rem,var(--select-available-width));max-height:min(28rem,calc(100dvh - 16px));
- padding:8px;border-radius:var(--select-radius);background:var(--paper);box-shadow:var(--surface-shadow);
 }
 .select-popup-filter .select-option {grid-template-columns:minmax(0,1fr) 32px;column-gap:16px;padding:var(--space-sm) var(--choice-row-inset);border-radius:var(--radius-control)}
 .select-popup-filter .select-option:has(.select-option-count) {grid-template-columns:minmax(0,1fr) auto 32px}
