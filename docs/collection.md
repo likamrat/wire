@@ -558,9 +558,12 @@ event and invocation IDs across the source and checkpoint, the hook session,
 tool, `workiq` server on the MCP hook and arguments, and the completion's own call and turn.
 Only the completion reports the outcome; missing success stays unknown.
 Projected hooks, ambiguous original fields, credentials and deleted
-dependencies cannot qualify the chain. This path requires compact JSON
-originals: WIRE checks their encoded digest so that duplicate fields lost
-during parsing cannot conceal another identity. WIRE refuses a split chain rather
+dependencies cannot qualify the chain. WIRE binds the original bytes. For
+entries up to 16 KiB it can also verify harmless JSON spelling differences,
+such as `17.0` instead of `17`, without accepting duplicate keys or rounded
+values. Explicit `checkpoint: false` and `ephemeral: false` flags are
+compatible with an ordinary original; replay copies and transient records
+are not. WIRE refuses a split chain rather
 than carrying private hook arguments or result bodies into the next part.
 
 Confirmation rereads the same bounded originals, using the same two-minute

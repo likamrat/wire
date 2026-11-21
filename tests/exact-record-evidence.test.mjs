@@ -66,6 +66,57 @@ function decide(reads, options = {}) {
 const scan = async (events, options) => decide(await parts(encode([boot, ...events])), options);
 const unverified = { code: "EXACT_EVIDENCE_UNVERIFIED" };
 
+test("explicit original-record flags do not turn an ordinary source event into a replay copy", async () => {
+    const direct = [p, a, s, e], baseline = await scan(direct);
+    const marked = direct.map(event => ({ ...event, ephemeral: false, checkpoint: false }));
+    assert.deepEqual((await scan(marked)).records, baseline.records);
+    for (const field of ["ephemeral", "checkpoint"]) {
+        for (const value of [true, "false", 0, null]) {
+            await assert.rejects(scan(marked.with(2, { ...marked[2], [field]: value })), unverified);
+        }
+        const duplicate = JSON.stringify(marked[2]).replace(`"${field}":false`, `"${field}":true,"${field}":false`);
+        await assert.rejects(scan(marked.with(2, duplicate)), unverified);
+    }
+});
+
+test("no literal call alias in a bounded off-chain record does not prove disjointness", async () => {
+    // The SDK's completion receipt covers an inclusive *range*. Its endpoints
+    // need not be the IDs on the independently observed call inside that range.
+    const first = line("range-first", "user.message", { messageId: "range-message", source: "user", content: "An earlier request." }, 0);
+    const last = line("range-last", "assistant.turn_end", { turnId: "outside-turn" }, 5);
+    const receipt = line("range-summary", "session.completion_receipt", {
+        attempt: 1, eventRange: { startEventId: first.id, endEventId: last.id }, failedToolCount: 0,
+        successfulToolCount: 1, schemaVersion: 1, sourceEventId: last.id, stopReason: "natural",
+    }, 6, last.id);
+    const events = [first, p, a, s, e, last, receipt];
+    const idx = eventId => events.findIndex(ev => ev.id === eventId);
+    assert.ok(idx(receipt.data.eventRange.startEventId) < idx(s.id) && idx(e.id) < idx(receipt.data.eventRange.endEventId));
+    const scalarStrings = v => typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).flatMap(scalarStrings) : [];
+    const encodedIds = new Set(scalarStrings(receipt));
+    assert.ok([p.id, p.data.messageId, a.id, a.data.messageId, s.id, s.data.turnId, s.data.toolCallId, e.id].every(v => !encodedIds.has(v)));
+    assert.equal(retainEvent(receipt, { credentialExclusions: 0 }), null);
+    const bytes = encode([boot, ...events]), reads = await parts(bytes);
+    assert.equal(reads.at(-1).cursor.offset, bytes.length);
+    assert.equal(reads.at(-1).cursor.oversizedLines, 0);
+    assert.throws(() => decide(reads), unverified);
+    assert.equal((await scan(events.slice(0, -1))).records.length, 1);
+});
+
+test("ordinary number or whitespace spelling does not hide a field; duplicate or rounded values still refuse", async () => {
+    const rows = originJournal(), ordinary = rows[2];
+    const encoded = JSON.stringify(ordinary);
+    const differentlyWritten = encoded.replace('"data":{', '"data": { ').replace('"totalNanoAiu":17', '"totalNanoAiu": 17.000e0 ');
+    const baseline = await scan(rows);
+    const accepted = await scan(rows.with(2, differentlyWritten));
+    assert.deepEqual(accepted.records, baseline.records);
+    assert.notEqual(accepted.witness, baseline.witness, "Confirmation must still bind the original bytes, not reserialized JSON");
+    for (const invalid of [
+        differentlyWritten.replace('"totalNanoAiu":', '"totalNanoAiu":42,"totalNanoAiu":'),
+        differentlyWritten.replace('"totalNanoAiu":', '"totalNanoAiu":16,"totalNanoAi\\u0075":'),
+        differentlyWritten.replace("17.000e0", "17.0000000000000001"),
+    ]) await assert.rejects(scan(rows.with(2, invalid)), unverified);
+});
+
 function otherLifecycle(family) {
     if (family === "external") return [
         line("dispatch", "external_tool.requested", { requestId: "foreign-request", sessionId, toolCallId: "foreign-call", toolName: "invented-tool", arguments: {} }, 0, boot.id),

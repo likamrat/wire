@@ -106,8 +106,9 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         knownOriginals.splice(1, 0, info, usage, turn);
         knownOriginals.push(event("request-turn-end", "assistant.turn_end", completion.timestamp, { turnId: assistant.data.turnId }, completion.id));
     }
-    await appendFile(file, encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
-        ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]));
+    const originalBytes = encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
+        ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]);
+    await appendFile(file, causalHooks ? originalBytes.replace('"totalNanoAiu":123', '"totalNanoAiu": 123.0') : originalBytes);
     if (preservation) {
         await mkdir(path.dirname(otherFile));
         await writeFile(otherFile, encode([event("other-boot", "session.start", at(older, 0), { sessionId: otherId, version: 1 }),
