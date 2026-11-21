@@ -96,6 +96,102 @@ function compactCardRecords() {
     });
 }
 
+test("Analyze chart, controls and grouped interactions share the available workspace", { timeout: 60000 }, async t => {
+    const records = reviewRecords();
+    const { page } = await setup(t, "react", [records.at(-1), ...records.slice(0, 7)]);
+    const list = page.locator("#activityList"), card = list.locator(".activity-card").first();
+    const opener = card.locator(".card-panel-link"), measurements = [], failures = [];
+    const captureDir = process.env.WIRE_ANALYZE_FRAME_PROOFS;
+    if (captureDir) await mkdir(captureDir, { recursive: true });
+    for (const state of ["wide", "narrow", "resized", "reader"]) {
+        const narrow = state === "narrow";
+        await page.setViewportSize({ width: narrow ? 390 : 1900, height: narrow ? 900 : 1080 });
+        if (state === "resized") {
+            await chooseTheme(page, "dark");
+            const handle = page.locator(".navigation-resize");
+            await handle.press("End");
+            await expect(handle).toHaveAttribute("aria-valuenow", await handle.getAttribute("aria-valuemax"));
+        }
+        if (state === "reader") {
+            await opener.press("Enter");
+            await expect(page.locator("body")).toHaveAttribute("data-context-docked", /.*/);
+            await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(4);
+        }
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
+        const value = await page.evaluate(() => {
+            const el = selector => document.querySelector(selector);
+            const edges = node => {
+                const { left, right } = node.getBoundingClientRect();
+                return [left, right];
+            };
+            const surface = node => {
+                const s = getComputedStyle(node);
+                return [s.borderTopLeftRadius, s.borderTopWidth, s.borderTopColor, s.backgroundColor, s.boxShadow];
+            };
+            const chart = el(".analyze-chart-grid"), list = el("#activityList"), rows = [...list.querySelectorAll(".activity-card")];
+            const prompt = rows[0].querySelector(".card-request-context");
+            return {
+                frame: edges(el("#workspace")), chart: edges(chart), heading: edges(el("#workspace > .page-heading")),
+                toolbar: edges(el("#analyzeToolbar")), filters: edges(el("#openAnalyzeFilters")),
+                listHeading: edges(el("#activityListContext")), list: edges(list),
+                rows: rows.map(edges), chartSurface: surface(chart), listSurface: surface(list),
+                borders: rows.map(row => [getComputedStyle(row).borderTopWidth, getComputedStyle(row).borderBottomWidth].map(parseFloat)),
+                rowShadows: rows.map(row => getComputedStyle(row).boxShadow),
+                promptWidth: prompt.getBoundingClientRect().width, promptMeasure: parseFloat(getComputedStyle(prompt).maxWidth),
+                contents: [...rows[0].querySelectorAll(".card-tool-item,.request-card-summary,.request-card-open,.card-evidence-link,.card-panel-link")].map(edges),
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            };
+        });
+        measurements.push({ state, ...value });
+        const check = (ok, label) => { if (!ok) failures.push(`${state}: ${label}`); };
+        for (const key of ["chart", "heading", "listHeading", "list"]) {
+            check(value[key].every((x, i) => Math.abs(x - value.frame[i]) <= 1), `${key} edges ${value[key]} vs ${value.frame}`);
+        }
+        check(Math.abs(value.toolbar[1] - value.chart[1]) <= 1, `toolbar right ${value.toolbar[1]} vs ${value.chart[1]}`);
+        check(Math.abs(value.filters[1] - value.toolbar[1]) <= 1, "Filters ends the control row");
+        check(value.rows.every(row => row.every((x, i) => Math.abs(x - value.frame[i]) <= 1)), "row edges");
+        check(value.listSurface.every((x, i) => x === value.chartSurface[i]), "group corner, edge and surface");
+        check(value.borders[0][0] === 0 && value.borders.at(-1)[1] === 0
+            && value.borders.slice(1).every(([top], i) => value.borders[i][1] + top === 1), "only inter-row dividers");
+        check(value.rowShadows.every(x => x === "none") && value.overflow <= 0, "flat rows, no page overflow");
+        check(value.promptWidth <= value.promptMeasure + 1, "the excerpt keeps its inner reading measure");
+        check(value.contents.every(([left, right]) => left >= value.list[0] && right <= value.list[1] && right > left),
+            "tool labels, metadata and actions fit within the row");
+        await expect(card.locator(".card-tool-item")).toHaveCount(2);
+        await expect(card.locator(".card-identities")).toContainText("Mail");
+        await expect(opener).toBeVisible();
+        if (captureDir) {
+            await page.screenshot({ path: path.join(captureDir, `${state}.png`) });
+            if (state === "wide") {
+                await list.locator(".activity-card").last().scrollIntoViewIfNeeded();
+                await page.screenshot({ path: path.join(captureDir, "list-end.png") });
+            }
+            if (narrow) {
+                await page.locator("#activityListContext").evaluate(node => scrollBy(0,
+                    node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
+                await page.screenshot({ path: path.join(captureDir, "narrow-list.png") });
+            }
+        }
+        if (narrow) {
+            const scroll = page.locator("#chart .dimensional-scroll");
+            await scroll.press("ArrowRight");
+            await expect.poll(() => scroll.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+        }
+    }
+    await page.locator("#closeContextSidebar").press("Enter");
+    await expect(opener).toBeFocused();
+    await expect(opener).toHaveCSS("outline-style", "solid");
+    assert.ok(await opener.evaluate(node => {
+        const outline = getComputedStyle(node), outset = parseFloat(outline.outlineWidth) + parseFloat(outline.outlineOffset);
+        const ring = node.getBoundingClientRect(), group = node.closest("#activityList").getBoundingClientRect();
+        return ring.left - outset >= group.left && ring.right + outset <= group.right
+            && ring.top - outset >= group.top && ring.bottom + outset <= group.bottom;
+    }), "the group does not clip the restored keyboard focus ring");
+    if (captureDir) await writeFile(path.join(captureDir, "geometry.json"), JSON.stringify(measurements, null, 2));
+    assert.deepEqual(failures, []);
+});
+
 test("React and retained controls paint the same light outline from compact status to page heading", async t => {
     const { page } = await setup(t, "react", compactCardRecords());
     const selectors = [

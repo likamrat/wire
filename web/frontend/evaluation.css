@@ -2,6 +2,11 @@
 .wire-frontend-react .frontend-record-slot {
     display: contents;
 }
+/* The workspace already fits between the sidebars. Keep reading measures inside
+   its sections instead of capping the heading and records independently. */
+.wire-frontend-react.analyze-reading:not(.period-comparing) #workspace > :is(.page-heading, #homeView, #activityView, #frontendBreakdowns) {
+    max-width: none;
+}
 .wire-frontend-react.analyze-reading:not(.period-comparing) .page-heading > div:first-child {
     position: static !important;
     width: auto;
@@ -22,6 +27,7 @@
 .wire-frontend-react .frontend-heading-copy { min-width: 0; flex: 1 1 14rem; }
 .wire-frontend-react #frontendHeadingActions { align-self: center; }
 .wire-frontend-react #frontendHeadingActions:not(:has(> :not([hidden]))) { display: none; }
+.wire-frontend-react.analyze-reading:not(.period-comparing) #frontendHeadingActions { margin-inline-start: auto; max-width: 100%; }
 .wire-frontend-react #frontendHeadingActions .analyze-toolbar { margin: 0; padding: 0; container: none; flex-wrap: wrap; }
 .wire-frontend-react #pagePrimaryActions:not(:has(> :not([hidden]))) { display: none; }
 .wire-frontend-react .page-heading p { margin-top: 4px; font-size: var(--type-small); }
@@ -33,15 +39,24 @@
     transition: border-color .15s ease-out;
 }
 .wire-frontend-react input.search-capsule-input:focus-visible { outline-color: var(--focus); }
+.wire-frontend-react .analyze-chart-grid,
+.wire-frontend-react #activityList:has(.activity-card) {
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--radius);
+    background: var(--paper);
+    overflow: clip;
+}
 .wire-frontend-react #activityList .activity-card {
     display: block;
     container-type: inline-size;
     margin: 0;
     padding: 0;
     border: 0;
-    border-bottom: 1px solid var(--surface-divider);
     border-radius: 0;
-    background: var(--paper);
+    background: transparent;
+}
+.wire-frontend-react #activityList .frontend-record-slot + .frontend-record-slot > .activity-card {
+    border-top: 1px solid var(--surface-divider);
 }
 .wire-frontend-react #activityList .request-card-open:not(.recognition-row) {
     display: grid;
@@ -65,10 +80,6 @@
     grid-template-columns: minmax(0, 1.15fr) minmax(27rem, 1fr);
     align-items: stretch;
     gap: 0;
-    border: 1px solid var(--surface-edge);
-    border-radius: var(--radius);
-    overflow: clip;
-    background: var(--paper);
 }
 .wire-frontend-react .analyze-chart-main {
     grid-column: 1;
@@ -187,7 +198,8 @@
     .wire-frontend-react:has(#homeView:not([hidden])) .frontend-heading-copy p { margin: 0; }
 }
 @media (forced-colors: active) {
-    .wire-frontend-react #activityList .activity-card,
+    .wire-frontend-react #activityList:has(.activity-card),
+    .wire-frontend-react #activityList .frontend-record-slot + .frontend-record-slot > .activity-card,
     .wire-frontend-react .analyze-chart-grid { border-color: CanvasText; }
     .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open { outline: 2px solid Highlight; }
 }

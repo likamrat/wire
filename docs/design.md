@@ -76,8 +76,11 @@ Resting panels have no drop shadow. Navigation uses neutral selection without
 an outlined card or redundant Workspace caption. Settings follows the shared
 page and section type scale.
 
-The React evaluation pairs its compact overview above full-width interaction
-rows. In the Work IQ list the prompt leads. An adjacent identity key stacks below
+In React Analyze, the heading and controls, chart group, list heading and
+interaction list use the same workspace edges as the sidebars resize. The
+charts and the list each have one rounded surface; a single divider separates
+adjacent rows, without individual card borders or shadows. The prompt leads
+and keeps its shorter reading measure. An adjacent identity key stacks below
 it in narrow columns. A tool failure and a separate returned issue each lead to
 their own evidence; routine rows need no four-state ledger.
 The four supporting breakdowns use paired,
