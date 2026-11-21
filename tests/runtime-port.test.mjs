@@ -12,6 +12,8 @@ import { createRuntimeClient, RUNTIME_ORIGIN } from "../lib/runtime-client.mjs";
 import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture } from "./helpers.mjs";
+import pkg from "../package.json" with { type: "json" };
+import { chromium, expect } from "@playwright/test";
 
 async function isolatedStore(t) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-port-test-"));
@@ -92,6 +94,28 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
     });
     return { url, stop, stdout, stderr };
 }
+
+test("General identifies a directly launched manual copy by package version without claiming a verified build or offering Update", async t => {
+    const app = await isolatedStore(t);
+    const runtime = await launch(app, ["--port", "0"]);
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        const status = page.waitForResponse(response => response.url() === runtime.url + "api/app-update"
+            && response.request().postDataJSON()?.action === "status");
+        await page.goto(runtime.url + "settings?section=general");
+        const data = await (await status).json();
+        assert.equal(data.packageVersion, pkg.version);
+        assert.equal(data.installed, null);
+        assert.equal(data.phase, "manual");
+        await expect(page.locator("#generalTitle")).toBeVisible();
+        await expect(page.locator("#appUpdateVersion")).toHaveText(`WIRE · Package version ${pkg.version}`);
+        await expect(page.locator("#appUpdateStatus")).toContainText("managed manually");
+        await expect(page.locator("#appUpdateNotice")).toBeHidden();
+        await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+        await expect(page.locator("#appUpdateCheck")).toBeDisabled();
+    } finally { await browser.close(); }
+});
 
 test("normal launcher and default canvas client use loopback 4000 and preserve retained evidence", { timeout: 30000 }, async t => {
     const app = await isolatedStore(t), before = await loadBoardState(app.context);

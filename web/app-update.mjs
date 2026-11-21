@@ -46,7 +46,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         const status = feedback || success || result || state?.message || "Reading update status…";
         $("appUpdateStatus").textContent = state?.lastChecked != null
             ? `${status} Last checked ${new Date(state.lastChecked).toLocaleString()}.` : status;
-        $("appUpdateVersion").textContent = state?.installed ? `WIRE · Build ${state.installed.slice(0, 8)}` : "WIRE";
+        $("appUpdateVersion").textContent = state?.installed ? `WIRE · Build ${state.installed.slice(0, 8)}`
+            : typeof state?.packageVersion === "string" ? `WIRE · Package version ${state.packageVersion}` : "WIRE";
     }
     async function post(action, fields = {}) {
         const response = await fetch("/api/app-update", { ...fixed, method: "POST",

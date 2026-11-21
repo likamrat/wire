@@ -45,6 +45,8 @@ lock intact and inspect the original launcher error.
 
 Contributor worktrees, forks, modified clones and special development launch
 modes stay manual. Do not use a new data folder to resolve an update problem.
+For a directly launched runtime, **General** shows the local package version,
+not a verified Git build. It does not offer to install an update.
 One-click activation is qualified on Windows and WSL. Standalone Linux and
 macOS use the same-folder manual path until their cutover tests pass natively.
 Special modes cannot bypass an active staged build or unresolved handoff.
