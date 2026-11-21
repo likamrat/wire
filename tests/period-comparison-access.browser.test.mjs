@@ -134,7 +134,7 @@ async function compare(page, emptyB = false, waitForPair = true) {
     }, emptyB);
     if (waitForPair) {
         await expect.poll(() => page.evaluate(() => Boolean(window.periodComparisonOwner.acceptedPair()))).toBe(true);
-        await page.getByRole("button", { name: "View calls", exact: true }).click();
+        await page.locator("#viewComparisonCalls").click();
     }
 }
 
@@ -190,7 +190,7 @@ test("withdrawal during record construction cannot repopulate private DOM", { ti
     await page.evaluate(() => { window.compareAccess.withdrawDuringPaint = true; });
     await compare(page, false, false);
     await expect.poll(() => page.evaluate(() => Boolean(window.periodComparisonOwner.acceptedPair()))).toBe(true);
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect.poll(() => page.evaluate(() => window.compareAccess.withdrawDuringPaint)).toBe(false);
     assert.deepEqual(await page.evaluate(() => ({
         contents: document.getElementById("periodComparisonResults").textContent,
@@ -212,7 +212,7 @@ for (const emptyB of [false, true]) test(`fresh access keeps safe selected B wit
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()), null);
     await expect(page.locator("#periodComparison")).toBeHidden();
     await page.evaluate(() => window.compareAccess.fresh());
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     assert.equal(await page.evaluate(() => window.compareAccess.calls), before.calls + 1);
     assert.notEqual(await page.evaluate(() => window.periodComparisonOwner.acceptedPair().key), before.key);

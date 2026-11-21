@@ -568,6 +568,11 @@ denominator is unavailable, not 0%. Choose a period's value to inspect its
 exact contributing calls; an error within a completed call does not relabel
 that call as failed.
 
+The baseline is the period to compare against; the selected period is the one
+under review. Either date opens the shared calendar on that side. Choose a measure
+name for both exact values, or a side's value for its calls. On the change-table
+view, the call-count action opens the selected period first.
+
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with
 the preceding seven; 14/30-day choices follow the same rule. Custom dates uses

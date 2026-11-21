@@ -146,7 +146,7 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await openReportComparison(page);
     const compare = page.locator("#comparisonWorkspace");
-    for (const [index, label] of ["Earlier report", "Later report"].entries()) {
+    for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
         await compare.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup [data-value="${saved[index].bundleId}"]`).click();
     }

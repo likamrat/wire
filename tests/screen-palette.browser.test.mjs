@@ -50,7 +50,7 @@ test("tool, returned issue and disclosure inks follow the evidence through each 
         await page.goto(app.runtime.url+"compare?aFrom=2026-11-10&aTo=2026-11-12&bFrom=2026-11-14&bTo=2026-11-16");
         await paint(page.locator(".compare-outcome-paint.compare-mark-success").first(),"--tool-positive","backgroundColor");
         await paint(page.locator(".compare-outcome-paint.compare-mark-failure").first(),"--tool-negative","backgroundColor");
-        await page.getByRole("button",{name:"View calls",exact:true}).click();
+        await page.locator("#viewComparisonCalls").click();
         await paint(page.locator(".compare-record-failure:visible").first(),"--tool-negative");
         await navigateMain(page,"reports");
         const choice=page.locator("#reportPrivacyChoice"); await choice.click();

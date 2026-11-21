@@ -151,8 +151,8 @@ test("historical one-sided facts stay readable in both directions while new comp
     for (const direction of directions) {
         await showReports(direction.baseline.bundleId);
         await page.locator("#reportCompareLink").click();
-        await select("Earlier report", direction.baseline.bundleId);
-        await select("Later report", direction.later.bundleId);
+        await select("Baseline report", direction.baseline.bundleId);
+        await select("Selected report", direction.later.bundleId);
         const inspecting = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
         await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
         const response = await inspecting;

@@ -297,7 +297,10 @@ access remains valid.
 
 For existing reports, open **Compare > Saved reports** (or **Reports > Saved library >
 Compare saved reports**), choose
-**Earlier report** and **Later report**, then **Compare reports**. This uses
+**Baseline report** and **Selected report**, then **Compare reports**. Or use
+**Compare report** on a saved-library row to start with that report selected.
+**Open baseline report** and **Open selected report** open the registered saved
+copies; **Back to comparison** returns to the pair. The comparison uses
 their frozen facts, not current history. Different definitions, missing facts
 or incompatible identities can prevent a comparison. A saved two-period report
 already contains a comparison; it cannot serve as one of these ordinary report

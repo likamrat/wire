@@ -221,7 +221,7 @@ test("existing screen families share soft depth and themed switches without chan
         await page.getByRole("tab", { name: /^Files/ }).click();
         await capture(`${theme}-report-files`, ["#reportCreatePanel"]);
         await openReportLibrary(page); await openReportComparison(page);
-        for (const [label, entry] of [["Earlier report", entries[0]], ["Later report", entries[1]]]) {
+        for (const [label, entry] of [["Baseline report", entries[0]], ["Selected report", entries[1]]]) {
             await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
             await page.locator(`.select-popup .select-option[data-value="${entry.bundleId}"]`).click();
         }

@@ -316,8 +316,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const calendarTitle = el("h2", "Custom comparison dates"); calendarTitle.id = "comparisonCalendarTitle";
     calendar.append(calendarTitle, form);
     const calendars = {};
+    const periodRoles = { a: "Baseline period (compare against)", b: "Selected period (to review)" };
     for (const [side, label] of [["a", "Period A"], ["b", "Period B"]]) {
-        const group = el("fieldset"); group.append(el("legend", label));
+        const group = el("fieldset"); group.append(el("legend", periodRoles[side]));
         form.append(group);
         calendars[side] = assessmentFactories.createDateRangeCalendar({ root: group, id: "comparison" + side.toUpperCase(),
             label, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
@@ -329,10 +330,10 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     calendarActions.append(cancelCalendar, apply); form.append(calendarActions); setup.append(calendar);
     const dateChoices = el("div", undefined, "report-period-choices"); dateChoices.setAttribute("role", "group");
     dateChoices.setAttribute("aria-label", "Comparison period"); dateChoices.append(el("span", "Period"));
-    function openCalendar() {
+    function openCalendar(side = "a") {
         const context = getContext(), ranges = periods(context.route);
         calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
-        calendar.showModal(); calendars.a.focus();
+        calendar.showModal(); calendars[side].focus();
     }
     for (const days of ["7", "14", "30", "custom"]) {
         const control = button(days === "custom" ? "Custom dates" : `Last ${days} days`, () => {
@@ -435,7 +436,12 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (restore && publicationCurrent(acceptedPublication) && inspectionTrigger?.checkVisibility()) inspectionTrigger.focus({ preventScroll: true });
     }
     inspect.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); closeInspection(true); } });
-    const calls = button("View calls", () => openInspection("calls", calls));
+    const calls = button("View calls", () => {
+        if (selectedCallCount(consumer()) !== null) selectedPeriod = "later";
+        openInspection("calls", calls);
+    });
+    const callLabel = calls.firstChild;
+    calls.id = "viewComparisonCalls";
     const numbers = button("View numbers", () => openInspection("numbers", numbers));
     for (const control of [calls, numbers, report, inspectClose]) control.classList.add("icon-action");
     calls.append(ux.icon("forward")); numbers.append(ux.icon("forward"));
@@ -444,11 +450,17 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     scopeRow.append(dateHint, scope);
     setup.append(title, dateChoices, status, scopeRow, searchLabel);
     root.append(resultHeading, chartControls, footer, output, inspect);
+    function selectedCallCount(value) {
+        return value && chartView() === "outcomes" && !value.nativePeriods && value.periods.later.changeSummary
+            ? value.periods.later.rowIds.length : null;
+    }
     function syncReport(value = null) {
         report.disabled = !createReport || !value || !(Object.values(value.periods).some(side => side.scenarioIds.length)
             || value.nativePeriods?.rows.length || value.nativePeriods?.refinement?.contextConversationRefs.length);
         report.hidden = false;
         calls.disabled = numbers.disabled = !value;
+        const n = selectedCallCount(value);
+        callLabel.data = n !== null ? `View ${counted(n, "call")}` : value && value.definitions.layer !== "tool" ? "View records" : "View calls";
     }
     function clearResults() {
         acceptedPublication = null;
@@ -683,31 +695,34 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         }
         return node;
     }
+    const changeMeasures = [
+        { label: "Share of interactions with an error or failure", issue: true, share: true },
+        { label: "Matching interactions", interactions: true },
+        { label: "Tool calls" },
+        { label: "Failed tool calls", failed: true },
+    ];
+    function measureReading(measure, side) {
+        const { affected, interactions, issueRowIds } = side.changeSummary;
+        const ids = measure.issue ? issueRowIds : measure.failed
+            ? side.analytics.rows.filter(row => row.outcome === "failure").map(row => row.id) : side.rowIds;
+        const value = measure.share ? interactions ? affected * 100 / interactions : null : measure.interactions ? interactions : ids.length;
+        const label = `View ${counted(ids.length, "call")}${measure.issue ? " with errors or failures" : measure.failed ? " that failed" : ""}`;
+        return { ids, value, label };
+    }
     function changesPanel(sides) {
         const node = panel("What changed", "compare-changes");
-        const rate = (n, d) => d ? n * 100 / d : null;
         const percentage = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
-        const measures = [
-            { label: "Share of interactions with an error or failure", issue: true, share: true },
-            { label: "Matching interactions", interactions: true },
-            { label: "Tool calls" },
-            { label: "Failed tool calls", failed: true },
-        ];
-        const rows = measures.map(measure => {
+        const rows = changeMeasures.map((measure, index) => {
             const values = [], affected = [];
             const cells = sides.map(([key, side]) => {
                 const summary = side.changeSummary;
-                const ids = measure.issue ? summary.issueRowIds : measure.failed
-                    ? side.analytics.rows.filter(row => row.outcome === "failure").map(row => row.id) : side.rowIds;
-                const value = measure.share ? rate(summary.affected, summary.interactions)
-                    : measure.interactions ? summary.interactions : ids.length;
+                const { ids, value, label } = measureReading(measure, side);
                 values.push(value); affected.push(summary.affected);
                 const text = measure.share ? value === null ? "Not available" : percentage.format(value) + "%" : number(value);
-                const evidence = measure.issue ? " with errors or failures" : measure.failed ? " that failed" : "";
-                const label = `View ${counted(ids.length, "call")}${evidence}`;
                 const cell = el("div", undefined, "compare-change-value");
                 if (ids.length) {
-                    const action = button(text, () => openInspection("calls", action, { side: key, ids, label }));
+                    const action = button(text, () => openInspection("calls", action, { side: key, index, label }));
+                    action.id = `compareChange-${index}-${key}`;
                     action.setAttribute("aria-label", `${measure.label}, ${key === "baseline" ? "baseline" : "selected"}: ${text}. ${label}`);
                     cell.append(action);
                 } else cell.append(numeric(text));
@@ -723,7 +738,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const count = affected[1] - affected[0];
                 change.append(el("span", `${signed(count)} affected interaction${Math.abs(count) === 1 ? "" : "s"}`, "compare-value-detail"));
             } else change.append(numeric(signed(delta)));
-            return [measure.label, ...cells, change];
+            const detail = button(measure.label, () => openInspection("measure", detail, { index }));
+            detail.id = `compareChangeMeasure${index}`;
+            detail.classList.add("icon-action");
+            detail.append(ux.icon("forward"));
+            return [detail, ...cells, change];
         });
         node.append(table("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
         return node;
@@ -765,10 +784,26 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const names = presentation.names(sides.map(([, side]) => side.range), value.timeContext, new Date().toISOString());
         inspectionTrigger = trigger; inspected = { kind, narrowing, key: inspectionKey(value) };
         inspectTitle.textContent = kind === "numbers" ? "Exact numbers" : narrowing ? narrowing.label : value.definitions.layer === "tool" ? "Calls in both periods" : "Records in both periods";
-        if (kind === "numbers") inspectBody.replaceChildren(numbersPanel(value, sides, names));
+        if (kind === "measure") {
+            const index = narrowing.index;
+            const measure = changeMeasures[index];
+            if (!measure || sides.some(([, side]) => !side.changeSummary)) return;
+            const title = measure.label, units = measure.share || measure.interactions ? "interaction" : "call";
+            const rows = sides.map(([key, side]) => {
+                const { interactions, affected } = side.changeSummary;
+                const { ids, value: measured, label } = measureReading(measure, side);
+                const amount = measure.share ? measured === null ? "No denominator" : `${number(measured)}% (${number(affected)} of ${counted(interactions, units)})` : counted(measured, units);
+                const action = button(label, () => openInspection("calls", trigger, { side: key, index, label }));
+                action.classList.add("icon-action"); action.append(ux.icon("forward")); action.disabled = !ids.length;
+                return [key === "baseline" ? "Baseline" : "Selected", time.formatCivilRange(side.range.from, side.range.to, value.timeContext), amount, action];
+            });
+            inspectTitle.textContent = title;
+            inspectBody.replaceChildren(table(title, ["Period", "Dates", "Value", "Calls"], rows));
+        } else if (kind === "numbers") inspectBody.replaceChildren(numbersPanel(value, sides, names));
         else {
             const readingSides = narrowing ? sides.map(([key, side, name]) => {
-                const ids = new Set(key === narrowing.side ? narrowing.ids : []);
+                const measure = changeMeasures[narrowing.index];
+                const ids = new Set(measure && side.changeSummary ? measureReading(measure, side).ids : key === narrowing.side ? narrowing.ids : []);
                 const rows = side.analytics.rows.filter(row => ids.has(row.id));
                 const scenarioIds = [...new Set(rows.map(row => row.scenarioId))];
                 const unmappedScenarioIds = side.unmappedScenarioIds.filter(id => scenarioIds.includes(id));
@@ -1093,8 +1128,17 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const pair = el("div", undefined, "compare-period-key");
         for (const [index, [, side]] of sides.entries()) {
             const line = el("p");
-            line.append(identity(index ? "Selected period" : "Baseline period"),
-                el("span", `${dateRange(side)} (${dayCount(side)} ${dayCount(side) === 1 ? "day" : "days"})`, "compare-date-qualification")); pair.append(line);
+            const role = index ? "b" : "a";
+            const edit = button(dateRange(side), () => {
+                if (readCurrent(started, publication) && edit.isConnected) openCalendar(role);
+            });
+            edit.classList.add("icon-action");
+            edit.append(ux.icon("chevron"));
+            edit.setAttribute("aria-haspopup", "dialog");
+            edit.setAttribute("aria-label", `Change ${index ? "selected" : "baseline"} period: ${dateRange(side)}`);
+            line.append(identity(periodRoles[role]), edit);
+            if (dayCount(a) !== dayCount(b)) line.append(el("span", counted(dayCount(side), "day"), "compare-date-qualification"));
+            pair.append(line);
         }
         const collection = { history: "Saved collection", legacy: "Earlier snapshot", all: "Both collections" }[value.options.filters.scope ?? "history"];
         const content = doc.createDocumentFragment(); content.append(pair);
@@ -1281,7 +1325,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             if (!readCurrent(started, publication)) return;
             if (inspectionReturn?.key === inspectionKey(value)) {
                 selectedPeriod = inspectionReturn.selectedPeriod;
-                openInspection(inspectionReturn.kind, inspectionReturn.trigger, inspectionReturn.narrowing, { focus: false });
+                const trigger = inspectionReturn.trigger?.id ? doc.getElementById(inspectionReturn.trigger.id) ?? inspectionReturn.trigger : inspectionReturn.trigger;
+                openInspection(inspectionReturn.kind, trigger, inspectionReturn.narrowing, { focus: false });
             }
             inspectionReturn = null;
             setStatus("Comparison ready.", "visually-hidden");
@@ -1378,6 +1423,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             while (walker.nextNode()) walker.currentNode.data = "";
         };
         for (const host of [scope, status, resultTitle, output, inspectBody]) clearText(host);
+        callLabel.data = "View calls";
         scope.textContent = ""; scope.hidden = true;
         searchInput.value = ""; searchInput.defaultValue = "";
         if (calendar.open) calendar.close();

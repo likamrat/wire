@@ -149,7 +149,7 @@ test("report metadata groups preserve scope, authors, counts and saved identity 
     assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
     await capture("omitted-copy", "#reportReviewBody");
     await openReportLibrary(page); await openReportComparison(page);
-    const combo = page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Later report", exact: true });
+    const combo = page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Selected report", exact: true });
     await combo.click();
     const item = page.locator(`.select-option[data-value="${entries[1].bundleId}"]`);
     assert.equal(await item.locator(".select-option-label").textContent(), title);
@@ -199,7 +199,7 @@ test("unavailable saved comparison choices retain native and accessible reasons 
     const option = choices.locator(`option[value="${entries[0].bundleId}"]`);
     assert.equal(await option.isDisabled(), true);
     assert.match(await option.textContent(), /structured facts unavailable/);
-    await page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Earlier report", exact: true }).click();
+    await page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Baseline report", exact: true }).click();
     const row = page.locator(`.select-option[data-value="${entries[0].bundleId}"]`);
     assert.equal(await row.getAttribute("aria-disabled"), "true");
     assert.match(await row.locator(".select-option-detail").textContent(), /Unavailable: structured facts unavailable\./);
@@ -374,7 +374,7 @@ test("six saved reports share a deliberate page frame with tasks, inspector and 
     await openReportComparison(page);
     await page.locator("#comparisonWorkspace select").first().locator("option").nth(1).waitFor({ state: "attached" });
     await capture("comparison-wide", "#comparisonWorkspace");
-    for (const [label, entry] of [["Earlier report", entries[0]], ["Later report", entries[1]]]) {
+    for (const [label, entry] of [["Baseline report", entries[0]], ["Selected report", entries[1]]]) {
         await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${entry.bundleId}"]`).click();
     }

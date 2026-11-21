@@ -338,7 +338,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("link", { name: "Compare saved reports", exact: true }).click();
     const comparison = page.locator("#comparisonWorkspace");
-    for (const [label, title] of [["Earlier report", "Earlier release checklist"], ["Later report", "Call results"]]) {
+    for (const [label, title] of [["Baseline report", "Earlier release checklist"], ["Selected report", "Call results"]]) {
         await comparison.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup [data-value="${seeded.get(title)}"]`).click();
     }

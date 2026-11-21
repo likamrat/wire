@@ -323,7 +323,7 @@ test("populated saved-report comparison inherits Fluent roles without changing f
     await page.locator("#reportCompareLink").click();
     const workspace = page.locator("#comparisonWorkspace");
     await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
-    for (const [index, label] of ["Earlier report", "Later report"].entries()) {
+    for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
         await workspace.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${bundles[index].bundleId}"]`).click();
     }

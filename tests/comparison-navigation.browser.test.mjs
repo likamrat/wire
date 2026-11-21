@@ -54,6 +54,18 @@ test("Compare sections keep the period view and saved report choices across keyb
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, timezoneId: "UTC" });
     await page.goto(app.runtime.url + "compare?aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");
     await ready(page);
+    const selectedDates = page.getByRole("button", { name: /^Change selected period:/ });
+    await selectedDates.click();
+    await expect(page.locator("#comparisonCustomDates fieldset").nth(1)).toContainText("Selected period (to review)");
+    await page.keyboard.press("Escape");
+    await expect(selectedDates).toBeFocused();
+    const measure = page.locator("#compareChangeMeasure0");
+    await measure.click();
+    await expect(page.locator(".compare-inspection")).toContainText("Mar 8–9, 2026");
+    await page.locator(".compare-inspection").getByRole("button", { name: /View .* with errors or failures/ }).last().click();
+    await expect(page.locator("#comparisonExactRecordsB")).toBeVisible();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(measure).toBeFocused();
     const nav = page.getByRole("navigation", { name: "Compare sections" });
     const periods = nav.getByRole("link", { name: "Periods" }), reports = nav.getByRole("link", { name: "Saved reports" });
     const sectionIcons = () => nav.locator("a").evaluateAll(links => links.map(link => {
@@ -73,7 +85,7 @@ test("Compare sections keep the period view and saved report choices across keyb
     assert.deepEqual(await sectionIcons(), inPeriods);
     await expect(page.locator("#reportTaskNav")).toBeHidden();
     const picker = page.locator("#comparisonWorkspace");
-    for (const [label, bundle] of [["Earlier report", app.bundles[0]], ["Later report", app.bundles[1]]]) {
+    for (const [label, bundle] of [["Baseline report", app.bundles[0]], ["Selected report", app.bundles[1]]]) {
         await picker.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup [data-value="${bundle.bundleId}"]`).click();
     }
@@ -82,8 +94,8 @@ test("Compare sections keep the period view and saved report choices across keyb
     await expect(page.getByRole("button", { name: "By tool", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".compare-period-key")).toContainText(/Mar 7, 2026.*Mar 8–9, 2026/s);
     await reports.click();
-    await expect(picker.getByRole("combobox", { name: "Earlier report", exact: true })).toContainText("Earlier weekly review");
-    await expect(picker.getByRole("combobox", { name: "Later report", exact: true })).toContainText("Later weekly review");
+    await expect(picker.getByRole("combobox", { name: "Baseline report", exact: true })).toContainText("Earlier weekly review");
+    await expect(picker.getByRole("combobox", { name: "Selected report", exact: true })).toContainText("Later weekly review");
     await periods.click(); await ready(page);
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Exact numbers" })).toBeVisible();
@@ -97,6 +109,21 @@ test("Compare sections keep the period view and saved report choices across keyb
     await expect(reports).toHaveAttribute("aria-current", "page");
     await page.getByRole("link", { name: "Back to saved reports", exact: true }).click();
     await expect(libraryEntry).toBeFocused();
+    const rowEntry = page.locator(`[data-bundle-id="${app.bundles[1].bundleId}"]`).getByRole("button", { name: "Compare report" });
+    await rowEntry.click();
+    await expect(picker.getByRole("combobox", { name: "Selected report", exact: true })).toContainText("Later weekly review");
+    const baseline = picker.getByRole("combobox", { name: "Baseline report", exact: true });
+    await expect(baseline).toBeFocused();
+    await expect(picker.getByRole("button", { name: "Compare reports", exact: true })).toBeDisabled();
+    await baseline.click();
+    await page.locator(`.select-popup [data-value="${app.bundles[0].bundleId}"]`).click();
+    const original = picker.getByRole("button", { name: "Open selected report", exact: true });
+    await original.click();
+    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Later weekly review");
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(original).toBeFocused();
+    await page.getByRole("link", { name: "Back to saved reports", exact: true }).click();
+    await expect(rowEntry).toBeFocused();
 });
 test("exact-call captions follow narrowed membership", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
@@ -191,7 +218,7 @@ test("comparison paint is linear and exact-call captions follow narrowed members
     await expect(page.locator("#comparisonExactRecordsA")).not.toContainText("missing service details");
     await expect(page.locator("#comparisonExactRecordsA tbody tr")).toHaveCount(1);
     await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("5 calls across 3 interactions");
     await expect(page.locator("#comparisonExactRecordsA")).toContainText("missing service details");
 });
@@ -231,7 +258,7 @@ test("primary comparison opens complete days independently, keeps chart membersh
         }
         await expect(page.locator("#comparisonActions button")).toHaveText(["View calls", "View numbers", "Create report"]);
         assert.equal(await page.locator("#comparisonActions").evaluate(node => node === window.comparisonFooter), true);
-        await page.getByRole("button", { name: "View calls", exact: true }).click();
+        await page.locator("#viewComparisonCalls").click();
         await expect(page.locator("#comparisonExactRecordsA tbody tr")).toHaveCount(pair.periods.baseline.rowIds.length);
         await expect(page.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(pair.periods.later.rowIds.length);
         await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
@@ -355,7 +382,7 @@ test("access withdrawal scrubs comparison marks, inspection and held links witho
     const { page, server } = await setup(t, "#analyze", { enforced: true });
     await page.locator("#comparePeriods").click();
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await page.evaluate(() => {
         window.heldComparisonLink = document.querySelector("#comparisonExactRecordsA a");
         window.heldComparisonText = window.heldComparisonLink.firstChild;
@@ -378,7 +405,7 @@ test("exact call reading returns to the selected period, chart and focused recor
     const { page } = await setup(t, "#analyze?compare=periods");
     await ready(page); await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
     await page.getByRole("button", { name: "Timeline", exact: true }).click();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     const link = page.locator("#comparisonExactRecordsB a").last(), id = await link.getAttribute("id");
     await link.click();
@@ -484,7 +511,7 @@ for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exa
         searchParams.sort(); return pathname + "?" + searchParams;
     };
     const pair = comparisons.at(-1), origin = locationKey();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     const call = page.locator("#comparisonExactRecordsB a").first(), id = await call.getAttribute("id");
     for (const back of ["close", "history"]) {

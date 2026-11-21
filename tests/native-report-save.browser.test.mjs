@@ -996,7 +996,7 @@ for (const theme of ["light", "dark"]) test(`screen notices keep report journeys
         await page.goto(app.url + "#reports");
         await openReportComparison(page);
         const workspace = page.locator("#comparisonWorkspace");
-        for (const [label, bundle] of [["Earlier report", first], ["Later report", second]]) {
+        for (const [label, bundle] of [["Baseline report", first], ["Selected report", second]]) {
             await workspace.getByRole("combobox", { name: label, exact: true }).click();
             await page.locator(`.select-popup .select-option[data-value="${bundle.bundleId}"]`).click();
         }
@@ -1316,7 +1316,7 @@ test("existing Compare screen prepares, reviews and saves Microsoft snapshots wi
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await openReportComparison(page);
         const workspace = page.locator("#comparisonWorkspace");
-        for (const [index, label] of ["Earlier report", "Later report"].entries()) {
+        for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
             await workspace.getByRole("combobox", { name: label, exact: true }).click();
             await page.locator(`.select-popup .select-option[data-value="${saved[index].bundleId}"]`).click();
         }
@@ -1919,7 +1919,7 @@ test("a lost saved response survives collection advancement with immutable files
         await page.goto(app.url + "#reports");
         await openReportComparison(page);
         const workspace = page.locator("#comparisonWorkspace");
-        for (const [label, bundle] of [["Earlier report", first], ["Later report", second]]) {
+        for (const [label, bundle] of [["Baseline report", first], ["Selected report", second]]) {
             await workspace.getByRole("combobox", { name: label, exact: true }).click();
             await page.locator(`.select-popup .select-option[data-value="${bundle.bundleId}"]`).click();
         }

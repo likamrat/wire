@@ -7618,6 +7618,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 action: () => openSavedReport(bundle, files, format),
             })), outer, current, rowListeners);
             const actions = el("div", "saved-report-actions");
+            if (bundle.kind !== "comparison" && bundle.reportType !== "period-comparison") {
+                const compare = viewKey(button("Compare report", async () => {
+                    if (!current()) return;
+                    if (reportComparisonUI.isBusy() || reportComparisonUI.hasPendingSave()) {
+                        announce("Finish or check the current comparison save first.", "stale"); return;
+                    }
+                    const publication = api.publicationToken(), key = savedEntry("library-comparison", null, compare);
+                    const loaded = await navigate({ view: "reports", task: "compare", savedEntry: key, search: "", analysisQuery: null });
+                    const atEntry = () => api.isCurrent(publication) && savedComparisonSection(workspaceState.route) && workspaceState.route.savedEntry === key;
+                    if (!loaded || !atEntry()) return;
+                    try { await reportComparisonUI.selectSource(bundle.bundleId, atEntry); }
+                    catch (error) { if (atEntry()) announce(error.message, "error"); }
+                }, "quiet", rowListeners), "compare-bundle:" + bundle.bundleId);
+                actions.append(compare);
+            }
             const inspect = viewKey(button("Inspect details", () => {
                 if (current()) inspectSavedReport(bundle, inspect);
             }, "quiet", rowListeners), "inspect-bundle:" + bundle.bundleId);
@@ -10647,7 +10662,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     savedTools.append(libraryOptions);
     ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {
-        api, ux, createSaveIdentity: assessmentFactories.createReportSaveIdentity, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
+        api, ux, savedPeriodLabel, createSaveIdentity: assessmentFactories.createReportSaveIdentity, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
         createFileInspection: mountFileInspection,
         createPreparedFrame: (html, options) => assessmentFactories.preparedFrame(html, assessmentFactories.liveSearch.frozenFrame, options),
         onRead: leaveSavedInspectorContext,

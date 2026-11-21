@@ -511,7 +511,7 @@ test("relocated launchers use native records, reference, comparison and update d
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonResults")).toBeVisible();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     let pairedReads = 0;
     page.on("request", request => { if (request.url().endsWith("/api/period-comparison")) pairedReads++; });
@@ -519,7 +519,7 @@ test("relocated launchers use native records, reference, comparison and update d
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
     await expect(page.locator(".compare-inspection table").first()).toBeVisible();
     await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".compare-inspection h2")).toBeFocused();
     assert.equal(pairedReads, 0, "The footer reveals the accepted selected roster without another paired read");

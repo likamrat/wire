@@ -1023,7 +1023,7 @@ test("new library metadata and saved comparisons use frozen files and direct loc
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
     await page.locator("#reportCompareLink").click();
     const entries = (await loadBoardState(context)).exports;
-    for (const [label, id] of [["Earlier report", entries[0].bundleId], ["Later report", entries[1].bundleId]]) {
+    for (const [label, id] of [["Baseline report", entries[0].bundleId], ["Selected report", entries[1].bundleId]]) {
         await page.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup [data-value="${id}"]`).click();
     }

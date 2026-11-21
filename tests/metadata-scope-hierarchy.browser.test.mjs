@@ -162,7 +162,7 @@ test("native saved-report options retain detail and disabled reasons through the
     await expect(field.locator('option[value="hierarchy-earlier"]')).not.toHaveAttribute("data-disabled-reason");
     await expect(field.locator('option[value="hierarchy-period"]')).toHaveAttribute("data-disabled-reason", "two-cohort period report; open directly.");
     await expect(field.locator('option[value="hierarchy-period"]')).toContainText("(two-cohort period report; open directly)");
-    await page.getByRole("combobox", { name: "Earlier report", exact: true }).click();
+    await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
     const unavailable = page.locator('.select-popup [data-value="hierarchy-unavailable"]');
     await expect(unavailable).toHaveAttribute("aria-disabled", "true");
     await expect(unavailable).toHaveAccessibleDescription(`${metadata}; Unavailable: structured facts unavailable.`);
@@ -177,7 +177,7 @@ test("native saved-report options retain detail and disabled reasons through the
             await page.setViewportSize({ width, height: 1000 });
             await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
             await chooseTheme(page, theme);
-            await page.getByRole("combobox", { name: "Earlier report", exact: true }).click();
+            await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
             await unavailable.scrollIntoViewIfNeeded();
             await expect(unavailable).toHaveAccessibleName("Invented unavailable report");
             await expect(unavailable).toHaveAttribute("aria-disabled", "true");
@@ -203,12 +203,12 @@ test("native saved-report options retain detail and disabled reasons through the
     await field.locator('option[value="hierarchy-earlier"]').evaluate(node => {
         node.dataset.disabledReason = "Not applicable while this option is enabled.";
     });
-    await page.getByRole("combobox", { name: "Earlier report", exact: true }).click();
+    await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
     const available = page.locator('.select-popup [data-value="hierarchy-earlier"]');
     await expect(available).toHaveAttribute("aria-disabled", "false");
     await expect(available).not.toHaveAccessibleDescription(/Not applicable/);
-    await page.getByRole("combobox", { name: "Earlier report", exact: true }).press("End");
-    await expect(page.getByRole("combobox", { name: "Earlier report", exact: true }))
+    await page.getByRole("combobox", { name: "Baseline report", exact: true }).press("End");
+    await expect(page.getByRole("combobox", { name: "Baseline report", exact: true }))
         .toHaveAttribute("aria-activedescendant", await available.getAttribute("id"));
     await page.keyboard.press("Escape");
     if (proof) await writeFile(path.join(proof, "report-option-contract.json"), JSON.stringify(states, null, 2));

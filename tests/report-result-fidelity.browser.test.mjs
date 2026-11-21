@@ -67,7 +67,7 @@ test("normal report and saved comparison separately review, save and reopen mask
         savedIds.push((await loadBoardState(context)).exports.at(-1).bundleId);
     }
     await openReportComparison(page);
-    for (const [name, id] of [["Earlier report", savedIds[0]], ["Later report", savedIds[1]]]) {
+    for (const [name, id] of [["Baseline report", savedIds[0]], ["Selected report", savedIds[1]]]) {
         await page.getByRole("combobox", { name, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
     }

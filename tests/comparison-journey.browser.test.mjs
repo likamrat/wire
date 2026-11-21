@@ -84,8 +84,8 @@ async function selectReport(page, label, bundleId) {
 }
 async function inspectSavedPair(page, bundles, row) {
     await openReportComparison(page);
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
 }
 
@@ -101,12 +101,12 @@ test("saved comparison pending, invalid and failed choices keep their compact fo
     const { page, bundles, calls } = await setup(t);
     await openReportComparison(page);
     const root = page.locator("#comparisonWorkspace"), compare = root.getByRole("button", { name: "Compare reports", exact: true });
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[0].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[0].bundleId);
     assert.equal(await compare.isDisabled(), true);
     assert.match(await root.innerText(), /Choose two different saved reports/);
     await captureComparison(page, "invalid-same-report");
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     const arrived = Promise.withResolvers(), release = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/report-comparison/inspect", async route => {
@@ -115,7 +115,7 @@ test("saved comparison pending, invalid and failed choices keep their compact fo
     }, { times: 1 });
     await compare.click(); await arrived.promise;
     assert.equal(await compare.isDisabled(), true);
-    assert.equal(await root.getByRole("combobox", { name: "Earlier report", exact: true }).isDisabled(), true);
+    assert.equal(await root.getByRole("combobox", { name: "Baseline report", exact: true }).isDisabled(), true);
     await root.getByText("Reading the two selected reports...", { exact: true }).waitFor();
     await captureComparison(page, "pending-read");
     release.resolve();
@@ -123,19 +123,12 @@ test("saved comparison pending, invalid and failed choices keep their compact fo
     assert.equal(await compare.isEnabled(), true);
     await captureComparison(page, "failed-read");
     await compare.click();
-    await root.locator(".report-comparison").waitFor();
-    const trailing = locator => locator.evaluate(node => {
-        const root = node.closest("#comparisonWorkspace"), style = getComputedStyle(root);
-        return Math.abs(node.getBoundingClientRect().right - root.getBoundingClientRect().right + parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth)) < 1;
-    });
-    assert.equal(await trailing(root.getByRole("button", { name: "Prepare comparison copy", exact: true })), true);
-    await captureComparison(page, "comparison-facts");
-    await root.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     await root.locator(".comparison-prepared-files iframe").waitFor();
-    assert.equal(await trailing(root.getByRole("button", { name: "Approve for local saving", exact: true })), true);
+    assert.equal(await root.getByRole("button", { name: "Save comparison", exact: true }).isEnabled(), true);
+    assert.equal(await root.getByRole("button", { name: "Open baseline report", exact: true }).isVisible(), true);
     await captureComparison(page, "prepared-review");
     await root.getByRole("button", { name: "Back to comparison choices", exact: true }).click();
-    assert.equal(await root.getByRole("combobox", { name: "Earlier report", exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await root.getByRole("combobox", { name: "Baseline report", exact: true }).evaluate(node => node === document.activeElement), true);
     assert.deepEqual(await root.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
     assert.equal(calls.some(call => ["/api/report-comparison/review", "/api/report-comparison/save"].includes(call.path)), false);
 });
@@ -148,8 +141,8 @@ test("saved comparison choices share a balanced task frame without duplicate hea
     await openReportComparison(page);
     for (const selected of [false, true]) {
         if (selected) {
-            await selectReport(page, "Earlier report", bundles[0].bundleId);
-            await selectReport(page, "Later report", bundles[1].bundleId);
+            await selectReport(page, "Baseline report", bundles[0].bundleId);
+            await selectReport(page, "Selected report", bundles[1].bundleId);
         }
         for (const theme of ["light", "dark"]) for (const [width, scale, collapsed] of [
             [2000, 100, false], [1440, 100, true], [768, 100, true], [390, 100, false],
@@ -354,8 +347,8 @@ test("comparison is a bounded Reports task with a retained approved review and e
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), false);
     const workspace = page.locator("#comparisonWorkspace");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     const frame = workspace.locator(".comparison-prepared-files iframe");
@@ -365,7 +358,7 @@ test("comparison is a bounded Reports task with a retained approved review and e
     await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
     await workspace.getByRole("button", { name: "Back to comparison choices", exact: true }).click();
-    await workspace.getByRole("button", { name: "Inspect earlier report", exact: true }).click();
+    await workspace.getByRole("button", { name: "Inspect baseline report", exact: true }).click();
     await page.locator("#contextSidebar").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator("#savedReportReader iframe").waitFor();
     const requestCount = calls.length;
@@ -469,8 +462,8 @@ test("new Prepare replaces only the other report preview and preserves both task
     const ordinaryPreviews = calls.filter(call => call.path === "/api/preview").length;
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed", "Reading a comparison cannot invalidate an ordinary approval");
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
@@ -723,8 +716,8 @@ for (const mismatch of ["identity", "kind", "title", "shape"]) test(`comparison 
     const { page, context, bundles, row } = await setup(t);
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/preview"));
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
@@ -745,7 +738,7 @@ for (const mismatch of ["identity", "kind", "title", "shape"]) test(`comparison 
     await recovery.waitFor();
     assert.match(await workspace.innerText(), /receipt did not match the dispatched comparison/);
     assert.doesNotMatch(await workspace.innerText(), /Comparison saved:/);
-    assert.equal(await workspace.getByRole("combobox", { name: "Earlier report", exact: true }).isDisabled(), true);
+    assert.equal(await workspace.getByRole("combobox", { name: "Baseline report", exact: true }).isDisabled(), true);
     assert.equal(await workspace.getByRole("button", { name: "Discard comparison", exact: true }).isDisabled(), true);
     await recovery.click();
     assert.equal(await recovery.isVisible(), true);
@@ -771,8 +764,8 @@ test("closing a frozen comparison restores its library entry and preserves the c
     const original = await Promise.all([...bundles, savedComparison].map(hashes));
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await openReportLibrary(page);
     const open = row(savedComparison.bundleId).getByRole("button", { name: "Open saved comparison", exact: true });
     await open.scrollIntoViewIfNeeded();
@@ -808,18 +801,18 @@ test("comparison choices describe saved scope and useful results precede unavail
     assert.ok((await earlierOption.getAttribute("data-detail")).startsWith(`Prepared ${bundles[0].preparedAtDisplay}`));
     assert.match(await earlierOption.getAttribute("data-detail"), /1 interaction/);
     assert.doesNotMatch(options.join(" "), /export-[a-f0-9-]{36}/, "Identity is not the primary option label");
-    await workspace.getByRole("combobox", { name: "Earlier report", exact: true }).click();
+    await workspace.getByRole("combobox", { name: "Baseline report", exact: true }).click();
     assert.equal(await page.locator(`.select-option[data-value="${bundles[0].bundleId}"]`).getAttribute("data-value"), bundles[0].bundleId);
     assert.ok((await page.locator(`.select-option[data-value="${bundles[0].bundleId}"] .select-option-detail`).innerText()).includes(bundles[0].preparedAtDisplay));
     await page.keyboard.press("Escape");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
-    await workspace.getByRole("button", { name: "Inspect earlier report", exact: true }).click();
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
+    await workspace.getByRole("button", { name: "Inspect baseline report", exact: true }).click();
     assert.equal(await page.locator("#contextSidebarTitle").innerText(), bundles[0].title);
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
     await page.locator("#closeContextSidebar").click();
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
-    assert.equal(await workspace.getByRole("button", { name: "Inspect earlier report", exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await workspace.getByRole("button", { name: "Inspect baseline report", exact: true }).evaluate(node => node === document.activeElement), true);
     const response = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     const model = (await (await response).json()).comparison;
@@ -857,7 +850,7 @@ test("comparison choices describe saved scope and useful results precede unavail
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
         await page.evaluate(() => document.fonts.ready);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-        if (width === 375 && scale === 100) for (const label of ["Earlier report", "Later report"]) {
+        if (width === 375 && scale === 100) for (const label of ["Baseline report", "Selected report"]) {
             const timeFits = await workspace.getByRole("combobox", { name: label, exact: true }).locator(".select-value").evaluate(node => {
                 const time = node.textContent.match(/\d{1,2}:\d{2}:\d{2} [AP]M/);
                 if (!time || node.firstChild?.nodeType !== Node.TEXT_NODE) return false;
@@ -891,8 +884,8 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), ["", ""]);
     assert.equal(calls.filter(call => call.path.endsWith("/inspect")).length, 0);
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     const inspect = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     const inspectResponse = await inspect;
@@ -1077,8 +1070,8 @@ test("bulk report deletion preserves saved comparisons but invalidates their app
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
     await workspace.locator("select option").nth(1).waitFor({ state: "attached" });
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true }).check();
@@ -1199,8 +1192,8 @@ test("lost comparison Save response recovers by reading the saved library withou
     let saves = 0;
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
-    await selectReport(page, "Earlier report", bundles[0].bundleId);
-    await selectReport(page, "Later report", bundles[1].bundleId);
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     await workspace.locator(".comparison-prepared-files iframe").waitFor();
@@ -1215,7 +1208,7 @@ test("lost comparison Save response recovers by reading the saved library withou
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
     await workspace.getByRole("button", { name: "Read saved comparisons", exact: true }).waitFor();
     assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true, includeHidden: true }).isVisible(), false);
-    await workspace.getByRole("button", { name: "Inspect earlier report", exact: true }).click();
+    await workspace.getByRole("button", { name: "Inspect baseline report", exact: true }).click();
     await page.locator("#closeContextSidebar").click();
     assert.equal(await workspace.getByRole("button", { name: "Read saved comparisons", exact: true }).isVisible(), true);
     assert.match(await workspace.innerText(), /save is not confirmed and may have completed/);

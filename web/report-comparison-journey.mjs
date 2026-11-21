@@ -1,5 +1,5 @@
 // The report controller owns facts, privacy approval, and frozen files.
-export function mountReportComparisonJourney(root, { api, renderer, ux, timeContext, refresh, onError, inspectSource, openSaved, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection, createPreparedFrame }) {
+export function mountReportComparisonJourney(root, { api, renderer, ux, timeContext, refresh, onError, inspectSource, openSaved, savedPeriodLabel, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection, createPreparedFrame }) {
     if (!root?.ownerDocument || typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function") {
         throw new TypeError("Mounted comparison journeys require publication authority and a save-identity factory.");
     }
@@ -45,15 +45,19 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
     const selectors = el("div", undefined, "comparison-selectors");
     const baseline = el("select"), later = el("select");
     const identities = new Map();
-    for (const [text, select] of [["Earlier report", baseline], ["Later report", later]]) {
+    for (const [text, select] of [["Baseline report", baseline], ["Selected report", later]]) {
         const choice = el("div", undefined, "comparison-report-choice"), label = el("label", text);
         const identity = button("Inspect " + text.toLowerCase(), event => { if (!accessWithdrawn) inspectSource(select.value, event.currentTarget); }, "quiet comparison-report-identity");
+        const open = button("Open " + text.toLowerCase(), event => openSaved(select.value, event.currentTarget), "quiet comparison-report-identity");
+        const detail = el("span", "", "compare-caption");
+        if (ux) { open.classList.add("icon-action"); open.append(ux.icon("forward")); }
         if (ux) { identity.classList.add("icon-action"); identity.append(ux.icon("forward")); }
         identity.dataset.viewKey = "inspect-comparison-source:" + text;
         identity.hidden = true;
-        identities.set(select, { identity });
+        open.dataset.viewKey = "open-comparison-source:" + text;
+        identities.set(select, { identity, open, detail });
         select.dataset.selectPresentation = "filter";
-        label.append(select); choice.append(label, identity); selectors.append(choice);
+        label.append(select); choice.append(label, detail, open, identity); selectors.append(choice);
     }
     const status = el("p"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
     const content = el("div"), actions = el("div", undefined, "assessment-control-actions");
@@ -217,8 +221,16 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
         savedBack.hidden = savedContent.hidden = !savedMode;
         if (savedMode) reviewHost.hidden = true;
         for (const select of [baseline, later]) {
-            const { identity } = identities.get(select);
+            const { identity, open, detail } = identities.get(select);
+            const host = reviewing ? preparedFiles.querySelector(".comparison-inspection-actions") : identity.parentElement;
+            if (host && open.parentElement !== host) {
+                if (reviewing) host.append(open); else identity.before(open);
+            }
             const description = select.selectedOptions[0]?.dataset.detail;
+            const window = select.selectedOptions[0]?.dataset.period;
+            detail.textContent = select.value ? window || "Report period not recorded." : select === baseline ? "Compare against this report." : "Choose the report to review.";
+            open.hidden = !select.value || !openSaved;
+            open.disabled = writing || artifactPending || locked;
             identity.hidden = !description;
             identity.disabled = writing || artifactPending;
         }
@@ -562,7 +574,9 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
                 const option = el("option", title + (duplicate && prepared ? ` / ${prepared}` : "") + reference);
                 option.value = item.bundleId;
                 option.dataset.optionLabel = title + reference;
-                option.dataset.detail = metadata.join(" / ");
+                const period = savedPeriodLabel?.(item);
+                if (period) option.dataset.period = period;
+                option.dataset.detail = [...(period ? [period] : []), ...metadata].join(" / ");
                 option.disabled = !["available", "legacy-outcomes-only", "native-frozen-evidence"].includes(item.comparisonEligibility);
                 if (option.disabled) {
                     const reason = item.comparisonEligibility === "period-report-has-two-cohorts-not-one-source"
@@ -582,6 +596,23 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
         reconcileSave(entries);
         if (authoritative) reconcileSavedResult(entries);
         paint();
+    }
+    async function selectSource(bundleId, stillAtEntry) {
+        const access = publication(), token = generation;
+        if (!current(token, access) || !stillAtEntry() || writing || dispatchedSave) return;
+        if (!choicesLoaded) {
+            const inventory = inventoryVersion;
+            const result = await api("/api/report-artifacts/list", {});
+            if (!current(token, access) || !stillAtEntry() || inventory !== inventoryVersion) return;
+            receive(result.artifacts);
+        }
+        const option = [...later.options].find(item => item.value === bundleId && !item.disabled);
+        if (!option || !stillAtEntry()) { message("This saved report cannot be used for comparison.", true); return; }
+        if (!invalidate("", true)) return;
+        later.value = bundleId;
+        changed();
+        message("Choose a baseline report.");
+        (baseline.closest(".select-control")?.querySelector("button") || baseline).focus({ preventScroll: true });
     }
     async function open(bundleId, { retain = false, focus = true } = {}) {
         if (!current(generation, publication())) return;
@@ -674,7 +705,7 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
         clearPreparedFiles(); renderer.clear(content); renderer.clear(savedContent);
         titleInput.value = ""; reviewCheck.checked = false; resultTextChoice.checked = false; resultTerms.value = "";
         baseline.replaceChildren(); later.replaceChildren();
-        for (const { identity } of identities.values()) { identity.hidden = true; }
+        for (const { identity, open, detail } of identities.values()) { identity.hidden = open.hidden = true; detail.textContent = ""; }
         status.textContent = ""; preparationIssue.textContent = "";
         heading.textContent = "Compare saved reports";
         root.hidden = true;
@@ -688,7 +719,7 @@ export function mountReportComparisonJourney(root, { api, renderer, ux, timeCont
         return true;
     }
     paint();
-    return { open, receive, syncPresence, pendingArtifactCleanup, invalidate, invalidateSavedReport, syncPreparation,
+    return { open, receive, selectSource, syncPresence, pendingArtifactCleanup, invalidate, invalidateSavedReport, syncPreparation,
         withdrawAccess, resumeAccess, recoverSave, saveIdentity: () => saveVerifier.saveIdentity(),
         title: () => heading.textContent,
         hasUnfinishedChange: () => Boolean(preparing || writing || dispatchedSave || checkingSave || !savedMode && !savedResult

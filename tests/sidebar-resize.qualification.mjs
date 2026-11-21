@@ -174,7 +174,7 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
                 else {await dragOn(page,label,inspection);await page.getByRole("button",{name:"Back to comparison",exact:true}).click();}
             }
             await page.locator("#compareSectionSaved").click();
-            for (const [i,label] of ["Earlier report","Later report"].entries()) {
+            for (const [i,label] of ["Baseline report","Selected report"].entries()) {
                 await page.getByRole("combobox",{name:label,exact:true}).click();
                 await page.locator(`.select-popup [data-value="${bundles[i].bundleId}"]`).click();
             }

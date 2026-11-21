@@ -612,7 +612,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         await page.getByRole("button", { name: "Back to report library", exact: true }).click();
         await openReportComparison(page);
         const comparison = page.locator("#comparisonWorkspace");
-        for (const [index, label] of ["Earlier report", "Later report"].entries()) {
+        for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
             await comparison.getByRole("combobox", { name: label, exact: true }).click();
             await page.locator(`.select-popup .select-option[data-value="${[bundle.bundleId, reviewedBundle.bundleId][index]}"]`).click();
         }

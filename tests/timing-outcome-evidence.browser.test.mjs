@@ -120,7 +120,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await openReportComparison(page);
-    for (const [name, id] of [["Earlier report", oldBundle.bundleId], ["Later report", newBundle.bundleId]]) {
+    for (const [name, id] of [["Baseline report", oldBundle.bundleId], ["Selected report", newBundle.bundleId]]) {
         await page.getByRole("combobox", { name, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
     }
