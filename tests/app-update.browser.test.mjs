@@ -150,15 +150,28 @@ test("General preference rows open canonical pages and return to updated values"
     await expect(preview).toBeVisible();
     const painted = node => [node, node.querySelector(".palette-rail"), node.querySelector(".palette-strip i")].map(n => getComputedStyle(n).backgroundColor);
     const initialPaint = await preview.evaluate(painted);
+    const colors = current.locator(".palette-swatches i");
+    const swatchPaint = () => colors.evaluateAll(nodes => nodes.map(n => getComputedStyle(n).backgroundColor));
+    const initialColors = await swatchPaint();
+    assert.equal(new Set(initialColors).size, 6);
+    assert.ok(!initialColors.includes("rgba(0, 0, 0, 0)"));
     const back = page.getByRole("button", { name: "Back to General" });
     await current.focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#themesTitle")).toBeFocused();
     await expect(page).toHaveURL(/\/settings\?section=themes$/);
     await chooseTheme(page, "dark"); await page.locator("label:has(#palette-field)").click();
+    await expect(page.locator("#paletteSelection")).toBeHidden();
+    await page.locator("#findPalette").click(); await page.locator("#paletteQuery").fill("linen");
+    await expect(page.locator("#paletteSelection")).toHaveText("Active: Field notes");
+    await expect(page.locator("#paletteSelection")).toBeVisible();
+    await page.locator("#paletteQuery").press("Escape");
     const selectedPaint = await page.locator("label:has(#palette-field) .palette-scene:visible").evaluate(painted);
     await back.click(); await expect(current).toBeFocused(); await expect(current).toHaveAccessibleDescription("Field notes Dark");
     assert.deepEqual(await preview.evaluate(painted), selectedPaint);
     assert.notDeepEqual(selectedPaint, initialPaint);
+    const selectedColors = await swatchPaint();
+    assert.equal(new Set(selectedColors).size, 6);
+    assert.notDeepEqual(selectedColors, initialColors);
     await page.goForward(); await expect(back).toBeVisible();
     await page.locator("#settingsCategoryNav [data-category=general]").click();
     await expect(zone).toContainText("Device default");
@@ -226,6 +239,16 @@ test("General shows the actual fallback zone and panel-only palette at narrow en
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     const current = page.locator("#general-themes"), zone = page.locator("#general-regional");
     await expect(current).toContainText(/Petrol & coral.*this panel only/);
+    const thumbnail = await current.locator(".palette-scene").boundingBox();
+    assert.ok(thumbnail.width >= 1.8 * thumbnail.height, "The miniature should stay landscape when text grows");
+    const fit = await current.evaluate(n => {
+        const row = n.getBoundingClientRect();
+        return [...n.querySelectorAll(".palette-swatches i,#generalThemeAction,#generalMode")].every(el => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.left >= row.left - 1 && r.right <= row.right + 1;
+        });
+    });
+    assert.ok(fit, "Theme swatches, mode and action must fit at enlarged text");
     await expect(zone).toContainText(/UTC.*fallback: browser timezone unavailable/);
     await zone.focus(); await page.keyboard.press("Enter"); await expect(page.locator("#regionalTitle")).toBeFocused();
     await expect(page.locator("#displayTimeZone option:checked")).toHaveText(/UTC.*fallback/);

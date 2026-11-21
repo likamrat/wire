@@ -269,7 +269,10 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;min-height:44px;
  padding:.65rem 0;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
 .general-appearance .palette-scene {width:min(7.5rem,100%);min-height:3.8rem;box-sizing:border-box;border:1px solid var(--rule);border-radius:var(--radius-small)}
+.general-appearance .palette-rail::before {content:"";display:block;margin:.45rem .18rem;width:60%;height:2px;background:var(--control);box-shadow:0 .36rem var(--control),0 .72rem var(--control)}
 .general-appearance .palette-sheet {align-content:center}
+.general-palette-summary {display:grid;gap:.3rem;min-width:0}
+#generalThemeValue {display:flex;align-items:baseline;flex-wrap:wrap;gap:0 .5rem}
 .settings-preference-link strong,#generalMode,#generalTimeValue {display:block}
 #generalMode,#generalTimeValue {color:var(--muted);font-size:var(--type-small)}
 .settings-preference-link>.preference-destination {display:inline-flex;align-items:center;gap:var(--space-xs);margin-inline-start:auto;
@@ -278,8 +281,14 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-preference-link:hover>.preference-destination {background:var(--hover)}
 .settings-preference-link:active>.preference-destination {background:var(--pill-pressed)}
 .settings-preference-link:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+#generalThemeAction {border:1px solid var(--control);padding:.35em var(--pill-inset);border-radius:var(--radius-control);font-weight:var(--pill-weight)}
 @container settings-pane (max-width:23rem) {
  .settings-preference-link>.preference-destination {margin-inline-start:0}
+ #general-themes {display:grid;grid-template-columns:auto minmax(0,1fr)}
+ #general-themes .palette-scene {width:min(7.5rem,26cqi);min-height:0;aspect-ratio:2;grid-template-columns:20% minmax(0,1fr);padding:4px;gap:3px}
+ #general-themes .palette-rail::before {margin:4px 1px;box-shadow:0 4px var(--control),0 8px var(--control)}
+ #general-themes .palette-sheet {padding:3px;gap:4px}
+ #generalThemeAction {grid-column:1/-1;justify-self:start}
 }
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}

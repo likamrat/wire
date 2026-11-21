@@ -626,7 +626,11 @@ Settings opens in **General**, with the installed WIRE build, last check and
 **Check for updates** together above the automatic-check switch. The check button
 turns green when an update is available, even after the notice is dismissed.
 It still only checks; **Update** installs the build. Below updates,
-preview the current palette in its active mode beside its name. The preview and
+show the current theme with a miniature WIRE screen, its name and mode,
+and swatches drawn from the active screen palette. Use headings without a
+routine explanatory subtitle across Settings. Keep supporting text when it
+identifies an effective value, an unavailable setting, or a consequence of
+changing it. The preview and
 **Change theme** share one link to Themes; the effective time zone links
 to Regional. The whole shortcut stays clickable, but hover and press tint
 only the destination label and chevron. Center them together beside the

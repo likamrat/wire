@@ -349,7 +349,8 @@ your Copilot history. On [supported installations](development.md#updating-wire)
 you can check with automatic checks off. If General says **Updates are managed
 manually**, use this installation's usual update process instead.
 
-Below updates, **Current theme** previews your palette in Light or Dark.
+Below updates, **Current theme** shows your palette name, Light or Dark mode,
+and a preview with its colors.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
 **Regional**. **Back to General** returns to the shortcut with your current choice.
 

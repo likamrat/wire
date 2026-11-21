@@ -39,6 +39,7 @@ export function mountThemeControl(theme, ux) {
             if (visible) matches++;
         }
         $("paletteEmpty").hidden = matches > 0;
+        $("paletteSelection").hidden = options.some(input => input.value === active && !input.parentElement.hidden);
         const used = $("recentPalettes");
         used.hidden = !!q || recent.length < 2;
         used.replaceChildren();

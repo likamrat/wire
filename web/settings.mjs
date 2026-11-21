@@ -1,6 +1,6 @@
 import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
-import { paletteGallery, palettePreview } from "./palette-gallery.mjs";
+import { currentPaletteSwatches, paletteGallery, palettePreview } from "./palette-gallery.mjs";
 import { uxIcons } from "./ux-icons.mjs";
 
 export const settingsMarkup = `
@@ -31,14 +31,16 @@ export const settingsMarkup = `
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy"><h3 id="appUpdateAutoLabel">Automatically check for updates</h3>
-      <p id="appUpdateAutoHelp" hidden>Check when WIRE opens and daily while it stays open. When off, you can still check manually.</p></div>
+      <p id="appUpdateAutoHelp" hidden>On opening WIRE, then daily. Updates are never installed automatically.</p></div>
       <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
     </div>
     <section class="general-appearance" aria-labelledby="generalThemeTitle">
       <h3 id="generalThemeTitle">Current theme</h3>
       <a id="general-themes" class="settings-preference-link" href="/settings?section=themes" data-settings-link data-general-shortcut
         aria-labelledby="generalThemeAction" aria-describedby="generalThemeValue">
-        ${palettePreview("petrol","light")}<span id="generalThemeValue"><strong id="generalPaletteName"></strong><span id="generalMode">Unavailable</span></span>
+        ${palettePreview("petrol","light")}
+        <span class="general-palette-summary"><span id="generalThemeValue"><strong id="generalPaletteName"></strong><span id="generalMode">Unavailable</span></span>
+          ${currentPaletteSwatches}</span>
         <span class="preference-destination" id="generalThemeAction">Change theme ${uxIcons.disclosure}</span>
       </a>
     </section>
