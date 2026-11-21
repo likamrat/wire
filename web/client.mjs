@@ -10027,6 +10027,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
             }
         }, "primary");
+        confirm.prepend(ux.icon("export"));
         ux.pending(confirm, false);
         confirm.disabled = !localSave;
         confirm.dataset.reviewControl = "";
@@ -10617,7 +10618,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const savedTools = $("bundles").querySelector(".saved-library-tools");
     // Both presentations use the same panel and inventory; DOM order is also Tab order.
     $("reportCreatePanel").before($("reportSections"), $("savedReportsPanel"));
-    for (const [id, role] of [["reportOverviewLink", "home"], ["viewAllSavedReports", "report-all"]]) {
+    for (const [id, role] of [["reportOverviewLink", "section-overview"], ["viewAllSavedReports", "report-files"]]) {
         const link = $(id);
         link.prepend(ux.icon(role));
         link.addEventListener("click", event => {

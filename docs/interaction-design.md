@@ -420,7 +420,9 @@ preparation through inclusion controls, and through their contextual entries.
 
 Recent entries show their names and compact saved periods. Date ranges share
 month/year only where accurate; longer ranges wrap instead of losing endpoints.
-Overview and Saved library are the two Reports section links. The current link is underlined.
+Overview and Saved library are the two Reports section links. Both keep their
+icons: the same four-square Overview mark used in Trends, and stacked files for
+the library. The underline marks the current section.
 Prepared reports, saved readers and comparisons keep their contextual Back action instead.
 Library rows align Report, Report text and Actions. The name and its leading document
 icon open in-app reading. Preparation time is a secondary line under the name,

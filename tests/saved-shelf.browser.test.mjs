@@ -69,6 +69,12 @@ test("Reports starts with two recent saved names; full-library controls retain t
     const { page, requests, bundles } = await setup(t, 9);
     const shelf = page.locator("#savedReportsPanel");
     await expect(overview(page)).toHaveAttribute("aria-current", "page");
+    const expectSectionIcons = async () => {
+        for (const [link, mark] of [[overview(page), "grid-2x2"], [allSaved(page), "files"]]) {
+            await expect(link.locator(`:scope > svg:first-child[data-lucide-icon="${mark}"][aria-hidden="true"]`)).toBeVisible();
+        }
+    };
+    await expectSectionIcons();
     await expect(recent(page).locator(".saved-report-name")).toHaveText(["Fir field notes 9", "Fir field notes 8"]);
     await expect(recent(page).locator(".saved-report-period")).toHaveText(["Nov 7–19, 2026", "Oct 28–Nov 9, 2026"]);
     assert.ok(await shelf.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector("#reportCreatePanel")) & Node.DOCUMENT_POSITION_FOLLOWING)));
@@ -87,6 +93,7 @@ test("Reports starts with two recent saved names; full-library controls retain t
     const all = allSaved(page);
     await all.click();
     await expect(all).toHaveAttribute("aria-current", "page");
+    await expectSectionIcons();
     await expect(overview(page)).not.toHaveAttribute("aria-current", "page");
     await expect(page.locator("#pageTitle")).toHaveText("Saved report library");
     await expect(page.locator("#reportCreatePanel")).toBeHidden();

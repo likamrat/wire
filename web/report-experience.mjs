@@ -94,6 +94,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const outlineTitle = el("h3"), outlineDescription = el("p", "report-outline-description");
     const outlineChoices = el("div", "report-outline-choices"), outlineAction = el("div", "report-outline-action");
     const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary"); prepare.id = "prepareReportPreview";
+    const prepareLabel = prepare.firstChild;
+    prepare.prepend(ux.icon("read"));
     const prepareHint = el("p", "report-desk-hint"); prepareHint.id = "reportDeskHint"; prepareHint.setAttribute("role", "status");
     const scopeChoice = button("", () => { openDeskActivity(); showSelection(); }, "report-toolbar-choice");
     const scopeName = el("span"); scopeChoice.append(scopeName, ux.icon("chevron"));
@@ -144,6 +146,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     let privacyMode;
     const formats = popover("reportFileOptions", "Files to save"); formats.append(byId("formatOptions")); done(formats);
     const formatButton = opener("Files to save: HTML", formats);
+    const formatLabel = formatButton.firstChild;
+    formatButton.prepend(ux.icon("report-files"));
     const refine = popover("reportIncludeOptions", "Choose what to include");
     const author = root.querySelector(".report-author-choice");
     refine.append(author);
@@ -250,7 +254,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
         prepare.disabled ||= !value.options.formats.length;
         const resume = value.resumePreset === deskFocus;
-        prepare.textContent = resume ? "Resume preview" : "Prepare preview";
+        prepareLabel.data = resume ? "Resume preview" : "Prepare preview";
         const scopeIssue = !resume && value.explicitScope && value.scopeIssue;
         prepare.disabled ||= Boolean(scopeIssue);
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."
@@ -275,7 +279,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
                 none: "Calls and counts stay. Notes and error messages may still contain personal details." })[mode];
         const formatSummary = value.options.formats.map(format => value.prepared
             ? format === "markdown" ? "Markdown" : format.toUpperCase() : fileLabel(format)).join(", ") || "Choose a file";
-        setLabel(formatButton, value.prepared ? "Files to save: " + formatSummary : formatSummary);
+        formatLabel.data = value.prepared ? "Files to save: " + formatSummary : formatSummary;
         formatButton.setAttribute("aria-label", "Files to save: " + formatSummary);
         formatGroup.hidden = value.prepared && value.saved;
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
