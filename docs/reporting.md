@@ -243,8 +243,10 @@ Later collection, browsing filters or screen-theme changes do not rewrite them.
 file views and downloads keep their saved artwork, even if an older logo has poor contrast.
 Reopening an older report does not add newer interpretations. New reports need a
 compatible WIRE reader; an older version may refuse to open them.
-The saved list's search finds metadata; global Search can also find supported
-saved-file content. **Back to Reports** restores the list's search, order, page
+In **View all**, search for a report name, its displayed period, a start or end
+date (such as `2026-11-07`), a file format or its text treatment. This searches
+saved metadata. Use global Search to find text inside supported files.
+**Back to Reports** restores the list's search, order, page
 and reading position. Page controls are below the saved rows.
 Use Previous/Next, or enter a page and choose **Go to page**. Enter submits the
 same page choice; an out-of-range number does not change the page.

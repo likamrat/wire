@@ -7531,13 +7531,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
                 hasNative ? `${count(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
-            return { bundle, label, preparedLabel: date };
+            return { bundle, label, preparedLabel: date, period: savedPeriodLabel(bundle) };
         });
         $("savedReportOrder").value = workspaceState.route.order || "newest";
-        const matching = rows.filter(({ bundle, label }) => localSearch.matches(query, [
+        const matching = rows.filter(({ bundle, label, period }) => localSearch.matches(query, [
             label,
             bundle.bundleId, bundle.preparedAt, bundle.preparedAtDisplay, bundle.promptMode,
-            ({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[bundle.promptMode],
+            period, bundle.reportPeriod?.from, bundle.reportPeriod?.to,
+            savedPrivacyLabel(bundle),
             ...(bundle.formats || []), ...Object.keys(bundle.files || {}), bundle.timeContext?.timeZone, bundle.timeContext?.locale,
         ]));
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
@@ -7549,13 +7550,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Actions"));
                 list.classList.add("saved-report-rows");
                 host.append(columns, list); return host;
-            }, renderItem: ({ bundle, preparedLabel }, rowListeners) => {
+            }, renderItem: ({ bundle, preparedLabel, period }, rowListeners) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
             outer.toggleAttribute("data-detail-active", workspaceState.route.inspect === bundle.bundleId);
             const current = () => listCurrent() && outer.isConnected && outer.dataset.bundleId === bundle.bundleId && indexedSaved(bundle);
-            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, rowListeners, preparedLabel);
+            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, rowListeners, preparedLabel, period);
             const identity = el("span", "saved-report-identity");
             const privacy = savedPrivacyStatus(bundle);
             identity.append(summary);
@@ -7580,7 +7581,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             outer.prepend(identity, privacy, actions);
             return outer;
         } });
-        const unlisted = matching.filter(({ bundle }) => bundle.kind !== "comparison" && !savedPeriodLabel(bundle)).length;
+        const unlisted = matching.filter(({ bundle, period }) => bundle.kind !== "comparison" && !period).length;
         if (unlisted) {
             const note = el("p", "saved-period-availability", unlisted === 1
                 ? "The activity period isn't listed for one saved entry."
@@ -7592,7 +7593,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.inspect) renderSavedInspector();
         updateSelection();
     }
-    function savedTitleControl(bundle, current, shelf, listeners, preparedLabel) {
+    function savedTitleControl(bundle, current, shelf, listeners, preparedLabel, period = savedPeriodLabel(bundle)) {
         const summary = viewKey(button("", () => {
             if (current() && summary.isConnected && indexedSaved(bundle)) openSavedReport(bundle, summary);
         }, "saved-report-title", listeners), "open-bundle:" + bundle.bundleId);
@@ -7601,7 +7602,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const name = bundle.title?.trim() || assessmentFactories.reportIdentity.defaultTitle(bundle);
         caption.append(el("span", "saved-report-name", name));
         if (!shelf && preparedLabel !== "Time not recorded") caption.append(el("span", "saved-report-prepared", "Prepared " + preparedLabel));
-        const period = savedPeriodLabel(bundle);
         if (period) caption.append(el("span", "saved-report-period", shelf ? period : "Report period: " + period));
         else if (shelf) caption.append(el("span", "saved-report-period", bundle.kind === "comparison" ? "Saved comparison" : "Period not recorded"));
         summary.append(ux.icon("reports"), caption);
@@ -7914,13 +7914,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return navigate({ ...routeFor("reports"), bundle: bundle.bundleId, savedEntry: key });
     }
-    function savedPrivacyStatus(bundle) {
-        const label = ({ masked: "Detected personal details hidden", original: "Chat details kept",
+    function savedPrivacyLabel(bundle) {
+        return ({ masked: "Detected personal details hidden", original: "Chat details kept",
             none: "Prompts and replies left out" })[bundle?.promptMode] ?? "Text treatment not recorded";
+    }
+    function savedPrivacyStatus(bundle) {
         const node = el("span", "saved-report-privacy");
         node.dataset.promptMode = bundle?.promptMode ?? "unknown";
         node.append(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[bundle?.promptMode] ?? "unobserved"),
-            el("span", "", label));
+            el("span", "", savedPrivacyLabel(bundle)));
         return node;
     }
     async function renderSavedReader() {
