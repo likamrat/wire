@@ -10,7 +10,7 @@ export const uxIconSources = Object.freeze({
     "settings-selected": "settings", "collection-status-selected": "file-search",
     export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
     "navigation-reports": "clipboard-list", "navigation-settings": "settings", "navigation-help": "circle-question-mark",
-    "navigation-trends": "chart-no-axes-combined",
+    "navigation-trends": "chart-no-axes-combined", "navigation-feedback": "message-circle-heart",
     "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
     "navigation-collapse": "panel-left", "navigation-expand": "panel-left",
     "activity-panel": "panel-right-open", "activity-panel-close": "panel-right-close",

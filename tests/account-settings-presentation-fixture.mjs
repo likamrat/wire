@@ -127,6 +127,7 @@ export function renderAccountSettingsFixture() {
     }
     html = html.slice(0, html.lastIndexOf(`<script nonce="${nonce}">`)) + "</body></html>";
     html = html.replace(/<link rel="icon"[^>]*>/, "");
+    html = html.replace('src="/favicon.svg"', 'src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E"');
     html = html.replace("</head>", `<style>${accountSettingsStyles}</style></head>`);
     const script = `
 const ux = (${shell.ux})(${JSON.stringify(shell.icons).replaceAll("<", "\\u003c")});
@@ -138,7 +139,11 @@ $("pageIntro").hidden = true;
 $("pagePrimaryActions").hidden = true;
 for (const section of document.querySelectorAll("[data-settings-section]")) section.hidden = section.dataset.settingsSection !== "connection";
 $("settingsCategoryNav").innerHTML = '<a href="#settings?section=connection" aria-current="page">Connection &amp; updates</a>';
-for (const link of document.querySelectorAll(".primary-navigation [data-nav]")) link.prepend(ux.icon("navigation-" + link.dataset.nav));
+for (const link of document.querySelectorAll("nav [data-nav]")) link.prepend(ux.icon("navigation-" + link.dataset.nav));
+if ($("wireFeedback")) {
+    $("openEvidenceHelp").prepend(ux.icon("navigation-help"));
+    $("wireFeedback").prepend(ux.icon("navigation-feedback"));
+}
 $("navigationToggle").replaceChildren(ux.icon("menu"));
 const accountSlot = $("wireAccountEntry"), connectionSlot = $("microsoftConnectionHost");
 if (!accountSlot || !connectionSlot) throw new Error("The coordinator's real shell host pin is required.");

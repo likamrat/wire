@@ -608,7 +608,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
         document.querySelector("#closeContextSidebar").click();
         for (let i = 0; i < 120 && !panel.inert; i++) await frame();
         const exiting = panel.getAnimations()[0];
-        document.querySelector('.primary-navigation [data-nav="settings"]').click();
+        document.querySelector('nav [data-nav="settings"]').click();
         await frame();
         return { wasExiting: Boolean(exiting), retiredState: exiting?.playState, open: panel.open,
             bodyCount: document.querySelectorAll(".saved-report-inspection").length,

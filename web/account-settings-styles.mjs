@@ -1,7 +1,7 @@
 export const accountSettingsStyles = `
 .wire-account-slot {margin-top:auto;min-width:0}
 .wire-account-entry {width:170px;max-width:100%;padding-top:20px}
-.wire-account-trigger {display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:8px;align-items:center;justify-content:start;width:100%;min-height:44px;padding:6px;text-align:left;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink)}
+.wire-account-trigger {display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:center;justify-content:start;width:100%;min-height:44px;padding:6px 8px;text-align:left;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink)}
 .wire-account-trigger::before {display:none}
 .wire-account-trigger:is(:hover,[aria-expanded=true]) {background:var(--hover)}
 .wire-account-trigger:active {background:var(--pill-pressed)}
@@ -13,7 +13,7 @@ export const accountSettingsStyles = `
 .wire-account-copy>span,.wire-account-copy>small {overflow:hidden;text-overflow:ellipsis}
 .wire-account-copy>span {font-size:var(--type-control);line-height:1.3}
 .wire-account-copy>small {font-size:var(--type-caption);line-height:1.4;color:var(--muted)}
-.wire-account-trigger>svg {width:16px;height:16px;color:var(--muted)}
+.wire-account-trigger .wire-account-avatar {width:28px;height:28px}
 .wire-account-menu {--paper:var(--floating-paper);--pill-fill:var(--paper);position:fixed;inset:auto;margin:0;width:min(320px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:8px;border:1px solid var(--rule);border-radius:12px;background:var(--paper);color:var(--ink);box-shadow:var(--surface-shadow)}
 .wire-account-identity {display:flex;align-items:center;gap:12px;padding:8px 12px 12px;margin-bottom:4px;border-bottom:1px solid var(--rule)}
 .wire-account-identity>div {min-width:0}
@@ -45,9 +45,7 @@ export const accountSettingsStyles = `
 @media(min-width:700px) {
  .app-sidebar:has(.wire-account-slot:not([hidden])) {display:flex;flex-direction:column}
  .app-sidebar:has(.wire-account-slot:not([hidden]))>.navigation-content {flex:1;min-height:0}
- :root[data-navigation=collapsed] .app-sidebar .wire-account-entry {width:44px}
- :root[data-navigation=collapsed] .app-sidebar .wire-account-trigger {grid-template-columns:32px 0 0;gap:0}
- :root[data-navigation=collapsed] .app-sidebar .wire-account-copy,:root[data-navigation=collapsed] .app-sidebar .wire-account-trigger>svg {width:0;opacity:0;visibility:hidden}
+ :root[data-navigation=collapsed] .app-sidebar .wire-account-copy {width:0;opacity:0;visibility:hidden}
 }
 @media(max-width:699px) {
  .navigation-drawer:has(.wire-account-slot:not([hidden]))[open] {display:flex;flex-direction:column}

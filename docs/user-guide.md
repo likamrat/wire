@@ -394,10 +394,14 @@ default. This display profile does not control access to history. A neutral
 icon means the profile is unavailable, not that collection needs a different
 GitHub CLI login.
 
-Use **Help** beside the toolbar mode switch for the meaning of counts
+Use **Help** at the bottom of the sidebar for the meaning of counts
 and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
+
+Use **Feedback** beside Help to report a WIRE bug or suggest a feature.
+**Open GitHub draft** opens your text for review. Nothing is posted unless
+you submit the public issue on GitHub.
 
 In **Privacy & saved data**, **Review deletion** previews an exact activity
 scope before separate confirmation. **Read history again > Choose chats**

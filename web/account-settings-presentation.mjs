@@ -53,10 +53,10 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
     trigger.setAttribute("aria-haspopup", "menu");
     trigger.setAttribute("aria-expanded", "false");
     trigger.setAttribute("aria-controls", "wireAccountMenu");
-    const triggerAvatar = avatar(), triggerName = node("span"), triggerDetail = node("small");
+    const triggerAvatar = avatar(), triggerName = node("span");
     const triggerCopy = node("span", "wire-account-copy");
-    triggerCopy.append(triggerName, triggerDetail);
-    trigger.append(triggerAvatar, triggerCopy, ux.icon("chevron"));
+    triggerCopy.append(triggerName);
+    trigger.append(triggerAvatar, triggerCopy);
     const entry = node("div", "wire-account-entry");
     entry.append(trigger); accountSlot.append(entry);
     accountSlot.classList.add("wire-account-slot");
@@ -237,7 +237,6 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             detail = "Checking profile";
         }
         setText(triggerName, verified ? name : "Account"); setText(menuName, name);
-        setText(triggerDetail, verified ? "" : detail); triggerDetail.hidden = verified;
         setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
         menuDetail.hidden = !verified && detail === "This instance";
         const failedAppRead = appProfile && profile?.identity.reason === "app-profile-read-failed";

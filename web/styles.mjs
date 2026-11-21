@@ -117,7 +117,7 @@ button.danger {--pill-fill:transparent;--pill-ink:var(--danger);--pill-border:va
 button.danger:not(:disabled) {color:var(--danger)}
 .text-link {font-weight:var(--weight-medium);text-decoration:none}
 .button-link {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap);min-height:var(--pill-height);white-space:normal;overflow-wrap:anywhere}
-:is(a.button-link,a.result-link,.primary-navigation a,.app-header nav a,.header-help,.settings-categories a,.settings-search-results a):any-link {text-decoration:none}
+:is(a.button-link,a.result-link,.primary-navigation a,.app-header nav a,.footer-utilities a,.settings-categories a,.settings-search-results a):any-link {text-decoration:none}
 [hidden] {display:none!important}
 .app-header {position:sticky;top:0;z-index:3;background:var(--paper);border-bottom:1px solid var(--rule)}
 .header-inner {max-width:1248px;margin:auto;display:flex;gap:var(--space-lg);align-items:center;padding:12px var(--space-xl);min-height:76px}

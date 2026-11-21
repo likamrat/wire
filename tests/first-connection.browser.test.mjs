@@ -276,7 +276,7 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await expect(page.locator("#firstConnection")).toBeHidden();
 });
 
-test("header Help opens the one help destination without collecting and returns focus on Back", async t => {
+test("footer Help opens the one help destination without collecting and returns focus on Back", async t => {
     const { page, runtime, mutations } = await setup(t);
     await page.goto(runtime.url); await ready(page);
     await page.keyboard.press("Escape");
@@ -290,7 +290,8 @@ test("header Help opens the one help destination without collecting and returns 
     await expect(page.locator("#firstConnection")).toBeVisible();
     await expect(page.locator("#openEvidenceHelp")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator(".workspace-utilities #openEvidenceHelp").click();
+    await page.locator("#navigationToggle").click();
+    await page.locator("#navigationDrawer #openEvidenceHelp").click();
     await expect(page.locator("#navigationDrawer")).toBeHidden();
     await expect(page.locator("#troubleshootingTitle")).toBeFocused();
     assert.equal(mutations.length, 0);

@@ -183,7 +183,7 @@ test("chooser and every pill anchor family have decoration-free interactive stat
     assert.equal(await page.locator("#pageAction").innerText(), "Back to activity");
     await navigateMain(page, "settings"); await ready(page);
     assert.equal(await page.locator("#pageAction").isVisible(), false);
-    await assertPillStates(page, page.locator(".primary-navigation a[data-nav=settings]"));
+    await assertPillStates(page, page.locator("nav a[data-nav=settings]"));
     assert.equal(await page.locator("nav [data-nav=reports]").evaluate(node => node.tagName), "A");
     assert.equal(await page.locator("#sidebarExport").count(), 0);
     assert.equal(await page.locator("#reviewSource").evaluate(node => node.tagName), "BUTTON");
@@ -243,7 +243,7 @@ test("pill padding, icon, label, touch and keyboard preserve one native route an
         assert.equal(page.url(), original);
     } finally { await popup.close(); }
     await page.locator("#navigationToggle").click();
-    await activate(page, page.locator(".primary-navigation a[data-nav=settings]"), "icon", true);
+    await activate(page, page.locator("nav a[data-nav=settings]"), "icon", true);
     await page.goBack(); await ready(page);
     assert.equal(await page.locator("#activitySearch").inputValue(), "Synthetic pill chat");
     assert.ok(urls.every(url => !decodeURIComponent(url).includes("Synthetic pill chat")));

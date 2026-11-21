@@ -15,9 +15,6 @@ export const sidebarStyles = `
 .app-header .wire-search-entry {grid-column:2;min-width:0;width:100%;max-width:none}
 .workspace-utilities {grid-column:3;display:flex;align-items:center;justify-content:flex-end;min-width:0}
 .workspace-utilities .theme-control {flex:none}
-.workspace-utilities .header-help {display:grid;place-items:center;flex:0 0 44px;min-height:44px;color:var(--muted);border-radius:var(--radius-control)}
-.header-help .wire-icon {width:var(--icon-utility-size);height:var(--icon-utility-size)}
-.workspace-utilities .header-help:hover {background:var(--hover);color:var(--ink)}.workspace-utilities .header-help:active {background:var(--pill-pressed)}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .app-sidebar {position:fixed;display:flex;flex-direction:column;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:216px;padding:12px 10px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
@@ -25,14 +22,35 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .navigation-content>* {flex-shrink:0}
 .navigation-workspace>.navigation-group-label {display:none}
 .navigation-content>.analyze-tools {margin-top:0;padding-top:0;border-top:0}
-.navigation-bottom {margin-top:auto;min-width:0}
-.navigation-bottom>.navigation-footer {margin:0;padding-top:4px}
+.navigation-bottom {margin-top:auto;min-width:0;container-type:inline-size}
 .app-sidebar #analyzeTools .analyze-tool-action {white-space:nowrap}
-.navigation-footer {position:relative;display:grid;grid-template-columns:minmax(44px,1fr);align-items:center;gap:4px;contain:inline-size;margin-top:auto;padding-top:12px;border-top:0}
-.navigation-footer>#wireAccountEntry {min-width:0;margin:0;padding-top:6px;border-top:1px solid var(--surface-divider)}
+/* Separate the targets vertically before the gliding rail loses horizontal clearance. */
+.navigation-footer {--target:44px;--slots:4;--step:clamp(0px,calc((var(--slots) + 1) * var(--target) - 100cqi),var(--target));position:relative;height:calc(var(--target) + (var(--slots) - 1) * var(--step))}
+.navigation-footer:has(>#wireAccountEntry[hidden]) {--slots:3}
+:root:not([data-navigation=collapsed]) .app-sidebar:has(#wireAccountEntry:not([hidden])) {min-width:304px}
+.navigation-footer>#wireAccountEntry {position:absolute;inset:0 auto auto 0;width:max(var(--target),calc(100% - 3 * var(--target)));min-width:0;margin:0}
 .navigation-footer .wire-account-entry {width:100%;padding-top:0}
-.navigation-footer .primary-navigation a[aria-current=page]:not(:hover,:active) {background:transparent;box-shadow:none}
-.navigation-footer .primary-navigation a[aria-current=page]::after {content:"";position:absolute;inset-inline-start:2px;inset-block:14px;width:2px;background:currentColor;border-radius:2px}
+.footer-utilities>:is(a,button) {--index:0;position:absolute;bottom:calc(var(--index) * var(--step));left:max(0px,calc(100% - (var(--index) + 1) * var(--target)));display:grid;place-items:center;width:var(--target);height:var(--target);padding:0;border:0;border-radius:var(--radius-control);background:none;box-shadow:none;color:var(--muted);text-decoration:none}
+.footer-utilities>#openEvidenceHelp {--index:2}
+.footer-utilities>#wireFeedback {--index:1;anchor-name:--wire-feedback}
+.footer-utilities .wire-icon {width:20px;height:20px}
+.footer-utilities>:is(:hover,:focus-visible),.footer-utilities:has(+ :popover-open)>#wireFeedback {color:var(--ink);background:var(--hover)}
+.footer-utilities>[aria-current=page] {color:var(--ink)}
+.footer-utilities>[aria-current=page]::after {content:"";position:absolute;bottom:3px;width:12px;height:2px;border-radius:2px;background:currentColor}
+.footer-utilities>:active {background:var(--pill-pressed)}
+.footer-utilities>:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
+.wire-feedback-panel {position:fixed;box-sizing:border-box;width:min(22rem,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto;padding:16px;border:1px solid var(--rule);border-radius:12px;background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);font-size:var(--type-control);line-height:var(--leading-ui)}
+@supports (bottom:anchor(top)) {
+ .wire-feedback-panel {position-anchor:--wire-feedback;inset:auto auto calc(anchor(top) + 6px) clamp(8px,anchor(left),calc(100vw - min(22rem,100vw - 16px) - 8px));margin:0;max-height:calc(anchor(top) - 14px)}
+}
+.wire-feedback-panel label {display:block;margin-bottom:8px;font-weight:var(--weight-strong)}
+.wire-feedback-panel textarea {box-sizing:border-box;display:block;width:100%;min-height:6.5em;padding:10px 12px;resize:vertical;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--control);border-radius:var(--radius-control)}
+.wire-feedback-panel textarea:focus {outline:2px solid var(--focus);outline-offset:-1px}
+.wire-feedback-panel textarea::placeholder {color:var(--muted);opacity:1}
+.wire-feedback-panel p {margin:10px 0;color:var(--muted)}
+.wire-feedback-actions {display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.wire-feedback-actions button {min-height:36px}
+@media(pointer:coarse) {.wire-feedback-actions button {min-height:44px}}
 .navigation-collapse {position:relative;z-index:1;display:flex;grid-area:1/2;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0;padding:0;border:1px solid transparent;border-radius:var(--radius-control);background:transparent;color:var(--muted);box-shadow:none}
 .navigation-collapse:hover {--pill-hover-border:transparent;background:var(--hover);border-color:transparent;color:var(--ink)}
 .navigation-collapse:active {background:var(--pill-pressed);border-color:transparent}
@@ -41,7 +59,6 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 :root[data-navigation=collapsed] .app-sidebar .primary-navigation a {gap:0;width:44px;grid-template-columns:minmax(0,1fr) 0}
 :root[data-navigation=collapsed] .app-sidebar .navigation-label {width:0;opacity:0}
 :root[data-navigation=collapsed] .app-sidebar .navigation-group-label {width:0;height:0;padding-block:0;opacity:0}
-:root[data-navigation=collapsed] .app-sidebar .navigation-footer {grid-template-columns:44px}
 .navigation-label,.navigation-group-label {overflow:hidden}
 .app-sidebar[data-navigation-moving] {overflow-x:hidden}
 :root .app-sidebar[data-navigation-moving] .primary-navigation a {width:auto}

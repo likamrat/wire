@@ -73,7 +73,7 @@ async function setup(t, options = {}) {
 test("unqualified real-shell presentation is neutral and all account operations are unavailable", async t => {
     const { page } = await setup(t);
     await expect(page.locator("#wireAccountTrigger .wire-account-copy>span")).toHaveText("Account");
-    await expect(page.locator("#wireAccountTrigger")).toContainText("This instance");
+    await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName(/This instance/);
     await expect(page.locator("#wireMicrosoftStatus")).toHaveText("Unavailable");
     await expect(page.locator("#wireMicrosoftAction")).toBeDisabled();
     await expect(page.locator("#connectionSourceTitle")).toHaveText("GitHub Copilot app");
@@ -285,8 +285,8 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
                     settings: settings.toJSON(), account: account.toJSON() };
             });
             assert.equal(footer.bottom, footer.contentBottom, "The footer anchors to the padded rail, not the viewport edge");
-            assert.ok(footer.settings.bottom + 4 <= footer.account.top, "Settings and account have separate rows");
-            assert.equal(footer.settings.left, footer.account.left);
+            assert.equal(footer.settings.top, footer.account.top);
+            assert.ok(footer.account.right <= footer.settings.left, "Account and Settings share one row without overlapping");
         }
         await capture(page, theme + "-account-footer");
         await page.locator("#wireAccountTrigger").click();
@@ -308,7 +308,7 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
         await capture(page, theme + "-account-collapsed");
         await page.keyboard.press("Escape");
         await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-        await expect(page.locator('.primary-navigation [data-nav="settings"]')).toHaveAttribute("href", "/settings");
+        await expect(page.locator('nav [data-nav="settings"]')).toHaveAttribute("href", "/settings");
         await page.locator("#navigationCollapse").click();
     }
     await page.setViewportSize({ width: 390, height: 1000 });
@@ -349,9 +349,14 @@ test("compact footer keeps account and Settings independent through identity, ra
     }
     await expect(settings).toHaveAccessibleName("Settings");
     await expect(page.locator('[data-nav="settings"]')).toHaveCount(1);
-    await expect(settings.locator(".navigation-label")).toHaveText("Settings");
+    await expect(settings).toHaveText("");
     await page.locator("#wireAccountTrigger").focus();
-    await page.keyboard.press("Shift+Tab"); await expect(settings).toBeFocused();
+    const tabThroughUtilities = async () => {
+        for (const control of [page.locator("#openEvidenceHelp"), page.locator("#wireFeedback"), settings]) {
+            await page.keyboard.press("Tab"); await expect(control).toBeFocused();
+        }
+    };
+    await tabThroughUtilities();
     await expect(settings).toHaveAttribute("href", "/settings");
     for (const [width, scale] of [[1440, 1], [768, 2], [390, 1], [390, 2]]) {
         await page.setViewportSize({ width, height: 900 });
@@ -375,14 +380,19 @@ test("compact footer keeps account and Settings independent through identity, ra
                     assert.ok(target.width >= 44 && target.height >= 44);
                     assert.ok(target.left >= geometry.parent.left && target.right <= geometry.parent.right);
                 }
-                assert.ok(geometry.settings.bottom + 4 <= geometry.account.top);
-                assert.equal(geometry.account.left, geometry.settings.left);
+                if (mode === "collapsed") {
+                    assert.ok(geometry.account.bottom <= geometry.settings.top);
+                    assert.equal(geometry.account.left, geometry.settings.left);
+                } else {
+                    assert.equal(geometry.account.top, geometry.settings.top);
+                    assert.ok(geometry.account.right <= geometry.settings.left);
+                }
                 assert.equal(await host.evaluate(node => node === document.querySelector("#navigationFooter #wireAccountEntry")), true);
                 assert.equal(await trigger.evaluate(node => node === document.getElementById("wireAccountTrigger")), true);
                 await page.locator("#wireAccountTrigger").click();
                 await expect(page.locator("#wireAccountMenu")).toBeFocused();
                 await page.keyboard.press("Escape"); await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-                await page.keyboard.press("Shift+Tab"); await expect(settings).toBeFocused();
+                await tabThroughUtilities();
                 const overflow = await page.locator(width < 700 ? "#navigationDrawer" : "#sidebar").evaluate(node => ({
                     client: node.clientWidth, scroll: node.scrollWidth, left: node.scrollLeft,
                 }));

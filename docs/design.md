@@ -25,7 +25,7 @@ Evidence definitions and frozen-file requirements remain in the
 
 | Surface | Reading and navigation role |
 | --- | --- |
-| Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; Account/Settings at the bottom |
+| Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; account, Help, Feedback and Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
 | Trends | Seven visible measure names beside one daily chart; optional aligned charts share the accepted period |
