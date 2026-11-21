@@ -53,7 +53,7 @@ export const componentName = slug => aliases[slug] ?? "Lu" + slug.split("-").map
 
 export function iconProps(role, name, size) {
     return {
-        xmlns: "http://www.w3.org/2000/svg", className: "wire-icon", size,
+        xmlns: "http://www.w3.org/2000/svg", className: "wire-icon", size, strokeWidth: 1.5,
         "data-lucide-icon": name, "data-icon-size": size, "data-icon-role": role,
         "aria-hidden": true, focusable: false,
     };

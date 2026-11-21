@@ -28,7 +28,7 @@ test("each UI and service glyph is the selected React Icons component with its s
         assert.match(svg, /viewBox="0 0 24 24"/);
         assert.ok(svg.includes(`width="${asset[2]}"`) && svg.includes(`height="${asset[2]}"`));
         assert.match(svg, /aria-hidden="true" focusable="false"/);
-        assert.match(svg, /fill="none"/); assert.match(svg, /stroke="currentColor"/); assert.match(svg, /stroke-width="2"/);
+        assert.match(svg, /fill="none"/); assert.match(svg, /stroke="currentColor"/); assert.match(svg, /stroke-width="1\.5"/);
         assert.doesNotMatch(svg, /<(?:script|image|foreignObject)\b|\b(?:href|style|onload)=|<title>/i);
         if (Object.hasOwn(uxIconSources, key)) assert.equal(asset[1], uxIconSources[key]);
     }
@@ -56,6 +56,7 @@ test("each UI and service glyph is the selected React Icons component with its s
         "navigation-settings": "settings",
         "navigation-help": "circle-question-mark",
         "navigation-trends": "chart-no-axes-combined",
+        "navigation-feedback": "message-circle-heart",
         "navigation-records": "rotate-ccw-clock",
         "navigation-compare": "scale",
         "navigation-create-report": "file-text",

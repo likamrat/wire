@@ -118,8 +118,15 @@ services. A role identifies what the icon means, not its color or file name.
 React controls and the static SVG adapter use the same React Icons components
 and expose `data-icon-role` on the SVG. Keep icons decorative beside text;
 give an icon-only control an accessible name on the control itself.
-Retain WIRE branding, authorized profile imagery and actual chart data marks
-as their own assets: none is a substitute for an action or an outcome.
+Screen icons use a 1.5-unit stroke on Lucide's 24-unit grid, with round caps
+and joins. That gives a 16px cue a 1px line and a 24px heading a 1.5px line.
+Set weight in `iconProps`, not in page styles. Do not thin a glyph by fading
+it, shrinking its target or changing its weight when selected. Keep compact
+author and outcome cues at least 16px beside their text.
+
+This rule is for screen glyphs, not all SVGs. WIRE and provider marks, profile
+imagery, chart geometry and the versioned artwork embedded in reports retain
+their own paint. Native form controls keep their platform affordances.
 
 Decorative glyphs fit their text line without acquiring control-sized
 whitespace. Keep official Lucide's 24-unit viewBox; painted navigation glyphs

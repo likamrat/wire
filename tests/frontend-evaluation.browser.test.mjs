@@ -54,7 +54,8 @@ async function setup(t, frontend = "react", records = frontendRecords()) {
         "/api/report-artifacts/list"]);
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && !allowed.has(url.pathname)) {
+        const updateStatus = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
+        if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && !allowed.has(url.pathname) && !updateStatus) {
             errors.push(`Unexpected request: ${url.pathname}`);
             return route.abort();
         }
@@ -93,6 +94,28 @@ function compactCardRecords() {
         return record;
     });
 }
+
+test("React and retained controls paint the same light outline from compact status to page heading", async t => {
+    const { page } = await setup(t, "react", compactCardRecords());
+    const selectors = [
+        "#wireSearchHome [data-icon-role=search]", "#openAnalyzeFilters [data-icon-role=filter]",
+        ".primary-navigation [data-icon-role=navigation-analyze]", "#pageTitle [data-icon-role=navigation-analyze]",
+        "#activityList .card-outcome [data-icon-role]", "#activityList .service-cue [data-icon-role]",
+    ];
+    for (const selector of selectors) {
+        const icon = page.locator(selector).first();
+        await expect(icon).toBeVisible();
+        const result = await icon.evaluate(svg => {
+            const shape = svg.firstElementChild, style = getComputedStyle(shape);
+            return { weight: parseFloat(style.strokeWidth), stroke: style.stroke, ink: getComputedStyle(svg).color,
+                scale: svg.getScreenCTM().a, box: svg.viewBox.baseVal.width, size: svg.getBoundingClientRect().width };
+        });
+        assert.equal(result.stroke, result.ink, selector);
+        assert.equal(result.box, 24, selector);
+        assert.equal(result.weight, 1.5, selector);
+        assert.ok(result.weight * result.scale >= 1, `${selector}: readable stroke at ${result.size}px`);
+    }
+});
 
 test("completed status opens every counted call and no uncounted sibling", {timeout:60000}, async t => {
     const records=compactCardRecords(), group=records[0];
