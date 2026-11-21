@@ -705,7 +705,17 @@ export function createEvidenceUX(icons) {
         }
         return value;
     }
-    return { icon, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute,
+    // The owner supplies only accepted membership; disclosure is independent of this label.
+    function paintFilterEntry(trigger, count, neutralName = "Filters") {
+        const label = trigger.querySelector(".filter-entry-label");
+        const text = count ? `${count} ${count === 1 ? "filter" : "filters"} applied` : "Filters";
+        if (label.textContent !== text) setOwnedText(label, text);
+        trigger.classList.toggle("has-applied-filters", Boolean(count));
+        if (count || neutralName === text) trigger.removeAttribute("aria-label");
+        else trigger.setAttribute("aria-label", neutralName);
+    }
+
+    return { icon, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

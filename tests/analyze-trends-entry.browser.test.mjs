@@ -337,19 +337,25 @@ test("compiled Trends keeps explicit filters tab-bound, never broadens on expire
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|Calendar/);
     const filters = { tool: "workiq-fetch", service: "Calendar" };
     assert.deepEqual(reads.at(-1).filters, filters);
+    const entry = page.locator("#trendsView .filter-entry");
+    await expect(entry).toHaveAccessibleName("2 filters applied");
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(page).toHaveURL(publicRoute);
+    await expect(entry).toHaveText("Filters");
     await page.goBack(); await expect(page).toHaveURL(publicRoute + "&privateView=required");
     await expect.poll(() => reads.at(-1).filters).toEqual(filters);
+    await expect(entry).toHaveText("2 filters applied");
     const privateCount = reads.length;
     await page.reload();
     const recover = page.getByRole("button", { name: "Open this view without the private selection" });
     await expect(recover).toBeVisible();
+    await expect(entry).toBeHidden();
     assert.equal(reads.length, privateCount);
     await recover.click(); await expect(page.locator(".trends-landing")).toBeVisible();
     await expect.poll(() => reads.length).toBe(privateCount + 1);
     await expect(page).toHaveURL(url + "/trends");
     assert.deepEqual(reads.at(-1).filters, {});
+    await expect(entry).toHaveText("Filters");
 });
 
 test("compiled Trends refuses ambiguous or unsupported deep links instead of reading all calls", async t => {

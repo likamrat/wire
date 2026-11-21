@@ -777,7 +777,7 @@ test("the seven simultaneous charts, daily activity and population filters work 
     await expect(page.locator(".trends-restrictions")).toContainText("Files");
     await page.getByRole("button", { name: "Back to overview", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
-    await expect(page.getByRole("button", { name: "Filters", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "1 filter applied", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(page.locator(".trends-restrictions")).toBeHidden();
 });
@@ -1303,7 +1303,7 @@ test("series identities scale beyond four tools and stay fixed across visibility
     assert.equal(empty.totals.calls, 0);
     await expect(page.locator(".trends-panel:visible .trends-no-activity").first()).toContainText("No matching calls");
     await expect(page.locator('[data-family=tools]')).toHaveAttribute("data-maximized", "true");
-    await page.getByRole("button", { name: "Filters", exact: true }).click();
+    await page.getByRole("button", { name: "3 filters applied", exact: true }).click();
     await selectActivityOption(page, "trendsPromptauthors", "");
     await selectActivityOption(page, "trendsService", "Discovery");
     response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());

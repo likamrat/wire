@@ -48,6 +48,8 @@ async function setup(t, { mount = true } = {}) {
         const dates = document.createElement("div"); dates.className = "compare-period-key";
         dates.textContent = "Fixture period choices"; results.append(dates);
         document.getElementById("periodComparison").append(results);
+        const slot = document.createElement("div"); slot.id = "comparisonOptionsSlot";
+        results.before(slot);
         const comparisonDate = document.createElement("input");
         comparisonDate.type = "date";
         document.getElementById("periodComparisonSetup").append(comparisonDate);
@@ -300,7 +302,7 @@ test("withdrawal erases owned ordinary and paired presentations without focus or
         const capture = (node, site) => {
             const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-                if (text.data.includes("PRIVATE") || site === "analyzeFilterCount") handles.push({ kind: "Text", site, node: text });
+                if (text.data.includes("PRIVATE") || site === "filterEntry") handles.push({ kind: "Text", site, node: text });
             }
             for (const element of [node, ...node.querySelectorAll("*")]) {
                 for (const attribute of element.attributes) {
@@ -310,7 +312,7 @@ test("withdrawal erases owned ordinary and paired presentations without focus or
         };
         for (const id of window.ownedData.filter(id => id !== "analyzeScopeSummary")) capture(document.getElementById(id), id);
         capture(document.getElementById("comparisonAcceptedScope"), "paired-caption");
-        capture(document.getElementById("analyzeFilterCount"), "analyzeFilterCount");
+        capture(document.querySelector("#openAnalyzeFilters .filter-entry-label"), "filterEntry");
         capture(document.querySelector(".select-popup"), "popup");
         capture(document.querySelector("#privateHeadingChoice-control .select-option-sizer"), "sizer");
         for (const id of window.privateSelectIds) capture(document.querySelector(`#${id}-control .select-value`), `value:${id}`);
@@ -329,7 +331,7 @@ test("withdrawal erases owned ordinary and paired presentations without focus or
                 data: [...node.attributes].filter(attribute => attribute.name.startsWith("data-")).map(attribute => attribute.value) }; }),
             pair: document.getElementById("comparisonAcceptedScope")?.textContent ?? "",
             triggerData: { ...document.getElementById("openAnalyzeFilters").dataset },
-            badge: document.getElementById("analyzeFilterCount").textContent,
+            entry: document.getElementById("openAnalyzeFilters").textContent,
             describedBy: document.getElementById("openAnalyzeFilters").getAttribute("aria-describedby"),
             open: document.getElementById("analyzeFilterDialog").open, effects: window.effects, changes: window.changeEvents,
             serviceContextHidden: document.getElementById("serviceFocus").hidden,
@@ -342,7 +344,7 @@ test("withdrawal erases owned ordinary and paired presentations without focus or
         };
     });
     assert.ok(result.fields.every(field => !field.text.includes("PRIVATE") && field.data.length === 0), JSON.stringify(result.fields));
-    assert.equal(result.pair, ""); assert.deepEqual(result.triggerData, {}); assert.equal(result.badge, "");
+    assert.equal(result.pair, ""); assert.deepEqual(result.triggerData, {}); assert.equal(result.entry, "Filters");
     assert.equal(result.describedBy, null); assert.equal(result.open, false);
     assert.equal(result.serviceContextHidden, true);
     assert.deepEqual(result.safe, { layer: "code-reference", from: "2026-03-01" });

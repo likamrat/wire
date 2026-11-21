@@ -2484,7 +2484,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (description && !workspaceState.route.comparisonFocus && !filters.outcomes?.length
                 && filters.promptAuthors?.length === 1 && ["user", "agent"].includes(filters.promptAuthors[0])) {
                 const parts = description.parts.filter(part => !part.startsWith("Author: "));
-                description = { ...description, parts, text: parts.join("; "), activeCount: description.activeCount - 1 };
+                description = { ...description, parts, text: parts.join("; ") };
             }
             analyzeControls.pairedCaption(description === null ? null : {
                 ...description, key: pair.key, revision: pair.revision,
@@ -5146,7 +5146,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             meaning.append(definitions);
         }
         document.querySelectorAll("[data-chart]").forEach((node) => node.setAttribute("aria-pressed", String(node.dataset.chart === chartType)));
-        $("chartTitle").textContent = chartType === "time" ? frontendActivity && !native ? `${results.unit(layer, 2)} over time` : "Activity over time"
+        const interval = ["week", "month"].includes(workspaceState.scope.bucket) ? `by ${workspaceState.scope.bucket}` : "over time";
+        $("chartTitle").textContent = chartType === "time" ? `${frontendActivity && !native ? results.unit(layer, 2) : "Activity"} ${interval}`
             : chartType === "workload" ? layer === "tool" ? "Activity categories" : "Service categories" : layer === "tool" ? "Paths and operations" : "API paths requested";
         const notes = $("chartReadingNotes");
         const reading = el("dl");

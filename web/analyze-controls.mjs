@@ -157,7 +157,6 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         else if (toolbarHost) place(toolbarHost, toolbar);
         else if (toolbar.parentElement !== $("workspace")) $("analyzePopulation").before(toolbar);
         place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
-        trigger.querySelector(".analyze-entry-label").textContent = comparing ? "More options" : "Filters";
         for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
         for (const control of dialog.querySelectorAll("select")) control.dataset.optionSearch = String(comparing);
         // Reparenting the existing entry must not discard Reset's real focus handoff.
@@ -180,11 +179,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         scopeDescription.textContent = text;
         if (describedBy) trigger.setAttribute("aria-describedby", describedBy);
         else trigger.removeAttribute("aria-describedby");
-        const countText = activeCount === null ? "" : String(activeCount);
-        if ($("analyzeFilterCount").textContent !== countText) $("analyzeFilterCount").textContent = countText;
-        $("analyzeFilterCount").hidden = !activeCount;
-        const label = comparing ? "More comparison options" : "Filters and view";
-        trigger.setAttribute("aria-label", `${label}${activeCount ? `, ${activeCount} active ${activeCount === 1 ? "filter" : "filters"}` : ""}`);
+        ux.paintFilterEntry(trigger, activeCount, comparing ? "Filters" : "Filters and view");
     }
     function clearPairCaption() {
         pairScope.remove();
@@ -276,7 +271,6 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         }
         clearPairCaption();
         clearData(scopeDescription);
-        clearData($("analyzeFilterCount"));
         entryScope(null);
         const owned = id => scope.querySelector("#" + id) || $(id);
         function clearData(node) {
@@ -296,7 +290,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
             clearData(node);
             node.replaceChildren();
         }
-        for (const node of [scope, pairScope, owned("analyzeScopeError"), owned("periodCoverage"), $("analyzeFilterCount"), $("serviceFocus")].filter(Boolean)) clearData(node);
+        for (const node of [scope, pairScope, owned("analyzeScopeError"), owned("periodCoverage"), $("serviceFocus")].filter(Boolean)) clearData(node);
         for (const id of ["analyzeScopeStatus", "analyzeScopeError", "periodCoverage", "analyzeSourceCoverage",
             "analyzeEmptyScope", "activityListScope", "serviceFocus"]) {
             const node = owned(id);

@@ -155,8 +155,8 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
     }
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await closeAnalyzeFilters(page);
-    await expect(filter).toHaveAccessibleName("Filters and view, 2 active filters");
-    await expect(page.locator("#analyzeFilterCount")).toHaveText("2");
+    await expect(filter).toHaveAccessibleName("2 filters applied");
+    await expect(filter).toHaveText("2 filters applied");
     await expect(filter).toHaveAccessibleDescription(/Service: Files/);
     await page.setViewportSize({ width: 375, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; scrollTo(0, 0); });
@@ -188,7 +188,7 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
         assert.ok(value.guide.right + 7 <= value.filters.left && value.overflow <= 1);
         assert.ok(value.guide.left >= value.anchor.left - 1 && value.guide.overflow <= 1 && value.filters.overflow <= 1);
         assert.equal(value.guide.height, value.filters.height);
-        await expect(filter).toHaveAccessibleName("Filters, 2 active filters");
+        await expect(filter).toHaveAccessibleName("2 filters applied");
         if (proof) {
             await page.screenshot({ path: path.join(proof, `${width}-${scale}-${theme}-compare-overview.png`) });
             await page.screenshot({ path: path.join(proof, `${width}-${scale}-${theme}-compare-full.png`), fullPage: true });
@@ -262,7 +262,7 @@ test("Filters and chart guide consume nested Escape and outside clicks before th
     await expect(page.locator(".select-popup")).not.toBeVisible();
     await expect(dialog).toBeVisible();
     await expect(page.locator("#outcomeFilter-control")).toBeFocused();
-    await expect(page.locator("#analyzeFilterCount")).not.toBeVisible();
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
     await page.locator("#toolFilter-control").click();
     await clickOutside(page, dialog);
     await expect(page.locator(".select-popup")).not.toBeVisible();

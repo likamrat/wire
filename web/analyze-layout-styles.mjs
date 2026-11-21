@@ -212,10 +212,9 @@ export const analyzeLayoutStyles = `
 #analyzeRefresh:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 #openChartReference:focus-visible,#openAnalyzeFilters:focus-visible {outline:none}
 #openChartReference:focus-visible::before,#openAnalyzeFilters:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
-.analyze-filter-count {display:inline-flex;align-items:center;justify-content:center;min-width:1.5em;padding:0 .25em;border-radius:4px;background:var(--accent-soft);color:var(--ink);font-size:var(--type-caption);line-height:1.5;pointer-events:none}
-.analyze-filter-count[hidden] {display:none}
-/* An applied filter must not move this trigger or its toolbar neighbours. */
-#openAnalyzeFilters:has(>.analyze-filter-count[hidden])::after {content:"";inline-size:1.5em;font-size:var(--type-caption);flex:none}
+/* One stable target for the longest (two-digit) accepted label, also at enlarged type. */
+.filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
+.filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @container analyze-entries (max-width:24rem) {
  #openChartReference,#openAnalyzeFilters,#analyzeRefresh {gap:6px;padding-inline:6px}
 }
@@ -321,6 +320,5 @@ export const analyzeLayoutStyles = `
 }
 @media(forced-colors:active) {
  .analyze-filter-dialog,.analyze-scope-summary,.analyze-tools,.analyze-view-controls {border-color:CanvasText;box-shadow:none}
- .analyze-filter-count {border:1px solid CanvasText}
 }
 `;

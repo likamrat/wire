@@ -454,14 +454,14 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
             await expect(page.locator("#activityView")).toBeHidden();
             await expect(filterEntry).not.toHaveAccessibleDescription(/Saved collection|Search applied/);
             await expect(filterEntry).toHaveAccessibleName("Filters and view");
-            await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+            await expect(filterEntry).toHaveText("Filters");
         } finally { release(); }
         await expect(page.locator("#activityListSummary")).toHaveText(match
             ? "0 interactions with 0 matching Work IQ tool calls" : "1 interaction with 1 matching Work IQ tool call");
         await expect(filterEntry).toHaveAccessibleDescription(/Search applied/);
         await expect(filterEntry).not.toHaveAccessibleDescription(new RegExp(nextQuery));
-        await expect(filterEntry).toHaveAccessibleName("Filters and view, 1 active filter");
-        await expect(page.locator("#analyzeFilterCount")).toBeVisible();
+        await expect(filterEntry).toHaveAccessibleName("1 filter applied");
+        await expect(filterEntry).toHaveText("1 filter applied");
         await page.unroute("**/api/search/query", hold);
     } else {
         await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
@@ -477,7 +477,7 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
             await expect(filters).not.toHaveAccessibleDescription(/Saved collection|Search applied/);
         }
         await expect(filterEntry).toHaveAccessibleName("Filters and view");
-        await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+        await expect(filterEntry).toHaveText("Filters");
     }
     await page.locator("#wireSearch").fill("");
     await expect(page.locator("#activityListSummary")).toHaveText(initialSummary);
@@ -485,6 +485,6 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
     await expect(filterEntry).toHaveAccessibleDescription(/Saved collection/);
     await expect(filterEntry).not.toHaveAccessibleDescription(/Search applied/);
     await expect(filterEntry).toHaveAccessibleName("Filters and view");
-    await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+    await expect(filterEntry).toHaveText("Filters");
     assert.ok(!page.url().includes(query));
 });

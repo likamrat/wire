@@ -69,6 +69,10 @@ counts and provenance definitions live in Chart guide, not another drilldown.
 
 Filters opens one panel with the existing controls, applied chips and separate
 View group. Fields/labels wrap; accepting a restriction must not move focus.
+The closed Filters control names how many restrictions the displayed results
+actually use. Drafts and display choices do not count. Name non-default
+grouping in the chart title; in Trends, distinguish a subset of drawn series
+or compared measures from a change to the measured population.
 
 | Control or action | Effect |
 | --- | --- |

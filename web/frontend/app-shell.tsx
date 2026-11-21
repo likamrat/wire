@@ -202,9 +202,9 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
                 </button>
             </span>
             <button id="analyzeRefresh" className="quiet" type="button" aria-label="Refresh" onClick={event => refresh(event.currentTarget)}><span id="analyzeRefreshLabel">Refresh</span></button>
-            <button id="openAnalyzeFilters" className="quiet" type="button" aria-label="Filters and view"
+            <button id="openAnalyzeFilters" className="quiet filter-entry" type="button" aria-label="Filters and view"
                 aria-haspopup="dialog" aria-expanded="false" aria-controls="analyzeFilterDialog">
-                <Icon name="filter" /><span className="analyze-entry-label">Filters</span><span id="analyzeFilterCount" className="analyze-filter-count" aria-hidden="true" hidden />
+                <Icon name="filter" /><span className="analyze-entry-label filter-entry-label">Filters</span>
             </button>
             <span id="analyzeRefreshStatus" className="visually-hidden" role="status" aria-live="polite" />
         </>, ports.toolbar)}

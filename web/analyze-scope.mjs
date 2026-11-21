@@ -15,13 +15,11 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
             restrictions.push(collections[filters.scope]);
             if (paired) parts.push(collections[filters.scope]);
         }
-        let activeCount = Number(!paired && Boolean(filters.from || filters.to)) + Number(filters.scope !== "history");
         function add(label, values, restriction = true) {
             if (!values?.length) return;
             const text = `${label}: ${values.join(", ")}`;
             if (!paired || restriction) parts.push(text);
             if (restriction) restrictions.push(text);
-            activeCount++;
         }
         const count = value => value.toLocaleString(applied.timeContext?.locale);
         if (applied.layer !== "tool") add("Activity", [results.unit(applied.layer, 2)], false);
@@ -41,7 +39,6 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
                 const context = paired ? "Missing-service context allowed"
                     : `Includes missing-service context: ${count(selection.knownMatchIds.length)} known matches; ${count(selection.contextOnlyIds.length)} context-only`;
                 parts.push(context); restrictions.push(context);
-                activeCount++;
             }
         }
         add("Category", filters.workloads?.map(serviceLabel));
@@ -59,10 +56,9 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
         for (const service of acceptedRoute.withinServices?.split(",") || []) {
             const context = `${serviceLabel(service)} within current scope`;
             parts.push(context); restrictions.push(context);
-            activeCount++;
         }
-        if (hasSearch) { parts.push("Search applied"); restrictions.push("Search applied"); activeCount++; }
-        return { text: parts.join("; "), parts, activeCount, restrictions, restrictionText: restrictions.join("; ") };
+        if (hasSearch) { parts.push("Search applied"); restrictions.push("Search applied"); }
+        return { text: parts.join("; "), parts, activeCount: restrictions.length, restrictions, restrictionText: restrictions.join("; ") };
     }
     function describePair(pair) {
         if (pair === null) return null;

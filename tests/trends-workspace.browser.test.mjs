@@ -148,7 +148,7 @@ async function screenshot(page, name) {
 
 test("compiled index applies every available filter, supports calendar navigation and pages without changing the full period", { timeout: 90000 }, async t => {
     const { page, reads } = await setup(t), region = page.locator("#trendsView"), card = panelOf(page, "rhythm");
-    const period = page.locator("#trendsPeriod"), filter = region.getByRole("button", { name: "Filters", exact: true });
+    const period = page.locator("#trendsPeriod"), filter = region.locator(".filter-entry");
     const cases = { trendsPromptauthors: { "": 4, user: 2, agent: 1, unknown: 1 }, trendsTool: { "": 4, "workiq-fetch": 3, "workiq-retrieve": 1 },
         trendsService: { "": 4, Files: 2, Mail: 2, Calendar: 1, Discovery: 0, missing: 0 } };
     for (const [field, expected] of Object.entries(cases)) {
@@ -309,7 +309,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
 test("compiled Trends keeps its mounted chart and scroll during accepted, canceled, pending and failed filter reads", { timeout: 90000 }, async t => {
     const { page, index } = await setup(t);
     await index.getByRole("button", { name: "Services", exact: true }).click();
-    const panel = panelOf(page, "services"), filters = page.getByRole("button", { name: "Filters", exact: true });
+    const panel = panelOf(page, "services"), filters = page.locator("#trendsView .filter-entry");
     await page.setViewportSize({ width: 440, height: 650 });
     const marks = () => panel.locator("[data-trend-mark]").count(); const before = await marks();
     await filters.click(); await selectActivityOption(page, "trendsService", "Files"); await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -317,27 +317,58 @@ test("compiled Trends keeps its mounted chart and scroll during accepted, cancel
     let release; const gate = new Promise(resolve => { release = resolve; });
     await page.route("**/api/trends", async route => { const response = await route.fetch(); await gate; await route.fulfill({ response }); }, { times: 1 });
     await filters.click(); await selectActivityOption(page, "trendsService", "Files");
-    await page.evaluate(() => { const chart = document.querySelector('[data-family="services"] .trends-plot'), control = document.querySelector(".trends-toolbar button[aria-label=Filters]");
+    await page.evaluate(() => { const chart = document.querySelector('[data-family="services"] .trends-plot'), control = document.querySelector(".trends-toolbar .filter-entry");
         const top = chart.getBoundingClientRect().top, y = scrollY;
         window.sampleFilter = { chart, control, frames: [], done: false };
         (function tick() { const s = window.sampleFilter; s.frames.push([scrollY - y, chart.getBoundingClientRect().top - top]); if (!s.done) requestAnimationFrame(tick); })();
     });
+
     await page.getByRole("button", { name: "Apply filters" }).click(); await expect(page.locator(".trends-pending")).toContainText("Loading");
+    await expect(filters).toHaveText("Filters");
     await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); release();
     await expect(panel.locator(".trends-index-scope")).toContainText("2 dated calls");
+    await expect(filters).toHaveText("1 filter applied");
     const motion = await page.evaluate(() => { const s = window.sampleFilter; s.done = true;
         return { frames: s.frames.length, mounted: s.chart.isConnected && s.control.isConnected, worst: Math.max(...s.frames.flat().map(Math.abs)) }; });
     assert(motion.frames > 2); assert(motion.mounted); assert(motion.worst <= 1, JSON.stringify(motion)); await expect(filters).toBeFocused();
     await page.route("**/api/trends", route => route.fulfill({ status: 422, json: { error: "Invented range failure" } }), { times: 1 });
     await page.getByRole("button", { name: "Clear filters", exact: true }).click(); await expect(page.locator("#trendsView .notice")).toBeVisible();
+    await expect(filters).toHaveText("1 filter applied");
     await expect(panel.locator(".trends-index-scope")).toContainText("2 dated calls");
     await page.getByRole("button", { name: "Read stored activity", exact: true }).click(); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls");
+    await expect(filters).toHaveText("Filters");
     if (proof) await writeFile(path.join(proof, "filter-motion.json"), JSON.stringify(motion));
+});
+
+test("Trends keeps its scope toolbar and hit targets in place through zero, one, two and clear", async t => {
+    const { page } = await setup(t), view = page.locator("#trendsView"), filters = view.locator(".filter-entry");
+    // The result caption below can grow to name the actual restrictions. The toolbar cannot.
+    const boxes = () => view.locator(".trends-toolbar,#trendsPeriod,.trends-filter-actions>button").evaluateAll(nodes => nodes.map(n => {
+        const r = n.getBoundingClientRect(); return [r.x, r.y + scrollY, r.width, r.height].map(Math.round);
+    }));
+    for (const [width, scale] of [[1280, 1], [390, 2]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(async scale => { document.documentElement.style.fontSize = `${scale * 100}%`; await document.fonts.ready; }, scale);
+        const before = await boxes();
+        for (const [field, value, text] of [["trendsPromptauthors", "user", "1 filter applied"], ["trendsTool", "workiq-fetch", "2 filters applied"]]) {
+            await filters.press("Enter");
+            await selectActivityOption(page, field, value);
+            await view.getByRole("button", { name: "Apply filters", exact: true }).click();
+            await expect(filters).toHaveText(text); await expect(filters).toBeFocused();
+            assert.deepEqual(await boxes(), before);
+        }
+        await page.mouse.move(2, 2);
+        await filters.scrollIntoViewIfNeeded();
+        await screenshot(page, `applied-${width}`);
+        await view.getByRole("button", { name: "Clear filters", exact: true }).click();
+        await expect(filters).toHaveText("Filters"); await expect(filters).toBeFocused();
+        assert.deepEqual(await boxes(), before);
+    }
 });
 
 test("compiled Trends keeps the reading anchor across refinements, compare, empty, failed and superseded reads", { timeout: 90000 }, async t => {
     const { page, index } = await setup(t), view = page.locator("#trendsView"), panel = panelOf(page, "tools");
-    const filters = view.getByRole("button", { name: "Filters", exact: true }), period = view.locator("#trendsPeriod");
+    const filters = view.locator(".filter-entry"), period = view.locator("#trendsPeriod");
     const tool = index.getByRole("button", { name: "Tool usage", exact: true });
     await tool.click();
     const frames = [];
@@ -373,15 +404,23 @@ test("compiled Trends keeps the reading anchor across refinements, compare, empt
     await watch("percentage then count", async () => { await choose(panel,"Percentage"); await choose(panel,"Count"); });
     await watch("lines then columns", async () => { await choose(panel,"Lines"); await choose(panel,"Columns"); });
     const check = panel.getByRole("checkbox").first();
-    await watch("series visibility", async () => { await check.uncheck(); await check.check(); await expect(check).toBeFocused(); });
+    await watch("series visibility", async () => {
+        await check.uncheck(); await expect(panel.locator(".trends-index-scope")).toContainText("1 of 2 series shown");
+        await expect(filters).toHaveText("Filters");
+        await check.check(); await expect(check).toBeFocused();
+        await expect(panel.locator(".trends-index-scope")).not.toContainText("series shown");
+    });
     await watch("change measure and return", async () => { await choose(index,"Response models"); await tool.click(); });
     await watch("add comparison", async () => {
         await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
         await choose(view,"Apply comparison"); await expect(panelOf(page,"services")).toBeVisible();
+        await expect(panel.locator(".trends-index-scope")).toContainText("Comparing 2 measures");
+        await expect(filters).toHaveText("Filters");
     }, {scene:true});
     await watch("remove comparison", async () => {
         await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
         await choose(view,"Apply comparison");
+        await expect(panel.locator(".trends-index-scope")).not.toContainText("Comparing");
     }, {scene:true});
     await watch("empty filter", async () => { await applyService("Discovery"); await expect(panel.locator(".trends-no-activity")).toContainText("No matching calls"); });
     await watch("clear empty", async () => { await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });

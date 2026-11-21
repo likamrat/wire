@@ -622,7 +622,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         return Object.fromEntries(Object.entries(value.periods).map(([key, side]) => [key, by ? projection.groupRows(side.analytics.rows, by) : side.analytics.timeSeries.points]));
     }
     function plottedPanel(value, sides, names) {
-        const timeline = chartView() === "timeline", node = panel(timeline ? "Activity over time" : "Recorded activity by " + (getContext().route.chart === "endpoint" ? "path or operation" : getContext().route.chart === "workload" ? "category" : "tool"),
+        const timeline = chartView() === "timeline", interval = value.options.bucket;
+        const timelineTitle = ["week", "month"].includes(interval) ? `Activity by ${interval}` : "Activity over time";
+        const node = panel(timeline ? timelineTitle : "Recorded activity by " + (getContext().route.chart === "endpoint" ? "path or operation" : getContext().route.chart === "workload" ? "category" : "tool"),
             timeline ? "comparison-timeline" : "comparison-breakdown");
         const rows = chartRows(value), maximum = Math.max(0, ...Object.values(rows).flat().map(row => row.count));
         node.append(el("p", `${value.definitions.layer === "tool" ? "Call" : "Record"} count scale: 0 to ${number(maximum)}. Shares use each period's total.`, "compare-caption comparison-scale"));

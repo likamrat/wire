@@ -94,8 +94,10 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     const custom = button("Custom dates", openDates, "quiet trends-date-range"); custom.dataset.trendPeriod = "custom";
     custom.prepend(ux.icon("calendar")); periods.append(custom);
-    const filtersButton = button("Filters", openFilters);
-    filtersButton.prepend(ux.icon("filter"));
+    const filtersButton = button("", openFilters, "quiet filter-entry");
+    filtersButton.append(ux.icon("filter"), el("span", "filter-entry-label", "Filters"));
+    filtersButton.setAttribute("aria-haspopup", "dialog");
+    filtersButton.setAttribute("aria-expanded", "false");
     const sections = el("nav", "wire-section-nav"), guide = el("section", "trends-guide");
     sections.setAttribute("aria-label", "Trends sections");
     for (const [id, label, icon] of [["overview","Overview","section-overview"],["charts","Charts","section-charts"],["guide","Chart guide","section-guide"]]) {
@@ -128,7 +130,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
         paint();
     });
-    toolbar.append(periods, filtersButton, collapseAll);
+    const filterActions = el("div", "trends-filter-actions");
+    filterActions.append(filtersButton); toolbar.append(periods, filterActions, collapseAll);
     const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset, remember: "filters" }));
     restrictions.append(restrictionText, clearFilters); restrictions.hidden = true;
     const retry = button("Read stored activity", () => {
@@ -211,6 +214,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     toolbar.setAttribute("role", "group"); toolbar.setAttribute("aria-label", "Trend scope and options");
     dialog.addEventListener("close", () => {
         if (dialog.open) return;
+        filtersButton.setAttribute("aria-expanded", "false");
         scrub(dialogBody); scrub(dialogTitle);
         // Native close can restore focus before this queued event. Don't take it
         // back from a chart mark or another control the reader has since reached.
@@ -545,6 +549,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     function openFilters() {
         if (!openDialog("Filter activity")) return;
+        filtersButton.setAttribute("aria-expanded", "true");
         const author = select("Prompt authors", [["", "All, including unverified"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
         const tool = select("Tool", [["", "All tools"], ...data.definitions.tools.map(row => [row.id, row.label])], () => {});
         const service = select("Service", [["", "All services"], ...data.definitions.services.map(row => [row.id, row.label]), ["Discovery", "Discovery / preparation"], ["missing", "Missing service detail"]], () => {});
@@ -658,6 +663,9 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         card.summary.hidden = !card.legend.childElementCount;
         card.body.dataset.summary = String(!card.summary.hidden);
         const limits = [];
+        const shown = definitions.filter(definition => !hidden.has(definition.id)).length;
+        const seriesSubset = shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
+        if (allCharts && seriesSubset) limits.push(seriesSubset);
         if (id === "services") {
             if (allCharts && totals.missingServices) limits.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
             if (allCharts && totals.preparationCalls) limits.push(`${number(totals.preparationCalls)} preparation calls`);
@@ -674,6 +682,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${number(totals.calls)} calls timed`
             : `${number(unitIsInteraction ? totals.interactions : totals.calls)} ${unitIsInteraction ? "originating interactions" : "dated calls"}`;
         const captions = [summary + " in this period"];
+        if (seriesSubset) captions.push(seriesSubset);
+        if (id === activeMeasure && compared.size) captions.push(`Comparing ${compared.size + 1} measures`);
         if (id === "timing") captions.push("milliseconds");
         if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
@@ -879,10 +889,10 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         restrictions.hidden = !allCharts || !Object.keys(filters).length;
         if (!Object.keys(filters).length && doc.activeElement === clearFilters) filtersButton.focus({ preventScroll: true });
         clearFilters.disabled = !Object.keys(filters).length;
-        clearFilters.hidden = clearFilters.disabled;
-        filtersButton.setAttribute("aria-label", "Filters");
+        ux.paintFilterEntry(filtersButton, Object.keys(filters).length);
         filtersButton.title = restrictionText.textContent || "Filter activity";
-        const clearHost = allCharts && section === "charts" ? restrictions : toolbar;
+        const clearHost = allCharts && section === "charts" ? restrictions : filterActions;
+        clearFilters.hidden = clearHost === restrictions && clearFilters.disabled;
         if (clearFilters.parentElement !== clearHost) clearHost.append(clearFilters);
         const limits = [];
         if (allCharts && data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} calls have no start date and are left out.`);
@@ -927,6 +937,9 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
         scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("title"); periodButton.hidden = true;
+        ux.paintFilterEntry(filtersButton, 0);
+        filtersButton.setAttribute("aria-expanded", "false");
+        clearFilters.disabled = true;
         filtersButton.disabled = true; periodButton.disabled = true;
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = false;
@@ -1009,6 +1022,13 @@ export const trendsStyles = `
 .trends-toolbar{margin-bottom:16px;gap:8px}.trends-periods{gap:4px;margin-right:auto}
 .trends-pending{min-height:1.5em;margin:-8px 0 8px;color:var(--muted);font-size:var(--type-small);line-height:1.5}
 .trends-toolbar>button,.trends-detail-bar>button{display:inline-flex;align-items:center;gap:8px}
+.trends-filter-actions{display:inline-flex;align-items:center;gap:4px;max-inline-size:100%}
+.trends-filter-actions .filter-entry{display:inline-flex;align-items:center;gap:8px}
+.trends-filter-actions .filter-entry>.wire-icon{flex:none;width:1rem;height:1rem}
+.trends-filter-actions>button:disabled{visibility:hidden}
+@container(max-width:22rem){
+ .trends-filter-actions:has(>button:nth-child(2)) .filter-entry-label{display:grid;align-content:center;min-block-size:2lh;white-space:normal}
+}
 .trends-periods button[aria-pressed=true],.trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
 .trends-date-range{display:inline-flex;align-items:center;gap:8px;max-width:100%;white-space:normal}.trends-date-range>.wire-icon{width:16px;height:16px;flex:none}
 .trends-restrictions{margin-bottom:12px}

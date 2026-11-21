@@ -83,12 +83,13 @@ async function noOrdinaryAuthority(page, activeCount = 0) {
         const caption = page.locator("#comparisonAcceptedScope");
         await expect(caption).toBeVisible();
         await expect(entry).toHaveAccessibleDescription(await caption.textContent());
-        await expect(entry).toHaveAccessibleName(`Filters, ${activeCount} active ${activeCount === 1 ? "filter" : "filters"}`);
-        await expect(page.locator("#analyzeFilterCount")).toHaveText(String(activeCount));
+        const label = `${activeCount} ${activeCount === 1 ? "filter" : "filters"} applied`;
+        await expect(entry).toHaveAccessibleName(label);
+        await expect(entry).toHaveText(label);
     } else {
         await expect(entry).toHaveAccessibleName("Filters");
         await expect(entry).toHaveAccessibleDescription("");
-        await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+        await expect(entry).toHaveText("Filters");
     }
 }
 async function capture(page, name, { top = false } = {}) {
@@ -372,8 +373,8 @@ test("accepted restrictions stay visible with Filters closed and are withdrawn w
             && Boolean(node.compareDocumentPosition(answers) & Node.DOCUMENT_POSITION_FOLLOWING);
     }), "Restrictions follow named periods and precede the accepted results");
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(await caption.textContent());
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleName("Filters, 1 active filter");
-    await expect(page.locator("#analyzeFilterCount")).toHaveText("1");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleName("1 filter applied");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("1 filter applied");
     await capture(page, "filtered-100-percent", { top: true });
     const key = await caption.getAttribute("data-pair-key"), reads = comparisons().length;
     await expect(page.locator("#activityUpdateToggle,#activityUpdateSlot")).toHaveCount(0);
@@ -483,7 +484,7 @@ test("accepted empty pairs keep their identity without default recap or duplicat
     await expect(page.locator("#comparisonAcceptedScope")).toHaveText("Both collections");
     await expect(page.locator("#periodComparisonResults > p.compare-caption").filter({ hasText: "Both collections" })).toHaveCount(1);
     await expect(page.locator("#periodComparisonResults > p.compare-caption").filter({ hasText: /^Graph code references$/ })).toHaveCount(1);
-    await noOrdinaryAuthority(page, 2);
+    await noOrdinaryAuthority(page, 1);
     await page.locator("#openChartReference").click();
     await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveText("Both collections");
     await page.locator("#meaning").press("Escape");

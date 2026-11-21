@@ -383,7 +383,7 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     assert.equal(snapshots.at(-1).filters.from, olderDay);
     assert.equal(snapshots.at(-1).filters.to, newerDay);
     await closeAnalyzeFilters(page);
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAttribute("aria-label", /1 active filter/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleName("1 filter applied");
     await expect(page.locator("#analyzeScopeCaption")).not.toContainText("All dates");
     await openAnalyzeFilters(page);
     await page.locator("#resetView").click(); await ready(page);
@@ -391,7 +391,7 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
     await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
-    await expect(page.locator("#analyzeFilterCount")).not.toBeVisible();
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
     await expect(page.locator("#activitySelectionSummary")).toHaveText(selection);
     assert.ok(await page.locator("#activityList").evaluate(list => {
         const actions = document.getElementById("analyzeResultActions"), pager = document.getElementById("activityPager");
@@ -600,13 +600,13 @@ test("the integrated dashboard and panel reflow with long names, both themes and
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Invented lighthouse research");
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Invented harbor research");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    const badge = await page.locator("#analyzeFilterCount").evaluate(node => {
+    const label = await page.locator("#openAnalyzeFilters .filter-entry-label").evaluate(node => {
         const range = document.createRange(); range.selectNodeContents(node);
         const text = range.getBoundingClientRect(), bounds = node.getBoundingClientRect();
         return { top: text.top - bounds.top, bottom: bounds.bottom - text.bottom,
             left: text.left - bounds.left, right: bounds.right - text.right };
     });
-    assert.ok(Object.values(badge).every(inset => inset >= -1), "The active-filter count fits its surface at 200%: " + JSON.stringify(badge));
+    assert.ok(Object.values(label).every(inset => inset >= -1), "The applied-filter label fits at 200%: " + JSON.stringify(label));
     if (proof) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.screenshot({ path: path.join(proof, "long-applied-phone-200-overview.png") });

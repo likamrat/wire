@@ -68,7 +68,7 @@ test("paired restrictions reuse canonical labels and captured names without inve
         + "; Copilot project: Accepted project, Project not recorded, Project unavailable"
         + "; Recorder source: Accepted recorder, Source unavailable; API path: Accepted path, Selected path unavailable"
         + "; Files within current scope; Mail within current scope; Search applied");
-    assert.equal(value.activeCount, 14);
+    assert.equal(value.activeCount, 13, "The evidence unit is not another restriction");
     assert.equal(value.parts.join("; "), value.text);
     assert.equal(value.restrictions.join("; "), value.restrictionText);
     assert.equal(value.restrictionText, value.text);
@@ -77,7 +77,7 @@ test("paired restrictions reuse canonical labels and captured names without inve
     const strict = scope.describePair(pair);
     assert.match(strict.text, /Service: Files only;/);
     assert.doesNotMatch(strict.text, /missing-service/);
-    assert.equal(strict.activeCount, 13);
+    assert.equal(strict.activeCount, 12);
 });
 
 test("malformed or mismatched paired authority cannot become an unrestricted caption", () => {
@@ -108,7 +108,7 @@ test("paired outcome wording keeps returned results and unobserved code referenc
                 options: { layer, filters: { scope: "history", outcomes: ["failure"] } }, selection: { withinServices: [] } },
             scope: { hasSearch: false, projects: [], sessions: [], endpoints: [] } };
         assert.deepEqual(scope.describePair(pair), { text: label, parts: [label], restrictions: [label],
-            restrictionText: label, activeCount: 2 });
+            restrictionText: label, activeCount: 1 });
     }
 });
 
@@ -167,7 +167,7 @@ test("layer, strict service scope and accepted chart refinements stay explicit w
     });
     assert.equal(value.text, "All dates; Earlier snapshot; Activity: owned HTTP records"
         + "; Service: Files only (2 known matches); Recorder source: Source unavailable; Files within current scope");
-    assert.equal(value.activeCount, 5);
+    assert.equal(value.activeCount, 4);
     assert.deepEqual(value.restrictions, ["Earlier snapshot", "Service: Files only (2 known matches)",
         "Recorder source: Source unavailable", "Files within current scope"]);
 });
@@ -179,7 +179,7 @@ test("retained outcome restrictions on code references never imply observed exec
     });
     assert.equal(value.text, "All dates; Saved collection; Activity: Graph code references"
         + "; Previous outcome: Tool failed (execution not observed)");
-    assert.equal(value.activeCount, 2);
+    assert.equal(value.activeCount, 1);
     assert.deepEqual(value.restrictions, ["Previous outcome: Tool failed (execution not observed)"]);
 });
 
