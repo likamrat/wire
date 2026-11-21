@@ -287,6 +287,9 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
     await expect(card.locator(".request-card-cause").filter({ hasText: "workiq-retrieve" })).toContainText("ToolUnavailable");
     await expect(card.locator(".request-card-cause").filter({ hasText: "returned entry 2" })).toContainText("AccessDenied");
+    const timestampSize = await card.locator(".request-card-time").evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    const reasons = await card.locator(".request-card-cause").evaluateAll(nodes => nodes.map(el => parseFloat(getComputedStyle(el).fontSize)));
+    assert.ok(reasons.every(size => size > timestampSize), "Both failure explanations must read as body text, not timestamp captions.");
     await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
     await expect(card.locator("button,input,details")).toHaveCount(0);

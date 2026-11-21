@@ -166,7 +166,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const datesRow = optionsRow("Activity period", dateButton), fileRow = optionsRow("Files to save", formatGroup);
     draftChoices.append(compactLabel, datesRow);
     outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
-    outlineAction.append(el("small","","Preparing does not save or send anything."), prepare);
+    outlineAction.append(el("p","screen-explanation","Preparing does not save or send anything."), prepare);
     periodHost.append(period, periodCaption);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);

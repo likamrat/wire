@@ -11,7 +11,7 @@ export function palettePreview(id, mode) {
 }
 export const paletteGallery = `
 <section class="palette-gallery" aria-labelledby="paletteTitle">
-  <div class="palette-toolbar"><div><h3 id="paletteTitle">Color palette</h3><span id="paletteSelection" hidden></span></div>
+  <div class="palette-toolbar"><div class="settings-row-copy"><h3 id="paletteTitle">Color palette</h3><span id="paletteSelection" hidden></span></div>
   <div><button id="findPalette" aria-expanded="false" aria-controls="paletteFind" type="button">Find palette</button>
   <button id="resetPalette" type="button">Reset palette</button></div></div>
   <div id="paletteFind" hidden><label for="paletteQuery">Find a palette by name</label><input id="paletteQuery" type="search" autocomplete="off">

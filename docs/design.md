@@ -41,6 +41,8 @@ use the same native modal.
 | Element | Visual treatment |
 | --- | --- |
 | Screen type | Bundled Asta Sans and shared screen roles |
+| Failure reasons and action guidance | Regular body type (`--type-body`) with 1.5 line height. Keep reasons distinct from timestamp captions; do not shrink an action's consequences into fine print. |
+| Settings task headings | Peer tasks use the same strong reading-size heading (`--type-reading`), whether the control is a button or a gallery. |
 | Metadata label/value | Same regular weight and size; use placement and neutral label contrast for hierarchy |
 | Prompt | Regular, not bold italic |
 | Exact code and API path | Deliberate monospace |

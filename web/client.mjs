@@ -5893,7 +5893,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
         if (failure) {
             const failed = rows.find(r => r.id === failure.call), hint = failed && results.issueCue(sourceCallFor(failed), "failure");
-            if (failed && hint) facts.append(el("span", "request-card-cause", `${failed.tool}: ${failureReasonText(hint)}`));
+            if (failed && hint) facts.append(el("span", "request-card-cause screen-explanation", `${failed.tool}: ${failureReasonText(hint)}`));
         }
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         function evidenceLink(label, destination, status) {
@@ -5919,7 +5919,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             foot.append(evidenceLink(`${service} result: ${label}`, exact(issue, "reported-api")));
             if (cue && (result?.errorCode || result?.errorDiagnostic?.message || result?.errorDiagnostic?.details?.length)) {
                 const name = Number.isSafeInteger(result.index) && result.index >= 0 ? `returned entry ${result.index + 1}` : "returned entry";
-                facts.append(el("span", "request-card-cause", `${issue.tool}, ${name}: ${cue}`));
+                facts.append(el("span", "request-card-cause screen-explanation", `${issue.tool}, ${name}: ${cue}`));
             }
         }
         const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));

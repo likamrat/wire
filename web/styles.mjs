@@ -30,6 +30,7 @@ ${fontFaceStyles}
 html,body {margin:0;min-width:0}
 html {background:var(--page);font-family:var(--font);scroll-padding-top:100px}
 body {background:var(--page);color:var(--ink);font:var(--type-body)/var(--leading-ui) var(--font);font-variant-numeric:tabular-nums;color-scheme:inherit}
+.screen-explanation {font-size:var(--type-body);line-height:1.5;font-weight:var(--weight-regular);overflow-wrap:anywhere}
 #workspace[data-navigation-pending]>:not(#navigationPending) {display:none!important}
 .navigation-pending {padding:24px 0;color:var(--muted)}
 button,input,select,.button-link {font:var(--type-control)/var(--leading-control) var(--font);letter-spacing:var(--tracking-ui);color:inherit}
@@ -657,6 +658,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .request-card-problem {display:grid;gap:6px;margin-top:12px;min-width:0;font:var(--type-small)/1.5 var(--font)}
 .returned-coverage {display:block;margin:6px 0 0;max-width:none;color:var(--muted);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
 .request-card-summary {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-top:12px;font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--muted)}
+.request-card-cause {flex-basis:100%;min-width:0;color:var(--ink)}
 .read-in-place {container-type:inline-size}
 .read-in-place[data-detail-active] .card-reading-body,.read-in-place[data-detail-active] .card-reading-actions {background:var(--accent-soft)}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
