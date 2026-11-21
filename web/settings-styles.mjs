@@ -282,6 +282,24 @@ button.primary.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(
 .settings-view .settings-automatic-row[data-scoring-state=paused]>p {border-inline-start:3px solid var(--warning);padding-inline-start:12px}
 .settings-view .settings-content a:not(.button-link),.settings-status-link a {text-decoration:underline;text-underline-offset:3px}
 .settings-view .settings-content a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+#settingsGeneralBack {margin-bottom:var(--space-sm)}
+#settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
+.general-preferences>h3 {padding-bottom:var(--space-sm)}
+.settings-view .settings-content a.settings-preference-link {display:grid;grid-template-columns:auto minmax(0,1fr) fit-content(50%) auto;gap:.25rem .75rem;
+ padding:.6rem .5rem;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
+.settings-preference-link .wire-icon {width:1rem;height:1rem;color:var(--muted)}
+.settings-preference-link small {display:block;color:var(--muted);font-size:var(--type-caption)}
+.settings-preference-link .preference-name {font-size:var(--type-reading);font-weight:var(--weight-medium)}
+.settings-preference-link small {font-weight:var(--weight-regular)}
+.preference-value {color:var(--muted);text-align:end;font-size:var(--type-reading)}
+.settings-preference-link:hover {background:var(--hover)}.settings-preference-link:active {background:var(--pill-pressed)}
+.settings-preference-link:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+@container settings-pane (max-width:28rem) {
+ .settings-view .settings-content a.settings-preference-link {grid-template-columns:minmax(0,1fr) auto}
+ .settings-preference-link>.wire-icon:first-child,.settings-preference-link small {display:none}
+ .settings-preference-link>.wire-icon:last-child {grid-area:1/2/3/3}
+ .settings-preference-link .preference-value {grid-column:1;text-align:start}
+}
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}
 .settings-view .settings-advanced[open] {padding-bottom:12px}

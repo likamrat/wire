@@ -1697,6 +1697,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
+        $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
+            || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
         for (const pane of document.querySelectorAll("[data-settings-section]")) pane.hidden = pane.dataset.settingsSection !== section;
         for (const anchor of $("settingsCategoryNav").children) {
@@ -2803,6 +2805,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const { url, privateFields } = routeAddress(value);
         return JSON.stringify([url, privateFields, value.search || ""]);
     }
+    function positionKey(value, position) {
+        const key = readingKey(value);
+        // Two visits to General can launch different preference rows.
+        return value.view === "settings" && value.section === "general" ? `${key}:${position}` : key;
+    }
     function boundTrend(route) {
         const bound = route.view === "trends" && trendEntries.get(route.trendEntry);
         return bound && api.isCurrent(bound.publication) && bound.revision === workspaceState.evidence?.revision
@@ -2870,7 +2877,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analysisNavigations.set(key, { query, publication });
         return key;
     }
-    function rememberRoute(next, replace = false) {
+    function rememberRoute(next, replace = false, generalShortcut) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const analysisQuery = Object.hasOwn(next, "analysisQuery") ? next.analysisQuery : semanticQuery;
@@ -2895,8 +2902,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (replace && oldKey !== privateKey) historyViews.delete(oldKey);
         if (!replace) for (const [key, entry] of historyViews) if (entry.position >= historyPosition) historyViews.delete(key);
         if (privateKey) historyViews.set(privateKey, { fields: privateFields, publication, position: historyPosition });
+        const previousShortcut = replace && history.state?.wireAccess?.owner === historyOwner ? history.state?.evidenceView?.generalShortcut : undefined;
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
             evidenceView: { url, privateKey, analysisKey, position: historyPosition,
+            generalShortcut: next.view === "settings" && !next.setting && (generalShortcut || previousShortcut === next.section) ? next.section : undefined,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             savedEntry: next.savedEntry, savedAuthority: next.savedAuthority } };
@@ -2932,8 +2941,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             next = { ...next, returnToResults: sessionJourney.returnRoute({ ...workspaceState.route, search }, true), sidebarEntry: sidebarHistoryKey };
         }
         if (next.view === "request" && workspaceState.route.view === "request") replace = true;
-        rememberRoute(next, replace);
-        return applyRoute(next, options);
+        const originPosition = historyPosition;
+        rememberRoute(next, replace, options.generalShortcut);
+        return applyRoute(next, { ...options, originPosition });
     }
     function link(label, view, changes = {}, cls = "") {
         const node = el("a", cls, label);
@@ -3710,7 +3720,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
     }
-    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false, cardTarget = null, revealReferenceRecords = false } = {}) {
+    function applyRoute(next, { keepFocus = false, restorePosition = false, originPosition = historyPosition, reset = false, paging = null, reportSetup = false, cardTarget = null, revealReferenceRecords = false } = {}) {
         const publication = api.publicationToken();
         if (clearingAccess || !publication) { workspaceState.route = readRoute(); return false; }
         analyzeTrends.leave();
@@ -3800,7 +3810,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 cardEntry = null;
                 $("contextSidebarTitle").focus({ preventScroll: true }); return true;
             }
-            if (workspaceState.route.view !== "request") workspaceState.positions.set(readingKey(workspaceState.route), captureReading());
+            if (workspaceState.route.view !== "request") workspaceState.positions.set(positionKey(workspaceState.route, originPosition), captureReading());
             else saveSidebarPosition();
             chartReferenceUI.leave();
             ux.hideTooltip(); selectControls?.close(); sidebar.close(false);
@@ -3871,7 +3881,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const focusId = keepFocus ? document.activeElement?.id : null;
         if (workspaceState.route.view === "request" && next.view === "request") saveSidebarPosition();
         savedArtifactUI?.leave();
-        if (workspaceState.acceptedRoute) workspaceState.positions.set(readingKey(workspaceState.acceptedRoute), captureReading());
+        if (workspaceState.acceptedRoute) workspaceState.positions.set(positionKey(workspaceState.acceptedRoute, originPosition), captureReading());
         chartReferenceUI.leave();
         ux.hideTooltip();
         selectControls?.close();
@@ -3943,7 +3953,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (controlsOnly) { renderNavigation(); renderFilterChips(); updateSelection(); }
             else render();
         }
-        const position = workspaceState.positions.get(readingKey(workspaceState.route));
+        const position = workspaceState.positions.get(positionKey(workspaceState.route, historyPosition));
         periodReturnReading = restorePosition && workspaceState.route.view === "analyze" && workspaceState.route.compare === "periods" && position
             ? { position, navigation, intent } : null;
         const finishNavigation = (loaded = true) => {
@@ -3988,7 +3998,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (paging) { restorePager(paging); return; }
             if (workspaceState.route.view === "settings") {
                 revealSetting();
-                if (restorePosition && position && (!workspaceState.route.setting || position.focus?.key?.startsWith("settings-search:"))) restoreReading(position);
+                if (restorePosition && position && (!workspaceState.route.setting || position.focus?.key?.startsWith("settings-search:")
+                    || $(position.focus?.id)?.hasAttribute("data-general-shortcut"))) restoreReading(position);
             }
             else if (workspaceState.route.view === "collection-status") {
                 revealCollectionStatus();
@@ -10339,6 +10350,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         go(workspaceState.route.view, { from: undefined, to: undefined, range: undefined, request: undefined, page: undefined });
     });
     $("checkActivity").addEventListener("click", checkActivity);
+    $("settingsGeneralBack").onclick = () => { if (!$("settingsGeneralBack").hidden && !appUpdate?.locked()) history.back(); };
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -10349,7 +10361,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (target.view === "analyze" && ["calls", "interactions"].includes(mode)) {
             changes.page = undefined;
         }
-        go(target.view, changes);
+        if (node.hasAttribute("data-general-shortcut")) {
+            node.focus({ preventScroll: true });
+            navigate(routeFor(target.view, changes), false, { generalShortcut: true });
+        } else go(target.view, changes);
     }));
     recorderUI = mountRecorderDiagnostics({ api, openDialog, el, button });
     $("exportBtn").addEventListener("click", previewExport);
@@ -10460,9 +10475,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (next.view === "request" || next.inspect) ownSidebarHistory();
         else if (workspaceState.route.view !== "request" && !workspaceState.route.inspect) restoreSidebarHistoryMode();
-        const position = history.state?.evidenceView?.position;
+        const originPosition = historyPosition, position = history.state?.evidenceView?.position;
         historyPosition = Number.isSafeInteger(position) ? position : historyPosition + 1;
-        applyRoute(next, { restorePosition: true });
+        applyRoute(next, { restorePosition: true, originPosition });
     }
     window.addEventListener("popstate", traverse);
     // A native fragment navigation can emit both events. popstate canonicalizes

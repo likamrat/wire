@@ -587,7 +587,11 @@ action after confirmed first approval.
 ### Categories and setting search
 
 Settings opens in **General**, with the installed WIRE build, last check and
-**Check for updates** together above the automatic-check switch. The other categories are Collection,
+**Check for updates** together above the automatic-check switch. Below updates,
+the current palette and mode link to Themes, and the effective time zone links
+to Regional. Each row opens its existing category without changing anything.
+Back restores the activating row and its current value. Direct category and
+search entries do not gain a false General return. The other categories are Collection,
 Source access, Themes, Regional, and Privacy & saved data. Keep one
 focused pane; on narrow screens the same categories collapse into a chooser.
 Source access owns approval and paths; Collection owns cadence, Pause and

@@ -84,7 +84,9 @@ export function mountThemeControl(theme, ux) {
         document.getElementById("themeStorageNotice").hidden = !state.storageUnavailable;
         const changed = active !== undefined && active !== state.palette;
         active = state.palette;
-        $("settingsModeLabel").textContent = state.theme === "light" ? "Light" : "Dark";
+        const mode = state.theme === "light" ? "Light" : "Dark";
+        $("settingsModeLabel").textContent = mode;
+        $("generalThemeValue").textContent = `${names.get(active)} · ${mode}${state.storageUnavailable || state.paletteStorageUnavailable ? " (this panel only)" : ""}`;
         $("paletteSelection").textContent = `Active: ${names.get(active)}`;
         for (const input of options) input.checked = input.value === active;
         $("resetPalette").disabled = active === "petrol";

@@ -1,6 +1,13 @@
 import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
 import { paletteGallery } from "./palette-gallery.mjs";
+import { uxIcons } from "./ux-icons.mjs";
+
+function preferenceLink(section, category, label, valueId) {
+    return `<a id="general-${section}" class="settings-preference-link" href="/settings?section=${section}" data-settings-link data-general-shortcut>
+      ${uxIcons["settings-" + section]}<span class="preference-name">${label}<small>${category}</small></span>
+      <span class="preference-value" id="${valueId}">Unavailable</span>${uxIcons.disclosure}</a>`;
+}
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -20,6 +27,7 @@ export const settingsMarkup = `
   <a id="firstCollectionActivity" class="button-link" href="/" data-settings-link hidden>View activity</a>
   <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
+  <button id="settingsGeneralBack" type="button" class="quiet" hidden>${uxIcons.back} Back to General</button>
   <section class="settings-section" data-settings-section="general" aria-labelledby="generalTitle" hidden>
     <h2 id="generalTitle" tabindex="-1">General</h2>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
@@ -33,6 +41,11 @@ export const settingsMarkup = `
       <p id="appUpdateAutoHelp"></p></div>
       <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="select-toggle" aria-hidden="true"></span></label>
     </div>
+    <section class="settings-group general-preferences" aria-labelledby="generalPreferencesTitle">
+      <h3 id="generalPreferencesTitle">Display preferences</h3>
+      ${preferenceLink("themes", "Themes", "Current theme", "generalThemeValue")}
+      ${preferenceLink("regional", "Regional", "Time zone", "generalTimeValue")}
+    </section>
   </section>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
@@ -233,6 +246,8 @@ export function mountDisplayTimeSettings({ time, onChange }) {
         $("displayTimeZone").value = preference ?? "";
         $("displayTimeZone").disabled = busy;
         const changingZone = context.timeZone !== resolve().timeZone;
+        $("generalTimeValue").textContent = changingZone ? `Still using ${time.label(context)}`
+            : preference === null && !context.timeZoneFallback ? `Device default (${time.displayLabel(context)})` : time.label(context);
         $("displayTimeEffective").textContent = changingZone && stale
             ? `The selected zone has not loaded. Still using ${time.label(context)}; retry the view update.`
             : changingZone && state.pending ? `Updating time zone. Still using ${time.label(context)}.` : "";

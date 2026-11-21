@@ -336,6 +336,11 @@ Settings opens in **General**. **Check for updates** checks WIRE itself, not
 your Copilot history. On [supported installations](development.md#updating-wire),
 you can check with automatic checks off. If WIRE says this copy is managed
 manually, use its usual update process instead.
+
+Below updates, **Current theme** opens **Themes** and **Time zone** opens
+**Regional**. Change the preference there, then choose **Back to General**
+to see the value in the row you opened.
+
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network
 diagnostic; `city` finds Time zone.
