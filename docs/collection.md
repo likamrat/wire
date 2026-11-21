@@ -543,6 +543,8 @@ their turn; the originating prompt can be from an earlier turn. WIRE screens
 the complete original prompt and assistant request before using their bounded
 retained fields. It neither truncates the prompt to fit nor retains the
 assistant's discarded text. This does not make an unresolved reference safe.
+If multiple saved parents claim the original prompt, or its saved parent is
+ineligible, WIRE does not treat that prompt as missing to recover the call.
 
 An unrelated external-tool request or canvas record can be classified when
 its matching close is the next original event. The supported forms carry no
