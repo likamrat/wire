@@ -138,6 +138,7 @@ async function setupIndex(t, withBoundary = false, options = {}) {
     await page.goto(new URL(options.direct ? "/trends" : "/", server.url).href);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     if (!options.direct) await navigateMain(page, "trends");
+    await page.getByRole("navigation", { name: "Trends sections" }).getByRole("button", { name: "Charts", exact: true }).click();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#trendsPeriod")).toBeVisible();
     await expect(page.locator("#trendsPlot-rhythm svg")).toBeVisible();
@@ -1755,8 +1756,8 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             await expect(page.locator(".trends-exact tr")).toHaveCount(data.days.length + 1);
             await page.getByRole("button", { name: "Hide numbers", exact: true }).click();
             await page.getByRole("button", { name: "Chart guide", exact: true }).click();
-            await expect(page.locator(".trends-dialog")).toContainText(await panel.locator("h2").textContent());
-            await page.getByRole("button", { name: "Close", exact: true }).click();
+            await expect(page.locator(".trends-guide")).toContainText(await panel.locator("h2").textContent());
+            await page.goBack();
             await page.getByRole("button", { name: "Filters", exact: true }).click();
             await selectActivityOption(page, "trendsPromptauthors", "agent");
             await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -2089,8 +2090,8 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         dates: [...node.querySelectorAll("[data-date-tick]")].map(node => node.textContent),
     })));
     await page.evaluate(() => {
-        window.keptTrendSvgs = [...document.querySelectorAll(".trends-plot>svg")];
-        for (const plot of document.querySelectorAll(".trends-plot")) plot.scrollLeft = 120;
+        window.keptTrendSvgs = [...document.querySelectorAll(".trends-panel .trends-plot>svg")];
+        for (const plot of document.querySelectorAll(".trends-panel .trends-plot")) plot.scrollLeft = 120;
     });
     await settle(page);
     const before = await snapshot(), readCount = reads.length;
@@ -2104,8 +2105,8 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         }
         assert.equal(reads.length, readCount);
         const mounted = await page.evaluate(() => ({
-            same: window.keptTrendSvgs.every((node, index) => node === document.querySelectorAll(".trends-plot>svg")[index]),
-            scrolls: [...document.querySelectorAll(".trends-plot")].map(node => node.scrollLeft),
+            same: window.keptTrendSvgs.every((node, index) => node === document.querySelectorAll(".trends-panel .trends-plot>svg")[index]),
+            scrolls: [...document.querySelectorAll(".trends-panel .trends-plot")].map(node => node.scrollLeft),
         }));
         assert.equal(mounted.same, true); assert.ok(mounted.scrolls.every(value => Math.abs(value - 120) < 1), JSON.stringify(mounted));
     }

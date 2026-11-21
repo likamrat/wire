@@ -170,7 +170,8 @@ test("qualified outcome transition cancels in place, accepts only supported scop
     await page.reload(); await ready(page);
     assert.equal(reads.length, beforeReload, "reload cannot replace a bound home scope with all calls");
     await page.getByRole("button", { name: "Open this view without the private selection" }).click();
-    await expect(visiblePanel(page)).toHaveAttribute("data-family", "rhythm");
+    await expect(page.locator(".trends-landing")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("button", { name: "Back to Analyze" })).toHaveCount(0);
     await page.goto(url + "/?layer=reported-api"); await ready(page);
     await expect(page.locator("a.analyze-trend-link:visible")).toHaveCount(0);
@@ -220,7 +221,7 @@ test("no retained supported calls: unbounded Analyze offers no widget transfer, 
     await page.goto(url); await ready(page);
     await expect(page.locator(".analyze-trend-link:visible")).toHaveCount(0);
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Trends" }).click();
-    await expect(visiblePanel(page)).toHaveAttribute("data-family", "rhythm"); assert.deepEqual(reads.at(-1).filters, {});
+    await expect(page.locator(".trends-landing .trends-no-activity")).toContainText("No matching calls"); assert.deepEqual(reads.at(-1).filters, {});
     await expect(page.getByRole("button", { name: "Back to Analyze" })).toHaveCount(0);
     assert.equal(page.url(), url + "/trends");
 });
@@ -233,7 +234,8 @@ test("a changed retained revision cannot silently replace a widget transfer with
     await expect(page.getByRole("heading", { name: "This Analyze scope is no longer current" })).toBeVisible();
     await expect(visiblePanel(page)).toHaveCount(0); assert.equal(reads.length, 0);
     await page.getByRole("button", { name: "Open Trends without this scope" }).click();
-    await expect(visiblePanel(page)).toHaveAttribute("data-family", "rhythm");
+    await expect(page.locator(".trends-landing")).toBeVisible();
+    await expect.poll(() => reads.length).toBe(1);
     assert.deepEqual(reads.map(read => read.filters), [{}]);
 });
 test("accepted private Search and weekly grouping stay in Analyze, not in the Trends URL or request", async t => {
@@ -287,6 +289,40 @@ test("compiled Trends restores explicit period and measure via URL, reload and B
     assert.deepEqual([reads.at(-1).from, reads.at(-1).to], [day, day]);
 });
 
+test("Overview opens the dated error chart; section navigation retains the chart, scope and Back focus", async t => {
+    const { page, url, reads } = await setup(t, "react", records());
+    await page.goto(`${url}/trends?section=overview&period=custom&from=${day}&to=${day}`);
+    const nav = page.getByRole("navigation", { name: "Trends sections" });
+    const guide = nav.getByRole("button", { name: "Chart guide" });
+    const point = page.locator(".trends-landing [data-trend-mark]").first();
+    await expect(nav.getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
+    await expect(point).toHaveAccessibleName(/Errors & failures, 1 interaction$/);
+    await point.focus(); await point.press("Enter");
+    const chart = page.locator(".trends-panel:visible");
+    await expect(chart).toHaveAttribute("data-family", "problems");
+    await expect(chart.getByRole("button", { name: "View 1 call" })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Charts" })).toHaveAttribute("aria-current", "page");
+    const chartAddress = page.url();
+    await guide.focus(); await guide.press("Enter");
+    await expect(guide).toHaveAttribute("aria-current", "page"); await expect(chart).toHaveCount(0);
+    for (const action of [() => guide.hover(), () => guide.focus()]) {
+        await action();
+        const underline = await guide.evaluate(n => getComputedStyle(n).borderBottom);
+        assert.match(underline, /^3px solid /); assert(!underline.includes("rgba(0, 0, 0, 0)"));
+    }
+    await page.locator(".trends-guide summary").filter({ hasText: "Errors & failures" }).click();
+    await expect(page.locator(".trends-guide details[open]")).toContainText("Unknown results are not failures");
+    await page.setViewportSize({ width: 390, height: 820 });
+    await page.evaluate(() => document.documentElement.style.fontSize = "150%");
+    assert(await nav.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+    await page.goBack(); await expect(page).toHaveURL(chartAddress);
+    await expect(guide).toBeFocused(); await expect(chart.getByRole("button", { name: "View 1 call" })).toBeVisible();
+    assert.equal(reads.length, 1);
+    await page.goForward(); await expect(guide).toHaveAttribute("aria-current", "page");
+    await page.reload(); await expect(guide).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".trends-guide")).toBeVisible();
+});
+
 test("compiled Trends keeps explicit filters tab-bound, never broadens on expired reload or carries them to a new visit", async t => {
     const { page, url, reads } = await setup(t, "react", records());
     const publicRoute = `${url}/trends?measure=tools&period=custom&from=${day}&to=${day}`;
@@ -310,7 +346,8 @@ test("compiled Trends keeps explicit filters tab-bound, never broadens on expire
     const recover = page.getByRole("button", { name: "Open this view without the private selection" });
     await expect(recover).toBeVisible();
     assert.equal(reads.length, privateCount);
-    await recover.click(); await expect(panel).toHaveAttribute("data-family", "rhythm");
+    await recover.click(); await expect(page.locator(".trends-landing")).toBeVisible();
+    await expect.poll(() => reads.length).toBe(privateCount + 1);
     await expect(page).toHaveURL(url + "/trends");
     assert.deepEqual(reads.at(-1).filters, {});
 });
@@ -332,6 +369,7 @@ test("compiled Trends keeps an implicit historical week adaptive across measure 
     await page.goto(url + "/trends");
     const index = page.getByRole("navigation", { name: "Trend measures" }), panel = visiblePanel(page);
     await expect.poll(() => reads.at(-1)?.to).toBe(day);
+    await page.getByRole("button", { name: "Charts", exact: true }).click();
     await index.getByRole("button", { name: "Services", exact: true }).click();
     const adaptive = url + "/trends?measure=services";
     await expect(page).toHaveURL(adaptive);

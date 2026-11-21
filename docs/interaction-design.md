@@ -122,9 +122,10 @@ Use the shared [chart encodings](design.md#chart-reading) for those facts.
 
 ## Trends
 
-Trends is a peer destination. The index lists Errors & failures first and keeps
-all seven measures visible, including on narrow screens. Tool calls is the
-ordinary initial chart. A contextual Analyze entry opens the corresponding
+Trends is a peer destination. Overview opens with the daily Errors & failures
+count. Charts lists Errors & failures first and keeps all seven measure names
+visible, including on narrow screens. Chart guide is an in-page destination.
+A contextual Analyze entry opens Charts on the corresponding
 measure with supported scope; related rather than equivalent views name the
 difference before switching. Return restores the widget and its reading context.
 Changing measure, chart type, series or unit is not a new population read.

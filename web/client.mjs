@@ -2434,9 +2434,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
             entry: trendOrigin(underlyingRoute())?.entry ?? null,
+            section: trendSection(underlyingRoute()),
             routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
         onScopeChange: rememberTrendScope,
+        onSectionChange: (section, measure) => {
+            const route = workspaceState.route;
+            if (route.view !== "trends" || expiredTrendEntry(route)) return;
+            navigate({ ...route, trendSection: section, ...(measure ? { trendMeasure: measure } : {}) }, false, { keepFocus: true });
+        },
         returnToAnalyze: () => {
             const from = trendOrigin(workspaceState.route);
             if (from && from.position < historyPosition) history.go(from.position - historyPosition);
@@ -2831,11 +2837,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function trendRouteScope(route) {
         if (route.view !== "trends" || expiredTrendEntry(route)) return null;
         const bound = boundTrend(route);
-        if (bound?.scope) return bound.scope;
+        if (bound?.scope) return route.trendMeasure && route.trendSection
+            ? { ...bound.scope, family: route.trendMeasure } : bound.scope;
         if (!route.trendMeasure && !route.trendPeriod) return null;
         const period = route.trendPeriod ?? "7";
         return { family: route.trendMeasure ?? "rhythm", period, adaptive: !route.trendPeriod,
             range: period === "custom" ? { from: route.trendFrom, to: route.trendTo } : time.preset(period, viewerTime.timeZone), filters: {} };
+    }
+    function trendSection(route) {
+        return route.trendSection ?? (route.trendMeasure || route.trendPeriod || route.trendEntry ? "charts" : "overview");
     }
     function rememberTrendScope({ family, period, range, filters }, kind) {
         const previous = workspaceState.route;
@@ -2853,9 +2863,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         let next;
         if (home) {
             home.scope = scope;
-            next = previous;
+            next = previous.trendMeasure ? { ...previous, trendMeasure: family } : previous;
         } else {
             next = { view: "trends", search: "", analysisQuery: null, trendMeasure: family };
+            if (trendSection(previous) !== "charts") next.trendSection = trendSection(previous);
             const publicPeriod = ["7", "14", "30"].includes(period);
             const userDates = period === "custom" && (kind === "period" || previous.trendPeriod === "custom"
                 && previous.trendFrom === range.from && previous.trendTo === range.to);

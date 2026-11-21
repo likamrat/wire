@@ -573,6 +573,7 @@ test("narrow outcomes align three readable rows and four breakdowns form paired 
 test("Trends exact evidence is recognizable before opening and Compare keeps both periods compact", async t => {
     const { page } = await setup(t, "react", reviewRecords());
     await navigateMain(page, "trends");
+    await page.getByRole("button", { name: "Charts", exact: true }).click();
     await page.locator("#trendsPeriod").click();
     await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Trends from", { exact: true }).fill("2026-11-10");

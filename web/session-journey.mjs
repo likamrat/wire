@@ -16,7 +16,7 @@ export function createSessionJourney() {
             "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "comparisonFocus", "analysisQuery", "search", "inspect", "order", "nativeGroup"];
         const saved = Object.fromEntries(Object.entries(value)
             .filter(([key, entry]) => keys.includes(key) && ["string", "number", "boolean"].includes(typeof entry)));
-        if (value.view === "trends") for (const key of ["trendEntry", "trendMeasure", "trendPeriod", "trendFrom", "trendTo", "trendUnavailable"]) {
+        if (value.view === "trends") for (const key of ["trendEntry", "trendSection", "trendMeasure", "trendPeriod", "trendFrom", "trendTo", "trendUnavailable"]) {
             if (["string", "boolean"].includes(typeof value[key])) saved[key] = value[key];
         }
         if (value.localSearch) saved.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
@@ -54,7 +54,7 @@ export function createSessionJourney() {
     }
     function canonical(route) {
         if (route.view !== "trends") {
-            const { trendEntry, trendMeasure, trendPeriod, trendFrom, trendTo, trendUnavailable, ...rest } = route;
+            const { trendEntry, trendSection, trendMeasure, trendPeriod, trendFrom, trendTo, trendUnavailable, ...rest } = route;
             route = rest;
         }
         const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);

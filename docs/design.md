@@ -208,7 +208,9 @@ visualization to its definitions and exact values.
 
 Trends places a visible measure index beside the working chart. At narrow widths
 the names wrap above the chart, not into a chooser. Errors & failures comes
-first; a fresh sidebar entry starts on Tool calls. Keep the dated population
+first. A fresh sidebar entry starts on Overview with Errors & failures. The
+section row pairs each icon with a label; an underline identifies the current section.
+Keep the dated population
 beside the measure name. An incomplete service name is a limit on that count,
 not a general warning below every chart. Put the counting details in Data table.
 Named legend controls change what is drawn without changing the population.

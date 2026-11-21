@@ -184,7 +184,7 @@ test("compiled Trends switches a selected dated service between columns and line
         return route.abort();
     });
     await page.clock.setFixedTime(new Date("2026-03-04T20:00:00Z"));
-    await page.goto("https://wire.invalid/trends");
+    await page.goto("https://wire.invalid/trends?section=charts");
     const index = page.getByRole("navigation", { name: "Trend measures" });
     await index.getByRole("button", { name: "Services", exact: true }).click();
     const panel = page.locator("[data-family=services]"), plot = panel.locator(".trends-plot");

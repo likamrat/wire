@@ -54,7 +54,7 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
         ].includes(url.pathname)) { errors.push(`${request.method()} ${url.pathname}`); return route.abort(); }
         if (url.pathname === "/api/trends") reads.push(request.postDataJSON()); return route.continue();
     });
-    await page.clock.setFixedTime(new Date(now)); await page.goto(new URL("/trends", server.url).href);
+    await page.clock.setFixedTime(new Date(now)); await page.goto(new URL("/trends?section=charts", server.url).href);
     const index = page.getByRole("navigation", { name: "Trend measures" });
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
@@ -167,7 +167,8 @@ test("compiled index applies every available filter, supports calendar navigatio
     await expect(card.locator(".trends-index-scope")).toContainText("4 dated calls");
     await later.press("Enter"); await expect(card.locator("[data-date-tick]")).toHaveCount(51);
     await expect(earlier).toBeFocused();
-    await region.getByRole("button", { name: "Chart guide" }).click(); await expect(region.getByRole("dialog")).toContainText("Filters and series"); await page.keyboard.press("Escape");
+    await region.getByRole("button", { name: "Chart guide" }).click();
+    await expect(region.locator(".trends-guide")).toContainText("Filters and series"); await page.goBack();
     await period.click();
     const retainedFocus = await region.getByRole("dialog").evaluate(async dialog => {
         const mark = document.querySelector("#trendsPlot-rhythm [data-trend-mark]");

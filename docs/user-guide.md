@@ -112,9 +112,10 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 
 ## Trends
 
-Choose **Trends** in the sidebar to see tool calls by day. The seven measure
-names stay visible. Choose **Errors & failures** at the top to find affected
-interactions, or **Services** to compare named services immediately. On Analyze,
+Choose **Trends** in the sidebar. **Overview** shows the daily number of
+interactions with a recorded error or failure. Select a day to inspect its
+supporting calls in **Charts**. Charts lists all seven measures; **Chart guide**
+explains what each counts. Use Back to return to the chart you were reading. On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
 **Tool call results**, WIRE asks before showing **Errors & failures**: that
 chart counts affected interactions, not call outcomes. **Back to Analyze**
