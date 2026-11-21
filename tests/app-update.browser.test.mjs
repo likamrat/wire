@@ -7,7 +7,7 @@ import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, revealAnalyzeRecords, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, revealAnalyzeRecords, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 // No listener or real updater. Serve the normal built module and shell solely via intercepted requests.
@@ -139,6 +139,65 @@ test("unsupported bundled runtime reads status only, even if a saved automatic p
     await expect(page.locator("#settingsAppUpdate")).toBeHidden(); await expect(page.locator("#appUpdateApply")).toBeHidden();
     await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     assert.deepEqual(actions, [{ action: "status" }]);
+});
+
+test("General preference rows open canonical pages and return to updated values", async t => {
+    const { page, actions } = await workspace(t, { supported: false });
+    const current = page.getByRole("link", { name: /Current theme/ }), zone = page.getByRole("link", { name: /Time zone.*Regional/ });
+    const back = page.getByRole("button", { name: "Back to General" });
+    await current.focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#themesTitle")).toBeFocused();
+    await expect(page).toHaveURL(/\/settings\?section=themes$/);
+    await chooseTheme(page, "dark"); await page.locator("label:has(#palette-field)").click();
+    await back.click(); await expect(current).toBeFocused(); await expect(current).toContainText("Field notes · Dark");
+    await page.goForward(); await expect(back).toBeVisible();
+    await page.locator("#settingsCategoryNav [data-category=general]").click();
+    await expect(zone).toContainText("Device default");
+    await zone.click(); await expect(page.locator("#regionalTitle")).toBeFocused();
+    await selectActivityOption(page, "displayTimeZone", "Asia/Tokyo");
+    await page.goBack(); await expect(zone).toBeFocused(); await expect(zone).toContainText("Tokyo");
+    await expect(zone).not.toContainText("Device default");
+    if (process.env.WIRE_SETTINGS_GENERAL_PROOFS) {
+        await mkdir(process.env.WIRE_SETTINGS_GENERAL_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_SETTINGS_GENERAL_PROOFS, "general-after-return.png") });
+    }
+    await page.goBack(); await expect(back).toBeVisible();
+    await back.click(); await expect(current).toBeFocused();
+    await page.goto(origin + "/settings?section=themes"); await expect(page.locator("#themesTitle")).toBeVisible();
+    await expect(back).toBeHidden();
+    assert.ok(actions.every(({ action }) => action === "status"));
+});
+
+test("General shows the actual fallback zone and panel-only palette at narrow enlarged size", async t => {
+    const { page, actions } = await workspace(t, { supported: false });
+    await page.addInitScript(() => {
+        const read = Storage.prototype.getItem;
+        Storage.prototype.getItem = function (key) {
+            if (key === "workiq-evidence.palette.v1") throw new DOMException("Unavailable in fixture", "SecurityError");
+            return read.call(this, key);
+        };
+        const format = Intl.DateTimeFormat;
+        Intl.DateTimeFormat = new Proxy(format, { apply(target, self, args) {
+            const result = Reflect.apply(target, self, args);
+            if (!args.length) result.resolvedOptions = () => ({ locale: "en-US" });
+            return result;
+        } });
+    });
+    await page.setViewportSize({ width: 375, height: 850 }); await page.reload();
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const current = page.locator("#general-themes"), zone = page.locator("#general-regional");
+    await expect(current).toContainText(/Petrol & coral.*this panel only/);
+    await expect(zone).toContainText(/UTC.*fallback: browser timezone unavailable/);
+    await zone.focus(); await page.keyboard.press("Enter"); await expect(page.locator("#regionalTitle")).toBeFocused();
+    await expect(page.locator("#displayTimeZone option:checked")).toHaveText(/UTC.*fallback/);
+    await page.getByRole("button", { name: "Back to General" }).click(); await expect(zone).toBeFocused();
+    const geometry = await zone.evaluate(node => ({ row: node.offsetHeight, width: document.documentElement.scrollWidth, viewport: innerWidth }));
+    assert.ok(geometry.row >= 44 && geometry.width <= geometry.viewport + 1, JSON.stringify(geometry));
+    if (process.env.WIRE_SETTINGS_GENERAL_PROOFS) {
+        await mkdir(process.env.WIRE_SETTINGS_GENERAL_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_SETTINGS_GENERAL_PROOFS, "general-fallback-narrow.png") });
+    }
+    assert.ok(actions.every(({ action }) => action === "status"));
 });
 
 test("a managed launcher reporting manual-only shows instructions and never schedules or offers installation", async t => {

@@ -4,7 +4,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
@@ -122,6 +122,7 @@ async function setupIndex(t, withBoundary = false, options = {}) {
     }
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route, new URL(server.url).origin)) return;
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
             "/api/session", "/api/access/watch", "/api/snapshot", "/api/collection/status", "/api/collection/sources/status", "/api/assessment/overview", "/api/assessment/detail",

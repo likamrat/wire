@@ -136,7 +136,9 @@ Every civil day is available in **Data table**. Long single-series charts
 space out date labels to show more of the period at once. If the chart
 scrolls, the dates in view are shown below it; the index initially shows
 the span with the most calls. Custom ranges over 90 days page through
-days without changing full-period totals. Dates use the display time zone and
+days without changing full-period totals. The table caption identifies the daily
+rows shown. Use **Earlier days** or **Later days** to change pages; at either
+end, keyboard focus moves to the direction still available. Dates use the display time zone and
 include both endpoints; choosing older dates does not collect older history.
 
 **Filters** changes the activity included, even while a chart is maximized.
@@ -336,6 +338,11 @@ Settings opens in **General**. **Check for updates** checks WIRE itself, not
 your Copilot history. On [supported installations](development.md#updating-wire),
 you can check with automatic checks off. If WIRE says this copy is managed
 manually, use its usual update process instead.
+
+Below updates, **Current theme** opens **Themes** and **Time zone** opens
+**Regional**. Change the preference there, then choose **Back to General**
+to see the value in the row you opened.
+
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network
 diagnostic; `city` finds Time zone.

@@ -1697,6 +1697,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
+        $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
+            || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
         for (const pane of document.querySelectorAll("[data-settings-section]")) pane.hidden = pane.dataset.settingsSection !== section;
         for (const anchor of $("settingsCategoryNav").children) {
@@ -2803,6 +2805,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const { url, privateFields } = routeAddress(value);
         return JSON.stringify([url, privateFields, value.search || ""]);
     }
+    function positionKey(value, position) {
+        const key = readingKey(value);
+        // Two visits to General can launch different preference rows.
+        return value.view === "settings" && value.section === "general" ? `${key}:${position}` : key;
+    }
     function boundTrend(route) {
         const bound = route.view === "trends" && trendEntries.get(route.trendEntry);
         return bound && api.isCurrent(bound.publication) && bound.revision === workspaceState.evidence?.revision
@@ -2870,7 +2877,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analysisNavigations.set(key, { query, publication });
         return key;
     }
-    function rememberRoute(next, replace = false) {
+    function rememberRoute(next, replace = false, generalShortcut) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const analysisQuery = Object.hasOwn(next, "analysisQuery") ? next.analysisQuery : semanticQuery;
@@ -2895,8 +2902,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (replace && oldKey !== privateKey) historyViews.delete(oldKey);
         if (!replace) for (const [key, entry] of historyViews) if (entry.position >= historyPosition) historyViews.delete(key);
         if (privateKey) historyViews.set(privateKey, { fields: privateFields, publication, position: historyPosition });
+        const previousShortcut = replace && history.state?.wireAccess?.owner === historyOwner ? history.state?.evidenceView?.generalShortcut : undefined;
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
             evidenceView: { url, privateKey, analysisKey, position: historyPosition,
+            generalShortcut: next.view === "settings" && !next.setting && (generalShortcut || previousShortcut === next.section) ? next.section : undefined,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             savedEntry: next.savedEntry, savedAuthority: next.savedAuthority } };
@@ -2932,8 +2941,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             next = { ...next, returnToResults: sessionJourney.returnRoute({ ...workspaceState.route, search }, true), sidebarEntry: sidebarHistoryKey };
         }
         if (next.view === "request" && workspaceState.route.view === "request") replace = true;
-        rememberRoute(next, replace);
-        return applyRoute(next, options);
+        const originPosition = historyPosition;
+        rememberRoute(next, replace, options.generalShortcut);
+        return applyRoute(next, { ...options, originPosition });
     }
     function link(label, view, changes = {}, cls = "") {
         const node = el("a", cls, label);
@@ -3710,7 +3720,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
     }
-    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false, cardTarget = null, revealReferenceRecords = false } = {}) {
+    function applyRoute(next, { keepFocus = false, restorePosition = false, originPosition = historyPosition, reset = false, paging = null, reportSetup = false, cardTarget = null, revealReferenceRecords = false } = {}) {
         const publication = api.publicationToken();
         if (clearingAccess || !publication) { workspaceState.route = readRoute(); return false; }
         analyzeTrends.leave();
@@ -3800,7 +3810,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 cardEntry = null;
                 $("contextSidebarTitle").focus({ preventScroll: true }); return true;
             }
-            if (workspaceState.route.view !== "request") workspaceState.positions.set(readingKey(workspaceState.route), captureReading());
+            if (workspaceState.route.view !== "request") workspaceState.positions.set(positionKey(workspaceState.route, originPosition), captureReading());
             else saveSidebarPosition();
             chartReferenceUI.leave();
             ux.hideTooltip(); selectControls?.close(); sidebar.close(false);
@@ -3871,7 +3881,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const focusId = keepFocus ? document.activeElement?.id : null;
         if (workspaceState.route.view === "request" && next.view === "request") saveSidebarPosition();
         savedArtifactUI?.leave();
-        if (workspaceState.acceptedRoute) workspaceState.positions.set(readingKey(workspaceState.acceptedRoute), captureReading());
+        if (workspaceState.acceptedRoute) workspaceState.positions.set(positionKey(workspaceState.acceptedRoute, originPosition), captureReading());
         chartReferenceUI.leave();
         ux.hideTooltip();
         selectControls?.close();
@@ -3943,7 +3953,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (controlsOnly) { renderNavigation(); renderFilterChips(); updateSelection(); }
             else render();
         }
-        const position = workspaceState.positions.get(readingKey(workspaceState.route));
+        const position = workspaceState.positions.get(positionKey(workspaceState.route, historyPosition));
         periodReturnReading = restorePosition && workspaceState.route.view === "analyze" && workspaceState.route.compare === "periods" && position
             ? { position, navigation, intent } : null;
         const finishNavigation = (loaded = true) => {
@@ -3988,7 +3998,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (paging) { restorePager(paging); return; }
             if (workspaceState.route.view === "settings") {
                 revealSetting();
-                if (restorePosition && position && (!workspaceState.route.setting || position.focus?.key?.startsWith("settings-search:"))) restoreReading(position);
+                if (restorePosition && position && (!workspaceState.route.setting || position.focus?.key?.startsWith("settings-search:")
+                    || $(position.focus?.id)?.hasAttribute("data-general-shortcut"))) restoreReading(position);
             }
             else if (workspaceState.route.view === "collection-status") {
                 revealCollectionStatus();
@@ -7531,13 +7542,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
                 hasNative ? `${count(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
-            return { bundle, label, preparedLabel: date };
+            return { bundle, label, preparedLabel: date, period: savedPeriodLabel(bundle) };
         });
         $("savedReportOrder").value = workspaceState.route.order || "newest";
-        const matching = rows.filter(({ bundle, label }) => localSearch.matches(query, [
+        const matching = rows.filter(({ bundle, label, period }) => localSearch.matches(query, [
             label,
             bundle.bundleId, bundle.preparedAt, bundle.preparedAtDisplay, bundle.promptMode,
-            ({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[bundle.promptMode],
+            period, bundle.reportPeriod?.from, bundle.reportPeriod?.to,
+            savedPrivacyLabel(bundle),
             ...(bundle.formats || []), ...Object.keys(bundle.files || {}), bundle.timeContext?.timeZone, bundle.timeContext?.locale,
         ]));
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
@@ -7549,13 +7561,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Actions"));
                 list.classList.add("saved-report-rows");
                 host.append(columns, list); return host;
-            }, renderItem: ({ bundle, preparedLabel }, rowListeners) => {
+            }, renderItem: ({ bundle, preparedLabel, period }, rowListeners) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
             outer.toggleAttribute("data-detail-active", workspaceState.route.inspect === bundle.bundleId);
             const current = () => listCurrent() && outer.isConnected && outer.dataset.bundleId === bundle.bundleId && indexedSaved(bundle);
-            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, rowListeners, preparedLabel);
+            const title = savedTitle(bundle), summary = savedTitleControl(bundle, current, false, rowListeners, preparedLabel, period);
             const identity = el("span", "saved-report-identity");
             const privacy = savedPrivacyStatus(bundle);
             identity.append(summary);
@@ -7580,7 +7592,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             outer.prepend(identity, privacy, actions);
             return outer;
         } });
-        const unlisted = matching.filter(({ bundle }) => bundle.kind !== "comparison" && !savedPeriodLabel(bundle)).length;
+        const unlisted = matching.filter(({ bundle, period }) => bundle.kind !== "comparison" && !period).length;
         if (unlisted) {
             const note = el("p", "saved-period-availability", unlisted === 1
                 ? "The activity period isn't listed for one saved entry."
@@ -7592,7 +7604,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.inspect) renderSavedInspector();
         updateSelection();
     }
-    function savedTitleControl(bundle, current, shelf, listeners, preparedLabel) {
+    function savedTitleControl(bundle, current, shelf, listeners, preparedLabel, period = savedPeriodLabel(bundle)) {
         const summary = viewKey(button("", () => {
             if (current() && summary.isConnected && indexedSaved(bundle)) openSavedReport(bundle, summary);
         }, "saved-report-title", listeners), "open-bundle:" + bundle.bundleId);
@@ -7601,7 +7613,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const name = bundle.title?.trim() || assessmentFactories.reportIdentity.defaultTitle(bundle);
         caption.append(el("span", "saved-report-name", name));
         if (!shelf && preparedLabel !== "Time not recorded") caption.append(el("span", "saved-report-prepared", "Prepared " + preparedLabel));
-        const period = savedPeriodLabel(bundle);
         if (period) caption.append(el("span", "saved-report-period", shelf ? period : "Report period: " + period));
         else if (shelf) caption.append(el("span", "saved-report-period", bundle.kind === "comparison" ? "Saved comparison" : "Period not recorded"));
         summary.append(ux.icon("reports"), caption);
@@ -7914,13 +7925,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return navigate({ ...routeFor("reports"), bundle: bundle.bundleId, savedEntry: key });
     }
-    function savedPrivacyStatus(bundle) {
-        const label = ({ masked: "Detected personal details hidden", original: "Chat details kept",
+    function savedPrivacyLabel(bundle) {
+        return ({ masked: "Detected personal details hidden", original: "Chat details kept",
             none: "Prompts and replies left out" })[bundle?.promptMode] ?? "Text treatment not recorded";
+    }
+    function savedPrivacyStatus(bundle) {
         const node = el("span", "saved-report-privacy");
         node.dataset.promptMode = bundle?.promptMode ?? "unknown";
         node.append(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[bundle?.promptMode] ?? "unobserved"),
-            el("span", "", label));
+            el("span", "", savedPrivacyLabel(bundle)));
         return node;
     }
     async function renderSavedReader() {
@@ -10339,6 +10352,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         go(workspaceState.route.view, { from: undefined, to: undefined, range: undefined, request: undefined, page: undefined });
     });
     $("checkActivity").addEventListener("click", checkActivity);
+    $("settingsGeneralBack").onclick = () => { if (!$("settingsGeneralBack").hidden && !appUpdate?.locked()) history.back(); };
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -10349,7 +10363,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (target.view === "analyze" && ["calls", "interactions"].includes(mode)) {
             changes.page = undefined;
         }
-        go(target.view, changes);
+        if (node.hasAttribute("data-general-shortcut")) {
+            node.focus({ preventScroll: true });
+            navigate(routeFor(target.view, changes), false, { generalShortcut: true });
+        } else go(target.view, changes);
     }));
     recorderUI = mountRecorderDiagnostics({ api, openDialog, el, button });
     $("exportBtn").addEventListener("click", previewExport);
@@ -10460,9 +10477,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (next.view === "request" || next.inspect) ownSidebarHistory();
         else if (workspaceState.route.view !== "request" && !workspaceState.route.inspect) restoreSidebarHistoryMode();
-        const position = history.state?.evidenceView?.position;
+        const originPosition = historyPosition, position = history.state?.evidenceView?.position;
         historyPosition = Number.isSafeInteger(position) ? position : historyPosition + 1;
-        applyRoute(next, { restorePosition: true });
+        applyRoute(next, { restorePosition: true, originPosition });
     }
     window.addEventListener("popstate", traverse);
     // A native fragment navigation can emit both events. popstate canonicalizes

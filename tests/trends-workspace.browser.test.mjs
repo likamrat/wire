@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, navigateSettings, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, navigateSettings, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
@@ -45,7 +45,8 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
     t.after(async () => { try { await browser.close(); await server.close(); assert.deepEqual(errors, []); assert.deepEqual(await loadBoardState(context), original); } finally { await cleanup(); } });
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "no-preference", timezoneId: "UTC", hasTouch: touch });
     page.on("pageerror", e => errors.push(e.message));
-    await page.route("**/*", route => {
+    await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route, new URL(server.url).origin)) return;
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
             "/api/session", "/api/access/watch", "/api/snapshot", "/api/collection/status", "/api/collection/sources/status",
@@ -154,9 +155,18 @@ test("compiled index applies every available filter, supports calendar navigatio
     await page.getByLabel("Trends from", { exact: true }).fill("2026-07-01"); await page.getByLabel("Trends to", { exact: true }).fill("2026-11-18");
     await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
     await expect(region.locator(".trends-paging")).toContainText("91–141 of 141");
-    await region.getByRole("button", { name: "Earlier days" }).click(); await expect(card.locator("[data-date-tick]")).toHaveCount(90);
+    await card.getByRole("button", { name: "Data table" }).click();
+    const table = region.getByRole("dialog").getByRole("table");
+    await expect(table).toHaveAccessibleName(/Daily rows: 91–141 of 141 days/);
+    await expect(table.getByRole("rowheader", { name: "Entire period" })).toBeVisible();
+    await expect(table.getByRole("rowheader")).toHaveCount(52);
+    await page.keyboard.press("Escape");
+    const earlier = region.getByRole("button", { name: "Earlier days" }), later = region.getByRole("button", { name: "Later days" });
+    await earlier.focus(); await earlier.press("Enter"); await expect(card.locator("[data-date-tick]")).toHaveCount(90);
+    await expect(later).toBeFocused();
     await expect(card.locator(".trends-index-scope")).toContainText("4 dated calls");
-    await region.getByRole("button", { name: "Later days" }).click(); await expect(card.locator("[data-date-tick]")).toHaveCount(51);
+    await later.press("Enter"); await expect(card.locator("[data-date-tick]")).toHaveCount(51);
+    await expect(earlier).toBeFocused();
     await region.getByRole("button", { name: "Chart guide" }).click(); await expect(region.getByRole("dialog")).toContainText("Filters and series"); await page.keyboard.press("Escape");
     await period.click();
     const retainedFocus = await region.getByRole("dialog").evaluate(async dialog => {

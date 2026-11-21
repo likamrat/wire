@@ -93,6 +93,10 @@ test("Reports starts with two recent saved names; full-library controls retain t
     await expect(page.locator("#reportCompareLink")).toBeFocused();
     await selectActivityOption(page, "savedReportOrder", "oldest");
     await expect(page.locator(".saved-report-period").first()).toHaveText("Report period: Dec 29, 2025–Jan 3, 2026");
+    for (const query of ["Dec 29, 2025–Jan 3, 2026", "2025-12-29", "2026-01-03 prompts and replies left out"]) {
+        await page.locator("#savedReportSearch").fill(query);
+        await expect(page.locator(".saved-library-row").getByText("Fir field notes 7", { exact: true })).toBeVisible();
+    }
     await page.locator("#savedReportSearch").fill("Fir field");
     await expect(page.locator("#savedReportSearchCount")).toContainText("9 of 9");
     await page.getByRole("button", { name: "Next saved reports" }).click();
