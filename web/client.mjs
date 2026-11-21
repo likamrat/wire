@@ -3687,7 +3687,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("loading").hidden = true;
             const offline = error.reason === "runtime_unavailable";
             if (!refreshOwnsReadFailure()) {
-                announce(offline
+                announce(incomingNavigationError && error.message === incomingNavigationError ? incomingNavigationError : offline
                     ? (workspaceState.analytics ? "Local runtime unavailable. Showing the last recorded snapshot. " : "Your activity could not load. ")
                         + "Start WIRE if it is stopped, then retry."
                     : (workspaceState.analytics ? "This view could not update. The last recorded snapshot is shown. " : "Your activity could not load. ") + error.message,

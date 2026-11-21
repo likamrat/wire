@@ -139,6 +139,9 @@ period or Analyze widget never moves automatically. An empty period can offer
 The period control shows the accepted dates while a new read is pending.
 An explicit preset, measure or user-entered custom range can be reopened
 from the address; private filtered selections stay in the original tab.
+If WIRE cannot restore a private selection, reopen the result from its original
+tab. To continue without that selection, choose **Open this view without the
+private selection**. Neither action deletes saved activity.
 Every civil day is available in **Data table**. Long single-series charts
 space out date labels to show more of the period at once. If the chart
 scrolls, the dates in view are shown below it; the index initially shows
