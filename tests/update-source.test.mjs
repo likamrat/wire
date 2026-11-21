@@ -25,6 +25,8 @@ test("a skipped app change among docs and tests qualifies once; edited installs 
     const source = createUpdateSource({ fixtureRemote: origin });
     assert.equal((await source.inspectInstallation(root)).installed, installed);
     await commit("docs/manual.md", "Read the updated manual.");
+    await commit("CHANGELOG.md", "Documentation outside the docs directory.");
+    await commit("web/frontend/README.md", "Contributor instructions beside code.");
     await commit("web/frontend/demo.test.ts", "// fixture test");
     await commit(".github/workflows/check.yml", "name: test");
     assert.equal((await source.checkMain(root, installed)).candidate, null);
