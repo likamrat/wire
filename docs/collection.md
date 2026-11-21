@@ -514,6 +514,13 @@ No completion is inferred from a neighboring event. An unidentified region
 that could hide another matching identity prevents the preview, even if it is
 outside the proposed calls.
 
+In this mode only, each bounded read step can spend up to four extra parser
+pages on structurally dense entries. Each page keeps the ordinary 100,000-token
+limit, yields between pages and rechecks access and the selected file. Only
+the completed, validated entry is available to the identity checks. An
+unread tail, an unsupported field or an exhausted budget still prevents
+recovery; ordinary collection and strict recovery keep their existing limits.
+
 A supported SDK startup header can contain typed workspace, model and tool
 settings. WIRE still requires the source's mapped session identity and
 supported version. The header grants no access and its values are not copied
