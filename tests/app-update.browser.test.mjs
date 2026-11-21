@@ -13,14 +13,15 @@ import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 // No listener or real updater. Serve the normal built module and shell solely via intercepted requests.
 const origin = "http://127.0.0.1:48197", capability = "c".repeat(64);
 const old = "1".repeat(40), next = "2".repeat(40);
-async function workspace(t, { renderer = "react", automatic = false, supported = true, pending, open = "/settings?section=updates" } = {}) {
+const originalRuntime = UNBOUND_FIXTURE_BOOTSTRAP.runtimeId, replacement = "00000000-0000-4000-8000-000000000002";
+async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, pending, open = "/settings?section=updates" } = {}) {
     const assets = await loadBrowserAssets({ renderer }), browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
     const state = { supported, automatic, installed: old, candidate: next, lastChecked: null, dismissed: null,
-        phase: supported ? "available" : "manual", message: supported ? "A newer build is available." : "Update this installation manually." };
-    const setup = { entry: assets.entry, health: { service: "workiq-evidence", protocol: 1, build: old, clientEntry: assets.entry },
+        phase: manual ? "manual" : "available", message: manual ? "This copy is managed manually." : "A newer build is available." };
+    const setup = { entry: assets.entry, runtimeId: originalRuntime, capability, health: { service: "workiq-evidence", protocol: 1, runtimeId: originalRuntime, build: old, clientEntry: assets.entry },
         apply: route => route.fulfill({ status: 409, json: { error: "Close the other WIRE panel first." } }) };
     const records = [{ ...fixture("app-update"), capturedAt: new Date().toISOString() }];
     const basis = { sourceRevision: 1, membershipRevision: 1, consentRevision: 0, overrideRevision: 0, deletionEpoch: 0 };
@@ -38,7 +39,7 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
         const path = url.pathname;
         if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
             pages.push(setup.entry);
-            return route.fulfill({ contentType: "text/html", body: renderHtmlShell(capability, "updates", UNBOUND_FIXTURE_BOOTSTRAP,
+            return route.fulfill({ contentType: "text/html", body: renderHtmlShell(setup.capability, "updates", { ...UNBOUND_FIXTURE_BOOTSTRAP, runtimeId: setup.runtimeId },
                 { ...assets, entry: setup.entry }) });
         }
         if (path.startsWith("/assets/client/")) {
@@ -49,10 +50,14 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
             body: await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url)) });
         if (path === "/health") { healthReads.push(setup.health.build); return route.fulfill({ json: setup.health }); }
         const input = request.postDataJSON() || {};
-        if (path === "/api/session/release") { releases.push(request.headers()["x-board-capability"]); return route.fulfill({ json: { released: true } }); }
+        if (path === "/api/app-update/release-panel") {
+            assert.equal(request.method(), "POST"); assert.deepEqual(input, {});
+            releases.push(request.headers()["x-board-capability"]); return route.fulfill({ json: { released: true } });
+        }
         if (path === "/api/app-update") {
-            assert.equal(request.method(), "POST"); assert.equal(request.headers()["x-board-capability"], capability);
+            assert.equal(request.method(), "POST"); assert.equal(request.headers()["x-board-capability"], setup.capability);
             actions.push(input);
+            if (input.action === "status" && setup.status) return setup.status(route);
             if (input.action === "preferences") state.automatic = input.enabled;
             if (input.action === "dismiss") state.dismissed = input.candidate;
             if (input.action === "apply") return setup.apply(route);
@@ -95,7 +100,17 @@ test("React Settings checks, opts in and out, dismisses only this build, and sch
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {
     const { page, actions } = await workspace(t, { renderer: "bundled", automatic: true, supported: false });
     await expect(page.locator("#appUpdateStatus")).toHaveText(/manually/);
+    await expect(page.locator("#appUpdateManual")).toContainText("README");
+    await expect(page.locator("#settingsAppUpdate")).toBeHidden(); await expect(page.locator("#appUpdateApply")).toBeHidden();
     await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
+    assert.deepEqual(actions, [{ action: "status" }]);
+});
+
+test("a managed launcher reporting manual-only shows instructions and never schedules or offers installation", async t => {
+    const { page, actions } = await workspace(t, { automatic: true, manual: true });
+    await expect(page.locator("#appUpdateManual")).toBeVisible();
+    await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+    await expect(page.locator("#appUpdateApply")).toBeHidden();
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
@@ -160,8 +175,8 @@ test("a clean managed tab retains its capability for bfcache and releases only i
     await expect.poll(() => releases).toEqual([capability]);
 });
 
-test("single activation stays fenced through transport loss until health and executed target asset agree", async t => {
-    const { page, actions, setup, pages, healthReads } = await workspace(t);
+test("single activation stays fenced through transport loss until the authenticated status, runtime, health and executed target asset agree", async t => {
+    const { page, actions, setup, state, pages, healthReads } = await workspace(t);
     const apply = page.locator("#appUpdateApply"), modal = page.locator("#appUpdateFence");
     await apply.click(); await expect(page.locator("#appUpdateDetail")).toHaveText("Close the other WIRE panel first.");
     const hold = Promise.withResolvers();
@@ -175,13 +190,60 @@ test("single activation stays fenced through transport loss until health and exe
     await page.keyboard.press("Escape"); await expect(modal).toBeVisible();
     hold.resolve(); await expect.poll(() => healthReads.length).toBeGreaterThan(0);
     assert.equal(pages.length, 1); await expect(modal).toBeVisible();
-    setup.health = { ...setup.health, build: next, clientEntry: "/assets/client/newbuild-12345678.js" };
+    setup.health = { ...setup.health, build: next, runtimeId: replacement, clientEntry: "/assets/client/newbuild-12345678.js" };
+    await expect(page.locator("#appUpdateProgress")).toContainText("runtime identity", { timeout: 12000 });
+    await expect(modal).toBeVisible();
+    setup.capability = "d".repeat(64); setup.runtimeId = replacement;
     // The shell still names the stale entry: an available JS file is not loaded-client proof.
+    await page.reload();
     await expect(page.locator("#appUpdateProgress")).toContainText("different browser build", { timeout: 12000 });
     await expect(modal).toBeVisible();
     setup.entry = setup.health.clientEntry;
-    await page.reload(); await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated");
+    setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
+    await page.reload();
+    await expect(page.locator("#appUpdateProgress")).toContainText("could not verify");
+    await expect(modal).toBeVisible(); await expect(page.locator("#appUpdateHeading")).not.toHaveText("WIRE updated");
+    setup.status = route => route.abort("connectionreset");
+    await page.locator("#appUpdateRecover").click();
+    await expect(page.locator("#appUpdateProgress")).toContainText("could not verify"); await expect(modal).toBeVisible();
+    setup.status = null; state.phase = "current"; state.clientEntry = setup.entry;
+    await page.locator("#appUpdateRecover").click();
+    await expect(page.locator("#appUpdateProgress")).toContainText("does not confirm"); await expect(modal).toBeVisible();
+    state.installed = next; state.clientEntry = "/assets/client/wrong-12345678.js";
+    await page.locator("#appUpdateRecover").click();
+    await expect(page.locator("#appUpdateProgress")).toContainText("does not confirm"); await expect(modal).toBeVisible();
+    state.clientEntry = setup.entry;
+    await page.locator("#appUpdateRecover").click(); await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated");
     await expect(modal).not.toBeVisible();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }, { action: "apply", candidate: next }]);
     assert.equal(actions.filter(a => a.action === "preferences").length, 0);
+});
+
+test("expired original permission on bfcache restore cannot release an unverified page interlock", async t => {
+    const { page, setup, actions, releases } = await workspace(t);
+    await expect(page.locator("#appUpdateAuto")).toBeEnabled();
+    setup.status = route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Page permission expired." } });
+    await page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await expect(page.locator("#appUpdateStatus")).toHaveText("Page permission expired.");
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    assert.deepEqual(releases, []); assert.deepEqual(actions, [{ action: "status" }, { action: "status" }]);
+});
+
+test("a suspended draft is not certified clean by later status or by a reset of the visible editor", async t => {
+    const { page, releases, actions } = await workspace(t);
+    await page.locator('#settingsCategoryNav [data-category="source-access"]').click();
+    await page.locator("#editSource").click();
+    await page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await expect.poll(() => actions.length).toBe(2);
+    await page.locator("#cancelSource").click();
+    await page.locator("#appUpdateApply").click();
+    await expect(page.locator("#appUpdateDetail")).toContainText("unfinished work when it was suspended");
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    assert.deepEqual(releases, []); assert.ok(!actions.some(a => a.action === "apply"));
 });

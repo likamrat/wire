@@ -32,7 +32,7 @@ test("an occupied runtime endpoint refuses the access factory before any lifecyc
     await assert.rejects(startServer(context, createExportController(context), {
         port: occupied.address().port, collector: { timers: false },
         createAccess: async () => { calls++; throw new Error("must not initialize"); },
-    }), { code: "EADDRINUSE" });
+    }), { code: "EADDRINUSE", wireRefusedBeforeStore: true });
     assert.equal(calls, 0);
     await assert.rejects(readFile(path.join(context.dataDir, "microsoft-session", "session.json")), { code: "ENOENT" });
 });

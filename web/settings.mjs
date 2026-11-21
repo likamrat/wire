@@ -24,6 +24,7 @@ export const settingsMarkup = `
     <h2 id="appUpdatesTitle" tabindex="-1">Updates</h2>
     <div class="settings-task-row"><div class="settings-row-copy"><h3>WIRE version</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
+      <p id="appUpdateManual" hidden>Update this installation manually: finish drafts and resolve pending operations, then stop only this WIRE instance. Follow the update instructions in the README for your checkout and restart at the same address.</p>
       <p id="appUpdateVersion" hidden></p></div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>

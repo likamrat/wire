@@ -8,7 +8,7 @@ import path from "node:path";
 
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
 const managed = process.connected && process.env.WIRE_UPDATE_LAUNCHER === "1";
-let finishChild;
+let finishChild, getStoreIdentity, startupMayOwnStorage = false;
 function releaseChild(state) {
     if (!finishChild) return;
     finishChild(state);
@@ -95,12 +95,18 @@ if (managed) process.on("message", message => {
 });
 try {
     if (managed) {
-        const { claimChild } = await import("../lib/update-launch-state.mjs");
+        const { claimChild, storeIdentity, canonicalStore } = await import("../lib/update-launch-state.mjs");
         finishChild = claimChild(process.env.WIRE_UPDATE_DIRECTORY, process.env.WIRE_UPDATE_CHILD);
+        const dataDir = process.env.WORKIQ_EVIDENCE_DATA_DIR;
+        if (!path.isAbsolute(dataDir) || await canonicalStore(dataDir) !== dataDir) throw Error("The pinned store is no longer canonical.");
+        getStoreIdentity = () => storeIdentity(dataDir);
+        const identity = await getStoreIdentity().catch(error => { if (error.code !== "ENOENT") throw error; return ""; });
+        if (identity !== process.env.WIRE_UPDATE_STORE) throw Error("The pinned store changed before launch.");
     }
     const options = startupOptions(process.argv.slice(2));
     const context = { dataDir: options.contributor ? contributorDataDir() : process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
     const collector = { timers: !options.developmentMicrosoft };
+    startupMayOwnStorage = true;
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
         frontend: options.frontend,
@@ -142,13 +148,15 @@ try {
     if (stopping) await stop();
     else {
         if (managed) process.send({ type: "wire-update-ready", url: runtime.url, runtimeId: runtime.runtimeId,
-            build: process.env.WIRE_UPDATE_BUILD, clientEntry: runtime.clientEntry }, error => { if (error) void stop(); });
+            build: process.env.WIRE_UPDATE_BUILD, clientEntry: runtime.clientEntry, store: await getStoreIdentity() }, error => { if (error) void stop(); });
         else console.log(`${PRODUCT_NAME} ready at ${runtime.url}`);
         if (options.contributor) console.log(`Contributor checkout (${options.frontend}); private store: ${context.dataDir}`);
         if (options.developmentMicrosoft) console.log("Development-only Microsoft incubation. Automatic collection is off; saved configuration is not adopted.");
     }
 } catch (error) {
-    let clean = !runtime;
+    // A rejected startup can already have opened/changed the store without
+    // returning a runtime handle. Only pre-admission refusals prove no writer.
+    let clean = !startupMayOwnStorage || error.wireRefusedBeforeStore === true;
     if (copilotAccess) await copilotAccess.close().catch(() => {
         clean = false;
         console.error(`${PRODUCT_NAME} local access cleanup is incomplete.`);
@@ -161,6 +169,6 @@ try {
         ? "The requested port is already owned. No second evidence writer was started. Choose an unused port for an independent store, or verify the existing owner before using it."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;
-    if (clean) releaseChild("startup-failed");
+    if (clean) releaseChild("refused-before-store");
     if (managed && process.connected) process.disconnect();
 }

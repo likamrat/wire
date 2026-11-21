@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { request } from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture } from "./helpers.mjs";
 
-test("only the sole browser panel may activate; recheck panels and in-flight Save at final cutover", async t => {
+async function managedFixture(t, options) {
     const { context } = await privateFixture(t);
     const channel = Object.assign(new EventEmitter(), { connected: true,
         env: { WIRE_UPDATE_LAUNCHER: "1", WIRE_UPDATE_BUILD: "0".repeat(40) } });
@@ -17,7 +18,7 @@ test("only the sole browser panel may activate; recheck panels and in-flight Sav
             queueMicrotask(() => channel.emit("message", { type: "wire-update-response", id: msg.id, value: { phase: "preparing" } }));
         } else final = msg;
     };
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, updateChannel: channel });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, updateChannel: channel, ...options });
     t.after(async () => { const stopped = runtime.close(); runtime.server.closeIdleConnections(); await stopped; });
     const origin = new URL(runtime.url).origin;
     const page = async () => {
@@ -29,18 +30,51 @@ test("only the sole browser panel may activate; recheck panels and in-flight Sav
         Origin: origin, "Content-Type": "application/json", ...(cap && { "X-Board-Capability": cap }), ...extra,
     }, body: JSON.stringify(body) });
     const apply = cap => post("/api/app-update", { action: "apply", candidate: "1".repeat(40) }, cap);
+    const prepare = () => { channel.emit("message", { type: "wire-update-quiesce", id: "fixture" }); return final; };
+    return { page, post, apply, prepare, calls, origin, runtime, channel };
+}
+
+test("expiry withdraws data access without retiring a suspended browser's update blocker", async t => {
+    const { page, post, apply } = await managedFixture(t, { sessionTtlMs: 100 });
+    const suspended = await page();
+    await delay(160);
+    const current = await page();
+    assert.equal((await apply(current)).status, 409);
+    assert.equal((await post("/api/app-update", { action: "status" }, suspended)).status, 403);
+    assert.equal((await post("/api/app-update/release-panel", {}, suspended)).status, 200);
+    assert.equal((await post("/api/app-update", { action: "status" }, suspended)).status, 403);
+    assert.equal((await apply(current)).status, 200);
+});
+
+test("an admitted collector owner defers cutover; no scheduled or queued work starts behind the fence", async t => {
+    const { page, apply, runtime, prepare, channel } = await managedFixture(t);
+    assert.equal((await apply(await page())).status, 200);
+    const gate = Promise.withResolvers(), entered = Promise.withResolvers();
+    const activity = runtime.collector.exclusiveActivity(async () => { entered.resolve(); await gate.promise; });
+    try {
+        await entered.promise;
+        assert.equal(prepare().ok, false);
+    } finally { gate.resolve(); await activity; }
+    assert.equal(prepare().ok, true);
+    await assert.rejects(runtime.collector.exclusiveActivity(() => assert.fail("post-fence writer acquired")), /updat/i);
+    await assert.rejects(runtime.collector.collectNow(), /updat/i);
+    channel.emit("message", { type: "wire-update-resume" });
+    assert.equal(await runtime.collector.exclusiveActivity(() => true), true);
+});
+
+test("only the sole browser panel may activate; recheck panels and in-flight Save at final cutover", async t => {
+    const { page, post, apply, prepare, calls, origin, runtime, channel } = await managedFixture(t);
     const first = await page(), other = await page();
     assert.equal((await apply(first)).status, 409);
     assert.deepEqual(calls, []);
-    await post("/api/session/release", {}, other);
+    await post("/api/app-update/release-panel", {}, other);
     const adapter = (await (await post("/api/session", {}, null, { "X-Wire-Session-Protocol": "1" })).json()).capability;
     assert.equal((await apply(adapter)).status, 403);
     await post("/api/session/release", {}, adapter);
     assert.equal((await apply(first)).status, 200);
     const newTab = await page();
-    const prepare = () => { channel.emit("message", { type: "wire-update-quiesce", id: "fixture" }); return final; };
     assert.equal(prepare().ok, false);
-    await post("/api/session/release", {}, newTab);
+    await post("/api/app-update/release-panel", {}, newTab);
     const pending = request(origin + "/api/export", { method: "POST", headers: { Origin: origin,
         "Content-Type": "application/json", "X-Board-Capability": first } });
     const started = new Promise(resolve => runtime.server.once("request", resolve));

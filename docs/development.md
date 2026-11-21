@@ -45,6 +45,14 @@ lock intact and inspect the original launcher error.
 
 Contributor worktrees, forks, modified clones and special development launch
 modes stay manual. Do not use a new data folder to resolve an update problem.
+One-click activation is qualified on Windows and WSL. Standalone Linux and
+macOS use the same-folder manual path until their cutover tests pass natively.
+Special modes cannot bypass an active staged build or unresolved handoff.
+When a candidate changes the registered canvas adapter or its dependencies,
+WIRE declines the switch rather than silently running the old adapter.
+An expired tab can lose data access without resolving its draft or Save.
+If WIRE cannot confirm that all panels finished, resolve their original
+operations before manually restarting; do not replay them from a new tab.
 When adding a document consumed at runtime, list its tracked path in
 `lib/update-runtime-docs.json` so changes to that document qualify. An
 incompatible store, launcher or canvas change must update the compatibility

@@ -3,6 +3,8 @@ const receiptKey = "wire.app-update.expected";
 const sha = value => typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 const asset = value => typeof value === "string" && /^\/assets\/client\/[A-Za-z0-9_-]+-[A-Za-z0-9_-]{8,}\.js$/.test(value);
 const phases = ["current", "available", "unknown", "checking", "preparing", "restarting", "error", "manual"];
+const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
+const manualOnly = state => state && (!state.supported || state.phase === "manual");
 function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
@@ -19,7 +21,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     const entry = new URL(loadedEntry);
     const fixed = { mode: "same-origin", credentials: "same-origin", redirect: "error", cache: "no-store" };
     let state, busy = false, expected, checkingRestart = false, allowReload = false, storageAvailable = true;
-    let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "", managed = false;
+    let scheduleTimer, recoveryTimer, pendingPreference, restoring = false, feedback = "", result = "", success = "";
+    let panelVerified = false, unfinishedAtSuspension = false, restoredReceipt = false, lifetime = 0;
     function receipt(value) {
         if (value) sessionStorage.setItem(receiptKey, JSON.stringify(value));
         else sessionStorage.removeItem(receiptKey);
@@ -36,8 +39,9 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         $("settingsAppUpdate").hidden = !available || shown && !result;
         for (const id of ["appUpdateApply", "settingsAppUpdate", "appUpdateDismiss"]) $(id).disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
-        manual.disabled = busy || Boolean(expected) || updating || state?.supported === false;
-        automatic.disabled = busy || Boolean(expected) || updating || !state?.supported;
+        $("appUpdateManual").hidden = !manualOnly(state);
+        manual.disabled = busy || Boolean(expected) || updating || Boolean(manualOnly(state));
+        automatic.disabled = busy || Boolean(expected) || updating || !state?.supported || manualOnly(state);
         automatic.checked = pendingPreference ?? state?.automatic === true;
         $("appUpdateStatus").textContent = feedback || success || result || state?.message || "Reading update status…";
         const version = [state?.installed && `Installed ${state.installed.slice(0, 8)}`,
@@ -60,23 +64,25 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     }
     function schedule() {
         clearTimeout(scheduleTimer);
-        if (!state?.supported || expected) return;
+        if (!state?.supported || expected || manualOnly(state)) return;
         if (["checking", "preparing", "restarting"].includes(state.phase)) scheduleTimer = setTimeout(() => void run("status"), 2500);
         else if (state.automatic) scheduleTimer = setTimeout(() => void run("auto-check"), day);
     }
     async function run(action, fields) {
-        if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic)) return;
+        if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
+        const generation = lifetime;
         busy = true; feedback = ["check", "auto-check"].includes(action) ? "Checking for WIRE updates…" : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
         try {
             state = await post(action, fields);
-            managed = state.supported;
+            panelVerified = generation === lifetime && state.supported;
             success = result = "";
         } catch (error) {
             // Reconcile preferences/dismissals by reading; never repeat a lost command.
             state = null;
-            if (action !== "status") try { state = await post("status"); } catch { /* No usable current status. */ }
+            panelVerified = false;
+            if (action !== "status") try { state = await post("status"); panelVerified = generation === lifetime && state.supported; } catch { /* No usable current status. */ }
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
@@ -101,47 +107,60 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         }
         busy = false; render(); schedule();
     }
-    // Only the restarted page running the entry named by the target's health can confirm success.
-    async function recover(attempt = 0, freshPage = false, refusal = "", manualRead = false) {
+    // A replacement is verified in the fresh document, never by the old page that requested it.
+    async function recover(attempt = 0, refusal = "", manualRead = false) {
         if (!expected || checkingRestart) return;
+        const generation = lifetime, wanted = expected;
         checkingRestart = true; clearTimeout(recoveryTimer);
         fence(state?.phase === "preparing" ? "Preparing the selected build. Keep this panel open."
             : "Waiting for the updated WIRE build. The update will not be repeated.");
         try {
             const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
             const health = response.ok && await response.json();
-            if (health?.service === "workiq-evidence" && health.protocol === 1 && health.build === expected.candidate && asset(health.clientEntry)) {
-                if (freshPage && entry.href === location.origin + health.clientEntry) {
-                    state = null; finish(`This panel is running build ${health.build.slice(0, 8)}.`, true);
-                    // Read current preferences without clearing the verified notice.
-                    try { state = await post("status"); managed = state.supported; render(); schedule(); } catch { /* Build proof is independent of preferences. */ }
+            const wire = health?.service === "workiq-evidence" && health.protocol === 1 && uuid(health.runtimeId)
+                && sha(health.build) && asset(health.clientEntry) && wanted.origin === location.origin;
+            if (wire && health.build === wanted.candidate && uuid(wanted.runtimeId) && health.runtimeId !== wanted.runtimeId) {
+                if (restoredReceipt) {
+                    if (runtimeId !== health.runtimeId || wanted.targetRuntime && wanted.targetRuntime !== health.runtimeId) {
+                        fence("The runtime identity does not match this panel. Reopen WIRE at the same address to check the original update.", true); return;
+                    }
+                    if (entry.href !== location.origin + health.clientEntry || wanted.entry && wanted.entry !== health.clientEntry) {
+                        fence("WIRE restarted, but this panel loaded a different browser build. Check the local build before reloading.", true); return;
+                    }
+                    let confirmed;
+                    try { confirmed = await post("status"); }
+                    catch {
+                        fence("This panel could not verify the restart with its original permission. Reopen WIRE at the same address or check restart status.", true); return;
+                    }
+                    if (wanted !== expected || generation !== lifetime || !confirmed.supported || confirmed.installed !== wanted.candidate
+                        || confirmed.clientEntry !== health.clientEntry || !["current", "available"].includes(confirmed.phase)) {
+                        fence("Update status does not confirm the running build. Check restart status before continuing.", true); return;
+                    }
+                    state = confirmed; panelVerified = true;
+                    finish(`This panel is running build ${confirmed.installed.slice(0, 8)}.`, true);
                     return;
                 }
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
                 if (file.ok && /(?:java|ecma)script/i.test(file.headers.get("Content-Type") || "")) {
-                    if (freshPage && expected.entry === health.clientEntry) {
-                        fence("WIRE restarted, but this panel loaded a different browser build. Check the local build before reloading.", true); return;
-                    }
-                    receipt({ ...expected, entry: health.clientEntry });
+                    receipt({ ...wanted, entry: health.clientEntry, targetRuntime: health.runtimeId });
                     allowReload = true; location.reload(); return;
                 }
             }
             // A failed handoff can restart the previous build with new page capabilities.
             // Read the replacement's status in a fresh panel; never treat rollback as success.
-            if (!freshPage && health?.service === "workiq-evidence" && health.protocol === 1 && health.build === expected.previous
-                && health.runtimeId && health.runtimeId !== expected.runtimeId && asset(health.clientEntry)) {
+            if (!restoredReceipt && wire && health.build === wanted.previous && health.runtimeId !== wanted.runtimeId) {
                 allowReload = true; location.reload(); return;
             }
             const next = await post("status");
             state = next;
-            if ((["error", "manual"].includes(next.phase) || (refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))
-                && next.installed !== expected.candidate) {
+            if (next.supported && wire && health.runtimeId === runtimeId && health.build === wanted.previous && next.installed === wanted.previous
+                && (["error", "manual"].includes(next.phase) || (refusal || manualRead) && !["preparing", "restarting"].includes(next.phase))) {
                 finish(refusal || (manualRead && next.phase === "available" ? "WIRE is not updating. The selected build was not installed." : next.message));
                 return;
             }
         } catch { /* The old panel capability may be gone; use health without renewing it. */ }
         finally { checkingRestart = false; }
-        if (attempt < 45) recoveryTimer = setTimeout(() => void recover(attempt + 1, freshPage, refusal), Math.min(5000, (attempt + 1) * 1000));
+        if (attempt < 45) recoveryTimer = setTimeout(() => void recover(attempt + 1, refusal), Math.min(5000, (attempt + 1) * 1000));
         else fence("The restart is not confirmed. Check the original update’s status; do not run Update again.", true);
     }
     function reason() {
@@ -149,13 +168,17 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         catch { return "WIRE could not verify that this panel is ready. Resolve unfinished work before updating."; }
     }
     async function apply() {
-        if (busy || expected || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
+        if (busy || expected || !panelVerified || !state?.supported || state.phase !== "available" || !sha(state.candidate)) return;
         const candidate = state.candidate, hold = reason();
-        if (hold) { feedback = hold; render(); return; }
+        if (hold || unfinishedAtSuspension) { feedback = hold || "This panel had unfinished work when it was suspended. Resolve it before updating manually."; render(); return; }
+        if (!uuid(runtimeId) || !sha(state.installed) || entry.origin !== location.origin || !asset(entry.pathname)) {
+            feedback = "This panel cannot verify its installed build. Reopen WIRE at its original address before updating."; render(); return;
+        }
         busy = true; clearTimeout(scheduleTimer);
         try {
             if (!storageAvailable) throw new Error();
-            receipt({ candidate, previous: state.installed, runtimeId });
+            restoredReceipt = false;
+            receipt({ candidate, previous: state.installed, runtimeId, origin: location.origin });
         } catch {
             busy = false; feedback = "Allow session storage so WIRE can verify the restart. Nothing was started."; render(); schedule(); return;
         }
@@ -168,7 +191,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
             if (["manual", "error"].includes(state.phase) || state.phase === "available") { finish(state.message); return; }
         } catch (error) {
             if (error.expired) { state = null; finish("This panel’s update permission expired. Reopen WIRE. No update was started."); return; }
-            if (error.refused) { await recover(0, false, error.message); return; }
+            if (error.refused) { await recover(0, error.message); return; }
         }
         await recover();
     }
@@ -182,8 +205,11 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     // Capture before private owners withdraw and clear their in-memory state. Never
     // release an unfinished panel, a bfcache entry or a replacement runtime's grant.
     window.addEventListener("pagehide", event => {
+        lifetime++;
         clearTimeout(scheduleTimer);
-        if (!event.persisted && managed && storageAvailable && !busy && !expected && !reason()) void fetch("/api/session/release", {
+        const unfinished = Boolean(busy || expected || reason());
+        if (event.persisted) { unfinishedAtSuspension ||= unfinished; panelVerified = false; return; }
+        if (panelVerified && uuid(runtimeId) && storageAvailable && !unfinished && !unfinishedAtSuspension) void fetch("/api/app-update/release-panel", {
             ...fixed, method: "POST", keepalive: true, body: "{}", headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
         }).catch(() => {});
     }, true);
@@ -196,7 +222,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     });
     $("appUpdateApply").addEventListener("click", apply);
     $("settingsAppUpdate").addEventListener("click", apply);
-    $("appUpdateRecover").addEventListener("click", () => void recover(0, Boolean(expected?.entry), "", true));
+    $("appUpdateRecover").addEventListener("click", () => void recover(0, "", true));
     $("appUpdateDismiss").addEventListener("click", () => {
         if (success || result) { success = result = ""; render(); }
         else if (state?.candidate) void run("dismiss", { candidate: state.candidate }).then(() => {
@@ -209,11 +235,18 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     automatic.addEventListener("change", () => void run("preferences", { enabled: automatic.checked }));
     try {
         const saved = sessionStorage.getItem(receiptKey);
-        if (saved) { const data = JSON.parse(saved); if (!sha(data?.candidate)) throw new Error(); expected = data; }
+        if (saved) {
+            const data = JSON.parse(saved);
+            if (!sha(data?.candidate) || !uuid(data.runtimeId) || !sha(data.previous) || data.origin !== location.origin) throw new Error();
+            expected = data; restoredReceipt = true;
+        }
     } catch { storageAvailable = false; }
-    if (expected) void recover(0, true);
+    if (expected) void recover();
     else void run("status").then(() => {
         if (state?.supported && state.automatic) void run("auto-check");
     });
-    return { locked: () => Boolean(expected) };
+    return {
+        locked: () => Boolean(expected),
+        beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },
+    };
 }

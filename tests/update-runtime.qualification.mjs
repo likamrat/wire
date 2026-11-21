@@ -131,7 +131,7 @@ test("full WIRE clone updates on the original address and reopens the same saved
     const opened = await post("api/report/open", { bundleId: bundle.bundleId });
     assert.ok(opened);
     if (process.env.WIRE_UPDATE_BROWSER === "1") {
-        await post("api/session/release", {});
+        await post("api/app-update/release-panel", {});
         const { chromium, expect } = await import("@playwright/test");
         const browser = await chromium.launch();
         try {
