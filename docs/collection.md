@@ -572,6 +572,13 @@ separately from the source, prompt, request and call. A parent-task reference
 may recur in the same role; neither ID can stand in for the initiating message.
 A conflicting identity or checkpoint claim still prevents recovery.
 
+The historical SDK also records which interaction received a system or
+developer instruction. When that instruction immediately follows its original
+prompt, WIRE can verify their shared interaction ID and bounded template
+metadata (`promptVersion` and JSON `variables`). It screens the complete
+instruction but does not keep it or use it to choose a call's owner. A
+second request claiming the same call still excludes the call.
+
 If the original prompt exactly matches a single saved parent in this chat,
 WIRE can keep that parent and its recorded author, including an agent author,
 without writing a new prompt. The explicit request and call must agree on
