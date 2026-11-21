@@ -9,7 +9,7 @@ export const settingsStyles = `
 }
 .app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
 .app-update-actions {display:flex;align-items:center;gap:var(--space-sm)}
-button.primary.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--update-ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--update-ink))}
+button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--update-ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--update-ink))}
 #appUpdateApply {display:inline-flex;align-items:center;gap:.375rem}
 #appUpdateApply[hidden] {display:none}
 [data-settings-section=general] .settings-actions {margin-top:0}

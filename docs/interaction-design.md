@@ -587,7 +587,9 @@ action after confirmed first approval.
 ### Categories and setting search
 
 Settings opens in **General**, with the installed WIRE build, last check and
-**Check for updates** together above the automatic-check switch. The other categories are Collection,
+**Check for updates** together above the automatic-check switch. The check button
+turns green when an update is available, even after the notice is dismissed.
+It still only checks; **Update** installs the build. The other categories are Collection,
 Source access, Themes, Regional, and Privacy & saved data. Keep one
 focused pane; on narrow screens the same categories collapse into a chooser.
 Source access owns approval and paths; Collection owns cadence, Pause and
