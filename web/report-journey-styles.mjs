@@ -559,15 +559,13 @@ ${optionRow}:has(>input:disabled){cursor:not-allowed;color:var(--muted)}
 #reportsView #savedReportsPanel #bundles{padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 #reportsView #savedReportsPanel.saved-shelf{margin:0 0 1.5rem;padding:.75rem 1rem 1rem;border:1px solid var(--surface-edge);border-radius:var(--radius);background:var(--paper)}
 .saved-shelf .saved-library-heading{gap:.35rem 1rem;margin:0 0 .45rem}
-#viewAllSavedReports{display:inline-flex;align-items:center;gap:.35em;min-height:44px;white-space:normal}
-#viewAllSavedReports .wire-icon,.saved-shelf .saved-report-title>.wire-icon:last-child{width:1rem;height:1rem}
+.saved-shelf .saved-report-title>.wire-icon:last-child{width:1rem;height:1rem}
 .saved-shelf-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr));gap:.5rem 1rem}
 .saved-shelf .saved-report-title{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.65rem;width:100%;padding:.55rem .75rem;border:1px solid var(--rule);background:var(--canvas)}
 .saved-shelf .saved-report-title>.wire-icon{margin:0}
 .saved-shelf .saved-report-name{overflow-wrap:anywhere}
 .saved-shelf #bundleList>p{margin:.25rem 0 0;color:var(--muted)}
 .saved-shelf .saved-report-title:is(:hover,:focus-visible):not(:disabled){background:var(--hover);border-color:var(--accent)}
-#savedShelfAction:empty{display:none}
 @media(max-width:40rem){
  #reportsView #savedReportsPanel.saved-shelf{padding:10px 12px 12px;margin-bottom:20px}
  .saved-shelf .saved-report-title{gap:8px;padding:8px 10px}

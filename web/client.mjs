@@ -7451,10 +7451,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function retireSavedList() {
         savedListOwner?.events.abort();
         savedListOwner = null;
-        for (const id of ["bundleList", "savedShelfAction"]) {
-            const host = $(id);
-            if (host?.hasChildNodes()) { erasePreparedNodes(host); host.replaceChildren(); }
-        }
+        const host = $("bundleList");
+        if (host.hasChildNodes()) { erasePreparedNodes(host); host.replaceChildren(); }
         setText($("savedReportCount"), "");
         setText($("savedReportSearchCount"), "");
         setText($("savedLibraryTitle"), "Saved reports");
@@ -7464,11 +7462,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const library = active && workspaceState.route.task === "library";
         const panel = $("savedReportsPanel");
         panel.classList.toggle("saved-shelf", active && !library);
+        $("reportSections").hidden = !active;
+        for (const [id, selected, task] of [["reportOverviewLink", !library, undefined], ["viewAllSavedReports", library, "library"]]) {
+            const link = $(id);
+            if (active && selected) link.setAttribute("aria-current", "page");
+            else link.removeAttribute("aria-current");
+            if (active) setRouteLink(link, routeFor("reports", { task, order: undefined, request: undefined }));
+        }
         if (!active && savedListOwner) retireSavedList();
-        if (!library) return;
-        $("reportCreatePanel").hidden = true;
-        $("reportTaskNav").hidden = $("reportLibraryLink").hidden = false;
-        $("reportLibraryLink").removeAttribute("aria-current");
+        if (library) $("reportCreatePanel").hidden = true;
     }
     function renderReports() {
         if (workspaceState.route.bundle) { renderSavedReader(); return; }
@@ -7511,11 +7513,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }).sort((a, b) => a.prepared === null ? b.prepared === null ? a.index - b.index : 1
             : b.prepared === null ? -1 : (library && workspaceState.route.order === "oldest" ? 1 : -1) * (a.prepared - b.prepared || a.index - b.index));
         if (!library) {
-            const all = button(`View all ${count(savedCount)}`, () => {
-                if (listCurrent() && all.isConnected) navigate(routeFor("reports", { task: "library", request: undefined }));
-            }, "quiet", listeners);
-            all.id = "viewAllSavedReports"; all.append(ux.icon("next"));
-            $("savedShelfAction").append(all);
+            if (savedCount > 2) setText($("savedLibraryTitle"), `Recent saved reports (${count(savedCount)} total)`);
             const recent = el("div", "saved-shelf-rows");
             for (const { bundle } of ordered.slice(0, 2)) {
                 const control = savedTitleControl(bundle, listCurrent, true, listeners);
@@ -10192,10 +10190,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (id === "reportLibraryLink" && workspaceState.route.task === "compare"
             && savedEntries.get(workspaceState.route.savedEntry)?.kind === "library-comparison") { backSaved(); return; }
-        if (id === "reportLibraryLink" && workspaceState.route.task === "library") {
-            navigate(routeFor("reports", { task: undefined, order: undefined, request: undefined }), false, { restorePosition: true });
-            return;
-        }
         if (id === "reportLibraryLink" && workspaceState.route.task !== "compare") { backToReports(); return; }
         const reportTask = ["reportLibraryLink", "reportCreateLink", "reportCompareLink"].includes(id);
         if (!reportTask && (workspaceState.loading || workspaceState.stale)) return;
@@ -10589,9 +10583,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     const savedTools = $("bundles").querySelector(".saved-library-tools");
     // Both presentations use the same panel and inventory; DOM order is also Tab order.
-    $("reportCreatePanel").before($("savedReportsPanel"));
-    const shelfAction = el("div"); shelfAction.id = "savedShelfAction";
-    savedTools.before(shelfAction);
+    $("reportCreatePanel").before($("reportSections"), $("savedReportsPanel"));
+    for (const [id, role] of [["reportOverviewLink", "home"], ["viewAllSavedReports", "report-all"]]) {
+        const link = $(id);
+        link.prepend(ux.icon(role));
+        link.addEventListener("click", event => {
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            if (!savedListOwner?.current() || link.hasAttribute("aria-current")) return;
+            navigate(linkTargets.get(link), false, { restorePosition: id === "reportOverviewLink" });
+        });
+    }
     savedTools.append($("reportCompareLink"));
     const libraryOptions = button("", () => {}, "quiet");
     libraryOptions.id = "savedLibraryOptions";

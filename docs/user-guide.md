@@ -287,7 +287,7 @@ of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
-Open **Reports**. Select a recent saved report by name, or choose **View all**
+Open **Reports**. Select a recent report by name in **Overview**, or choose **Saved library**
 to search older copies. To make a report, select its focus under **New report**
 and check the activity, dates and text treatment in the outline.
 The default, **Mask detected details**, keeps the wording with local masking.
