@@ -561,6 +561,12 @@ and prompt-transformation hook pairs in order. All must belong to this source,
 finish successfully without output, and agree with the original message and
 its transformed copy. Hook text is not saved and does not establish authorship.
 
+A task-linked prompt may also record a parent-task ID, an interaction ID, an
+empty native-document list and reasoning settings. WIRE checks those IDs
+separately from the source, prompt, request and call. A parent-task reference
+may recur in the same role; neither ID can stand in for the initiating message.
+A conflicting identity or checkpoint claim still prevents recovery.
+
 If the original prompt exactly matches a single saved parent in this chat,
 WIRE can keep that parent and its recorded author, including an agent author,
 without writing a new prompt. The explicit request and call must agree on
