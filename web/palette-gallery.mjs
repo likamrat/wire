@@ -1,6 +1,9 @@
 import { palettes } from "./theme.mjs";
 import { uxIcons } from "./ux-icons.mjs";
 
+const swatchRoles = ["accent-fill", "screen-prompt-user", "screen-service-files", "screen-prompt-agent", "screen-activity-assistance", "danger"];
+export const currentPaletteSwatches = `<span class="palette-swatches" aria-hidden="true">${swatchRoles.map(() => "<i></i>").join("")}</span>`;
+
 export function palettePreview(id, mode) {
     return `<span class="palette-scene" data-preview-palette="${id}" data-preview-mode="${mode}" aria-hidden="true">
       <span class="palette-rail"></span><span class="palette-sheet"><span class="palette-type"><i></i><i></i></span>
@@ -8,7 +11,7 @@ export function palettePreview(id, mode) {
 }
 export const paletteGallery = `
 <section class="palette-gallery" aria-labelledby="paletteTitle">
-  <div class="palette-toolbar"><div><h3 id="paletteTitle">Color palette</h3><span id="paletteSelection"></span></div>
+  <div class="palette-toolbar"><div><h3 id="paletteTitle">Color palette</h3><span id="paletteSelection" hidden></span></div>
   <div><button id="findPalette" aria-expanded="false" aria-controls="paletteFind" type="button">Find palette</button>
   <button id="resetPalette" type="button">Reset palette</button></div></div>
   <div id="paletteFind" hidden><label for="paletteQuery">Find a palette by name</label><input id="paletteQuery" type="search" autocomplete="off">
@@ -42,6 +45,10 @@ export const galleryStyles = `
 .palette-sheet{display:grid;gap:8px;padding:8px;background:var(--screen-plot);border:1px solid var(--rule);border-radius:4px}
 .palette-type{display:flex;align-items:center;gap:4px}.palette-type i{height:3px;width:25%;background:var(--ink);border-radius:2px}.palette-type i+i{width:14%;background:var(--muted)}
 .palette-strip{display:grid;grid-template-columns:4fr 2fr 1fr 1fr;gap:2px;height:6px}.palette-strip i:nth-child(1){background:var(--success)}.palette-strip i:nth-child(2){background:var(--danger)}.palette-strip i:nth-child(3){background:var(--warning)}.palette-strip i:nth-child(4){background:var(--unknown)}
+.palette-swatches{display:flex;gap:3px;align-items:center}
+.palette-swatches i{width:.75rem;height:.75rem;border-radius:3px}
+${swatchRoles.map((role, index) => `.palette-swatches i:nth-child(${index + 1}){background:var(--${role})}`).join("\n")}
+@media(forced-colors:active){.palette-swatches{display:none}}
 .palette-comparison summary{cursor:pointer;align-content:center;min-height:44px}.palette-comparison>div>div{container-type:inline-size}
 :root:not([data-evidence-theme=dark]) .palette-option>[data-preview-mode=dark],:root[data-evidence-theme=dark] .palette-option>[data-preview-mode=light]{display:none}
 @media(forced-colors:active){.palette-option:has(:checked){outline-color:Highlight}.palette-option:has(:focus-visible){outline:3px dashed Highlight}.palette-strip i{border:1px solid CanvasText}}
