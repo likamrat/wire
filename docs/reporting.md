@@ -295,7 +295,8 @@ experience with the same formats, masking, optional notes and local Save.
 **Back to comparison** restores its dates, choices and reading position while
 access remains valid.
 
-For existing reports, open **Reports > View all > Compare saved reports**, choose
+For existing reports, open **Compare > Saved reports** (or **Reports > View all >
+Compare saved reports**), choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses
 their frozen facts, not current history. Different definitions, missing facts
 or incompatible identities can prevent a comparison. A saved two-period report

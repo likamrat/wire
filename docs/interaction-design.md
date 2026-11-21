@@ -532,6 +532,12 @@ Screen paint changes do not restyle saved documents.
 
 ## Compare
 
+**Periods** and **Saved reports** are local links in Compare. Changing sections
+keeps the accepted period pair separate from the two saved report choices.
+The saved-report library can also open that same comparison and retains its
+own return link. Chart views, refinements and exact evidence belong to Periods,
+not to a second level of page navigation.
+
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with
 the preceding seven; 14/30-day choices follow the same rule. Custom dates uses

@@ -2770,6 +2770,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const origin = sessionJourney.underlying(value);
         return origin?.view === "analyze" ? origin.compare === "periods" ? "compare" : "analyze" : origin?.view === "trends" ? "trends" : null;
     }
+    function savedComparisonSection(route) {
+        return route.view === "reports" && route.task === "compare" && !route.bundle && !route.inspect;
+    }
+    function compareDestination(route) {
+        return savedComparisonSection(route) || browseName(route) === "compare";
+    }
     function rememberBrowse() {
         const name = browseName(workspaceState.route);
         if (!name || workspaceState.loading || workspaceState.stale || !api.publicationToken()) return;
@@ -3934,7 +3940,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         let update = true;
         if (!workspaceState.analytics || queryChanged || workspaceState.loading) {
             if (workspaceState.analytics && (workspaceState.route.view !== previousRoute.view || workspaceState.route.compare !== previousRoute.compare)) {
-                const destination = browseName(workspaceState.route) === "compare" ? "compare" : workspaceState.route.view;
+                const destination = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view;
                 const name = { analyze: "Analyze", trends: "Trends", compare: "Compare", reports: "Reports", settings: "Settings",
                     request: "Interaction", "collection-status": "Collection status" }[destination];
                 const active = destination === "request" ? "analyze" : destination === "collection-status" ? "settings" : destination;
@@ -4420,7 +4426,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ordinary: workspaceState.route.view === "analyze" && workspaceState.route.compare !== "periods" && (semanticQuery === null || semanticBound) });
         const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || workspaceState.route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
-        const active = browseName(workspaceState.route) === "compare" ? "compare" : workspaceState.route.view === "request" ? underlyingRoute().view === "trends" ? "trends" : "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
+        const active = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view === "request" ? underlyingRoute().view === "trends" ? "trends" : "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
         document.title = ({ analyze: "Analyze", trends: "Trends", reports: "Reports", compare: "Compare", settings: "Settings" }[active] || "Analyze") + " | WIRE";
         document.querySelectorAll("[data-nav]").forEach((node) => {
@@ -4431,6 +4437,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
+        const sections = $("compareSections");
+        sections.hidden = active !== "compare" || workspaceState.route.view === "request";
+        if (!sections.hidden) {
+            const periods = $("compareSectionPeriods"), saved = $("compareSectionSaved"), comparingSaved = savedComparisonSection(workspaceState.route);
+            setRouteLink(periods, browseRoute("compare"));
+            setRouteLink(saved, { view: "reports", task: "compare", search: "", analysisQuery: null });
+            (comparingSaved ? saved : periods).setAttribute("aria-current", "page");
+            (comparingSaved ? periods : saved).removeAttribute("aria-current");
+        }
         const settings = workspaceState.route.view === "settings", operational = workspaceState.route.view === "collection-status", configurationOrStatus = settings || operational;
         for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView", ...($("frontendBreakdowns") ? ["frontendBreakdowns"] : [])], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
             for (const id of ids) $(id).hidden = workspaceState.route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
@@ -4573,7 +4588,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("reportsView").classList.toggle("report-file-stage", workspaceState.route.view === "reports" && Boolean(filePanel && !filePanel.hidden)
             && (comparing || filePanel.parentElement === $("reportReviewBody")));
         if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
-        $("reportTaskNav").hidden = workspaceState.route.view !== "reports" || reading || view.landing;
+        $("reportTaskNav").hidden = workspaceState.route.view !== "reports" || reading || view.landing
+            || comparing && savedEntries.get(workspaceState.route.savedEntry)?.kind !== "library-comparison";
         if (workspaceState.route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
             ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
                 : current.saveUnconfirmed ? "Report save status" : "Your report" : "Reports");
@@ -8461,7 +8477,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             label = el("span", "page-title-text");
             heading.replaceChildren(icon, label);
         }
-        const destination = workspaceState.route.view === "analyze" ? workspaceState.route.compare === "periods" ? "compare" : "analyze"
+        const destination = savedComparisonSection(workspaceState.route) ? "compare" : workspaceState.route.view === "analyze" ? workspaceState.route.compare === "periods" ? "compare" : "analyze"
             : workspaceState.route.view === "trends" ? "trends" : workspaceState.route.view === "reports" && !workspaceState.route.task && !workspaceState.route.bundle ? "reports" : null;
         if (icon.dataset.destination !== (destination ?? "")) {
             icon.replaceChildren(...(destination ? [ux.icon(`navigation-${destination}`)] : []));
@@ -10182,6 +10198,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     if (assessmentFactories.bindNavigation) assessmentFactories.bindNavigation(activateNavigation);
     else document.querySelectorAll("[data-nav]").forEach(node => node.addEventListener("click", event => activateNavigation(node, event)));
+    for (const link of $("compareSections").querySelectorAll("a")) link.addEventListener("click", event => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        if (link.hasAttribute("aria-current") || $("compareSections").hidden || !api.publicationToken()) return;
+        navigate(linkTargets.get(link), false, { keepFocus: true });
+    });
     for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -10838,6 +10860,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analysisNavigations.clear();
         historyViews.clear();
         linkTargets = new WeakMap();
+        $("compareSections").hidden = true;
+        $("compareSectionPeriods").href = "/compare";
         initialRoute = null;
         searchOpenedRequest = searchReturnMarker = null; searchTargetInvalid = true;
         incomingNavigation = null;
@@ -10912,7 +10936,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.body.classList.remove("analyze-reading");
         $("loading").hidden = true;
         $("accessShell").hidden = false;
-        const active = browseName(workspaceState.route) === "compare" ? "compare" : workspaceState.route.view === "request" ? "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
+        const active = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view === "request" ? "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
         const title = { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports", trends: "Trends" }[active] || "Analyze";
         setText($("accessPageTitle"), title);
