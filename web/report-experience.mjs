@@ -187,7 +187,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const backgroundScope = el("p"); background.append(backgroundScope);
     background.hidden = true;
     previewStage.before(background);
-    previewStage.before(drawer); drawer.append(drawerHeader, previewStage);
+    const activityNotice = el("p", "muted", "Recorded activity has changed. This preview still shows the activity it was prepared with.");
+    activityNotice.id = "reportPreviewActivityNotice"; activityNotice.hidden = true; activityNotice.setAttribute("role", "status");
+    previewStage.before(drawer); drawer.append(drawerHeader, activityNotice, previewStage);
     drawer.addEventListener("cancel", event => {
         event.preventDefault();
         if (current() && !read().locked) closePreview();

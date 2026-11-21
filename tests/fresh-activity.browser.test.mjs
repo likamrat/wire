@@ -263,7 +263,7 @@ test("collection deferral describes the current hold without inventing a report 
     const app = await fixture(t, true, false, { reducedMotion: "no-preference" }), { page } = app;
     const source = await app.source([event("user.message", { content: "Orchard release checklist" }), call("initial"), complete("initial")]);
     await app.runtime().collector.collectNow();
-    await page.goto(app.runtime().url + "#reports"); await ready(page);
+    await page.goto(new URL("/reports", app.runtime().url).href); await ready(page);
     const snapshots = [];
     page.on("request", request => { if (request.url().endsWith("/api/snapshot")) snapshots.push(request.postDataJSON()); });
     const notice = page.locator("#newDataNotice");
@@ -272,8 +272,9 @@ test("collection deferral describes the current hold without inventing a report 
         const id = `deferred-${++count}`;
         await appendFile(source.file, jsonl([call(id), complete(id)]));
         await app.runtime().collector.collectNow();
-        await expect(notice).toBeVisible({ timeout: 10000 });
-        return (await loadBoardState(app.context)).revision;
+        const revision = (await loadBoardState(app.context)).revision;
+        await page.waitForResponse(async r => r.url().endsWith("/api/collection/status") && r.ok() && (await r.json()).revision >= revision);
+        return revision;
     }
     async function apply(revision) {
         await page.locator("#pageTitle").focus();
@@ -288,7 +289,11 @@ test("collection deferral describes the current hold without inventing a report 
         await input.evaluate(node => node.setSelectionRange(1, 4));
         const reads = snapshots.length, applied = await page.locator("#promptAuthorSummary").getAttribute("data-revision");
         const revision = await advance();
-        await expect(notice).toHaveText("New evidence is available.");
+        if (id === "wireSearch") await expect(notice).toBeHidden();
+        else {
+            await expect(notice).toBeVisible();
+            await expect(notice).toHaveText("New evidence is available.");
+        }
         assert.equal(snapshots.length, reads, "Typing still defers snapshot application");
         assert.equal(await page.locator("#promptAuthorSummary").getAttribute("data-revision"), applied);
         assert.equal(await input.evaluate((node, original) => node === original && node === document.activeElement, original), true);
@@ -310,12 +315,24 @@ test("collection deferral describes the current hold without inventing a report 
     await page.locator("#cancelSource").click();
     await apply(settingsRevision);
     await navigateMain(page, "reports");
-    await chooseReportScope(page, "all");
-    await scanReport(page);
+    await page.getByRole("button", { name: "Prepare preview", exact: true }).click();
+    await expect(page.locator("#reportReviewBody iframe")).toBeVisible();
     const frame = page.locator("#reportReviewBody iframe"), originalFrame = await frame.elementHandle();
     const preview = await frame.getAttribute("srcdoc"), reviewReads = snapshots.length;
+    const previewNotice = page.locator("#reportPreviewDrawer #reportPreviewActivityNotice");
+    await expect(previewNotice).toBeHidden();
+    // An unrelated workspace revision is not a change in recorded activity.
+    await page.route("**/api/collection/status", async route => {
+        const response = await route.fetch(), status = await response.json();
+        await route.fulfill({ response, json: { ...status, revision: status.revision + 1 } });
+    }, { times: 1 });
+    await page.waitForResponse(r => r.url().endsWith("/api/collection/status") && r.ok());
+    await expect(previewNotice).toBeHidden();
+    await expect(notice).toBeHidden();
     await advance();
-    await expect(notice).toHaveText("New evidence is available. Your report preview stays frozen.");
+    await expect(notice).toBeHidden();
+    await expect(previewNotice).toBeVisible();
+    await expect(previewNotice).toHaveText("Recorded activity has changed. This preview still shows the activity it was prepared with.");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "ready");
     assert.equal(await frame.getAttribute("srcdoc"), preview);
     assert.equal(await frame.evaluate((node, original) => node === original, originalFrame), true);

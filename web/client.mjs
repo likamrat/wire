@@ -709,6 +709,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const scopeLabels = { history: "Current activity", legacy: "Preserved earlier snapshot", all: "Both collections" };
     const selected = new Set();
     let slice, activePreview = null, clearPreviewPayload = null, pendingSaveResult = null, pendingSaveOwner = null;
+    let deferredDataNotice = false;
     let acceptingSnapshot = null;
     let selectControls;
     let exportWriting = false, returnFocus = null;
@@ -3686,7 +3687,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             renderFreshActivity();
             restoreReading(reading);
             if (!mounted) revealSessionResult();
-            $("newDataNotice").hidden = true;
+            showDeferredDataNotice(false);
             mounted = true;
             if (next.collection) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 5000); }
             return true;
@@ -4138,9 +4139,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const owns = Boolean(eligible && deferredReviewIdentity.previewId === activePreview.previewId);
         $("freshActivity").dataset.deferredReview = String(owns);
         $("freshAwayNotice").dataset.deferredReview = String(owns);
+        showDeferredDataNotice(deferredDataNotice);
         if (model.phase === "waiting" && !model.sourceUnknown && !model.sourceBlocked) setText($("freshAwayStatus"), owns
             ? " Waiting to apply recorded activity. Your report preview stays frozen; finish the review or edits before applying it."
             : " Waiting until the current review or edits finish.");
+    }
+    function showDeferredDataNotice(deferred) {
+        deferredDataNotice = deferred;
+        const reports = workspaceState.route.view === "reports", notice = $("newDataNotice");
+        const error = fresh.snapshot().phase === "error", edits = collectionSettings?.hasDraft();
+        const explicitCheck = $("freshAwayNotice").dataset.deferredReview === "true";
+        notice.hidden = !deferred || reports && !error && !edits && !explicitCheck;
+        if (!notice.hidden) setText(notice, error ? "Stored evidence has changed. Retry the stored read; the earlier source check is not repeated."
+            : edits ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically."
+            : "New evidence is available.");
+        const previewNotice = $("reportPreviewActivityNotice"), sourceRevision = collection?.assessment?.basis?.sourceRevision;
+        if (previewNotice) previewNotice.hidden = !reports || !activePreview || !reportJourney?.snapshot().hasPreview || error || explicitCheck
+            || !Number.isSafeInteger(activePreview.activityRevision) || !Number.isSafeInteger(sourceRevision) || sourceRevision <= activePreview.activityRevision;
     }
     function renderStoredRefresh() {
         if (clearingAccess || !api.publicationToken()) return;
@@ -4283,7 +4298,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
             fresh.defer();
             $("workspace").setAttribute("aria-busy", "false");
-            $("newDataNotice").hidden = false;
+            showDeferredDataNotice(true);
             renderFreshActivity();
             pollTimer = setTimeout(pollCollection, 5000);
             return false;
@@ -8873,7 +8888,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             branch.flow?.defer(); settleRefreshBranch(branch);
         }
         $("workspace").setAttribute("aria-busy", "false");
-        $("newDataNotice").hidden = false;
+        showDeferredDataNotice(true);
         renderFreshActivity();
     }
     async function checkAllActivity(event, deadline) {
@@ -9112,7 +9127,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (branch) return result;
             if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
                 fresh.defer();
-                $("newDataNotice").hidden = false;
+                showDeferredDataNotice(true);
             } else await load({ background: true });
             if (!api.isCurrent(publication)) return false;
             return { ...result, checkMessage: fresh.snapshot().message };
@@ -9357,11 +9372,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 reviewing: $("overlay").open || deletionUI.isOpen() || recollectionUI.isOpen() || Boolean(activePreview) || reportJourney?.isReviewOpen(), loading: workspaceState.loading || collectionBusy || fresh.snapshot().phase === "error",
                 editing: collectionSettings.hasDraft() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || Boolean(document.querySelector(".select-popup:not([hidden])")),
             });
-            setText($("newDataNotice"), fresh.snapshot().phase === "error" ? "Stored evidence has changed. Retry the stored read; the earlier source check is not repeated."
-                : collectionSettings.hasDraft() ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically."
-                : activePreview ? "New evidence is available. Your report preview stays frozen."
-                : "New evidence is available.");
-            $("newDataNotice").hidden = action !== "defer" || status.revision === workspaceState.evidence?.revision;
+            showDeferredDataNotice(action === "defer");
             const canApply = !workspaceState.loading && !$("overlay").open && !deletionUI.isOpen() && !recollectionUI.isOpen() && !activePreview && !reportJourney?.isReviewOpen() && !collectionSettings.hasDraft()
                 && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && !document.querySelector(".select-popup:not([hidden])");
             if ((action === "refresh" || (connectionNeedsSnapshot || ["applying", "waiting"].includes(fresh.snapshot().phase)) && canApply) && workspaceState.evidence) await load({ background: true });
@@ -9403,7 +9414,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             renderCollection(status, publication);
             if (nativeChange && !historyStatus.persistence(result)) return result;
             if (!$("overlay").open && !reportJourney?.isReviewOpen()) await load({ background: true });
-            else if (connectionNeedsSnapshot || collection.revision !== workspaceState.evidence?.revision) $("newDataNotice").hidden = false;
+            else if (connectionNeedsSnapshot || collection.revision !== workspaceState.evidence?.revision) showDeferredDataNotice(true);
             return result;
         } catch (error) {
             if (sourceCollection.controlsActive && api.isCurrent(publication) && error.configuration !== "not-saved") {
@@ -10939,6 +10950,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (privateNarrowing) incomingNavigationError = "The earlier private selection was cleared when WIRE access changed. Search again or explicitly open this view without that selection.";
         search = ""; searchReturnMarker = null;
         refreshReadFailure = deferredReviewIdentity = null;
+        deferredDataNotice = false;
         withdrawRefreshGesture();
         fresh = createFreshActivity({ sourceUnknown: sourcePending, sourceWarning: sourceStorageWarning, nativeStatus: receiptStatus });
         if (nativeCollectIntent?.confirmed) nativeCollectIntent = null;
