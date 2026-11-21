@@ -244,6 +244,8 @@ test("primary comparison opens complete days independently, keeps chart membersh
     await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
     const pair = comparisons.at(-1), reads = comparisons.length;
+    assert.deepEqual(pair.periods.later.analytics.rows.map(row => row.scenarioId).sort(),
+        [2, 3, 4, 5].map(index => `period-request-${index}`));
     await page.locator("#comparisonActions").evaluate(node => { window.comparisonFooter = node; });
     for (const name of ["Timeline", "By tool", "Timing", "Outcomes"]) {
         await page.getByRole("button", { name, exact: true }).click();
@@ -256,9 +258,11 @@ test("primary comparison opens complete days independently, keeps chart membersh
             await page.screenshot({ path: path.join(process.env.WIRE_COMPARISON_PROOFS,
                 name === "Timeline" ? "compare-timeline.png" : "compare-periods.png"), fullPage: true });
         }
-        await expect(page.locator("#comparisonActions button")).toHaveText(["View calls", "View numbers", "Create report"]);
+        const callAction = name === "Outcomes" ? "View 4 calls" : "View calls";
+        await expect(page.locator("#comparisonActions button")).toHaveText([callAction, "View numbers", "Create report"]);
         assert.equal(await page.locator("#comparisonActions").evaluate(node => node === window.comparisonFooter), true);
         await page.locator("#viewComparisonCalls").click();
+        if (name === "Outcomes") await expect(page.locator("#comparisonExactRecordsB")).toBeVisible();
         await expect(page.locator("#comparisonExactRecordsA tbody tr")).toHaveCount(pair.periods.baseline.rowIds.length);
         await expect(page.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(pair.periods.later.rowIds.length);
         await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
@@ -268,7 +272,8 @@ test("primary comparison opens complete days independently, keeps chart membersh
     }
     assert.equal(comparisons.length, reads);
     await page.locator("nav [data-nav=analyze]").click();
-    await expect(page).toHaveURL(/tool=workiq-ask/);
+    await expect(page.locator("#toolFilter")).toHaveValue("workiq-ask");
+    await expect(page).toHaveURL(/\/\?privateView=required$/);
     await page.locator("#comparePeriods").click(); await ready(page);
     assert.deepEqual(comparisons.at(-1).periods.later.range, pair.periods.later.range);
     assert.equal(comparisons.at(-1).options.filters.tools, undefined);
