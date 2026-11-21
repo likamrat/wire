@@ -339,9 +339,9 @@ for (const failedRefresh of [false, true]) test(`confirmed comparison settlement
     assert.equal(saves, 1);
 });
 
-test("comparison is a bounded Reports task with a retained approved review and exact saved-source return", async t => {
+test("saved-library comparison retains its prepared copy when opening a source and returning", async t => {
     const { page, calls, bundles } = await setup(t);
-    await page.getByRole("link", { name: "Compare saved reports", exact: true }).click();
+    await openReportComparison(page);
     assert.match(page.url(), /task=compare/);
     assert.equal(await page.locator("#pageTitle").textContent(), "Compare saved reports");
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
@@ -350,34 +350,28 @@ test("comparison is a bounded Reports task with a retained approved review and e
     await selectReport(page, "Baseline report", bundles[0].bundleId);
     await selectReport(page, "Selected report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     const frame = workspace.locator(".comparison-prepared-files iframe");
     await frame.waitFor();
     const preparedFrame = await frame.elementHandle();
-    await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true }).check();
-    await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
-    await workspace.getByRole("button", { name: "Back to comparison choices", exact: true }).click();
-    await workspace.getByRole("button", { name: "Inspect baseline report", exact: true }).click();
-    await page.locator("#contextSidebar").getByRole("button", { name: "Open saved report", exact: true }).click();
+    const open = workspace.getByRole("button", { name: "Open baseline report", exact: true });
+    await open.click();
     await page.locator("#savedReportReader iframe").waitFor();
-    const requestCount = calls.length;
+    assert.equal(new URL(page.url()).searchParams.get("bundle"), bundles[0].bundleId);
     await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
-    await page.locator("#contextSidebar[open]").waitFor();
-    await page.locator("#closeContextSidebar").click();
-    await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
-    await workspace.getByRole("button", { name: "Return to review", exact: true }).click();
+    await open.waitFor();
+    assert.equal(await open.evaluate(node => node === document.activeElement), true);
     assert.equal(await frame.evaluate((node, original) => node === original, preparedFrame), true);
     assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true }).isEnabled(), true);
-    await page.locator("#reportLibraryLink").click();
-    assert.equal(await workspace.isVisible(), false);
-    await page.goBack();
+    await page.getByRole("link", { name: "Back to saved reports", exact: true }).click();
+    await page.locator("#reportCompareLink").waitFor();
+    assert.equal(await page.locator("#reportCompareLink").evaluate(node => node === document.activeElement), true);
+    await page.goForward();
     await workspace.waitFor();
     assert.match(page.url(), /task=compare/);
     assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true }).isEnabled(), true);
-    assert.equal(calls.length, requestCount, "Saved-source return and task Back reuse retained choices and approval without reads or writes.");
     assert.equal(calls.filter(call => call.path === "/api/report-comparison/preview").length, 1);
-    assert.equal(calls.filter(call => call.path === "/api/report-comparison/review").length, 1);
+    assert.equal(calls.filter(call => call.path === "/api/report-comparison/review").length, 0);
     assert.equal(calls.filter(call => call.path === "/api/report-comparison/save").length, 0);
 });
 
