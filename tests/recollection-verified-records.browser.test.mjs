@@ -41,7 +41,7 @@ const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptTok
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
 async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false,
-    longRequest = false, denseHook = false } = {}) {
+    longRequest = false, denseHook = false, priorNotice = false } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -100,6 +100,11 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
     const known = chain(day, "known", 10, true);
     if (longRequest) known[1].data.content = "Invented discarded reply. ".repeat(1400);
     let knownOriginals = known;
+    if (priorNotice) {
+        const before = event("before-prompt", "session.info", at(day, 9), { infoType: "timing", message: "Invented timeline notice." }, boot.id);
+        known[0].parentId = before.id;
+        knownOriginals = [before, ...known];
+    }
     if (causalHooks) {
         const [prompt, assistant, start, completion] = known;
         if (anchored) {
@@ -198,7 +203,7 @@ function assertReceipt(p, r) {
 }
 
 test("a bound exact preview reviews only identified members, never the full day", async t => {
-    const f = await fixture(t, { longRequest: true });
+    const f = await fixture(t, { longRequest: true, priorNotice: true });
     await f.start();
     const review = ok(await f.post("preview", { ...f.scope, mode }));
     assertReview(f, review);

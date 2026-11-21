@@ -113,6 +113,21 @@ test("a mapped call can use a bounded original projection of its unchanged retai
     await assert.rejects(scan([unknown, ...originals], anchored), unverified);
 });
 
+test("a classified timeline notice immediately before the prompt is not a competing prompt", async () => {
+    const notice = line("prior-notice", "session.info", { infoType: "timing", message: "An invented notice." }, 1, boot.id);
+    const prompt = { ...p, parentId: notice.id };
+    const rows = [notice, prompt, a, s, e];
+    assert.deepEqual((await scan(rows)).records, (await scan([p, a, s, e])).records);
+    for (const changed of [rows.with(0, { ...notice, timestamp: e.timestamp }),
+        rows.toSpliced(1, 0, line("intervening", "assistant.message", {}, 1)),
+        [...rows, { ...a, id: "other-answer", data: { apiCallId: notice.id } }]]) {
+        await assert.rejects(scan(changed), unverified);
+    }
+    await assert.rejects(scan(rows, { state: { checkpointEvents: [{ data: { alias: notice.id } }] } }), unverified);
+    await assert.rejects(scan(rows, { state: { deletion: { events: [eventIdentity(sessionId, notice.id)] } } }), unverified);
+    assert.deepEqual((await scan(rows.with(2, change(a, { originatingMessageId: "another-message" })))).records, []);
+});
+
 test("discarded assistant text does not disqualify an explicitly linked mapped call under a new human prompt", async () => {
     const long = change(a, { content: "Invented discarded reply. ".repeat(1400) });
     const rows = [p, long, s, e], result = await scan(rows);
