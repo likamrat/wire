@@ -295,7 +295,7 @@ test("standalone Linux and macOS disclose manual mode and reject Apply in the la
         const f = await fixture(t, host), app = f.launch(), url = await app.ready(), candidate = await f.commit("never-activate");
         const status = await request(url, "status");
         assert.equal(status.phase, "manual"); assert.equal(status.supported, false); assert.equal(status.automatic, false);
-        assert.match(status.message, /Windows and WSL.*manually/);
+        assert.match(status.message, /Windows and WSL only/);
         assert.deepEqual(await request(url, "check"), status);
         assert.deepEqual(await request(url, "apply", { candidate }), status);
         assert.deepEqual((await f.events()).map(e => e.event), ["start"]);

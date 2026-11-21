@@ -41,9 +41,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         for (const id of ["appUpdateApply", "settingsAppUpdate", "appUpdateDismiss"]) $(id).disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
         const manualMode = Boolean(manualOnly(state));
-        $("appUpdateManual").hidden = !manualMode;
-        $("appUpdateAutoHelp").textContent = manualMode ? "This installation cannot check for updates in WIRE."
-            : "Check when WIRE opens and daily while it stays open. When off, you can still check manually.";
+        $("appUpdateAutoHelp").hidden = !state?.supported || manualMode;
+        automatic.setAttribute("aria-describedby", manualMode || !state?.supported ? "appUpdateStatus" : "appUpdateAutoHelp");
         manual.disabled = busy || Boolean(expected) || updating || manualMode;
         automatic.disabled = manual.disabled || !state?.supported;
         automatic.checked = !manualMode && (pendingPreference ?? state?.automatic === true);

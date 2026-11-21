@@ -346,8 +346,8 @@ Open **Settings** at the bottom of the left sidebar and type in **Search
 settings**. Matching destinations appear under their categories.
 Settings opens in **General**. **Check for updates** checks WIRE itself, not
 your Copilot history. On [supported installations](development.md#updating-wire),
-you can check with automatic checks off. If WIRE says this copy is managed
-manually, use its usual update process instead.
+you can check with automatic checks off. If General says **Updates are managed
+manually**, use this installation's usual update process instead.
 
 Below updates, **Current theme** previews your palette in Light or Dark.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
