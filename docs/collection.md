@@ -534,6 +534,9 @@ fields, ambiguous identifiers, and unclassified oversized entries still
 prevent a verified-record preview.
 For a permissions notice recorded as `on`/`off`, both the previous and new
 modes must agree with their corresponding Boolean flags.
+A remote-session notice may name a canonical GitHub Copilot task URL. WIRE
+checks the task identifier for conflicting claims, but does not visit the URL,
+import the task, or use it to connect a prompt to a call.
 
 The assistant's `originatingMessageId` identifies the initiating user
 message; `parentId` identifies the preceding journal event. They need not

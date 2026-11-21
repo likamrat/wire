@@ -483,6 +483,22 @@ test("an on/off permissions transition is a notice only when its two recorded fo
     }
 });
 
+test("a remote task notice contributes a fenced reference, never a second source or call", async () => {
+    const task = "395078e3-b26f-43f5-81ae-681384491cad";
+    const url = `https://github.com/copilot/tasks/${task}`;
+    const remote = line("remote-notice", "session.info", { infoType: "remote", message: "An invented notice.", url }, 0, boot.id);
+    const original = [p, a, s, e];
+    const out = await scan([remote, ...original]);
+    assert.deepEqual(out.records, (await scan(original)).records);
+    assert.doesNotMatch(JSON.stringify(out), /github\.com|invented notice|395078e3/);
+    for (const data of [{ url: url + "?token=private" }, { url: url + "#fragment" }, { url: url.replace("github.com", "example.org") },
+        { url: url.replace(task, s.data.toolCallId) }, { infoType: "other" }, { destination: url }, { url: `https://github.com/copilot/tasks/${sessionId}` }]) {
+        await assert.rejects(scan([change(remote, data), ...original]), unverified);
+    }
+    await assert.rejects(scan([remote, ...original, change(a, { apiCallId: task })]), unverified);
+    await assert.rejects(scan([remote, ...original], { state: { checkpointEvents: [{ alias: task }] } }), unverified);
+});
+
 // Root timing metadata as consumed/produced by retainResponseTimingEvent (not an
 // assertion about other Copilot envelope versions). No parent link is inferred.
 const begin = line("boundary-open", "assistant.turn_start", { turnId: "other-turn" }, 5);
