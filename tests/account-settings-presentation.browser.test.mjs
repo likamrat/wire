@@ -325,6 +325,10 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
     await page.keyboard.press("Escape");
     await expect(page.locator("#wireAccountTrigger")).toBeFocused();
     await expect(page.locator("#navigationDrawer")).toBeVisible();
+    await receive(page, presentationFixture("disconnected"));
+    const name = page.locator("#wireAccountTrigger .wire-account-copy>span");
+    await expect(name).toHaveText("Account");
+    assert.ok(await name.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "The Account label fits at 200% text");
     await page.keyboard.press("Escape");
     await expect(page.locator("#navigationDrawer")).toBeHidden();
     await page.setViewportSize({ width: 1440, height: 1000 });

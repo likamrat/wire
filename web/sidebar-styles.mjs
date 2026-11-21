@@ -96,7 +96,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 #workspace {min-width:0}
 #workspace>:not(#homeView,#trendsView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}
 .navigation-toggle {display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;padding:10px}
-.navigation-drawer {margin:0;inset:0 auto 0 0;width:min(304px,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid transparent;border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink);box-shadow:var(--navigation-sidebar-shadow)}
+.navigation-drawer {margin:0;inset:0 auto 0 0;width:min(19rem,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid transparent;border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink);box-shadow:var(--navigation-sidebar-shadow)}
 .navigation-drawer[open] {display:flex;flex-direction:column}
 .navigation-drawer>.drawer-heading,.navigation-drawer>#drawerBrand {flex-shrink:0}
 #drawerContent {display:flex;flex:1 0 auto;flex-direction:column;min-width:0}

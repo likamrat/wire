@@ -188,6 +188,13 @@ treatment for the final deletion. Green on an eligible update means an update
 is available, not that it has run. Tabs, switches, icon-only utilities and
 chart marks keep their own interaction patterns.
 
+Use the shared `.primary` role for a filled CTA, including in studies using
+WIRE styles. Its label and inset `::before` face need the same role; changing
+only the text color can leave white lettering on the ordinary paper face.
+Check contrast against the **paint under the letters** in rest, hover, press,
+focus and pending states, including ancestor opacity. Keep normal-size button
+text at 4.5:1 or higher; mute the boundary, not the legibility, when disabled.
+
 Ordinary text actions share an 8px corner, 12px side padding and an 8px
 icon-to-label gap. At default text size a 32px face sits inside a 44px target;
 let the target grow with wrapped or enlarged text. Keep widths content-sized

@@ -11,6 +11,7 @@ import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-an
 import { defaultConsent } from "../lib/assessment-contract.mjs";
 import { fixture, privateFixture, exportCatalogFor, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, revealAnalyzeRecords, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
+import { paintedLabelContrast } from "./color-measurements.mjs";
 
 // No listener or real updater. Serve the normal built module and shell solely via intercepted requests.
 const origin = "http://127.0.0.1:48197", capability = "c".repeat(64);
@@ -265,6 +266,13 @@ test("Check for updates signals availability in both themes and stays check-only
         assert.ok(paint.rgb && paint.rgb[1] > paint.rgb[0] && paint.rgb[1] > paint.rgb[2], `${theme}: ${paint.rgb}`);
         await expect(check).toBeVisible();
         assert.equal(await fill(check), await fill(page.locator("#appUpdateApply")));
+        await check.hover(); await page.mouse.down();
+        try {
+            await page.waitForFunction(() => !document.getAnimations().some(a => a.playState === "running" && Number.isFinite(a.effect?.getComputedTiming().endTime)));
+            const painted = await paintedLabelContrast(check);
+            assert.ok(painted >= 4.5, `${theme}: pressed update text against its painted face (${painted.toFixed(2)}:1)`);
+        } finally { await page.mouse.move(1, 1); await page.mouse.up(); }
+        await expect.poll(() => fill(check)).toBe(await fill(page.locator("#appUpdateApply")));
         assert.ok(paint.height >= 44);
         assert.equal(paint.overflow, false);
         if (process.env.WIRE_APP_UPDATE_PROOFS) {

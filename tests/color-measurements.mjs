@@ -115,6 +115,33 @@ export async function shadowPaint(page, selector, side, distances = [2, 6, 12, 2
     return { bands: result, screenshot: baseline };
 }
 
+// Hide only text ink in the second exposure; the pseudo-face and composited opacity remain.
+export async function paintedLabelContrast(control) {
+    const before = await control.screenshot();
+    const face = await control.screenshot({ style: "*{-webkit-text-fill-color:transparent!important;text-shadow:none!important}" });
+    return control.evaluate(async (_, [normal, blank]) => {
+        async function pixels(value) {
+            const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(value), c => c.charCodeAt(0))]));
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width; canvas.height = bitmap.height;
+            const ctx = canvas.getContext("2d"); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+            return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        }
+        const [a, b] = await Promise.all([pixels(normal), pixels(blank)]);
+        if (a.length !== b.length) throw new Error("The control moved during the paint measurement.");
+        const channel = v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+        const luminance = (data, i) => .2126 * channel(data[i] / 255) + .7152 * channel(data[i+1] / 255) + .0722 * channel(data[i+2] / 255);
+        const ratios = [];
+        for (let i = 0; i < a.length; i += 4) {
+            if (a[i] === b[i] && a[i+1] === b[i+1] && a[i+2] === b[i+2]) continue;
+            const l = luminance(a, i), r = luminance(b, i);
+            ratios.push((Math.max(l, r) + .05) / (Math.min(l, r) + .05));
+        }
+        ratios.sort((a, b) => a-b);
+        return ratios[Math.floor(ratios.length * .99)] ?? 1;
+    }, [before.toString("base64"), face.toString("base64")]);
+}
+
 // Runs in the browser so contrast covers actual paint, not a gradient's solid fallback.
 export function measureChartPaint(selector) {
     return [...document.querySelectorAll(selector)].filter(node => node.checkVisibility()).map(node => {
