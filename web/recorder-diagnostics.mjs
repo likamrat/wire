@@ -143,6 +143,7 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     window.addEventListener("pagehide", () => clearTimeout(timer));
     window.addEventListener("pageshow", () => { if (current(publication()) && loaded && !busy) readResult(); });
     return {
+        hasUnfinishedChange: () => Boolean(busy || uncertain || attempt?.phase === "pending" || attemptId && !attempt),
         withdrawAccess() {
             if (!accessAvailable) return;
             accessAvailable = false; accessEpoch++;

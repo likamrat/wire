@@ -1,3 +1,3 @@
 import { mountBrowser } from "./browser-runtime.mjs";
 
-mountBrowser();
+mountBrowser({}, "bundled", import.meta.url);

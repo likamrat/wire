@@ -361,6 +361,7 @@ export function mountSourceCollectionSettings({ api, ux, sourceCollection, creat
             $("sourceMicrosoftSaved").hidden = !textValue;
         },
         hasDraft: dirty, isBusy: working,
+        hasUnconfirmedChange: () => uncertain.size > 0,
         canCollect: () => current(stamp()) && !working() && !dirty() && !uncertain.size
             && (needsStoredRead() || !readError && sources().actions.microsoft.includes("collect-now")),
         setChecking(value) { checking = value; paint(); },

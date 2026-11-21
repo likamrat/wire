@@ -3,4 +3,4 @@ import { mountReactShell } from "./app-shell.tsx";
 import "./evaluation.css";
 
 document.body.classList.add("wire-frontend-react");
-mountBrowser(mountReactShell(), "react");
+mountBrowser(mountReactShell(), "react", import.meta.url);

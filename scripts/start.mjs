@@ -7,6 +7,13 @@ import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import path from "node:path";
 
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
+const managed = process.connected && process.env.WIRE_UPDATE_LAUNCHER === "1";
+let finishChild;
+function releaseChild(state) {
+    if (!finishChild) return;
+    finishChild(state);
+    finishChild = undefined;
+}
 function startupOptions(args) {
     const options = { port: DEFAULT_RUNTIME_PORT, frontend: "bundled", developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
         microsoftVisibleSignIn: false, microsoftVisibilityExperiment: false, microsoftManualCollection: false };
@@ -70,9 +77,12 @@ async function stop() {
             runtime.server.closeIdleConnections();
             await finished;
             await copilotAccess?.close();
+            releaseChild("closed");
         } catch {
             console.error(`${PRODUCT_NAME} did not close cleanly. Owned source cleanup must finish before reconnecting.`);
             process.exitCode = 1;
+        } finally {
+            if (managed && process.connected) process.disconnect();
         }
     })();
     return closing;
@@ -80,7 +90,14 @@ async function stop() {
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 if (process.connected) process.once("disconnect", stop);
+if (managed) process.on("message", message => {
+    if (message?.type === "wire-update-stop") void stop();
+});
 try {
+    if (managed) {
+        const { claimChild } = await import("../lib/update-launch-state.mjs");
+        finishChild = claimChild(process.env.WIRE_UPDATE_DIRECTORY, process.env.WIRE_UPDATE_CHILD);
+    }
     const options = startupOptions(process.argv.slice(2));
     const context = { dataDir: options.contributor ? contributorDataDir() : process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
     const collector = { timers: !options.developmentMicrosoft };
@@ -124,19 +141,26 @@ try {
     });
     if (stopping) await stop();
     else {
-        console.log(`${PRODUCT_NAME} ready at ${runtime.url}`);
+        if (managed) process.send({ type: "wire-update-ready", url: runtime.url, runtimeId: runtime.runtimeId,
+            build: process.env.WIRE_UPDATE_BUILD, clientEntry: runtime.clientEntry }, error => { if (error) void stop(); });
+        else console.log(`${PRODUCT_NAME} ready at ${runtime.url}`);
         if (options.contributor) console.log(`Contributor checkout (${options.frontend}); private store: ${context.dataDir}`);
         if (options.developmentMicrosoft) console.log("Development-only Microsoft incubation. Automatic collection is off; saved configuration is not adopted.");
     }
 } catch (error) {
+    let clean = !runtime;
     if (copilotAccess) await copilotAccess.close().catch(() => {
+        clean = false;
         console.error(`${PRODUCT_NAME} local access cleanup is incomplete.`);
     });
     if (nativeHost) await nativeHost.close().catch(() => {
+        clean = false;
         console.error(`${PRODUCT_NAME} source cleanup is incomplete.`);
     });
     console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
         ? "The requested port is already owned. No second evidence writer was started. Choose an unused port for an independent store, or verify the existing owner before using it."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;
+    if (clean) releaseChild("startup-failed");
+    if (managed && process.connected) process.disconnect();
 }

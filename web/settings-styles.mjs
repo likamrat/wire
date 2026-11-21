@@ -1,4 +1,21 @@
 export const settingsStyles = `
+#appUpdateNotice {display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);flex-wrap:wrap;padding:var(--space-md) var(--space-lg);margin-bottom:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper)}
+#appUpdateNotice[hidden] {display:none}
+@media(min-width:64rem) {
+ #appUpdateNotice {position:fixed;z-index:var(--layer-header);inset-inline-start:10px;inset-block-end:7.5rem;
+  width:calc(var(--app-sidebar-width,216px) - 20px);min-width:12rem;max-width:19rem;margin:0;
+  padding:var(--space-md);gap:var(--space-xs);box-shadow:var(--surface-shadow)}
+ :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
+}
+.app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
+.app-update-actions {display:flex;align-items:center;gap:var(--space-sm)}
+button.primary.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--update-ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--update-ink))}
+#appUpdateApply {display:inline-flex;align-items:center;gap:.375rem}
+#appUpdateApply[hidden] {display:none}
+[data-settings-section=updates] .settings-actions {margin-top:0}
+#appUpdateFence {max-width:min(29rem,calc(100vw - 2rem));padding:var(--space-xl);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
+#appUpdateFence h2 {margin:0;font-size:var(--type-section)}
+#appUpdateRecover {margin-top:var(--space-md)}
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:1.5rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;

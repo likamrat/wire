@@ -906,5 +906,6 @@ export function createAssessmentExperience({ api, createPresentation, createCont
         }
     }
     return { receive, observe, detail, setup, leave, invalidate, withdrawAccess, clearPrivateText, prepareRecoveryPresentation,
+        hasUnfinishedChange: () => Boolean(consentControl?.hasUnsentDraft() || pendingRequest || recovering || recoveryBlocked()),
         invalidatePendingViewReads() { generation++; } };
 }

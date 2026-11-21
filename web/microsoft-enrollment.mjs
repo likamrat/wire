@@ -115,6 +115,7 @@ export function mountMicrosoftEnrollment({ api, container, createState, onConnec
     listen(recover, "click", () => { if (!recover.disabled) void read(); });
     return {
         phase: () => state.view(generation).phase,
+        hasUnfinishedChange: () => { const value = state.view(generation); return value.pending || value.uncertain; },
         connectionStarted() {
             if (state.view(generation).phase === "prepared" && !state.view(generation).uncertain) { error = ""; paint(); }
         },

@@ -32,7 +32,7 @@
   "scripts": {
     "predev": "npm run build",
     "dev": "node scripts/start.mjs --contributor",
-    "start": "node scripts/start.mjs",
+    "start": "node scripts/launch.mjs",
     "icons:generate": "node scripts/build-icon-assets.mjs --write",
     "build": "node scripts/build-icon-assets.mjs && vite build",
     "typecheck": "tsc --noEmit",
@@ -41,6 +41,7 @@
     "test": "node --test tests/*.test.mjs web/*.test.mjs web/frontend/*.test.ts",
     "test:frontend": "npm run typecheck && npm run build && node --test --test-concurrency=1 tests/browser-assets.test.mjs tests/browser-bundle.browser.test.mjs tests/frontend-evaluation.browser.test.mjs web/frontend/*.test.ts",
     "test:packaging": "npm run build && node --test --test-concurrency=1 tests/search-packaging.qualification.mjs tests/browser-packaging.qualification.mjs",
+    "test:update-runtime": "node --test tests/update-runtime.qualification.mjs",
     "migrate": "node scripts/migrate.mjs",
     "install:canvas": "node scripts/install-canvas.mjs"
   }

@@ -152,6 +152,9 @@ export function createReportDraft({ contextSelector } = {}) {
     }
     return {
         options: () => structuredClone(options),
+        hasUnsavedChoices: () => Boolean(nativePicks || options.title || options.resultText || options.reportFocus || options.reportNotes?.length
+            || options.recordedContext || options.manualTerms.length || options.overrides.length || options.promptMode !== "masked"
+            || options.formats.length !== 1 || options.formats[0] !== "html"),
         token: () => version,
         current: (token) => !withdrawn && token === version,
         invalidate: () => { version++; },

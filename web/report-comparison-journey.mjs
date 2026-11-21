@@ -690,5 +690,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     return { open, receive, syncPresence, pendingArtifactCleanup, invalidate, invalidateSavedReport, syncPreparation,
         withdrawAccess, resumeAccess, recoverSave, saveIdentity: () => saveVerifier.saveIdentity(),
         title: () => heading.textContent,
+        hasUnfinishedChange: () => Boolean(preparing || writing || dispatchedSave || checkingSave || !savedMode && !savedResult
+            && (preview || baseline.value || later.value || draftTitle || resultTerms.value || resultTextChoice.checked)),
         isBusy: () => writing, hasPendingSave: () => Boolean(dispatchedSave), hasPreviewWork: () => Boolean(preview) || preparing };
 }

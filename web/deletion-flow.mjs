@@ -298,6 +298,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         for (const button of dialog.querySelectorAll("button")) button.disabled = true;
     }
     return { open, isOpen: () => dialog.open,
+        hasUnfinishedChange: () => previewBusy || readBusy || ["pending", "uncertain"].includes(flow.snapshot().phase) || sessionStorage.getItem(key) !== null,
         withdrawAccess,
         resumeAccess() {
             const access = publication();

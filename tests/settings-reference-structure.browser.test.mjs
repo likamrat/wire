@@ -226,7 +226,7 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
 
 test("every registered setting and old route opens its exact live destination without an action", { timeout: 45000 }, async t => {
     const { page, origin } = await setup(t);
-    const navigation = createSettingsNavigation(createLocalSearch());
+    const navigation = createSettingsNavigation(createLocalSearch(), { updates: false });
     const route = async hash => {
         await page.evaluate(hash => { location.hash = hash; }, hash);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -452,7 +452,7 @@ test("four current groups retain keyboard focus and readable geometry at 375 and
     const { page } = await setup(t);
     const evidence = [], proofs = process.env.WIRE_SETTINGS_ORGANIZATION_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
-    const groups = createSettingsNavigation(createLocalSearch()).categories;
+    const groups = createSettingsNavigation(createLocalSearch(), { updates: false }).categories;
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 100], [375, 100], [375, 200]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);

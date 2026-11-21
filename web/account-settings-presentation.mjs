@@ -876,6 +876,8 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
     paintProfile(); paintGate();
     return {
         receive, receiveMicrosoft, receiveAccess, withdrawAccess, unavailableConnectionFeedback,
+        hasUnfinishedChange: () => Boolean(actionBusy || pendingGate || nativeResultRead || enrollment?.hasUnfinishedChange()
+            || nativeState?.snapshot(null, api.controlToken()).pending.length),
         dispose() {
             if (disposed) return;
             withdrawAccess(); close(); disposed = true;

@@ -11,7 +11,7 @@ import { createLocalSearch } from "../web/local-search.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_SETTINGS_SEARCH_PROOFS;
-const navigation = createSettingsNavigation(createLocalSearch());
+const navigation = createSettingsNavigation(createLocalSearch(), { updates: false });
 const queries = ["reco", "record", "Theme", "city", "purge", "permission", "history", "display", "TIME-zone"];
 const unavailableHere = new Set(["microsoft-collection", "microsoft-collection-state", "microsoft-collect-now", "global-collection"]);
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");

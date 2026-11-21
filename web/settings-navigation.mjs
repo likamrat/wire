@@ -1,11 +1,12 @@
 // Only fixed setting metadata is searchable here, never local paths or evidence.
-export function createSettingsNavigation(search) {
+export function createSettingsNavigation(search, { updates = true } = {}) {
     const categories = [
         { id: "connection", title: "Collection", heading: "connectionTitle" },
         { id: "source-access", title: "Source access", heading: "sourceAccessTitle" },
         { id: "themes", title: "Themes", heading: "themesTitle" },
         { id: "regional", title: "Regional", heading: "regionalTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
+        ...(updates ? [{ id: "updates", title: "Updates", heading: "appUpdatesTitle" }] : []),
         { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle", headerEntry: true },
     ];
     const sectionAliases = {
@@ -19,6 +20,10 @@ export function createSettingsNavigation(search) {
     };
     const settingAliases = { advanced: "collection-details" };
     const entries = [
+        ...(updates ? [
+            { id: "app-update", section: "updates", title: "Check for WIRE updates", context: "Check for a newer build from main. Checking does not install it.", synonyms: "version application upgrade manual release", target: "appUpdateCheck" },
+            { id: "automatic-updates", section: "updates", title: "Automatic update checks", context: "Check on opening WIRE and daily while it stays open. Installing always requires choosing Update.", synonyms: "preferences enable disable scheduled", target: "appUpdateAuto" },
+        ] : []),
         { id: "assessment-evidence", section: "privacy", title: "Save Copilot replies locally", context: "Keep recorded replies with your activity. Turning this off deletes saved response text and dependent retained annotations, not saved reports.", synonyms: "optional evidence answer response capture consent permission revoke", target: "assessmentSetupTitle" },
         { id: "delete-activity", section: "privacy", title: "Review deletion", context: "Preview and permanently delete all collected records or a date range. Saved reports and Copilot sources stay unchanged.", synonyms: "delete collected activity clear remove reset purge records data", target: "deleteActivity" },
         { id: "recollect-activity", section: "privacy", title: "Read history again", context: "Choose chats to preview available history from approved sources. Only explicit confirmation starts recollection.", synonyms: "recollect activity regenerate reread restore deleted history records recovery", target: "recollectActivity" },

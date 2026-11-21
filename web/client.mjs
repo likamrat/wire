@@ -176,7 +176,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
-    const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch);
+    let appUpdate;
+    const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch, { updates: Boolean(assessmentFactories.mountAppUpdate) });
     const paths = assessmentFactories.createPagePaths();
     const currentAddress = () => paths.legacy(location.hash) ? location.hash : location.pathname + location.search;
     let linkTargets = new WeakMap(), initialRoute = null;
@@ -2905,6 +2906,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else history.pushState(navigationState, "", url);
     }
     function navigate(next, replace = false, options = {}) {
+        if (appUpdate?.locked()) return false;
         if (clearingAccess || !api.publicationToken()) return false;
         next = canonicalRoute(next);
         if (!options.restorePosition && browseName(workspaceState.route) === "analyze" && browseName(next) === "analyze")
@@ -6966,6 +6968,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportPreset = null;
         forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null;
         reportScope = "selected";
+        reportAuthors = authorship.selection();
+        reportExperience?.resetDeskFocus();
         reportEntry = null;
         periodReport = null; periodReportInvalid = false;
         selected.clear();
@@ -9197,12 +9201,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         let pollGeneration = collectionPollGeneration;
         const current = () => readGeneration === collectionReadGeneration && pollGeneration === collectionPollGeneration;
         try {
-            if (collectionBusy || refreshWorking()) return;
+            if (appUpdate?.locked() || collectionBusy || refreshWorking()) return;
             if (exportWriting ? !Number.isSafeInteger(draft.contextRevision()) : !ensureCurrentTime()) return;
             // A visibility-triggered read can overtake a pending poll without changing evidence revision.
             pollGeneration = ++collectionPollGeneration;
             const status = await readCollectionStatus({}, current);
-            if (!api.isCurrent(publication) || !current() || collectionBusy || refreshWorking()) return;
+            if (appUpdate?.locked() || !api.isCurrent(publication) || !current() || collectionBusy || refreshWorking()) return;
             observeNativeReaderStatus(status);
             updateRequestReportActions();
             savedArtifactUI?.observeEligibility(status.revision);
@@ -10430,6 +10434,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.scrollIntoView({ block: "start" });
     });
     function traverse() {
+        if (appUpdate?.locked()) { rememberRoute(workspaceState.route, true); return; }
         initialRoute = null;
         if (!api.publicationToken()) {
             workspaceState.route = readRoute(currentAddress(), null);
@@ -10737,7 +10742,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         clearTimeout(pollTimer);
         $("workspace").hidden = true;
         contextSidebar.hidden = true;
-        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer)")) dialog.style.visibility = "hidden";
+        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer,#appUpdateFence)")) dialog.style.visibility = "hidden";
         if (contextOwner?.identity === "report-setup" && contextOwner.footer) $("contextSidebarParking").append(contextOwner.footer);
         const roots = [...privateContentIds.map($), savedInspector?.body, savedInspector?.footer].filter(Boolean);
         const privateSelects = ["sourceFilter", "projectFilter", "chatFilter", "toolFilter", "serviceFilter", "serviceAssociationFilter", "outcomeFilter"].map($);
@@ -10873,7 +10878,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         homeCount.textContent = homeUnit.textContent = "";
         $("savedLibraryTitle").textContent = "Saved reports";
-        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer)")) if (dialog.open) dialog.close();
+        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer,#appUpdateFence)")) if (dialog.open) dialog.close();
         document.body.removeAttribute("data-context-docked");
         selectControls?.withdrawAccess();
         syncSaveLocks();
@@ -11042,4 +11047,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         pollTimer = setTimeout(pollCollection, 250);
     });
     api.startAccess();
+    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, blocked() {
+        const report = reportJourney?.snapshot();
+        if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
+            return "Save or cancel your Settings changes and resolve any unconfirmed changes before updating.";
+        }
+        if (exportWriting || pendingSaveOwner || reportPreparing || report?.saveUnconfirmed || report?.phase === "scanning"
+            || reportComparisonUI?.hasUnfinishedChange() || !report?.completed && (report?.hasPreview || reportPreset || selected.size
+                || periodReport || reportBaseExplicit || reportRebuildFrom || reportDates.range !== "7" || reportExperience?.hasDeskDraft() || draft.hasUnsavedChoices()
+                || reportAuthors.length !== authorship.selection().length)) {
+            return "Finish or discard your report draft and resolve any unconfirmed save before updating.";
+        }
+        const reread = recollectionUI?.snapshot(), refresh = fresh.snapshot();
+        if (collectionSettings?.isBusy() || sourceSettings?.isBusy() || collectionSettings?.hasUnconfirmedChange()
+            || sourceSettings?.hasUnconfirmedChange() || accountUI?.hasUnfinishedChange() || savedArtifactUI?.hasUnfinishedChange()
+            || recorderUI?.hasUnfinishedChange() || deletionUI?.hasUnfinishedChange() || reread?.busy || reread?.needsReceipt || reread?.hasReceipt
+            || nativeCollectIntent || sourcePending || githubRecoveryPending || refresh.sourceUnknown || refresh.sourceBlocked || artifactRefreshRequired || collection?.assessment?.pendingCleanup
+            || refreshWorking() || fresh.busy() || workspaceState.loading || collectionBusy) {
+            return "Finish the current operation or check its original result before updating.";
+        }
+        if (workspaceState.dateDraft || document.querySelector("dialog[open]:not(#appUpdateFence),.select-popup:not([hidden])")) {
+            return "Finish the open edit or dialog before updating.";
+        }
+        return "";
+    } });
 }

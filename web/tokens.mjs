@@ -65,6 +65,7 @@ export const tokens = `
 
 // Screen surfaces are separate from the tokens embedded in saved reports and PDFs.
 export const screenLight = `
+ --update-fill:#007458;--update-ink:#ffffff;
  --report-sheet:#ffffff;--report-note:#f5f8f8;
  --page:#f0f3f3;--paper:#ffffff;--canvas:#f5f8f8;--hover:#edf2f2;
  --navigation-paper:var(--page);--context-paper:var(--paper);--floating-paper:var(--paper);
@@ -97,6 +98,7 @@ export const screenLight = `
  --focus:#28454e;--scrim:#000000a6;
 `;
 export const screenDark = `
+ --update-fill:#10b981;--update-ink:#0f111a;
  --report-sheet:#1c2629;--report-note:#222e32;
  --page:#141a1c;--paper:#1c2629;--canvas:#222e32;--hover:#293a40;
  --navigation-paper:var(--page);--context-paper:#222e32;--floating-paper:#222e32;

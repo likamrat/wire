@@ -19,9 +19,43 @@ npm start
 Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
 that terminal to stop WIRE; closing the browser tab leaves it running.
 
-To update an existing checkout, stop its WIRE process, pull the changes, run
-`npm ci`, rebuild with `npm run build` and restart. If the port is already in use, check whether WIRE is
-already running rather than stopping an unfamiliar process.
+### Updating WIRE
+
+For an older version without **Settings > Updates**, finish open work, stop
+only its own WIRE process, then run `git pull --ff-only`, `npm ci`,
+`npm run build` and `npm start` in the **same clean main clone** with the same
+OS user, data-folder override and port. A conflict is a reason to stop, not
+to rebase or discard someone’s edits.
+
+After that, `npm start` manages one runtime. WIRE can check the official
+repository on opening and daily while in use. A manual **Check for updates**
+works with automatic checks off. Only **Update** prepares and replaces the
+app. Checking may fetch Git objects, including documentation; documentation,
+tests and CI alone do not create an app-update notice. Git uses the current
+user's repository access; no source approval or Copilot sign-in is requested.
+
+Finish any report, close other WIRE panels, and resolve unconfirmed saves or
+deletions before updating. Keep the terminal open while WIRE prepares its
+replacement. App versions and the activation record stay inside this clone’s
+Git directory, separate from evidence. A failed check is not “up to date.”
+On restart, return to the same address and reopen an old canvas if needed.
+The updater never restores a previous copy of your store or takes over a port.
+If it cannot verify a clean shutdown or compatible reader, leave the store and
+lock intact and inspect the original launcher error.
+
+Contributor worktrees, forks, modified clones and special development launch
+modes stay manual. Do not use a new data folder to resolve an update problem.
+When adding a document consumed at runtime, list its tracked path in
+`lib/update-runtime-docs.json` so changes to that document qualify. An
+incompatible store, launcher or canvas change must update the compatibility
+contract rather than silently treating older readers as compatible.
+
+`npm run test:update-runtime` builds and updates a disposable clone using
+the platform's own Git, Node and npm, then reopens a saved report at the
+original address and verifies its bytes. It does not update your installation.
+With the project's Playwright Chromium installed, set `WIRE_UPDATE_BROWSER=1`
+to exercise the green **Update** button through restart and verify that the
+reloaded browser is executing the new build.
 
 ## Windows, WSL and Linux
 

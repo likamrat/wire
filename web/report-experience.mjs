@@ -293,6 +293,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     return {
         sync, openCalendar, showSelection, selectionReturn,
+        hasDeskDraft: () => deskFocus !== "all" || calendar.matches(":popover-open"),
+        resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
             closeOptions();

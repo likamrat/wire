@@ -20,6 +20,19 @@ export const settingsMarkup = `
   <a id="firstCollectionActivity" class="button-link" href="/" data-settings-link hidden>View activity</a>
   <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
+  <section class="settings-section" data-settings-section="updates" aria-labelledby="appUpdatesTitle" hidden>
+    <h2 id="appUpdatesTitle" tabindex="-1">Updates</h2>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>WIRE version</h3>
+      <p id="appUpdateStatus" role="status">Reading update status…</p>
+      <p id="appUpdateVersion" hidden></p></div>
+      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
+        <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
+    </div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3 id="appUpdateAutoLabel">Automatic update checks</h3>
+      <p id="appUpdateAutoHelp">Check when WIRE opens and daily while it stays open. Updates are never installed automatically.</p></div>
+      <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="select-toggle" aria-hidden="true"></span></label>
+    </div>
+  </section>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
     <section id="assessmentSetupTitle" class="settings-reply-row" aria-label="Recorded replies" tabindex="-1">
@@ -891,6 +904,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         hasNativeConfiguration: () => nativeView()?.present === true,
         nativeConfigurationIntent: () => nativeView()?.intent ?? null,
         hasDraft: () => Boolean(safeDraft?.changed) || dirty() || editing || nativeView()?.stale === true, isBusy: () => busy,
+        hasUnconfirmedChange: () => uncertain || Boolean(pendingOperation) || checking,
         explain: id => current(capture()) ? explanations.get(id) || "" : "",
         canRefresh() {
             if (!current(capture())) return false;

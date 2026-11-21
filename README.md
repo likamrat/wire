@@ -79,6 +79,11 @@ npm start
 The default browser address is `localhost:4000`. Keep the terminal running
 while you use WIRE.
 
+When WIRE offers **Update**, choose it to restart this installation at the
+same address with your settings and reports. **Dismiss** hides that build's
+notice; **Settings > Updates** lets you check or install it later. Older
+installs need [one update in the same clone](docs/development.md#updating-wire).
+
 ### Connect your history
 
 WIRE prompts you to connect on first use. Choose **Review and connect**, check

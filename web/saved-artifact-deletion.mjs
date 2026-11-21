@@ -327,6 +327,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     }
     return {
         open, qualify, eligible, observeEligibility, clearEligibility,
+        hasUnfinishedChange: () => busy() || phase === "unknown" || sessionStorage.getItem(receiptKey) !== null,
         withdrawAccess,
         resumeAccess() {
             const access = publication();

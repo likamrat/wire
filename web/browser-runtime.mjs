@@ -80,6 +80,7 @@ import { createNativeActivityPresentation } from "./native-activity.mjs";
 import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
 import { mountFirstConnection } from "./first-connection.mjs";
+import { mountAppUpdate } from "./app-update.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
 
 function factories() {
@@ -116,7 +117,7 @@ function factories() {
     };
 }
 
-export function mountBrowser(extraFactories = {}, renderer = "bundled") {
+export function mountBrowser(extraFactories = {}, renderer = "bundled", loadedEntry) {
     const element = document.getElementById("wireBootstrap");
     const bootstrap = JSON.parse(element?.textContent ?? "null");
     const appearance = globalThis.__wireAppearance;
@@ -136,6 +137,7 @@ export function mountBrowser(extraFactories = {}, renderer = "bundled") {
         createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess,
         createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation,
         createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion,
-        { ...factories(), ...extraFactories }, createPromptAuthorship, createFilterState, createAnalysisSlice,
+        { ...factories(), mountAppUpdate: options => mountAppUpdate({ ...options, loadedEntry, runtimeId: bootstrap.accessBootstrap?.runtimeId }),
+            ...extraFactories }, createPromptAuthorship, createFilterState, createAnalysisSlice,
         createActivityProjection, createRequestContext, createCallInvestigation, bootstrap.accessBootstrap);
 }
