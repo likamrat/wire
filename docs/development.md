@@ -428,6 +428,10 @@ mounted chart nodes, not reformat dates or rebuild the evidence scene.
 Both latest-date and earlier-date anchors must survive reversal; deliberate
 horizontal scrolling during the glide must replace the old anchor.
 Run it with `node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
+For a physical divider-drag sweep, build first and run
+`node --test tests/sidebar-resize.qualification.mjs`. It exercises all primary
+destinations, report and comparison readers, Settings sections and the modal
+boundaries with a disposable store and native scrollbars.
 Set `WIRE_TRENDS_PERFORMANCE` to an owned JSON file for measurements; optional
 `WIRE_TRENDS_PROFILE` writes the 30-day Chromium CPU profile. Keep these private.
 Timing uses invented activity, disabled collection timers and the unchanged

@@ -94,7 +94,8 @@ export function mountSidebarNavigation(ux, preference) {
     divider.setAttribute("aria-controls", rail.id);
     rail.append(divider);
     const minWidth = () => $("wireAccountEntry").hidden ? 216 : 248;
-    const maxWidth = () => Math.min(520, Math.floor(innerWidth * .45));
+    // Match the CSS viewport after space is reserved for a native scrollbar.
+    const maxWidth = () => Math.min(520, Math.floor(document.documentElement.getBoundingClientRect().width * .45));
     const bounded = value => Math.max(minWidth(), Math.min(maxWidth(), Math.round(value)));
     function measure() {
         document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
