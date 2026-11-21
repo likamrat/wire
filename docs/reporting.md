@@ -1,8 +1,8 @@
 # Create and compare reports
 
 A report preserves selected interactions and their recorded Work IQ calls.
-Use it to explain repeated errors, operations and working patterns, then give
-product teams examples from which they can create eval cases. WIRE does not
+Use it to explain repeated errors, operations and working patterns. The recorded
+examples can also serve as a starting point for eval cases. WIRE does not
 generate evals or rate answer quality.
 
 Go to [report choices](#open-a-report), [text and privacy options](#read-and-adjust),
@@ -13,16 +13,15 @@ Contributors changing report behavior should also read the
 ## Open a report
 
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
-to search the library. Under **New report**, choose what text the recipient
-will see, then check **Report focus**, **Activity period**, **Activity** and
+to search the library. Under **New report**, choose which chat details to
+include, then check **Report focus**, **Activity period**, **Activity** and
 **Files to save**.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
 **Prepare preview** opens a right-side drawer without writing files. Check the
 report there, then choose **Save report** to write the selected files locally.
-If you kept chat details, the confirmation names those formats. Saving does
-not send the files to the product group.
+If you kept chat details, the confirmation names those formats. Nothing is sent.
 
 | Report | Includes |
 | --- | --- |

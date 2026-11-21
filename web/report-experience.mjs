@@ -254,7 +254,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const privacyHost = value.prepared ? privacy : treatment;
         if (promptOptions.parentElement !== privacyHost) privacyHost.prepend(promptOptions);
         legend.classList.toggle("visually-hidden", value.prepared);
-        legend.textContent = value.prepared ? "Report text" : "What will the product group see?";
+        legend.textContent = value.prepared ? "Report text" : "Chat details in this report";
         if (value.prepared) {
             if (dateButton.parentElement !== choices) choices.prepend(dateButton);
             if (formatGroup.parentElement !== choices) dateButton.after(formatGroup);
@@ -452,7 +452,7 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             const files = formats.join(", ");
             copy.textContent = `${files || "Your saved files"} will include original chat wording. Anyone you share the files with could read names, email addresses, project details or other sensitive information.`;
             const detail = doc.createElement("p"); detail.className = "muted";
-            detail.textContent = "Save writes on this device. It does not send the files to the product group. Detected passwords and other credentials are removed.";
+            detail.textContent = "Saving creates local files. Nothing is sent. Detected passwords and other credentials are removed.";
             const actions = doc.createElement("div"); actions.className = "report-warning-actions";
             for (const [choice, label, cls] of [["masked", "Hide details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
                 const button = doc.createElement("button"); button.type = "button"; button.className = cls;
