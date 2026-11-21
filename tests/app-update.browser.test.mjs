@@ -5,9 +5,11 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { startServer } from "../lib/server.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, revealAnalyzeRecords, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, exportCatalogFor, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, revealAnalyzeRecords, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 // No listener or real updater. Serve the normal built module and shell solely via intercepted requests.
@@ -283,6 +285,39 @@ test("a clean managed tab retains its capability for bfcache and releases only i
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
     await expect.poll(() => releases).toEqual([capability]);
+});
+
+test("manual reload releases a clean page without releasing a suspended page or an uncertain operation", async t => {
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, [fixture("manual-departure")]);
+    t.after(async () => { for (const fn of cleanup.reverse()) await fn(); });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, frontend: "react" });
+    cleanup.push(() => runtime.close());
+    const responses = [];
+    runtime.server.on("request", (req, res) => {
+        if (req.url === "/api/session/release" || req.url === "/api/app-update/release-panel") res.on("finish", () => responses.push([req.url, res.statusCode]));
+    });
+    const browser = await chromium.launch(); cleanup.push(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(runtime.url + "settings");
+    await expect(page.locator("#appUpdateManual")).toBeVisible();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await expect(page.locator("#appUpdateManual")).toBeVisible();
+    assert.deepEqual(responses, []);
+    await page.reload();
+    await expect.poll(() => responses).toEqual([["/api/session/release", 200]]);
+    await expect(page.locator("#appUpdateManual")).toBeVisible();
+    const pendingPage = await browser.newPage();
+    await pendingPage.addInitScript(() => sessionStorage.setItem("workiq-evidence.source-check.v1", "pending"));
+    await pendingPage.goto(runtime.url + "settings");
+    await expect(pendingPage.locator("#appUpdateManual")).toBeVisible();
+    await expect(pendingPage.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await pendingPage.reload();
+    await expect(pendingPage.locator("#appUpdateManual")).toBeVisible();
+    assert.deepEqual(responses, [["/api/session/release", 200]]);
 });
 
 test("single activation stays fenced through transport loss until the authenticated status, runtime, health and executed target asset agree", async t => {

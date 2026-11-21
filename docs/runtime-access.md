@@ -34,7 +34,7 @@ grant backend authority.
 | `POST /api/session` | Independent-client handshake; exactly `{}` and `X-Wire-Session-Protocol: 1` |
 | Invalid/missing/duplicate protocol | 409 `WIRE_CLIENT_UPDATE_REQUIRED`, before allocating authority |
 | `/health` | Readiness check without allocating a panel |
-| `/api/session/release` | Release the API helper's own capability after its work/recovery ends |
+| `/api/session/release` | Release the caller's own capability after its work/recovery ends |
 
 The handshake returns exactly `{capability,runtimeId,accessBootstrap}` with
 matching runtime IDs. The descriptor is immutable for that runtime, with
@@ -44,7 +44,11 @@ a missing or failed watch. Enforced renewal cannot silently downgrade.
 
 Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
 random capabilities, TTL and the 128-panel limit still apply. Each page GET
-allocates a panel; closing a tab does not release authority before its TTL.
+allocates a panel, including on reload. On a clean departure, a verified
+browser page releases only its original panel. Suspended pages and pages
+with unfinished work do not release it. If the browser cannot deliver the
+release, the ordinary session expires after inactivity; expiry does not
+clear a managed installation's update interlock.
 There is no general HTML fallback for other paths, files, APIs or methods.
 The localhost spelling is only an entry redirect for root navigation; fragments
 stay with the browser. It is not an alternate API/write origin. Requests with

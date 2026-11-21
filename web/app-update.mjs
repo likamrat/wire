@@ -80,13 +80,13 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         clearTimeout(scheduleTimer); render();
         try {
             state = await post(action, fields);
-            panelVerified = generation === lifetime && state.supported;
+            panelVerified = generation === lifetime;
             success = result = "";
         } catch (error) {
             // Reconcile preferences/dismissals by reading; never repeat a lost command.
             state = null;
             panelVerified = false;
-            if (action !== "status") try { state = await post("status"); panelVerified = generation === lifetime && state.supported; } catch { /* No usable current status. */ }
+            if (action !== "status") try { state = await post("status"); panelVerified = generation === lifetime; } catch { /* No usable current status. */ }
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
@@ -213,7 +213,10 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         clearTimeout(scheduleTimer);
         const unfinished = Boolean(busy || expected || reason());
         if (event.persisted) { unfinishedAtSuspension ||= unfinished; panelVerified = false; return; }
-        if (panelVerified && uuid(runtimeId) && storageAvailable && !unfinished && !unfinishedAtSuspension) void fetch("/api/app-update/release-panel", {
+        if (!panelVerified || !state || !uuid(runtimeId) || !storageAvailable || unfinished || unfinishedAtSuspension) return;
+        // A manual installation has no updater interlock to release.
+        const releasePath = state.supported ? "/api/app-update/release-panel" : "/api/session/release";
+        void fetch(releasePath, {
             ...fixed, method: "POST", keepalive: true, body: "{}", headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
         }).catch(() => {});
     }, true);
