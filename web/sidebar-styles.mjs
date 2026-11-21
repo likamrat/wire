@@ -55,10 +55,13 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gu
 @supports (bottom:anchor(top)) {
  .wire-feedback-panel {position-anchor:--wire-feedback;inset:auto auto calc(anchor(top) + 6px) clamp(8px,anchor(left),calc(100vw - min(22rem,100vw - 16px) - 8px));margin:0;max-height:calc(anchor(top) - 14px)}
 }
-.wire-feedback-panel label {display:block;margin-bottom:8px;font-weight:var(--weight-strong)}
-.wire-feedback-panel textarea {box-sizing:border-box;display:block;width:100%;min-height:6.5em;padding:10px 12px;resize:vertical;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--control);border-radius:var(--radius-control)}
-.wire-feedback-panel textarea:focus {outline:2px solid var(--focus);outline-offset:-1px}
-.wire-feedback-panel textarea::placeholder {color:var(--muted);opacity:1}
+.wire-feedback-panel h2 {margin:0 0 12px;font-size:var(--type-body);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
+.wire-feedback-panel label {display:block;margin:10px 0 4px;font-weight:var(--weight-medium)}
+.wire-feedback-panel label span {font-weight:var(--weight-regular);color:var(--muted)}
+.wire-feedback-panel :is(input,textarea) {box-sizing:border-box;display:block;width:100%;padding:8px 10px;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--control);border-radius:var(--radius-control)}
+.wire-feedback-panel textarea {min-height:6.5em;resize:vertical}
+.wire-feedback-panel :is(input,textarea):focus {outline:2px solid var(--focus);outline-offset:-1px}
+.wire-feedback-panel :is(input,textarea)::placeholder {color:var(--muted);opacity:1}
 .wire-feedback-panel p {margin:10px 0;color:var(--muted)}
 .wire-feedback-actions {display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .wire-feedback-actions button {min-height:36px}

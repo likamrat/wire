@@ -65,18 +65,21 @@ async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
 }
 
 for (const frontend of ["bundled", "react"])
-test(`${frontend}: sidebar feedback opens only a user-written GitHub draft`, async t => {
+test(`${frontend}: sidebar feedback prefills the GitHub new issue title and optional description`, async t => {
     const { page } = await setup(t, { frontend });
     const feedback = page.getByRole("button", { name: "Feedback", exact: true });
     const help = page.getByRole("link", { name: "Help", exact: true });
     const panel = page.getByRole("dialog", { name: "Report a bug or suggest a feature" });
-    const field = panel.getByRole("textbox"), draft = panel.getByRole("button", { name: "Open GitHub draft" });
+    const title = panel.getByRole("textbox", { name: "Title", exact: true });
+    const description = panel.getByRole("textbox", { name: "Description (optional)" });
+    const openIssue = panel.getByRole("button", { name: "Open on GitHub" });
+    const summary = "Remember filters & dates #2";
     const example = "Please keep the filter visible.\nA&B #1 + 👋";
     const opens = [];
     // Fulfill the new tab's navigation locally. No request reaches GitHub.
     await page.context().route(url => url.hostname === "github.com", route => {
         opens.push(route.request());
-        return route.fulfill({ contentType: "text/html", body: "<title>Intercepted issue draft</title>" });
+        return route.fulfill({ contentType: "text/html", body: "<title>Intercepted new issue</title>" });
     });
     await expect(help).toHaveCount(1);
     await expect(page.locator("#navigationFooter #wireAccountTrigger img")).toBeVisible();
@@ -88,32 +91,34 @@ test(`${frontend}: sidebar feedback opens only a user-written GitHub draft`, asy
             await page.locator("#navigationToggle").click();
         }
         await feedback.focus(); await page.keyboard.press("Enter");
-        await expect(field).toBeFocused(); await expect(draft).toBeDisabled();
+        await expect(title).toBeFocused(); await expect(openIssue).toBeDisabled();
         const bounds = await panel.boundingBox(), anchor = await feedback.boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width + 1);
         assert.ok(Math.abs(anchor.y - bounds.y - bounds.height - 6) < 2, JSON.stringify({ bounds, anchor }));
-        await field.fill("   "); await expect(draft).toBeDisabled();
-        await field.fill(example); await expect(draft).toBeEnabled();
-        if (layout === "expanded") {
-            const [tab] = await Promise.all([page.context().waitForEvent("page"), draft.click()]);
-            await expect(tab).toHaveTitle("Intercepted issue draft");
+        await title.fill("   "); await expect(openIssue).toBeDisabled();
+        if (layout === "expanded") await description.fill(example);
+        await expect(openIssue).toBeDisabled();
+        await title.fill(summary); await expect(openIssue).toBeEnabled();
+        if (layout !== "drawer") {
+            const [tab] = await Promise.all([page.context().waitForEvent("page"), openIssue.click()]);
+            await expect(tab).toHaveTitle("Intercepted new issue");
             const url = new URL(tab.url());
             assert.equal(url.origin + url.pathname, "https://github.com/likamrat/wire/issues/new");
-            assert.deepEqual([...url.searchParams], [["body", example]]);
-            assert.equal(opens[0].method(), "GET"); assert.equal(opens[0].headers().referer, undefined);
+            assert.deepEqual([...url.searchParams], layout === "expanded" ? [["title", summary], ["body", example]] : [["title", summary]]);
+            assert.equal(opens.at(-1).method(), "GET"); assert.equal(opens.at(-1).headers().referer, undefined);
             assert.equal(await tab.evaluate(() => window.opener === null), true);
             await tab.close();
             await panel.getByRole("button", { name: "Cancel" }).click();
         } else await page.keyboard.press("Escape");
         await expect(panel).toBeHidden(); await expect(feedback).toBeFocused();
-        await page.keyboard.press("Space"); await expect(field).toHaveValue("");
+        await page.keyboard.press("Space"); await expect(title).toHaveValue(""); await expect(description).toHaveValue("");
         await page.keyboard.press("Escape"); await expect(feedback).toBeFocused();
         if (layout === "drawer") {
             await expect(page.locator("#navigationDrawer")).toBeVisible();
             await page.keyboard.press("Escape"); await expect(page.locator("#navigationToggle")).toBeFocused();
         }
     }
-    assert.equal(opens.length, 1);
+    assert.equal(opens.length, 2);
 });
 
 test("the left divider resizes live, remembers the release and leaves the narrow drawer alone", async t => {

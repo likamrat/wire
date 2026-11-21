@@ -631,9 +631,10 @@ metadata and navigates; it never clicks an action or reads private path values.
 
 The sidebar footer pairs the account avatar and name with Help, Feedback and
 Settings icons. The icons have accessible names and on-demand tooltips. Help
-opens the existing Help destination. Feedback opens a field for a WIRE bug or
-feature suggestion, not a rating of a recorded interaction. Only the typed text
-goes to a GitHub issue draft; posting is a separate action on GitHub. The
+opens the existing Help destination. Feedback asks for a required title and
+optional description for a WIRE bug or feature suggestion, not a rating of a
+recorded interaction. **Open on GitHub** prefills the same two fields on the
+new issue form; posting is a separate action on GitHub. The
 account menu shows the complete bound identity even if the name is clipped.
 Keep static explanations of counts and recorded tool outcomes there. Coverage
 warnings belong with the affected activity and link to Collection status.

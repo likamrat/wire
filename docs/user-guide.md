@@ -411,8 +411,8 @@ launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
 
 Use **Feedback** beside Help to report a WIRE bug or suggest a feature.
-**Open GitHub draft** opens your text for review. Nothing is posted unless
-you submit the public issue on GitHub.
+Enter a title and, optionally, a description. **Open on GitHub** fills in
+those fields on WIRE's new issue form. The issue is public only after you submit it.
 
 In **Privacy & saved data**, **Review deletion** previews an exact activity
 scope before separate confirmation. **Read history again > Choose chats**

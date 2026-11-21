@@ -273,13 +273,16 @@ export function mountSidebarNavigation(ux, preference) {
     panel.popover = "auto";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-labelledby", "wireFeedbackTitle");
-    panel.innerHTML = `<label id="wireFeedbackTitle" for="wireFeedbackText">Report a bug or suggest a feature</label>
-        <textarea id="wireFeedbackText" placeholder="What feedback would you like to share?" aria-describedby="wireFeedbackNotice" autofocus></textarea>
-        <p id="wireFeedbackNotice">Review your draft on GitHub before posting a public issue.</p>
+    panel.innerHTML = `<h2 id="wireFeedbackTitle">Report a bug or suggest a feature</h2>
+        <label for="wireIssueTitle">Title</label>
+        <input id="wireIssueTitle" type="text" required maxlength="256" placeholder="Summarize the issue" autofocus>
+        <label for="wireFeedbackText">Description <span>(optional)</span></label>
+        <textarea id="wireFeedbackText" placeholder="Add details about the bug or feature"></textarea>
+        <p id="wireFeedbackNotice">Review on GitHub. The issue is public only after you submit it.</p>
         <p id="wireFeedbackError" role="alert" hidden></p>
-        <div class="wire-feedback-actions"><button type="button" id="wireFeedbackCancel">Cancel</button><button type="button" id="wireFeedbackDraft" class="primary" disabled>Open GitHub draft</button></div>`;
+        <div class="wire-feedback-actions"><button type="button" id="wireFeedbackCancel">Cancel</button><button type="button" id="wireFeedbackOpen" class="primary" aria-describedby="wireFeedbackNotice" disabled>Open on GitHub</button></div>`;
     feedback.parentElement.after(panel);
-    const field = $("wireFeedbackText"), draft = $("wireFeedbackDraft"), error = $("wireFeedbackError");
+    const title = $("wireIssueTitle"), description = $("wireFeedbackText"), openIssue = $("wireFeedbackOpen"), error = $("wireFeedbackError");
     let toggling = false;
     for (const node of content.querySelectorAll(".footer-utilities > *")) {
         ux.tooltip(node, () => !toggling && !panel.matches(":popover-open") ? node.getAttribute("aria-label") : "", {
@@ -290,24 +293,25 @@ export function mountSidebarNavigation(ux, preference) {
         toggling = true;
         ux.hideTooltip();
         if (event.newState === "closed") {
-            field.value = "";
-            draft.disabled = true;
+            title.value = description.value = "";
+            openIssue.disabled = true;
             error.hidden = true;
         }
     });
     panel.addEventListener("toggle", () => { toggling = false; });
-    field.addEventListener("input", () => { draft.disabled = !field.value.trim(); error.hidden = true; });
+    panel.addEventListener("input", () => { openIssue.disabled = !title.value.trim(); error.hidden = true; });
     $("wireFeedbackCancel").addEventListener("click", () => { panel.hidePopover(); ux.restoreFocus(feedback); });
-    draft.addEventListener("click", () => {
-        if (!field.value.trim()) return;
+    openIssue.addEventListener("click", () => {
+        if (!title.value.trim()) return;
         const url = new URL("https://github.com/likamrat/wire/issues/new");
-        url.searchParams.set("body", field.value);
+        url.searchParams.set("title", title.value.trim());
+        if (description.value) url.searchParams.set("body", description.value);
         if (url.href.length > 8192) {
-            error.textContent = "This draft is too long for a link. Shorten it, then add the rest on GitHub.";
+            error.textContent = "The description is too long for a link. Shorten it and add the rest on GitHub.";
             error.hidden = false;
             return;
         }
-        // Only the text deliberately shared here crosses the boundary. Keep the draft if the host blocks new tabs.
+        // Keep both fields intact if the host blocks opening a new tab.
         window.open(url.href, "_blank", "noopener,noreferrer");
     });
     preference.subscribe(state => {
