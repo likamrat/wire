@@ -172,6 +172,10 @@ For a directional row, keep its arrow visible and tint its surface or ink on
 hover/press; don't underline or embolden the label. Keyboard focus keeps an
 outline. The underline below an active section marks location; an underline
 inside prose or evidence identifies a link even without hovering.
+Keep hover paint close to its subject. Section links highlight just the icon
+and label; sidebar utilities highlight a small face around their glyph, not
+the full 44px target. A navigation or search result row can highlight its
+whole surface when activating anywhere on that row opens the same item.
 
 Use the same 44×26px track and round, sliding thumb for a binary setting.
 Keep its target at least 44px high. On/off is visible in position and

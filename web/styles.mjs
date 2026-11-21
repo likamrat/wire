@@ -19,7 +19,7 @@ import { promptAuthorStyles } from "./prompt-author-styles.mjs";
 import { analyzeLayoutStyles } from "./analyze-layout-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
-const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.wire-account-trigger,.wire-account-action,.filter-chip,.report-step,.report-tile-open,.report-calendar-day,.trends-option,.trends-highlight,.saved-report-title,.saved-report-summary,[role=tab],.comparison-pattern-title,.comparison-chart-mark,.time-column,.chart-row,.chart-data-action,.document-back,.document-view-mode,.prepared-file-choice,.saved-pdf-page-choice):not(:where(.wire-section-nav>*))";
+const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.wire-account-trigger,.wire-account-action,.filter-chip,.report-step,.report-tile-open,.report-calendar-day,.trends-option,.trends-highlight,.saved-report-title,.saved-report-summary,[role=tab],.comparison-pattern-title,.comparison-chart-mark,.time-column,.chart-row,.chart-data-action,.document-back,.document-view-mode,.prepared-file-choice,.saved-pdf-page-choice):not(:where(.wire-section-nav>*,.footer-utilities>*))";
 
 export const styles = `
 /* Shared screen presentation; saved output uses its own tokens. */
@@ -394,10 +394,12 @@ ${uxStyles}
 .wire-section-nav{display:flex;align-items:stretch;flex-wrap:wrap;gap:0 1.25rem;margin:0 0 1rem;border-bottom:1px solid var(--surface-divider)}
 #workspace:has(>#compareSections:not([hidden]),>#trendsView:not([hidden]),>#reportsView:not([hidden]) #reportSections:not([hidden]))>.page-heading{margin-bottom:var(--space-lg)}
 .wire-section-nav>:is(a,button){display:inline-flex;align-items:center;justify-content:flex-start;gap:.5em;min-height:44px;padding:.375em .25em;max-width:100%;box-sizing:border-box;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font:inherit;text-decoration:none}
-.wire-section-nav>:is(a,button)::before{display:none}
+.wire-section-nav>:is(a,button){position:relative;isolation:isolate}
+.wire-section-nav>:is(a,button)::before{content:"";position:absolute;inset:.55em 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--section-cue,transparent)}
 .wire-section-nav>:is(a,button)[aria-current=page]{border-bottom-color:var(--accent);color:var(--ink);font-weight:var(--weight-medium)}
-.wire-section-nav>:is(a,button):hover{background:var(--hover);color:var(--ink);text-decoration:none}
-.wire-section-nav>:is(a,button):active{background:var(--accent-pressed)}
+.wire-section-nav>:is(a,button):hover:not(:disabled){--section-cue:var(--hover);background:transparent;color:var(--ink);text-decoration:none}
+.wire-section-nav>:is(a,button):active:not(:disabled){--section-cue:var(--accent-pressed);background:transparent}
+.wire-section-nav>:is(a,button):not([aria-current=page]){border-bottom-color:transparent}
 .wire-section-nav>:is(a,button):focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 .wire-section-nav .wire-icon{width:1.125em;height:1.125em;flex:none}
 @media(forced-colors:active){.wire-section-nav>:is(a,button)[aria-current=page]{border-bottom-color:Highlight}}

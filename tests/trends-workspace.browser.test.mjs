@@ -59,6 +59,31 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
 }
+test("hovering a section or utility paints a compact face without reducing the hit target", async t => {
+    const { page } = await setup(t);
+    const guide = page.locator("#trends-section-guide");
+    for (const theme of ["light","dark"]) {
+        await chooseTheme(page,theme);
+        for (const control of [guide, page.locator("#openEvidenceHelp"), page.locator("#wireFeedback"), page.locator("#navigationCollapse")]) {
+            await control.hover();
+            await expect.poll(() => control.evaluate(node => getComputedStyle(node,"::before").backgroundColor),
+                {message: `Hover face on ${await control.getAttribute("id")}`}).not.toBe("rgba(0, 0, 0, 0)");
+            const geometry = await control.evaluate(node => {
+                const box = node.getBoundingClientRect(), face = getComputedStyle(node,"::before"), target = getComputedStyle(node);
+                return { height:box.height, faceHeight:parseFloat(face.height), faceInk:face.backgroundColor, surface:target.backgroundColor,
+                    outerHit:node.contains(document.elementFromPoint(box.left+box.width/2,box.bottom-2)) };
+            });
+            assert.ok(geometry.outerHit && geometry.height >= 44);
+            assert.equal(geometry.surface,"rgba(0, 0, 0, 0)");
+            assert.notEqual(geometry.faceInk,"rgba(0, 0, 0, 0)");
+            assert.ok(geometry.faceHeight >= 20 && geometry.faceHeight <= geometry.height-10, JSON.stringify(geometry));
+        }
+        await guide.focus(); await page.keyboard.press("Shift");
+        await expect(guide).toBeFocused(); await expect(guide).toHaveCSS("outline-style","solid");
+        await expect(page.locator("#trends-section-charts")).toHaveAttribute("aria-current","page");
+    }
+});
+
 test("first entry finds the latest retained week; an explicitly empty period stays empty and names the way back", async t => {
     const {page, index, reads} = await setup(t, false, { now: "2026-12-05T19:00:00Z" });
     const region = page.locator("#trendsView"), card = panelOf(page,"rhythm"), period = region.locator("#trendsPeriod");
