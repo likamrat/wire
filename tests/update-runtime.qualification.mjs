@@ -15,9 +15,10 @@ import { createExportController } from "../lib/export.mjs";
 const exec = promisify(execFile);
 const project = fileURLToPath(new URL("../", import.meta.url));
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 // Slow by design: install locked dependencies and build two full copies of WIRE,
 // not a replacement server or mock health endpoint. Use only a synthetic source.
-test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: 300000 }, async t => {
+test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
     const origin = path.join(temp, "origin"), root = path.join(temp, "installed"), store = path.join(temp, "store");
     const env = { ...process.env, COPILOT_HOME: path.join(temp, "empty-source"), GH_CONFIG_DIR: path.join(temp, "empty-gh"),
@@ -80,12 +81,12 @@ test("full WIRE clone updates on the original address and reopens the same saved
         cwd: root, env: { ...env, NODE_OPTIONS: "--import=" + pathToFileURL(hook).href }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
     app.stdout.on("data", data => { stdout += data; }); app.stderr.on("data", data => { stderr += data; });
     ended = new Promise(resolve => app.once("exit", resolve));
-    async function until(work, timeout = 90000) {
+    async function until(work, timeout = 90000, interval = 120) {
         const deadline = Date.now() + timeout;
         while (Date.now() < deadline) {
             assert.equal(app.exitCode, null, stderr);
             const value = await work(); if (value) return value;
-            await delay(120);
+            await delay(interval);
         }
         throw Error("Fixture timed out waiting for the expected running version: " + stderr);
     }
@@ -106,6 +107,35 @@ test("full WIRE clone updates on the original address and reopens the same saved
     assert.equal(original.build, base);
     await writeFile(path.join(origin, "lib", "update-proof-marker.mjs"), "export const marker = 'updated';\n");
     await git(origin, "add", "."); await git(origin, "commit", "-qm", "Fixture app change");
+    async function verifyPreserved() {
+        for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
+        assert.deepEqual(await readFile(cfgPath), configBytes);
+        assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    }
+    if (handsOn) {
+        const target = await git(origin, "rev-parse", "HEAD");
+        assert.ok((await update("status")).supported, "Use Windows or WSL for the hands-on update simulation.");
+        await update("preferences", { enabled: false });
+        await post("api/app-update/release-panel", {});
+        console.log(`Disposable update simulation: ${url}settings\nOpen this address in one tab. Choose Check for updates, then Update. `
+            + `You can dismiss the notice first. Expect build ${target.slice(0, 8)} at the same address. This copy waits 20 minutes.`);
+        await until(async () => {
+            let h; try { h = await health(); } catch { return false; }
+            return h.build === target && h.runtimeId !== original.runtimeId;
+        }, 20 * 60000, 1000);
+        cap = await getPage();
+        const state = await until(async () => {
+            const current = await update("status");
+            return current.phase === "current" && current.installed === target && current;
+        });
+        assert.equal(state.clientEntry, (await health()).clientEntry);
+        assert.ok(await post("api/report/open", { bundleId: bundle.bundleId }));
+        await verifyPreserved();
+        console.log(`Running build ${target.slice(0, 8)}. Saved report verified; files and paused source settings unchanged. `
+            + "You have two minutes to inspect Reports before this disposable copy closes.");
+        await delay(120000);
+        return;
+    }
     async function applyTip() {
         const before = await health(), next = await git(origin, "rev-parse", "HEAD");
         assert.equal((await update("check")).candidate, next);
@@ -152,7 +182,5 @@ test("full WIRE clone updates on the original address and reopens the same saved
             assert.equal(new URL(page.url()).origin, new URL(url).origin);
         } finally { await browser.close(); }
     }
-    for (const [file, digest] of reportHashes) assert.equal(hash(await readFile(file)), digest);
-    assert.deepEqual(await readFile(cfgPath), configBytes);
-    assert.equal(await git(root, "rev-parse", "HEAD"), base);
+    await verifyPreserved();
 });

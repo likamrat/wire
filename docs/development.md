@@ -67,6 +67,24 @@ With the project's Playwright Chromium installed, set `WIRE_UPDATE_BROWSER=1`
 to exercise the green **Update** button through restart and verify that the
 reloaded browser is executing the new build.
 
+To try the update yourself on Windows or WSL, set `WIRE_UPDATE_BROWSER=manual`
+and run `npm run test:update-runtime`. In PowerShell:
+
+```powershell
+$env:WIRE_UPDATE_BROWSER = 'manual'
+npm run test:update-runtime
+Remove-Item Env:WIRE_UPDATE_BROWSER
+```
+
+Open the printed **Disposable update simulation** address in one tab. In
+**Settings > General**, choose **Check for updates**. Checking does not
+install anything. Try **Dismiss**, then choose **Update** in General.
+When the same page says **WIRE updated**, compare its build to the one in
+the terminal. Open **Reports** to read the saved example. No GitHub release,
+account connection or change to your usual WIRE installation is involved.
+The simulation waits up to 20 minutes for the update, then stays open two
+minutes after verification so you can inspect the result.
+
 ## Windows, WSL and Linux
 
 Starting the server and accessing Copilot history are separate requirements:
