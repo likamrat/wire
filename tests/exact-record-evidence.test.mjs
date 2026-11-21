@@ -499,6 +499,42 @@ test("a remote task notice contributes a fenced reference, never a second source
     await assert.rejects(scan([remote, ...original], { state: { checkpointEvents: [{ alias: task }] } }), unverified);
 });
 
+function firstPromptHooks() {
+    const initial = change(p, { messageId: "77ff1beb-2d83-4edc-8c92-eec722366750", delivery: "idle",
+        transformedContent: `<current_datetime>${p.timestamp}</current_datetime>\n\n${p.data.content}` });
+    const cwd = "/invented", timestamp = Date.parse(p.timestamp);
+    const inputs = [
+        ["sessionStart", { source: "new", initialPrompt: p.data.content, sessionId, timestamp, cwd }],
+        ["userPromptSubmitted", { sessionId, prompt: p.data.content, timestamp, cwd }],
+        ["userPromptTransformed", { sessionId, prompt: p.data.content, transformedPrompt: initial.data.transformedContent, timestamp, cwd }],
+    ];
+    const events = [], starts = [];
+    for (const [hookType, input] of inputs) {
+        const hookInvocationId = `inv-${hookType}`, start = line(`begin-${hookType}`, "hook.start", { hookType, hookInvocationId, input }, 1, events.at(-1)?.id ?? boot.id);
+        events.push(start, line(`done-${hookType}`, "hook.end", { hookType, hookInvocationId, success: true, output: {} }, 1, start.id));
+        starts.push(start);
+    }
+    return { events, starts, prompt: { ...initial, parentId: events.at(-1).id } };
+}
+
+test("the recorded first-prompt hook sequence verifies the original and transformed copies without choosing an author", async () => {
+    const { events, starts, prompt } = firstPromptHooks(), request = change(a, { originatingMessageId: prompt.data.messageId });
+    const rows = [...events, prompt, request, s, e];
+    const baseline = await scan([{ ...prompt, parentId: boot.id }, request, s, e]);
+    assert.equal(baseline.records.length, 1);
+    const out = await scan(rows);
+    assert.deepEqual(out.records, baseline.records);
+    for (const bad of [
+        rows.with(4, change(starts[2], { input: { ...starts[2].data.input, transformedPrompt: "Different text." } })),
+        rows.with(1, change(events[1], { output: { suppress: true } })), rows.with(3, change(events[3], { success: false })),
+        rows.with(2, { ...starts[1], parentId: boot.id }), rows.with(4, change(starts[2], { input: { ...starts[2].data.input, sessionId: "another" } })),
+        rows.with(0, change(starts[0], { input: { ...starts[0].data.input, cwd: "api_key=invented_secret" } })),
+        rows.with(6, { ...prompt, parentId: events[3].id }), rows.slice(0, 6),
+    ]) await assert.rejects(scan(bad), unverified);
+    await assert.rejects(scan(rows, { state: { checkpointEvents: [{ alias: starts[1].data.hookInvocationId }] } }), unverified);
+    await assert.rejects(scan(rows, { state: { deletion: { events: [eventIdentity(sessionId, events[3].id)] } } }), unverified);
+});
+
 // Root timing metadata as consumed/produced by retainResponseTimingEvent (not an
 // assertion about other Copilot envelope versions). No parent link is inferred.
 const begin = line("boundary-open", "assistant.turn_start", { turnId: "other-turn" }, 5);

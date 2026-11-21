@@ -552,6 +552,11 @@ A prompt can also follow an independently verified session notice in the
 selected interval if the prompt names that immediately preceding event. This
 checks journal order only; the assistant must still name the prompt explicitly.
 
+For a first message, WIRE can verify the recorded session-start, prompt-submission
+and prompt-transformation hook pairs in order. All must belong to this source,
+finish successfully without output, and agree with the original message and
+its transformed copy. Hook text is not saved and does not establish authorship.
+
 If the original prompt exactly matches a single saved parent in this chat,
 WIRE can keep that parent and its recorded author, including an agent author,
 without writing a new prompt. The explicit request and call must agree on
