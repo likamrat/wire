@@ -51,7 +51,8 @@ async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
         await exports.confirm("visual-repair", preview.previewId, true);
     }
     browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" });
+    const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" });
+    const page = await browserContext.newPage();
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.route(url => url.origin !== origin, route => route.abort());
@@ -113,6 +114,41 @@ test(`${frontend}: sidebar feedback opens only a user-written GitHub draft`, asy
         }
     }
     assert.equal(opens.length, 1);
+});
+
+test("the left divider resizes live, remembers the release and leaves the narrow drawer alone", async t => {
+    const { page } = await setup(t, { frontend: "react" });
+    const divider = page.getByRole("separator", { name: "Navigation width" });
+    const rail = page.locator("#sidebar"), collapse = page.locator("#navigationCollapse");
+    const width = () => rail.evaluate(node => Math.round(node.getBoundingClientRect().width));
+    await expect(divider).toBeVisible({ timeout: 1000 });
+    const defaultWidth = await width();
+    const handle = await divider.boundingBox(), x = handle.x + handle.width / 2, y = handle.y + 120;
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 55, y);
+    await expect.poll(width).toBe(defaultWidth + 55);
+    await page.keyboard.press("Escape"); await page.mouse.up(); await expect.poll(width).toBe(defaultWidth);
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 96, y, { steps: 6 });
+    await expect.poll(width).toBe(defaultWidth + 96);
+    assert.ok(Math.abs((await page.locator("#main").boundingBox()).x - await width()) <= 1);
+    await page.mouse.up();
+    await collapse.click(); await expect(divider).toBeHidden();
+    await collapse.click(); await expect.poll(width).toBe(defaultWidth + 96);
+    await page.reload(); await expect(divider).toHaveAttribute("aria-valuenow", String(defaultWidth + 96));
+    const sibling = await page.context().newPage();
+    await sibling.goto(page.url());
+    const otherDivider = sibling.getByRole("separator", { name: "Navigation width" });
+    await expect(otherDivider).toHaveAttribute("aria-valuenow", String(defaultWidth + 96));
+    await divider.focus(); await page.keyboard.press("ArrowRight");
+    await expect.poll(width).toBe(defaultWidth + 112);
+    await expect(otherDivider).toHaveAttribute("aria-valuenow", String(defaultWidth + 112));
+    await sibling.close();
+    await page.keyboard.press("End"); const wide = await width();
+    await page.setViewportSize({ width: 760, height: 900 }); await expect.poll(width).toBeLessThan(wide);
+    await page.setViewportSize({ width: 390, height: 900 }); await expect(divider).toBeHidden();
+    await page.locator("#navigationToggle").click(); await expect(page.locator("#navigationDrawer")).toBeVisible();
+    await expect(divider).toBeHidden(); await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 1440, height: 1000 }); await expect.poll(width).toBe(wide);
+    await divider.dblclick(); await expect.poll(width).toBe(defaultWidth);
 });
 
 test("the loaded avatar keeps its horizontal position at collapse, reversal and settle", async t => {

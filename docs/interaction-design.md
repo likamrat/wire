@@ -661,6 +661,12 @@ sidebar motion. Its image and name stay mounted; fade and clip the
 copy with the moving footer rather than switching its grid to a centered
 alignment before the rail has moved. Reversals start at the painted position.
 
+The expanded desktop rail resizes from its right edge. Keep the divider quiet
+until hover, keyboard focus or drag. The header and workspace track the rail
+live; release saves the width and Escape cancels the drag. A smaller viewport
+limits the rail without replacing the chosen width. The mobile drawer does not
+inherit a desktop width.
+
 ### Saving preferences
 
 | Settings change | Commit boundary |

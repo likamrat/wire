@@ -394,6 +394,10 @@ default. This display profile does not control access to history. A neutral
 icon means the profile is unavailable, not that collection needs a different
 GitHub CLI login.
 
+Drag the sidebar's right edge to resize it. With the divider focused, use the
+left and right arrow keys. WIRE remembers your width in this browser;
+double-click the edge or press Enter on it to restore the default.
+
 Use **Help** at the bottom of the sidebar for the meaning of counts
 and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from

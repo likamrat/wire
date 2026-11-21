@@ -1,8 +1,24 @@
 export function initializeNavigationPreference() {
-    const key = "workiq-evidence.navigation";
+    const key = "workiq-evidence.navigation", widthKey = key + "-width";
     const root = document.documentElement, listeners = new Set();
     const valid = value => value === "expanded" || value === "collapsed";
-    let preference = "expanded", storage, storageUnavailable = false;
+    let preference = "expanded", width = null, storage, storageUnavailable = false;
+    const validWidth = value => Number.isInteger(value) && value >= 216 && value <= 520;
+    function readWidth(raw) {
+        if (raw === null) return null;
+        if (/^\d{3}$/.test(raw) && validWidth(Number(raw))) return Number(raw);
+        console.warn("Unrecognized navigation width. Using the default width.");
+        return null;
+    }
+    function paintWidth(value) {
+        if (value === null) {
+            delete root.dataset.navigationSized;
+            root.style.removeProperty("--navigation-preferred-width");
+        } else {
+            root.dataset.navigationSized = "";
+            root.style.setProperty("--navigation-preferred-width", value + "px");
+        }
+    }
     function storageFailure(error) {
         if (!["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
         storageUnavailable = true;
@@ -13,13 +29,17 @@ export function initializeNavigationPreference() {
         const stored = storage.getItem(key);
         if (valid(stored)) preference = stored;
         else if (stored !== null) console.warn("Unrecognized saved navigation preference. Keeping navigation expanded.");
+        width = readWidth(storage.getItem(widthKey));
     } catch (error) { storageFailure(error); }
     function apply() {
         root.dataset.navigation = preference;
-        for (const listener of listeners) listener({ preference, storageUnavailable });
+        paintWidth(width);
+        for (const listener of listeners) listener({ preference, width, storageUnavailable });
     }
     window.addEventListener("storage", event => {
-        if (storageUnavailable || event.storageArea !== storage || (event.key !== key && event.key !== null)) return;
+        if (storageUnavailable || event.storageArea !== storage) return;
+        if (event.key === widthKey) { width = readWidth(event.newValue); apply(); return; }
+        if (event.key !== key && event.key !== null) return;
         if (!valid(event.newValue)) {
             console.warn("Unrecognized navigation preference from another panel. Keeping the current navigation.");
             return;
@@ -29,7 +49,19 @@ export function initializeNavigationPreference() {
     });
     apply();
     return {
-        subscribe(listener) { listeners.add(listener); listener({ preference, storageUnavailable }); },
+        subscribe(listener) { listeners.add(listener); listener({ preference, width, storageUnavailable }); },
+        previewWidth: paintWidth,
+        setWidth(value) {
+            if (value !== null && !validWidth(value)) throw new RangeError("Choose a supported navigation width.");
+            width = value;
+            try {
+                storage = window.localStorage;
+                if (value === null) storage.removeItem(widthKey);
+                else storage.setItem(widthKey, String(value));
+                storageUnavailable = false;
+            } catch (error) { storageFailure(error); }
+            apply();
+        },
         setPreference(value) {
             if (!valid(value)) throw new Error("Choose expanded or collapsed navigation.");
             preference = value;
@@ -53,15 +85,83 @@ export function mountSidebarNavigation(ux, preference) {
     const collapse = $("navigationCollapse");
     const header = document.querySelector(".app-header");
     const brand = $("shellBrand");
+    const divider = document.createElement("div");
+    divider.className = "navigation-resize";
+    divider.tabIndex = 0;
+    divider.setAttribute("role", "separator");
+    divider.setAttribute("aria-label", "Navigation width");
+    divider.setAttribute("aria-orientation", "vertical");
+    divider.setAttribute("aria-controls", rail.id);
+    rail.append(divider);
+    const minWidth = () => $("wireAccountEntry").hidden ? 216 : 248;
+    const maxWidth = () => Math.min(520, Math.floor(innerWidth * .45));
+    const bounded = value => Math.max(minWidth(), Math.min(maxWidth(), Math.round(value)));
     function measure() {
         document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
-        if (!media.matches) document.documentElement.style.setProperty("--app-sidebar-width", rail.getBoundingClientRect().width + "px");
+        if (!media.matches) {
+            const current = rail.getBoundingClientRect().width;
+            document.documentElement.style.setProperty("--app-sidebar-width", current + "px");
+            if (!collapsed && !rail.hasAttribute("data-navigation-moving")) {
+                divider.setAttribute("aria-valuemin", String(minWidth()));
+                divider.setAttribute("aria-valuemax", String(maxWidth()));
+                divider.setAttribute("aria-valuenow", String(Math.round(current)));
+                divider.setAttribute("aria-valuetext", `${Math.round(current)} pixels wide`);
+            }
+        }
     }
     const headerSize = new ResizeObserver(measure);
     headerSize.observe(header);
     headerSize.observe(rail);
     let restoreFocus = true, collapsed = false, navigationFocus = null;
     let animations = [], motionOrigin = null, drawerAnimation = null, drawerClosing = false;
+    let savedWidth = null, drag = null, frame = 0;
+    function endDrag(commit) {
+        if (!drag) return;
+        const { id, width, start } = drag;
+        drag = null;
+        cancelAnimationFrame(frame); frame = 0;
+        rail.removeAttribute("data-resizing");
+        if (divider.hasPointerCapture(id)) divider.releasePointerCapture(id);
+        if (commit && width !== start) preference.setWidth(width);
+        else preference.previewWidth(savedWidth);
+    }
+    ux.tooltip(divider, () => drag ? "" : "Drag or use arrow keys to resize. Double-click or press Enter to reset.", { placement: "right" });
+    divider.addEventListener("pointerdown", event => {
+        if (!event.isPrimary || event.button !== 0 || collapsed || media.matches) return;
+        event.preventDefault();
+        ux.restoreFocus(divider); ux.hideTooltip();
+        const start = Math.round(rail.getBoundingClientRect().width);
+        drag = { id: event.pointerId, x: event.clientX, start, width: start };
+        rail.dataset.resizing = "";
+        divider.setPointerCapture(event.pointerId);
+    });
+    divider.addEventListener("pointermove", event => {
+        if (drag?.id !== event.pointerId) return;
+        drag.width = bounded(drag.start + event.clientX - drag.x);
+        if (!frame) frame = requestAnimationFrame(() => { frame = 0; preference.previewWidth(drag.width); });
+    });
+    divider.addEventListener("pointerup", event => {
+        if (drag?.id === event.pointerId) {
+            drag.width = bounded(drag.start + event.clientX - drag.x);
+            endDrag(true);
+        }
+    });
+    for (const type of ["pointercancel", "lostpointercapture"]) divider.addEventListener(type, event => {
+        if (drag?.id === event.pointerId) endDrag(false);
+    });
+    divider.addEventListener("dblclick", () => preference.setWidth(null));
+    divider.addEventListener("keydown", event => {
+        if (drag) {
+            if (event.key === "Escape") { event.preventDefault(); endDrag(false); }
+            return;
+        }
+        const width = rail.getBoundingClientRect().width;
+        const next = { ArrowLeft: width - 16, ArrowRight: width + 16, Home: minWidth(), End: maxWidth(), Enter: null }[event.key];
+        if (next === undefined || event.altKey || event.ctrlKey || event.metaKey) return;
+        event.preventDefault(); ux.hideTooltip();
+        preference.setWidth(next === null ? null : bounded(next));
+    });
+    window.addEventListener("blur", () => endDrag(false));
     function captureBrand() {
         const link = brand.querySelector(".brand-home"), bounds = link.getBoundingClientRect();
         return {
@@ -210,6 +310,8 @@ export function mountSidebarNavigation(ux, preference) {
         window.open(url.href, "_blank", "noopener,noreferrer");
     });
     preference.subscribe(state => {
+        savedWidth = state.width;
+        endDrag(false);
         ux.hideTooltip();
         finishMotion();
         collapsed = state.preference === "collapsed";
@@ -301,6 +403,7 @@ export function mountSidebarNavigation(ux, preference) {
         restoreFocus = true;
     });
     function settleMotion() {
+        endDrag(false);
         finishMotion();
         finishDrawerMotion();
     }
