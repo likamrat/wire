@@ -79,6 +79,15 @@ test("explicit original-record flags do not turn an ordinary source event into a
     }
 });
 
+test("a direct-call proposal requires field agreement even on ordinary rows outside the call", async () => {
+    const direct = [p, a, { ...s, checkpoint: false }, e];
+    const other = JSON.stringify(line("other", "assistant.message", { apiCallId: "other-api" }, 86400001));
+    const harmless = other.replace('"apiCallId":', '"apiCallId": ');
+    const ambiguous = other.replace('"apiCallId":', `"apiCallId":"${a.data.turnId}","apiCallId":`);
+    assert.equal((await scan([...direct, harmless])).records.length, 1);
+    for (const events of [[ambiguous, ...direct], [...direct, ambiguous]]) await assert.rejects(scan(events), unverified);
+});
+
 test("no literal call alias in a bounded off-chain record does not prove disjointness", async () => {
     // The SDK's completion receipt covers an inclusive *range*. Its endpoints
     // need not be the IDs on the independently observed call inside that range.

@@ -563,8 +563,10 @@ entries up to 16 KiB it can also verify harmless JSON spelling differences,
 such as `17.0` instead of `17`, without accepting duplicate keys or rounded
 values. Explicit `checkpoint: false` and `ephemeral: false` flags are
 compatible with an ordinary original; replay copies and transient records
-are not. WIRE refuses a split chain rather
-than carrying private hook arguments or result bodies into the next part.
+are not. Even a directly linked call cannot be proposed if another original
+in the journal could hide a conflicting identifier. WIRE refuses a split
+hook chain rather than carrying private arguments or result bodies into the
+next part.
 
 Confirmation rereads the same bounded originals, using the same two-minute
 deadline and explicit reading steps. A changed mapping, file, checkpoint,
