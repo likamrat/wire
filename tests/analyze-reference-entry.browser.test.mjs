@@ -212,7 +212,7 @@ test("a copied private chart URL without its handoff cannot silently broaden the
     const href = await page.locator('#outcomeChart li a[href*="result=success"]').getAttribute("href");
     const copied = await page.context().newPage();
     await copied.goto(new URL(href, page.url()).href);
-    await expect(copied.locator("#message")).toContainText("The private selection could not be restored");
+    await expect(copied.locator("#message p")).toHaveText(/^The private selection could not be restored\./);
     await expect(copied.locator("#activityListSummary")).toBeHidden();
     await copied.close();
 });
