@@ -469,6 +469,20 @@ test("SDK session-mode metadata is a boundary, not a call, grant or source of mi
     ] } }), unverified);
 });
 
+test("an on/off permissions transition is a notice only when its two recorded forms agree", async () => {
+    const before = line("permission", "session.permissions_changed", { previousAllowAllPermissions: false,
+        allowAllPermissions: true, previousAllowAllPermissionMode: "off", allowAllPermissionMode: "on" }, 0, boot.id);
+    const direct = [p, a, s, e];
+    for (const notice of [before, change(before, { previousAllowAllPermissions: true, previousAllowAllPermissionMode: "on",
+        allowAllPermissions: false, allowAllPermissionMode: "off" })]) {
+        assert.deepEqual((await scan([notice, ...direct])).records, (await scan(direct)).records);
+    }
+    for (const bad of [{ allowAllPermissions: false }, { allowAllPermissions: "true" }, { previousAllowAllPermissionMode: "always" },
+        { allowAllPermissionMode: undefined }, { mode: "manual" }, { previousMode: "manual" }, { interactionId: p.id }]) {
+        await assert.rejects(scan([change(before, bad), ...direct]), unverified);
+    }
+});
+
 // Root timing metadata as consumed/produced by retainResponseTimingEvent (not an
 // assertion about other Copilot envelope versions). No parent link is inferred.
 const begin = line("boundary-open", "assistant.turn_start", { turnId: "other-turn" }, 5);

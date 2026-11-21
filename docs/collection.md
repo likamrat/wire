@@ -532,6 +532,8 @@ declared fields and identifiers against the whole source and its checkpoint.
 Notice content never supplies attribution or grants access. Unknown
 fields, ambiguous identifiers, and unclassified oversized entries still
 prevent a verified-record preview.
+For a permissions notice recorded as `on`/`off`, both the previous and new
+modes must agree with their corresponding Boolean flags.
 
 The assistant's `originatingMessageId` identifies the initiating user
 message; `parentId` identifies the preceding journal event. They need not
