@@ -203,6 +203,18 @@ export function createPeriodComparisonState({ time, search, contract, projection
                         && row.startedAt !== null && row.startedAt >= side.dateRange.from && row.startedAt < side.dateRange.to);
                     require(side.resultFacts.calls.length === side.analytics.rows.length + nativeRows.length
                         && new Set(side.resultMembership.map(item => item.rowRef)).size === side.resultMembership.length);
+                    if (side.changeSummary !== undefined) {
+                        const { interactions, affected, issueRowIds } = side.changeSummary;
+                        const ids = new Set(side.rowIds);
+                        require(!value.nativePeriods && Number.isSafeInteger(interactions) && interactions >= 0
+                            && interactions <= side.scenarioIds.length && Boolean(interactions) === Boolean(ids.size)
+                            && Number.isSafeInteger(affected) && affected >= 0 && affected <= interactions
+                            && Array.isArray(issueRowIds) && new Set(issueRowIds).size === issueRowIds.length
+                            && issueRowIds.every(id => ids.has(id)) && affected <= issueRowIds.length
+                            && Boolean(affected) === Boolean(issueRowIds.length)
+                            && issueRowIds.length === side.resultFacts.calls.filter(call =>
+                                call.completion === "failed" || call.observations.some(resultContract.reportObservationHasError)).length);
+                    }
                 }
                 require(same(value.resultComparison, resultContract.compareReportResultFacts(value.periods.baseline.resultFacts, value.periods.later.resultFacts)));
             } else require(value.periods.baseline.resultFacts === null && value.periods.later.resultFacts === null
@@ -671,6 +683,51 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         }
         return node;
     }
+    function changesPanel(sides) {
+        const node = panel("What changed", "compare-changes");
+        const rate = (n, d) => d ? n * 100 / d : null;
+        const percentage = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+        const measures = [
+            { label: "Share of interactions with an error or failure", issue: true, share: true },
+            { label: "Matching interactions", interactions: true },
+            { label: "Tool calls" },
+            { label: "Failed tool calls", failed: true },
+        ];
+        const rows = measures.map(measure => {
+            const values = [], affected = [];
+            const cells = sides.map(([key, side]) => {
+                const summary = side.changeSummary;
+                const ids = measure.issue ? summary.issueRowIds : measure.failed
+                    ? side.analytics.rows.filter(row => row.outcome === "failure").map(row => row.id) : side.rowIds;
+                const value = measure.share ? rate(summary.affected, summary.interactions)
+                    : measure.interactions ? summary.interactions : ids.length;
+                values.push(value); affected.push(summary.affected);
+                const text = measure.share ? value === null ? "Not available" : percentage.format(value) + "%" : number(value);
+                const evidence = measure.issue ? " with errors or failures" : measure.failed ? " that failed" : "";
+                const label = `View ${counted(ids.length, "call")}${evidence}`;
+                const cell = el("div", undefined, "compare-change-value");
+                if (ids.length) {
+                    const action = button(text, () => openInspection("calls", action, { side: key, ids, label }));
+                    action.setAttribute("aria-label", `${measure.label}, ${key === "baseline" ? "baseline" : "selected"}: ${text}. ${label}`);
+                    cell.append(action);
+                } else cell.append(numeric(text));
+                if (measure.share) cell.append(el("span", `${number(summary.affected)} of ${counted(summary.interactions, "interaction")}`, "compare-value-detail"));
+                return cell;
+            });
+            const delta = values.some(value => value === null) ? null : values[1] - values[0];
+            const change = el("div", undefined, "compare-change-value");
+            if (measure.share) {
+                const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
+                const magnitude = Math.abs(delta);
+                change.append(numeric(delta === null ? "Not comparable" : `${sign}${magnitude > 0 && magnitude < 0.1 ? "<0.1" : percentage.format(magnitude)} pp`));
+                const count = affected[1] - affected[0];
+                change.append(el("span", `${signed(count)} affected interaction${Math.abs(count) === 1 ? "" : "s"}`, "compare-value-detail"));
+            } else change.append(numeric(signed(delta)));
+            return [measure.label, ...cells, change];
+        });
+        node.append(table("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
+        return node;
+    }
     function numbersPanel(value, sides, names) {
         const view = chartView();
         if (view === "timing") {
@@ -1036,7 +1093,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const pair = el("div", undefined, "compare-period-key");
         for (const [index, [, side]] of sides.entries()) {
             const line = el("p");
-            line.append(identity(names[index].preset === "custom" ? `Period ${index ? "B" : "A"}` : names[index].label),
+            line.append(identity(index ? "Selected period" : "Baseline period"),
                 el("span", `${dateRange(side)} (${dayCount(side)} ${dayCount(side) === 1 ? "day" : "days"})`, "compare-date-qualification")); pair.append(line);
         }
         const collection = { history: "Saved collection", legacy: "Earlier snapshot", all: "Both collections" }[value.options.filters.scope ?? "history"];
@@ -1077,6 +1134,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             "Totals are not adjusted for the different lengths.", "compare-scope-note compare-length-note"));
         if (sharedRecords || sharedInteractions) content.append(el("p",
             `${number(sharedRecords)} records and ${counted(sharedInteractions, "interaction")} appear in both periods.`, "compare-scope-note"));
+        if (chartView() === "outcomes" && !value.nativePeriods && sides.every(([, side]) => side.changeSummary))
+            content.append(changesPanel(sides));
         if (!a.rowIds.length && !b.rowIds.length) {
             content.append(el("p", value.nativePeriods ? "No GitHub records match these periods. Microsoft activity is shown separately."
                 : nativeDatesUnavailable ? "No dated records match these periods. This is not a count of Microsoft calls."
@@ -1448,6 +1507,10 @@ export const periodComparisonStyles = `
 .compare-answer-grid>.compare-panel>:is(h3,.compare-findings,.compare-caption,.compare-values-table){margin:0}
 .compare-panel h3{font-size:1.125rem;margin:0 0 8px}
 .compare-panel h4{font-size:.875rem;margin:0}
+.compare-changes{margin-block:var(--space-lg)}
+.compare-change-value{display:grid;justify-items:end;gap:2px;font-variant-numeric:tabular-nums}
+.compare-changes .period-comparison-table tr>:not(:first-child){text-align:end}
+.compare-change-value .compare-value-detail{color:var(--muted);font-size:var(--type-small)}
 .compare-findings{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:8px 0}
 .compare-findings>p{margin:0}
 .compare-finding{font-size:1.125rem;line-height:1.5}

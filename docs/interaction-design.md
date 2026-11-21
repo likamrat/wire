@@ -560,6 +560,14 @@ not to a second level of page navigation.
 Both section links keep their calendar or document icon when inactive. A
 trailing arrow opens supporting evidence; the return action points back.
 
+For a retained Work IQ tool-call comparison, Outcomes starts with **What
+changed**. Baseline and Selected show the calls and distinct originating
+interactions for each period. The affected share includes an interaction once
+when a matching call failed or had a recorded application/API error. An empty
+denominator is unavailable, not 0%. Choose a period's value to inspect its
+exact contributing calls; an error within a completed call does not relabel
+that call as failed.
+
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with
 the preceding seven; 14/30-day choices follow the same rule. Custom dates uses

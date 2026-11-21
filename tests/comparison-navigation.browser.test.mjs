@@ -102,6 +102,13 @@ test("exact-call captions follow narrowed membership", { timeout: 30000 }, async
     const { page } = await setup(t);
     await page.locator("#comparePeriods").click(); await ready(page);
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    const issueShare = page.getByRole("row", { name: /Share of interactions with an error or failure/ });
+    const selected = issueShare.getByRole("button", { name: /selected:.*View .* with errors or failures/i });
+    await selected.click();
+    await expect(page.locator("#comparisonExactRecordsB")).toBeVisible();
+    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("1 call across 1 interaction");
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(selected).toBeFocused();
     await page.locator('.compare-outcome-bar').first().locator('[data-outcome="failure"]').click();
     await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("1 call across 1 interaction");
     await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("0 calls across 0 interactions");

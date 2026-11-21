@@ -81,6 +81,23 @@ test("overlapping periods count each identity once per side, without changing fu
     assert.deepEqual(value.periods.baseline.rowIds, value.periods.later.rowIds);
 });
 
+test("change summary counts an affected origin once and drills into only its matching calls", () => {
+    const { state, input } = periodFixture();
+    const call = state.evidence.find(record => record.scenarioId === "period-request-0").toolCalls
+        .find(item => item.toolCallId === "period-calendar");
+    // The calendar call completed; a returned entry on it failed.
+    call.apiResults = [{ index: 0, path: "/me/calendarView", statusCode: 403 }];
+    const view = buildPeriodComparison(state, { ...input, options: { ...input.options, filters: { scope: "history" } } });
+    const side = view.periods.baseline;
+    assert.equal(side.changeSummary.interactions, 2);
+    assert.equal(side.changeSummary.affected, 1);
+    const issueCalls = side.analytics.rows.filter(row => side.changeSummary.issueRowIds.includes(row.id));
+    assert.deepEqual(issueCalls.map(row => [row.toolCallId, row.outcome]).sort(),
+        [["period-calendar", "success"], ["period-call-0", "failure"]].sort());
+    assert.deepEqual(buildPeriodComparison(state, { ...input, scenarioIds: [] }).periods.baseline.changeSummary,
+        { interactions: 0, affected: 0, issueRowIds: [] });
+});
+
 test("a single measured zero is not missing, and response timing stays a different population", () => {
     const { state, input } = periodFixture();
     const value = buildPeriodComparison(state, { ...input, scenarioIds: ["period-request-0", "period-request-3"], withinServices: ["Files"] });
