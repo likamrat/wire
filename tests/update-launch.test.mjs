@@ -2,9 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { existsSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
-import { release } from "node:os";
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { release, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -66,15 +65,15 @@ export async function startServer({dataDir}, controller, options) {
 }`;
 
 async function fixture(t, host) {
-    const base = path.join(project, "test-results", "launcher-" + randomUUID().slice(0, 8));
+    const base = await mkdtemp(path.join(tmpdir(), "wire-lch-"));
     const origin = path.join(base, "origin"), root = path.join(base, "user clone"), store = path.join(base, "store");
-    await Promise.all([mkdir(path.join(origin, "lib"), { recursive: true }), mkdir(path.join(origin, "scripts"), { recursive: true }),
-        mkdir(store, { recursive: true })]);
     const children = new Set();
     t.after(async () => {
         try { for (const app of children) { if (app.child.connected) app.child.disconnect(); await app.done; } }
         finally { await rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
     });
+    await Promise.all([mkdir(path.join(origin, "lib"), { recursive: true }), mkdir(path.join(origin, "scripts"), { recursive: true }),
+        mkdir(store, { recursive: true })]);
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
         /^(PATH|PATHEXT|OS|WINDIR|SystemRoot|ComSpec|SystemDrive|NUMBER_OF_PROCESSORS)$/i.test(key)));
     Object.assign(env, { USERPROFILE: base, HOME: base, LOCALAPPDATA: base, APPDATA: base, TMP: base, TEMP: base, TMPDIR: base,
@@ -168,6 +167,20 @@ async function request(url, action, args) {
 const phase = (url, expected) => eventually(() => request(url, "status"), state => state.phase === expected);
 const stop = async app => { app.child.disconnect(); assert.equal((await app.done).code, 0, app.stderr); };
 
+async function awaitCandidateEvent(f, app, url, candidate, event) {
+    const evidence = await eventually(async () => {
+        const events = await f.events();
+        const reached = events.some(row => row.build === candidate && row.event === event);
+        if (reached || app.exit) return { reached, events };
+        const status = await request(url, "status").catch(() => null);
+        return { reached, events, status };
+    }, e => e.reached || app.exit || e.status?.phase === "error").catch(error => ({ error: error.message }));
+    if (evidence.reached) return;
+    const staging = await readFile(f.stageLog, "utf8").catch(() => "stageMain not reached");
+    assert.fail(`Candidate ${candidate} did not reach ${event}; evidence: ${JSON.stringify(evidence)}; `
+        + `staging: ${staging.trim()}; launcher exit: ${JSON.stringify(app.exit)}; stderr: ${app.stderr.slice(-1500)}`);
+}
+
 async function assertRefused(app, reason) {
     await eventually(() => ({ exit: app.exit, stdout: app.stdout }), v => v.exit || /ready at/.test(v.stdout));
     assert.equal(app.exit?.code, 1, app.stdout + app.stderr);
@@ -244,6 +257,8 @@ activationTest("changed app content or incompatible store protocol requires a ne
     assert.equal((await request(url, "check")).candidate, breaking);
     assert.equal((await request(url, "apply", { candidate: breaking })).phase, "preparing");
     assert.match((await phase(url, "error")).message, /contract|manual/);
+    await assert.rejects(awaitCandidateEvent(f, app, url, breaking, "touched-store"),
+        error => /did not reach touched-store/.test(error.message) && /stageMain: .*contract/.test(error.message));
     assert.equal((await f.events()).length, 5);
     await stop(app);
 });
@@ -252,6 +267,7 @@ activationTest("a candidate that touches storage and fails before returning a ru
     const f = await fixture(t), app = f.launch(), url = await app.ready(), candidate = await f.commit("partial-init");
     assert.equal((await request(url, "check")).candidate, candidate);
     await request(url, "apply", { candidate });
+    await awaitCandidateEvent(f, app, url, candidate, "touched-store");
     await eventually(async () => ({ exit: app.exit, events: await f.events() }), v => v.exit || v.events.length > 3);
     assert.deepEqual((await f.events()).map(e => e.event), ["start", "close", "touched-store"]);
     assert.equal((await app.done).code, 1);
@@ -309,14 +325,7 @@ activationTest("interrupted activation requires the same store, recovers prior b
     const candidate = await f.commit("hold");
     assert.equal((await request(url, "check")).candidate, candidate);
     assert.equal((await request(url, "apply", { candidate })).phase, "preparing");
-    try { await eventually(f.events, rows => rows.at(-1).event === "health-pending"); }
-    catch (error) {
-        const status = await request(url, "status").catch(e => ({ phase: "unreachable", message: e.message }));
-        const operations = await readFile(f.stageLog, "utf8").catch(() => "stageMain not reached");
-        assert.fail(`Before launcher kill: expected candidate ${candidate} to start its health probe. `
-            + `Update phase ${status.phase}: ${status.message}; staging: ${operations.trim()}; `
-            + `launcher exit ${JSON.stringify(app.exit)}, stderr: ${app.stderr.slice(-1500)}. ${error.message}`);
-    }
+    await awaitCandidateEvent(f, app, url, candidate, "health-pending");
     app.child.kill("SIGKILL"); await app.done;
     await eventually(f.events, rows => rows.at(-1).event === "close");
     const wrong = f.launch({ dataDir: f.store + "-other" });
