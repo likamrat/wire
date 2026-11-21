@@ -633,7 +633,10 @@ turns green when an update is available, even after the notice is dismissed.
 It still only checks; **Update** installs the build. Below updates,
 preview the current palette in its active mode beside its name. The preview and
 **Change theme** share one link to Themes; the effective time zone links
-to Regional. Each row opens its existing category without changing anything.
+to Regional. The whole shortcut stays clickable, but hover and press tint
+only the destination label and chevron. Center them together beside the
+current value and keep keyboard focus visible around the link.
+Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,
 Source access, Themes, Regional, and Privacy & saved data. Keep one
