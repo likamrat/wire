@@ -284,21 +284,21 @@ button.primary.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(
 .settings-view .settings-content a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
 #settingsGeneralBack {margin-bottom:var(--space-sm)}
 #settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
-.general-preferences>h3 {padding-bottom:var(--space-sm)}
-.settings-view .settings-content a.settings-preference-link {display:grid;grid-template-columns:auto minmax(0,1fr) fit-content(50%) auto;gap:.25rem .75rem;
- padding:.6rem .5rem;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
-.settings-preference-link .wire-icon {width:1rem;height:1rem;color:var(--muted)}
-.settings-preference-link small {display:block;color:var(--muted);font-size:var(--type-caption)}
-.settings-preference-link .preference-name {font-size:var(--type-reading);font-weight:var(--weight-medium)}
-.settings-preference-link small {font-weight:var(--weight-regular)}
-.preference-value {color:var(--muted);text-align:end;font-size:var(--type-reading)}
+.general-appearance {border-top:1px solid var(--rule);padding-block:1.25rem .85rem}
+.settings-view .general-appearance h3,.settings-preference-link strong {margin:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
+.settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;
+ padding:.65rem 0;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
+.general-appearance .palette-scene {width:min(7.5rem,100%);min-height:3.8rem;box-sizing:border-box;border:1px solid var(--rule);border-radius:var(--radius-small)}
+.general-appearance .palette-sheet {align-content:center}
+.settings-preference-link strong,#generalMode,#generalTimeValue {display:block}
+#generalMode,#generalTimeValue {color:var(--muted);font-size:var(--type-small)}
+.settings-preference-link>.preference-destination {display:flex;align-items:center;gap:.25rem;margin-inline-start:auto;font-size:var(--type-control);color:var(--ink)}
+.preference-destination .wire-icon {width:1rem;height:1rem}
 .settings-preference-link:hover {background:var(--hover)}.settings-preference-link:active {background:var(--pill-pressed)}
 .settings-preference-link:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
-@container settings-pane (max-width:28rem) {
- .settings-view .settings-content a.settings-preference-link {grid-template-columns:minmax(0,1fr) auto}
- .settings-preference-link>.wire-icon:first-child,.settings-preference-link small {display:none}
- .settings-preference-link>.wire-icon:last-child {grid-area:1/2/3/3}
- .settings-preference-link .preference-value {grid-column:1;text-align:start}
+@container settings-pane (max-width:23rem) {
+ .settings-preference-link>.preference-destination {margin-inline-start:0}
+ #general-themes>.preference-destination {flex-basis:100%}
 }
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}

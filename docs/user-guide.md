@@ -337,9 +337,9 @@ your Copilot history. On [supported installations](development.md#updating-wire)
 you can check with automatic checks off. If WIRE says this copy is managed
 manually, use its usual update process instead.
 
-Below updates, **Current theme** opens **Themes** and **Time zone** opens
-**Regional**. Change the preference there, then choose **Back to General**
-to see the value in the row you opened.
+Below updates, **Current theme** previews your palette in Light or Dark.
+Select **Change theme** to open **Themes**, or select **Time zone** to open
+**Regional**. **Back to General** returns to the shortcut with your current choice.
 
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network

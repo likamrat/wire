@@ -86,7 +86,11 @@ export function mountThemeControl(theme, ux) {
         active = state.palette;
         const mode = state.theme === "light" ? "Light" : "Dark";
         $("settingsModeLabel").textContent = mode;
-        $("generalThemeValue").textContent = `${names.get(active)} · ${mode}${state.storageUnavailable || state.paletteStorageUnavailable ? " (this panel only)" : ""}`;
+        $("generalPaletteName").textContent = names.get(active);
+        $("generalMode").textContent = `${mode}${state.storageUnavailable || state.paletteStorageUnavailable ? " (this panel only)" : ""}`;
+        const preview = $("general-themes").querySelector(".palette-scene");
+        preview.dataset.previewPalette = active;
+        preview.dataset.previewMode = state.theme;
         $("paletteSelection").textContent = `Active: ${names.get(active)}`;
         for (const input of options) input.checked = input.value === active;
         $("resetPalette").disabled = active === "petrol";

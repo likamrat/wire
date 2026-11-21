@@ -588,7 +588,8 @@ action after confirmed first approval.
 
 Settings opens in **General**, with the installed WIRE build, last check and
 **Check for updates** together above the automatic-check switch. Below updates,
-the current palette and mode link to Themes, and the effective time zone links
+preview the current palette in its active mode beside its name. The preview and
+**Change theme** share one link to Themes; the effective time zone links
 to Regional. Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,

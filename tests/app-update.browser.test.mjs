@@ -143,13 +143,20 @@ test("unsupported bundled runtime reads status only, even if a saved automatic p
 
 test("General preference rows open canonical pages and return to updated values", async t => {
     const { page, actions } = await workspace(t, { supported: false });
-    const current = page.getByRole("link", { name: /Current theme/ }), zone = page.getByRole("link", { name: /Time zone.*Regional/ });
+    const current = page.getByRole("link", { name: "Change theme" }), zone = page.getByRole("link", { name: /Time zone.*Regional/ });
+    const preview = current.locator(".palette-scene");
+    await expect(preview).toBeVisible();
+    const painted = node => [node, node.querySelector(".palette-rail"), node.querySelector(".palette-strip i")].map(n => getComputedStyle(n).backgroundColor);
+    const initialPaint = await preview.evaluate(painted);
     const back = page.getByRole("button", { name: "Back to General" });
     await current.focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#themesTitle")).toBeFocused();
     await expect(page).toHaveURL(/\/settings\?section=themes$/);
     await chooseTheme(page, "dark"); await page.locator("label:has(#palette-field)").click();
-    await back.click(); await expect(current).toBeFocused(); await expect(current).toContainText("Field notes · Dark");
+    const selectedPaint = await page.locator("label:has(#palette-field) .palette-scene:visible").evaluate(painted);
+    await back.click(); await expect(current).toBeFocused(); await expect(current).toHaveAccessibleDescription("Field notes Dark");
+    assert.deepEqual(await preview.evaluate(painted), selectedPaint);
+    assert.notDeepEqual(selectedPaint, initialPaint);
     await page.goForward(); await expect(back).toBeVisible();
     await page.locator("#settingsCategoryNav [data-category=general]").click();
     await expect(zone).toContainText("Device default");
