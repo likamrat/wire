@@ -425,6 +425,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     inspect.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); closeInspection(true); } });
     const calls = button("View calls", () => openInspection("calls", calls));
     const numbers = button("View numbers", () => openInspection("numbers", numbers));
+    for (const control of [calls, numbers, report, inspectClose]) control.classList.add("icon-action");
+    calls.append(ux.icon("forward")); numbers.append(ux.icon("forward"));
+    report.prepend(ux.icon("reports")); inspectClose.prepend(ux.icon("back"));
     footer.append(calls, numbers, report);
     scopeRow.append(dateHint, scope);
     setup.append(title, dateChoices, status, scopeRow, searchLabel);
@@ -911,6 +914,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                         const knownTool = typeof row.tool === "string" && row.tool.length > 0;
                         const toolName = knownTool ? row.tool : "Tool not recorded";
                         if (!knownTool) link.textContent = toolName;
+                        link.classList.add("icon-action");
+                        link.append(ux.icon("forward"));
                         link.id = `comparison-record-${name}-${row.id}`;
                         link.setAttribute("aria-label", `${toolName}, ${title || "Retained interaction"}, ${startedAt}, record ${rowIndex + 1}`);
                         link.addEventListener("click", event => {

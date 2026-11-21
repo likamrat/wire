@@ -56,12 +56,21 @@ test("Compare sections keep the period view and saved report choices across keyb
     await ready(page);
     const nav = page.getByRole("navigation", { name: "Compare sections" });
     const periods = nav.getByRole("link", { name: "Periods" }), reports = nav.getByRole("link", { name: "Saved reports" });
+    const sectionIcons = () => nav.locator("a").evaluateAll(links => links.map(link => {
+        const icon = link.querySelector("svg");
+        return icon && icon.getBoundingClientRect().width > 0
+            ? [icon.dataset.lucideIcon, getComputedStyle(icon).strokeWidth, icon.getAttribute("aria-hidden")] : null;
+    }));
     await page.getByRole("button", { name: "By tool", exact: true }).click();
     await ready(page);
     await expect(periods).toHaveAttribute("aria-current", "page");
+    const inPeriods = await sectionIcons();
+    assert.deepEqual(inPeriods.map(icon => icon?.[0]), ["calendar-days", "file-text"]);
+    assert.deepEqual(inPeriods.map(icon => icon.slice(1)), [["1.5px", "true"], ["1.5px", "true"]]);
     await periods.focus(); await page.keyboard.press("Tab"); await expect(reports).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(reports).toHaveAttribute("aria-current", "page");
+    assert.deepEqual(await sectionIcons(), inPeriods);
     await expect(page.locator("#reportTaskNav")).toBeHidden();
     const picker = page.locator("#comparisonWorkspace");
     for (const [label, bundle] of [["Earlier report", app.bundles[0]], ["Later report", app.bundles[1]]]) {

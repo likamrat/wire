@@ -1,5 +1,5 @@
 // The report controller owns facts, privacy approval, and frozen files.
-export function mountReportComparisonJourney(root, { api, renderer, timeContext, refresh, onError, inspectSource, openSaved, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection, createPreparedFrame }) {
+export function mountReportComparisonJourney(root, { api, renderer, ux, timeContext, refresh, onError, inspectSource, openSaved, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection, createPreparedFrame }) {
     if (!root?.ownerDocument || typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function") {
         throw new TypeError("Mounted comparison journeys require publication authority and a save-identity factory.");
     }
@@ -48,6 +48,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     for (const [text, select] of [["Earlier report", baseline], ["Later report", later]]) {
         const choice = el("div", undefined, "comparison-report-choice"), label = el("label", text);
         const identity = button("Inspect " + text.toLowerCase(), event => { if (!accessWithdrawn) inspectSource(select.value, event.currentTarget); }, "quiet comparison-report-identity");
+        if (ux) { identity.classList.add("icon-action"); identity.append(ux.icon("forward")); }
         identity.dataset.viewKey = "inspect-comparison-source:" + text;
         identity.hidden = true;
         identities.set(select, { identity });
