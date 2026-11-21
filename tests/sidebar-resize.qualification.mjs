@@ -125,7 +125,7 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             await drag("Trends overview", ".trends-landing");
             await page.locator("#trends-section-charts").click();
             await drag("Trends charts", ".trends-panel:visible");
-            await page.getByRole("button",{ name:"Compare measures", exact:true }).first().click();
+            await page.getByRole("button",{ name:"Arrange charts", exact:true }).first().click();
             await page.getByRole("button",{ name:"All charts", exact:true }).first().click();
             await drag("Trends all charts", '#trendsView[data-layout=all]');
             await page.locator(".trends-panel:visible .trends-sizing button:visible").first().click();

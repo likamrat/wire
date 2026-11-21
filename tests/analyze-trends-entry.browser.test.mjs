@@ -310,8 +310,8 @@ test("Overview opens the dated error chart; section navigation retains the chart
         const underline = await guide.evaluate(n => getComputedStyle(n).borderBottom);
         assert.match(underline, /^3px solid /); assert(!underline.includes("rgba(0, 0, 0, 0)"));
     }
-    await page.locator(".trends-guide summary").filter({ hasText: "Errors & failures" }).click();
-    await expect(page.locator(".trends-guide details[open]")).toContainText("Unknown results are not failures");
+    await page.locator(".trends-guide nav").getByRole("button",{name:"Errors & failures"}).click();
+    await expect(page.locator(".trends-guide article")).toContainText("Unknown results are not failures");
     await page.setViewportSize({ width: 390, height: 820 });
     await page.evaluate(() => document.documentElement.style.fontSize = "150%");
     assert(await nav.evaluate(n => n.scrollWidth <= n.clientWidth + 1));

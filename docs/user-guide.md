@@ -162,8 +162,21 @@ Period breakdowns summarize the whole chosen range. A dated point uses that
 day's matching population. **Count / Percentage** changes compatible measures;
 tool percentages can use calls or originating interactions. Duration remains
 in milliseconds. **Columns / Lines** changes the drawing, not the values.
-**Compare measures** adds charts for the same dates. **Data table** includes
-daily numbers and period totals, including series hidden in the chart.
+**Compare measures** lets you choose two readings for the same dates, or start
+from an example on Overview. For example, compare **Errors & failures ·
+interaction share** with a tool's **interaction reach**. Both count matching
+interactions that day, so they can share one graph. Call share uses a different
+denominator; call volume and duration use different units. These use aligned charts.
+
+Select a point for its exact daily reading and matching calls. **Remove
+comparison** drops the second measure; **Collapse chart** keeps your choices.
+**Daily values** includes both measures on the current date page. The optional
+correlation describes that page's paired daily values, not causation or
+individual calls. **Compare periods** instead compares this period with the
+preceding period of equal length. Review the dates and scope before opening
+Compare; **Back to Trends** returns to the pair and selected day.
+On an individual chart, **Data table** includes daily numbers and period
+totals, including series hidden in the chart.
 
 | Chart | Measure |
 | --- | --- |
@@ -203,7 +216,7 @@ Choose **Data table** below the chart. On a narrow screen, scroll within
 the table; keyboard users can focus it
 and use the arrow keys. Dates and column headers stay attached to the values.
 
-For the full-width stack choose **Compare measures → All charts**. In that
+For the full-width stack choose **Arrange charts → All charts**. In that
 workspace, **Back to overview** returns to the same place. Collapse or restore charts
 without losing their measure, series choices or horizontal reading position.
 Collapsed widgets show their names and applied dates. Click anywhere on a collapsed row to

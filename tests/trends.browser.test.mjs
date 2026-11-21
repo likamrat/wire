@@ -147,8 +147,8 @@ async function setupIndex(t, withBoundary = false, options = {}) {
 }
 
 async function openAllCharts(page) {
-    await page.getByRole("button", { name: "Compare measures", exact: true }).click();
-    await page.getByRole("dialog", { name: "Compare measures" }).getByRole("button", { name: "All charts", exact: true }).click();
+    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
 }
 
@@ -169,7 +169,7 @@ test("Trends opens one count chart with an errors-first visible index and compar
     const before = reads.length;
     await index.getByRole("button", { name: "Services", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "services");
-    await page.getByRole("button", { name: "Compare measures", exact: true }).click();
+    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
     await page.getByRole("checkbox", { name: "Call duration", exact: true }).check();
     await page.getByRole("button", { name: "Apply comparison", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(2);

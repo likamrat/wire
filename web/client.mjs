@@ -611,7 +611,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (origin) history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, sidebarRestoration: sidebarHistoryMode } }, "");
         history.scrollRestoration = "manual";
     }
-    let periodReturnReading = null;
+    let periodReturnReading = null, trendPeriodVisit = null;
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     const nativeActivity = assessmentFactories.createNativeActivityPresentation({
         api, ux, presentation, createReaderSections: assessmentFactories.readerSections, sourceLabel: filterState.sourceLabel,
@@ -783,7 +783,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function requestIdentity(value = workspaceState.route) { return JSON.stringify([value.request, value.call, value.callRevision,
         value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal, value.completedCalls?.key, value.nativeCompletedRef]); }
     function sidebarAnchor() {
-        if (underlyingRoute().view === "trends") return trendsUI.evidenceOrigin()?.closest(".trends-panel") ?? null;
+        if (underlyingRoute().view === "trends") return trendsUI.evidenceOrigin()?.closest(".trends-panel,.trends-panel-pair") ?? null;
         return (workspaceState.route.inspect ? savedInspector?.anchor || keyed("bundle:" + workspaceState.route.inspect) : null)
             ?? (fromReportCreation() ? keyed("report:" + workspaceState.route.request)?.closest(".activity-card") : null)
             ?? keyed("request:" + workspaceState.route.request)?.closest(".activity-card")
@@ -2430,6 +2430,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     expiredTrend.append(expiredTrendTitle, expiredTrendHelp,
         button("Open Trends without this scope", () => navigate({ view: "trends", search: "", analysisQuery: null }, true)));
     $("trendsView").before(expiredTrend);
+    const periodBackToTrends = button("Back to Trends", () => {
+        if (!trendPeriodVisit || !api.isCurrent(trendPeriodVisit.publication)
+            || trendPeriodVisit.destination !== historyPosition || workspaceState.route.compare !== "periods") return;
+        history.back();
+    }, "quiet");
+    periodBackToTrends.prepend(ux.icon("back")); periodBackToTrends.hidden = true;
+    $("compareSections").after(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
         root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
@@ -2438,6 +2445,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
         onScopeChange: rememberTrendScope,
+        onComparePeriods: (dates, filters) => {
+            const publication = api.publicationToken();
+            if (workspaceState.route.view !== "trends" || !publication || workspaceState.stale || workspaceState.loading) return;
+            const target = { view: "analyze", compare: "periods", layer: "tool", scope: "all", source: "github-copilot",
+                bucket: "day", search: "", analysisQuery: null, ...dates,
+                ...(filters.author ? { authors: filters.author } : {}), ...(filters.tool ? { tool: filters.tool } : {}),
+                ...(filters.service === "Discovery" ? { service: "Discovery" } : filters.service && filters.service !== "missing"
+                    ? { services: filters.service, includeMissingService: false } : {}) };
+            trendPeriodVisit = { publication, destination: historyPosition + 1, target: readingKey(target) };
+            navigate(target);
+        },
         onSectionChange: (section, measure) => {
             const route = workspaceState.route;
             if (route.view !== "trends" || expiredTrendEntry(route)) return;
@@ -4449,6 +4467,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else node.removeAttribute("aria-current");
         });
         const sections = $("compareSections");
+        periodBackToTrends.hidden = !(trendPeriodVisit && api.isCurrent(trendPeriodVisit.publication)
+            && trendPeriodVisit.destination === historyPosition && workspaceState.route.compare === "periods"
+            && trendPeriodVisit.target === readingKey(workspaceState.route));
         sections.hidden = active !== "compare" || workspaceState.route.view === "request";
         if (!sections.hidden) {
             const periods = $("compareSectionPeriods"), saved = $("compareSectionSaved"), comparingSaved = savedComparisonSection(workspaceState.route);
@@ -10809,6 +10830,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        trendPeriodVisit = null; periodBackToTrends.hidden = true;
         appUpdate?.beforeOwnerRetirement();
         const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation || new URLSearchParams(location.search).has("privateView"));
         clearingAccess = true;

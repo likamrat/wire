@@ -286,9 +286,10 @@ edge. Place display choices together by the measure title. The plot shares
 the chart card's surface, not a second palette-colored rectangle. An empty
 period uses a compact dated explanation and optional jump to real activity.
 Period opens the 7/14/30/custom choices. Never substitute a pending date or
-filter for the last accepted facts. Compare measures adds charts on the same
-dates without copying a second scope. **All charts**, available within the
-comparison chooser, retains the full-width overview and its sizing controls.
+filter for the last accepted facts. Compare measures uses one accepted scope
+for both series. Overlay only matching units and denominator bases; otherwise
+align dates on separate scales. **All charts**, available under **Arrange charts**,
+retains the full-width overview and its sizing controls.
 
 The same chart owner serves overview and maximized reading. Daily ticks use
 month and day, except Today; the compact index may show fewer tick labels

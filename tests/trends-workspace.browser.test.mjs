@@ -50,7 +50,7 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
             "/api/session", "/api/access/watch", "/api/snapshot", "/api/collection/status", "/api/collection/sources/status",
-            "/api/assessment/overview", "/api/assessment/detail", "/api/evaluation/automatic/summary", "/api/trends",
+            "/api/assessment/overview", "/api/assessment/detail", "/api/evaluation/automatic/summary", "/api/trends", "/api/period-comparison", "/api/report-artifacts/list",
         ].includes(url.pathname)) { errors.push(`${request.method()} ${url.pathname}`); return route.abort(); }
         if (url.pathname === "/api/trends") reads.push(request.postDataJSON()); return route.continue();
     });
@@ -59,6 +59,44 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
 }
+test("custom pairs keep units, members, collapse and day through the real period comparison and Back", async t => {
+    const {page,reads}=await setup(t),nav=page.getByRole("navigation",{name:"Trends sections"});
+    await nav.getByRole("button",{name:"Overview"}).click();
+    const cta=page.locator(".trends-discover").getByRole("button",{name:"Compare measures",exact:true});
+    await expect(cta).toBeVisible();await cta.click();
+    const pair=page.locator(".trends-panel-pair"), first=pair.locator("select#trendsPairMeasure1"), second=pair.locator("select#trendsPairMeasure2");
+    await expect(first).toHaveValue("");await expect(second).toBeDisabled();
+    const select = async (locator,values) => selectActivityOption(page,await locator.getAttribute("id"),JSON.stringify(values));
+    await select(first,["problems","problems","share"]);await select(second,["tools","workiq-fetch","reach"]);
+    const graph=pair.locator(".trends-plot:visible");
+    await expect(graph).toHaveCount(1);
+    const mark=graph.getByRole("button",{name:/Nov 16.*fetch.*50%/});
+    await mark.focus();await mark.press("Enter");
+    const reading=pair.locator(".trend-pair-readings");
+    await expect(reading).toContainText("50% · 1 of 2 interactions that day");
+    await reading.getByRole("button",{name:"View 2 calls"}).click();
+    await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
+    const record=page.locator(".trends-evidence-row a").first();
+    await expect(record).toContainText("Review the invented harbor notes mon-a."); await record.click();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key","request:chart-mon-a");
+    await page.goBack();await expect(reading.getByRole("button",{name:"View 2 calls"})).toBeFocused();
+    await pair.getByRole("button",{name:"Aligned charts",exact:true}).click();await expect(graph).toHaveCount(2);
+    await pair.locator(".trend-pair-scene").last().getByRole("button",{name:"Collapse",exact:true}).click();await expect(graph).toHaveCount(1);
+    await pair.getByRole("button",{name:"Expand",exact:true}).click();
+    await select(second,["timing","timing","p95"]);await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
+    await expect(reading).toContainText("180 ms");
+    await nav.getByRole("button",{name:"Chart guide"}).click();await expect(page.locator(".trends-guide")).toContainText("95th percentile");
+    await page.goBack();await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
+    const periodTransfer=page.locator("#trendsComparePeriods");
+    await periodTransfer.click();await page.getByRole("button",{name:"Open comparison",exact:true}).click();
+    await expect(page).toHaveURL(/\/compare\?/);
+    const u=new URL(page.url());assert.deepEqual(["aFrom","aTo","bFrom","bTo"].map(k=>u.searchParams.get(k)),["2026-11-05","2026-11-11","2026-11-12","2026-11-18"]);
+    await page.getByRole("button",{name:"Back to Trends",exact:true}).click();await expect(periodTransfer).toBeFocused();
+    await expect(reading).toContainText("Nov 16");await expect(reading).toContainText("180 ms");
+    await pair.getByRole("button",{name:"Remove comparison"}).click();await expect(second).toHaveValue("");
+    await expect(graph).toHaveCount(1);assert.equal(reads.length,1);
+});
+
 test("hovering a section or utility paints a compact face without reducing the hit target", async t => {
     const { page } = await setup(t);
     const guide = page.locator("#trends-section-guide");
@@ -92,7 +130,7 @@ test("first entry finds the latest retained week; an explicitly empty period sta
     await screenshot(page,"historical-first-entry");
     await expect(card.locator(".trends-index-scope")).toContainText("4 dated calls");
     assert.equal(reads.at(-1).from,"2026-11-12"); assert.equal(reads.at(-1).to,"2026-11-18");
-    await expect(period).toContainText("Nov 18"); await expect(card.locator("[data-trend-bar]")).toHaveCount(2);
+    await expect(period).toContainText("Nov 12–18, 2026"); await expect(card.locator("[data-trend-bar]")).toHaveCount(2);
     await period.click(); await region.getByRole("button",{name:"Last 7 days",exact:true}).click();
     await expect(card.locator(".trends-index-scope")).toContainText("0 dated calls");
     for (const id of ["rhythm","problems","services","tools","models","timing","authors"]) {
@@ -293,14 +331,14 @@ test("compiled Trends uses the exact daily populations on both chart types and k
     const times = await page.locator(".trends-evidence-time").allTextContents();
     assert(times.some(text => text.includes("12:15")) && times.some(text => text.includes("12:16")), times.join("; "));
     await page.keyboard.press("Escape");
-    await services.getByRole("button", { name: "Compare measures" }).click();
-    const dialog = page.getByRole("dialog", { name: "Compare measures" }), choices = dialog.getByRole("checkbox");
+    await services.getByRole("button", { name: "Arrange charts" }).click();
+    const dialog = page.getByRole("dialog", { name: "Arrange charts" }), choices = dialog.getByRole("checkbox");
     await dialog.getByRole("checkbox", { name: "Call duration", exact: true }).check();
     await dialog.getByRole("button", { name: "Cancel" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
-    await services.getByRole("button", { name: "Compare measures" }).click();
+    await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.check();
     await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
-    await services.getByRole("button", { name: "Compare measures" }).click();
+    await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.uncheck();
     await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     assert.equal(reads.length, initial);
@@ -412,13 +450,13 @@ test("compiled Trends keeps the reading anchor across refinements, compare, empt
     });
     await watch("change measure and return", async () => { await choose(index,"Response models"); await tool.click(); });
     await watch("add comparison", async () => {
-        await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
+        await choose(panel,"Arrange charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
         await choose(view,"Apply comparison"); await expect(panelOf(page,"services")).toBeVisible();
         await expect(panel.locator(".trends-index-scope")).toContainText("Comparing 2 measures");
         await expect(filters).toHaveText("Filters");
     }, {scene:true});
     await watch("remove comparison", async () => {
-        await choose(panel,"Compare measures"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
+        await choose(panel,"Arrange charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
         await choose(view,"Apply comparison");
         await expect(panel.locator(".trends-index-scope")).not.toContainText("Comparing");
     }, {scene:true});
@@ -532,7 +570,7 @@ test("Trends choices keep their selected state distinct from hover and press wit
         ]) await states(control,`${id}/${mode} ${label}`);
         const series = card.locator(".trends-series").first();
         await states(series,`${id}/${mode} series`,series.locator("input"));
-        await card.getByRole("button",{name:"Compare measures"}).click();
+        await card.getByRole("button",{name:"Arrange charts"}).click();
         const row = view.getByRole("dialog").locator(".trends-compare-choices label").first(), check = row.locator("input");
         await states(row,`${id}/${mode} comparison unchecked`,check);
         await check.check(); await states(row,`${id}/${mode} comparison checked`,check);

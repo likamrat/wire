@@ -52,6 +52,7 @@ import { createSavedArtifactDeletion } from "./saved-artifact-deletion.mjs";
 import { createPeriodComparisonState, createPeriodComparisonPresentation, mountPeriodComparison } from "./period-comparison.mjs";
 import { mountTrends } from "./trends.mjs";
 import { mountTrendsChart } from "./trends-chart.mjs";
+import { createTrendPairModel, mountTrendPair } from "./trends-pair.mjs";
 import { createLiveSearchState } from "./live-search-state.mjs";
 import { createSearchMembership } from "./search-membership.mjs";
 import { mountLiveSearch, createFrozenReportFrame, searchHitPresentation } from "./live-search.mjs";
@@ -98,7 +99,7 @@ function factories() {
         createNativeReportPublicationState, mountBoundedNative,
         savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection,
         createReportSaveIdentity, reportWorkspacePresentation, reportFileChoices, createDateRangeCalendar,
-        mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart }),
+        mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart, createTrendPairModel, mountTrendPair }),
         createReportExperience: options => createReportExperience({ ...options, createCalendar: createDateRangeCalendar }),
         createReportSaveWarning, decoratePreparedReport, enhanceReportReading, mountAnalyzeReferenceEntry,
         chartReference: { facts: chartReferenceFacts, mount: options => mountChartReference({ ...options, createState: createChartReferenceState }) },
