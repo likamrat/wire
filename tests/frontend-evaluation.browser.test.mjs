@@ -96,6 +96,44 @@ function compactCardRecords() {
     });
 }
 
+test("Analyze distinguishes grouped tool names and keeps each count with its tool", async t => {
+    const records = compactCardRecords();
+    const mixed = records[0], repeated = records[1];
+    const long = ["workiq-call_function", "workiq-update_entity"];
+    for (const [i, name] of long.entries()) mixed.toolCalls.push({
+        ...mixed.toolCalls[0], tool: name, toolCallId: `long-${i}`, startEventId: `start-long-${i}`, completionEventId: `end-long-${i}`,
+    });
+    repeated.toolCalls.push({ ...repeated.toolCalls[0], toolCallId: "second-read", startEventId: "start-second-read", completionEventId: "end-second-read" });
+    const { page } = await setup(t, "react", records);
+    const cards = page.locator("#activityList .activity-card");
+    const report = process.env.WIRE_TOOL_GROUP_PROOFS;
+    if (report) await mkdir(report, { recursive: true });
+    for (const [width, scale, theme] of [[1440, 1, "light"], [390, 2, "dark"]]) {
+        await page.setViewportSize({ width, height: 900 }); await chooseTheme(page, theme);
+        await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
+        const field = i => cards.nth(i).locator(".card-identity-field").filter({ has: page.locator(".card-tool-item") });
+        await expect(field(0).locator(".card-tool-name")).toHaveText([...long, "workiq-fetch", "workiq-retrieve"]);
+        if (report) {
+            for (const [i, name] of ["multiple", "repeated", "single"].entries()) {
+                await field(i).screenshot({ path: path.join(report, `${name}-${width}.png`) });
+            }
+            await field(0).evaluate(n => n.scrollIntoView({ block: "center" }));
+            await page.screenshot({ path: path.join(report, `screen-${width}.png`) });
+        }
+    }
+    const toolList = cards.first().locator(".card-identities").getByRole("list");
+    await expect(toolList.getByRole("listitem")).toHaveText([...long, "workiq-fetch (3 calls)", "workiq-retrieve"]);
+    await expect(cards.nth(1).locator(".card-identities").getByRole("listitem")).toHaveCount(1);
+    await expect(cards.nth(1).locator(".card-tool-count")).toHaveText("(2 calls)");
+    await expect(cards.nth(2).locator(".card-tool-count")).toHaveCount(0);
+    await expect(toolList.getByRole("listitem").first()).toHaveCSS("list-style-type", "disc");
+    await expect(cards.nth(1).locator(".card-tool-item")).toHaveCSS("list-style-type", "none");
+    await cards.first().locator(".card-panel-link").press("Enter");
+    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(mixed.toolCalls.length);
+    await page.locator("#closeContextSidebar").press("Enter");
+    await expect(cards.first().locator(".card-panel-link")).toBeFocused();
+});
+
 test("Analyze chart, controls and grouped interactions share the available workspace", { timeout: 60000 }, async t => {
     const records = reviewRecords();
     const { page } = await setup(t, "react", [records.at(-1), ...records.slice(0, 7)]);
@@ -381,7 +419,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
         for (const [width, scale] of [[1440,1],[1170,1],[390,2]]) {
             await page.setViewportSize({width,height:1000}); await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
             const measured = await row.evaluate(node => {
-                const list = node.querySelector(".card-tool-item").parentElement, left = list.getBoundingClientRect().left;
+                const list = node.querySelector(".card-tool-list"), left = list.getBoundingClientRect().left + parseFloat(getComputedStyle(list).paddingInlineStart);
                 let prevTop = -Infinity, lines = 0;
                 for (const item of list.children) {
                     const r = item.getBoundingClientRect(), css = getComputedStyle(item);
@@ -391,7 +429,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
                     prevTop = r.top;
                 }
                 const c = node.querySelector(".card-tool-count"), name = c.previousElementSibling, face = node.querySelector(".card-failure-face");
-                return {aligned:true, lines, paper:getComputedStyle(node).backgroundColor, count:getComputedStyle(c).color,
+                return {aligned:true, lines, paper:getComputedStyle(node.closest("#activityList")).backgroundColor, count:getComputedStyle(c).color,
                     failure:getComputedStyle(face).color, failPaper:getComputedStyle(face).backgroundColor,
                     author:getComputedStyle(node.querySelector(".request-card-author")).color,
                     size:getComputedStyle(c).fontSize, nameSize:getComputedStyle(name).fontSize};

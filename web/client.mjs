@@ -5791,14 +5791,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean))
                 gaps.set(gap.reason, { id: "Unknown", label: categories.displayEvidence(gap).label });
         }
-        if (includeTools && ["tool", "reported-api"].includes(layer)) field(tools.size > 1 ? "Tools" : "Tool",
-            tools.size ? [...tools].map(([n, total]) => {
-                const item = el("span", "card-tool-item");
-                item.append(el("span", "card-tool-name", n));
-                if (total > 1) item.append(document.createTextNode(" "), el("span", "card-tool-count",
+        if (includeTools && ["tool", "reported-api"].includes(layer)) {
+            const list = el("ul", "card-tool-list");
+            for (const [name, total] of tools) {
+                const item = el("li", "card-tool-item");
+                item.append(el("span", "card-tool-name", name));
+                if (total > 1) item.append(document.createTextNode("\u00a0"), el("span", "card-tool-count",
                     `(${count(total)} ${layer === "tool" ? "calls" : "results"})`));
-                return item;
-            }) : rows?.length ? [el("span", "muted", "Not recorded")] : []);
+                list.append(item);
+            }
+            field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [list] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
+        }
         const cues = entries => [...entries.values()].map(item => serviceCue("span", item.id, item));
         const values = cues(targets);
         if (values.length > 3 && includeTools) {

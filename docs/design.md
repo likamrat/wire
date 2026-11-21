@@ -62,8 +62,9 @@ Keep provenance in Source details; name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
 the glyph beside its label. Separate the identity key from the prompt with a
-rule; inside a field, grouped names wrap back to one value edge without
-separators. Show repeats with a readable unit such as “2 calls.” On a returned
+rule. A single tool needs no marker; multiple tools use a compact bulleted list.
+Wrap whole tool groups where they fit, with each repeat count beside its name
+and a readable unit such as “2 calls.” On a returned
 result layer the unit is results, not calls. The reader retains every record.
 
 ### Surfaces and color

@@ -712,9 +712,12 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identity-field+.card-identity-field {margin-top:4px}.card-identity-field dt {margin:0;color:var(--muted)}
 .card-identity-values {display:flex;align-items:baseline;flex-wrap:wrap;gap:.22em 1em;margin:0;min-width:0;overflow-wrap:anywhere}
 .card-identity-values>* {min-width:0;max-width:100%}
-.card-tool-item {display:inline-flex;align-items:baseline;gap:.35em;color:var(--ink)}
+.card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:.25em 1.5em;margin:0;padding:0;list-style:none;max-width:100%}
+.card-tool-list:has(>li+li) {padding-inline-start:1em;list-style:disc}
+.card-tool-item {max-width:100%;min-width:0;color:var(--ink)}
+.card-tool-item::marker {color:var(--muted);font-size:.8em}
 .card-tool-item .card-tool-name {min-width:0;overflow-wrap:anywhere}
-.card-tool-item .card-tool-count {flex:none;white-space:nowrap;font:inherit;color:var(--ink);font-variant-numeric:tabular-nums}
+.card-tool-item .card-tool-count {white-space:nowrap;font:inherit;color:var(--muted);font-variant-numeric:tabular-nums}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
@@ -793,7 +796,6 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 #activityList>.activity-card .interaction-tools {display:grid;gap:4px;margin:0;padding:0;list-style:none;color:var(--ink);font:inherit}
 #activityList>.activity-card .interaction-tools>li {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;min-width:0}
 #activityList>.activity-card .card-tool-name {font:inherit;overflow-wrap:anywhere;min-width:0}
-#activityList>.activity-card .card-tool-count {color:var(--ink)}
 #activityList>.activity-card .recorded-results {align-items:center;gap:4px 12px}
 #activityList>.activity-card .result-unit {font-weight:var(--weight-regular)}
 #activityList>.activity-card .recorded-result-label {text-transform:none;letter-spacing:0;font-weight:var(--weight-regular)}
