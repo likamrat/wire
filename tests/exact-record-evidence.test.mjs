@@ -499,6 +499,24 @@ test("a remote task notice contributes a fenced reference, never a second source
     await assert.rejects(scan([remote, ...original], { state: { checkpointEvents: [{ alias: task }] } }), unverified);
 });
 
+test("task-linked prompt references cannot hide a second interaction, a checkpoint claim or a deletion", async () => {
+    const task = "49cd6a7d-5d0e-4d9e-974f-af84f77b140a", interaction = "ad0ae80a-fdcc-449d-964f-811c96e76a4d";
+    const data = { parentAgentTaskId: task, interactionId: interaction, supportedNativeDocumentMimeTypes: [],
+        responsesReasoning: { model: "invented", initialEffort: "low", effort: "medium" } };
+    const scoped = change(p, data), rows = [scoped, a, s, e];
+    assert.deepEqual((await scan(rows)).records, (await scan([p, a, s, e])).records);
+    for (const extra of [{ ...scoped, id: "another" }, change(a, { originatingMessageId: interaction }),
+        line(task, "assistant.message", { content: "Another event." }, 7)]) {
+        await assert.rejects(scan([...rows, extra]), unverified);
+    }
+    for (const patch of [{ parentAgentTaskId: interaction }, { supportedNativeDocumentMimeTypes: ["text/plain"] },
+        { responsesReasoning: { ...data.responsesReasoning, owner: "another" } }, { interactionId: undefined }]) {
+        await assert.rejects(scan(rows.with(0, change(scoped, patch))), unverified);
+    }
+    await assert.rejects(scan(rows, { state: { checkpointEvents: [{ data: { alias: interaction } }] } }), unverified);
+    await assert.rejects(scan(rows, { state: { deletion: { events: [eventIdentity(sessionId, task)] } } }), unverified);
+});
+
 function firstPromptHooks() {
     const initial = change(p, { messageId: "77ff1beb-2d83-4edc-8c92-eec722366750", delivery: "idle",
         transformedContent: `<current_datetime>${p.timestamp}</current_datetime>\n\n${p.data.content}` });

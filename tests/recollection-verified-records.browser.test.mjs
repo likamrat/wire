@@ -42,7 +42,7 @@ const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptTok
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
 async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false,
-    longRequest = false, denseHook = false, priorNotice = false } = {}) {
+    longRequest = false, denseHook = false, priorNotice = false, taskPrompt } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -104,6 +104,16 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
     ]));
     const known = chain(day, "known", 10, true);
+    if (taskPrompt) {
+        const [prompt, request] = known;
+        const messageId = randomUUID(), parentAgentTaskId = randomUUID(), interactionId = randomUUID();
+        delete prompt.data.source;
+        Object.assign(prompt.data, { messageId, parentAgentTaskId, interactionId, delivery: "idle", turnId: request.data.turnId,
+            transformedContent: `<current_datetime>${prompt.timestamp}</current_datetime>\n\n${prompt.data.content}`,
+            supportedNativeDocumentMimeTypes: [], responsesReasoning: { model: "invented-model", initialEffort: "low", effort: "medium" } });
+        request.data.originatingMessageId = taskPrompt === "conflicting" ? parentAgentTaskId : messageId;
+        if (taskPrompt === "collision") prompt.data.parentAgentTaskId = sourceId;
+    }
     if (longRequest) known[1].data.content = "Invented discarded reply. ".repeat(1400);
     let knownOriginals = known;
     if (priorNotice) {
@@ -314,6 +324,25 @@ test("history compatibility: late recovery and ordinary collection agree on the 
     await f.start();
     assert.deepEqual(ok(await f.post("status", receiptFor(review))), receipt);
     assert.deepEqual(facts(await loadBoardState(f.context)), expected);
+});
+
+test("verified preview keeps the source, parent task, interaction and originating message distinct", async t => {
+    for (const taskPrompt of ["explicit", "conflicting", "collision"]) await t.test(taskPrompt, async t => {
+        const f = await fixture(t, { taskPrompt });
+        await f.start();
+        const before = await loadBoardState(f.context);
+        const r = await f.post("preview", { ...f.scope, mode });
+        if (taskPrompt !== "explicit") {
+            assert.equal(r.status, 422);
+            assert.equal(r.body.code, "EXACT_EVIDENCE_UNVERIFIED");
+            assert.equal(r.body.operationId, undefined);
+        } else {
+            const p = ok(r);
+            assertReview(f, p);
+            assert.doesNotMatch(JSON.stringify(p), /parentAgentTaskId|interactionId|invented-model/);
+        }
+        assert.deepEqual(await loadBoardState(f.context), before);
+    });
 });
 
 test("history compatibility: a later unfamiliar record cannot publish earlier proposals or leak source fields", async t => {
