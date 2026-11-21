@@ -205,6 +205,24 @@ input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
 
+### Changing a Copilot journal format
+
+Run `npm run test:history-compatibility` when changing source recognition,
+retention or historical recovery. It uses invented journals and disposable
+stores. It compares normal collection with recovery from the **same original
+events** after the connector mapping arrives late. Compare the originating
+prompt, author, call, start, completion and outcome, not just the count.
+A start without an end can be retained as unknown by collection; it is not
+independently recoverable as a completed call.
+
+For a newly observed layout, add the smallest invented example to the
+existing fixtures. Keep an older layout in the comparison and include a
+counterexample that would change attribution or exclusions. A new field is
+not safe merely because the current collector ignores it. An unfamiliar
+record after a valid call must not produce an empty-success response or
+leave the earlier call available for confirmation. No test should require
+someone's real history or permission to replay it.
+
 ### Browser build and React evaluation
 
 `npm run build` creates local, content-hashed browser modules in `dist/client`.

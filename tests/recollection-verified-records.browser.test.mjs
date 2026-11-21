@@ -96,7 +96,9 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
             allowAllPermissions: true, previousAllowAllPermissionMode: "off", allowAllPermissionMode: "on" }, "mode-switch"),
         event("remote-notice", "session.info", at(day, 3), { infoType: "remote", message: "Invented remote session.",
             url: "https://github.com/copilot/tasks/395078e3-b26f-43f5-81ae-681384491cad" }, "permission-notice"),
-        event("mode-notice", "session.mode_notice_delivered", at(day, 4), { mode: "plan", instructionUpdatePersisted: true }, "remote-notice"),
+        event("permission-after-update", "session.permissions_changed", at(day, 4),
+            { previousMode: "allow-all", mode: "assisted" }, "remote-notice"),
+        event("mode-notice", "session.mode_notice_delivered", at(day, 4), { mode: "plan", instructionUpdatePersisted: true }, "permission-after-update"),
         event("other-turn-open", "assistant.turn_start", at(day, 5), { turnId: "other-turn" }),
         event("other-turn-close", "assistant.turn_end", at(day, 6), { turnId: "other-turn" }),
     ]));
@@ -219,6 +221,67 @@ test("exact preview can finish validating a dense, disjoint hook without changin
     await f.start();
     assertReview(f, ok(await f.post("preview", { ...f.scope, mode })));
     assert.deepEqual(ids(await loadBoardState(f.context)), []);
+});
+
+test("history compatibility: late recovery and ordinary collection agree on the same mixed-format originals", async t => {
+    const f = await fixture(t, { denseHook: true, disjointTurns: true, causalHooks: true, longRequest: true });
+    const ordinaryContext = { dataDir: path.join(path.dirname(f.context.dataDir), "ordinary-store") };
+    const ordinary = await createCollector(ordinaryContext, { timers: false });
+    try {
+        await ordinary.configure({ approved: true, enabled: false, appDbPath: f.dbPath,
+            sessionRoot: path.dirname(path.dirname(f.file)), windowDays: 7, pollSeconds: 5 });
+        let status;
+        for (let i = 0; i < 16; i++) {
+            status = await ordinary.collectNow();
+            if (!status.metrics.backlogBytes) break;
+        }
+        assert.equal(status.metrics.backlogBytes, 0);
+    } finally { await ordinary.close(); }
+
+    // Ordinary collection had the mapping at first read. The original store
+    // learned it after EOF and must not silently rewind or invent a result.
+    const facts = state => state.evidence.filter(r => r.sourceSessionId === f.sourceId).flatMap(r =>
+        r.toolCalls.map(c => [c.toolCallId, r.userPrompt.sourceEventId, r.userPrompt.authorship.actor, c.startEventId,
+            c.completionEventId, c.reportedOutcome])).sort((a, b) => a[0].localeCompare(b[0]));
+    const expected = [["call-known", "prompt-known", "user", "start-known", "end-known", "succeeded"],
+        ["call-unknown", "prompt-unknown", "user", "start-unknown", "end-unknown", "unknown"]];
+    const ordinaryFacts = facts(await loadBoardState(ordinaryContext));
+    assert.deepEqual(ordinaryFacts.filter(row => ["call-known", "call-unknown"].includes(row[0])), expected);
+    const unfinished = ordinaryFacts.find(row => row[0] === "call-unfinished");
+    assert.deepEqual(unfinished?.slice(-2), [null, "unknown"]);
+
+    await f.start();
+    ok(await f.api("/api/collection/now", {}));
+    assert.deepEqual(facts(await loadBoardState(f.context)), []);
+    const review = ok(await f.post("preview", { ...f.scope, mode }));
+    assertReview(f, review);
+    assert.deepEqual(facts(await loadBoardState(f.context)), []);
+    const receipt = ok(await f.post("confirm", confirm(review)));
+    await f.start();
+    assert.deepEqual(ok(await f.post("status", receiptFor(review))), receipt);
+    assert.deepEqual(facts(await loadBoardState(f.context)), expected);
+});
+
+test("history compatibility: a later unfamiliar record cannot publish earlier proposals or leak source fields", async t => {
+    for (const [label, type, reason] of [
+        ["new family", "private-extension-example", /unsupported record type/],
+        ["changed layout", "session.permissions_changed", /session\.permissions_changed.*unsupported/],
+    ]) await t.test(label, async t => {
+        const f = await fixture(t);
+        await f.start();
+        await appendFile(f.file, encode([event("private-event-example", type, at(f.day, 90),
+            { mode: "assisted", privateFieldExample: "private-value-example" })]));
+        ok(await f.api("/api/collection/now", {}));
+        const before = await loadBoardState(f.context);
+        const refusal = await f.post("preview", { ...f.scope, mode });
+        assert.equal(refusal.status, 422);
+        assert.equal(refusal.body.code, "EXACT_EVIDENCE_UNVERIFIED");
+        assert.match(refusal.body.error, reason);
+        assert.doesNotMatch(JSON.stringify(refusal.body), /private-extension-example|private-event-example|privateFieldExample|private-value-example/);
+        assert.equal(refusal.body.operationId, undefined);
+        assert.equal(refusal.body.exactMembers, undefined);
+        assert.deepEqual(await loadBoardState(f.context), before);
+    });
 });
 
 test("a missing mapped call joins the existing agent prompt without rewriting it", async t => {
