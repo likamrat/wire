@@ -1,13 +1,7 @@
 import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
-import { paletteGallery } from "./palette-gallery.mjs";
+import { paletteGallery, palettePreview } from "./palette-gallery.mjs";
 import { uxIcons } from "./ux-icons.mjs";
-
-function preferenceLink(section, category, label, valueId) {
-    return `<a id="general-${section}" class="settings-preference-link" href="/settings?section=${section}" data-settings-link data-general-shortcut>
-      ${uxIcons["settings-" + section]}<span class="preference-name">${label}<small>${category}</small></span>
-      <span class="preference-value" id="${valueId}">Unavailable</span>${uxIcons.disclosure}</a>`;
-}
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -41,11 +35,18 @@ export const settingsMarkup = `
       <p id="appUpdateAutoHelp"></p></div>
       <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="select-toggle" aria-hidden="true"></span></label>
     </div>
-    <section class="settings-group general-preferences" aria-labelledby="generalPreferencesTitle">
-      <h3 id="generalPreferencesTitle">Display preferences</h3>
-      ${preferenceLink("themes", "Themes", "Current theme", "generalThemeValue")}
-      ${preferenceLink("regional", "Regional", "Time zone", "generalTimeValue")}
+    <section class="general-appearance" aria-labelledby="generalThemeTitle">
+      <h3 id="generalThemeTitle">Current theme</h3>
+      <a id="general-themes" class="settings-preference-link" href="/settings?section=themes" data-settings-link data-general-shortcut
+        aria-labelledby="generalThemeAction" aria-describedby="generalThemeValue">
+        ${palettePreview("petrol","light")}<span id="generalThemeValue"><strong id="generalPaletteName"></strong><span id="generalMode">Unavailable</span></span>
+        <span class="preference-destination" id="generalThemeAction">Change theme ${uxIcons.disclosure}</span>
+      </a>
     </section>
+    <a id="general-regional" class="settings-preference-link" href="/settings?section=regional" data-settings-link data-general-shortcut>
+      <span><strong>Time zone</strong><span id="generalTimeValue">Unavailable</span></span>
+      <span class="preference-destination">Regional ${uxIcons.disclosure}</span>
+    </a>
   </section>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>

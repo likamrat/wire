@@ -1,7 +1,7 @@
 import { palettes } from "./theme.mjs";
 import { uxIcons } from "./ux-icons.mjs";
 
-function preview(id, mode) {
+export function palettePreview(id, mode) {
     return `<span class="palette-scene" data-preview-palette="${id}" data-preview-mode="${mode}" aria-hidden="true">
       <span class="palette-rail"></span><span class="palette-sheet"><span class="palette-type"><i></i><i></i></span>
       <span class="palette-strip"><i></i><i></i><i></i><i></i></span></span></span>`;
@@ -15,10 +15,10 @@ export const paletteGallery = `
     <div id="recentPalettes" hidden></div></div>
   <fieldset class="palette-grid" aria-labelledby="paletteTitle" aria-describedby="paletteStorageNotice">
   ${Object.entries(palettes).map(([id,name]) => `<label class="palette-option"><input id="palette-${id}" type="radio" name="screenPalette" value="${id}" aria-label="${name}${id === "petrol" ? ", default" : ""}">
-    ${preview(id,"light")}${preview(id,"dark")}<span class="palette-caption"><span>${name}${id === "petrol" ? ' <small>Default</small>' : ""}</span><span class="palette-active">${uxIcons["select-check"]} Active</span></span></label>`).join("")}</fieldset>
+    ${palettePreview(id,"light")}${palettePreview(id,"dark")}<span class="palette-caption"><span>${name}${id === "petrol" ? ' <small>Default</small>' : ""}</span><span class="palette-active">${uxIcons["select-check"]} Active</span></span></label>`).join("")}</fieldset>
   <p id="paletteEmpty" hidden>No palettes match.</p>
   <details class="palette-comparison"><summary>Compare Light and Dark</summary><div>${["light","dark"].map(mode =>
-        `<div><b>${mode === "light" ? "Light" : "Dark"}</b>${preview("petrol",mode)}</div>`).join("")}</div></details>
+        `<div><b>${mode === "light" ? "Light" : "Dark"}</b>${palettePreview("petrol",mode)}</div>`).join("")}</div></details>
   <p id="paletteStorageNotice" class="notice" role="status" hidden>Palette could not be saved in this browser. Your choice applies to this panel only.
   <button type="button" id="retryPalette">Try saving again</button></p><span id="paletteAnnouncement" role="status" class="visually-hidden"></span>
 </section>`;
