@@ -605,11 +605,15 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await captureSwitchState(page, `${theme}-reply-on-draft`);
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(choice).toBeDisabled();
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("Turning on reply saving. Last confirmed setting: off.");
     await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toBeDisabled();
     await captureSwitchState(page, `${theme}-reply-saving`);
     await category(page, "display"); release();
     await category(page, "privacy");
     await expect(pane.getByRole("alert")).toContainText("do not repeat the update");
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("The current setting is unconfirmed. Last confirmed setting: off.");
     await expect(choice).toBeDisabled();
     await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toHaveCount(0);
     await captureSwitchState(page, `${theme}-reply-unknown`);
@@ -631,6 +635,9 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(pane.getByRole("alert")).toContainText("Synthetic source approval changed");
     await expect(choice).toBeEnabled();
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("Response saving is off.");
+    await expect(pane.getByRole("button", { name: "Turn on response saving", exact: true })).toBeEnabled();
     assert.equal(writes.length, 2);
     assert.notEqual(writes[1].mutationRef, writes[0].mutationRef);
     await captureSwitchState(page, `${theme}-reply-rejected`);

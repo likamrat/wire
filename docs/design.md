@@ -177,7 +177,10 @@ Use the same 44×26px track and round, sliding thumb for a binary setting.
 Keep its target at least 44px high. On/off is visible in position and
 theme-aware contrast. The theme switch retains its sun and moon. Disabled
 inputs retain their state, with a dashed boundary; pending copy stays with
-the setting. A list option, radio, disclosure or section link is not a switch.
+the setting. A reply-saving draft previews the requested choice. From submission
+until confirmation the switch shows the last confirmed setting; an unknown
+outcome is not a rejection. A list option, radio, disclosure or section link
+is not a switch.
 
 Toolbar buttons, selects and numeric fields use a compact painted face inside
 their full target. Keep text/icon baselines aligned and let targets grow with

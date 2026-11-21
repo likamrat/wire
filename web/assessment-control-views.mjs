@@ -69,14 +69,22 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
             : state === "enabled" ? idle ? "" : "Response saving is on."
             : state === "off" ? idle ? "" : "Response saving is off."
                 : "The response-saving state is no longer current. Reload these settings.";
-        if (snapshot.draft !== null && !locked(snapshot)) applied.textContent += " This change is not saved yet.";
+        const requested = snapshot.draft?.enabled;
+        if (requested !== undefined) {
+            const last = inactiveGrant ? `Last confirmed setting: inactive for this source.`
+                : `Last confirmed setting: ${active ? "on" : "off"}.`;
+            if (snapshot.phase === "pending") applied.textContent = `Turning ${requested ? "on" : "off"} reply saving. ${last}`;
+            else if (["unknown", "checking"].includes(snapshot.phase)) applied.textContent = `The current setting is unconfirmed. ${last}`;
+        }
+        if (snapshot.phase === "editing") applied.textContent += " This change is not saved yet.";
         applied.hidden = !applied.textContent;
-        input.checked = snapshot.draft?.enabled ?? active;
+        // A draft previews the choice. Once submitted, the switch represents only confirmed consent.
+        input.checked = snapshot.phase === "editing" ? requested : active;
         input.disabled = locked(snapshot) || currentSource?.available === false;
         confirm.disabled = locked(snapshot) || snapshot.draft === null;
         confirm.hidden = idle;
         confirm.textContent = snapshot.phase === "pending" ? "Saving..." : snapshot.draft === null ? "Save response setting"
-            : input.checked ? "Turn on response saving" : "Turn off and delete responses";
+            : requested ? "Turn on response saving" : "Turn off and delete responses";
         confirm.classList.toggle("danger", snapshot.draft !== null && (snapshot.draft.enabled === false || inactiveGrant));
         check.hidden = !["unknown", "checking"].includes(snapshot.phase);
         check.disabled = snapshot.phase === "checking";
@@ -87,7 +95,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         revoke.hidden = state !== "enabled" || snapshot.draft?.enabled !== false;
         renewalImpact.hidden = !inactiveGrant || snapshot.draft?.enabled !== true;
         details.hidden = snapshot.draft?.enabled !== true;
-        status.textContent = localError || (snapshot.phase === "view" ? "" : snapshot.message);
+        status.textContent = localError || (["view", "pending"].includes(snapshot.phase) ? "" : snapshot.message);
         status.hidden = !status.textContent;
         status.setAttribute("role", localError || ["error", "unknown", "stale"].includes(snapshot.phase) ? "alert" : "status");
         form.setAttribute("aria-busy", String(["pending", "checking"].includes(snapshot.phase)));
