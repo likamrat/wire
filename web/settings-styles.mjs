@@ -266,19 +266,20 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 #settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
 .general-appearance {border-top:1px solid var(--rule);padding-block:1.25rem .85rem}
 .settings-view .general-appearance h3,.settings-preference-link strong {margin:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
-.settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;
+.settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;min-height:44px;
  padding:.65rem 0;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
 .general-appearance .palette-scene {width:min(7.5rem,100%);min-height:3.8rem;box-sizing:border-box;border:1px solid var(--rule);border-radius:var(--radius-small)}
 .general-appearance .palette-sheet {align-content:center}
 .settings-preference-link strong,#generalMode,#generalTimeValue {display:block}
 #generalMode,#generalTimeValue {color:var(--muted);font-size:var(--type-small)}
-.settings-preference-link>.preference-destination {display:flex;align-items:center;gap:.25rem;margin-inline-start:auto;font-size:var(--type-control);color:var(--ink)}
-.preference-destination .wire-icon {width:1rem;height:1rem}
-.settings-preference-link:hover {background:var(--hover)}.settings-preference-link:active {background:var(--pill-pressed)}
+.settings-preference-link>.preference-destination {display:inline-flex;align-items:center;gap:var(--space-xs);margin-inline-start:auto;
+ padding:.25em .5em;border-radius:var(--radius-small);font-size:var(--type-control);line-height:var(--leading-control);color:var(--ink)}
+.preference-destination .wire-icon {display:block;flex:none;width:1rem;height:1rem}
+.settings-preference-link:hover>.preference-destination {background:var(--hover)}
+.settings-preference-link:active>.preference-destination {background:var(--pill-pressed)}
 .settings-preference-link:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 @container settings-pane (max-width:23rem) {
  .settings-preference-link>.preference-destination {margin-inline-start:0}
- #general-themes>.preference-destination {flex-basis:100%}
 }
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}
@@ -289,7 +290,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view [data-settings-section=themes]>.settings-theme-row,.settings-view [data-settings-section=regional]>.settings-display-field {padding-top:0;border:0}
 .settings-view .settings-theme-row {align-items:center}
 .settings-view .settings-theme-row .theme-trigger {border-radius:var(--radius-pill)}
-.settings-view .settings-section>:nth-last-child(1 of :not([hidden])) {padding-bottom:0}
+.settings-view .settings-section>:nth-last-child(1 of :not([hidden])):not(.settings-preference-link) {padding-bottom:0}
 .display-time-field p {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}

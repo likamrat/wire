@@ -177,6 +177,36 @@ test("General preference rows open canonical pages and return to updated values"
     assert.ok(actions.every(({ action }) => action === "status"));
 });
 
+test("General shortcut hover highlights only the destination and keeps its chevron centered", async t => {
+    const { page } = await workspace(t, { supported: false });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const id of ["general-regional", "general-themes"]) {
+        const row = page.locator("#" + id), destination = row.locator(".preference-destination");
+        await row.scrollIntoViewIfNeeded();
+        await page.mouse.move(0, 0);
+        const resting = await destination.boundingBox();
+        // Hover the description, not the trailing action: the whole row is still a link.
+        await row.hover({ position: { x: 5, y: 10 } });
+        const paint = await row.evaluate(n => {
+            const d = n.querySelector(".preference-destination"), icon = d.querySelector("svg");
+            const rect = n.getBoundingClientRect(), arrow = icon.getBoundingClientRect(), face = d.getBoundingClientRect();
+            return { hovered: n.matches(":hover"), row: getComputedStyle(n).backgroundColor, face: getComputedStyle(d).backgroundColor,
+                arrowOffset: (arrow.top + arrow.bottom - rect.top - rect.bottom) / 2,
+                endInset: face.right - arrow.right, height: rect.height };
+        });
+        if (process.env.WIRE_SETTINGS_GENERAL_PROOFS) {
+            await mkdir(process.env.WIRE_SETTINGS_GENERAL_PROOFS, { recursive: true });
+            await row.screenshot({ path: path.join(process.env.WIRE_SETTINGS_GENERAL_PROOFS, `${id}-hover.png`) });
+        }
+        assert.ok(paint.hovered && Math.abs(paint.arrowOffset) <= 1, `${id}: ${JSON.stringify(paint)}`);
+        assert.equal(paint.row, "rgba(0, 0, 0, 0)", `${id}: row-wide hover`);
+        assert.notEqual(paint.face, paint.row, `${id}: no visible destination cue`);
+        assert.ok(paint.endInset >= 4 && paint.height >= 44,
+            `${id}: ${JSON.stringify(paint)}`);
+        assert.deepEqual(await destination.boundingBox(), resting);
+    }
+});
+
 test("General shows the actual fallback zone and panel-only palette at narrow enlarged size", async t => {
     const { page, actions } = await workspace(t, { supported: false });
     await page.addInitScript(() => {
