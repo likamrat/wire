@@ -532,6 +532,10 @@ declared fields and identifiers against the whole source and its checkpoint.
 Notice content never supplies attribution or grants access. Unknown
 fields, ambiguous identifiers, and unclassified oversized entries still
 prevent a verified-record preview.
+If another saved prompt's text happens to equal the call ID, WIRE can
+distinguish that text from a second request. The complete checkpoint row
+and saved prompt must match a unique original, and the ID must appear there
+only as text. An actual competing request still rules out the call.
 For a permissions notice recorded as `on`/`off`, both the previous and new
 modes must agree with their corresponding Boolean flags.
 A remote-session notice may name a canonical GitHub Copilot task URL. WIRE
