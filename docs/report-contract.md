@@ -196,12 +196,21 @@ Mixed interactions qualify. Completed-only requires at least one eligible call,
 every call completed and no recorded errors. Unknown evidence is neither failure
 nor success. Unverified authors remain available through All.
 
-`reportPatterns` v2 binds normalized operations and distinct error channels to
+`reportPatterns` v3 binds normalized operations and distinct error channels to
 their calls and interactions. It does not infer root causes or prompt similarity.
 For conflicting returned statuses with error evidence, patterns preserve both
 the reported and diagnostic sides and label the conflict. Version 1 patterns and
 all saved population flags retain their original frozen meaning; they are not
-recomputed on read. New version 2 patterns require a compatible reader.
+recomputed on read. New observations can include `errorDetailVersion: 1`:
+the typed error field supplied text or a code, independently of whether the
+report may disclose its value. A status disagreement between two non-error
+statuses is not itself an error. Version 3 patterns count these qualified
+signals without copying the message or a withheld code into the pattern. A
+qualified recurring cause, such as sign-in required or an upstream connection
+timeout, is grouped with its operation and attributed to its call, result or
+returned entry. An unexplained marker does not acquire a cause from similar calls.
+Older observations and v1/v2 pattern groups keep their saved meaning; new
+reports with this extension need a compatible reader.
 `reportNotes` v1 contains report-author context scoped to included pseudonymous
 interaction IDs. Notes share privacy treatment and the existing copy budget,
 but never enter metrics. Matching namespace hashes are required in the manifest

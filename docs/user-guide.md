@@ -85,6 +85,12 @@ missing prompt text alone does not make its author unknown. Microsoft 365
 conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 
+On an Analyze card, the failed-call link opens the first matching failed
+call. Its short reason comes from that call; a returned-entry issue has a
+separate link to that entry. Open the reader for the full retained wording,
+code and status. A completed tool can still return an error. A missing
+completion does not establish that anyone cancelled the call.
+
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
 **Settings > Regional > Time zone**. Missing history and records without qualified

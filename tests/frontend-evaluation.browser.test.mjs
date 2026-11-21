@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { frontendRecords, reviewRecords, overviewGeometry } from "./frontend-fixture.mjs";
 import { scanSourceForExport } from "../lib/privacy.mjs";
-import { chooseTheme, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { chooseTheme, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, fulfillFixtureUpdateStatus } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast } from "./color-measurements.mjs";
@@ -52,7 +52,8 @@ async function setup(t, frontend = "react", records = frontendRecords()) {
         "/api/assessment/detail", "/api/evaluation/automatic/summary", "/api/search/events", "/api/search/query",
         "/api/search/open", "/api/search/cancel", "/api/search/close", "/api/period-comparison", "/api/trends",
         "/api/report-artifacts/list"]);
-    await page.route("**/*", route => {
+    await page.route("**/*", async route => {
+        if (await fulfillFixtureUpdateStatus(route, new URL(app.runtime.url).origin)) return;
         const request = route.request(), url = new URL(request.url());
         const updateStatus = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
         if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && !allowed.has(url.pathname) && !updateStatus) {
@@ -174,7 +175,7 @@ test("completed status opens every counted call and no uncounted sibling", {time
     } finally {await cdp.detach();}
 });
 
-test("compact summaries keep diagnostic prose in the right reader while exact filtered calls remain reachable", { timeout: 60000 }, async t => {
+test("compact summaries name the scoped causes and open the full diagnostic in the exact reader", { timeout: 60000 }, async t => {
     const { page } = await setup(t, process.env.WIRE_TEST_FRONTEND ?? "react", compactCardRecords());
     const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";
     if (proofs) {
@@ -188,7 +189,9 @@ test("compact summaries keep diagnostic prose in the right reader while exact fi
     await expect(card.locator(".card-tool-item").filter({hasText:"workiq-fetch"})).toHaveText("workiq-fetch (3 calls)");
     await expect(card.locator(".card-identities")).toContainText("Mail");
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
-    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied|ToolUnavailable|flag alone|completion event|end time/);
+    await expect(card.locator(".request-card-cause").filter({ hasText: "workiq-retrieve" })).toContainText("ToolUnavailable");
+    await expect(card.locator(".request-card-cause").filter({ hasText: "returned entry 2" })).toContainText("AccessDenied");
+    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
     await expect(card.locator("button,input,details")).toHaveCount(0);
     await promptLink.focus(); await page.keyboard.press("Enter");

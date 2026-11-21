@@ -5865,6 +5865,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const exception = activityCardException(layer, rows, summary);
         const failure = layer === "tool" && summary?.failure && callInvestigation.firstFailure(workspaceState.evidence.requestActivity,
             workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
+        if (failure) {
+            const failed = rows.find(r => r.id === failure.call), hint = failed && results.issueCue(sourceCallFor(failed), "failure");
+            if (failed && hint) facts.append(el("span", "request-card-cause", `${failed.tool}: ${failureReasonText(hint)}`));
+        }
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         function evidenceLink(label, destination, status) {
             const link = open(label, "record", destination);
@@ -5883,12 +5887,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (issue) {
             const result = results.returnedResult(sourceCallFor(issue), issue), diagnostic = result?.errorDiagnostic?.statusCode;
             const service = issue.serviceAssociation?.services?.length === 1 ? serviceLabel(issue.serviceAssociation.services[0]) : "Returned";
+            const cue = results.issueCue(sourceCallFor(issue), issue.outcome, result);
             const label = diagnostic != null && issue.status != null && diagnostic !== issue.status ? "statuses disagree"
                 : issue.status != null ? `HTTP ${issue.status}` : "reported error";
             foot.append(evidenceLink(`${service} result: ${label}`, exact(issue, "reported-api")));
+            if (cue && (result?.errorCode || result?.errorDiagnostic?.message || result?.errorDiagnostic?.details?.length)) {
+                const name = Number.isSafeInteger(result.index) && result.index >= 0 ? `returned entry ${result.index + 1}` : "returned entry";
+                facts.append(el("span", "request-card-cause", `${issue.tool}, ${name}: ${cue}`));
+            }
         }
         const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));
-        if (reported) foot.append(evidenceLink("Reported result issue", exact(reported, layer)));
+        if (reported) {
+            const cue = results.issueCue(sourceCallFor(reported), reported.outcome);
+            foot.append(evidenceLink(cue ? `${reported.tool} result: ${cue}` : "Reported result issue", exact(reported, layer)));
+        }
         if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
             if (cue) foot.append(el("span", "request-card-exception", cue));

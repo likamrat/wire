@@ -99,7 +99,10 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         const diagnostic = call?.resultEvidence?.version === 1 ? call.resultEvidence.diagnostic : null;
         const result = diagnostic?.version === 1 && !genericMessage(diagnostic) ? diagnosticSummary(diagnostic) : "";
         const duplicate = diagnostic && JSON.stringify(diagnostic) === JSON.stringify(call?.failureEvidence?.diagnostic);
-        return [primaryFailureCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
+        // A legacy summary derived from returned entries is not an independent invocation cause.
+        const entrySummary = !call?.failureEvidence?.diagnostic && call?.failureEvidence?.messageSource === "workiq-error-json"
+            && call.failureEvidence.messageSignal === "response-processing-error" && returnedErrorSummary(call);
+        return [entrySummary ? null : primaryFailureCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
             includeReturned ? returnedErrorSummary(call) : null].filter(Boolean).join("\n") || null;
     }
     function reportedStatus(status, subject = "The tool") {
@@ -391,6 +394,23 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             .map(target => [target.method, target.apiVersion, target.path].filter(Boolean).join(" ")))];
         return [row?.tool || "Tool not recorded", paths.length ? "Requested: " + paths.join("; ") : null].filter(Boolean).join(" \u00b7 ");
     }
+    // Preview one scoped reason; the link keeps its exact call/entry, with full text in the reader.
+    function issueCue(call, outcome, entry) {
+        if (!call) return null;
+        const value = call.resultEvidence;
+        let detail;
+        if (entry) {
+            const diagnostic = entry.errorDiagnostic;
+            if (diagnostic?.statusCode != null && entry.statusCode != null && diagnostic.statusCode !== entry.statusCode)
+                detail = `Returned HTTP ${entry.statusCode}; diagnostic HTTP ${diagnostic.statusCode}`;
+            else detail = diagnosticSummary({ ...diagnostic, code: diagnostic?.code ?? entry.errorCode }, entry.statusCode);
+        } else if (outcome === "failure") detail = failureReason(call, { contextual: true, includeReturned: false });
+        else if (value?.version === 1) detail = completionReason(call, outcome, true, false);
+        if (!detail) return null;
+        const first = Array.from(detail.split("\n").find(Boolean)?.trim() ?? "");
+        if (!first.length) return null;
+        return first.length > 160 ? first.slice(0, 157).join("") + "..." : first.join("");
+    }
     function returnedCoverage(call) {
         const result = call?.resultEvidence, retained = call?.apiResults?.length ?? 0;
         if (result?.version !== 1) return null;
@@ -646,5 +666,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, issueCue, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }
