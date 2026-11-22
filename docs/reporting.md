@@ -81,6 +81,16 @@ stay unchanged. Prepare a new report to use the corrected author.
 
 ## Read the findings
 
+New focused reports put a finding, its population and one recorded example
+together in preview, Brief and the saved document. Compare the directly labeled
+pattern rows by **interactions**, not calls: an interaction can match several
+rows, so the bars do not add to a total. Choose a pattern for its members, or
+open the example call directly. A tool's completion, a tool-reported status
+and the status of a particular returned entry answer different questions.
+For example, a completed batch can have HTTP 200 on one entry and 403 on
+another. A quoted diagnostic belongs to its named observation and entry.
+Use the named section disclosures in Full report without leaving your place.
+
 In **Saved library**, open a report by name. Supported focused reports open in
 **Brief** with the leading recorded pattern, its population and a saved error
 message when available. Choose the matching interactions, then a Work IQ call

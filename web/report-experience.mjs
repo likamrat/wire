@@ -21,7 +21,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     ];
     const help = {
         all: "Includes prompts with unknown authors.",
-        errors: "At least one call failed or reported an error. Other calls may have completed.",
+        errors: "Compare interactions with a failed call or a recorded error against all eligible interactions. A completed call can contain an API error.",
         completed: "All calls completed without a recorded error. The answer can still be wrong.",
         mine: "Started by you, including any calls made by an agent.",
         agent: "Started by an agent. Unknown authors are excluded.",
@@ -91,7 +91,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     };
     const treatment = el("div", "report-before-prepare");
     const draftChoices = el("div", "report-draft-fields");
-    desk.append(treatment, draftChoices, outlineDescription, outlineChoices, outlineAction, prepareHint);
+    desk.append(draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
     gallery.append(el("h2", "", "New report"), desk);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");

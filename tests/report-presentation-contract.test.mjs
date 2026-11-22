@@ -9,6 +9,10 @@ test("product presentation is supported only with its declared report kind and p
     const snapshot = { kind: "report", reportPopulation: { version: 1 }, presentation: currentProductReportPresentation };
     assert.equal(hasSupportedReportPresentation(snapshot), true);
     assert.equal(hasCurrentReportPresentation(snapshot), true);
+    const { findingVersion, ...priorProduct } = currentProductReportPresentation;
+    assert.equal(findingVersion, 1);
+    assert.equal(hasSupportedReportPresentation({ ...snapshot, presentation: priorProduct }), true);
+    assert.equal(hasSupportedReportPresentation({ ...snapshot, presentation: { ...priorProduct, findingVersion: 2 } }), false);
     const historicalFocused = { ...snapshot, presentation: currentReportPresentation };
     assert.equal(hasCurrentReportPresentation(historicalFocused), false);
     assert.equal(hasSupportedReportPresentation(historicalFocused), true, "Existing unmarked focused reports retain their original reader");

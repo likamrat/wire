@@ -371,6 +371,17 @@ or corrupted payloads block preparation.
 
 ## Frozen files and saved reading
 
+Focused reports prepared with `presentation.findingVersion: 1` use a
+finding-first reading. HTML/PDF/Markdown and the verified Brief refer to
+the same frozen `reportPopulation.reference` / `included`, `reportPatterns`
+member sets and `resultFacts` observations. The five leading pattern bars use
+distinct interaction counts against the included population; patterns overlap.
+The example follows `reportPatterns.calls[].ref → scenarioRef` and, for
+diagnostic text, the exact `memberRefs`, `observationRef` and `entryIndex` of
+the saved copy. A null entry index does not describe a returned item's reason.
+Neither an improvement hypothesis nor a future evaluation target is a fact
+in the report. Earlier presentations and original downloads are unchanged.
+
 | Format | Saved representation |
 | --- | --- |
 | HTML | Escaped and self-contained; no scripts or remote assets |

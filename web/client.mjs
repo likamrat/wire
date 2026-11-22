@@ -8374,7 +8374,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 icon: ux.icon, title: current.title, brand: cloneReportBrand,
                 readingDocument: source => {
                     assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand, saved: true });
-                    held.expandable = Boolean(source.querySelector(".wire-reading-section,.wire-reading-interaction"));
+                    // The new reading uses named, native disclosures inside the opaque frame.
+                    // Never replace the verified document just to open or close one of its sections.
+                    held.expandable = !source.querySelector('main[data-finding-version="1"]')
+                        && Boolean(source.querySelector(".wire-reading-section,.wire-reading-interaction"));
                     current.expand.hidden = !held.expandable;
                 },
                 onError: error => {
