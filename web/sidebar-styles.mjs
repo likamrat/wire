@@ -24,10 +24,17 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gu
 .navigation-content>.analyze-tools {margin-top:0;padding-top:0;border-top:0}
 .navigation-bottom {margin-top:auto;min-width:0;container-type:inline-size}
 .app-sidebar #analyzeTools .analyze-tool-action {white-space:nowrap}
+.app-sidebar,.navigation-drawer {--footer-utility-width:44px}
+@media (pointer:fine) and (not (any-pointer:coarse)) {
+ .app-sidebar,.navigation-drawer {--footer-utility-width:32px}
+}
 /* Separate the targets vertically before the gliding rail loses horizontal clearance. */
-.navigation-footer {--target:44px;--slots:4;--step:clamp(0px,calc((var(--slots) + 1) * var(--target) - 100cqi),var(--target));position:relative;height:calc(var(--target) + (var(--slots) - 1) * var(--step))}
+.navigation-footer {--target:44px;--slots:4;--step:clamp(0px,calc((var(--slots) + 1) * var(--target) - 100cqi),var(--target));
+ /* As the row becomes a stack, each utility fills the rail's 44px track again. */
+ --pitch:max(var(--footer-utility-width),var(--step));position:relative;height:calc(var(--target) + (var(--slots) - 1) * var(--step))}
 .navigation-footer:has(>#wireAccountEntry[hidden]) {--slots:3}
-:root:not([data-navigation=collapsed]):not([data-navigation-sized]) .app-sidebar:has(#wireAccountEntry:not([hidden])) {min-width:304px}
+/* Preserve the account's 151px plus the rail insets and border at the default width. */
+:root:not([data-navigation=collapsed]):not([data-navigation-sized]) .app-sidebar:has(#wireAccountEntry:not([hidden])) {min-width:calc(172px + 3 * var(--footer-utility-width))}
 :root[data-navigation=expanded][data-navigation-sized] .app-sidebar {min-width:216px;width:min(var(--navigation-preferred-width),45vw)}
 :root[data-navigation=expanded][data-navigation-sized] .app-sidebar:has(#wireAccountEntry:not([hidden])) {min-width:248px}
 :root[data-navigation-sized] .app-sidebar .primary-navigation a {grid-template-columns:max(24px,1.5rem) minmax(0,1fr)}
@@ -38,14 +45,15 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gu
 #sidebar>.navigation-resize:focus-visible {outline:none}
 .app-sidebar[data-navigation-moving]>.navigation-resize,:root[data-navigation=collapsed] .navigation-resize {display:none}
 @media(forced-colors:active) {.navigation-resize::before {background:Highlight;forced-color-adjust:none}}
-.navigation-footer>#wireAccountEntry {position:absolute;inset:0 auto auto 0;width:max(var(--target),calc(100% - 3 * var(--target)));min-width:0;margin:0}
+.navigation-footer>#wireAccountEntry {position:absolute;inset:0 auto auto 0;width:max(var(--target),calc(100% - 3 * var(--pitch)));min-width:0;margin:0}
 .navigation-footer .wire-account-entry {width:100%;padding-top:0}
-.footer-utilities>:is(a,button) {--index:0;position:absolute;bottom:calc(var(--index) * var(--step));left:max(0px,calc(100% - (var(--index) + 1) * var(--target)));display:grid;place-items:center;width:var(--target);height:var(--target);padding:0;border:0;border-radius:var(--radius-control);background:none;box-shadow:none;color:var(--muted);text-decoration:none}
+.footer-utilities>:is(a,button) {--index:0;position:absolute;bottom:calc(var(--index) * var(--step));left:max(0px,calc(100% - (var(--index) + 1) * var(--pitch)));display:grid;place-items:center;width:var(--pitch);min-width:var(--pitch);height:var(--target);padding:0;border:0;border-radius:var(--radius-control);background:none;box-shadow:none;color:var(--muted);text-decoration:none}
 .footer-utilities>#openEvidenceHelp {--index:2}
 .footer-utilities>#wireFeedback {--index:1;anchor-name:--wire-feedback}
 .footer-utilities .wire-icon {width:20px;height:20px}
 .footer-utilities>:is(a,button),.navigation-collapse {isolation:isolate}
 .footer-utilities>:is(a,button)::before,.navigation-collapse::before {content:"";position:absolute;inset:6px;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--utility-cue,transparent)}
+.footer-utilities>:is(a,button)::before {inset:auto;width:min(32px,calc(100% - 4px));aspect-ratio:1}
 .footer-utilities>:is(a,button):is(:hover,:focus-visible),.footer-utilities:has(+ :popover-open)>#wireFeedback {color:var(--ink);background:transparent;--utility-cue:var(--hover)}
 .footer-utilities>[aria-current=page] {color:var(--ink)}
 .footer-utilities>[aria-current=page]::after {content:"";position:absolute;bottom:3px;width:12px;height:2px;border-radius:2px;background:currentColor}

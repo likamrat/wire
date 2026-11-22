@@ -381,7 +381,9 @@ test("compact footer keeps account and Settings independent through identity, ra
                         footer: rect("#navigationFooter"), parent: rect(matchMedia("(max-width:699px)").matches ? "#navigationDrawer" : "#sidebar") };
                 });
                 for (const target of [geometry.account, geometry.settings]) {
-                    assert.ok(target.width >= 44 && target.height >= 44);
+                    if (target === geometry.settings) assert.equal(target.width, mode === "collapsed" ? 44 : 32);
+                    else assert.ok(target.width >= 44);
+                    assert.ok(target.height >= 44);
                     assert.ok(target.left >= geometry.parent.left && target.right <= geometry.parent.right);
                 }
                 if (mode === "collapsed") {
@@ -461,7 +463,7 @@ test("compact footer glides and reverses without overlapping account and Setting
                 `${scale}x/${after.phase}/${target}: no initial ${key} snap`);
         }
         for (const { phase, account, settings, footer, rail } of result.samples) {
-            assert.ok(account.width >= 43.9 && account.height >= 43.9 && settings.width >= 43.9 && settings.height >= 43.9);
+            assert.ok(account.width >= 43.9 && account.height >= 43.9 && settings.width >= 31.9 && settings.height >= 43.9);
             assert.ok(account.right <= settings.left + 1 || account.bottom <= settings.top + 1 || settings.bottom <= account.top + 1,
                 `${scale}x/${phase}: separate full-sized targets ${JSON.stringify({ account, settings })}`);
             assert.ok(account.left >= rail.left - 1 && settings.left >= rail.left - 1);

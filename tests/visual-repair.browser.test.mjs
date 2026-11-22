@@ -10,7 +10,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
 
-async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
+async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch = false } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         Array.from({ length: 60 }, (_, index) => {
             const record = fixture("visual-repair-" + index);
@@ -53,7 +53,7 @@ async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
         await exports.confirm("visual-repair", preview.previewId, true);
     }
     browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
-    const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" });
+    const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", hasTouch });
     const page = await browserContext.newPage();
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -65,6 +65,46 @@ async function setup(t, { reports = false, rosterCount = 0, frontend } = {}) {
     await page.evaluate(() => document.fonts.ready);
     return { page, context, records, roster };
 }
+
+for (const hasTouch of [false, true])
+test(`footer utilities group closely without sharing hit targets (${hasTouch ? "touch" : "mouse"})`, async t => {
+    const { page } = await setup(t, { hasTouch });
+    const utilities = page.getByRole("navigation", { name: "Utility navigation" });
+    const settings = utilities.getByRole("link", { name: "Settings" });
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-current", "page");
+    await chooseTheme(page, "light");
+    await page.mouse.move(1000, 800);
+    const targets = utilities.locator(":scope > :is(a,button)");
+    const boxes = await targets.evaluateAll(nodes => nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return { label: node.getAttribute("aria-label"), box: box.toJSON(), glyph: node.querySelector("svg").getBoundingClientRect().toJSON(),
+            hit: [box.left + 1, box.right - 1].every(x => node.contains(document.elementFromPoint(x, box.top + box.height / 2))) };
+    }));
+    const dir = process.env.WIRE_FOOTER_PROOFS;
+    if (dir && !hasTouch) {
+        await mkdir(dir, { recursive: true });
+        await page.screenshot({ path: path.join(dir, "screen.png") });
+        // Identical viewport coordinates include the edge of the rail in both revisions.
+        await page.screenshot({ path: path.join(dir, "footer.png"), clip: { x: 0, y: page.viewportSize().height - 76, width: 320, height: 76 } });
+        const boxesFor = await page.evaluate(() => Object.fromEntries(["#sidebar", "#navigationFooter", "#wireAccountTrigger",
+            ".wire-account-avatar img", ".wire-account-copy"].map(s => [s, document.querySelector(s).getBoundingClientRect().toJSON()])));
+        await writeFile(path.join(dir, "geometry.json"), JSON.stringify({ boxesFor, boxes }, null, 2));
+    }
+    assert.deepEqual(boxes.map(item => item.label), ["Help", "Feedback", "Settings"]);
+    const minimum = hasTouch ? 44 : 32;
+    const footprint = boxes.at(-1).box.right - boxes[0].box.left;
+    assert.ok(hasTouch || footprint <= 100, `Expanded desktop utilities take ${footprint}px`);
+    await page.locator("#wireAccountTrigger").focus();
+    for (const [index, { box, hit }] of boxes.entries()) {
+        assert.ok(box.width >= minimum && box.height >= 44 && hit);
+        if (index) assert.ok(box.left >= boxes[index - 1].box.right);
+        await page.keyboard.press("Tab");
+        await expect(targets.nth(index)).toBeFocused();
+        await expect(targets.nth(index)).toHaveCSS("outline-style", "solid");
+        if (dir && !hasTouch && index === 1) await page.screenshot({ path: path.join(dir, "feedback-focus.png") });
+    }
+});
 
 for (const frontend of ["bundled", "react"])
 test(`${frontend}: sidebar feedback prefills the GitHub new issue title and optional description`, async t => {

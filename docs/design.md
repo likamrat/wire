@@ -161,8 +161,11 @@ and compact cues retain their 16px role. Other established utility roles remain
 its changing accessible expand/collapse name and state. Its 44px target remains
 beside the compact mark without widening the collapsed rail or reserving an
 empty navigation row.
-Interactive targets stay usable independently of their smaller painted face;
-preserve the established 44px targets, focus indications and wrapping labels.
+Interactive targets stay usable independently of their smaller painted face.
+The footer's three utilities use 32px-wide, 44px-high targets in a horizontal
+row on fine-pointer devices without touch. Touch and the stacked rail keep
+44px squares. Preserve focus indications, wrapping labels and the width
+available for the account name.
 On activity cards, a trailing arrow opens supporting evidence. A completed
 count opens all the calls it counts, preserving any filter and original call
 numbers. A failure opens its recorded call; a returned issue opens its own
@@ -210,7 +213,7 @@ outline. The underline below an active section marks location; an underline
 inside prose or evidence identifies a link even without hovering.
 Keep hover paint close to its subject. Section links highlight just the icon
 and label; sidebar utilities highlight a small face around their glyph, not
-the full 44px target. A navigation or search result row can highlight its
+the full target. A navigation or search result row can highlight its
 whole surface when activating anywhere on that row opens the same item.
 
 Use the same 44×26px track and round, sliding thumb for a binary setting.
