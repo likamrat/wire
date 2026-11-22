@@ -105,6 +105,11 @@ entries use their own qualified path or the explicit single-target fallback,
 not every batch target. Category grouping and service involvement have
 different definitions and must not be substituted for one another.
 
+New report facts containing the Exchange ID conversion path use technical
+pattern v4 and require a compatible reader. Its normalized operation identifies
+no individual mailbox item or named app. Older v3 patterns keep the shapes and
+counts they saved; comparisons do not equate the two pattern definitions.
+
 | Measure | Interpretation |
 | --- | --- |
 | Tool completion | Not application or task success |

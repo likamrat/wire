@@ -5797,7 +5797,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : `${label.unknown}: ${count(summary.unknown)}`;
         return summary.other ? label.other : null;
     }
-    function activityIdentities(rows, layer, { includeTools = true } = {}) {
+    function activityIdentities(rows, layer, { includeTools = true, inspectGap } = {}) {
         const group = el("dl", "card-identities"), tools = new Map(), targets = new Map(), operations = new Map(), gaps = new Map();
         const field = (name, values) => {
             if (!values.length) return;
@@ -5820,15 +5820,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (association?.status === "not-applicable" && categories.operation(row.tool))
                 operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label });
             if (presentation.icon === "Assistance") operations.set("Assistance", presentation);
-            for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean))
-                gaps.set(gap.reason, { id: "Unknown", label: categories.displayEvidence(gap).label });
+            for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean)) {
+                const conversion = gap.reason === "exchange-item-type", owner = conversion ? operations : gaps;
+                if (!owner.has(gap.reason)) owner.set(gap.reason, { id: "Unknown",
+                    label: conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label, reason: gap.reason, rows: [] });
+                owner.get(gap.reason).rows.push(row);
+            }
         }
         if (includeTools && ["tool", "reported-api"].includes(layer)) {
             const labels = Array.from(tools, ([name, total]) => ({ name,
                 countLabel: total > 1 ? `${count(total)} ${layer === "tool" ? "calls" : "results"}` : null }));
             field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [ux.cardToolList(labels)] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
         }
-        const cues = entries => [...entries.values()].map(item => serviceCue("span", item.id, item));
+        const cues = entries => [...entries.values()].map(item => {
+            const cue = serviceCue("span", item.id, item);
+            return item.reason && inspectGap ? inspectGap(item, cue) : cue;
+        });
         const values = cues(targets);
         if (values.length > 3 && includeTools) {
             const extra = el("details", "card-more-targets");
@@ -5915,7 +5922,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const orientation = el("div", "card-orientation");
         orientation.append(author);
         context.append(orientation, prompt, facts);
-        body.append(context, activityIdentities(rows, layer));
+        function inspectGap(entry, cue) {
+            const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
+                workspaceState.evidence.scenarios, entry.rows, { ...target, layer }, workspaceState.evidence.revision,
+                row => row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason));
+            if (!exact) return cue;
+            const link = open("", "record", exact, "card-evidence-link card-gap-link");
+            const action = entry.rows.length === 1 ? "View call" : `First of ${count(entry.rows.length)} calls`;
+            link.append(cue, el("span", "card-gap-action", action));
+            return link;
+        }
+        body.append(context, activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null }));
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
         const failure = layer === "tool" && summary?.failure && callInvestigation.firstFailure(workspaceState.evidence.requestActivity,
@@ -6654,7 +6671,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
                 : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
             if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
-            if (!attribution && explanation.textContent.trim()) expert.append(explanation);
+            if (serviceEvidence?.reason === "hosted-routing") expert.append(el("p", "reader-call-evidence",
+                "This request does not record which apps Copilot used, if any. There is nothing to repair in this record."));
+            else if (!attribution && explanation.textContent.trim()) expert.append(explanation);
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             const completion = fields([

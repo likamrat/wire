@@ -221,6 +221,12 @@ identify another service. Correcting path recognition updates live views of
 retained calls without rereading history or changing outcomes. Previously saved
 report facts and files remain frozen.
 
+An exact `/me/translateExchangeIds` or `/users/{id}/translateExchangeIds`
+target identifies an Exchange ID conversion request, not whether the item is
+mail, an event or a contact. The public operation name survives normalization;
+user IDs, item IDs and query values do not become part of its path template.
+An older record that retains only `/me/{id}` cannot establish the operation.
+
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
 complete entries before malformed syntax, marked partial with an unknown

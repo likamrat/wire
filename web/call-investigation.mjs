@@ -43,16 +43,16 @@ export function createCallInvestigation(compareEntries) {
                 : scenario.graphActivities?.find(record => record.activityId === row.activityId);
         return source ? { status: "available", row, source, actionId: parent.id } : unavailable;
     }
-    function firstFailure(activity, records, matching, route, revision) {
+    function firstToolCall(activity, records, matching, route, revision, qualifies) {
         if (route.view !== "request" || route.layer !== "tool" || route.call !== undefined) return null;
         const candidates = [];
         for (const row of matching) {
-            if (row.scenarioId !== route.request || row.outcome !== "failure") continue;
+            if (row.scenarioId !== route.request || !qualifies(row)) continue;
             const target = { ...route, call: row.id };
             const resolved = resolve(activity, records, target, revision);
-            // Missing ownership cannot be repaired by selecting a neighboring failure.
+            // Missing ownership cannot be repaired by selecting a neighboring call.
             if (resolved.status !== "available") return target;
-            if (resolved.row.outcome !== "failure") continue;
+            if (!qualifies(resolved.row)) continue;
             const source = records.find(record => record.scenarioId === route.request);
             candidates.push({ target, at: resolved.source.startedAt, index: source.recordKind === "native-conversation"
                 ? source.nativeConversation.calls.indexOf(resolved.source) : source.toolCalls.indexOf(resolved.source) });
@@ -60,5 +60,6 @@ export function createCallInvestigation(compareEntries) {
         candidates.sort((a, b) => compareEntries(a, b) || a.index - b.index);
         return candidates[0]?.target ?? null;
     }
-    return { duration, order, resolve, firstFailure };
+    const firstFailure = (...args) => firstToolCall(...args, row => row.outcome === "failure");
+    return { duration, order, resolve, firstFailure, firstToolCall };
 }

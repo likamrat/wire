@@ -74,6 +74,42 @@ async function expectCallStatus(call, ordinal, status) {
     await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText(`1 tool call ${status}`);
 }
 
+test("service limits open their own calls, not a neighboring named target or the prompt", async t => {
+    const record = records()[0], sample = record.toolCalls[0];
+    const values = [["workiq-fetch", { entityUrls: ["/me/messages", "/me/calendar/events"] }],
+        ["workiq-ask", { question: "Plan the workshop" }], ["workiq-ask", { question: "Review the plan" }],
+        ["workiq-do_action", { actionUrl: "/me/translateExchangeIds" }], ["workiq-do_action", { actionUrl: "/me/{id}" }]];
+    record.toolCalls = values.map(([tool, requestArgs], i) => ({ tool, requestArgs, toolCallId: `service-exact-${i}`,
+        startEventId: `service-start-${i}`, startedAt: new Date(Date.parse(sample.startedAt) + [0, 2, 1, 3, 4][i] * 1000).toISOString(),
+        toolSucceeded: true, reportedOutcome: "succeeded", apiResults: [] }));
+    const { page } = await setup(t, [record]);
+    const card = page.locator("#activityList .card-identities");
+    for (const [label, index, via, words] of [
+        ["Underlying services not recorded", 2, "keyboard", /nothing to repair/i],
+        ["Exchange ID conversion", 3, "pointer", /Exchange item IDs/],
+        ["Recorded path not recognized", 4, "pointer", /recorded path/],
+    ]) {
+        await chooseTheme(page, via === "keyboard" ? "light" : "dark");
+        await page.setViewportSize({ width: via === "keyboard" ? 1440 : 390, height: 1000 });
+        const link = card.getByRole("link", { name: new RegExp(label) });
+        await expect(link).toHaveCount(1);
+        if (via === "keyboard") {
+            await expect(link).toContainText("First of 2 calls");
+            await link.focus(); await page.keyboard.press("Enter");
+        } else await link.click();
+        const call = page.locator(`[data-tool-call-id="service-exact-${index}"]`);
+        await expect(call).toBeFocused();
+        const inspect = call.locator(".reader-call-toggle");
+        await expect(inspect).toHaveAttribute("aria-expanded", "false", "Opening a service explanation does not reveal the recorded input.");
+        await inspect.click();
+        await expect(call).toContainText(words);
+        await page.keyboard.press("Escape");
+        await expect(link).toBeFocused();
+        assert.ok(await link.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+    }
+    await expect(card.getByRole("link", { name: /Mail|Calendar/ })).toHaveCount(0);
+});
+
 async function measure(page) {
     return page.locator(".read-in-place").evaluateAll(nodes => nodes.map(node => {
         const prompt = node.querySelector(".request-card-prompt"), style = getComputedStyle(prompt);

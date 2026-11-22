@@ -302,6 +302,9 @@ The panel glyph beside the call count opens the right-hand activity reader;
 when that panel is open the same control closes it. A prompt link opens
 the original; tool failure and
 returned-result links resolve their own evidence. Report selection is separate.
+On an Analyze tool-call card, **View call** beside a service limit opens that
+call's evidence. **First of N calls** opens the earliest matching call in the
+interaction, not the first call with a known target elsewhere on the card.
 Keep the native links, text selection, focus return and disclosure controls
 independent. Opening the reader does not alter report membership.
 Back from a card opened in **Change activity selection** returns to the
