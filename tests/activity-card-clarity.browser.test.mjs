@@ -85,7 +85,7 @@ test("service limits open their own calls, not a neighboring named target or the
     const { page } = await setup(t, [record]);
     const card = page.locator("#activityList .card-identities");
     for (const [label, index, via, words] of [
-        ["Underlying services not recorded", 2, "keyboard", /nothing to repair/i],
+        ["Asked Copilot", 2, "keyboard", /nothing to repair/i],
         ["Exchange ID conversion", 3, "pointer", /Exchange item IDs/],
         ["Recorded path not recognized", 4, "pointer", /recorded path/],
     ]) {
@@ -95,6 +95,8 @@ test("service limits open their own calls, not a neighboring named target or the
         await expect(link).toHaveCount(1);
         if (via === "keyboard") {
             await expect(link).toContainText("First of 2 calls");
+            await expect(link).toContainText("no app list in this record");
+            await expect(card).not.toContainText("Underlying services not recorded");
             await link.focus(); await page.keyboard.press("Enter");
         } else await link.click();
         const call = page.locator(`[data-tool-call-id="service-exact-${index}"]`);
@@ -1134,7 +1136,7 @@ test("service identity is stated once for an inherited target and keeps independ
         assert.match(byId.get("service-preparation").identity, /Operation\s*Schema lookup/);
         assert.equal(byId.get("service-preparation").returned[0].path, "Not recorded");
         assert.match(byId.get("service-search").identity, /Operation\s*Search requested/);
-        assert.match(byId.get("service-assistance").identity, /Asked Copilot.*Underlying services not recorded/);
+        assert.match(byId.get("service-assistance").identity, /Operation\s*Asked Copilot \(no app list in this record\)/);
     }
     const selectedId = observations[0].values.find(value => value.id === "service-returned").returned[1].id;
     const exact = new URL(page.url());

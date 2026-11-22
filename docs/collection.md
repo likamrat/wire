@@ -229,6 +229,14 @@ An older record that retains only `/me/{id}` cannot establish the operation.
 The generic `/businessapps/me` route also identifies no particular business
 app. WIRE distinguishes that recorded limit from a path it does not recognize.
 
+Ask returns an answer and a conversation ID, not an app-by-app execution log.
+Requested sources, attached files and citations do not establish which apps
+Copilot used. Separately, a structured Work IQ batch can report a path on an
+individual result. When its completion matches one recorded Work IQ start,
+WIRE keeps the normalized path beside that result's status, without query
+values, bodies or literal identifiers. A sibling's path is never substituted.
+An older result saved without that path does not gain one on reopen.
+
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
 complete entries before malformed syntax, marked partial with an unknown

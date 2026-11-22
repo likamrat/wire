@@ -102,7 +102,7 @@ test("enforced React activity caps the home preview while keeping the full reque
         { type: "user.message", data: { content: prompt } },
         start("read", "workiq-fetch", { entityUrls: ["/me/calendarView", "/me/messages", "/me/people"] }),
         end("read", true, { structuredContent: { results: [{ statusCode: 200, path: "/me/calendarView" },
-            { statusCode: 403, path: "/me/messages", errorCode: "AccessDenied" }] } }),
+            { statusCode: 403, errorCode: "AccessDenied" }] } }),
         start("lookup", "workiq-retrieve", { query: "Willow handover" }), end("lookup", false),
         start("document", "workiq-fetch", { entityUrls: [longPath] }), end("document", true, { structuredContent: { results: [{ statusCode: 200 }] } }),
         start("assistance", "workiq-ask", { question: "Compare the two notes." }), end("assistance", true, {}),
@@ -120,7 +120,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await expect(page.locator("#activityList .request-row")).toHaveCount(2);
     const card = page.locator("#activityList .read-in-place").filter({ hasText: "Keep both original dates." });
     await expect(card.locator(".card-tool-name").first()).toContainText(/workiq-/);
-    await expect(card).toContainText("Asked Copilot"); await expect(card).toContainText("Underlying services not recorded");
+    await expect(card).toContainText("Asked Copilot (no app list in this record)");
     await expect(card.locator(".card-quotation")).toHaveCount(0);
     await expect(page.locator("#activityView").getByText("Scope details", { exact: true })).toHaveCount(0);
     await expect(page.locator("#activityListSummary")).toContainText("2 interactions");
@@ -134,6 +134,9 @@ test("enforced React activity caps the home preview while keeping the full reque
         await issue.focus(); await page.keyboard.press("Enter");
         await expect(page.locator(".api-result-entry:focus")).toContainText("403");
         const exact = page.locator(".api-result-entry:focus"), batchHelp = exact.getByRole("button", { name: "About batch target" });
+        const known = page.locator('#requestContent [data-tool-call-id="read"] .api-result-entry').first();
+        await expect(known).toContainText("Calendar");
+        await expect(known).toContainText("/me/calendarView");
         await expect(batchHelp).toBeVisible();
         const box = await exact.evaluate(entry => {
             const outer = entry.getBoundingClientRect(), fact = entry.querySelector(".returned-target-help"), text = fact.firstElementChild;

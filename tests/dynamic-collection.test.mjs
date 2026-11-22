@@ -98,6 +98,32 @@ const managedCall = id => {
         mcpServerName: "cc-invented-connector", mcpConfigServerName: "cc-invented-connector" } };
 };
 
+test("late structured results retain only their own normalized paths across recorder restart", async t => {
+    const app = await installation(t), id = app.session(), start = managedCall("returned-path");
+    start.data.arguments = { entityUrls: ["/me/messages", "/me/events"] };
+    app.db.exec(managedSchema);
+    app.db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)").run(id, start.id, "Work IQ");
+    const file = await logFor(app, id, [event("user.message", { content: "Check invented items." }), start]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow(); await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, JSON.stringify(event("tool.execution_complete", { toolCallId: "returned-path", success: true,
+        result: { structuredContent: { results: [{ statusCode: 200, path: "/me/events/PRIVATE-EVENT?$filter=PRIVATE-QUERY" },
+            { statusCode: 403 }] } } })) + "\n");
+    await collector.collectNow(); await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    const state = await loadBoardState(app.context);
+    assert.deepEqual(state.evidence.flatMap(r => r.toolCalls).flatMap(c => c.apiResults.map(r => [r.statusCode, r.path ?? null])),
+        [[200, "/me/events/{id}"], [403, null]]);
+    const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json")));
+    const checkpoint = await readFile(path.join(app.context.dataDir, "collector", index.fingerprint, `${id}.json`), "utf8");
+    assert.doesNotMatch(checkpoint, /PRIVATE-EVENT|PRIVATE-QUERY/);
+    assert.match(checkpoint, /\/me\/events\/\{id\}/);
+});
+
 test("a managed failure retains only entries from its bound connector, including after restart", async t => {
     const app = await installation(t), id = app.session();
     app.db.exec(managedSchema);

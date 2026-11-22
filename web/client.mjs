@@ -5825,11 +5825,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (association?.status === "not-applicable" && categories.operation(row.tool))
                 operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label });
-            if (presentation.icon === "Assistance") operations.set("Assistance", presentation);
             for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean)) {
-                const conversion = gap.reason === "exchange-item-type", owner = conversion ? operations : gaps;
-                if (!owner.has(gap.reason)) owner.set(gap.reason, { id: "Unknown",
-                    label: conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label, reason: gap.reason, rows: [] });
+                const hosted = presentation.icon === "Assistance" && gap.reason === "hosted-routing";
+                const conversion = gap.reason === "exchange-item-type", owner = hosted || conversion ? operations : gaps;
+                if (!owner.has(gap.reason)) owner.set(gap.reason, { ...(hosted ? presentation : { id: "Unknown" }),
+                    label: hosted ? "Asked Copilot (no app list in this record)" : conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label,
+                    reason: gap.reason, rows: [] });
                 owner.get(gap.reason).rows.push(row);
             }
         }
