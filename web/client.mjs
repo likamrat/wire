@@ -2286,13 +2286,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!switchingAnalysis) { render(); finishChartReferenceReading(); }
         },
     });
-    deletionUI = mountDeletion({ api, flow: createDeletionFlow(), timeContext: () => viewerTime, ux,
+    deletionUI = mountDeletion({ api, flow: createDeletionFlow(), createCalendar: assessmentFactories.createDateRangeCalendar, time, timeContext: () => viewerTime, ux,
         onCommitted: async () => {
             clearDeletedDraft("deleted");
             return load();
         },
     });
-    recollectionUI = assessmentFactories.mountRecollection({ api, time, timeContext: () => viewerTime, search: localSearch, ux, searchFields,
+    recollectionUI = assessmentFactories.mountRecollection({ api, createCalendar: assessmentFactories.createDateRangeCalendar, time, timeContext: () => viewerTime, search: localSearch, ux, searchFields,
         describe: assessmentFactories.describeRecollection,
         offerVerifiedRecords: () => collection?.recollection?.exactRecordsAvailable === true,
         canAct: recollectionGuard,
@@ -4141,7 +4141,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function syncControls() {
         restoring = true;
         const values = {
-            layerFilter: workspaceState.route.layer || "tool", dateFilter: workspaceState.route.range || "capture", sourceFilter: workspaceState.route.source || "all",
+            layerFilter: workspaceState.route.layer || "tool", dateFilter: workspaceState.dateDraft ? "custom" : workspaceState.route.range || "capture", sourceFilter: workspaceState.route.source || "all",
             toolFilter: workspaceState.route.tool || "all", serviceAssociationFilter: workspaceState.route.services || "all", chatFilter: workspaceState.route.session || "all",
             serviceFilter: workspaceState.route.service || "all",
             projectFilter: workspaceState.route.project || "all", scopeFilter: workspaceState.route.scope || "history",
@@ -4155,6 +4155,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             control.value = value;
         }
         $("dateFields").hidden = $("dateFilter").value !== "custom";
+        if (!$("dateFields").hidden) analyzeCalendar.sync();
         setText($("dateHint"), `Both dates included in ${time.displayLabel(viewerTime)}.`);
         $("activitySearch").value = search;
         restoring = false;
@@ -10480,11 +10481,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.restoreFocus($("promptAuthorFilter-control"));
         navigate(routeFor(workspaceState.route.view, { authors: undefined, page: undefined, request: undefined }), false, { keepFocus: true });
     });
+    const analyzeCalendarHost = el("div","historical-calendar");
+    $("dateFields").prepend(analyzeCalendarHost);
+    const analyzeCalendar = assessmentFactories.createDateRangeCalendar({
+        root:analyzeCalendarHost, id:"analyzeCalendar", existingFields:{from:$("fromFilter"),to:$("toFilter")},
+        inputIds:{from:"fromFilter",to:"toFilter"}, sharedDateNote:$("dateHint"), time, ux, context:()=>viewerTime,
+        current:()=>Boolean(api.publicationToken()) && !clearingAccess,
+        onEdit:()=>{ workspaceState.dateDraft=analyzeCalendar.value(); },
+        onChange:()=>{ $("applyDates").disabled=!analyzeCalendar.valid(); }
+    });
     $("dateFilter").addEventListener("change", () => {
         workspaceState.dateDraft = null;
         dateError("");
         const range = $("dateFilter").value;
         $("dateFields").hidden = range !== "custom";
+        if (range === "custom") {
+            workspaceState.dateDraft = {from:dateInput(workspaceState.route.from),to:dateInput(workspaceState.route.to)};
+            analyzeCalendar.reset(workspaceState.dateDraft);
+            return;
+        }
         const dates = range === "capture" ? { range: undefined, from: undefined, to: undefined }
             : { range, ...time.preset(range, viewerTime.timeZone) };
         navigate(routeFor(workspaceState.route.view, { ...dates, page: undefined }), false, { keepFocus: true });
@@ -10495,6 +10510,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         try {
             if (!from || !to) throw new RangeError("Choose both dates. For one day, use the same date twice.");
             time.calendar(from); time.calendar(to); time.range({ from, to }, viewerTime.timeZone);
+            if (!analyzeCalendar.valid()) throw new RangeError("Choose today or an earlier date.");
         } catch (error) { dateError(error.message); return; }
         dateError("");
         workspaceState.dateDraft = null;
@@ -10506,10 +10522,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("dateError").hidden = !message;
         for (const id of ["fromFilter", "toFilter"]) $(id).setAttribute("aria-invalid", String(Boolean(message)));
     }
-    for (const id of ["fromFilter", "toFilter"]) $(id).addEventListener("input", () => {
-        workspaceState.dateDraft = { from: $("fromFilter").value, to: $("toFilter").value };
-        dateError("");
-    });
     $("activitySearch").addEventListener("input", () => {
         search = $("activitySearch").value; activityPage = 0;
         workspaceState.route = { ...workspaceState.route, search, page: undefined };
@@ -10595,6 +10607,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
     $("clearDates").addEventListener("click", () => {
+        workspaceState.dateDraft = null;
+        analyzeCalendar.clear();
         ux.restoreFocus($("dateFilter-control"));
         go(workspaceState.route.view, { from: undefined, to: undefined, range: undefined, request: undefined, page: undefined });
     });
@@ -11022,6 +11036,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        analyzeCalendar.clear();
         namedDrafts.withdrawAccess(); namedReport = null;
         trendPeriodVisit = null; periodBackToTrends.hidden = true;
         appUpdate?.beforeOwnerRetirement();

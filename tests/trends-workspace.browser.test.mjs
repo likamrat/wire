@@ -389,7 +389,7 @@ test("compiled index applies every available filter, supports calendar navigatio
     await expect(page.getByLabel("Trends from", { exact: true })).toHaveValue("2026-11-17");
     await expect(page.getByLabel("Trends to", { exact: true })).toHaveValue("2026-11-18");
     await page.getByLabel("Trends to", { exact: true }).fill("2026-11-10");
-    await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Apply dates", exact: true })).toBeDisabled(); await expect(region.getByRole("dialog")).toBeVisible();
     assert.equal(reads.length, before, "invalid calendar drafts never read or replace the accepted range");
     await page.getByLabel("Trends from", { exact: true }).fill("2026-07-01"); await page.getByLabel("Trends to", { exact: true }).fill("2026-11-18");
     await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");

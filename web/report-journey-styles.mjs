@@ -595,6 +595,11 @@ ${optionRow}:has(>input:disabled){cursor:not-allowed;color:var(--muted)}
 .report-calendar-day{min-height:44px;min-width:0;border:0;border-radius:4px;padding:8px 0}
 .report-calendar-day.in-range{background:var(--accent-soft)}
 .report-calendar-day[aria-pressed=true]{background:var(--accent-fill);color:var(--on-accent)}
+.report-calendar-day:disabled{color:var(--muted);opacity:.5;cursor:not-allowed;background:transparent}
+.wire-calendar-input::-webkit-calendar-picker-indicator{display:none}
+.wire-range-calendar>.report-calendar,.wire-range-calendar>.report-date-fields{width:100%;min-width:0}
+#analyzeFilterPanel .historical-calendar{grid-column:1/-1;width:min(100%,28rem)}
+#deleteDateFields.wire-range-calendar,#recollectDialog .recollect-dates.wire-range-calendar{display:grid;width:min(100%,28rem);gap:.5rem}
 .report-first .report-document{border:1px solid color-mix(in srgb,var(--focus) 45%,var(--rule));border-radius:8px;overflow:hidden;background:var(--paper)}
 .report-first .report-frame{border:0;border-radius:0;margin:0;display:block;width:100%;min-height:0}
 .report-first #reportDecision{border:0;margin:0;padding:0}

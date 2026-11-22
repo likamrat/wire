@@ -105,7 +105,9 @@ completion does not establish that anyone cancelled the call.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
-**Settings > Regional > Time zone**. Missing history and records without qualified
+**Settings > Regional > Time zone**. Select a start and end on the calendar,
+or type them. Today is the latest date you can use. **This week** and **This
+month** also end today. Missing history and records without qualified
 times remain explicit. No matches means
 no matching retained evidence, not proof that no activity occurred.
 

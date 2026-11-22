@@ -67,7 +67,7 @@ test("October headline names the applied month and the notice distinguishes unch
         await page.evaluate(async () => { await document.fonts.ready; document.activeElement.blur(); scrollTo(0, 0); });
         await page.screenshot({ path: path.join(proof, "october-desktop.png"), fullPage: true });
     }
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
     await expect(page.locator("#periodCoverageText")).toHaveText("Some of this period is outside checked history; activity may be missing.");
     await expect(page.locator("#periodHistoryLink")).toHaveText("History settings");
     const evidence = [];
@@ -103,7 +103,7 @@ test("October headline names the applied month and the notice distinguishes unch
     await expect(page).toHaveURL(/#settings.*section=connection.*setting=history-window/);
     await expect(page.locator("#collectionWindow-control")).toBeFocused();
     await page.goBack(); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
     await navigateMain(page, "collection-status"); await ready(page);
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Last checked history");
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Sep 13, 2026, 11:00:00 AM GMT-7");
@@ -114,9 +114,9 @@ test("October headline names the applied month and the notice distinguishes unch
 test("every Dates choice keeps its caption with accepted counts, including unapplied custom drafts and other units", async t => {
     const page = await setup(t);
     for (const [value, calls, caption] of [
-        ["day", 0, "Oct 13, 2026"], ["week", 3, "Oct 12 - Oct 18, 2026"],
-        ["month", 43, "Oct 1 - Oct 31, 2026"], ["7", 18, "Oct 7 - Oct 13, 2026"],
-        ["30", 44, "Sep 14 - Oct 13, 2026"], ["capture", 44, "All dates"],
+        ["day", 0, "Oct 13, 2026"], ["week", 3, "Oct 12–13, 2026"],
+        ["month", 43, "Oct 1–13, 2026"], ["7", 18, "Oct 7–13, 2026"],
+        ["30", 44, "Sep 14–Oct 13, 2026"], ["capture", 44, "All dates"],
     ]) {
         await selectActivityOption(page, "dateFilter", value); await ready(page);
         await expect(page.locator("#periodResult")).toHaveText(`${calls} Work IQ tool calls (${caption})`);
@@ -130,13 +130,14 @@ test("every Dates choice keeps its caption with accepted counts, including unapp
     await page.locator("#fromFilter").fill("2026-12-28");
     await page.locator("#toFilter").fill("2027-01-03");
     await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
-    await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("0 Work IQ tool calls (Dec 28, 2026 - Jan 3, 2027)");
+    await expect(page.locator("#applyDates")).toBeDisabled();
+    await expect(page.locator("#analyzeCalendarStatus")).toContainText("today or an earlier date");
+    await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
     await page.locator("#clearDates").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 tool-returned API results (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 tool-returned API results (Oct 1–13, 2026)");
     await page.locator("#resetView").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
 });
@@ -156,7 +157,7 @@ test("the accepted checked window, not old imported dates, controls the notice w
         await route.fulfill({ response, json: { ...snapshot, collection: status(snapshot.collection) } });
     });
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
     await expect(page.locator("#periodCoverage")).toBeHidden();
     await expect(page.locator("#collectionNotice")).toBeVisible();
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");

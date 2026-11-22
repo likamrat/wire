@@ -634,12 +634,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (!beginChoices("Custom dates",origin === periodButton ? periodButton : custom)) return;
         const host = el("div"), actions = el("div", "trends-dialog-actions");
         const calendar = createCalendar({ root: host, id: "trendsCalendar", label: "Trends", time, ux,
-            context: () => getContext().timeContext, current, onChange: () => {} });
-        calendar.reset(range);
-        actions.append(button("Cancel", () => localChoices.close()), button("Apply dates", () => {
+            context: () => getContext().timeContext, current, onChange: () => {apply.disabled=!calendar.valid();} });
+        const apply = button("Apply dates", () => {
             if (!calendar.valid()) return;
             const selected = calendar.value(); localChoices.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
-        }, "primary"));
+        }, "primary");
+        calendar.reset(range);
+        actions.append(button("Cancel", () => localChoices.close()), apply);
         local.append(host, actions); localChoices.place(); host.querySelector("input").focus({preventScroll:true});
     }
     function openFilters() {

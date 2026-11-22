@@ -60,9 +60,9 @@ describe("civil date/time contract", () => {
         const zone = "America/Los_Angeles", now = "2026-03-09T06:00:00Z";
         assert.deepEqual(time.preset("day", zone, now), { from: "2026-03-08", to: "2026-03-08" });
         assert.deepEqual(time.preset("week", zone, now), { from: "2026-03-02", to: "2026-03-08" });
-        assert.deepEqual(time.preset("month", zone, now), { from: "2026-03-01", to: "2026-03-31" });
-        assert.deepEqual(time.preset("week", "UTC", now), { from: "2026-03-09", to: "2026-03-15" });
-        assert.deepEqual(time.preset("week", zone, "2026-01-01T12:00:00Z"), { from: "2025-12-29", to: "2026-01-04" });
+        assert.deepEqual(time.preset("month", zone, now), { from: "2026-03-01", to: "2026-03-08" });
+        assert.deepEqual(time.preset("week", "UTC", now), { from: "2026-03-09", to: "2026-03-09" });
+        assert.deepEqual(time.preset("week", zone, "2026-01-01T12:00:00Z"), { from: "2025-12-29", to: "2026-01-01" });
         assert.deepEqual(time.preset("month", zone, "2024-02-29T12:00:00Z"), { from: "2024-02-01", to: "2024-02-29" });
         for (const range of ["day", "week", "month"]) {
             const selection = { range, ...time.preset(range, zone, now) };

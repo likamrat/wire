@@ -104,7 +104,10 @@ scope rather than relabel it with requested filters. Partial/unbound analytical
 Search withholds measures instead of inventing zeros. Access withdrawal clears
 private results rather than keeping stale content visible.
 
-Calendar presets and custom dates use the selected IANA zone. Custom dates
+Historical date inputs share one calendar. Today is selectable in the display
+time zone; later dates cannot be selected or applied by typing. This week and
+This month stop at today. Recovery previews and confirmations remain separate
+from date selection. Calendar presets and custom dates use the selected IANA zone. Custom dates
 are inclusive civil days; buckets are clipped to that scope. Undated records
 stay explicit. Missing history cannot be assigned to the current filtered
 slice from source-wide diagnostics.

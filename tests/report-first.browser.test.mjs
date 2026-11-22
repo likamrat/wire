@@ -26,14 +26,14 @@ function records() {
         return record;
     });
 }
-async function setup(t, { source = records(), route = "#reports", enforced = false, frontend = "bundled", now, hasTouch = false, contextFixture = false } = {}) {
+async function setup(t, { source = records(), route = "#reports", enforced = false, frontend = "bundled", now, hasTouch = false, contextFixture = false, timezoneId = "America/Los_Angeles" } = {}) {
     const cleanup = [], lifetime = { after: work => cleanup.push(work) };
     const { context } = contextFixture ? await reportContextFixture(lifetime) : await privateFixture(lifetime, source);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false }, ...(access ? { access } : {}) });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access?.close(); for (const work of cleanup) await work(); });
-    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId: "America/Los_Angeles", hasTouch });
+    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId, hasTouch });
     const page = await profile.newPage();
     if (now) await page.clock.setFixedTime(new Date(now));
     page.setDefaultTimeout(10000);
@@ -49,6 +49,62 @@ async function prepare(page, preset = "errors") {
     await selectReportFocus(page, preset);
     return prepareSelectedFocus(page);
 }
+
+for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-03-01"],["Asia/Tokyo","2026-03-01","2026-03-02"]]) {
+    test(`historical calendars stop at ${today} in ${zone} for the same instant`, async t => {
+        const {page,requests}=await setup(t,{frontend:"react",route:"reports",timezoneId:zone,now:"2026-03-01T00:15:00Z"});
+        const desk = page.locator("#reportDeskDates"), accepted = await desk.innerText();
+        await desk.click(); await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        const calendar = page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
+        await expect(end).toHaveAttribute("max",today);
+        if (zone === "Asia/Tokyo") await calendar.getByRole("button",{name:"Next month"}).click();
+        const last=calendar.locator(`[data-day="${today}"]`);
+        await expect(last).toBeEnabled(); await last.focus(); await last.press("ArrowRight"); await expect(last).toBeFocused();
+        await expect(calendar.getByRole("button",{name:"Next month"})).toBeDisabled();
+        if(zone === "Asia/Tokyo") await expect(calendar.locator(`[data-day="${tomorrow}"]`)).toBeDisabled();
+        const written = () => requests.filter(r=>/\/(?:preview|export|period-comparison)$/.test(r.path)).length;
+        const before = written();
+        await end.fill(tomorrow); await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
+        await expect(calendar).toContainText(`today or an earlier date in ${zone}`);
+        await calendar.getByRole("button",{name:"Cancel"}).click(); await expect(desk).toHaveText(accepted);
+        assert.equal(written(),before);
+        await navigateMain(page,"compare"); await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        const pair=page.locator("#comparisonCustomDates"), prior=written();
+        for (const side of ["A","B"]){
+            await expect(pair.locator(`#comparison${side}To`)).toHaveAttribute("max",today);
+            await pair.locator(`#comparison${side}From`).fill(today);
+            await pair.locator(`#comparison${side}To`).fill(tomorrow);await expect(pair.locator("#applyPeriodComparison")).toBeDisabled();
+            await pair.locator(`#comparison${side}To`).fill(today);
+        }
+        assert.equal(written(),prior);
+        await pair.locator("#applyPeriodComparison").click();
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        assert.equal(written(),prior+1);
+    });
+}
+
+test("an open calendar enables the next month at midnight in the display zone without applying a draft", async t => {
+    const {page,requests}=await setup(t,{frontend:"react",route:"reports",now:"2026-03-01T07:59:00Z"});
+    await page.clock.install({time:new Date("2026-03-01T07:59:00Z")});
+    const desk=page.locator("#reportDeskDates"), accepted=await desk.innerText();
+    await desk.click();await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+    const calendar=page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
+    await expect(end).toHaveAttribute("max","2026-02-28");
+    await calendar.locator("#reportDatefrom").fill("2026-02-27");
+    await end.fill("2026-03-01");
+    await expect(calendar.getByRole("button",{name:"Next month"})).toBeDisabled();
+    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
+    await page.clock.fastForward(61_000);
+    await expect(end).toHaveAttribute("max","2026-03-01");
+    await calendar.getByRole("button",{name:"Next month"}).click();
+    await expect(calendar.locator('[data-day="2026-03-01"]')).toBeEnabled();
+    await expect(calendar.locator('[data-day="2026-03-02"]')).toBeDisabled();
+    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeEnabled();
+    await calendar.getByRole("button",{name:"Cancel"}).click();
+    await expect(desk).toHaveText(accepted);
+    assert(!requests.some(r=>["/api/preview","/api/export"].includes(r.path)));
+});
 
 test("period choices keep exact dates, one zone and only the restrictions that matter", async t => {
     const { page, requests } = await setup(t, { frontend: "react", route: "trends", source: periodFixture().records, now: "2026-03-10T12:00:00Z" });

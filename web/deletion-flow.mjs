@@ -34,7 +34,7 @@ export function createDeletionFlow() {
     };
 }
 
-export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
+export function mountDeletion({ api, flow, createCalendar, time, timeContext, ux, onCommitted }) {
     if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
         throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
     }
@@ -45,6 +45,9 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
     const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
     const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
         && api.isCurrent(access.token) === true;
+    const calendar = createCalendar({root:$("deleteDateFields"),id:"deleteCalendar",time,ux,context:timeContext,
+        current:()=>current(publication()),existingFields:{from:$("deleteFrom"),to:$("deleteTo")},inputIds:{from:"deleteFrom",to:"deleteTo"},
+        onEdit:()=>{ edited(); update(); }});
     const key = "workiq-evidence.deletion-operation";
     const records = count => `${count} record${count === 1 ? "" : "s"}`;
     const setStatus = (message, error = false) => {
@@ -62,6 +65,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         if (flow.edit(scope()) === null) return;
         cancelPreview(previous);
         $("deleteDateFields").hidden = $("deleteAll").checked;
+        $("deleteFrom").disabled = $("deleteTo").disabled = $("deleteAll").checked;
         $("deleteConfirmation").hidden = true;
         $("deleteConfirm").disabled = true;
         $("deleteScopeForm").hidden = false;
@@ -103,7 +107,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             : ["confirm", "pending", "unknown", "checking"].includes(phase) ? "deleteSummary" : "deleteBoundary");
         form.inert = pending || uncertain;
         if (pending || uncertain) form.hidden = true;
-        $("deletePreview").disabled = previewBusy || pending || uncertain;
+        $("deletePreview").disabled = previewBusy || pending || uncertain || (!$("deleteAll").checked && !calendar.valid());
         $("deleteConfirm").disabled = pending || uncertain || !state.preview || (!state.preview.counts.records && !state.preview.counts.localCopies);
         $("deleteConfirm").hidden = !["preview", "pending"].includes(state.phase) || !hasTargets;
         $("deleteCancel").disabled = pending;
@@ -158,6 +162,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         event.preventDefault();
         const access = publication();
         if (!current(access) || previewBusy || ["pending", "uncertain"].includes(flow.snapshot().phase)) return;
+        if (!$("deleteAll").checked && !calendar.valid()) { setStatus("Choose valid dates through today before previewing.",true); return; }
         edited();
         const token = flow.token();
         previewBusy = true; update();
@@ -239,8 +244,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         trigger = document.activeElement;
         if (!["pending", "uncertain"].includes(flow.snapshot().phase)) {
             $("deleteRange").checked = true;
-            $("deleteFrom").value = "";
-            $("deleteTo").value = "";
+            calendar.reset({});
             edited();
             let receipt;
             try { receipt = sessionStorage.getItem(key); }
@@ -256,7 +260,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         $("deleteCancel").focus();
     }
     form.addEventListener("submit", preview);
-    for (const id of ["deleteAll", "deleteRange", "deleteFrom", "deleteTo"]) $(id).addEventListener("input", () => { edited(); update(); });
+    for (const id of ["deleteAll", "deleteRange"]) $(id).addEventListener("input", () => { edited(); update(); });
     $("deleteConfirm").addEventListener("click", confirm);
     $("deleteCheck").addEventListener("click", check);
     $("deleteChangeScope").addEventListener("click", () => { if (!current(publication())) return; edited(); update(); $("deleteRange").focus(); });
@@ -290,7 +294,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         for (const id of ["deleteTitle", "deleteSummary", "deleteZone", "deleteBreakdown", "deleteCopies", "deleteLinkedInsights", "deleteLinkedDetails", "deleteStatus"]) {
             if ($(id)) $(id).textContent = "";
         }
-        $("deleteFrom").value = ""; $("deleteTo").value = "";
+        calendar.clear();
         $("deleteRange").checked = true; $("deleteAll").checked = false;
         $("deleteConfirm").textContent = "Delete selected activity";
         $("deleteConfirmation").hidden = true; form.hidden = true; form.inert = true;
