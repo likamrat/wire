@@ -1346,7 +1346,7 @@ test("keep-details warning can cancel or regenerate masked notes and copies befo
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     const saved = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Hide details and save", exact: true }).click();
+    await page.getByRole("button", { name: "Mask detected details and save", exact: true }).click();
     const result = await saved;
     assert.equal(result.status(), 200, JSON.stringify(await result.json()));
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");

@@ -244,11 +244,11 @@ and sensitive information that may be included:
 
 | Choice | Effect |
 | --- | --- |
-| Hide details and save | Regenerates masked copies and saves that exact new bundle once. |
+| Mask detected details and save | Saves a new copy with masking. Masking can miss names and sensitive wording. |
 | Save with chat details | Confirms this particular local save with chat details kept. |
 | Go back | Writes nothing. |
 
-![The keep-chat-details warning offering Hide details and save, Save with chat details, and Go back.](images/report-save-warning.png)
+![The save warning lets you mask details, keep original chat wording, or go back.](images/report-save-warning.png)
 
 The save receipt records your choice to save locally, not a claim that you
 reviewed every copy. Older reports keep the review confirmation recorded

@@ -12,6 +12,7 @@ import { startServer } from "../lib/server.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
 import { resolveReportView } from "../lib/report-population.mjs";
+import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 function records() {
@@ -59,7 +60,13 @@ test("finding-first selected reports freeze each final member and its own eviden
         assert.deepEqual(j.reportPopulation.included, [expected.scenarioId]);
         assert.deepEqual([...new Set(j.reportPatterns.calls.map(c=>c.scenarioRef))], [expected.scenarioId]);
         const reopened = await readSavedReportView(context, state, bundle.bundleId);
-        assert.ok(reopened.text.includes('id="finding"') && reopened.text.includes("1 interaction included from 1 eligible interaction."));
+        assert.ok(reopened.text.includes('id="finding"') && reopened.text.includes("This report includes 1 interaction."));
+        const prior = structuredClone(j);
+        prior.presentation.findingVersion = 1;
+        for (const render of [renderHtmlReport, renderMarkdownReport]) {
+            assert.match(render(prior.records, { snapshot: prior }), /1 interaction included from 1 eligible interaction\./);
+            assert.match(render(j.records, { snapshot: j }), /This report includes 1 interaction\./);
+        }
         readbacks.push([bundle.bundleId, reopened.text]);
     }
     assert.equal((await readSavedReportView(context, await loadBoardState(context), readbacks[0][0])).text,readbacks[0][1]);

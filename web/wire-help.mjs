@@ -1,6 +1,6 @@
 const topics = [
     ["reports", "Prepare a report", `<p>A preview lets you check the included activity and text before you save any files.</p>
-        <ol><li>Open <strong>Reports</strong>. In <strong>New report</strong>, choose the activity to include. Check the dates shown: <strong>All retained dates</strong> includes the full retained history for that scope.</li>
+        <ol><li>In <strong>Reports</strong>, choose the activity and dates under <strong>New report</strong>. <strong>All retained dates</strong> includes every date WIRE has saved for that activity.</li>
         <li>Choose your file formats and whether to keep, mask or leave out chat details.</li>
         <li>Select <strong>Prepare preview</strong>. Review the result, then select <strong>Save report</strong> to keep it.</li></ol>
         <h3>Where does it go?</h3><p>Save writes the files on this device. Open <strong>Reports → Saved library</strong> to find them again.</p>`],
@@ -13,7 +13,8 @@ const topics = [
         <h3>Reading a particular chart</h3><p>Use <strong>Guide</strong> in Analyze or Trends for the measure, its scope and a worked example.</p>`],
     ["results", "Read tool results", `<p>A completed call means the tool reported success. It does not establish that the whole task finished or that the answer was correct.</p>
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>
-        <h3>What the record identifies</h3><p>A recorded target can identify a service; mentioning an app in a prompt cannot. Prompt authorship comes from sender evidence, not the tool executor. Missing or conflicting evidence stays unverified.</p>`],
+        <h3>Which app did Copilot use?</h3><p>Look for <strong>Target</strong> on the call. A prompt can mention Calendar without Copilot using it. <strong>Asked Copilot</strong> tells you there was a request. It doesn’t tell you which apps Copilot used.</p>
+        <h3>Who sent the prompt?</h3><p>WIRE checks who sent the message. The tool that ran the call doesn’t tell you who asked. If sender details are missing or disagree, you’ll see <strong>Author unverified</strong>.</p>`],
 ];
 
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>

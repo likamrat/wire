@@ -66,7 +66,7 @@ export const settingsMarkup = `
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Collected activity</h3>
-    <p id="deleteActivityHelp">Permanent local deletion. Copilot chats and saved reports stay.</p>
+    <p id="deleteActivityHelp">Delete WIRE’s copy of the activity for good. Your Copilot chats and saved reports stay.</p>
     </div>
     <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Review deletion</button>
     </div>

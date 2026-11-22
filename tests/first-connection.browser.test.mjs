@@ -120,7 +120,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await expect(page.locator("#activityList .request-row")).toHaveCount(2);
     const card = page.locator("#activityList .read-in-place").filter({ hasText: "Keep both original dates." });
     await expect(card.locator(".card-tool-name").first()).toContainText(/workiq-/);
-    await expect(card).toContainText("Asked Copilot (no app list in this record)");
+    await expect(card.locator(".card-identity-field").filter({hasText:"Operation"}).getByText("Asked Copilot", {exact:true})).toBeVisible();
     await expect(card.locator(".card-quotation")).toHaveCount(0);
     await expect(page.locator("#activityView").getByText("Scope details", { exact: true })).toHaveCount(0);
     await expect(page.locator("#activityListSummary")).toContainText("2 interactions");

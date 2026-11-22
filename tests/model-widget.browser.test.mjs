@@ -117,7 +117,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click();
     await exact("historical absence is coverage", 1, {}, 1);
-    await expect(widget.locator(".percentage-empty")).toHaveText("Model names unavailable.");
+    await expect(widget.locator(".percentage-empty")).toHaveText("WIRE can’t tell which models these interactions used.");
     await openModelData();
     await expect(guideData.locator(".percentage-note")).toBeVisible();
     await expect(guideData.locator(".percentage-note")).toContainText("1 not recorded.");

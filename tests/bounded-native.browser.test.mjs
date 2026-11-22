@@ -499,7 +499,7 @@ test("no-call conversation context remains in the single roster without a GitHub
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
         await expect(page.locator("#activityPager")).toContainText("1-1 of 1 activity entries");
         await expect(page.locator("#outcomeChart")).toContainText("No tool calls recorded.");
-        await expect(page.locator("#percentageCharts [data-breakdown=models]")).toContainText("Model names unavailable.");
+        await expect(page.locator("#percentageCharts [data-breakdown=models]")).toContainText("WIRE can’t tell which models these interactions used.");
         await expect(page.locator("#homeView")).not.toContainText("GitHub Copilot: 0");
         await expect(page.locator("#activityView")).not.toContainText("No collected activity yet");
         await selectActivityOption(page, "layerFilter", "reported-api");

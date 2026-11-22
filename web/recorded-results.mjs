@@ -371,7 +371,9 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             label: "WIRE interpretation" + (item.channel === "returned-entry"
                 ? ` (returned ${item.indexes.length === 1 ? "entry" : "entries"} ${item.indexes.join(", ")})`
                 : item.channel === "result" ? " (result)" : ""),
-            text: item.text, interpretation: true,
+            text: screen && item.kind === "missing-completion"
+                ? "The call may have finished. Without a saved result, there’s no way to tell."
+                : item.text, interpretation: true,
         }));
     }
     function callReasonItems(call, outcome, { includeReturned = true } = {}) {

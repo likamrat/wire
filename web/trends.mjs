@@ -703,7 +703,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 : id === "timing" ? "No calls with recorded duration" : id === "models" ? "No recorded response models" : "No identified services";
             card.emptyDetail.textContent = noCalls ? latest ? `Most recent matching call: ${fullDate(latest)}.`
                 : source.coverage.undatedCalls ? "Matching calls without a start date cannot be placed on a daily chart."
-                : Object.keys(filters).length ? "No dated calls match these filters in retained activity." : "No dated Work IQ calls are available in retained activity."
+                : Object.keys(filters).length ? "Try a different filter or date range." : "WIRE has no saved calls with a start date to show here."
                 : id === "timing" ? "A duration needs a recorded start and completion." : "The calls are included in the period count.";
             card.showWeek.hidden = !(noCalls && latest);
             if (!card.showWeek.hidden) card.showWeek.textContent = `Show week ending ${axisDate(latest)}`;
@@ -1022,7 +1022,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "overview") {
             const card = cards.get("problems");
             landingOpen.disabled = false;
-            landingScope.textContent = ["Affected interactions per day", data.totals.calls && data.days.some(day => !day.calls) ? "No matching dated calls on days marked with a cross" : "",
+            landingScope.textContent = ["Interactions with an error or failed call each day", data.totals.calls && data.days.some(day => !day.calls) ? "No matching dated calls on days marked with a cross" : "",
                 restrictionText.textContent, card.limits.textContent,
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;

@@ -44,7 +44,7 @@ export function createPeriodFlow(time, copy = chatCopy) {
                         historyLink = true;
                     }
                 } else {
-                    warning = "Checked history is unknown; using retained activity.";
+                    warning = "These counts use saved activity. WIRE can’t tell how much history it checked for these dates.";
                     historyLink = true;
                 }
             }

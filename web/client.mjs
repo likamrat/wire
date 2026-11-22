@@ -292,7 +292,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         describe: recordedCategories.display, operation(tool) {
         const operation = recordedCategories.operation(tool);
         return tool === "workiq-ask" ? { ...operation, label: "Asked Copilot",
-            description: "Recorded attempt to ask Copilot or an agent, not confirmation of delivery." } : operation;
+            description: "A request to Copilot or a selected agent." } : operation;
     }, serviceEvidence(row, layer = "tool") {
         return recordedCategories.displayEvidence(recordedCategories.serviceEvidence(row, layer), { screen: true });
     }, displayEvidence(evidence) {
@@ -5672,16 +5672,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable"
             : `${nativeUnavailable ? "GitHub: " : ""}${groups} \u00b7 ${count(selectionRows().length)} matching ${workspaceState.scope.layer === "tool"
                 ? selectionRows().length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, selectionRows().length)}`
-            + (unlinked ? `. ${count(unlinked)} records have no retained interaction and are listed separately below.` : "");
+            + (unlinked ? `. WIRE couldn’t link ${count(unlinked)} ${unlinked === 1 ? "record" : "records"} to an interaction. See the separate list below.` : "");
         $("activityListSummary").hidden = false;
         host.replaceChildren();
         activityPage = roster.index;
         if (!roster.total && !nativeUnavailable) {
             host.append(empty(native ? "No matching activity" : !workspaceState.evidence.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 workspaceState.evidence.scenarios.length
-                    ? search ? "Try another phrase or clear Search." : "Change filters or reset Analyze."
-                    : search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
-                        : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged."));
+                    ? search ? "Try another phrase or clear Search." : "Try different dates or clear a filter."
+                    : search ? "Try a different phrase or clear Search. Your other filters and report selections stay."
+                        : "Check your source and collection progress in Settings."));
         }
         for (const item of items.slice(roster.githubOffset, roster.githubOffset + roster.githubLimit)) {
             const card = item.scenario ? requestCard(item.scenario, { eventSignal: stage?.signal }) : matchingAction(item.record);
@@ -5911,7 +5911,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const hosted = presentation.icon === "Assistance" && gap.reason === "hosted-routing";
                 const conversion = gap.reason === "exchange-item-type", owner = hosted || conversion ? operations : gaps;
                 if (!owner.has(gap.reason)) owner.set(gap.reason, { ...(hosted ? presentation : { id: "Unknown" }),
-                    label: hosted ? "Asked Copilot (no app list in this record)" : conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label,
+                    label: hosted ? presentation.label : conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label,
                     reason: gap.reason, rows: [] });
                 owner.get(gap.reason).rows.push(row);
             }
@@ -6708,8 +6708,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (coverage) limits.append(el("p", "", coverage));
         provenance.append(limits);
         support.append(provenance);
-        sourceHomes.set(scenario.scenarioId, { provenance, identifiers,
-            operationHome: isSelected ? intro : requestText, operationEntries: [] });
+        sourceHomes.set(scenario.scenarioId, { provenance, identifiers });
         sourceSection.body.append(support);
         for (const message of context.messages.filter(message => message.scenarioId === scenario.scenarioId && message.kind === "follow-up")) {
             const followup = el("section", "request-context-prompt");
@@ -6733,9 +6732,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const hasInputReferences = Array.isArray(sourceCall.requestArgs?.fileUrls) && sourceCall.requestArgs.fileUrls.length > 0;
             const attribution = categories.attributionReading(row ? { ...row, tool: tool.tool } : undefined, "tool", { hasInputReferences });
             entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool", ordinal: ordinals.get(tool),
-                operation: attribution?.kind === "operation" ? {
-                    label: categories.operation(tool.tool)?.label ?? categories.describe("Search").label, hasInputReferences,
-                } : null,
                 identifiers: [["ID", tool.toolCallId], ["start event", tool.startEventId], ["completion event", tool.completionEventId],
                     ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
                     ["error code", row?.outcome === "failure" && tool.failureEvidence?.version === 1
@@ -6803,8 +6799,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
                 : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
             if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
-            if (serviceEvidence?.reason === "hosted-routing") expert.append(el("p", "reader-call-evidence",
-                "This request does not record which apps Copilot used, if any. There is nothing to repair in this record."));
+            if (attribution?.kind === "operation") expert.append(el("p", "reader-call-evidence", attribution.text));
             else if (!attribution && explanation.textContent.trim()) expert.append(explanation);
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
@@ -6914,27 +6909,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : ({ reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + ordinal;
             entryLabels.set(entry.key, label);
             const home = sourceHomes.get(entry.scenarioId);
-            if (entry.operation && (!countedIds || entry.scenarioId !== workspaceState.route.request || countedIds.has(entry.actionId))) {
-                home.operationEntries.push({ ordinal, ...entry.operation });
-            }
             home.identifiers.push(...(entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
                 .map(([kind, value]) => [label + " " + kind, value]));
         });
         if (commonToolTiming && !countedIds) activitySection.toggle.querySelector("span").textContent =
             `${count(selectedActions.length)} recorded ${selectedActions.length === 1 ? "call" : "calls"}`;
         for (const [scenarioId, home] of sourceHomes) {
-            if (home.operationEntries.length) {
-                const operations = home.operationEntries;
-                const scope = results.callGroupLabel(operations.map(entry => entry.ordinal));
-                const names = [...new Set(operations.map(entry => entry.label))].join(", ");
-                const note = el("p", "reader-call-evidence reader-operation-context",
-                    `${scope} (${names}) ${operations.length === 1 ? "records a request" : "record requests"}, not confirmed app use.`);
-                note.dataset.contextGroup = scenarioId;
-                const references = operations.filter(entry => entry.hasInputReferences);
-                if (references.length) note.append(" Input files (" + results.callGroupLabel(references.map(entry => entry.ordinal))
-                    + ") provide context, not app-use evidence.");
-                home.operationHome.append(note);
-            }
             const toggle = el("button", "quiet reader-identifiers-toggle", "Record identifiers");
             toggle.type = "button";
             const detail = el("div", "reader-identifiers");

@@ -320,7 +320,7 @@ inventory. The receipt records `explicit-local-save`, with both reviewer flags
 false. Its keep-chat-details flag is true exactly when original wording was
 chosen. Historical attested bundles keep their existing interpretation.
 
-Hide details and save regenerates masked bytes before binding the save intent.
+Mask detected details and save regenerates masked bytes before binding the save intent.
 Cancellation writes nothing. Later content or authority changes retire that
 intent. A dispatched or uncertain save keeps its original exact-content
 recovery identity rather than preparing or writing another bundle.
@@ -382,8 +382,10 @@ or corrupted payloads block preparation.
 
 ## Frozen files and saved reading
 
-Focused reports prepared with `presentation.findingVersion: 1` use a
-finding-first reading. HTML/PDF/Markdown and the verified Brief refer to
+Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
+finding-first reading. Version 2 changes the explanation of the counts, not
+what is counted. Version 1 keeps its original wording when reopened from JSON.
+HTML/PDF/Markdown and the verified Brief refer to
 the same frozen `reportPopulation.reference` / `included`, `reportPatterns`
 member sets and `resultFacts` observations. The five leading pattern bars use
 distinct interaction counts against the included population; patterns overlap.

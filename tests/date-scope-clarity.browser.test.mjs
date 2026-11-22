@@ -162,7 +162,7 @@ test("the accepted checked window, not old imported dates, controls the notice w
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
     checkedWindow = null;
     await selectActivityOption(page, "dateFilter", "week"); await ready(page);
-    await expect(page.locator("#periodCoverageText")).toHaveText("Checked history is unknown; this view uses retained activity.");
+    await expect(page.locator("#periodCoverageText")).toHaveText("These counts use saved activity. WIRE can’t tell how much history it checked for these dates.");
     await expect(page.locator("#collectionNotice")).toBeVisible();
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
 });

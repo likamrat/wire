@@ -309,7 +309,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(page.locator(".report-save-warning")).toBeVisible();
     await capture("report-save-warning", { locator: page.locator(".report-save-warning") });
     const savedResponse = page.waitForResponse(item => item.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Hide details and save", exact: true }).click();
+    await page.getByRole("button", { name: "Mask detected details and save", exact: true }).click();
     assert.equal((await savedResponse).status(), 200);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const state = await loadBoardState(app.context);

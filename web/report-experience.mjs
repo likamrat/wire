@@ -324,7 +324,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
         prepare.disabled ||= Boolean(scopeIssue);
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."
-            : value.unavailable ? "Waiting for a current activity snapshot." : !value.options.formats.length ? "Choose at least one file to prepare a preview." : scopeIssue || "";
+            : value.unavailable ? "Waiting for activity to load." : !value.options.formats.length ? "Choose at least one file format to preview the report." : scopeIssue || "";
         prepareHint.hidden = !prepareHint.textContent;
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
         const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
@@ -498,9 +498,9 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             const files = formats.join(", ");
             copy.textContent = `${files || "Your saved files"} will include original chat wording. Anyone you share the files with could read names, email addresses, project details or other sensitive information.`;
             const detail = doc.createElement("p"); detail.className = "muted";
-            detail.textContent = "Saving creates local files. Nothing is sent. Detected passwords and other credentials are removed.";
+            detail.textContent = "WIRE saves the files on this device and sends nothing. It removes passwords and other credentials it detects. Masking can still miss names and sensitive wording.";
             const actions = doc.createElement("div"); actions.className = "report-warning-actions";
-            for (const [choice, label, cls] of [["masked", "Hide details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
+            for (const [choice, label, cls] of [["masked", "Mask detected details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
                 const button = doc.createElement("button"); button.type = "button"; button.className = cls;
                 if (!choice) { button.append(icon("back")); button.autofocus = true; }
                 button.append(doc.createTextNode(label)); button.addEventListener("click", () => close(current() ? choice : null)); actions.append(button);

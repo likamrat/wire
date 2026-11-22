@@ -44,7 +44,7 @@ async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|Search is incomplete\. Some saved content could not be searched\.|Saved GitHub replies are unavailable for Search\.)$/, { timeout: 30000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved GitHub replies are unavailable for Search\.))$/, { timeout: 30000 });
     return page.locator("#wireSearchResults button");
 }
 async function jsonValues(page) {

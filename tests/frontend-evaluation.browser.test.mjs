@@ -959,7 +959,7 @@ test("the selected evaluation layout retains complete membership, native reading
     await expect(page.locator("#pageIntro")).toBeHidden();
     await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
     await expect(page.locator("#activityListScope")).toBeHidden();
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("Checked history is unknown");
+    await expect(page.locator("#analyzeScopeStatus")).toContainText("These counts use saved activity");
     await capture(page, "react-analyze-light");
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.locator("#activityPager")).toContainText("9-16 of 240");

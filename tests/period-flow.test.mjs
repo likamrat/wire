@@ -20,7 +20,7 @@ test("checked history compares elapsed selected time, not future calendar days",
     assert.equal(model({ from: "2026-09-01", to: "2026-09-12" }).warning,
         "This period is outside checked history; activity may be missing.");
     assert.equal(model({ from: "2026-10-01", to: "2026-10-12" }, null).warning,
-        "Checked history is unknown; this view uses retained activity.");
+        "These counts use saved activity. WIRE can’t tell how much history it checked for these dates.");
     assert.equal(model({}).warning, "");
 });
 test("period feedback counts exact distinct canonical request owners and source sessions", () => {
@@ -49,7 +49,7 @@ test("coverage boundaries use local IANA days without claiming full-day or compl
     const inside = describe({ rows, filters: { from: "2026-09-05", to: "2026-10-03" }, coverage: { since: "2026-09-05T00:00:00Z", until: "2026-10-05T00:00:00Z" }, timeContext });
     assert.equal(inside.warning, "");
     const unknown = describe({ rows: [], filters: { from: "2026-07-29" }, coverage: {}, timeContext });
-    assert.equal(unknown.warning, "Checked history is unknown; this view uses retained activity.");
+    assert.equal(unknown.warning, "These counts use saved activity. WIRE can’t tell how much history it checked for these dates.");
     assert.match(unknown.next, /not proof that no activity occurred/);
     assert.equal(unknown.historyLink, true);
 });
@@ -92,7 +92,7 @@ test("partial boundary instants stay distinct from full civil days, unknown wind
         "An inclusive instant end can overlap the first checked instant.");
     for (const coverage of [null, {}, { since: full.since }, { since: "invalid", until: full.until },
         { since: full.until, until: full.since }, { since: 0, until: full.until }]) {
-        assert.match(model(coverage).warning, /^Checked history is unknown/);
+        assert.match(model(coverage).warning, /^These counts use saved activity/);
         assert.equal(model(coverage, { from: "2026-10-14" }).warning, "");
     }
     assert.match(model(full, { to: "2026-10-01" }).warning, /^Some of/);

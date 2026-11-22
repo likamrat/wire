@@ -150,14 +150,9 @@ test("service evidence explains significance at its call without warning on ordi
         const assistance = page.locator('[data-tool-call-id="hosted-1"]');
         if (phase !== "before") {
             await expect(assistance.locator(".reader-call-toggle")).toHaveAttribute("aria-expanded", "false");
-            const context = page.locator('[data-reader-section="activity"] .reader-operation-context');
-            await expect(context).toBeVisible();
-            await expect(context).toHaveCount(1);
-            await expect(context).toContainText("Calls #1\u20132 (Search and retrieval, Asked Copilot)");
-            await expect(context).toContainText("not confirmed app use");
-            await expect(context).toHaveText("Calls #1\u20132 (Search and retrieval, Asked Copilot) record requests, not confirmed app use.");
+            await expect(assistance.getByText("Asked Copilot", {exact:true})).toBeVisible();
+            await expect(assistance).not.toContainText("which apps, if any");
             await expect(assistance.locator(".recorded-result")).toHaveAttribute("data-outcome", "success");
-            assert.equal(await context.evaluate(node => node.closest(".technical-detail,button") === null), true);
             await expect(page.locator('[data-attribution-kind="operation"]')).toHaveCount(0);
             await expect(assistance.locator(".call-reason-list")).toHaveCount(0);
         }
@@ -166,7 +161,7 @@ test("service evidence explains significance at its call without warning on ordi
         if (phase !== "before") {
             await assistance.locator(".reader-call-toggle").click();
             await expect(assistance.locator(".technical-detail")).toContainText("Response bodies are excluded from activity retention.");
-            await expect(assistance.locator(".technical-detail")).not.toContainText("counts this call as Asked Copilot");
+            await expect(assistance.locator(".technical-detail")).toContainText("which apps, if any, Copilot used");
             await assistance.locator(".reader-call-toggle").click();
         }
         await page.keyboard.press("Escape"); await expect(card("hosted")).toBeFocused();
@@ -178,8 +173,9 @@ test("service evidence explains significance at its call without warning on ordi
         await expect(failure.locator(".result-status")).toHaveText("1 tool call failed");
         if (phase !== "before") {
             await expect(failure.locator(".service-availability")).toHaveCount(0, "The actual failed Files call has an identified service.");
-            await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toContainText(
-                "Input files (Call #2) provide context, not app-use evidence.");
+            const ask = page.locator('[data-tool-call-id="mixed-1"]');
+            await ask.locator(".reader-call-toggle").click();
+            await expect(ask).toContainText("The files listed in the request don’t tell us that either.");
         }
         if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-mixed-reader.png`) });
         assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
@@ -238,7 +234,7 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(page.locator('[data-tool-call-id="missing-0"] .reader-attribution-context')).toContainText("could not read");
             await expect(page.locator('[data-tool-call-id="missing-0"] .reader-attribution-context')).toContainText("not a recorded service failure");
             await expect(page.locator("#requestContent")).not.toContainText("1 of 0");
-            await expect(page.locator('[data-view-key="percentage:services:exact"] .percentage-note')).toContainText("All selected records remain in the denominator.");
+            await expect(page.locator('[data-view-key="percentage:services:exact"] .percentage-note')).toContainText("Percentages use all selected records");
             await settle();
             if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-detail-unreadable.png`) });
             await page.keyboard.press("Escape"); await settle();
@@ -247,7 +243,7 @@ test("service evidence explains significance at its call without warning on ordi
     if (proof) await writeFile(path.join(proof, phase + "-observations.json"), JSON.stringify(observations, null, 2));
 });
 
-test("routine operation explanations appear once per interaction without merging call evidence", { timeout: 60000 }, async t => {
+test("app uncertainty belongs to the exact expanded call, not the prompt or a neighboring call", { timeout: 60000 }, async t => {
     const make = (id, tools, minute) => {
         const record = fixture(id);
         record.userPrompt = { text: `Review the invented ${id} workshop plan.`, status: "full",
@@ -275,15 +271,12 @@ test("routine operation explanations appear once per interaction without merging
     ];
     evidence[0].followUpPrompts = [structuredClone(evidence[1].userPrompt)];
     evidence[1].followUpPrompts = [structuredClone(evidence[2].userPrompt)];
-    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, evidence);
+    const cleanup = [], { context, runtime } = await searchFixture({ after: fn => cleanup.push(fn) }, { records: evidence, reply: false });
     const before = await loadBoardState(context), errors = [], denied = [];
-    const start = process.env.WIRE_EVIDENCE_BASELINE
-        ? (await import(pathToFileURL(path.join(process.env.WIRE_EVIDENCE_BASELINE, "lib", "server.mjs")))).startServer : startServer;
-    const runtime = await start(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "no-preference" });
     t.after(async () => {
         try {
-            await browser.close(); await runtime.close();
+            await browser.close();
             assert.deepEqual(errors, []); assert.deepEqual(denied, []);
             const after = await loadBoardState(context);
             for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], before[key]);
@@ -292,9 +285,7 @@ test("routine operation explanations appear once per interaction without merging
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || [
-            "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
-        ].includes(url.pathname))) return route.continue();
+        if (url.origin === new URL(runtime.url).origin) return route.continue();
         denied.push(url.pathname); return route.abort();
     });
     const proof = process.env.WIRE_OPERATION_GROUP_PROOFS, phase = process.env.WIRE_OPERATION_GROUP_PHASE ?? "after";
@@ -306,9 +297,8 @@ test("routine operation explanations appear once per interaction without merging
     for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
         await page.setViewportSize({ width: 1440, height: 1000 }); await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 }); await settle();
-        for (const [id, scope, count] of [["op-two", "Calls #1\u20132", 2], ["op-three", "Calls #1\u20133", 3],
-            ["op-long", "Calls #1\u20139", 9], ["op-mixed", "Calls #1\u20132, #4", 4]]) {
-            const card = page.locator(`.request-card-open[href*="${id}"]`);
+        for (const [id, count] of [["op-two", 2], ["op-three", 3], ["op-long", 9], ["op-mixed", 4]]) {
+            const card = page.locator(".request-card-open").filter({hasText:`Review the invented ${id} workshop plan.`});
             await card.click(); await settle();
             const activity = page.locator('[data-reader-section="activity"]');
             const metrics = await activity.evaluate(node => {
@@ -319,35 +309,22 @@ test("routine operation explanations appear once per interaction without merging
             });
             observations.push({ theme, width, id, ...metrics });
             if (phase !== "before") {
-                await expect(activity.locator('.reader-operation-context, [data-attribution-kind="operation"]')).toHaveCount(1,
-                    "The ordinary reading explanation must not repeat as more routine calls are displayed.");
-                const note = activity.locator(".reader-operation-context");
-                await expect(note).toHaveCount(1);
-                await expect(note).toHaveAttribute("data-context-group", id);
-                await expect(note).toContainText(scope);
-                await expect(note).toContainText("not confirmed app use");
-                await expect(note).toContainText("operation counts");
-                await expect(note).toContainText("needs no action");
-                await expect(note).not.toContainText("history repair");
-                await expect(activity.locator('.reader-attribution-context[data-attribution-kind="operation"]')).toHaveCount(0);
+                await expect(activity).not.toContainText("which apps");
                 await expect(activity.locator(".reader-call-row")).toHaveCount(count);
                 if (id === "op-mixed") {
-                    await expect(note).toContainText("Input files (Call #2) provide context");
+                    const ask = activity.locator('[data-tool-call-id="op-mixed-1"]');
+                    await ask.locator(".reader-call-toggle").click();
+                    await expect(ask).toContainText("which apps, if any, Copilot used");
+                    await expect(ask).toContainText("files listed in the request");
+                    await ask.locator(".reader-call-toggle").click();
                     await expect(activity.locator('[data-tool-call-id="op-mixed-2"]')).toContainText("Payload too large; downloads are limited to 4 MB.");
                     await expect(activity.locator('[data-tool-call-id="op-mixed-2"] .reader-entry-label')).toHaveText("Call #3");
                 }
-                const scopeText = await note.innerText();
-                assert.ok(scopeText.length < 350, scopeText);
-                observations.at(-1).scopeText = scopeText;
             }
             await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 0);
             if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${id}.png`) });
             assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
             if (phase !== "before" && id === "op-three") {
-                const all = page.locator("#requestContent .reader-operation-context");
-                await expect(all).toHaveCount(3, "Linked prompt groups retain separate scopes instead of one cross-interaction definition.");
-                await expect(all.filter({ hasText: "Calls #1\u20132" })).toHaveAttribute("data-context-group", "op-two");
-                await expect(all.filter({ hasText: "Calls #1\u20139" })).toHaveAttribute("data-context-group", "op-long");
                 if (width === 1440) {
                     const source = page.locator('[data-reader-section="source"] > .reader-section-heading .reader-section-toggle');
                     if (await source.getAttribute("aria-expanded") !== "true") await source.click();
@@ -355,9 +332,9 @@ test("routine operation explanations appear once per interaction without merging
                     const linked = page.locator(".reader-linked-context");
                     if (!await linked.evaluate(node => node.open)) await linked.locator(":scope > summary").click();
                     await settle();
-                    const earlier = all.filter({ hasText: "Calls #1\u20132" });
+                    const earlier = linked.locator('[data-tool-call-id="op-two-1"]');
                     await expect(earlier).toBeVisible();
-                    assert.equal(await earlier.evaluate(node => node.closest('[data-context-group="op-two"]').dataset.contextGroup), "op-two");
+                    await expect(earlier.getByText("Asked Copilot", {exact:true})).toBeVisible();
                     if (proof) {
                         await earlier.scrollIntoViewIfNeeded();
                         await page.screenshot({ path: path.join(proof, `${phase}-${theme}-linked-groups.png`) });
@@ -370,10 +347,9 @@ test("routine operation explanations appear once per interaction without merging
     if (phase !== "before") {
         await page.goto(runtime.url + "#analyze?tool=workiq-retrieve");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await page.locator('.request-card-open[href*="op-mixed"]').click();
+        await page.locator(".request-card-open").filter({hasText:"Review the invented op-mixed workshop plan."}).click();
         await expect(page.locator("#requestContent .reader-scope")).toContainText("2 of 4");
-        const note = page.locator('[data-reader-section="activity"] .reader-operation-context');
-        await expect(note).toContainText("Calls #1\u20132, #4");
+        await expect(page.locator('[data-reader-section="activity"]')).not.toContainText("which apps");
         await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(4);
     }
     if (proof) await writeFile(path.join(proof, phase + "-scopes.json"), JSON.stringify(observations, null, 2));
@@ -455,7 +431,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
             assert.ok(cueStyle.centerOffset <= 1.5, JSON.stringify(cueStyle));
             const legend = page.locator('.percentage-legend-row[data-service-basis="Assistance"] .percentage-cue');
             assert.equal(await legend.evaluate(node => getComputedStyle(node).color), cueStyle.color);
-            await expect(page.locator("#requestContent .reader-operation-context")).toContainText("Call #1 (Asked Copilot) records a request");
+            await expect(page.locator("#requestContent").getByText("Asked Copilot", {exact:true}).first()).toBeVisible();
             await expect(page.locator("#requestContent")).not.toContainText("Service not shown");
             await expect(page.locator("#requestContent")).not.toContainText("not relevant");
         }
