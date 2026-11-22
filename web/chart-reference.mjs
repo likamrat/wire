@@ -317,7 +317,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function workedExample(topic) {
         if (context.mode !== "analyze" || context.nativeOnly) return "";
         if (topic === "outcomes" && ["tool", "reported-api"].includes(context.layer)) return "One fetch finishes and returns two entries: HTTP 200 for a file and HTTP 403 for a message. That is one completed call. The 403 is an error for the message, not a failed tool call.";
-        if (topic === "services" && context.layer === "tool") return "A fetch can target a known Files path and a second path WIRE does not recognize. It counts once for Files and once in the total. The second target stays unidentified even if the call completed.";
+        if (topic === "services" && context.layer === "tool") return "One interaction asks Copilot for help, then fetches a file. The card can show both “Underlying services not recorded” and Files: Files is the fetch target, not evidence that Copilot used Files.";
         if (topic === "categories" && context.layer === "tool") return "A fetch targeting Files and Mail counts once under More than one service, rather than once in each service category.";
         if (topic === "authors") return "A human prompt followed by four tool calls contributes one human prompt, not four agent prompts.";
         if (topic === "models") return "An interaction with two model names appears in both rows. One without a name appears in neither, but still counts toward the total.";
@@ -337,7 +337,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             list.append(definition("Search / retrieval", "Counts a search request, not confirmed use of a named app."),
                 definition(hosted.label, `${categories.operation("workiq-ask").label} counts the request to Copilot. ${hosted.description}`),
                 definition(unmapped.label, unmapped.description));
-            meanings.append(list, el("p", "Open the prompt in Analyze and inspect the individual call’s targets and outcome. The service labels do not identify the prompt author or indicate failure. On their own they are not a reason to retry or sign in."));
+            meanings.append(list, el("p", "On the Analyze card, select the tool-call count to open the interaction. Expand a numbered call to inspect its targets and outcome. A service label does not tell you who wrote the prompt or whether the call failed."));
             host.append(meanings); return;
         }
         list.append(definition("Evidence", help.layers[context.layer]));

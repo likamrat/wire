@@ -62,7 +62,8 @@ test("Guide separates an undisclosed service from an unclassified path and leads
     await page.locator("#openChartReference").click();
     await page.locator('#chartReferenceTopics button[data-reference-topic="services"]').click();
     await expect(article).toContainText("Recorded path not recognized");
-    await expect(article).toContainText(/author/i);
+    await expect(article).toContainText("who wrote the prompt");
+    await expect(article).toContainText("tool-call count");
     await expect(article).not.toContainText("INVENTED-PRIVATE");
     await page.locator("#chartReferenceAllTopics").click();
     await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
