@@ -88,6 +88,8 @@ async function setup(t, { mount = true } = {}) {
         if (mount) {
             window.filters = window.mountFilters(window.ux, {
                 api: window.accessBoundary,
+                toolbarHost: document.getElementById("analyzeResultCommands"),
+                scopeHost: document.getElementById("analyzeResultScope"),
                 motionTiming: { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" },
                 closeSelect: () => window.selects?.close(),
                 closeNavigation: () => { if (document.getElementById("navigationDrawer").open) document.getElementById("navigationDrawer").close(); },
