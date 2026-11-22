@@ -25,6 +25,7 @@ import { createReportJourney, createPreparedReportFrame } from "./report-journey
 import { createReportExperience, createReportSaveWarning, decoratePreparedReport, reportFileChoices, reportWorkspacePresentation } from "./report-experience.mjs";
 import { createDateRangeCalendar } from "./date-range-calendar.mjs";
 import { enhanceReportReading } from "./report-reading.mjs";
+import { mountSavedReportBrief } from "./saved-report-brief.mjs";
 import { mountCollectionSettings, mountDisplayTimeSettings } from "./settings.mjs";
 import { createTextAccess } from "./text-access.mjs";
 import { createRequestContext } from "./request-context.mjs";
@@ -103,7 +104,7 @@ function factories() {
         createReportSaveIdentity, reportWorkspacePresentation, reportFileChoices, createDateRangeCalendar,
         mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart, createTrendPairModel, mountTrendPair }),
         createReportExperience: options => createReportExperience({ ...options, createCalendar: createDateRangeCalendar }),
-        createReportSaveWarning, decoratePreparedReport, enhanceReportReading, mountAnalyzeReferenceEntry,
+        createReportSaveWarning, decoratePreparedReport, enhanceReportReading, mountSavedReportBrief, mountAnalyzeReferenceEntry,
         chartReference: { facts: chartReferenceFacts, mount: options => mountChartReference({ ...options, createState: createChartReferenceState }) },
         liveSearch: { presentHit: searchHitPresentation,
             mount: options => mountLiveSearch({ ...options, contract: searchContract, presentHit: searchHitPresentation }),

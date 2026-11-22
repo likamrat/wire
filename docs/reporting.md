@@ -81,6 +81,17 @@ stay unchanged. Prepare a new report to use the corrected author.
 
 ## Read the findings
 
+In **Saved library**, open a report by name. Supported focused reports open in
+**Brief** with the leading recorded pattern, its population and a saved error
+message when available. Choose the matching interactions, then a Work IQ call
+to read its completion and returned API entries. **Back** returns to the same
+row. **Coverage** holds counts, timing and preparation details.
+
+Choose **Viewing > Full report** for the continuous saved reading or a file
+format to inspect its original. Reports without supported frozen relationships
+keep their existing reader. Brief does not change saved files or fill gaps from
+current activity.
+
 New reports lead with the included activity, separate call and returned-entry
 outcomes, and timing coverage before the patterns and individual interactions.
 Read interaction, tool-call and returned-API counts separately.

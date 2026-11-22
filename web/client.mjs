@@ -8104,9 +8104,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const identity = el("div", "saved-reader-identity"), titleBlock = el("div", "saved-reader-title");
         titleBlock.append($("pageTitle"));
         const artifact = bundle || entry?.value?.artifact;
-        if (artifact?.preparedAt || artifact?.preparedAtDisplay) {
+        const period = artifact && savedPeriodLabel(artifact);
+        if (period || artifact?.preparedAt || artifact?.preparedAtDisplay) {
             const meta = el("dl", "saved-reader-meta");
-            meta.append(cardFact("Prepared", artifact.preparedAt
+            meta.append(period ? cardFact("Report period", period) : cardFact("Prepared", artifact.preparedAt
                 ? time.formatDate(artifact.preparedAt, artifact.timeContext || viewerTime, true) : artifact.preparedAtDisplay));
             titleBlock.append(meta);
         }
@@ -8187,7 +8188,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             clearOriginalRead(current.read); clearOriginalRead(current.downloadRead);
             current.preview?.dispose(); current.preview = null;
             if (current.reportHost) current.reportHost.hidden = true;
-            const showingReport = selector.value === "report";
+            const showingReport = selector.value === "report" || selector.value === "document";
+            const completeDocument = selector.value === "document";
             fileHint.hidden = showingReport;
             if (showingReport) selector.removeAttribute("aria-describedby"); else selector.setAttribute("aria-describedby", fileHint.id);
             const read = {}, format = showingReport ? savedReadableFormat(bundle) : selector.value;
@@ -8245,7 +8247,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 if (!active()) return;
                 download.disabled = false;
-                paintSavedDocument(body, value, active, showingReport);
+                paintSavedDocument(body, value, active, showingReport, completeDocument);
+                if (showingReport && current.reportHost?.classList.contains("saved-brief-host") && !selector.querySelector('[value="document"]')) {
+                    selector.options[0].textContent = "Brief";
+                    selector.options[0].after(option("document", "Full report"));
+                }
                 selectControls?.sync();
             } catch (error) {
                 if (active()) {
@@ -8322,7 +8328,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 name: result.name, ...(format === "pdf" || downloadOnly ? { data: result.data } : { text: new TextDecoder("utf-8", { fatal: true }).decode(current.originalBytes) }) };
         } finally { clearOriginalRead(current); }
     }
-    function paintSavedDocument(body, value, valid, reportView = false) {
+    function paintSavedDocument(body, value, valid, reportView = false, completeDocument = false) {
         if (!valid()) return;
         const artifact = value.artifact;
         if (typeof artifact?.title === "string" && artifact.title.trim()) savedReportView.title = savedTitle(artifact);
@@ -8333,7 +8339,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             "An original report is no longer available. This independently reviewed saved copy is unchanged."));
         if (reportView) {
             const previous = current.reportValue;
-            if (previous?.kind === value.kind && previous.text === value.text && previous.data === value.data
+            if (previous?.kind === value.kind && previous.completeDocument === completeDocument && previous.text === value.text && previous.data === value.data
                 && previous.expanded === current.expanded) {
                 current.reportHost.hidden = false;
                 current.expand.hidden = value.kind !== "html" || previous.expandable === false;
@@ -8342,16 +8348,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             current.reportPreview?.dispose(); current.reportHost?.remove();
             const preview = el("div", "saved-reader-file");
             current.reportHost = preview; body.append(preview);
-            current.reportValue = { kind: value.kind, text: value.text, data: value.data, expanded: current.expanded };
+            current.reportValue = { kind: value.kind, text: value.text, data: value.data, expanded: current.expanded, completeDocument };
             const publication = api.publicationToken(), held = current.reportValue;
             const currentReport = () => api.isCurrent(publication) && savedReportView === current && !current.invalid
                 && current.reportValue === held && workspaceState.route.bundle === current.bundleId
                 && workspaceState.evidence.exports?.some(entry => savedIdentity(entry) === current.identity);
+            if (value.brief && !completeDocument) {
+                current.reportPreview = assessmentFactories.mountSavedReportBrief(preview, value, { icon: ux.icon, isCurrent: currentReport });
+                if (current.reportPreview) {
+                    held.expandable = false;
+                    current.expand.hidden = true;
+                    preview.classList.add("saved-brief-host");
+                    return;
+                }
+            }
             current.reportPreview = assessmentFactories.savedFilePreview(preview, value, {
                 frozenFrame: assessmentFactories.liveSearch.frozenFrame, isCurrent: currentReport, toolbar: current.toolbar,
                 icon: ux.icon, title: current.title, brand: cloneReportBrand,
                 readingDocument: source => {
-                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand });
+                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand, saved: true });
                     held.expandable = Boolean(source.querySelector(".wire-reading-section,.wire-reading-interaction"));
                     current.expand.hidden = !held.expandable;
                 },

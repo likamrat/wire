@@ -432,6 +432,12 @@ original anchor identities. Color repeats recorded outcome words, never a new
 success judgment. Collapse, navigation and format switching do not change
 membership, facts, file bytes or print/export completeness.
 
+For supported ordinary focused reports, Brief uses the verified manifest's
+pattern membership, call-to-interaction bindings and permitted result copies
+with the corresponding saved document anchors. It never joins a call to a
+prompt by display order or transfers a returned status to the parent outcome.
+The full historical reading and original files remain separate choices.
+
 Saved metadata search does not read prompt/report bodies. Global Search
 extracts only permitted text from independently verified saved files through
 the [corpus contract](search-corpus.md). Its receipt authority is not

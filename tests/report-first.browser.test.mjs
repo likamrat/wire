@@ -931,9 +931,11 @@ test("JSON-only saved reports open as readable reports independently of their fi
     await page.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
     const reader = page.locator("#savedReportReader");
     await expect(reader.getByRole("combobox", { name: "Viewing", exact: true })).toBeVisible();
+    await expect(reader.locator(".saved-brief")).toContainText("2 of 8 interactions had recorded errors.");
     assert.deepEqual(await reader.locator("#savedReaderFormat option").evaluateAll(options => options.map(o => [o.value, o.label])), [
-        ["report", "Report in WIRE"], ["json", "Structured data (JSON)"], ["manifest", "File list (manifest)"],
+        ["report", "Brief"], ["document", "Full report"], ["json", "Structured data (JSON)"], ["manifest", "File list (manifest)"],
     ], "The reader lists this bundle’s files, not all the formats a new report could save.");
+    await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(reader.frameLocator("iframe").locator("h1")).toHaveText("Errors & failures");
     await expect(reader.frameLocator("iframe").locator("body")).toContainText("2 of 8 interactions had recorded errors.");
     await expect(reader.locator(".saved-json-tree")).toHaveCount(0);
@@ -943,7 +945,7 @@ test("JSON-only saved reports open as readable reports independently of their fi
     await expect(reader.locator(".saved-json-tree")).toBeVisible();
     await expect(reader.getByRole("button", { name: "Download", exact: true })).toBeVisible();
     await selectActivityOption(page, "savedReaderFormat", "report");
-    await expect(reader.frameLocator("iframe").locator("h1")).toHaveText("Errors & failures");
+    await expect(reader.locator(".saved-brief")).toContainText("2 of 8 interactions had recorded errors.");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, reads, "Saved reading never prepares current activity.");
     assert.deepEqual(downloads, []);
     assert.deepEqual(await readFile(saved.files["product-report.json"]), bytes);
@@ -970,17 +972,17 @@ test("withdrawal clears a hidden cached report while an original file is being v
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toBeVisible();
-    await page.evaluate(() => { window.heldReportFrame = document.querySelector("#savedReportReader iframe"); });
+    await expect(page.locator("#savedReportReader .saved-brief")).toBeVisible();
+    await page.evaluate(() => { window.heldBrief = document.querySelector("#savedReportReader .saved-brief"); });
     await selectActivityOption(page, "savedReaderFormat", "html");
-    assert.equal(await page.evaluate(() => heldReportFrame.isConnected && !heldReportFrame.checkVisibility()), true);
+    assert.equal(await page.evaluate(() => heldBrief.isConnected && !heldBrief.checkVisibility()), true);
     const controller = await page.context().newPage();
     await controller.goto(runtime.url);
     await expect(controller.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await controller.locator("#wireAccountTrigger").click();
     await controller.locator("#wireAccountGate").click();
     await expect(page.locator("#workspace")).toBeHidden();
-    assert.deepEqual(await page.evaluate(() => [heldReportFrame.isConnected, heldReportFrame.srcdoc]), [false, ""]);
+    assert.deepEqual(await page.evaluate(() => [heldBrief.isConnected, heldBrief.textContent]), [false, ""]);
     assert.deepEqual(errors, []);
 });
 

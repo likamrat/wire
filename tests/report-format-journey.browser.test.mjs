@@ -346,7 +346,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
     }
-    await selectActivityOption(page, "savedReaderFormat", "report");
+    await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(reader.frameLocator("iframe").locator("h1")).toHaveText(prepared.title);
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);

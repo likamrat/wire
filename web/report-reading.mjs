@@ -1,5 +1,5 @@
 // Screen-only reading structure. Original files and their print layout are unchanged.
-export function enhanceReportReading(source, { expanded, brand } = {}) {
+export function enhanceReportReading(source, { expanded, brand, saved = false } = {}) {
     if (source.body.hasAttribute("data-wire-reader")) return;
     source.body.setAttribute("data-wire-reader", "");
     for (const mark of source.querySelectorAll('header.report-brand[aria-label="WIRE"]>.report-mark')) {
@@ -58,6 +58,13 @@ body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=da
 .wire-reading-section>summary:focus-visible,.wire-reading-interaction>summary:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 .wire-reading-section>section:not(.wire-reading-multi-heading)>h2:first-child,.wire-reading-interaction>article>h3:first-child{display:none}
 body[data-wire-reader] .report-nav{position:sticky;top:0;z-index:2;background:var(--report-sheet,var(--paper));padding:12px 0;margin:16px 0;border-bottom:1px solid var(--rule);gap:8px 16px}
+${saved ? `@media screen{
+ body[data-wire-reader] .report-nav a{position:relative;isolation:isolate;min-height:44px;align-items:center}
+ body[data-wire-reader] .report-nav a:is(:hover,:active){background:transparent}
+ body[data-wire-reader] .report-nav a::before{content:"";position:absolute;inset:.55em -.2em;z-index:-1;pointer-events:none;border-radius:.25em}
+}
+@media screen and (hover:hover){body[data-wire-reader] .report-nav a:hover::before{background:var(--accent-soft)}}
+@media screen{body[data-wire-reader] .report-nav a:active::before{background:var(--accent-pressed)}}` : ""}
 body[data-wire-reader] [id]{scroll-margin-top:5rem}
 .wire-reading-interaction>article[id]{scroll-margin-top:9rem}
 .wire-reading-meta{margin-top:16px}

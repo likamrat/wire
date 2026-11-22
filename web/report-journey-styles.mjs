@@ -38,6 +38,45 @@ body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:
 .saved-file-notice .dialog-body{font-size:var(--type-body);line-height:1.6}
 .saved-sharing-lead{font-weight:var(--weight-medium)}.saved-sharing-detail{border-top:1px solid var(--rule);padding-top:16px;color:var(--muted);font-size:var(--type-control)}
 .saved-reader-loading{align-self:center;margin:auto;padding:24px;color:var(--muted)}
+.saved-reader-file.saved-brief-host{display:block;overflow:auto;overscroll-behavior:contain;container-type:inline-size}
+.saved-brief{min-width:0;background:var(--paper)}
+.saved-brief .wire-section-nav{padding-inline:clamp(12px,3cqi,32px);margin:0;gap:0 1rem;background:var(--screen-plot)}
+.saved-brief .wire-section-nav button>span,.brief-action>span{display:inline-grid;grid-template-columns:auto minmax(0,1fr);gap:.5em;align-items:start;line-height:1.5}
+.saved-brief .wire-icon{flex:none;width:1.125em;height:1.125em;margin-top:.18em}
+.brief-page{padding:clamp(16px,3cqi,32px);max-width:76rem;margin:auto;overflow-wrap:anywhere}
+.brief-page h2{margin:0 0 .38em;font-size:var(--type-section-title,1.5rem);line-height:1.25;color:var(--ink)}
+.brief-page h3{margin:0 0 .35em;font-size:var(--type-body);font-weight:var(--weight-medium)}
+.brief-page p,.brief-reason blockquote{margin:.35em 0;line-height:var(--leading-reading);max-width:70ch;white-space:pre-wrap}
+.brief-page section,.brief-page>details,.brief-page>div>details{margin-top:1.5rem}
+.brief-spread{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);gap:2rem;border-top:1px solid var(--surface-divider);margin-top:1.25rem;padding-top:1.25rem}
+.brief-spread>section{margin:0;border-inline-start:1px solid var(--surface-divider);padding-inline-start:1.25rem}
+.brief-spread>:only-child{grid-column:1/-1}
+@container(max-width:42rem){.brief-spread{grid-template-columns:minmax(0,1fr);gap:1.25rem}.brief-spread>section{border:0;padding:0}}
+.brief-page summary{cursor:pointer;min-height:44px;align-content:center;font-size:var(--type-control)}
+.brief-population,.brief-meta,.brief-interpretation,.brief-operation{color:var(--muted)}
+.brief-operation{overflow-wrap:anywhere}.brief-population{font-size:var(--type-body)}
+.brief-reason{background:var(--canvas);padding:1rem 1.25rem;margin:1.25rem 0 .25rem;max-width:70ch;border-radius:var(--radius-small)}
+.brief-reason figcaption,.brief-facts dt{font-size:var(--type-control);color:var(--muted)}
+.brief-reason figcaption{display:flex;justify-content:space-between;gap:0 1rem;align-items:center;flex-wrap:wrap}
+.brief-reason blockquote,.brief-copy{color:var(--ink);font-weight:400}.brief-reason blockquote{font-size:1.125rem}
+#savedReportReader .brief-action{display:inline-flex;justify-content:start;text-align:left;align-items:center;min-height:44px;max-width:100%;border:0;background:none;box-shadow:none;color:var(--accent);padding:0;font:inherit}
+#savedReportReader .brief-action::before{content:none}
+.brief-action>span{padding:.25em .4em;border-radius:var(--radius-small)}
+@media(hover:hover){.brief-action:hover>span{background:var(--hover)}}
+.brief-action:active>span{background:var(--accent-pressed)}
+.brief-action:focus-visible,.brief-page summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.brief-list{padding:0;margin:0;list-style:none}.brief-list>li+li{border-top:1px solid var(--surface-divider)}
+.brief-facts{display:block;margin:.5rem 0;container-type:inline-size;max-width:68ch}
+.brief-facts>div{display:grid;grid-template-columns:minmax(8rem,32%) minmax(0,1fr);align-items:baseline;gap:4px 16px;padding:.65rem 0;border-top:1px solid var(--surface-divider)}
+.brief-facts :is(dt,dd){margin:0;line-height:1.5}
+@container(max-width:27rem){.brief-facts>div{grid-template-columns:minmax(0,1fr)}}
+.brief-print{display:none}
+@media print{
+ body:has(>.brief-print)>:not(.brief-print){display:none!important}
+ body>.brief-print{display:block;color:#111;background:white;font:11pt/1.45 var(--font);margin:0;padding:0}
+ .brief-print pre{font:inherit;white-space:pre-wrap}.brief-print :is(h1,h2,h3,h4){break-after:avoid}.brief-print tr{break-inside:avoid}
+ .brief-print :is(td,th,p,pre){overflow-wrap:anywhere}.brief-print table{border-collapse:collapse}.brief-print :is(td,th){padding:.3em .6em}
+}
 .saved-reader-issue{flex-basis:100%;max-width:65ch;line-height:var(--leading-reading)}
 .original-file-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .original-file-choice{display:grid;gap:8px;min-width:0;flex-basis:100%}

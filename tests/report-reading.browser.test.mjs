@@ -19,6 +19,11 @@ test("pattern counts lead to one matching interaction and preserve the individua
         record.followUpPrompts = [];
         Object.assign(record.toolCalls[0], { startedAt: record.capturedAt, toolSucceeded: false,
             reportedOutcome: "failed", apiResults: [{ index: 0, statusCode }] });
+        if (statusCode === 403) record.toolCalls[0].resultEvidence = {
+            version: 1, source: "sdk-result", applicationError: true, resultCount: null, statusCode: null,
+            contentStatus: "body-excluded", diagnostic: { version: 1, source: "mcp-result-text",
+                status: "recorded", message: "Calendar access is missing for the planning room." },
+        };
         return record;
     });
     const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
@@ -90,6 +95,44 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await chooseTheme(page, "dark");
     await page.setViewportSize({ width: 540, height: 900 });
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    const brief = page.getByRole("article", { name: "Report brief" });
+    await expect(brief.getByRole("heading", { name: "4 calls with a returned HTTP 403" })).toBeVisible();
+    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await capture(page, "brief-narrow-dark");
+    await brief.getByRole("button", { name: "Coverage", exact: true }).click();
+    await expect(brief.getByRole("heading", { name: "Evidence counts" })).toBeVisible();
+    for (const [width, size] of [[1240, "100%"], [390, "125%"]]) {
+        await page.setViewportSize({ width, height: 920 });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
+        const facts = await brief.locator(".brief-facts dd").evaluateAll(values => values.map(n => n.getBoundingClientRect().width));
+        assert.ok(facts.length && facts.every(width => width > 100), `Unreadable Coverage values: ${facts}`);
+    }
+    await brief.getByRole("button", { name: "Findings", exact: true }).click();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await chooseTheme(page, "light");
+    await capture(page, "brief-wide");
+    await brief.getByRole("button", { name: "View 4 matching interactions" }).click();
+    const matching = brief.getByRole("button", { name: heading, exact: true });
+    await matching.click();
+    const owner = prepared.snapshot.reportPatterns.calls.find(item => item.scenarioRef === expected);
+    const ordinal = prepared.snapshot.resultFacts.calls.findIndex(item => item.ref === owner.ref) + 1;
+    const exact = brief.getByRole("button", { name: new RegExp(`^Report call ${ordinal}:`) });
+    await exact.click();
+    await expect(brief).toContainText("Returned API entry 1: status 403.");
+    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await page.evaluate(() => dispatchEvent(new Event("beforeprint")));
+    await expect(page.locator(".brief-print")).toContainText("Interaction 5");
+    await expect(page.locator(".brief-print")).toContainText("Scope and coverage");
+    await expect(page.locator(".brief-print [href],.brief-print script,.brief-print iframe")).toHaveCount(0);
+    await page.evaluate(() => dispatchEvent(new Event("afterprint")));
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(exact).toBeFocused();
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(matching).toBeFocused();
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 540, height: 900 });
+    await selectActivityOption(page, "savedReaderFormat", "document");
     const saved = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
     await saved.locator('.report-nav a[href$="#patterns"]').click();
     const singleRow = saved.locator(".report-pattern-table tbody tr").filter({ hasText: "404" });
@@ -101,6 +144,13 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await saved.locator('.report-nav a[href$="#patterns"]').click();
     await singleRow.getByRole("link", { name: /^Report call / }).click();
     await expect(saved.locator(":target")).toHaveAttribute("id", single.callRefs[0]);
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
+    const reopen = page.locator(".saved-library-row .saved-report-title").first();
+    await reopen.click();
+    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await expect(reopen).toBeFocused();
     assert.equal(await readFile(file, "utf8"), prepared.files["product-report.html"]);
 });
 
@@ -662,6 +712,7 @@ test("long reports keep complete evidence behind working navigation and real for
     }
     assert.doesNotMatch(savedBytes.get("product-report.html").toString(), /wire-reading|data-wire-reader/);
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "document");
     const savedFrame = page.locator("#savedReportReader .saved-file-preview:visible").frameLocator("iframe");
     await expect(savedFrame.locator(".wire-reading-interaction")).toHaveCount(6);
     assert.equal(await page.locator("#savedReportReader iframe").getAttribute("sandbox"), "");
@@ -683,7 +734,7 @@ test("long reports keep complete evidence behind working navigation and real for
         proof.push({ savedFormat: format, selected: await page.locator("#savedReaderFormat").inputValue(),
             file: item.suggestedFilename(), bytesMatch: true });
     }
-    await selectActivityOption(page, "savedReaderFormat", "report");
+    await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(savedFrame.locator(".wire-reading-interaction[open]")).toHaveCount(1);
     assert.equal(await originalFrame.evaluate(node => node.isConnected && node.checkVisibility()), true);
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
