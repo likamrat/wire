@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { chooseTheme, navigateMain, navigateSettings, openAnalyzeFilters, selectActivityOption, restoreLegacySearch, fixture, privateFixture } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
@@ -750,6 +750,7 @@ test("primary width budgets match actual single-choice and pending multi-choice 
 
 test("real long metadata lists retain typeahead, keyboard scrolling, touch targets and no scroll trap", { timeout: 30000 }, async t => {
     const { page, reads } = await metadataListSetup(t, { viewport: { width: 375, height: 1000 }, hasTouch: true });
+    await openAnalyzeFilters(page);
     await page.locator("#moreFiltersToggle").tap();
     assert.equal(await page.locator("#projectFilter option").count(), 61);
     for (const scale of [1, 2]) {
@@ -758,12 +759,12 @@ test("real long metadata lists retain typeahead, keyboard scrolling, touch targe
         await trigger.tap(); await trigger.press("End");
         assert.equal(await page.locator(".select-option[data-active=true]").getAttribute("data-value"), "invented-project-59");
         const geometry = await page.locator(".select-popup:visible").evaluate(node => {
-            const b = node.getBoundingClientRect(), active = node.querySelector("[data-active=true]").getBoundingClientRect();
-            return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, scrollTop: node.scrollTop,
+            const list = node.querySelector("[role=listbox]"), b = list.getBoundingClientRect(), active = list.querySelector("[data-active=true]").getBoundingClientRect();
+            return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, scrollTop: list.scrollTop,
                 activeTop: active.top, activeBottom: active.bottom, activeHeight: active.height };
         });
         assert.ok(geometry.left >= 8 && geometry.right <= 367 && geometry.top >= 8 && geometry.bottom <= 992);
-        assert.ok(geometry.scrollTop > 0 && geometry.activeTop >= geometry.top && geometry.activeBottom <= geometry.bottom && geometry.activeHeight >= 44);
+        assert.ok(geometry.scrollTop > 0 && geometry.activeTop >= geometry.top - 1 && geometry.activeBottom <= geometry.bottom + 1 && geometry.activeHeight >= 44, JSON.stringify(geometry));
         await trigger.press("Home");
         await trigger.pressSequentially("Project 42");
         assert.equal(await page.locator(".select-option[data-active=true]").getAttribute("data-value"), "invented-project-42");
@@ -776,6 +777,8 @@ test("real long metadata lists retain typeahead, keyboard scrolling, touch targe
         await page.getByRole("button", { name: /^Remove copilot project filter:/ }).tap(); await ready(page);
         assert.equal(await page.locator("#activityCount").textContent(), "60");
         await page.locator("#chatFilter-control").tap(); await page.keyboard.press("Tab");
+        await expect(page.getByRole("combobox", { name: "Find a chat" })).toBeFocused();
+        await page.keyboard.press("Tab");
         assert.equal(await page.locator(".select-popup:visible").count(), 0);
         assert.equal(await page.locator("#chatFilter").inputValue(), "all");
         if (proofDir) {

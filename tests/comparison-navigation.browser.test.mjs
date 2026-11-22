@@ -381,14 +381,16 @@ test("Use Analyze view preserves deliberate private narrowing without changing e
     assert.deepEqual(comparisons.at(-1).selection.scenarioIds, ["period-request-0"]);
 });
 test("optional unions, intersections, grouping and intervals preserve independent restrictions", { timeout: 60000 }, async t => {
-    const { page, comparisons } = await setup(t, "#analyze?compare=periods");
+    const { page, comparisons } = await setup(t, "#analyze?compare=periods", { frontend: "react" });
     await ready(page);
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
     await page.locator("#openAnalyzeFilters").click();
     await page.locator("#comparisonServices-control").click();
-    await page.getByRole("searchbox", { name: "Find an option", exact: true }).fill("Files");
+    const finder = page.getByRole("combobox", { name: "Find a service", exact: true });
+    await finder.click(); await page.keyboard.type("Files"); await expect(finder).toHaveValue("Files");
     await page.locator('.select-popup [data-value="Files"]').click(); await ready(page);
     await page.locator("#comparisonServices-control").click();
+    await finder.click(); await page.keyboard.type("Mail"); await expect(page.locator('.select-popup [data-value="Files"]')).toBeHidden();
     await page.locator('.select-popup [data-value="Mail"]').click(); await ready(page);
     assert.deepEqual(comparisons.at(-1).options.filters.services, ["Files", "Mail"]);
     await page.locator("#comparisonWithinServices-control").click();

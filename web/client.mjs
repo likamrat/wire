@@ -10856,8 +10856,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
     assessmentFactories.bindPageDefaults(pageDefaults, () => selectControls?.sync());
+    const optionFinders = {
+        trendsPairMeasure1: "Find a measure", trendsPairMeasure2: "Find a measure",
+        displayTimeZone: "Find a city or time zone", toolFilter: "Find a tool", trendsTool: "Find a tool",
+        projectFilter: "Find a project", chatFilter: "Find a chat", comparisonEndpoint: "Find a path or operation",
+        serviceFilter: "Find a category", serviceAssociationFilter: "Find a service", comparisonServices: "Find a service",
+        comparisonWithinServices: "Find a service", trendsService: "Find a service", reportService: "Find a service",
+    };
     selectControls = createSelectControls(ux, {
-        matchesOption: (query, label) => !query.trim() || localSearch.phrase(query, [label]),
+        searchFields,
+        finderFor: (select, count) => {
+            if (!Object.hasOwn(optionFinders, select.id) || count < 10 && !select.id.startsWith("trendsPairMeasure")) return null;
+            return select.id === "chatFilter" && workspaceState.scope?.layer === "http" ? "Find a recorder source" : optionFinders[select.id];
+        },
+        matchesOption: (query, label) => localSearch.matches(query, [label]),
         pagingFor: nativeInventoryPaging,
         onClose: select => {
             boundedNative.cancelInventory(nativeFilterDimensions[select.id]);

@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, navigateSettings, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, navigateSettings, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
@@ -59,6 +59,111 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
 }
+test("long option finders keep the current measure, filters and time zone until a deliberate choice", { timeout: 75_000 }, async t => {
+    const tools = ["ask", "fetch", "fetch_blob", "retrieve", "get_schema", "call_function", "do_action", "search_paths", "create_entity", "update_entity", "delete_entity", "list_agents"];
+    const records = Array.from({ length: 84 }, (_, i) => {
+        const r = fixture(`picker-${i}`), day = 12 + i % 7, stamp = `2026-11-${day}T12:15:00Z`;
+        r.project = `Harbor workspace ${1 + i % 22}`; r.projectId = `harbor-${1 + i % 22}`;
+        r.sourceSessionId = `cedar-${1 + i % 64}`; r.sourceSessionName = `Cedar review ${1 + i % 64}`;
+        r.userPrompt = { text: `Review the Cedar release notes, batch ${i + 1}.`, status: "full", sourceTimestamp: stamp,
+            sourceEventId: `prompt-${i}`, authorship: { actor: "user", basis: "source-user" } };
+        const apiPath = ["/me/messages", "/me/drive/root", "/me/calendarView"][i % 3];
+        Object.assign(r.toolCalls[0], { tool: `workiq-${tools[i % tools.length]}`, startedAt: stamp, requestedApiPath: apiPath,
+            requestArgs: { entityUrls: [apiPath] }, completedAt: new Date(Date.parse(stamp) + 800).toISOString(),
+            durationMs: 800, completionEventId: `end-${i}`, toolSucceeded: i % 9 !== 0 });
+        return r;
+    });
+    const { page } = await setup(t, true, { records });
+    const proofDir = process.env.WIRE_PICKER_PROOFS;
+    if (proofDir) {
+        await mkdir(proofDir, { recursive: true });
+        await page.context().tracing.start({ screenshots: true, snapshots: true });
+    }
+    const requests = [];
+    page.on("request", req => { if (req.method() === "POST" && !req.url().endsWith("/api/access/watch")) requests.push(new URL(req.url()).pathname); });
+    const popup = page.locator(".select-popup:visible");
+    const option = label => popup.getByRole("option", { name: label, exact: true });
+    const input = name => popup.getByRole("combobox", { name, exact: true });
+    const trigger = id => page.locator(`#${id}-control`);
+    const pressText = async (name, text) => {
+        const edit = input(name); await edit.click(); await expect(edit).toBeFocused(); await page.keyboard.type(text);
+        await expect(edit).toHaveValue(text);
+    };
+    await page.getByRole("navigation", { name: "Trends sections" }).getByRole("button", { name: "Overview" }).click();
+    await page.locator(".trends-discover").getByRole("button", { name: "Compare measures", exact: true }).click();
+    await trigger("trendsPairMeasure1").click(); await pressText("Find a measure", "errors share");
+    await expect(popup.getByRole("option")).toHaveText(["Errors & failures · interaction share"]); await page.keyboard.press("Enter");
+    await selectActivityOption(page, "trendsPairMeasure2", JSON.stringify(["tools", "workiq-fetch", "reach"]));
+    const pair = page.locator(".trends-panel-pair"), title = await pair.locator("h2").innerText();
+    const second = trigger("trendsPairMeasure2"), edit = input("Find a measure");
+    await second.click(); await edit.click();
+    // Sample actual painted frames, including the short zero-result interval, not just the final bounds.
+    await page.evaluate(async () => {
+        await document.fonts.ready;
+        const popup = document.querySelector(".select-popup:popover-open"), trigger = document.querySelector("#trendsPairMeasure2-control");
+        const field = popup.querySelector("input"), chart = document.querySelector(".trends-panel-pair .trends-plot svg");
+        const bounds = node => { const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; };
+        const sample = () => {
+            const r = popup.getBoundingClientRect();
+            return [scrollX, scrollY, ...bounds(trigger), r.x, r.width, popup.dataset.side === "top" ? r.bottom : r.top, ...bounds(field), ...bounds(chart)];
+        };
+        const frames = [], sampleFrame = () => {
+            frames.push({ t: performance.now(), q: field.value, geometry: sample(), open: popup.matches(":popover-open"),
+                focused: field === document.activeElement, chart: chart.isConnected, opacity: getComputedStyle(popup).opacity });
+            frame = requestAnimationFrame(sampleFrame);
+        };
+        let frame = requestAnimationFrame(sampleFrame);
+        window.finishPickerFrames = () => { cancelAnimationFrame(frame); return frames; };
+    });
+    const before = requests.length;
+    await edit.pressSequentially("ask reach", { delay: 24 });
+    await expect(popup.getByRole("option")).toHaveText(["ask · interaction reach"]);
+    await edit.pressSequentially("zzz", { delay: 22 }); await expect(popup.getByRole("status")).toHaveText("No matching choices.");
+    await edit.press("ArrowDown"); await edit.press("Enter"); await expect(edit).not.toHaveAttribute("aria-activedescendant");
+    await edit.press("Control+a"); await edit.press("Backspace"); await edit.pressSequentially("reach", { delay: 18 });
+    await expect(popup.getByRole("option")).toHaveCount(12);
+    const frames = await page.evaluate(() => window.finishPickerFrames());
+    assert(frames.length > 5 && new Set(frames.map(f => f.q)).size > 3);
+    assert(frames.every(f => f.open && f.focused && f.chart && f.opacity !== "0"));
+    const drift = Math.max(...frames.flatMap(f => f.geometry.map((n, i) => Math.abs(n - frames[0].geometry[i]))));
+    assert(drift <= 1, `Finder or chart drifted ${drift}px`);
+    assert.equal(await pair.locator("h2").innerText(), title); assert.equal(requests.length, before);
+    if (proofDir) {
+        await writeFile(path.join(proofDir, "frames.json"), JSON.stringify({ drift, frames }));
+        await page.screenshot({ path: path.join(proofDir, "trends-desktop.png") });
+    }
+    await edit.press("Escape"); await expect(second).toBeFocused(); await second.click(); await expect(edit).toHaveValue("");
+    await pressText("Find a measure", "cordless"); await popup.getByRole("button", { name: "Clear option search" }).click();
+    await expect(edit).toBeFocused(); await page.keyboard.type("ask"); await edit.press("ArrowDown"); await edit.press("Enter");
+    await expect(page.locator("#trendsPairMeasure2")).toHaveValue(JSON.stringify(["tools","workiq-ask","reach"]));
+    await chooseTheme(page, "dark"); await page.setViewportSize({ width: 390, height: 760 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "135%"; });
+    await second.tap(); await expect(edit).not.toBeFocused(); await edit.tap(); await expect(edit).toBeFocused();
+    // A smaller visual area exercises keyboard-like constraints; this is not a native OS keyboard test.
+    await page.setViewportSize({ width: 390, height: 500 }); await page.keyboard.type("retrieve reach");
+    const rect = await popup.boundingBox(); assert(rect && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 390 && rect.y + rect.height <= 500);
+    assert(rect.x + rect.width <= await page.evaluate(() => document.body.getBoundingClientRect().right), "The popup must stay inside the reserved scrollbar gutter");
+    if (proofDir) await page.screenshot({ path: path.join(proofDir, "trends-narrow.png") });
+    await option("retrieve · interaction reach").tap(); await expect(page.locator("#trendsPairMeasure2")).toHaveValue(JSON.stringify(["tools","workiq-retrieve","reach"]));
+    await page.evaluate(() => document.documentElement.style.removeProperty("font-size")); await page.setViewportSize({ width: 1280, height: 800 });
+    await navigateMain(page, "analyze"); await openAnalyzeFilters(page); await page.locator("#moreFiltersToggle").click();
+    for (const [id, name, query, expected] of [
+        ["toolFilter", "Find a tool", "blob", "workiq-fetch_blob"], ["projectFilter", "Find a project", "workspace 18", "Harbor workspace 18"],
+        ["chatFilter", "Find a chat", "42", "Cedar review 42"],
+    ]) {
+        await trigger(id).click(); await pressText(name, query); await expect(popup.getByRole("option")).toHaveText([expected]);
+        await expect(page.locator(`#${id}`)).toHaveValue("all"); await page.keyboard.press("Escape"); await expect(trigger(id)).toBeFocused();
+    }
+    await trigger("projectFilter").click(); await pressText("Find a project", "18"); await option("Harbor workspace 18").click();
+    await expect(page.locator("#projectFilter")).toHaveValue("harbor-18"); await closeAnalyzeFilters(page);
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional"); await trigger("displayTimeZone").click();
+    await pressText("Find a city or time zone", "York"); await expect(popup.getByRole("option")).toHaveText(["New York time (America/New_York)"]);
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), null);
+    await page.keyboard.press("Escape"); await trigger("displayTimeZone").click(); await pressText("Find a city or time zone", "York");
+    await page.keyboard.press("Enter"); await expect(page.locator("#displayTimeZone")).toHaveValue("America/New_York");
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "America/New_York");
+    if (proofDir) await page.context().tracing.stop({ path: path.join(proofDir, "picker-journeys.zip") });
+});
 test("custom pairs keep units, members, collapse and day through the real period comparison and Back", async t => {
     const {page,reads}=await setup(t),nav=page.getByRole("navigation",{name:"Trends sections"});
     await nav.getByRole("button",{name:"Overview"}).click();

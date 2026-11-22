@@ -71,6 +71,12 @@ counts and provenance definitions live in Guide, not another drilldown.
 
 Filters opens one panel with the existing controls, applied chips and separate
 View group. Fields/labels wrap; accepting a restriction must not move focus.
+Both Trends measure selectors and long project, chat, tool, category, service,
+path and time-zone selectors find words anywhere in their option labels. Keep
+the finder inside the open picker; opening on touch does not focus a text
+field until tapped. Typing never changes an accepted choice, removes a check,
+performs a new read or sends a query to Search. A miss is recoverable in place.
+Compact lists keep their ordinary prefix/repeated-letter navigation.
 The closed Filters control names how many restrictions the displayed results
 actually use. Drafts and display choices do not count. Name non-default
 grouping in the chart title; in Trends, distinguish a subset of drawn series

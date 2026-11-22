@@ -1,5 +1,5 @@
 // Serialized into the nonce-authorized shell; keep this factory self-contained.
-export function createSelectControls(ux, { decorateOption = () => {}, pagingFor = () => null, onClose = () => {}, matchesOption } = {}) {
+export function createSelectControls(ux, { decorateOption = () => {}, pagingFor = () => null, onClose = () => {}, finderFor = () => null, matchesOption, searchFields } = {}) {
     const controls = new Map();
     const events = new AbortController();
     let sequence = 0, active = null, typeBuffer = "", typeTime = 0, frame = 0;
@@ -74,6 +74,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         if (typeof popup.hidePopover === "function" && popup.matches(":popover-open")) popup.hidePopover();
         popup.hidden = true;
         if (entry) {
+            entry.finder?.field.dispose();
+            entry.finder = null;
+            entry.rows = null;
             entry.draft = null;
             entry.updateDraft = null;
             attribute(entry.trigger, "aria-expanded", "false");
@@ -94,24 +97,26 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const box = active.trigger.getBoundingClientRect();
         const viewport = window.visualViewport;
         const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
-        const width = viewport?.width || document.documentElement.clientWidth;
+        const width = Math.min(viewport?.width || Infinity, document.documentElement.getBoundingClientRect().width);
         const height = viewport?.height || innerHeight;
         const gap = 6, edge = 8;
-        if (box.bottom <= top || box.top >= top + height || box.right <= left || box.left >= left + width) { close(); return; }
+        const editing = active.finder?.input === document.activeElement;
+        if ((!editing && (box.bottom <= top || box.top >= top + height)) || box.right <= left || box.left >= left + width) { close(); return; }
         const boundary = active.trigger.closest(".filter-scroll")?.getBoundingClientRect();
         if (boundary && (box.right <= boundary.left || box.left >= boundary.right)) { close(); return; }
         // Measuring the CSS height limit can temporarily clamp a scrolled list.
-        const scrollTop = popup.scrollTop;
+        const scroller = active.finder ? list : popup, scrollTop = scroller.scrollTop;
         popup.style.setProperty("--select-available-width", Math.max(0, width - edge * 2) + "px");
         popup.style.setProperty("--select-anchor-width", box.width + "px");
         popup.style.maxHeight = "";
         const availableBelow = top + height - box.bottom - gap - edge;
         const availableAbove = box.top - top - gap - edge;
         const limit = Math.min(parseFloat(getComputedStyle(popup).maxHeight), height - edge * 2);
-        const wanted = Math.min(popup.scrollHeight, limit);
+        // A short result set must not flip the search field across its trigger.
+        const wanted = active.finder ? limit : Math.min(popup.scrollHeight, limit);
         const above = availableBelow < wanted && availableAbove > availableBelow;
         const available = Math.max(0, above ? availableAbove : availableBelow);
-        popup.style.maxHeight = Math.min(limit, available) + "px";
+        popup.style.maxHeight = Math.min(limit, available, height - edge * 2) + "px";
         const popupWidth = popup.getBoundingClientRect().width;
         const anchorLeft = getComputedStyle(active.wrapper).justifySelf === "end" ? box.right - popupWidth : box.left;
         popup.style.left = Math.max(left + edge, Math.min(anchorLeft, left + width - popupWidth - edge)) + "px";
@@ -119,7 +124,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const anchorTop = above ? box.top - popupHeight - gap : box.bottom + gap;
         popup.style.top = Math.max(top + edge, Math.min(anchorTop, top + height - popupHeight - edge)) + "px";
         popup.dataset.side = above ? "top" : "bottom";
-        popup.scrollTop = scrollTop;
+        scroller.scrollTop = scrollTop;
         if (keepActive && active.index >= 0) highlight(active.index);
     }
     function schedulePosition(event) {
@@ -130,21 +135,28 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         }
     }
     function highlight(index, scroll = true) {
-        if (!active || index < 0 || active.options[index]?.disabled || list.querySelector(`[data-option-index="${index}"]`)?.hidden) return;
+        const row = active?.rows?.[index];
+        if (!row || active.options[index].disabled || row.hidden) return;
+        if (active.index !== index) active.rows[active.index]?.removeAttribute("data-active");
         active.index = index;
-        [...popup.querySelectorAll(".select-option")].forEach((row, i) => {
-            attribute(row, "data-active", i === index ? "true" : null);
-        });
-        const row = popup.querySelector(`[data-option-index="${index}"]`);
+        attribute(row, "data-active", "true");
         attribute(active.trigger, "aria-activedescendant", row.id);
+        if (active.finder) attribute(active.finder.input, "aria-activedescendant", row.id);
         attribute(active.trigger, "aria-describedby", [active.select.getAttribute("aria-describedby"), row.getAttribute("aria-describedby")].filter(Boolean).join(" ") || null);
         if (scroll) {
-            const rowBox = row.getBoundingClientRect(), box = popup.getBoundingClientRect();
-            if (rowBox.top < box.top + 6) popup.scrollTop -= box.top + 6 - rowBox.top;
-            else if (rowBox.bottom > box.bottom - 6) popup.scrollTop += rowBox.bottom - box.bottom + 6;
+            const scroller = active.finder ? list : popup;
+            const rowBox = row.getBoundingClientRect(), box = scroller.getBoundingClientRect();
+            if (rowBox.top < box.top + 6) scroller.scrollTop -= box.top + 6 - rowBox.top;
+            else if (rowBox.bottom > box.bottom - 6) scroller.scrollTop += rowBox.bottom - box.bottom + 6;
         }
     }
-    function open(entry, edge) {
+    function move(entry, key) {
+        const enabled = entry.rows.flatMap((row, index) => row.hidden || entry.options[index].disabled ? [] : [index]);
+        const at = enabled.indexOf(entry.index);
+        highlight(key === "Home" ? enabled[0] : key === "End" ? enabled.at(-1) :
+            enabled[Math.max(0, Math.min(enabled.length - 1, at + (key === "ArrowDown" ? 1 : -1)))]);
+    }
+    function open(entry, edge, focusFinder = false) {
         syncEntry(entry);
         if (entry.trigger.disabled || !visible(entry)) return;
         close();
@@ -152,6 +164,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const revision = popupRevision;
         const current = () => active === entry && revision === popupRevision;
         entry.index = -1;
+        entry.rows = [];
         list.replaceChildren();
         popup.replaceChildren(list);
         entry.draft = entry.multiple ? new Set(selectedValues(entry)) : null;
@@ -203,28 +216,8 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
                 row.append(detail);
             }
             list.append(row);
+            entry.rows.push(row);
         });
-        if (entry.select.dataset.optionSearch === "true" && typeof matchesOption === "function") {
-            const finder = document.createElement("input");
-            const found = document.createElement("p"); found.className = "select-draft-hint"; found.setAttribute("role", "status"); found.hidden = true;
-            finder.type = "search"; finder.placeholder = "Find an option"; finder.setAttribute("aria-label", "Find an option");
-            finder.className = "select-option-search"; finder.autocomplete = "off";
-            finder.addEventListener("input", () => {
-                if (!current()) return;
-                for (const row of list.querySelectorAll(".select-option")) row.hidden = !matchesOption(finder.value, entry.options[Number(row.dataset.optionIndex)].displayLabel);
-                const next = [...list.querySelectorAll(".select-option")].find(row => !row.hidden && row.getAttribute("aria-disabled") !== "true");
-                found.textContent = next ? "" : "No matching options."; found.hidden = Boolean(next);
-                entry.index = -1;
-                if (next) highlight(Number(next.dataset.optionIndex), false);
-                position(false);
-            });
-            finder.addEventListener("keydown", event => {
-                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); }
-                else if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); entry.trigger.focus(); }
-                else if (event.key === "Enter") { event.preventDefault(); commit(entry.index); }
-            });
-            popup.prepend(finder); popup.append(found);
-        }
         const paging = pagingFor(entry.select);
         if (paging) {
             const footer = document.createElement("div"), note = document.createElement("p");
@@ -306,6 +299,46 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             cancel.addEventListener("click", () => { if (current()) close(true); });
             entry.updateDraft();
         }
+        const finderLabel = finderFor(entry.select, entry.options.length);
+        popup.classList.toggle("select-popup-find", Boolean(finderLabel));
+        if (finderLabel) {
+            const input = document.createElement("input"), clear = document.createElement("button"), capsule = document.createElement("div");
+            const icon = document.createElement("span"), status = document.createElement("p");
+            capsule.className = "search-capsule"; icon.className = "wire-search-icon"; icon.append(ux.icon("search"));
+            input.type = "search"; input.className = "search-capsule-input select-option-search"; input.placeholder = finderLabel;
+            input.autocomplete = "off"; input.spellcheck = false; input.autocapitalize = "none"; input.enterKeyHint = "done";
+            input.setAttribute("aria-label", finderLabel); input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
+            input.setAttribute("aria-controls", list.id); input.setAttribute("aria-expanded", "true");
+            clear.type = "button"; clear.className = "quiet search-capsule-clear";
+            status.className = "select-find-status"; status.setAttribute("role", "status");
+            capsule.append(icon, input, clear); popup.prepend(capsule); list.after(status);
+            const choices = entry.options.filter(option => !option.disabled).length;
+            const describe = count => count ? `${count} of ${choices} choices` : paging ? "No matching choices on this page." : "No matching choices.";
+            status.textContent = describe(choices);
+            const field = searchFields.mount(input, { clearLabel: "Clear option search", onInput() {
+                if (!current()) return;
+                let count = 0, next = -1;
+                entry.rows.forEach((row, i) => {
+                    row.hidden = !matchesOption(input.value, entry.options[i].displayLabel);
+                    if (!row.hidden && !entry.options[i].disabled) { count++; if (next === -1) next = i; }
+                });
+                entry.rows[entry.index]?.removeAttribute("data-active"); entry.index = -1;
+                attribute(input, "aria-activedescendant", null); attribute(entry.trigger, "aria-activedescendant", null);
+                attribute(entry.trigger, "aria-describedby", entry.select.getAttribute("aria-describedby"));
+                list.scrollTop = 0;
+                const selected = entry.options.findIndex(option => option.node.selected && !option.disabled);
+                status.textContent = describe(count);
+                position(false);
+                highlight(!input.value && selected >= 0 ? selected : next);
+            } });
+            entry.finder = { input, field };
+            input.addEventListener("keydown", event => {
+                if (!current() || event.isComposing || event.keyCode === 229) return;
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(entry, event.key); }
+                else if (event.key === "Enter") { event.preventDefault(); commit(entry.index); }
+                else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); }
+            });
+        }
         attribute(list, "aria-labelledby", entry.trigger.getAttribute("aria-labelledby"));
         attribute(list, "aria-label", entry.trigger.getAttribute("aria-label"));
         (entry.trigger.closest(":popover-open,dialog[open]") || document.body).append(popup);
@@ -319,6 +352,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const selected = entry.options.findIndex((option) => option.node.selected && !option.disabled);
         position();
         highlight(edge === "first" ? enabled[0] : edge === "last" ? enabled.at(-1) : selected >= 0 ? selected : enabled[0]);
+        if (focusFinder) entry.finder?.input.focus({ preventScroll: true });
         if (typeof paging?.load === "function") {
             const access = withdrawalRevision;
             Promise.resolve(paging.load()).then(loaded => {
@@ -342,7 +376,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
     function commit(index) {
         const revision = withdrawalRevision;
         const entry = active, option = entry?.options[index];
-        if (!entry || !option || option.disabled) return;
+        if (!entry || !option || option.disabled || entry.rows[index]?.hidden) return;
         // A replaced option cannot commit a stale value into a newer snapshot.
         if (!entry.select.contains(option.node) || unavailable(entry)) { close(); sync(); return; }
         if (entry.multiple) {
@@ -412,17 +446,14 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         }
         if (["Enter", " "].includes(event.key) && (entry.multiple || !(event.key === " " && typeBuffer && performance.now() - typeTime <= 700))) {
             event.preventDefault();
-            if (opened) commit(entry.index); else open(entry);
+            if (opened) commit(entry.index); else open(entry, undefined, true);
             return;
         }
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
             if (!opened) { open(entry, event.key === "Home" ? "first" : event.key === "End" ? "last" : undefined); return; }
             if (event.altKey && event.key === "ArrowUp") { close(true); return; }
-            const enabled = entry.options.map((option, index) => option.disabled || list.querySelector(`[data-option-index="${index}"]`)?.hidden ? -1 : index).filter((index) => index >= 0);
-            const current = enabled.indexOf(entry.index);
-            highlight(event.key === "Home" ? enabled[0] : event.key === "End" ? enabled.at(-1) :
-                enabled[Math.max(0, Math.min(enabled.length - 1, current + (event.key === "ArrowDown" ? 1 : -1)))]);
+            move(entry, event.key);
             return;
         }
         if (event.key.length !== 1 || event.altKey) return;
@@ -436,7 +467,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const start = query.length === 1 ? entry.index + 1 : entry.index;
         for (let offset = 0; offset < entry.options.length; offset++) {
             const index = (Math.max(0, start) + offset) % entry.options.length, option = entry.options[index];
-            if (!option.disabled && !list.querySelector(`[data-option-index="${index}"]`)?.hidden
+            if (!option.disabled && !entry.rows[index].hidden
                 && option.label.trim().toLocaleLowerCase().startsWith(query.toLocaleLowerCase())) {
                 highlight(index);
                 break;
@@ -541,7 +572,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         attribute(select, "aria-hidden", "true");
         select.tabIndex = -1;
         ux.tooltip(trigger, () => trigger.getAttribute("aria-expanded") === "true" || value.scrollWidth <= value.clientWidth ? "" : value.textContent);
-        listen(trigger, "click", () => active === entry ? close(true) : open(entry));
+        listen(trigger, "click", event => active === entry ? close(true) : open(entry, undefined, event.pointerType !== "touch"));
         listen(trigger, "keydown", (event) => keydown(event, entry));
         listen(select, "change", () => syncEntry(entry));
         listen(select, "invalid", (event) => { event.preventDefault(); attribute(trigger, "aria-invalid", "true"); trigger.focus(); });
@@ -596,8 +627,13 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         }
         sync();
     }
-    listen(popup, "pointerdown", (event) => event.preventDefault());
+    listen(popup, "pointerdown", event => { if (!event.target.closest(".search-capsule")) event.preventDefault(); });
     listen(popup, "keydown", (event) => {
+        if (event.isComposing || event.keyCode === 229) return;
+        if (event.key === "Tab" && active?.finder) {
+            const stops = [...popup.querySelectorAll("input, button:not(:disabled)")].filter(node => node.checkVisibility());
+            if (event.target === (event.shiftKey ? stops[0] : stops.at(-1))) close(true);
+        }
         if (event.key === "Escape" && active) { event.preventDefault(); event.stopPropagation(); close(true); }
     });
     listen(popup, "pointermove", (event) => {
@@ -641,7 +677,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
     listen(window, "pagehide", () => close());
     listen(document, "visibilitychange", () => { if (document.hidden) close(); });
     listen(document, "reset", () => queueMicrotask(sync));
-    const observer = new MutationObserver(sync);
+    const observer = new MutationObserver(records => {
+        if (records.some(record => !popup.contains(record.target))) sync();
+    });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true,
         attributeFilter: ["disabled", "hidden", "selected", "label", "value", "class", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "required", "data-select-state", "data-all-label", "data-detail", "data-disabled-reason", "data-option-label", "data-count", "open"] });
     sync();

@@ -61,6 +61,11 @@ in this release. Saving Copilot reply text is a separate choice under
 available response-model names, plus prompt authors. The interaction list below
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
+Open a long project, chat, tool or service list to find a choice by part of
+its name. Trends' **Measure** and **Compare with** also match units: `ask reach`
+finds the ask tool's interaction reach. In **Settings → Regional**, try a city
+or part of a time-zone ID. Typing only narrows the open list. Choose a row or
+press Enter to accept the highlighted choice; Escape keeps the previous value.
 Find the prompt in the list, then open its row to see the tools, services and
 results in the right-hand reader. A note such as **1 tool call failed** or
 **Reported result issue** helps identify exceptions. These are different:

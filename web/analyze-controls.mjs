@@ -158,7 +158,6 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         else place(toolbarHost, toolbar);
         place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
         for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
-        for (const control of dialog.querySelectorAll("select")) control.dataset.optionSearch = String(comparing);
         // Reparenting the existing entry must not discard Reset's real focus handoff.
         if (entryFocus && active && canPublish() && document.activeElement !== entryFocus) entryFocus.focus({ preventScroll: true });
         if (reference.tagName === "DETAILS") $("analyzeReference").hidden = !referenceAvailable || !reference.open;
