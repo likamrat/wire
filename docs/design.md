@@ -218,8 +218,9 @@ whole surface when activating anywhere on that row opens the same item.
 
 Use the same 44×26px track and round, sliding thumb for a binary setting.
 Keep its target at least 44px high. On/off is visible in position and
-theme-aware contrast. The theme switch adds 4px between its sun and moon,
-with the thumb centered on the selected icon. Disabled
+theme-aware contrast. In the header and Settings, the theme switch leaves
+10px between its 16px sun and moon. Its 20px disc centers on the selected
+icon, with 4px of space inside the track border. Disabled
 inputs retain their state, with a dashed boundary; pending copy stays with
 the setting. A reply-saving draft previews the requested choice. From submission
 until confirmation the switch shows the last confirmed setting; an unknown

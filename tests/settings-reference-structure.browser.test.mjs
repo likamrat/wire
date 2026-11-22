@@ -530,7 +530,7 @@ test("Display and header share switch artwork, native activation, storage update
         for (const control of controls) {
             await expect(control).toHaveAttribute("role", "switch");
             await expect(control).toHaveAttribute("aria-checked", String(theme === "dark"));
-            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 22 : 0}, 0)`);
+            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 26 : 0}, 0)`);
         }
         const geometry = [];
         for (const control of controls) geometry.push(await control.evaluate(node => {
@@ -545,9 +545,13 @@ test("Display and header share switch artwork, native activation, storage update
                 })), artwork: node.querySelector(".theme-track").outerHTML };
         }));
         assert.deepEqual(geometry[0], geometry[1], "Same painted glyphs, thumb/track and target, not just matching SVG names");
-        assert.deepEqual(geometry[0].target, { width: 48, height: 44 });
-        assert.equal(geometry[0].track.width, 48);
-        assert.equal(geometry[0].thumb.width, 18);
+        const { target, track, thumb, glyphs: [sun, moon] } = geometry[0];
+        assert.equal(moon.x - sun.x - sun.width, 10, "Room between the sun and moon");
+        assert.equal(thumb.y - track.y, 5, "Breathing room around the selected disc");
+        assert.equal(theme === "light" ? thumb.x - track.x : track.x + track.width - thumb.x - thumb.width, 5);
+        assert.deepEqual(target, { width: 56, height: 44 });
+        assert.equal(track.width, 56);
+        assert.equal(thumb.width, 20);
         assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 16, 16], ["moon", 16, 16]]);
         for (const control of controls) for (const action of ["click", "Space", "Enter"]) {
             const wasDark = await control.getAttribute("aria-checked") === "true";
