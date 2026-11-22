@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { searchFixture } from "./live-search-fixture.mjs";
+import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { navigateSettings, selectActivityOption } from "./helpers.mjs";
 
 test("page settings retain a nonempty format choice on reload and expose keyboard-searchable defaults", async t => {
@@ -67,9 +67,39 @@ test("a real storage refusal is visible beside the edited default without claimi
             return write.call(this, key, value);
         };
     });
+
     await page.goto(new URL("/settings?section=trends", runtime.url).href);
     await selectActivityOption(page, "defaultTrendChart", "timing");
     await expect(page.locator("#defaultTrendChart-control")).toContainText("Call duration");
     await expect(page.locator("#defaultTrendChartStatus")).toHaveText(/could not be saved.*this panel only/i);
     await page.reload(); await expect(page.locator("#defaultTrendChart-control")).toContainText("Errors & failures");
+});
+
+test("Last 14 days persists from Settings and opens Analyze on the matching activity", async t => {
+    const records = searchRecords(4);
+    const starts = ["2026-09-17T03:59:59Z", "2026-09-17T04:00:00Z", "2026-09-30T21:00:00Z", "2026-10-01T04:00:00Z"];
+    for (const [i, row] of records.entries()) row.toolCalls[0].startedAt = row.capturedAt = starts[i];
+    const { runtime } = await searchFixture(t, { frontend: "react", reply: false, records });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ timezoneId: "America/New_York" });
+    await page.clock.setFixedTime(new Date("2026-10-01T02:00:00Z"));
+    await page.goto(new URL("/settings?section=analyze", runtime.url).href);
+    await expect(page.locator("#defaultAnalyzeRange option")).toHaveText(["All dates", "Last 7 days", "Last 14 days", "Last 30 days"]);
+    await selectActivityOption(page, "defaultAnalyzeRange", "14");
+    await page.reload();
+    await expect(page.locator("#defaultAnalyzeRange-control")).toContainText("Last 14 days");
+    await page.locator("nav [data-nav=analyze]").click();
+    await expect(page.locator("#dateFilter")).toHaveValue("14");
+    await expect(page.locator("#fromFilter")).toHaveValue("2026-09-17");
+    await expect(page.locator("#toFilter")).toHaveValue("2026-09-30");
+    await expect(page.locator("#activityListSummary")).toContainText("2 matching tool calls");
+    const address = new URL(page.url());
+    assert.equal(address.searchParams.get("range"), "14");
+    assert.equal(address.searchParams.has("privateView"), false);
+    await selectActivityOption(page, "dateFilter", "7");
+    await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
+    await page.goBack();
+    await expect(page.locator("#dateFilter")).toHaveValue("14");
+    await expect(page.locator("#activityListSummary")).toContainText("2 matching tool calls");
 });

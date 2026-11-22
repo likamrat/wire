@@ -2672,7 +2672,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (["from", "to", "timelineFrom", "aFrom", "aTo", "bFrom", "bTo"].includes(key)) return /^\d{4}-\d\d-\d\d(?:T\d\d:\d\d:\d\d(?:\.\d{3})?Z)?$/.test(value);
         if (["bundle", "inspect"].includes(key)) return /^export-[a-f0-9-]{36}$/.test(value);
         if (key === "page") return /^\d{1,8}$/.test(value);
-        return ({ chart: ["time", "service", "endpoint", "workload"], bucket: ["day", "week", "month"], range: ["capture", "custom", "7", "30"],
+        return ({ chart: ["time", "service", "endpoint", "workload"], bucket: ["day", "week", "month"], range: ["capture", "custom", "7", "14", "30"],
             task: ["create", "library"], order: ["oldest"], scope: ["history", "legacy", "all"], origin: ["analyze", "trends", "reports"],
             includeMissingService: ["true", "false"], expanded: ["true"], comparisonView: ["outcomes", "timeline", "tools", "timing"],
             comparisonFocus: ["errors", "completed"] })[key]?.includes(value) === true;

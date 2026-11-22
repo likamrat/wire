@@ -376,7 +376,7 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates, Last 7 days or Last 30 days. This filters activity already collected. |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today in your display time zone. This filters activity already collected. |
 | Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
