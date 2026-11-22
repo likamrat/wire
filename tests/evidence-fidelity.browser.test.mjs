@@ -54,7 +54,7 @@ test("cards, reader and author filters explain fresh and retained failures witho
         await expect(reader).toContainText("Human prompt");
         await expect(reader).toContainText(reason);
         await expect(reader).not.toContainText(/unsupported format|Request timed out|try again/i);
-        await expect(reader).toContainText("The recorded path does not identify a named app. The call still counts; its result is shown separately.");
+        await expect(reader).toContainText("The recorded /businessapps/me path does not name a specific business app. The call still counts; its result is shown separately.");
         await expect(reader).not.toContainText(/Inspect the recorded request|named-app service counts|Other identified targets/);
         if (process.env.WIRE_FIDELITY_PROOFS) {
             await mkdir(process.env.WIRE_FIDELITY_PROOFS, { recursive: true });

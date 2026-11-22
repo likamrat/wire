@@ -146,8 +146,9 @@ test("routing attribution limits stay separate from call failure and preserved s
         requestedApiPath: "/businessapps/me", toolSucceeded: false, reportedOutcome: "failed" });
     const analytics = buildActivityAnalytics([record]), before = structuredClone(analytics);
     const call = analytics.rows[0], explanation = serviceCategories.attributionReading(call);
+    assert.equal(call.serviceAssociation.gaps[0].reason, "business-app-not-named");
     assert.equal(explanation.text,
-        "The recorded path does not identify a named app. The call still counts; its result is shown separately.");
+        "The recorded /businessapps/me path does not name a specific business app. The call still counts; its result is shown separately.");
     assert.doesNotMatch(explanation.text, /investigat|supported service|named-app service counts|Dataverse|retry/i);
     assert.equal(call.outcome, "failure");
     assert.equal(call.workload, "Unknown");
@@ -156,7 +157,8 @@ test("routing attribution limits stay separate from call failure and preserved s
     const returned = { ...row("workiq-fetch", "/businessapps/me") };
     returned.serviceAssociation = serviceCategories.associate(returned, "reported-api", classifyWorkload);
     assert.equal(serviceCategories.attributionReading(returned, "reported-api").text,
-        "The recorded path does not identify a named app. The returned result and its status still count.");
+        "The recorded /businessapps/me path does not name a specific business app. The returned result and its status still count.");
+    assert.equal(row("workiq-do_action", "/businessapps/unknown").serviceAssociation.gaps[0].reason, "unrecognized-path");
     const serialized = Function(`return (${createServiceCategories.toString()})()`)();
     assert.deepEqual(serialized.attributionReading(call), explanation);
     assert.deepEqual(analytics, before);

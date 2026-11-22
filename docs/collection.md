@@ -226,6 +226,8 @@ target identifies an Exchange ID conversion request, not whether the item is
 mail, an event or a contact. The public operation name survives normalization;
 user IDs, item IDs and query values do not become part of its path template.
 An older record that retains only `/me/{id}` cannot establish the operation.
+The generic `/businessapps/me` route also identifies no particular business
+app. WIRE distinguishes that recorded limit from a path it does not recognize.
 
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
