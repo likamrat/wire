@@ -7,6 +7,46 @@ import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { privateFixture } from "./helpers.mjs";
 import { executeAction } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+import { buildTrends } from "../lib/trends.mjs";
+
+test("Compare, Analyze and Trends agree on exact call starts, not capture dates or the host clock", () => {
+    const { state, input } = periodFixture();
+    const starts = [
+        "2026-11-01T00:00:00-04:00", "2026-11-01T01:30:00-04:00", "2026-11-01T01:30:00-05:00",
+        "2026-11-01T23:59:59.9999999-05:00", "2026-11-02T00:00:00-05:00",
+        null, "2026-11-01T12:00:00", "2026-11-01",
+    ];
+    state.evidence = state.evidence.slice(0, starts.length);
+    state.evidence.forEach((record, index) => {
+        record.capturedAt = "2026-11-01T12:00:00Z";
+        record.toolCalls = [{ ...record.toolCalls[0], startedAt: starts[index],
+            completedAt: "2026-11-03T00:00:00Z", toolSucceeded: true, reportedOutcome: "succeeded",
+            failureEvidence: undefined, apiResults: [{ index: 0, statusCode: 200 }] }];
+    });
+    state.evidence[0].toolCalls.push(structuredClone(state.evidence[0].toolCalls[0]));
+    const options = { ...input.options, filters: { scope: "all", sources: ["github-copilot"], tools: ["workiq-fetch"] }, limit: 1 };
+    const pairInput = { ...input, options, scenarioIds: state.evidence.map(record => record.scenarioId),
+        periods: { baseline: { from: "2026-11-01", to: "2026-11-01" }, later: { from: "2026-11-02", to: "2026-11-02" } } };
+    const pair = buildPeriodComparison(state, pairInput);
+    for (const [key, indexes] of [["baseline", [0, 1, 2, 3]], ["later", [4]]]) {
+        const range = pairInput.periods[key], expected = indexes.map(index => `call:["period-chat-${index}","period-call-${index}"]`);
+        const analyze = buildActivityAnalytics(state.evidence, { ...options, filters: { ...options.filters, ...range } });
+        const trends = buildTrends(state, { expectedRevision: state.revision, timeContext: options.timeContext,
+            ...range, filters: { tool: "workiq-fetch" } }, { records: state.evidence });
+        assert.deepEqual(pair.periods[key].rowIds, expected);
+        assert.deepEqual(analyze.rows.map(row => row.id), expected);
+        assert.deepEqual(trends.members.map(row => row.id).sort(), expected);
+        assert.equal(trends.coverage.undatedCalls, 3);
+        assert.equal(pair.periods[key].changeSummary.affected, 0);
+    }
+    const all = buildActivityAnalytics(state.evidence, options);
+    assert.equal(all.rows.length, starts.length);
+    assert.equal(all.rows.filter(row => row.startedAt === null).length, 3);
+    const failed = buildPeriodComparison(state, { ...pairInput, options: { ...options, filters: { ...options.filters, outcomes: ["failure"] } } });
+    assert.deepEqual(failed.periods.baseline.rowIds, []);
+    assert.equal(failed.periods.baseline.analytics.resultFacet.totals.count, 4);
+});
 
 test("two unequal periods retain exact canonical cohorts from one revision", () => {
     const { state } = qualityDisplayFixture({ requests: 3, calls: 3, timed: 2, finalDuration: null });

@@ -309,6 +309,11 @@ under **Settings > Compare**.
 days. **Cancel** leaves the accepted comparison unchanged. Unequal or overlapping
 ranges are allowed and remain labeled.
 
+For GitHub Copilot calls, Analyze, Compare and Trends use the recorded call
+start in the display time zone. If the start is missing or has no time zone,
+the call remains in **All dates** but does not belong to either period. A zero
+in a period is not proof that history collection was complete.
+
 The compact activity choice offers All activity, Errors & failures, Completed
 calls, Human prompts and Agent prompts. **More options** retains source, tool,
 service, category, author, outcome, project, chat, evidence-layer and collection
