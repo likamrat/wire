@@ -587,6 +587,12 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "150%"; });
     await page.evaluate(() => document.fonts.ready);
+    const formats = page.locator('[popovertarget="reportFileOptions"]');
+    await formats.click();
+    const panel = page.locator("#reportFileOptions:popover-open");
+    await expect.poll(() => panel.evaluate(n => Math.round(document.documentElement.getBoundingClientRect().right - n.getBoundingClientRect().right))).toBeGreaterThanOrEqual(8);
+    await page.keyboard.press("Escape");
+    await expect(formats).toBeFocused();
     async function inspectRows(selector) {
         const rows = page.locator(selector);
         const boxes = await rows.evaluateAll(nodes => nodes.map(node => {

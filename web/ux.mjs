@@ -185,10 +185,13 @@ export function createEvidenceUX(icons) {
             if (!panel.matches(":popover-open")) return;
             if (!anchor?.checkVisibility()) { panel.hidePopover(); return; }
             const box = anchor.getBoundingClientRect(), gap = 6, pad = 8;
+            // The root's painted width excludes the stable scrollbar gutter even when clientWidth does not.
+            const width = Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width);
+            panel.style.maxWidth = Math.max(0, width - pad * 2) + "px";
             const availableBelow = innerHeight - box.bottom - gap - pad, availableAbove = box.top - gap - pad;
             const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
             panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
-            panel.style.left = Math.max(pad, Math.min(box.left, document.documentElement.clientWidth - panel.offsetWidth - pad)) + "px";
+            panel.style.left = Math.max(pad, Math.min(box.left, width - panel.offsetWidth - pad)) + "px";
             panel.style.top = Math.max(pad, above ? box.top - gap - panel.offsetHeight : box.bottom + gap) + "px";
         }
         panel.addEventListener("beforetoggle", event => {
