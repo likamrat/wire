@@ -19,7 +19,7 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     const namedDefaults = {
         analyze: [["defaultAnalyzeRange-control", "Default date range"], ["defaultGuideStart-control", "Open Guide to"]],
         trends: [["defaultTrendChart-control", "Default trend chart"]],
-        reports: [["defaultReportFormats", "Default file formats"], ["defaultReportPeriod-control", "Default reporting period"]],
+        reports: [["defaultReportFormats", "Default formats"], ["defaultReportPeriod-control", "Default reporting period"]],
         compare: [["defaultCompareDays-control", "Default comparison period"]],
     };
     const ids = await nav.getByRole("link").evaluateAll(links => links.map(a => a.dataset.category));

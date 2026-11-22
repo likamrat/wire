@@ -15,7 +15,7 @@ Contributors changing report behavior should also read the
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
 to search the library. Under **New report**, choose which chat details to
 include, then check **Report focus**, **Activity period**, **Activity** and
-**Files to save**.
+**Formats**.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
@@ -200,8 +200,7 @@ Masking, edits and omissions still control the diagnostic copies. A fixed WIRE
 interpretation can remain when you leave out error-message text; it does not
 restore the omitted wording or read prompts, replies or arguments.
 
-**Files to save** chooses a web page (HTML), print document (PDF), structured
-data (JSON) or editable text (Markdown); you can select more than one.
+**Formats** lets you select HTML, PDF, Markdown and JSON in any combination.
 **Viewing** changes only what you are reading: **Report** is the readable page,
 while a file choice shows that actual format in its own reading pane. Text
 inspection stays out of the file view. PDF has page controls, JSON has
@@ -219,7 +218,7 @@ text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Your selected file and
 Preview/Source mode stay selected during these updates and after changing the
 report period or call filters. Removing that file
-from **Files to save** returns to **Report**. Save is unavailable until the update finishes.
+from **Formats** returns to **Report**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
 

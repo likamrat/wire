@@ -444,8 +444,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 #promptOptions .prompt-choice strong{display:flex;gap:.4em;align-items:center;font-weight:var(--weight-medium)}
 #promptOptions .prompt-choice strong svg{width:1em;height:1em;flex:none}
 .report-before-prepare .prompt-choice :is(svg,input:checked+span strong){color:var(--choice-ink)}
-.report-home .report-outline-action{justify-content:space-between;gap:.75rem;flex-wrap:wrap}
-.report-home .report-outline-action .screen-explanation{color:var(--muted)}
+.report-home .report-outline-action{justify-content:flex-end}
 .report-preview-drawer:not([open]){display:none}
 .report-preview-drawer{position:fixed;inset:0 0 0 auto;width:min(54rem,85vw);max-width:100vw;height:100dvh;max-height:100dvh;box-sizing:border-box;margin:0;padding:0 1rem 1rem;overflow:auto;overscroll-behavior:contain;border:0;border-inline-start:1px solid var(--surface-edge);border-radius:0;background:var(--canvas);color:var(--ink);box-shadow:var(--surface-shadow);scrollbar-gutter:stable}
 .report-preview-drawer[open]{animation:report-drawer-in .2s ease-out}
@@ -577,6 +576,11 @@ ${optionRow}:has(>input:disabled){cursor:not-allowed;color:var(--muted)}
 .report-options-popover :is(input:not([type=checkbox]):not([type=radio]),select,textarea){width:100%;min-width:0;min-height:44px}
 .report-options-popover .format-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));grid-auto-rows:auto;gap:var(--space-xs) var(--space-sm)}
 .report-options-popover .format-choices label::before{content:none}
+#reportFileOptions.wire-local-choices{width:min(10rem,calc(100vw - 16px));padding:var(--space-xs)}
+#reportFileOptions #formatOptions{margin:0}
+#reportFileOptions .format-choices{grid-template-columns:1fr;gap:0;margin:0}
+#reportFileOptions .format-choices label{padding-block:0;min-height:44px}
+#reportFileOptions .format-choices label:has(>input:checked):not(:hover,:active){background:transparent}
 .report-options-popover #additionalMasking{margin-top:18px}
 .report-options-popover #additionalMasking>label{margin:16px 0 12px}
 .report-popover-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}

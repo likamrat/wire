@@ -382,7 +382,7 @@ test("late regeneration retains the selected file mode and never publishes super
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
     assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
     assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     prepared = await (await response).json();
@@ -391,7 +391,7 @@ test("late regeneration retains the selected file mode and never publishes super
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=html]").uncheck();
     await response;
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await selectActivityOption(page, "preparedReportView", "product-report.json");
     await page.locator("#reportPrivacyChoice").click();
@@ -667,7 +667,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1800, height: 1100 });
 
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -677,7 +677,7 @@ test("long reports keep complete evidence behind working navigation and real for
         assert.ok(result.request().postDataJSON().options.formats.includes(format));
         assert.ok(prepared.files["product-report." + (format === "markdown" ? "md" : format)]);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     const previewCount = posts.filter(item => item.path === "/api/preview").length;
     await expect(report.locator(".wire-reading-section[open]")).toHaveCount(0, "Content-only regeneration retains deliberate collapse.");
     await report.locator('.report-nav a[href$="#examples"]').click();

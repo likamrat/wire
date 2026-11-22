@@ -8,7 +8,7 @@ export const pageDefaultSpecs = {
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "A direct link opens its own chart.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
-    reportFormats: { id: "defaultReportFormats", label: "Default file formats", help: "Choose at least one.", initial: ["html"],
+    reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
     reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Includes today in your display time zone.", initial: "7",
         choices: rollingPeriods },

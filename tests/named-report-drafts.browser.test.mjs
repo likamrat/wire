@@ -86,9 +86,9 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     for (const [i, draftName] of ["Release review", "Handoff"].entries()) {
         await navigateMain(page, "reports");
         await page.locator("#namedReportDraft").selectOption({ label: draftName });
-        await page.getByRole("button", { name: /^Files to save:/ }).click();
+        await page.getByRole("button", { name: /^Formats:/ }).click();
         await page.locator("#formatOptions input[value=json]").check();
-        await page.locator("#reportFileOptions").getByRole("button", { name: "Done" }).click();
+        await page.keyboard.press("Escape");
         const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
         await page.locator("#prepareReportPreview").click(); const response = await preparing, prepared = await response.json();
         assert.equal(response.status(), 200, prepared.error);

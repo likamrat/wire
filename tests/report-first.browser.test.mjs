@@ -195,13 +195,13 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     const copies = updated.records.flatMap(record => record.prompts);
     assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
     assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
         updated = await (await pending).json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const saved = (await loadBoardState(context)).exports;
@@ -319,13 +319,13 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
     await replyCopy.getByRole("button", { name: "Update report copy", exact: true }).click();
     updated = await (await editingReply).json();
     await captureReport(page, "shared-context-before-save");
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
         updated = await (await pending).json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const saved = (await loadBoardState(context)).exports;
@@ -621,7 +621,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.keyboard.press("Escape");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await prepare(page, "all");
-    await page.getByRole("button", { name: /^Files to save:/ }).click();
+    await page.getByRole("button", { name: /^Formats:/ }).click();
     await inspectRows("#reportFileOptions .format-choices label");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
@@ -750,7 +750,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
     const updated = await (await rebuilt).json();
     assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     let preparedFiles = updated.files;
     for (const format of ["pdf", "json", "markdown"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -760,7 +760,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
         assert.deepEqual(body.snapshot.reportPopulation, initial.snapshot.reportPopulation);
         preparedFiles = body.files;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     const save = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).dblclick();
     assert.equal((await save).status(), 200);
@@ -864,7 +864,7 @@ test("Reports starts with the configured period and files; changing defaults doe
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "Resume preview", exact: true }).click();
     await expect(range).toHaveText("Last 14 days");
-    await expect(page.getByRole("button", { name: /^Files to save: .*Markdown/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Formats: .*Markdown/ })).toBeVisible();
     assert.deepEqual(effects().map(request => request.path), ["/api/preview"]);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
@@ -873,33 +873,35 @@ test("Reports starts with the configured period and files; changing defaults doe
     for (const name of ["product-report.json", "product-report.md"]) assert.equal(await readFile(saved.files[name], "utf8"), preview.files[name]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(range).toHaveText("Last 30 days");
-    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     await page.reload();
     await expect(range).toHaveText("Last 30 days");
-    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     assert.deepEqual(errors, []);
 });
 
-test("Files to save changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
+test("Formats changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
-    const chooser = page.getByRole("dialog", { name: "Files to save", exact: true });
+    const chooser = page.getByRole("dialog", { name: "Formats", exact: true });
     const effects = () => requests.filter(({ path }) => ["/api/preview", "/api/export"].includes(path));
     await page.clock.install();
-    await page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true }).click();
-    const html = chooser.getByRole("checkbox", { name: "HTML Web page", exact: true });
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await expect(chooser.locator("label")).toHaveText(["HTML", "PDF", "Markdown", "JSON"]);
+    await expect(chooser.getByRole("button")).toHaveCount(0);
+    const html = chooser.getByRole("checkbox", { name: "HTML", exact: true });
     await html.uncheck();
     await expect(chooser.getByRole("alert")).toBeVisible();
-    await expect(chooser.getByRole("checkbox", { name: "PDF Print document", exact: true })).not.toBeChecked();
-    await chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true }).check();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await expect(chooser.getByRole("checkbox", { name: "PDF", exact: true })).not.toBeChecked();
+    await chooser.getByRole("checkbox", { name: "JSON", exact: true }).check();
+    await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     assert.deepEqual(effects(), [], "Choosing files on landing must not start a debounced preview or write.");
     const initial = await prepare(page, "all");
     assert.deepEqual(initial.formats, ["json"]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
-    await page.getByRole("button", { name: "Files to save: Structured data (JSON)", exact: true }).click();
-    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).check();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Formats: JSON", exact: true }).click();
+    await chooser.getByRole("checkbox", { name: "Markdown", exact: true }).check();
+    await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     assert.equal(effects().length, 1, "A resumed draft stays unprepared until requested.");
     const state = await loadBoardState(context), added = fixture("after-file-choice");
@@ -914,14 +916,14 @@ test("Files to save changes only the draft on landing and resumes the frozen pop
     assert.deepEqual(resumed.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await selectActivityOption(page, "preparedReportView", "product-report.md");
     await expect(page.locator("#reportFileInspection .saved-markdown")).toBeVisible();
-    await page.getByRole("button", { name: "Files to save: JSON, Markdown", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: Markdown, JSON", exact: true }).click();
     await expect(html).not.toBeChecked();
-    await expect(chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true })).toBeChecked();
+    await expect(chooser.getByRole("checkbox", { name: "JSON", exact: true })).toBeChecked();
     assert.equal(effects().length, 2, "Viewing a prepared file must neither change the output inventory nor prepare or save it.");
     const removing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).uncheck();
+    await chooser.getByRole("checkbox", { name: "Markdown", exact: true }).uncheck();
     const remaining = await (await removing).json();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.keyboard.press("Escape");
     assert.deepEqual(remaining.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await expect(page.locator('#preparedReportView option[value="product-report.md"]')).toHaveCount(0);
@@ -934,17 +936,17 @@ test("JSON-only saved reports open as readable reports independently of their fi
     const downloads = [];
     page.on("download", download => downloads.push(download));
     await prepare(page);
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const [format, selected] of [["json", true], ["html", false]]) {
         const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).setChecked(selected); await ready;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const before = await loadBoardState(context), saved = before.exports[0];
     assert.deepEqual(saved.formats, ["json"]);
-    await expect(page.getByRole("button", { name: /^Files to save:/ })).toBeHidden();
+    await expect(page.getByRole("button", { name: /^Formats:/ })).toBeHidden();
     const bytes = await readFile(saved.files["product-report.json"]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
@@ -1207,7 +1209,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.deepEqual(prepared.snapshot.periodComparison.comparison, acceptedComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -1224,7 +1226,7 @@ test("retained-period comparison opens its report directly and saves the accepte
         assert.deepEqual(stablePair(rebuilt.snapshot.periodComparison), stablePair(prepared.snapshot.periodComparison));
         preparedFiles = rebuilt.files;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     assert.equal((await loadBoardState(context)).exports[0].reportType, "period-comparison");

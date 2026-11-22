@@ -275,11 +275,11 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("report-example", { locator: report.locator(".wire-example-editor").first() });
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
     await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         prepared = await preparedChange(() => page.locator(`#formatOptions input[value="${format}"]`).check());
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     for (const format of ["html", "pdf", "json", "md"]) {
         await selectActivityOption(page, "preparedReportView", "product-report." + format);
         const file = page.locator("#reportFileInspection .saved-file-preview:visible");

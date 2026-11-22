@@ -70,9 +70,9 @@ test("the React review fixture prepares, edits and saves real formats through th
         assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), chosen);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) prepared = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".report-copy-controls textarea").fill("Cedar edited synthetic review copy.");
@@ -194,9 +194,9 @@ test("all file viewers preserve the edited report through regeneration, reading 
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let prepared = await regenerate(() => prepareLandingReport(page, "all"));
     prepared = await regenerate(() => page.getByLabel("Report name", { exact: true }).fill("Cedar format review"));
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) prepared = await regenerate(() => page.locator(`#formatOptions input[value=${format}]`).check());
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".report-copy-controls textarea").fill("Cedar revised copy for jordan@example.invalid.");

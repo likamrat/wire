@@ -367,7 +367,7 @@ your Analyze filters.
 
 Select **Prepare preview** to read the patterns and supporting interactions in
 the right-side drawer. Preparing does not write files or send the report.
-You can add a note or edit a report copy. **Files to save** chooses the HTML,
+You can add a note or edit a report copy. **Formats** chooses the HTML,
 PDF, JSON or Markdown files to write; **Viewing** only changes what you read.
 **Save report** keeps the chosen files on this device.
 If you keep chat details, the warning lets you hide details and save, save

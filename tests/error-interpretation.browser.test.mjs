@@ -163,7 +163,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
         await capture("interpreted-report-" + theme);
     }
     await page.setViewportSize({ width: 1380, height: 1080 });
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["json", "markdown", "pdf"]) {
         const wait = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -183,7 +183,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
         if (!name.endsWith(".json")) assert.match(text, /diagnostic status 403 conflicts with returned status 500/i, name);
         if (!name.endsWith(".json")) assert.match(text, /Conflicting returned-entry statuses \(reported: 200; diagnostic: 500\)/, name);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     const completedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await prepareLandingReport(page, "completed");

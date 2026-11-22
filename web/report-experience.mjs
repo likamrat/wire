@@ -1,9 +1,9 @@
 // Screen copy only: file names, format values and saved report bytes are unchanged.
 export const reportFileChoices = {
-    html: { name: "HTML", purpose: "Web page", description: "Open the formatted report in a browser." },
-    pdf: { name: "PDF", purpose: "Print document", description: "Keep a fixed layout for reading or printing." },
-    json: { name: "JSON", purpose: "Structured data", description: "Use the recorded facts in a script or analysis tool." },
-    markdown: { name: "Markdown", purpose: "Editable text", description: "Edit or quote the file in a text editor." },
+    html: { name: "HTML", purpose: "Web page" },
+    pdf: { name: "PDF", purpose: "Print document" },
+    markdown: { name: "Markdown", purpose: "Editable text" },
+    json: { name: "JSON", purpose: "Structured data" },
 };
 
 export function reportWorkspacePresentation(route, journey = {}) {
@@ -13,7 +13,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, fileLabel, selectNamed }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity", "report-all"], ["errors", "Errors & failures", "warning"],
@@ -25,7 +25,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         completed: "All calls completed without a recorded error. The answer can still be wrong.",
         mine: "Started by you, including any calls made by an agent.",
         agent: "Started by an agent. Unknown authors are excluded.",
-        formats: "Choose the files that Save report will write on this device. Viewing a file does not change this choice.",
     };
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
@@ -154,8 +153,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const privacyHint = el("p", "report-privacy-hint"); privacyHint.id = "reportPrivacyHint";
     privacyRow.append(privacyLabel, privacyButton); privacyGroup.append(privacyRow, privacyHint);
     let privacyMode;
-    const formats = popover("reportFileOptions", "Files to save"); formats.append(byId("formatOptions")); done(formats);
-    const formatButton = opener("Files to save: HTML", formats);
+    const formats = popover("reportFileOptions", "Formats");
+    formats.firstElementChild.classList.add("visually-hidden");
+    const formatOptions = byId("formatOptions");
+    formats.append(formatOptions);
+    const formatButton = opener("HTML", formats);
     const formatLabel = formatButton.firstChild;
     formatButton.prepend(ux.icon("report-files"));
     const refine = popover("reportIncludeOptions", "Choose what to include");
@@ -180,10 +182,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton);
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
-    const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Files to save", formatGroup);
+    const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
     outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
-    outlineAction.append(el("p","screen-explanation","Preparing does not save or send anything."), prepare);
+    outlineAction.append(prepare);
     periodHost.append(period, periodCaption);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
@@ -342,10 +344,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             : ({ masked: "Masking can miss names and sensitive wording.",
                 original: "Personal details may be included. Detected credentials are still removed.",
                 none: "Calls and counts stay. Notes and error messages may still contain personal details." })[mode];
-        const formatSummary = value.options.formats.map(format => value.prepared
-            ? format === "markdown" ? "Markdown" : format.toUpperCase() : fileLabel(format)).join(", ") || "Choose a file";
-        formatLabel.data = value.prepared ? "Files to save: " + formatSummary : formatSummary;
-        formatButton.setAttribute("aria-label", "Files to save: " + formatSummary);
+        const formatSummary = [...formatOptions.querySelectorAll("label")].filter(row =>
+            value.options.formats.includes(row.querySelector("input").value)).map(row => row.textContent.trim()).join(", ") || "None";
+        formatLabel.data = value.prepared ? "Formats: " + formatSummary : formatSummary;
+        formatButton.setAttribute("aria-label", "Formats: " + formatSummary);
         formatGroup.hidden = value.prepared && value.saved;
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";

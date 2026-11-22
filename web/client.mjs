@@ -2036,7 +2036,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     ux.tooltip($("clearResultFilter"), "Cancel the pending Outcome change and keep all recorded results. Other filters stay applied.");
     $("clearPromptAuthorFilter").append(ux.icon("close"));
     ux.tooltip($("clearPromptAuthorFilter"), "Cancel the pending Author change and keep all authors, including unverified. Other filters stay applied.");
-    $("formatOptions").append(el("p", "context-help-note", "Nothing is written until you choose Save report. A file list (manifest) is included automatically."));
     function date(value, full = false) {
         return time.formatDate(value, workspaceState.scope?.timeContext || viewerTime, full);
     }
@@ -10325,7 +10324,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 expanded = !expanded; preparedReportReader?.expand(expanded);
                 expand.textContent = expanded ? "Collapse sections" : "Expand sections";
             }, "quiet");
-            const fileHint = el("p", "context-help-note", "File preview only. Use Files to save to choose what Save report writes.");
+            const fileHint = el("p", "context-help-note", "File preview only. Choose output in Formats.");
             fileHint.id = "preparedFileViewingHint"; fileHint.hidden = true;
             viewBar.append(label, expand); report.prepend(viewBar, fileHint);
             exactFiles.id = "reportFileInspection"; exactFiles.hidden = true;
@@ -10848,7 +10847,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         utility: (...args) => ux.utility(...args),
     });
     reportExperience = assessmentFactories.createReportExperience({
-        fileLabel: reportFileLabel,
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
         selectNamed: id => {

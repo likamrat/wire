@@ -537,7 +537,7 @@ and the existing navigation owners.
 
 ### Formats
 
-Files to save chooses output files. Viewing chooses Report or an actual format preview,
+Formats chooses output files. Viewing chooses Report or an actual format preview,
 with PDF pages, a JSON tree or HTML/Markdown Preview/Source. Returning from a file
 to the same authorized HTML report keeps its open sections and reading position.
 JSON-only saves can render a readable page from their verified frozen snapshot.
