@@ -116,7 +116,7 @@ or the last topic read in this tab. This preference does not change the charts.
 **Services and operations** distinguishes a hosted Copilot request that did
 not record its downstream services from a saved target path WIRE could not
 classify. Neither tells you who wrote the prompt or whether the call failed.
-On an interaction card, **View call**, when available beside a service label,
+On an interaction card, **View call**, when available beside a service or operation,
 opens the matching call. If several match, the link identifies the first.
 The **tool-call count** opens the whole interaction. Expand a numbered call
 to see which target and result belong to that call.
