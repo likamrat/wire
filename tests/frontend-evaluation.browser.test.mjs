@@ -149,7 +149,7 @@ test("Analyze groups exact tool names and counts in static labels beside genuine
     await name.click(); expect(page.url()).toBe(url);
     await expect(card.locator(".card-tool-list").getByRole("link")).toHaveCount(0);
     const panel = card.locator(".card-panel-link");
-    await card.locator(".request-card-open").focus(); await page.keyboard.press("Tab");
+    await card.locator(".report-draft-trigger").focus(); await page.keyboard.press("Tab");
     await expect(panel).toBeFocused();
     await expect(panel).toHaveCSS("outline-style", "solid");
     await panel.press("Enter");
@@ -462,7 +462,8 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     await expect(card.locator(".card-issue-owner")).toHaveText(["Call #1 · workiq-fetch", "Call #2 · workiq-retrieve"]);
     await expect(card).not.toContainText(/Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
-    await expect(card.locator("button,input,details")).toHaveCount(0);
+    await expect(card.locator("button,input,details")).toHaveCount(1);
+    await expect(card.getByRole("button", { name: "Add to report", exact: true })).toHaveClass(/report-draft-trigger/);
     await promptLink.focus(); await page.keyboard.press("Enter");
     const reader = page.locator("#requestContent");
     await expect(reader.locator(".reader-call-row")).toHaveCount(4);

@@ -25,6 +25,13 @@ Zero and unavailable are different.
 
 ## Evidence and membership
 
+Named drafts are editable local selections, not prepared reports or saved
+artifacts. The Copilot picker binds them to the retained store, source
+configuration and access generation; it stores membership references, not
+chat text. Prepare checks the exact draft identity, revision and Selected IDs
+against the same state used to build the preview. Later draft edits do not
+modify that preview, any saved files, or the interaction itself.
+
 Count canonical identities once before pagination. Work IQ calls, returned API
 entries, Graph request sites, sites with visible status, owned HTTP captures
 and code references are distinct populations. Visible statuses are a subset

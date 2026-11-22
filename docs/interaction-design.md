@@ -393,9 +393,10 @@ unmasked text. Pending/success feedback replaces the existing glyph without a
 new line or layout shift. Failure remains explicit with manual-copy guidance.
 No Clipboard read is required.
 
-The fixed reader footer owns Add/Remove and Continue to report. Reading does
-not select or save. Broader report scopes explain membership instead
-of silently switching to Selected.
+For local Copilot interactions in Analyze, the card utility and the reader
+action after Source share one named-draft picker. Search and Remove stay in
+that picker. Reading does not select or save. Other reader entry points keep
+their contextual report footer; broader scopes do not silently switch to Selected.
 
 ### Reader size
 

@@ -62,8 +62,15 @@ The activity picker keeps its actions visible while its
 contents scroll together, without a second scroll area inside the interaction list.
 Failure summaries keep the recorded tool name; open an interaction to read its
 exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
-You can also use **Add to report > Continue to report** in an interaction reader.
-Reading or selecting an interaction alone does not save a report.
+On Analyze, use the report icon beside the call count or **Add to report**
+beside **Source** in the reader. Pick a local report draft, search by name, or
+choose **New draft**. To remove the interaction from just one draft, reopen
+the picker and choose that draft's **Remove** row. Other drafts and the
+recorded interaction are unchanged.
+
+In **Reports**, choose the name under **Report draft**, then **Prepare preview**.
+Quick additions keep their membership across reloads, not a copy of the chat.
+They never write an export or change an already prepared or saved report.
 
 **Back to Reports** returns to the choices and saved list. It keeps an unfinished
 copy in memory. Use **Resume preview** with the same focus and unchanged dates to

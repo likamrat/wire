@@ -274,6 +274,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const renderedContextBundles = new Set();
     const ux = createEvidenceUX(uxIcons);
     const searchFields = assessmentFactories.createSearchFields(ux);
+    let namedReport = null;
+    const namedDrafts = assessmentFactories.createReportDraftPicker({ api, ux, searchFields, normalize: assessmentFactories.normalizeSearchText,
+        announce, erase: erasePreparedNodes,
+        blocked: () => workspaceState.loading || workspaceState.stale || clearingAccess ? "Wait for current activity." : "",
+        changed: () => { if (workspaceState.route.view === "reports") reportExperience?.sync(); },
+    });
+    function namedRequest(id) {
+        if (!namedDrafts.read()) return null;
+        const requests = workspaceState.evidence?.exportCatalog?.requests;
+        return requests?.find(r => r.scenarioId === id) ?? requests?.find(r => r.aliases.includes(id));
+    }
     const metadata = createInlineMetadata(ux);
     // Keep operation wording on screen separate from saved report definitions.
     const recordedCategories = createServiceCategories();
@@ -2542,6 +2553,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }, "text-link"),
     });
     function clearDeletedDraft(change = "changed") {
+        namedReport = null;
         assessmentUI.invalidate(`Collected activity or its optional evidence was ${change}. Read current insights.`);
         selected.clear();
         periodReport = null; periodReportInvalid = false;
@@ -2970,6 +2982,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else history.pushState(navigationState, "", url);
     }
     function navigate(next, replace = false, options = {}) {
+        namedDrafts.close();
         if (appUpdate?.locked()) return false;
         if (clearingAccess || !api.publicationToken()) return false;
         next = canonicalRoute(next);
@@ -3670,6 +3683,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!workspaceState.acceptRead(request, publication, {
                 evidence: next, analytics: validated, scope: config, route: acceptedRoute,
             })) return false;
+            namedDrafts.accept(next.namedDrafts);
             if (acceptedRoute.view === "request") rememberRoute(acceptedRoute, true);
             nativePublication.snapshot(next.nativeReportPublication, nativePublicationContext(false));
             syncNativeSaveAvailability?.();
@@ -5985,6 +5999,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             "activity", target, "card-evidence-link request-card-open-label card-panel-link");
         panel.prepend(ux.icon("activity-panel"), ux.icon("activity-panel-close"));
         labelPanelLink(panel, panel.getAttribute("aria-expanded") === "true");
+        const named = !reportPicker && namedRequest(scenario.scenarioId);
+        if (named) foot.append(namedDrafts.make(named.scenarioId));
         foot.append(panel);
         row.append(body, foot);
         cardOwners.set(row, events);
@@ -6222,6 +6238,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const sourceJump = sectionJump(sourceSection, "Source", "section-source");
         jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
+        const quickReport = underlyingRoute().view === "analyze" && namedRequest(workspaceState.route.request);
+        if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId));
         body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);
@@ -6617,7 +6635,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     ? "This is the next saved message, not a confirmed follow-up." : message.source.association));
             entries.push({ ...message, relation: group.relation, render: () => followup });
         }
-        const actions = reportReaderActions(scenario.scenarioId);
+        const actions = quickReport ? null : reportReaderActions(scenario.scenarioId);
         const entryStart = entries.length;
         const ordinals = requestContext.actionOrdinals(scenario);
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : undefined);
@@ -6781,7 +6799,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         if (entryStart === entries.length) (isSelected ? intro : requestText).append(el("p", "reader-empty",
             isSelected && context.groups.length > 1 ? "No individual action details were retained for the selected interaction." : "No individual action details were retained."));
-        if (isSelected) $("contextSidebarFooter").replaceChildren(actions);
+        if (isSelected) $("contextSidebarFooter").replaceChildren(...(actions ? [actions] : []));
         for (const item of workspaceState.analytics.journeys || []) {
             if (item.scenarioId !== scenario.scenarioId || item.association === "none") continue;
             const relation = item.association === "same-prompt-after-failure" ? "A Graph request follows a Work IQ failure in this prompt group." : item.association === "explicit-transition" ? "The record contains an explicit transition to Graph." : "Work IQ and Graph activity occur in the same prompt group.";
@@ -7110,6 +7128,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function clearReportSelection() {
         if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return;
+        namedReport = null;
         reportPreset = null;
         forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null;
         reportScope = "selected";
@@ -9596,6 +9615,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function chooseReportPreset(preset, trigger) {
         if (periodReport && !exportWriting && !reportJourney.snapshot().saveUnconfirmed) clearReportSelection();
         if (reportSelectionBlock() || reportPreparing) return;
+        const latestDraft = namedReport && namedDrafts.read()?.drafts.find(d => d.id === namedReport.id);
+        const updatedDraft = namedReport && latestDraft?.revision !== namedReport.revision;
+        if (namedReport && (updatedDraft || !(reportPreset === preset && (activePreview || reportRebuildFrom)))) {
+            const latest = latestDraft;
+            if (!latest || latest.unavailable || !latest.scenarioIds.length) {
+                announce("This draft has no complete available selection. Choose another draft or update its interactions.", "stale");
+                return;
+            }
+            namedReport = latest;
+            selected.clear();
+            for (const id of latest.scenarioIds) selected.add(id);
+        }
         const publication = api.publicationToken();
         if (workspaceState.route.view === "reports" && assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).landing) {
             forgetReading(reportLandingOrigin?.reading);
@@ -9607,11 +9638,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const moved = await navigate(routeFor("reports", { task: "create", inspect: undefined }), false, { keepFocus: true });
             if (!moved || !api.isCurrent(publication)) return;
         }
-        if (reportPreset === preset && activePreview && reportJourney.snapshot().hasPreview) {
+        if (!updatedDraft && reportPreset === preset && activePreview && reportJourney.snapshot().hasPreview) {
             reportJourney.go(3);
             return;
         }
-        if (reportPreset === preset && reportRebuildFrom) {
+        if (!updatedDraft && reportPreset === preset && reportRebuildFrom) {
             await previewExport({ contentOnly: true });
             return;
         }
@@ -9622,7 +9653,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
         invalidatePreview();
         draft.change({
-            saveMode: "local", title: undefined, overrides: [], manualTerms: [],
+            saveMode: "local", title: namedReport?.name, overrides: [], manualTerms: [],
             reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
             reportFocus: { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
         });
@@ -9721,6 +9752,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const preview = await api("/api/preview", { ...(rebuilding ? { rebuildFrom: rebuilding } : periodReport ? { periodComparison: periodReport.value,
                 ...(periodReport.semanticSelection ? { semanticSelection: periodReport.semanticSelection } : {}) } : { selection,
                     ...(nativeRequest ? { nativeViewId: nativeRequest.nativeViewId } : {}),
+                    ...(namedReport ? { namedDraft: { id: namedReport.id, revision: namedReport.revision } } : {}),
                     ...(reportView ? { reportView } : {}) }), options: draft.options() });
             if (!api.isCurrent(publication)) return;
             if (!ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) {
@@ -10701,7 +10733,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         fileLabel: reportFileLabel,
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
+        selectNamed: id => {
+            if (exportWriting || reportPreparing || reportJourney.snapshot().saveUnconfirmed) return;
+            const item = namedDrafts.read()?.drafts.find(d => d.id === id);
+            clearReportSelection();
+            applyReportDefaults();
+            if (item) {
+                namedReport = item; reportScope = "selected"; reportBaseExplicit = true;
+                reportDates = { range: "capture" };
+                for (const id of item.scenarioIds) selected.add(id);
+                draft.change({ title: item.name });
+                draft.synchronizeTime(viewerTime, reportDates);
+            }
+            updateSelection(); reportExperience.sync();
+        },
         read: () => ({
+            namedDrafts: namedDrafts.read()?.drafts, namedReport,
             dates: reportDates, timeContext: viewerTime, options: draft.options(),
             resumePreset: (activePreview && reportJourney.snapshot().hasPreview || reportRebuildFrom) ? reportPreset : null,
             explicitScope: reportBaseExplicit, scopeIssue: reportJourney.reason(2),
@@ -10711,7 +10758,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             loading: workspaceState.loading || workspaceState.stale || reportPreparing,
             preparing: reportJourney.snapshot().phase === "scanning",
             unavailable: workspaceState.loading || workspaceState.stale,
-            scopeLabel: !reportBaseExplicit ? "All retained activity"
+            scopeLabel: namedReport ? namedReport.name : !reportBaseExplicit ? "All retained activity"
                 : reportScope === "current" ? reportDatesReplaced ? "Based on Analyze filters" : "Current Analyze view"
                     : reportScope === "selected" ? "Selected interactions" : "All retained activity",
             services: categories.entries.filter(entry => !["Multiple workloads", "Platform metadata", "Unknown"].includes(entry.id)).map(entry => entry.id),
@@ -10873,6 +10920,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        namedDrafts.withdrawAccess(); namedReport = null;
         trendPeriodVisit = null; periodBackToTrends.hidden = true;
         appUpdate?.beforeOwnerRetirement();
         const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation || new URLSearchParams(location.search).has("privateView"));

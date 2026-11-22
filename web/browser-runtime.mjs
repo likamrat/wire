@@ -84,6 +84,8 @@ import { mountFirstConnection } from "./first-connection.mjs";
 import { mountAppUpdate } from "./app-update.mjs";
 import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
+import { createReportDraftPicker } from "./report-draft-picker.mjs";
+import { normalizeSearchText } from "../lib/search-normalize.mjs";
 
 function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
@@ -100,7 +102,7 @@ function factories() {
         createAccountProfile, createNativeActivityPresentation, activityPage, createNativeConfigurationState,
         createSourceCollectionState, createRefreshSources, mountSourceCollectionSettings, createBoundedNativeState,
         createNativeReportPublicationState, mountBoundedNative,
-        savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection,
+        savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection, createReportDraftPicker, normalizeSearchText,
         createReportSaveIdentity, reportWorkspacePresentation, reportFileChoices, createDateRangeCalendar,
         mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart, createTrendPairModel, mountTrendPair }),
         createReportExperience: options => createReportExperience({ ...options, createCalendar: createDateRangeCalendar }),

@@ -181,7 +181,8 @@ for (const withReply of [false, true]) test(`reader section jumps pair named ico
         await readerSettled(page);
         await jumps.scrollIntoViewIfNeeded();
         await readerShot(page, `section-jumps-${withReply ? "with-reply" : "ordinary"}-${width}`);
-        await expect(jumps.getByRole("button")).toHaveText(destinations.map(([label]) => label));
+        await expect(jumps.getByRole("button")).toHaveText([...destinations.map(([label]) => label), "Add to report"]);
+        await expect(jumps.getByRole("button", { name: "Add to report" })).toHaveAttribute("aria-haspopup", "dialog");
         for (const [label, name, icon] of destinations) {
             const control = jumps.getByRole("button", { name: label, exact: true });
             await expect(control.locator("svg")).toHaveAttribute("data-lucide-icon", icon);

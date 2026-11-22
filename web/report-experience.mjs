@@ -13,7 +13,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, fileLabel }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, fileLabel, selectNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity", "report-all"], ["errors", "Errors & failures", "warning"],
@@ -91,7 +91,25 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     };
     const treatment = el("div", "report-before-prepare");
     const draftChoices = el("div", "report-draft-fields");
-    desk.append(draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
+    const namedRow = el("label", "report-desk-compact", "Report draft"), namedSelect = el("select");
+    namedSelect.id = "namedReportDraft"; namedSelect.dataset.nativeSelect = "";
+    const namedChoice = el("span", "native-choice"), namedChevron = ux.icon("chevron");
+    namedChevron.classList.add("native-choice-chevron"); namedChoice.append(namedSelect, namedChevron); namedRow.append(namedChoice);
+    let optionSignature;
+    let replacePrompt = null;
+    namedSelect.onchange = () => {
+        const value = read(), id = namedSelect.value;
+        if (!current() || namedSelect.disabled) return;
+        if (!value.resumePreset) { selectNamed(id); return; }
+        namedSelect.value = value.namedReport?.id ?? "";
+        replacePrompt?.remove();
+        replacePrompt = el("div", "context-help-note");
+        replacePrompt.append(el("p", "", "Switch draft and discard the unfinished preview? Saved reports will not change."),
+            button("Switch draft", () => { replacePrompt.remove(); replacePrompt = null; selectNamed(id); }),
+            button("Keep preview", () => { replacePrompt.remove(); replacePrompt = null; namedSelect.focus(); }));
+        namedRow.after(replacePrompt); replacePrompt.querySelector("button").focus();
+    };
+    desk.append(namedRow, draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
     gallery.append(el("h2", "", "New report"), desk);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");
@@ -248,6 +266,15 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     function sync() {
         if (!current()) return;
         const value = read();
+        const draftOptions = value.namedDrafts ?? [];
+        namedRow.hidden = !draftOptions.length || value.prepared;
+        namedSelect.disabled = value.locked || value.loading;
+        const signature = JSON.stringify(draftOptions.map(d => [d.id, d.name, d.revision]));
+        if (signature !== optionSignature) {
+            optionSignature = signature;
+            namedSelect.replaceChildren(new Option("New report", ""), ...draftOptions.map(d => new Option(d.name, d.id)));
+        }
+        namedSelect.value = value.namedReport?.id ?? "";
         toolbar.hidden = !value.prepared;
         gallery.hidden = value.paired && value.prepared;
         if (privacyGroup.parentElement !== choices) choices.append(privacyGroup);
@@ -276,10 +303,14 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         scopeName.textContent = value.scopeLabel;
         scopeChoice.setAttribute("aria-label", "Activity: " + value.scopeLabel);
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
+        scopeChoice.disabled ||= Boolean(value.namedReport);
         prepare.disabled ||= !value.options.formats.length;
-        const resume = value.resumePreset === deskFocus;
-        prepareLabel.data = resume ? "Resume preview" : "Prepare preview";
-        const scopeIssue = !resume && value.explicitScope && value.scopeIssue;
+        const named = value.namedReport && draftOptions.find(d => d.id === value.namedReport.id);
+        const updated = value.namedReport && named?.revision !== value.namedReport.revision;
+        const resume = !updated && value.resumePreset === deskFocus;
+        prepareLabel.data = resume ? "Resume preview" : updated ? "Prepare updated draft" : "Prepare preview";
+        const scopeIssue = !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
+            ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
         prepare.disabled ||= Boolean(scopeIssue);
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."
             : value.unavailable ? "Waiting for a current activity snapshot." : !value.options.formats.length ? "Choose at least one file to prepare a preview." : scopeIssue || "";
@@ -311,6 +342,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
         scopeCaption.textContent = value.paired ? "" : value.scopeLabel;
+        scope.hidden = Boolean(value.namedReport);
         scopeCaption.hidden = !scopeCaption.textContent;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
         dateButton.disabled = formatButton.disabled = value.locked || value.unavailable;
@@ -343,6 +375,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
+            optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true;
+            replacePrompt?.remove(); replacePrompt = null;
             syncDrawer(false);
             closeOptions();
             deskFocus = "all";
