@@ -474,7 +474,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 origin = actor === "unknown" ? "Author unverified" : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
                 const cue = el("span", origin, "author-option-value");
                 cue.dataset.promptActor = actor;
-                cue.prepend(ux.icon(authorship.iconRole(actor)));
+                cue.prepend(ux.icon("author-" + actor));
                 meta.append(cue);
             }
             if (layer) meta.append(el("span", kindLabel, "wire-search-kind"));

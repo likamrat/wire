@@ -174,6 +174,15 @@ Set weight in `iconProps`, not in page styles. Do not thin a glyph by fading
 it, shrinking its target or changing its weight when selected. Keep compact
 author and outcome cues at least 16px beside their text.
 
+A circled check identifies a recorded success. A bare check at the trailing
+edge of an option marks the selected value, even if that value is a failure.
+Keep the leading glyph and its ink when hovering or selecting the row. Compare's
+mixed **Errors & failures** starting point uses an attention triangle, not a
+failed-call cross. Human and Agent prompt glyphs keep their author inks. A
+service glyph keeps its service ink even in Search, outside the chart legend.
+Navigation and ordinary actions inherit their control's ink; they are not
+additional data categories.
+
 This rule is for screen glyphs, not all SVGs. WIRE and provider marks, profile
 imagery, chart geometry and the versioned artwork embedded in reports retain
 their own paint. Native form controls keep their platform affordances.

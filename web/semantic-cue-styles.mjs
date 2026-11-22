@@ -1,10 +1,23 @@
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
+import { serviceIconRole } from "./icon-roles.mjs";
 
+const { outcomeTones, servicePalette } = createDimensionalCharts();
 export const resultCueColors = Object.freeze(Object.fromEntries(
-    Object.entries(createDimensionalCharts().outcomeTones).map(([key, tone]) => [key, `var(--chart-${tone}-label)`]),
+    Object.entries(outcomeTones).map(([key, tone]) => [key, `var(--chart-${tone}-label)`]),
 ));
 
+// Navigation and actions inherit their control's ink. A service glyph can leave
+// its legend wrapper (e.g. in Search); its identity must travel with it.
+const iconInk = {
+    "author-user": "--screen-prompt-user", "author-agent": "--screen-prompt-agent", "author-unknown": "--muted",
+    "scope-issues": "--warning", "select-check": "--accent", "service:assistance": "--screen-activity-assistance",
+    ...Object.fromEntries(Object.entries(servicePalette).map(([service, { token }]) =>
+        [serviceIconRole(service), `--chart-${token}-label`])),
+};
 export const semanticCueStyles = `
+@media screen and (forced-colors:none) {
+${Object.entries(iconInk).map(([role, ink]) => `:where(svg[data-icon-role="${role}"]) {color:var(${ink})}`).join("\n")}
+}
 ${Object.entries(resultCueColors).map(([key, color]) => `.result-tone-${key} {--cue-color:${color}}`).join("\n")}
 .service-cue {--cue-color:var(--column-label);--cue-icon-size:24px}
 .semantic-cue {display:inline-flex;align-items:flex-start;gap:8px;max-width:100%;vertical-align:baseline;font-weight:600;line-height:1.6}

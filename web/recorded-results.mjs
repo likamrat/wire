@@ -1,7 +1,7 @@
 // Self-contained for the nonce-authorized browser shell.
 export function createRecordedResults({ scope = () => null, screen = false } = {}) {
     const keys = ["success", "failure", "unknown", "partial", "other", "transport"];
-    const icons = { success: "check", failure: "result-failure", unknown: "unobserved", partial: "result-partial", other: "result-other", transport: "result-transport" };
+    const icons = { success: screen ? "result-success" : "check", failure: "result-failure", unknown: "unobserved", partial: "result-partial", other: "result-other", transport: "result-transport" };
     function icon(key) {
         if (!Object.hasOwn(icons, key)) throw new TypeError("Result icons require a recorded outcome.");
         return icons[key];

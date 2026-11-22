@@ -109,8 +109,8 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
             const rows = offered.drafts.filter(d => normalize(d.name).includes(needle)).sort((a,b) => Number(b.id === lastId) - Number(a.id === lastId));
             for (const d of rows) {
                 const included = d.scenarioIds.includes(id), row = el("button", "draft-choice");
-                row.type = "button"; row.append(ux.icon(included ? "check" : "reports"), el("span", "", d.name));
-                if (included) row.append(el("small", "", "Remove"));
+                row.type = "button"; row.append(ux.icon("reports"), el("span", "", d.name));
+                if (included) row.append(el("small", "", "Remove"), ux.icon("select-check"));
                 row.setAttribute("aria-label", `${included ? "Remove from" : "Add to"} ${d.name}`);
                 row.onclick = () => void edit({ id: d.id, included: !included }, `${included ? "Removed from" : "Added to"} ${d.name}`);
                 list.append(row);

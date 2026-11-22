@@ -1,7 +1,7 @@
 export const uxIconSources = Object.freeze({
     copy: "copy", check: "check", warning: "triangle-alert", unobserved: "circle-question-mark", info: "info", account: "user-round",
-    "result-failure": "circle-x", "result-partial": "circle-dashed", "result-other": "info", "result-transport": "unplug",
-    "check-compact": "check", "result-failure-compact": "circle-x", "unobserved-compact": "circle-question-mark",
+    "result-success": "circle-check", "result-failure": "circle-x", "result-partial": "circle-dashed", "result-other": "info", "result-transport": "unplug",
+    "result-success-compact": "circle-check", "result-failure-compact": "circle-x", "unobserved-compact": "circle-question-mark",
     "result-partial-compact": "circle-dashed", "result-other-compact": "info", "result-transport-compact": "unplug",
     "select-check": "check", sun: "sun", moon: "moon", chevron: "chevron-down", disclosure: "chevron-right",
     pending: "loader-circle", "pending-small": "loader-circle",
@@ -21,9 +21,10 @@ export const uxIconSources = Object.freeze({
     "search-action": "workflow", "search-tool": "wrench",
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "compare-periods": "scale",
-    "report-all": "layers", "report-agent": "bot",
-    "report-files": "files", "report-options": "ellipsis", "report-masked": "shield-check",
-    "report-original": "shield-alert", "report-no-text": "message-square-off",
+    "report-all": "layers", "scope-issues": "triangle-alert",
+    "author-user": "user-round", "author-agent": "bot", "author-unknown": "circle-question-mark",
+    "report-files": "files", "report-options": "ellipsis", "report-masked": "eye-off",
+    "report-original": "triangle-alert", "report-none": "message-square-off",
     "settings-connection": "clock", "settings-source-access": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-themes": "palette", "settings-regional": "globe", "settings-general": "settings", "settings-troubleshooting": "circle-question-mark",
     "settings-analyze": "chart-column", "settings-trends": "chart-no-axes-combined", "settings-reports": "clipboard-list", "settings-compare": "scale",
@@ -43,6 +44,8 @@ export const serviceIconSources = Object.freeze({
     Search: "search", Discovery: "book-open", "Multiple workloads": "grid-2x2", "Platform metadata": "code-xml",
     Unknown: "circle-question-mark", "group:other": "layout-grid", Assistance: "message-circle",
 });
+
+export const serviceIconRole = service => "service:" + service.toLowerCase().replaceAll(" ", "-");
 
 export function iconSize(role) {
     return role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24

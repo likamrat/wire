@@ -16,8 +16,8 @@ export function reportWorkspacePresentation(route, journey = {}) {
 export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
-        ["all", "All activity", "report-all"], ["errors", "Errors & failures", "warning"],
-        ["completed", "Completed calls", "check"], ["mine", "Human prompts", "account"], ["agent", "Agent prompts", "report-agent"],
+        ["all", "All activity"], ["errors", "Errors & failures"],
+        ["completed", "Completed calls"], ["mine", "Human prompts"], ["agent", "Agent prompts"],
     ];
     const help = {
         all: "Includes prompts with unknown authors.",
@@ -142,7 +142,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     legend.after(promptOptions.querySelector('[value="masked"]').closest("label"));
     for (const input of promptOptions.querySelectorAll("input")) {
         const row = input.closest("label"); row.dataset.promptMode = input.value;
-        row.querySelector("strong").prepend(ux.icon(({masked:"hide",none:"report-no-text",original:"warning"})[input.value]));
+        row.querySelector("strong").prepend(ux.icon("report-" + input.value));
     }
     privacy.append(byId("additionalMasking")); done(privacy);
     const privacyButton = opener("Mask detected details", privacy);
@@ -334,7 +334,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         backgroundScope.textContent = value.paired ? "Period comparison" : `${compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
         if (privacyMode !== mode) {
             privacyMode = mode;
-            privacyButton.replaceChildren(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[mode]),
+            privacyButton.replaceChildren(ux.icon("report-" + mode),
                 doc.createTextNode(({ masked: "Mask detected details", original: "Keep chat details", none: "Leave out prompts and replies" })[mode]),
                 ux.icon("chevron"));
         }
@@ -492,7 +492,7 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             dialog = doc.createElement("dialog"); dialog.className = "report-save-warning";
             dialog.setAttribute("aria-labelledby", "reportSaveWarningTitle"); dialog.setAttribute("aria-describedby", "reportSaveWarningCopy");
             const title = doc.createElement("h2"); title.id = "reportSaveWarningTitle";
-            const glyph = doc.createElement("span"); glyph.append(icon("warning"));
+            const glyph = doc.createElement("span"); glyph.append(icon("report-original"));
             title.append(glyph, doc.createTextNode("Save details from your chats?"));
             const copy = doc.createElement("p"); copy.id = "reportSaveWarningCopy";
             const files = formats.join(", ");

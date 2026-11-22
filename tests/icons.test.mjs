@@ -43,7 +43,7 @@ test("each UI and service glyph is the selected React Icons component with its s
     assert.equal(uxIconSources.refresh, "refresh-cw");
     assert.equal(uxIconSources.info, "info");
     assert.equal(uxIconSources["select-check"], "check");
-    for (const name of ["check", "result-failure", "unobserved", "result-partial", "result-other", "result-transport"]) {
+    for (const name of ["result-success", "result-failure", "unobserved", "result-partial", "result-other", "result-transport"]) {
         assert.match(uxIcons[`${name}-compact`], /data-icon-size="16"/);
     }
     for (const icon of Object.values(dimensionalIcons)) assert.match(icon, /data-icon-size="24"/);
@@ -116,7 +116,7 @@ test("the shell bundles icons locally without an icon font or remote runtime res
 test("static action lookups resolve, including export and every newly integrated control", () => {
     for (const relative of ["../web/client.mjs", "../web/theme-control.mjs", "../web/ux.mjs"]) {
         const source = readFileSync(new URL(relative, import.meta.url), "utf8");
-        for (const [, name] of source.matchAll(/\bicon\(["']([^"']+)["']\)/g)) {
+        for (const [, name] of source.matchAll(/(?<![\w.])(?:ux\.)?icon\(["']([^"']+)["']\)/g)) {
             assert.ok(Object.hasOwn(uxIcons, name), `${relative}: missing ${name} icon`);
         }
     }
@@ -127,10 +127,10 @@ test("static action lookups resolve, including export and every newly integrated
 
 test("authored app controls do not regress to Unicode or emoji icon shorthands", () => {
     const glyphs = /[×✕✖✓✔☀☾☰⌂ℹ⚠↻↺▾▸▼▶]|\\u(?:00d7|2713|2714|2715|2716|2630|2139|26a0|21bb|21ba)/iu;
-    for (const directory of ["../web/", "../lib/"]) {
+    for (const directory of ["../web/", "../web/frontend/", "../lib/"]) {
         const root = new URL(directory, import.meta.url);
         for (const entry of readdirSync(root, { withFileTypes: true })) {
-            if (!entry.isFile() || !entry.name.endsWith(".mjs")) continue;
+            if (!entry.isFile() || !/\.(?:mjs|tsx?)$/.test(entry.name)) continue;
             const source = readFileSync(new URL(entry.name, root), "utf8");
             assert.ok(!glyphs.test(source), `${directory}${entry.name}: use a Lucide glyph for authored icon controls`);
             assert.ok(!/[\u{1f300}-\u{1faff}]/u.test(source), `${directory}${entry.name}: no emoji UI icons`);

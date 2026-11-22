@@ -1741,8 +1741,6 @@ export const periodComparisonStyles = `
 .comparison-time-date{font-size:var(--type-caption);white-space:nowrap;color:var(--muted)}
 .comparison-preset-option{color:var(--ink)}
 .comparison-preset-option[data-preset=completed]>.wire-icon{color:var(--tool-positive)}
-.comparison-preset-option[data-preset=mine]>.wire-icon{color:var(--screen-prompt-user)}
-.comparison-preset-option[data-preset=agent]>.wire-icon{color:var(--screen-prompt-agent)}
 .period-comparison .comparison-chart-mark{padding:0;border:0;background:transparent;box-shadow:none;color:var(--ink);border-radius:0}
 .period-comparison .comparison-chart-mark:hover{background:var(--report-note)}
 .period-comparison .comparison-chart-mark::before{display:none}

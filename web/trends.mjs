@@ -69,8 +69,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         return `var(--trends-series-${colors.get(key) + 1})`;
     }
     function authorIcon(id) {
-        const node = ux.icon(authorship.iconRole(id));
-        node.classList.add("trends-author-icon"); node.style.color = color(id, "authors");
+        const node = ux.icon("author-" + id);
+        node.classList.add("trends-author-icon");
         return node;
     }
     function sample(id, family) {
@@ -1022,7 +1022,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "overview") {
             const card = cards.get("problems");
             landingOpen.disabled = false;
-            landingScope.textContent = ["Affected interactions per day", data.totals.calls && data.days.some(day => !day.calls) ? "× No matching dated calls" : "",
+            landingScope.textContent = ["Affected interactions per day", data.totals.calls && data.days.some(day => !day.calls) ? "No matching dated calls on days marked with a cross" : "",
                 restrictionText.textContent, card.limits.textContent,
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;

@@ -241,7 +241,7 @@ test("production screens use cool-neutral surfaces, Asta Sans and Petrol and cor
                     color: getComputedStyle(cue).color };
             }));
         assert.deepEqual(statusColors.map(({ id, label, icon }) => ({ id, label, icon })), [
-            { id: "success", label: "Worked", icon: "check" },
+            { id: "success", label: "Worked", icon: "circle-check" },
             { id: "failure", label: "Tool failed", icon: "circle-x" },
             { id: "unknown", label: "No result recorded", icon: "circle-question-mark" },
             { id: "partial", label: "Partly worked", icon: "circle-dashed" },

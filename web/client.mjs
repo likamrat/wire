@@ -6006,7 +6006,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);
         author.dataset.promptActor = actor;
-        author.prepend(ux.icon(authorship.iconRole(actor)));
+        author.prepend(ux.icon("author-" + actor));
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
         const facts = el("div", "request-card-summary");
         const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
@@ -6398,7 +6398,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 label.textContent = heading.textContent;
                 label.dataset.promptActor = heading.dataset.promptActor;
                 label.classList.add("reader-prompt-origin");
-                label.prepend(ux.icon(authorship.iconRole(heading.dataset.promptActor)));
+                label.prepend(ux.icon("author-" + heading.dataset.promptActor));
                 const accessible = el("span", "visually-hidden reader-prompt-role-label", heading.textContent);
                 accessible.id = heading.id;
                 accessible.dataset.promptActor = heading.dataset.promptActor;
@@ -6409,7 +6409,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const author = el("span", "", heading.textContent);
                 author.dataset.promptActor = heading.dataset.promptActor;
                 author.classList.add("reader-prompt-origin");
-                author.prepend(ux.icon(authorship.iconRole(heading.dataset.promptActor)));
+                author.prepend(ux.icon("author-" + heading.dataset.promptActor));
                 secondary.id = heading.id;
                 secondary.append(author);
                 heading.replaceWith(secondary);
@@ -8201,7 +8201,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function savedPrivacyStatus(bundle) {
         const node = el("span", "saved-report-privacy");
         node.dataset.promptMode = bundle?.promptMode ?? "unknown";
-        node.append(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[bundle?.promptMode] ?? "unobserved"),
+        node.append(ux.icon(["masked", "original", "none"].includes(bundle?.promptMode) ? "report-" + bundle.promptMode : "unobserved"),
             el("span", "", savedPrivacyLabel(bundle)));
         return node;
     }
@@ -10954,7 +10954,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (id === "comparisonQuickChoice") {
                 node.classList.add("comparison-preset-option");
                 node.dataset.preset = value;
-                const glyph = { all: "report-all", errors: "warning", completed: "check", mine: "account", agent: "report-agent" }[value];
+                const glyph = { all: "report-all", errors: "scope-issues", completed: results.icon("success"), mine: "author-user", agent: "author-agent" }[value];
                 if (glyph) node.prepend(ux.icon(glyph));
                 return;
             }
@@ -10971,7 +10971,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (authorship.actors.includes(value)) {
                     node.dataset.promptActor = value;
                     node.classList.add("author-option-value");
-                    replacePrivateChoices(node, ux.icon(authorship.iconRole(value)), el("span", "", label));
+                    replacePrivateChoices(node, ux.icon("author-" + value), el("span", "", label));
                 }
                 else delete node.dataset.promptActor;
                 return;
