@@ -1,5 +1,5 @@
 // Shared civil-day editor. Its caller owns acceptance, cancellation and authority.
-export function createDateRangeCalendar({ root, id, inputIds = {}, label = "", time, ux, context, current, onChange = () => {} }) {
+export function createDateRangeCalendar({ root, id, inputIds = {}, label = "", sharedDateNote, time, ux, context, current, onChange = () => {} }) {
     const doc = root.ownerDocument, fields = {};
     let monthKey, from = "", to = "", selectingEnd = false;
     const el = (tag, cls, text) => {
@@ -19,7 +19,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, label = "", t
         const field = el("label", "report-field"), input = el("input");
         input.type = "date"; input.id = inputIds[bound] || id + (bound === "from" ? "From" : "To");
         input.setAttribute("aria-label", label ? `${label} ${bound}` : caption);
-        input.setAttribute("aria-describedby", status.id);
+        input.setAttribute("aria-describedby", [sharedDateNote?.id, status.id].filter(Boolean).join(" "));
         input.addEventListener("input", () => {
             if (!current()) return;
             from = fields.from.value; to = fields.to.value;
@@ -76,9 +76,12 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, label = "", t
         }
         body.replaceChildren(header, grid);
         fields.from.value = from; fields.to.value = to;
-        status.textContent = !from || !to ? "Choose both dates." : valid()
-            ? `${context().timeZone}. Both days included.` : "Choose valid dates with the end on or after the start.";
-        for (const input of Object.values(fields)) input.setAttribute("aria-invalid", String(Boolean(from && to && !valid())));
+        const invalid = Boolean(from && to && !valid());
+        status.textContent = invalid ? (to < from ? "End date must be on or after the start." : "Choose valid dates.")
+            : !from ? "Choose a start date." : !to ? "Choose an end date."
+            : sharedDateNote ? "" : `Inclusive dates · ${context().timeZone}`;
+        status.hidden = !status.textContent;
+        for (const input of Object.values(fields)) input.setAttribute("aria-invalid", String(invalid));
         onChange();
         if (focusDay) grid.querySelector(`[data-day="${focusDay}"]`)?.focus();
     }

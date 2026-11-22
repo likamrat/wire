@@ -21,11 +21,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         ["completed", "Completed calls", "check"], ["mine", "Human prompts", "account"], ["agent", "Agent prompts", "report-agent"],
     ];
     const help = {
-        all: "All eligible interactions in this period, including your prompts, agent prompts and prompts whose author was not recorded.",
-        errors: "At least one Work IQ call failed or reported an error. Other calls in the interaction may have completed.",
-        completed: "The calls finished without a recorded error. The answer can still be wrong or incomplete.",
-        mine: "Interactions whose starting prompt is recorded as yours. Calls made by an agent while handling your request stay included.",
-        agent: "Interactions whose starting prompt is recorded as agent-written. Prompts with an unknown author are not included.",
+        all: "Includes prompts with unknown authors.",
+        errors: "At least one call failed or reported an error. Other calls may have completed.",
+        completed: "All calls completed without a recorded error. The answer can still be wrong.",
+        mine: "Started by you, including any calls made by an agent.",
+        agent: "Started by an agent. Unknown authors are excluded.",
         formats: "Choose the files that Save report will write on this device. Viewing a file does not change this choice.",
     };
     function el(tag, cls, text) {
@@ -61,7 +61,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
     const period = el("div", "report-period-choices"); period.setAttribute("role", "group"); period.setAttribute("aria-label", "Report period");
     const periodCaption = el("p", "report-period-caption");
-    period.append(el("span", "", "Period"));
     for (const range of ["7", "14", "30", "custom"]) {
         const control = button(range === "custom" ? "Custom dates" : `Last ${range} days`, () => {
             if (range === "custom") openCalendar();
@@ -163,7 +162,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton);
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
-    const datesRow = optionsRow("Activity period", dateButton), fileRow = optionsRow("Files to save", formatGroup);
+    const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Files to save", formatGroup);
     draftChoices.append(compactLabel, datesRow);
     outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
     outlineAction.append(el("p","screen-explanation","Preparing does not save or send anything."), prepare);
@@ -268,7 +267,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         useActivity.hidden = value.prepared;
         byId("additionalMasking").hidden = !value.prepared;
         if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
-        periodCaption.textContent = `Calendar dates include both endpoints in ${value.timeContext.timeZone}.`;
+        periodCaption.textContent = `Presets include today · ${value.timeContext.timeZone}`;
         for (const control of period.querySelectorAll("button")) {
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
@@ -291,7 +290,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         setLabel(dateButton, labelDates(value.dates));
         dateButton.hidden = value.paired;
         const mode = value.options.promptMode;
-        backgroundScope.textContent = `${value.paired ? "Two-period comparison" : compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
+        backgroundScope.textContent = value.paired ? "Period comparison" : `${compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
         if (privacyMode !== mode) {
             privacyMode = mode;
             privacyButton.replaceChildren(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[mode]),
@@ -312,8 +311,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
-        scopeCaption.textContent = value.paired ? "Two periods with the same filters."
-            : value.scopeLabel;
+        scopeCaption.textContent = value.paired ? "" : value.scopeLabel;
+        scopeCaption.hidden = !scopeCaption.textContent;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
         dateButton.disabled = formatButton.disabled = value.locked || value.unavailable;
         privacyButton.disabled = value.locked || value.unavailable;

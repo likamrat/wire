@@ -1405,11 +1405,11 @@ for (const grouped of [false, true]) test(`native ${grouped ? "Search and group"
         await expect(page.locator("#wireNativeSearch")).toContainText("1 matching native tool calls");
         await page.locator("#wireSearch").press("Escape");
         await page.locator("#comparePeriods").click();
-        await expect(page.locator("#comparisonDateHint")).toContainText("replace the original Dates filter");
+        await expect(page.locator("#comparisonDateHint")).toContainText("Search, group and other source filters stay applied");
         for (const [label, date] of [["Period A from", "2026-10-01"], ["Period A to", "2026-10-07"],
             ["Period B from", "2026-10-08"], ["Period B to", "2026-10-14"]]) await page.getByLabel(label, { exact: true }).fill(date);
         await page.locator("#applyPeriodComparison").click();
-        await expect(page.locator("#periodComparisonResults")).toContainText("Search, group and other source filters are preserved");
+        await expect(page.locator("#periodComparisonResults")).toContainText("for context only; message counts by date are not established");
         const population = page.locator('#periodComparisonResults [aria-label="Microsoft period populations"] tbody tr').first();
         await expect(population.locator("td")).toHaveText(["1", "0", "-1", "0"]);
         if (process.env.WIRE_REPORT_PROOFS) {

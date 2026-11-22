@@ -115,7 +115,7 @@ test("Compare sections keep the period view and saved report choices across keyb
     await ready(page);
     const selectedDates = page.getByRole("button", { name: /^Change selected period:/ });
     await selectedDates.click();
-    await expect(page.locator("#comparisonCustomDates fieldset").nth(1)).toContainText("Selected period (to review)");
+    await expect(page.locator("#comparisonCustomDates legend").nth(1)).toHaveText("Selected");
     await page.keyboard.press("Escape");
     await expect(selectedDates).toBeFocused();
     const measure = page.locator("#compareChangeMeasure0");

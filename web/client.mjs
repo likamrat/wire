@@ -2498,7 +2498,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         open: () => navigateBrowse("compare"),
         useAnalyze: () => navigateBrowse("compare", { useAnalyze: true }),
         onPairChange: pair => {
-            let description = analyzeScope.describePair(pair);
+            let description = analyzeScope.describePair(pair, {
+                githubOnly: !sourceCollection.active && !workspaceState.evidence?.nativeRead
+                    && !workspaceState.evidence?.scenarios.some(nativeActivity.isNative),
+            });
             const filters = pair?.comparison.options.filters;
             if (description && !workspaceState.route.comparisonFocus && !filters.outcomes?.length
                 && filters.promptAuthors?.length === 1 && ["user", "agent"].includes(filters.promptAuthors[0])) {
@@ -2507,7 +2510,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             analyzeControls.pairedCaption(description === null ? null : {
                 ...description, key: pair.key, revision: pair.revision,
-                replacesCollectionCaption: pair.comparison.options.filters.scope !== "history",
             });
             refreshChartReference();
         },

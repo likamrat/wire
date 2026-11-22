@@ -465,7 +465,7 @@ test("accepted restrictions wrap as plain caption text with the same guide and e
 
 test("accepted empty pairs keep their identity without default recap or duplicate collection and unit captions", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await fillPeriods(page);
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.locator("#comparisonAFrom").fill("2025-03-07");
     await page.locator("#comparisonATo").fill("2025-03-07");
     await page.locator("#comparisonBFrom").fill("2025-03-08");
@@ -481,13 +481,14 @@ test("accepted empty pairs keep their identity without default recap or duplicat
     await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await closeAnalyzeFilters(page);
-    await expect(page.locator("#comparisonAcceptedScope")).toHaveText("Both collections");
-    await expect(page.locator("#periodComparisonResults > p.compare-caption").filter({ hasText: "Both collections" })).toHaveCount(1);
+    await expect(page.locator("#comparisonAcceptedScope")).toHaveCount(0);
+    await expect(page.locator("#periodComparisonResults > p.compare-caption").filter({ hasText: "Both collections" })).toHaveCount(0);
     await expect(page.locator("#periodComparisonResults > p.compare-caption").filter({ hasText: /^Graph code references$/ })).toHaveCount(1);
-    await noOrdinaryAuthority(page, 1);
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveText("Both collections");
-    await page.locator("#meaning").press("Escape");
+    await noOrdinaryAuthority(page);
+    await page.locator("#openAnalyzeFilters").click();
+    await expect(page.locator("#scopeFilter")).toHaveValue("all");
+    await expect(page.locator("#layerFilter")).toHaveValue("code-reference");
+    await closeAnalyzeFilters(page);
 });
 
 test("late older paired reads cannot replace newer accepted restrictions or ordinary exit authority", { timeout: 30000 }, async t => {

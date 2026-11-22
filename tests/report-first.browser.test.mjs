@@ -49,6 +49,35 @@ async function prepare(page, preset = "errors") {
     await selectReportFocus(page, preset);
     return prepareSelectedFocus(page);
 }
+
+test("period choices keep exact dates, one zone and only the restrictions that matter", async t => {
+    const { page } = await setup(t, { frontend: "react", route: "trends", source: periodFixture().records, now: "2026-03-10T12:00:00Z" });
+    await page.getByRole("button", { name: "Compare periods", exact: true }).click();
+    await page.getByRole("button", { name: "Open comparison", exact: true }).click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    const pair = page.locator(".compare-period-key");
+    await expect(pair).toContainText("Feb 25–Mar 3, 2026");
+    await expect(pair).toContainText("Mar 4–10, 2026");
+    await expect(page.locator("#periodComparisonResults")).not.toContainText(/Both collections|Source: GitHub Copilot|compare against|to review/);
+    const edit = page.getByRole("button", { name: /^Change selected period:/ });
+    await edit.click();
+    const calendar = page.locator("#comparisonCustomDates");
+    await expect(calendar.locator("legend")).toHaveText(["Baseline", "Selected"]);
+    assert.equal((await calendar.innerText()).split("America/Los_Angeles").length - 1, 1);
+    await calendar.locator("#comparisonBTo").fill("2026-03-01");
+    await expect(calendar.locator("#comparisonBStatus")).toContainText(/end.*start/i);
+    await expect(calendar.getByRole("button", { name: "Use dates" })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(edit).toBeFocused();
+    await expect(edit).toContainText("Mar 4–10, 2026");
+    await navigateMain(page, "reports");
+    await page.locator("#reportDeskDates").click();
+    await expect(page.locator("#reportPeriodChoices")).not.toContainText("both endpoints");
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await expect(page.locator("#reportDatefrom")).toHaveValue("2026-03-04");
+    await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
+    await expect(page.locator("#reportCustomDates")).toContainText("America/Los_Angeles");
+});
 async function prepareSelectedFocus(page) {
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await prepareReportPreview(page);
@@ -1482,11 +1511,11 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
         if (proofs) await page.screenshot({ path: path.join(proofs, name + ".png") });
     }
     const focuses = [
-        ["all", "All activity", /author was not recorded/i],
-        ["errors", "Errors & failures", /other calls .* may have completed/i],
-        ["completed", "Completed calls", /answer can still be wrong or incomplete/i],
-        ["mine", "Human prompts", /calls made by an agent .* stay included/i],
-        ["agent", "Agent prompts", /unknown author .* not included/i],
+        ["all", "All activity", /includes prompts with unknown authors/i],
+        ["errors", "Errors & failures", /other calls may have completed/i],
+        ["completed", "Completed calls", /answer can still be wrong/i],
+        ["mine", "Human prompts", /including any calls made by an agent/i],
+        ["agent", "Agent prompts", /unknown authors are excluded/i],
     ];
     const compact = page.getByRole("combobox", { name: "Report focus", exact: true });
     const outline = page.locator(".report-desk");

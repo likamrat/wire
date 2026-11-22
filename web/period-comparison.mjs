@@ -313,15 +313,16 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const form = el("form", undefined, "period-comparison-controls");
     const calendar = el("dialog", undefined, "comparison-calendar report-options-popover");
     calendar.id = "comparisonCustomDates"; calendar.setAttribute("aria-labelledby", "comparisonCalendarTitle");
-    const calendarTitle = el("h2", "Custom comparison dates"); calendarTitle.id = "comparisonCalendarTitle";
-    calendar.append(calendarTitle, form);
+    const calendarTitle = el("h2", "Custom dates"); calendarTitle.id = "comparisonCalendarTitle";
+    const calendarNote = el("p", undefined, "report-period-caption"); calendarNote.id = "comparisonCalendarZone";
+    calendar.append(calendarTitle, calendarNote, form);
     const calendars = {};
-    const periodRoles = { a: "Baseline period (compare against)", b: "Selected period (to review)" };
+    const periodRoles = { a: "Baseline", b: "Selected" };
     for (const [side, label] of [["a", "Period A"], ["b", "Period B"]]) {
         const group = el("fieldset"); group.append(el("legend", periodRoles[side]));
         form.append(group);
         calendars[side] = assessmentFactories.createDateRangeCalendar({ root: group, id: "comparison" + side.toUpperCase(),
-            label, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
+            label, sharedDateNote: calendarNote, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
             onChange: () => { if (calendars.a && calendars.b) apply.disabled = !calendars.a.valid() || !calendars.b.valid(); } });
     }
     const apply = el("button", "Use dates", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
@@ -329,9 +330,10 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const cancelCalendar = button("Cancel", () => calendar.close());
     calendarActions.append(cancelCalendar, apply); form.append(calendarActions); setup.append(calendar);
     const dateChoices = el("div", undefined, "report-period-choices"); dateChoices.setAttribute("role", "group");
-    dateChoices.setAttribute("aria-label", "Comparison period"); dateChoices.append(el("span", "Period"));
+    dateChoices.setAttribute("aria-label", "Comparison period");
     function openCalendar(side = "a") {
         const context = getContext(), ranges = periods(context.route);
+        calendarNote.textContent = `Inclusive dates · ${context.options.timeContext.timeZone}`;
         calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
         calendar.showModal(); calendars[side].focus();
     }
@@ -1142,15 +1144,17 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             if (dayCount(a) !== dayCount(b)) line.append(el("span", counted(dayCount(side), "day"), "compare-date-qualification"));
             pair.append(line);
         }
-        const collection = { history: "Saved collection", legacy: "Earlier snapshot", all: "Both collections" }[value.options.filters.scope ?? "history"];
         const content = doc.createDocumentFragment(); content.append(pair);
-        if (value.options.filters.scope && value.options.filters.scope !== "history") content.append(el("p", collection, "compare-caption"));
         if (value.nativePeriods) {
             const section = el("section", undefined, "compare-native");
-            section.append(el("h3", "Microsoft activity"), el("p",
-                "Each source and unit is counted separately. Undated evidence remains visible below, but is not assigned to either period. Message dates are not call start times.", "compare-caption"));
+            section.append(el("h3", "Microsoft activity"));
+            if (a.rowIds.length || b.rowIds.length) section.append(el("p", "The charts show GitHub Copilot activity separately.", "compare-caption"));
+            if (value.nativePeriods.summary.some(item => item.undated)) section.append(el("p",
+                "Undated records are excluded from both periods.", "compare-caption"));
+            if (value.nativePeriods.summary.some(item => item.unit === "message-representation-observation")) section.append(el("p",
+                "Message dates are not call start times.", "compare-caption"));
             if (value.nativePeriods.refinement) section.append(el("p",
-                `Period A and B replace the original Dates filter; the original Search, group and other source filters are preserved. ${number(value.nativePeriods.refinement.contextConversationRefs.length)} matching conversation${value.nativePeriods.refinement.contextConversationRefs.length === 1 ? " is" : "s are"} context-only; exact message-date cohorts are not established.`,
+                `${counted(value.nativePeriods.refinement.contextConversationRefs.length, "matching conversation")} for context only; message counts by date are not established.`,
                 "compare-caption"));
             const rows = value.nativePeriods.summary.flatMap(item => {
                 const source = item.sourceId === "microsoft-365-chat" ? "Microsoft 365 Chat" : "Microsoft 365 Cowork";
@@ -1165,7 +1169,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 return [[`${source}: ${unit}`, number(item.baseline.count), number(item.later.count),
                     signed(item.later.count - item.baseline.count), number(item.undated)], ...outcomes];
             });
-            section.append(rows.length ? table("Microsoft period populations", ["Source and measure", "A", "B", "Change", "Undated"], rows)
+            section.append(rows.length ? table("Microsoft period populations", ["Source and measure", "Baseline", "Selected", "Change", "Undated"], rows)
                 : el("p", "No Microsoft observations match this source, record type and filter selection.", "compare-empty"));
             content.append(section);
         }
@@ -1259,7 +1263,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         dateHint.className = context.options.timeContext.timeZoneFallback || refinedNative ? "context-help-note" : "visually-hidden";
         dateHint.textContent = context.options.timeContext.timeZoneFallback
             ? "Dates use UTC because the browser timezone is unavailable." : "Start and end dates are included.";
-        if (refinedNative) dateHint.textContent += " Period A and B replace the original Dates filter; Search, group and other source filters stay fixed.";
+        if (refinedNative) dateHint.textContent = (context.options.timeContext.timeZoneFallback ? dateHint.textContent + " " : "")
+            + "Only dates change. Search, group and other source filters stay applied.";
         scope.hidden = !context.semanticSearch && !context.search.trim();
         scope.textContent = "The same non-date filters apply to both periods."
             + (context.semanticSearch ? " Search uses matching interactions and individual records across all pages."

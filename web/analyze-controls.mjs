@@ -220,11 +220,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (value.text) {
             const dates = $("periodComparisonResults").querySelector(":scope > .compare-period-key");
             if (!dates) throw new Error("Accepted comparison scope requires its current result caption area.");
-            if (value.replacesCollectionCaption && dates.nextElementSibling !== pairScope) {
-                const collection = dates.nextElementSibling;
-                if (!collection?.matches("p.compare-caption")) throw new Error("Accepted collection scope requires its current caption.");
-                collection.replaceWith(pairScope);
-            } else if (pairScope.previousElementSibling !== dates) dates.after(pairScope);
+            if (pairScope.previousElementSibling !== dates) dates.after(pairScope);
             scopeCaption(pairScope, value);
             pairScope.dataset.pairKey = value.key;
             pairScope.dataset.revision = String(value.revision);

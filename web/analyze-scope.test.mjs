@@ -48,6 +48,16 @@ test("paired captions describe only accepted common restrictions, without dates,
     assert.equal(scope.describePair(null), null);
 });
 
+test("compact Compare scope omits unrestricted collections but keeps meaningful limits", () => {
+    const pair = { key: "p", revision: 1, scope: { hasSearch: false, projects: [], sessions: [], endpoints: [] },
+        comparison: { revision: 1, schemaVersion: 1, kind: "retained-period-comparison", selection: { withinServices: [] },
+            options: { layer: "tool", filters: { scope: "all", sources: ["github-copilot"] } } } };
+    assert.equal(scope.describePair(pair, { githubOnly: true }).text, "");
+    assert.equal(scope.describePair(pair, { githubOnly: false }).text, "GitHub Copilot only");
+    Object.assign(pair.comparison.options.filters, { scope: "legacy", tools: ["workiq-fetch"] });
+    assert.equal(scope.describePair(pair, { githubOnly: true }).text, "Earlier snapshot; Tool: workiq-fetch");
+});
+
 test("paired restrictions reuse canonical labels and captured names without inventing shared service counts", () => {
     const pair = {
         key: "period:8", revision: 4,
