@@ -73,9 +73,10 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-content {max-width:48rem;padding:24px 28px;background:var(--paper);border-radius:12px;container:settings-pane / inline-size}
 .settings-categories {padding:0}
 .settings-categories>summary {display:none}
-.settings-categories nav {display:flex;flex-direction:column;gap:4px}
-.settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
-.settings-categories a>.wire-icon {width:20px;height:20px;margin-top:0;flex:none}
+.settings-categories nav,.settings-default-links {display:flex;flex-direction:column}
+.settings-default-links {margin-block:var(--space-lg) var(--space-sm);padding-block-end:var(--space-sm);border-block-end:1px solid var(--surface-divider)}
+.settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:var(--space-md);border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
+.settings-categories a>.wire-icon {width:1.125rem;height:1.125rem;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
 .settings-categories a[aria-current=page] {background:transparent;color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
 .settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;width:2px;height:1.25em;border-radius:2px;background:currentColor}
@@ -146,7 +147,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
-.settings-nav-group {padding:var(--space-md) 12px 0;color:var(--muted);font-size:var(--type-caption)}
+.settings-nav-group {padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
 .settings-view .page-default-field {min-width:0;margin:0;padding:0;border:0}
 .settings-view .page-default-field+.page-default-field {margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--rule)}
 .page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}

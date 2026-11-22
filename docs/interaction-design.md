@@ -649,10 +649,12 @@ current value and keep keyboard focus visible around the link.
 Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,
-Source access, Themes, Regional, Privacy & saved data, and Help. Under **Page
-defaults**, Analyze, Trends, Reports and Compare own their opening defaults.
+Source access, Themes, Regional, Privacy & saved data, and Help. **WIRE
+defaults** groups the four destinations with starting preferences in this
+browser: Analyze, Trends, Reports and Compare. Help remains a separate link.
 Name each default in its visible control label or group legend so its purpose
-is clear even without the navigation. Explain when it applies in the category intro.
+is clear even without the navigation. The category intro names the default
+behavior being changed even on direct entry.
 General does not repeat this directory. Apply a default only to a fresh entry;
 an explicit link, a return position, a selected period or a resumed draft keeps
 its own context. Report format defaults select files, not a disclosure policy

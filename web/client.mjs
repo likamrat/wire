@@ -10401,17 +10401,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("settingsSearchResults").addEventListener("keydown", event => {
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
+    const categoryNav = $("settingsCategoryNav"), defaultsGroup = el("div", "settings-default-links");
+    const defaultsHeading = el("span", "settings-nav-group", "WIRE defaults");
+    defaultsHeading.id = "settingsDefaultsHeading";
+    defaultsGroup.setAttribute("role", "group");
+    defaultsGroup.setAttribute("aria-labelledby", defaultsHeading.id);
+    defaultsGroup.append(defaultsHeading);
     for (const category of settingsNavigation.categories) {
-        if (category.id === "analyze" || category.headerEntry) {
-            $("settingsCategoryNav").append(el("span", "settings-nav-group", category.headerEntry ? "Support" : "Page defaults"));
-        }
+        const group = category.group === "defaults" ? defaultsGroup : categoryNav;
+        if (group === defaultsGroup && !group.parentNode) categoryNav.append(group);
         const anchor = el("a");
         setRouteLink(anchor, routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
         // Static shell links use live navigation guards, not a pre-admission data publication.
         anchor.dataset.settingsLink = "";
         anchor.dataset.category = category.id;
         anchor.append(ux.icon("settings-" + category.id), el("span", "settings-category-label", category.title));
-        $("settingsCategoryNav").append(anchor);
+        group.append(anchor);
     }
     const settingsSize = new ResizeObserver(() => {
         if (!$("settingsView").checkVisibility()) return;

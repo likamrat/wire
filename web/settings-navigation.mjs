@@ -7,11 +7,11 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "themes", title: "Themes", heading: "themesTitle" },
         { id: "regional", title: "Regional", heading: "regionalTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
-        { id: "analyze", title: "Analyze", heading: "analyzeSettingsTitle" },
-        { id: "trends", title: "Trends", heading: "trendsSettingsTitle" },
-        { id: "reports", title: "Reports", heading: "reportsSettingsTitle" },
-        { id: "compare", title: "Compare", heading: "compareSettingsTitle" },
-        { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle", headerEntry: true },
+        { id: "analyze", title: "Analyze", heading: "analyzeSettingsTitle", group: "defaults" },
+        { id: "trends", title: "Trends", heading: "trendsSettingsTitle", group: "defaults" },
+        { id: "reports", title: "Reports", heading: "reportsSettingsTitle", group: "defaults" },
+        { id: "compare", title: "Compare", heading: "compareSettingsTitle", group: "defaults" },
+        { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle" },
     ];
     const sectionAliases = {
         ...(updates ? { updates: { section: "general" } } : {}),

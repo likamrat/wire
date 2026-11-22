@@ -154,10 +154,10 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  ${pageSettings("analyze", "Analyze", "Choose how Analyze opens in this browser.", ["analyzeRange"])}
-  ${pageSettings("trends", "Trends", "Choose the chart you see when you open Trends.", ["trendChart"])}
-  ${pageSettings("reports", "Reports", "Changes apply to new reports, not drafts or saved files.", ["reportFormats", "reportPeriod"])}
-  ${pageSettings("compare", "Compare", "Choose the starting period for new comparisons.", ["compareDays"])}
+  ${pageSettings("analyze", "Analyze", "Set the default date range for opening Analyze.", ["analyzeRange"])}
+  ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
+  ${pageSettings("reports", "Reports", "Set the default formats and period for new reports only.", ["reportFormats", "reportPeriod"])}
+  ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
     <h2 id="troubleshootingTitle" tabindex="-1">Help</h2>
     <p class="settings-intro">Interpret your activity or troubleshoot missing results.</p>

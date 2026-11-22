@@ -13,7 +13,9 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     await expect(page.locator("#generalTitle")).toBeVisible();
     const nav = page.locator("#settingsCategoryNav");
     await expect(nav.getByRole("link")).toHaveCount(11);
-    await expect(nav.getByText("Page defaults", { exact: true })).toBeVisible();
+    const group = nav.getByRole("group", { name: "WIRE defaults" });
+    await expect(group.getByRole("link")).toHaveText(["Analyze", "Trends", "Reports", "Compare"]);
+    await expect(nav.getByRole("link", { name: "Help" })).toBeVisible();
     const namedDefaults = {
         analyze: [["defaultAnalyzeRange-control", "Default date range"]],
         trends: [["defaultTrendChart-control", "Default trend chart"]],
@@ -24,6 +26,7 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     for (const id of ids) {
         await nav.locator(`[data-category="${id}"]`).click();
         await expect(page.locator(`[data-settings-section="${id}"] > h2 + .settings-intro`)).toBeVisible();
+        if (id in namedDefaults) await expect(page.locator(`[data-settings-section="${id}"] > .settings-intro`)).toHaveText(/default/i);
         for (const [control, name] of namedDefaults[id] ?? []) {
             await expect(page.locator("#" + control)).toHaveAccessibleName(name);
         }
