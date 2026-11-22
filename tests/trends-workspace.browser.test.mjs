@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, navigateSettings, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, navigateSettings, closeAnalyzeFilters, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
@@ -146,7 +146,11 @@ test("long option finders keep the current measure, filters and time zone until 
     if (proofDir) await page.screenshot({ path: path.join(proofDir, "trends-narrow.png") });
     await option("retrieve · interaction reach").tap(); await expect(page.locator("#trendsPairMeasure2")).toHaveValue(JSON.stringify(["tools","workiq-retrieve","reach"]));
     await page.evaluate(() => document.documentElement.style.removeProperty("font-size")); await page.setViewportSize({ width: 1280, height: 800 });
-    await navigateMain(page, "analyze"); await openAnalyzeFilters(page); await page.locator("#moreFiltersToggle").click();
+    await navigateMain(page, "analyze");
+    await page.locator("#analyzeResultCommands").getByRole("button", { name: /^Filters/ }).click();
+    const filters = page.locator("#analyzeFilterDialog:modal");
+    await expect(filters.getByRole("combobox", { name: "Tool", exact: true })).toBeVisible();
+    if (!await trigger("projectFilter").isVisible()) await filters.getByText("More filters", { exact: true }).click();
     for (const [id, name, query, expected] of [
         ["toolFilter", "Find a tool", "blob", "workiq-fetch_blob"], ["projectFilter", "Find a project", "workspace 18", "Harbor workspace 18"],
         ["chatFilter", "Find a chat", "42", "Cedar review 42"],
@@ -156,6 +160,10 @@ test("long option finders keep the current measure, filters and time zone until 
     }
     await trigger("projectFilter").click(); await pressText("Find a project", "18"); await option("Harbor workspace 18").click();
     await expect(page.locator("#projectFilter")).toHaveValue("harbor-18"); await closeAnalyzeFilters(page);
+    const members = records.filter(record => record.projectId === "harbor-18");
+    const cards = page.locator("#activityView .request-card-open");
+    await expect(cards).toHaveCount(members.length);
+    for (const record of members) await expect(cards.filter({ hasText: record.userPrompt.text })).toHaveCount(1);
     await navigateMain(page, "settings"); await navigateSettings(page, "regional"); await trigger("displayTimeZone").click();
     await pressText("Find a city or time zone", "York"); await expect(popup.getByRole("option")).toHaveText(["New York time (America/New_York)"]);
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), null);
