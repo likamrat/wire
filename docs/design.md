@@ -23,6 +23,12 @@ Evidence definitions and frozen-file requirements remain in the
 
 ## One coherent workspace
 
+When changing a control, compare it with a shipped WIRE control that does the
+same job. Use the same icon role, label treatment and interaction states unless
+the action has a different meaning. Review both in their full screens at rest,
+on hover, when selected and with keyboard focus; a component preview alone
+cannot show whether it fits its surroundings.
+
 | Surface | Reading and navigation role |
 | --- | --- |
 | Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; account, Help, Feedback and Settings at the bottom |
