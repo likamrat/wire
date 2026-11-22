@@ -146,9 +146,9 @@ test("literal Search follows real collection advances while the saved report sta
     await page.goto(runtime.url + "reports?task=library");
     const row = page.locator(`[data-bundle-id="${saved[0].bundleId}"]`);
     await row.locator(".saved-report-title").click();
-    const reader = page.locator("#savedReportReader");
-    await expect(reader).toBeVisible();
-    const document = reader.frameLocator("iframe").locator("body");
+    const savedReportReader = page.locator("#savedReportReader");
+    await expect(savedReportReader).toBeVisible();
+    const document = savedReportReader.frameLocator("iframe").locator("body");
     await expect(document).toContainText("Invented earlier report");
     const frozen = await document.innerText(), before = await loadBoardState(context);
     await page.locator("#wireSearch").fill("invented");
