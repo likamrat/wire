@@ -79,9 +79,11 @@ percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
 
 **Prompt authors** counts each originating interaction once across all matching
-pages: **Human prompts**, **Agent prompts**, or **Author unverified**. Calls and
-follow-ups do not add prompts. Unverified authors stay in the denominator;
-missing prompt text alone does not make its author unknown. Microsoft 365
+pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
+counts add up to the total in **Chart guide**. Calls and follow-ups do not add
+prompts. To inspect unverified interactions, select **Author unverified** in
+the **Prompt author** filter and open an interaction. Unverified authors stay
+in the denominator; missing prompt text alone does not make its author unknown. Microsoft 365
 conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 

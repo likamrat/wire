@@ -381,7 +381,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             }
             list.append(definition("Human prompts", "Recorded user origin, not verified account identity."),
                 definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
-                definition("Author unverified", "Missing, conflicting, system or unsupported author evidence. These interactions stay in the denominator."),
+                definition("Author unverified", "The saved record does not establish a human or agent sender. These interactions still count. Filter to Author unverified and open an interaction to see its recorded reason."),
                 definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));
         } else if (topic === "tools") {
             list.append(definition("Discovery / preparation", "API, schema or agent lookup, not data-service execution."),

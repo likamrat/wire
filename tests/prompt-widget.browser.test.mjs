@@ -55,7 +55,8 @@ async function exact(page, widget, counts, calls) {
     await settle(page);
     const total = counts.reduce((sum, count) => sum + count, 0);
     await expect(widget).toHaveAttribute("data-total", String(total));
-    await expect(widget.locator(".percentage-denominator")).toHaveText(`${total} matching ${total === 1 ? "interaction" : "interactions"}`);
+    if (total) await expect(widget).toHaveAccessibleDescription(`${total} matching ${total === 1 ? "interaction" : "interactions"}`);
+    await expect(widget.locator(".percentage-denominator")).toBeHidden();
     await expect(page.locator("#activityCount")).toHaveText(String(calls));
     const rows = await widget.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
         actor: node.dataset.promptActor, count: Number(node.dataset.count), value: node.querySelector(".percentage-value").textContent,
@@ -72,7 +73,9 @@ async function exact(page, widget, counts, calls) {
             assert.ok(Math.abs(row.width - row.fraction * 100) < .0001, "CSS percentage serialization keeps its available precision");
         }
     } else assert.deepEqual(rows, []);
-    assert.equal(await widget.locator("a,button,svg:not([aria-hidden=true])").count(), 0, "The author glyphs are decorative; the legend is not a new drilldown.");
+    assert.equal(await widget.locator(".percentage-content :is(a,button,svg:not([aria-hidden=true]))").count(), 0,
+        "The author glyphs are decorative; the legend is not a new drilldown.");
+    if (total) await expect(widget.getByRole("link", { name: "View trend: Prompt authors" })).toBeVisible();
     return rows;
 }
 async function reset(page) {
@@ -125,7 +128,9 @@ test("retained origin causes reach the reader without changing author shares or 
         await page.locator(`[data-view-key="request:prompt-widget-${index}"] .request-card-open`).click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator("#contextSidebar .reader-state")).toContainText(reason);
-        await expect(page.locator("#contextSidebar")).toContainText(index === 14 ? "Call #1 completed" : "Call #1 failed");
+        const firstCall = page.locator("#contextSidebar .reader-call-toggle").first();
+        await expect(firstCall).toContainText("Call #1");
+        await expect(firstCall).toContainText(index === 14 ? "1 tool call completed" : "1 tool call failed");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `origin-issue-${index}-${width}`);
         await page.locator("#closeContextSidebar").click();

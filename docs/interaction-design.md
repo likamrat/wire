@@ -63,8 +63,10 @@ Prompt authors is a compact, noninteractive breakdown of canonical originating
 interactions across the complete accepted slice, before paging. Human prompts,
 Agent prompts and Author unverified use the shared author vocabulary and screen
 colors; all three remain visible when the population is nonempty, including
-known zeros. Its visible denominator names interactions rather than calls.
-Incompatible Microsoft 365 conversations stay separately unavailable. Exact
+known zeros. The chart's accessible description names the total matching
+interactions, not calls, without repeating it on a separate visible line.
+For mixed sources, keep the GitHub denominator visible;
+incompatible Microsoft 365 conversations stay separately unavailable. Exact
 counts and provenance definitions live in Chart guide, not another drilldown.
 
 Filters opens one panel with the existing controls, applied chips and separate
