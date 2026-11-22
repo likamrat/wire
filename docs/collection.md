@@ -73,12 +73,13 @@ their Work IQ calls only when the approved app metadata labels that exact
 session and event as **Work IQ** or **WorkIQ**. A tool named `fetch` alone is
 not enough. This bounded read admits at most 100,000 managed Work IQ event
 identities; incompatible mappings fail explicitly without replacing evidence.
-If an opaque start has a recognized operation but no mapping at read time,
-WIRE checks that decision again if the app metadata changes before it saves
+If a recognized operation needs an app mapping, even when the start carries
+only the logical tool name, WIRE rechecks that decision if metadata changes before it saves
 progress. A changed mapping stops the stale read; the next check can collect
 the call from the unchanged cursor. A mapping first supplied **after** progress
 was saved is different: updating WIRE or refreshing does not rewind the cursor
-or authorize a historical reread.
+or authorize a historical reread. Use **Read history again** to review eligible
+missing calls; only a separately confirmed preview can save them.
 
 A failed managed call can return a JSON error labeled with its opaque connector
 name. WIRE reads supported diagnostics and returned entries only when the name

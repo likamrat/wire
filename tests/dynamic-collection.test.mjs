@@ -197,7 +197,8 @@ test("managed Work IQ uses event-bound app identity, including newly discovered 
     assert.deepEqual(await readFile(configFile), configBefore);
 });
 
-test("a managed mapping published during a read cannot strand the start behind a committed cursor", async t => {
+for (const naming of ["opaque connector", "logical tool name only"]) test(
+    `a managed mapping published during a read cannot strand the start behind a committed cursor: ${naming}`, async t => {
     const app = await installation(t), id = app.session();
     app.db.exec(managedSchema);
     const file = await logFor(app, id, [event("user.message", { source: "user", content: "Invented baseline." }), call("prior")]);
@@ -210,6 +211,12 @@ test("a managed mapping published during a read cannot strand the start behind a
     const checkpoint = path.join(path.dirname(indexPath), indexBefore.fingerprint, id + ".json");
     const before = await readFile(checkpoint), stateBefore = await loadBoardState(app.context);
     const start = managedCall("racing"), end = event("tool.execution_complete", { toolCallId: "racing", success: false });
+    if (naming === "logical tool name only") {
+        start.data.toolName = "fetch";
+        delete start.data.mcpServerName;
+        delete start.data.mcpConfigServerName;
+        delete start.data.mcpToolName;
+    }
     await appendFile(file, [start, end].map(e => JSON.stringify(e) + "\n").join(""));
     // The app supplies the event mapping after the live-tail lookup, before cursor publication.
     const readdir = fs.readdir;
