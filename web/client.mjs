@@ -6547,8 +6547,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const provenance = el("div", "reader-source-record");
         provenance.dataset.contextGroup = scenario.scenarioId;
         if (context.groups.length > 1) provenance.append(el("h3", "reader-source-heading", relationLabel(group.relation)));
-        const association = scenario.promptAssociation === "Nearest preceding recorded user.message; association is inferred, not a proven causal link. Follow-ups remain separate prompt-group scenarios."
-            ? "Calls follow this saved prompt; the link is inferred, not proven." : scenario.promptAssociation;
+        const association = scenario.workloadKind === "recorded-history" ? authorship.requestLink(scenario).note : scenario.promptAssociation;
         const coverage = scenario.coverageNote === "Recorded Work IQ invocation, not observed Graph HTTP. Result entity/body content excluded. Missing completions and truncated logs are disclosed in the source roster."
             && !scenario.toolCalls?.some(tool => tool.observedGraphHttp)
             ? "These records show Work IQ calls, not Graph traffic or returned content." : scenario.coverageNote;

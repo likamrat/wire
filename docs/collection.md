@@ -296,6 +296,15 @@ the image-envelope classifier does not trigger that repair automatically.
 Literal image-reference examples in the original prompt or a supported canvas
 attachment remain content, not host provenance.
 
+The sender of a saved message is separate from the link between a call and
+its initiating request. Within existing checkpoint limits, WIRE keeps the
+assistant's outstanding tool-request identifiers beyond the recent-event
+window so a later start can still match the original message and turn.
+This does not keep extra reply text. A uniquely linked Work IQ call keeps
+its prompt and assistant-request event references. A group-level link from
+an older record is not evidence for each call in it. Reading old records
+does not reopen history or assign a requester from a skill or system message.
+
 The host can append a direct-message source reference after the original text.
 WIRE recognizes the supported UUID/revision envelope and fixed footer only at
 that exact outer boundary. The reference is neutral framing: source, timestamp,

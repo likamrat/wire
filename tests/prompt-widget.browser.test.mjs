@@ -17,12 +17,17 @@ async function settle(page) {
         animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
-async function setup(t, { completeSearch = false, disputedOrigin = false, qualifiedIssues = false } = {}) {
+async function setup(t, { completeSearch = false, disputedOrigin = false, qualifiedIssues = false, mixedLinks = false } = {}) {
     const records = promptWidgetRecords(), cleanups = [];
     if (disputedOrigin) records[1].userPrompt.sourceEventId = records[0].userPrompt.sourceEventId;
     if (qualifiedIssues) {
         records[14].userPrompt.authorship.issue = "body-boundary-v1";
         records[11].userPrompt.authorship.issue = "host-wrapper-v1";
+    }
+    if (mixedLinks) {
+        const record = records[2];
+        record.promptAssociationEvidence = { version: 1, method: "explicit-message" };
+        record.toolCalls[0].promptLink = { version: 1, promptEventId: record.userPrompt.sourceEventId, requestEventId: "invented-request" };
     }
     if (completeSearch) records[3].userPrompt = { ...records[3].userPrompt, status: "full", text: "Harbor review: read the mailbox updates." };
     const app = await searchFixture({ after: fn => cleanups.push(fn) }, { records, reply: completeSearch });
@@ -136,6 +141,18 @@ test("retained origin causes reach the reader without changing author shares or 
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
     }
+});
+
+test("a direct link for one call does not verify the sender or the other calls in the group", async t => {
+    const { page } = await setup(t, { mixedLinks: true });
+    await selectActivityOption(page, "promptAuthorFilter", "unknown"); await closeAnalyzeFilters(page);
+    await page.locator('[data-view-key="request:prompt-widget-2"] .request-card-open').click();
+    const reader = page.locator("#contextSidebar");
+    await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+    await expect(reader.locator(".reader-record-limits").first()).toContainText("Copilot linked 1 of 3 tool calls directly to the prompt.");
+    await expect(reader.locator(".reader-record-limits").first()).toContainText("No direct link was retained for the others.");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator('[data-view-key="request:prompt-widget-2"] .request-card-author')).toHaveText("Author unverified");
 });
 
 test("ordinary Analyze shows complete prompt origins through filters, paging, guide and composed layouts", { timeout: 120000 }, async t => {

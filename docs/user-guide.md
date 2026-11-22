@@ -83,7 +83,10 @@ pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
 counts add up to the total in **Chart guide**. Calls and follow-ups do not add
 prompts. To inspect unverified interactions, select **Author unverified** in
 the **Prompt author** filter and open an interaction. Unverified authors stay
-in the denominator; missing prompt text alone does not make its author unknown. Microsoft 365
+in the denominator; missing prompt text alone does not make its author unknown.
+In the reader, **Source** distinguishes a direct link to the prompt from
+grouping by message order. Seeing a skill or system message before a call
+doesn't tell you who asked for the work. Microsoft 365
 conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 

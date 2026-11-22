@@ -7,6 +7,11 @@ import os from "node:os";
 import { createCollector } from "../lib/collector.mjs";
 import { TAIL_LIMITS, hash } from "../lib/collector-io.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { promptAuthorship } from "../lib/prompt-authorship.mjs";
+import { buildSanitizedRecord } from "../lib/export.mjs";
+import { eventIdentity, filterDeletedRecords } from "../lib/deletion-identities.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 
 const sessionId = "10000000-0000-4000-8000-000000000001";
@@ -162,6 +167,78 @@ test("turn coincidence alone never links a late message", async t => {
     assert.equal(state.evidence.length, 1);
     assert.equal(state.evidence[0].userPrompt.text, null);
     assert.equal(state.evidence[0].userPrompt.capture.reason, "unlinked");
+});
+
+for (const [source, expected] of [["user", "user"], ["agent-invented", "agent"]]) {
+    test(`a pending tool request still links to its ${expected} prompt across intervening skill input and restart`, async t => {
+        const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "original",
+            turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+        const app = await installation(t, [
+            prompt("Invented initiating request", { source, messageId: "original" }),
+            request("first-request", "first", 1), start("first", 2),
+            prompt("Invented host instructions", { source: "skill-workiq", messageId: "instructions" }, "skill", 3),
+            request("second-request", "second", 4),
+            ...Array.from({ length: 305 }, (_, i) => event("other-" + i, "assistant.message", {}, 10 + i)),
+        ]);
+        await app.collect();
+        await app.restart();
+        await app.append([start("second", 1000)]);
+        const state = await app.collect();
+        assert.deepEqual(state.evidence.map(r => [r.userPrompt.sourceEventId, r.toolCalls.map(c => c.toolCallId)]),
+            [["prompt", ["first", "second"]]], "An app-inserted message must not become an additional request when the call names its actual origin.");
+        const chart = createPercentageCharts({ authorship: promptAuthorship }).authorUsage(state.evidence);
+        assert.equal(chart.total, 1);
+        assert.equal(chart.rows.find(row => row.id === expected).count, 1);
+        const detail = [...buildAssessmentModel(state).details.values()][0];
+        assert.equal(detail.interaction.message.association, "explicit-source-link");
+        const record = state.evidence[0];
+        const snapshot = buildSanitizedRecord(record, "a".repeat(64));
+        assert.equal(snapshot.promptAssociation, "Copilot linked all 2 tool calls directly to the prompt.");
+        assert.doesNotMatch(JSON.stringify(snapshot), /first-request|second-request/);
+        const [pruned] = filterDeletedRecords([record], { events: [eventIdentity(sessionId, "first-request")] });
+        assert.equal(pruned.toolCalls[0].promptLink, undefined);
+        assert.match(promptAuthorship.requestLink(pruned).note, /linked 1 of 2 tool calls/);
+        await app.append([event("end-second", "tool.execution_complete", { toolCallId: "second", success: true }, 1010)]);
+        const refreshed = await app.collect();
+        assert.equal(refreshed.evidence.length, 1);
+        assert.equal(refreshed.evidence[0].toolCalls[1].completionEventId, "end-second");
+        assert.deepEqual(refreshed.evidence[0].toolCalls[1].promptLink, record.toolCalls[1].promptLink);
+    });
+}
+
+test("the recent-event cutoff cannot discard a competing request and manufacture a direct link", async t => {
+    const response = (id, messageId, at) => event(id, "assistant.message", { originatingMessageId: messageId,
+        turnId: "turn-one", toolRequests: [{ toolCallId: "competing" }] }, at);
+    const app = await installation(t, [
+        prompt("First invented request", { messageId: "one" }),
+        response("older-claim", "one", 1),
+        ...Array.from({ length: 305 }, (_, i) => event("filler-" + i, "assistant.message", {}, 10 + i)),
+        prompt("Second invented request", { messageId: "two" }, "other", 400), response("recent-claim", "two", 410),
+    ]);
+    await app.collect(); await app.restart(); await app.append([start("competing", 1000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.toolCalls.length, 1);
+    assert.equal(record.userPrompt.capture.reason, "ambiguous-link");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+});
+
+test("hard checkpoint bounds leave a pruned competing request unlinked", async t => {
+    const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "origin",
+        turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+    const app = await installation(t, [
+        prompt("A pending original", { messageId: "origin" }),
+        request("old", "shared", 1),
+        ...Array.from({ length: TAIL_LIMITS.maxContextEvents }, (_, i) => request(`filler-${i}`, `other-${i}`, 10 + i)),
+        request("recent", "shared", 4000),
+    ]);
+    await app.collect();
+    const checkpoint = await app.checkpoint();
+    assert.ok(checkpoint.events.length <= TAIL_LIMITS.maxContextEvents);
+    assert.ok(Buffer.byteLength(JSON.stringify(checkpoint.events.filter(e => e.id !== "prompt"))) <= TAIL_LIMITS.maxContextBytes);
+    await app.restart(); await app.append([start("shared", 5000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.userPrompt.capture.reason, "unlinked");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
 });
 
 for (const flaw of ["duplicate-message", "different-turn", "subagent"]) {
