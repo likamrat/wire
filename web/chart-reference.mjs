@@ -231,7 +231,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             : help.layers[context.layer];
         if (topic === "time") return context.layer === "tool" ? "Each bar counts calls by their recorded start in your display time zone. Undated calls stay in the period total, outside the bars."
             : "Each interval counts qualifying dated records. A record without a usable date cannot be placed on the timeline.";
-        if (topic === "services") return "Each service’s share uses all matching records, including those with missing targets. One record can name several services.";
+        if (topic === "services") return "A service is unidentified when the record does not name an app or WIRE cannot map the saved target to one. Each service’s share uses all matching records, and one record can name several services.";
         if (topic === "models") return "Each interaction counts once for each recorded response model. Interactions without a recorded model name stay in the denominator.";
         if (topic === "authors") return "One originating prompt per matching interaction, across all pages. Tool calls and follow-ups do not add prompts.";
         if (topic === "tools") return context.layer === "tool" ? "Count each invocation under its recorded tool name. Repeated uses count separately; one call with several targets still counts once."
@@ -299,7 +299,10 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const rows = keys => {
             const list = el("dl", undefined, "chart-reference-definitions");
             for (const key of keys) {
-                list.append(definition(names[key], context.mode === "comparison" && context.layer === "tool" && ["success", "failure"].includes(key) ? "" : help.resultMeaning(key, context.layer), {
+                const meaning = context.mode === "analyze" && context.layer === "tool" && key === "failure"
+                    ? "The failure belongs to the call itself. Look for a diagnostic on that call, not an HTTP error on a returned item."
+                    : context.mode === "comparison" && context.layer === "tool" && ["success", "failure"].includes(key) ? "" : help.resultMeaning(key, context.layer);
+                list.append(definition(names[key], meaning, {
                     outcome: key,
                 }));
             }
@@ -334,8 +337,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const example = el("aside", undefined, "chart-reference-example");
         example.append(el("h4", "Worked example"), el("p", "Illustrative, not from your activity", "guide-example-caption"), el("p", workedExample(topic)));
         const cases = !context.nativeOnly && context.layer === "tool" && ({
-            outcomes: [["workiq-retrieve", "Tool failed", "A recorded ToolUnavailable error belongs to this invocation."],
-                ["workiq-fetch", "Tool completed", "Returned entries: HTTP 200 for a file and HTTP 403 for a message."]],
+            outcomes: [["workiq-retrieve", "Tool failed · ToolUnavailable", "The tool was unavailable. This invocation counts as one failed call."],
+                ["workiq-fetch", "Tool completed · HTTP 200 and 403", "The file entry returned HTTP 200. The message entry returned HTTP 403. That is one completed call with an error on the message entry."]],
             services: [["workiq-ask", "No downstream app list", "The request to Copilot is recorded; the apps used internally are not."],
                 ["workiq-fetch", "One of two targets identified", "One path identifies Files. The other path was saved, but WIRE cannot classify it."]],
         })[topic];

@@ -76,6 +76,9 @@ test("the single reference entry opens the native guide without a read and prese
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
     await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Did the tool fail, or did it return an error?");
     await expect(page.locator(".chart-reference-example")).toContainText("Illustrative, not from your activity");
+    const summaries = page.locator(".guide-example-calls details:not([open]) > summary");
+    await expect(summaries.nth(0)).toContainText("ToolUnavailable");
+    await expect(summaries.nth(1)).toContainText("HTTP 200 and 403");
     const sample = page.locator(".guide-example-calls details").last();
     await sample.locator("summary").press("Enter");
     await expect(sample.locator("p")).toBeVisible();
