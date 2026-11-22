@@ -148,7 +148,7 @@ test("long option finders keep the current measure, filters and time zone until 
     await page.evaluate(() => document.documentElement.style.removeProperty("font-size")); await page.setViewportSize({ width: 1280, height: 800 });
     await navigateMain(page, "analyze");
     await page.locator("#analyzeResultCommands").getByRole("button", { name: /^Filters/ }).click();
-    const filters = page.locator("#analyzeFilterDialog:popover-open");
+    const filters = page.locator("#analyzeFilterDialog[open]:not(:modal)");
     await expect(filters.getByRole("combobox", { name: "Tool", exact: true })).toBeVisible();
     if (!await trigger("projectFilter").isVisible()) await filters.getByText("More filters", { exact: true }).click();
     for (const [id, name, query, expected] of [
