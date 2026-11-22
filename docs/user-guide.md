@@ -350,7 +350,7 @@ Copy controls copy the exact retained original, unmasked. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 
-Use the small report icon beside a card's call count, or **Add to report** after
+Use **Add to report** at the bottom left of a card, or the same action after
 **Source** in its reader. Choose a draft to add the entire interaction without
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
 one. In **Reports**, choose the draft by name, prepare it and use **Save report**

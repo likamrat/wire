@@ -8,9 +8,11 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         if (text !== undefined) n.textContent = text;
         return n;
     };
-    function confirm(trigger, text) {
+    function confirm(trigger, text, included) {
         clearTimeout(timer); if (notice) { erase(notice); notice.remove(); }
         notice = el("div", "report-draft-confirmation", text);
+        notice.dataset.membership = included ? "added" : "removed";
+        notice.prepend(ux.icon(included ? "report-member" : "report-remove"));
         notice.setAttribute("role", "status");
         (trigger.closest("dialog:modal") || document.body).append(notice);
         timer = setTimeout(() => { if (notice) { erase(notice); notice.remove(); notice = null; } }, 3500);
@@ -29,6 +31,8 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         const member = catalog?.drafts.filter(d => d.scenarioIds.includes(id)) ?? [];
         const label = member.length ? `In report: ${member[0].name}${member.length > 1 ? ` (+${member.length - 1})` : ""}` : "Add to report";
         b.classList.toggle("in-draft", Boolean(member.length));
+        const role = member.length ? "report-member" : "report-add";
+        if (b.firstElementChild.dataset.iconRole !== role) b.firstElementChild.replaceWith(ux.icon(role));
         if (b.lastElementChild.textContent !== label) b.lastElementChild.textContent = label;
         const name = member.length ? `Report drafts: ${member.map(d => d.name).join(", ")}. Add or remove interaction` : label;
         b.setAttribute("aria-label", name);
@@ -45,7 +49,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         const authority = api.publicationToken();
         const b = el("button", "report-draft-trigger");
         b.type = "button"; b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("aria-expanded", "false");
-        b.append(ux.icon("reports"), el("span")); keys.set(b, id); paint(b);
+        b.append(ux.icon("report-add"), el("span")); keys.set(b, id); paint(b);
         b.onclick = () => {
             if (!b.isConnected || writing || !api.isCurrent(authority)) return;
             if (owner?.trigger === b) { close(true); return; }
@@ -81,7 +85,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
                 const result = await api("/api/report-drafts/edit", { expected: offered.version, scenarioId: id, ...command });
                 if (!api.isCurrent(publication)) return;
                 if (current()) close(true);
-                lastId = result.draftId; accept(result.catalog); changed(); confirm(trigger, text);
+                lastId = result.draftId; accept(result.catalog); changed(); confirm(trigger, text, command.included);
             } catch (error) {
                 if (!api.isCurrent(publication)) return;
                 close(true);

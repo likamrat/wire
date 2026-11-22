@@ -575,18 +575,28 @@ ${selectStyles}
 .call-duration {font-variant-numeric:tabular-nums}
 ${reportJourneyStyles}
 .report-draft-trigger>span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.reader-section-jumps>.report-draft-trigger{min-width:0;max-width:100%}
+:root {
+ --report-action-ink:color-mix(in srgb,var(--accent) 46%,var(--ink));
+ --report-action-face:color-mix(in srgb,var(--accent-fill) 17%,var(--paper));
+ --report-action-edge:color-mix(in srgb,var(--accent) 72%,var(--control));
+ --report-action-hover:color-mix(in srgb,var(--accent-fill) 24%,var(--paper));
+ --report-action-pressed:color-mix(in srgb,var(--accent-fill) 29%,var(--paper));
+ --report-remove-face:color-mix(in srgb,var(--muted) 30%,var(--paper));
+}
 .reader-section-jumps:has(.report-draft-trigger)>button{flex:none}
-.reader-section-jumps>.report-draft-trigger.in-draft{flex:0 1 auto;min-width:min(10rem,100%)}
-.card-reading-actions:has(.report-draft-trigger){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
-.card-reading-actions:has(.report-draft-trigger)>.report-draft-trigger{justify-self:end;max-width:100%}
-.card-reading-actions:has(.report-draft-trigger) .card-panel-link{margin-inline-start:0}
-.card-reading-actions>button.report-draft-trigger{display:inline-flex;align-items:center;gap:5px;min-width:32px;max-width:calc(100% - 8em);height:44px;padding:0 5px;margin-inline-start:auto;border:0;background:transparent;box-shadow:none;color:var(--muted);font:var(--type-small)/1.4 var(--font)}
-.card-reading-actions>.report-draft-trigger::before,.report-draft-picker .draft-choice::before{display:none}
-.card-reading-actions>.report-draft-trigger:not(.in-draft)>span{display:none}
-.card-reading-actions>.report-draft-trigger>.wire-icon{width:15px;height:15px;flex:none}
-.card-reading-actions>.report-draft-trigger:is(:hover,:focus-visible){color:var(--ink);background:var(--hover)}
-.card-reading-actions>.report-draft-trigger:active,.report-draft-picker .draft-choice:active{color:var(--ink);background:var(--pill-pressed);text-decoration:none}
+.wire-section-nav.reader-section-jumps>.report-draft-trigger{flex:1 1 9em;min-width:min(9em,100%);max-width:24em;color:var(--report-action-ink)}
+.reader-section-jumps>.report-draft-trigger>.wire-icon{color:var(--accent)}
+#activityList .card-reading-actions:has(.report-draft-trigger){display:grid;grid-template-columns:minmax(0,1fr) 9.6em;column-gap:var(--space-sm);align-items:center}
+#activityList .card-reading-actions>.report-draft-trigger{justify-self:start;display:inline-flex;align-items:center;gap:.45em;min-width:0;max-width:100%;height:44px;min-height:44px;margin:0;padding:0 .65em;position:relative;isolation:isolate;border:0;background:none;box-shadow:none;color:var(--report-action-ink);font:var(--weight-regular) var(--type-small)/1.4 var(--font);text-decoration:none}
+#activityList .card-reading-actions>.report-draft-trigger::before{content:"";display:block;position:absolute;inset:calc((100% - 2em)/2) 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--report-action-face);border:1px solid var(--report-action-edge)}
+#activityList .card-reading-actions>.report-draft-trigger:is(:hover,:focus-visible,[aria-expanded=true])::before{background:var(--report-action-hover)}
+#activityList .card-reading-actions>.report-draft-trigger:active::before{background:var(--report-action-pressed)}
+#activityList .card-reading-actions>.report-draft-trigger>.wire-icon{width:1.125em;height:1.125em;flex:none}
+#activityList .card-reading-actions:has(.report-draft-trigger)>.card-panel-link{justify-self:start;justify-content:flex-start;width:100%;margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+@container(max-width:20rem){#activityList .card-reading-actions:has(.report-draft-trigger){grid-template-columns:minmax(0,1fr) 9em;column-gap:3px}}
+@container(max-width:17rem){#activityList .card-reading-actions:has(.report-draft-trigger){grid-template-columns:minmax(0,1fr);row-gap:0}}
+.report-draft-picker .draft-choice::before{display:none}
+.report-draft-picker .draft-choice:active{color:var(--ink);background:var(--pill-pressed);text-decoration:none}
 .report-draft-picker{position:fixed;inset:auto;margin:0;width:min(21rem,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto;box-sizing:border-box;padding:8px;border:1px solid var(--control);border-radius:var(--radius);color:var(--ink);background:var(--paper);box-shadow:var(--surface-shadow)}
 .report-draft-picker h2{margin:5px 7px 9px;color:var(--muted);font:var(--weight-medium) var(--type-small)/1.45 var(--font)}
 .report-draft-options{max-height:min(16rem,45dvh);overflow:auto;overscroll-behavior:contain}
@@ -595,7 +605,10 @@ ${reportJourneyStyles}
 .draft-choice>.wire-icon{width:16px;height:16px;flex:none}.draft-choice>small{margin-inline-start:auto;color:var(--muted)}
 .report-draft-picker form:not([hidden]),.report-draft-picker label{display:grid;gap:6px}
 .report-draft-picker form>button{justify-self:start}
-.report-draft-confirmation{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 24px);z-index:100;padding:8px 14px;border:1px solid var(--control);border-radius:var(--radius);background:var(--paper);color:var(--ink);font:var(--type-small)/1.45 var(--font);pointer-events:none;overflow-wrap:anywhere}
+.report-draft-confirmation{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 24px);z-index:100;display:flex;align-items:center;gap:.55em;padding:8px 12px;border:1px solid var(--accent-fill);border-radius:var(--radius-control);background:var(--accent-fill);color:var(--on-accent);box-shadow:0 2px 8px color-mix(in srgb,var(--ink) 13%,transparent);font:var(--weight-medium) var(--type-small)/1.45 var(--font);pointer-events:none;overflow-wrap:anywhere}
+.report-draft-confirmation[data-membership=removed]{background:var(--report-remove-face);color:var(--ink);border-color:var(--control)}
+.report-draft-confirmation>.wire-icon{width:1.2em;height:1.2em;flex:none}
+@media(forced-colors:active){#activityList .card-reading-actions>.report-draft-trigger::before{background:ButtonFace;border-color:ButtonText}.report-draft-confirmation[data-membership]{background:Canvas;color:CanvasText;border-color:CanvasText}}
 @media(max-width:430px){.wire-section-nav.reader-section-jumps:has(.report-draft-trigger){column-gap:2px}}
 ${settingsStyles}
 ${periodFlowStyles}

@@ -8,6 +8,69 @@ import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { contrast } from "./color-measurements.mjs";
+import { palettes } from "../web/theme.mjs";
+
+test("report actions and call counts keep their columns while palettes distinguish add and remove", { timeout: 90000 }, async t => {
+    const counts = [1, 3, 4, 12];
+    const records = counts.map((n, i) => {
+        const r = fixture(`column-${i}`);
+        r.capturedAt = new Date().toISOString(); r.userPrompt.sourceTimestamp = r.capturedAt;
+        r.toolCalls = Array.from({ length: n }, (_, j) => ({ ...r.toolCalls[0], toolCallId: `column-${i}-${j}`,
+            startEventId: `start-${i}-${j}`, startedAt: r.capturedAt }));
+        return r;
+    });
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
+    const access = await createCopilotRuntimeAccess(context);
+    const server = await startServer(context, createExportController(context), { port: 0, frontend: "react", access, collector: { timers: false } });
+    const browser = await chromium.launch(process.env.WIRE_FRONTEND_BROWSER ? { channel: process.env.WIRE_FRONTEND_BROWSER } : {});
+    t.after(async () => { await browser.close(); await server.close(); await access.close(); for (const fn of cleanup.reverse()) await fn(); });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    await page.goto(server.url + "#analyze");
+    const rows = page.locator("#activityList .card-reading-actions"), action = rows.first().locator(".report-draft-trigger");
+    await expect(rows).toHaveCount(4);
+    const geometry = () => rows.evaluateAll(footers => footers.map(footer => {
+        const b = footer.querySelector(".report-draft-trigger"), link = footer.querySelector(".card-panel-link");
+        const rect = el => el.getBoundingClientRect();
+        const text = node => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect(); };
+        return [rect(b.querySelector("svg")).x, text(b.lastElementChild).x, rect(link.querySelector("svg")).x,
+            text(link.lastChild).x, rect(footer).height];
+    }));
+    const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
+    const notice = page.locator(".report-draft-confirmation");
+    const ink = button => button.evaluate(node => {
+        // Chromium can report interpolated colors in OKLab. Sample their actual sRGB paint.
+        const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        return [getComputedStyle(node).color, getComputedStyle(node, node.matches(".report-draft-trigger") ? "::before" : null).backgroundColor]
+            .map(value => {
+                ctx.fillStyle = value; ctx.fillRect(0, 0, 1, 1);
+                return `rgb(${[...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).join(",")})`;
+            });
+    });
+    for (const [width, scale] of [[1440, 1], [390, 1.25]]) {
+        await page.setViewportSize({ width, height: 900 }); await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
+        await expect(action.locator("span")).toBeVisible(); await expect(action.locator("svg")).toHaveAttribute("data-lucide-icon", "clipboard-plus");
+        const before = await geometry();
+        for (const row of before) assert.deepEqual(row.slice(0, 4), before[0].slice(0, 4));
+        for (const palette of Object.keys(palettes)) for (const theme of ["light", "dark"]) {
+            await page.evaluate(([palette, theme]) => {
+                document.documentElement.dataset.evidencePalette = palette; document.documentElement.dataset.evidenceTheme = theme;
+            }, [palette, theme]);
+            const verify = async control => { const [fg,bg] = await ink(control); assert.ok(contrast(fg,bg) >= 4.5, `${palette}/${theme}: ${fg} on ${bg}`); };
+            await page.mouse.move(0, 0); await verify(action); await action.hover(); await verify(action);
+            await action.click();
+            if (await picker.getByLabel("Draft name").isVisible()) {
+                await picker.getByLabel("Draft name").fill("Launch readiness"); await picker.getByRole("button", { name: "Create draft and add" }).click();
+            } else await picker.getByRole("button", { name: "Add to Launch readiness" }).click();
+            await expect(notice).toHaveText("Added to Launch readiness"); await verify(notice);
+            await expect(action.locator("svg")).toHaveAttribute("data-lucide-icon","clipboard-check");
+            assert.deepEqual(await geometry(), before);
+            await action.click(); await picker.getByRole("button", { name: "Remove from Launch readiness" }).click();
+            await expect(notice).toHaveText("Removed from Launch readiness"); await verify(notice);
+            await expect(notice.locator("svg")).toHaveAttribute("data-lucide-icon","clipboard-minus");
+        }
+    }
+});
 
 test("Analyze and its reader edit distinct named drafts through Prepare, Save and verified Open", { timeout: 90000 }, async t => {
     const records = ["x", "y"].map((id, i) => {
