@@ -167,8 +167,7 @@ test("ordinary Analyze shows complete prompt origins through filters, paging, gu
     await capture(page, "unverified-light");
     await reset(page);
     await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    const topic = page.locator('[data-reference-topic="authors"]');
+    const topic = page.locator('#chartReferenceTopics button[data-reference-topic="authors"]');
     await topic.hover();
     await topic.focus();
     await expect(topic).toBeFocused();

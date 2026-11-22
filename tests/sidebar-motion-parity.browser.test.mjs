@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 
 for (const [width, reducedMotion] of [[1920, "reduce"], [676, "reduce"], [1920, "no-preference"]])
-test(`Filters and guide visibly glide like both reference sidebars (${width}px, ${reducedMotion})`, { timeout: 30000 }, async t => {
+test(`Filters glide like the sidebars while the Analyze Guide stays in-page (${width}px, ${reducedMotion})`, { timeout: 30000 }, async t => {
     const app = await authorFilterFixture(t, { serviceCases: true });
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width, height: 1080 }, reducedMotion });
@@ -75,7 +75,8 @@ test(`Filters and guide visibly glide like both reference sidebars (${width}px, 
         await writeFile(path.join(process.env.WIRE_MOTION_PARITY_PROOFS, `motion-${width}-${reducedMotion}.json`),
             JSON.stringify({ width, reducedMotion: reducedMotion === "reduce", runs }, null, 2));
     }
-    for (const id of [width >= 700 ? "sidebar" : "navigationDrawer", "contextSidebar", "analyzeFilterDialog", "meaning"]) {
+    assert.equal(runs.filter(run => run.id === "meaning").length, 0, "The Analyze reader has no opening or closing glide");
+    for (const id of [width >= 700 ? "sidebar" : "navigationDrawer", "contextSidebar", "analyzeFilterDialog"]) {
         const animations = runs.filter(run => run.id === id);
         assert.equal(animations.length, 2, `${id}: explicit opening and closing follow the reference policy`);
         for (const run of animations) {

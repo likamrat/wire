@@ -111,7 +111,9 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             await page.locator("#wireSearchClear").click(); await page.keyboard.press("Escape");
             await openAnalyzeFilters(page); await blockedByModal(page, seen("#analyzeFilterDialog"));
             await expect(page.locator("#analyzeFilterDialog")).toBeHidden();
-            await page.locator("#openChartReference").click(); await blockedByModal(page, seen("#meaning"));
+            await page.locator("#openChartReference").click();
+            await drag("in-page Analyze Guide", "#meaning");
+            await page.locator("#closeChartReference").click();
             await page.locator("#activityList .card-panel-link").first().click();
             const reader = seen("#contextSidebar"); await expect(reader).toBeVisible();
             if (await reader.evaluate(n => n.matches(":modal"))) await blockedByModal(page, reader);

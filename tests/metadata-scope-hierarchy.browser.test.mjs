@@ -119,7 +119,8 @@ test("native accepted scope presents complete peer facts without parsing retaine
         ]);
         assert.equal(context.qualification, context.qualificationParts.join("; "));
     }
-    await page.getByRole("button", { name: "See exact numbers", exact: true }).click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
+    await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceSource > summary").click();
     await expect(page.locator("#periodHint")).toBeVisible();
     await page.locator("#periodHint").scrollIntoViewIfNeeded();

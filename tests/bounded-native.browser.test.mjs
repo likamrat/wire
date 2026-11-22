@@ -591,8 +591,7 @@ test("native time exact data follows the guide topic independently of the catego
         await closeAnalyzeFilters(page);
         await expect(page.locator("#chart .flat-comparison-action")).toHaveCount(1);
         await page.locator("#openChartReference").click();
-        await page.locator("#chartReferenceAllTopics").click();
-        await page.locator('button[data-reference-topic="time"]').click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="time"]').click();
         await page.locator("#chartReferenceShowData").click();
         const table = page.locator("#chartReferenceData .native-reference").getByRole("table", { name: "Dated calls and results", exact: true });
         await expect(table).toBeVisible();
@@ -618,12 +617,13 @@ test("native Analyze uses ordinary outcome rings, tool bars, exact columns and r
         await expect(page.locator("#activityList .card-identities")).toContainText("mcp__graph__CallGraph");
         await expect(page.locator("#activityList .card-identities")).toContainText("Not identified in this record");
         await page.locator("#openChartReference").click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
         await expect(page.locator("#chartReferenceExplanation")).toContainText("3 tool calls");
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
         await page.locator("#chartReferenceBack").click();
         await page.locator("#chartReferenceAllTopics").click();
-        await page.locator("button[data-reference-topic=paths]").click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("Paths are unavailable");
         await page.locator("#chartReferenceFindInput").fill("CallGraph");
@@ -661,6 +661,7 @@ test("mixed Analyze preserves separate source populations and native time/outcom
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
         await expect(page.locator("#activityList .request-card-categories")).toContainText("MoveMessage");
         await page.locator("#openChartReference").click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("Cowork");
     });
@@ -669,8 +670,7 @@ test("GitHub exact-table drilldown in mixed Analyze retains its original source 
     { skip: !root }, async t => {
         const { page } = await setup(t, { mainClient: true, github: true, timed: true });
         await page.locator("#openChartReference").click();
-        await page.locator("#chartReferenceAllTopics").click();
-        await page.locator('button[data-reference-topic="time"]').click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="time"]').click();
         await page.locator("#chartReferenceShowData").click();
         const action = page.locator("#chartReferenceData .chart-data-action").first();
         await expect(action).toHaveAttribute("href", /source=github-copilot/);

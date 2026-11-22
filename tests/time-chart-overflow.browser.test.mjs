@@ -129,8 +129,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; }); await ready(page);
     await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    await page.locator('button[data-reference-topic="time"]').click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="time"]').click();
     await expect(page.locator("#chartReferenceExplanation")).toContainText("Individual calendar days by default");
     await page.locator("#chartReferenceShowData").click();
     const exact = page.locator("#chartReferenceData .exact-data-table");

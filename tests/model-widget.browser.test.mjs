@@ -50,8 +50,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     const openModelData = async () => {
         await closeAnalyzeFilters(page);
         await page.locator("#openChartReference").click();
-        await page.locator("#chartReferenceAllTopics").click();
-        await page.locator('button[data-reference-topic="models"]').click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="models"]').click();
         await page.locator("#chartReferenceShowData").click();
         await guideData.locator(".percentage-reference-notes>summary").click();
     };

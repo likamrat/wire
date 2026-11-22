@@ -103,6 +103,8 @@ export const chartReferenceStyles = `
  .chart-reference-service-key,.chart-reference-service-track>i {background:CanvasText}
 }
 /* The Analyze Guide uses the workspace, not a chart overlay. Compare keeps its period panel. */
+#analyzeToolbar:has(>#analyzeReferenceEntry:not([hidden])) {flex-wrap:wrap}
+#analyzeToolbar>#analyzeReferenceEntry {flex:none}
 #workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>:not(#analyzeReference) {display:none!important}
 #meaning[data-mode=analyze] {
  position:relative;inset:auto;width:100%;max-width:none;height:auto;max-height:none;
@@ -148,6 +150,7 @@ export const chartReferenceStyles = `
  #meaning[data-mode=analyze] .chart-reference-body {padding:16px}
 }
 @media(forced-colors:active) {
- #meaning .chart-reference-topic[aria-current=page] {outline:1px solid Highlight}
+ #meaning .chart-reference-topic[aria-current=page]:not(:focus-visible) {outline:1px solid CanvasText}
+ #meaning .chart-reference-topic:focus-visible {outline:2px solid CanvasText;outline-offset:3px}
 }
 `;

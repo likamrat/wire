@@ -251,7 +251,7 @@ async function clickOutside(page, dialog) {
     await page.mouse.click(point.x, point.y);
 }
 
-test("Filters and chart guide consume nested Escape and outside clicks before their parent", { timeout: 30000 }, async t => {
+test("Filters consume nested outside clicks and Escape backs out of Guide exact data before exiting", { timeout: 30000 }, async t => {
     const { page, reads } = await setup(t);
     const dialog = page.locator("#analyzeFilterDialog"), guide = page.locator("#meaning");
     const count = reads.length, url = page.url();
@@ -274,19 +274,14 @@ test("Filters and chart guide consume nested Escape and outside clicks before th
     assert.equal(reads.length, count);
     assert.equal(page.url(), url, "Dismissal cannot click a chart or navigation control through the backdrop");
     await page.locator("#openChartReference").click();
-    const box = await guide.boundingBox();
-    await page.mouse.move(box.x + 40, box.y + 30);
-    await page.mouse.down();
-    await page.mouse.move(box.x - 8, box.y + 30);
-    await page.mouse.up();
     await expect(guide).toBeVisible();
-    await page.locator("#chartReferenceTitle").click();
-    await expect(guide).toBeVisible();
-    await clickOutside(page, guide);
+    assert.equal(await guide.evaluate(node => node.matches(":modal")), false);
+    await page.keyboard.press("Escape");
     await expect(guide).not.toBeVisible();
     await expect(page.locator("#openChartReference")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await page.keyboard.press("Escape");
     await expect(guide).toBeVisible();

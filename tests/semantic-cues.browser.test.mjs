@@ -61,6 +61,7 @@ async function ready(page) {
 }
 async function expand(page) {
     await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceSource>summary").press("Enter");
 }
@@ -103,7 +104,10 @@ async function app(run) {
 
 async function measure(page, selector = "#meaningBody,#serviceDefinitions") {
     return page.locator(selector).evaluateAll(sections => {
-        const rgb = value => value.match(/[\d.]+/g).map(Number);
+        const rgb = value => {
+            const channels = value.match(/[\d.]+/g).map(Number);
+            return value.startsWith("color(srgb ") ? channels.map((channel, i) => i < 3 ? channel * 255 : channel) : channels;
+        };
         const lum = rgb => rgb.slice(0, 3).map(n => n / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
         const contrast = (a, b) => (Math.max(lum(a), lum(b)) + .05) / (Math.min(lum(a), lum(b)) + .05);
         const background = node => {

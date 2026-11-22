@@ -340,8 +340,7 @@ test("real shared watch clears an idle guide's exact rows and source notes befor
     await expect(reader.locator("#workspace")).toBeVisible();
     const openExact = async () => {
         await reader.locator("#openChartReference").click();
-        await reader.locator("#chartReferenceAllTopics").click();
-        await reader.locator('button[data-reference-topic="services"]').click();
+        await reader.locator('#chartReferenceTopics button[data-reference-topic="services"]').click();
         await reader.locator("#chartReferenceShowData").click();
         await expect(reader.locator("#chartReferenceData tbody tr").first()).toBeVisible();
     };

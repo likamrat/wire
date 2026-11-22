@@ -49,7 +49,7 @@ async function setup(t, { layer = "tool", source } = {}) {
     const records = source ?? [record];
     const analytics = buildActivityAnalytics(records, { layer });
     await page.setContent(`<style>${styles}${chartReferenceStyles}</style>
-        <button id="openChartReference" type="button">How to read these charts</button>
+        <button id="openChartReference" type="button">Guide</button>
         <div id="fixtureCharts" hidden></div><div id="fixtureExact" hidden></div><section id="analyzeReference" hidden>${chartReferenceMarkup}</section>`);
     await page.evaluate(({ factories, icons, analytics, records, layer }) => {
         const make = source => (0, eval)(`(${source})`);
@@ -94,7 +94,7 @@ async function setup(t, { layer = "tool", source } = {}) {
                 if (identity.key !== window.context.key || identity.revision !== window.context.revision) {
                     return { status: "unavailable", reason: "The chart view changed. Open its current exact data." };
                 }
-                percentages.renderExact(topic, host);
+                percentages.renderExact(topic, host, presentation);
                 window.onGuideExact?.(host);
                 return { status: "ready" };
             },
@@ -102,7 +102,10 @@ async function setup(t, { layer = "tool", source } = {}) {
             onUnavailable: message => window.referenceNotices.push(message),
         });
 
-        document.getElementById("openChartReference").addEventListener("click", () => window.guide.open());
+        document.getElementById("openChartReference").addEventListener("click", () => {
+            if (window.context.mode === "comparison") window.guide.open();
+            else window.guide.openAnalyze("index");
+        });
     }, {
         factories: { mount: mountChartReference.toString(), state: createChartReferenceState.toString(), facts: chartReferenceFacts.toString(),
             percentage: createPercentageCharts.toString(), dimensional: createDimensionalCharts.toString(),
@@ -114,12 +117,18 @@ async function setup(t, { layer = "tool", source } = {}) {
     return page;
 }
 
+const choice = (page, topic) => page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`);
+async function openTopic(page, topic) {
+    await page.locator("#openChartReference").click();
+    await choice(page, topic).click();
+}
+
 test("guide access withdrawal clears retained private content synchronously without navigation or focus", async t => {
     const page = await setup(t);
     await page.evaluate(() => {
         window.context = { ...window.context, qualification: "PRIVATE_GUIDE_QUALIFICATION", coverage: "PRIVATE_GUIDE_COVERAGE" };
     });
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     assert.ok(await page.locator("#chartReferenceData tbody tr").count());
     const cleared = await page.evaluate(() => {
@@ -174,7 +183,7 @@ test("guide access withdrawal clears retained private content synchronously with
     assert.deepEqual(cleared.heldAttributes, ["", ""]);
     assert.deepEqual(cleared.removedWithData, [], "Private values are blank before their nodes or attributes are detached");
     assert.doesNotMatch(cleared.text, /PRIVATE_GUIDE_|66\.7%/);
-    assert.match(cleared.text, /Worked means tool completion, not answer correctness\./);
+    assert.match(cleared.text, /not that the answer was correct/);
     assert.equal(cleared.value, "");
     assert.equal(cleared.table, "");
     assert.equal(cleared.rows, 0);
@@ -186,7 +195,7 @@ test("guide access withdrawal clears retained private content synchronously with
 
 test("guide access rejects closed publication and old captures across a fresh epoch", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     const result = await page.evaluate(() => {
         const saved = window.guide.capture(), reads = window.contextReads;
@@ -265,7 +274,7 @@ test("guide access requires synchronous tokens and exact-true verifier results",
 
 test("guide access fences retained exact callbacks on expiry and after a new publication", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     const expired = await page.evaluate(() => {
         window.retiredExactScope = window.guideRenderScope;
@@ -274,13 +283,14 @@ test("guide access fences retained exact callbacks on expiry and after a new pub
             open: document.getElementById("meaning").open };
     });
     assert.deepEqual(expired, { admitted: false, rows: 0, open: false });
-    await page.evaluate(() => { window.guideAccess.token = Object.freeze({}); window.guideAccess.allowed = true; window.guide.open(); });
+    await page.evaluate(() => { window.guideAccess.token = Object.freeze({}); window.guideAccess.allowed = true; });
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     const fresh = await page.evaluate(() => ({
         old: window.retiredExactScope.isCurrent(), current: window.guideRenderScope.isCurrent(),
         rows: document.querySelectorAll("#chartReferenceData tbody tr").length, open: document.getElementById("meaning").open,
     }));
-    assert.deepEqual(fresh, { old: false, current: true, rows: 6, open: true });
+    assert.deepEqual(fresh, { old: false, current: true, rows: 4, open: true });
 });
 
 test("guide access blocks late notices and retired resize focus callbacks", async t => {
@@ -324,7 +334,6 @@ test("guide access rejects reentrant context and exact-render publication after 
         window.onGuideRead = null;
         window.guideAccess.token = Object.freeze({});
         window.guideAccess.allowed = true;
-        window.guide.open();
         window.onGuideExact = host => {
             window.guideAccess.allowed = false;
             window.guide.withdrawAccess();
@@ -332,6 +341,7 @@ test("guide access rejects reentrant context and exact-render publication after 
             throw new Error("PRIVATE_LATE_ERROR");
         };
     });
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     assert.equal(await page.locator("#meaning").evaluate(node => node.open), false);
     assert.doesNotMatch(await page.locator("#meaning").textContent(), /PRIVATE_LATE|66\.7%/);
@@ -342,13 +352,18 @@ test("chart guide uses accepted chart facts, native exact links and a text-only 
     const page = await setup(t);
     await page.locator("#openChartReference").click();
     assert.equal(await page.locator("#openChartReference svg").count(), 0);
-    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /4 \(66.7%\)/);
+    assert.equal(await page.locator("#meaning").getAttribute("data-reference-view"), "index");
+    await choice(page, "outcomes").click();
+    const article = await page.locator("#chartReferenceExplanation").innerText();
+    assert.match(article, /6 Work IQ tool calls/);
+    assert.match(article, /HTTP 403/);
+    assert.doesNotMatch(article, /66\.7%|16\.7%/);
     assert.doesNotMatch(await page.locator("#meaning").innerText(), /All retained dates|All services|All authors|Current collection/);
-    assert.equal(await page.locator("#chartReferenceTopics .chart-reference-topic-group").count(), 0);
-    assert.equal(await page.locator("#chartReferenceTopics button").count(), 7);
-    assert.equal(await page.locator("#chartReferenceTopics").isVisible(), false);
     await page.locator("#chartReferenceShowData").click();
-    assert.equal(await page.locator("#chartReferenceData tbody tr").count(), 6);
+    const rows = page.locator("#chartReferenceData tbody tr");
+    assert.equal(await rows.count(), 4);
+    assert.deepEqual(await rows.evaluateAll(rows => Object.fromEntries(rows.map(row => [row.cells[0].textContent, row.cells[1].textContent]))),
+        { Worked: "4", "Tool failed": "1", "Partly worked": "0", "No result recorded": "1" });
     assert.equal(await page.locator("#chartReferenceData tfoot td").first().innerText(), "6");
     assert.equal(await page.locator("#chartReferenceData a").first().getAttribute("href"), "#accepted-outcomes-success");
     await page.locator("#chartReferenceBack").click();
@@ -364,7 +379,7 @@ test("guide qualification fallback is whole accepted text, never a substitute fo
     const page = await setup(t);
     const text = "Standalone scope; original \u00b7 identity: punctuation", coverage = "Coverage stays separately qualified.";
     await page.evaluate(({ text, coverage }) => { window.context = { ...window.context, qualification: text, coverage }; }, { text, coverage });
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     assert.deepEqual(await page.locator("#chartReferenceGuide .chart-reference-qualification").allTextContents(), [text, coverage]);
     assert.equal(await page.locator("#chartReferenceGuide .analyze-scope-part").count(), 0);
     await page.locator("#chartReferenceShowData").click();
@@ -385,7 +400,7 @@ test("guide qualification fallback is whole accepted text, never a substitute fo
 
 test("stale and unavailable views never invent zero or silently activate exact data", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.evaluate(() => {
         window.context = { ...window.context, key: "pending-two", canOpenData: false,
             notice: "Changing filters. Earlier accepted numbers are still shown.",
@@ -393,14 +408,15 @@ test("stale and unavailable views never invent zero or silently activate exact d
         window.guide.refresh();
     });
 
-    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /4 \(66.7%\)/);
+    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /6 Work IQ tool calls/);
     assert.equal(await page.locator("#chartReferenceShowData").isDisabled(), true);
     await page.evaluate(() => {
         window.context = { ...window.context, key: "unavailable", available: false, model: null, facts: null,
             notice: "Chart numbers are unavailable.", unavailableReason: "Read the current view before opening exact data." };
         window.guide.refresh();
     });
-    assert.equal(await page.locator("#meaning .chart-reference-definition>.chart-reference-value").count(), 0);
+    assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /\b(?:6|0) Work IQ tool calls/);
+    assert.equal(await page.locator("#chartReferenceShowData").isDisabled(), true);
     assert.match(await page.locator("#chartReferenceNotice").innerText(), /unavailable/);
 });
 
@@ -409,22 +425,22 @@ test("source-defined units keep counts without pooled outcome or service shares"
     await page.evaluate(() => {
         window.context = { ...window.context, model: { ...window.context.model, separateUnits: true } };
     });
-    await page.locator("#openChartReference").click();
-    assert.equal(await page.locator("#chartReferenceTopicTitle").innerText(), "Results by source");
+    await openTopic(page, "outcomes");
     assert.equal(await page.locator("#chartReferenceExplanation .chart-reference-share").count(), 0);
     assert.match(await page.locator("#chartReferenceExplanation").innerText(), /These results use different source units/);
-    assert.equal((await page.locator(".chart-reference-definition>.chart-reference-value").first().innerText()).trim(), "4");
+    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /6 Work IQ tool calls/);
+    assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /66\.7%/);
     await page.locator("#chartReferenceAllTopics").click();
-    await page.locator('button[data-reference-topic="services"]').click();
+    await choice(page, "services").click();
     assert.equal(await page.locator("#chartReferenceExplanation .chart-reference-share").count(), 0);
     assert.equal(await page.locator(".chart-reference-service-track:visible").count(), 0);
-    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /counts can overlap/);
+    assert.match(await page.locator("#chartReferenceExplanation").innerText(), /several services|counts can overlap/);
     assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /Shares use all|%/);
 });
 
 test("exact rendering rejects an accepted-context change instead of mixing generations", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.evaluate(() => { window.changeBeforeExact = true; });
     await page.locator("#chartReferenceShowData").click();
     assert.equal(await page.locator("#chartReferenceData table").count(), 0);
@@ -457,13 +473,12 @@ for (const layer of ["tool", "reported-api", "direct-request", "recorded-http", 
             ...extractGraphActivities(references, { sessionId: "guide-code" }).scenarios];
         const expected = buildActivityAnalytics(source, { layer });
         const page = await setup(t, { layer, source });
-        const title = createRecordedResults().outcomeTitle(layer);
+        const title = layer === "tool" ? "Tool call outcomes" : createRecordedResults().outcomeTitle(layer);
         await page.locator("#openChartReference").click();
+        assert.equal(await choice(page, "outcomes").innerText(), title);
+        await choice(page, "outcomes").click();
         assert.equal(await page.locator("#chartReferenceTopicTitle").innerText(), title);
-        await page.locator("#chartReferenceAllTopics").click();
-        assert.equal(await page.locator('button[data-reference-topic="outcomes"]').innerText(), title);
-        await page.locator('button[data-reference-topic="outcomes"]').click();
-        assert.match(await page.locator(".chart-reference-group-heading").innerText(),
+        assert.match(await page.locator("#chartReferenceExplanation").innerText(),
             new RegExp(`${expected.totals.count} ${createRecordedResults().unit(layer, expected.totals.count)}`));
         if (layer === "code-reference") {
             assert.match(await page.locator("#chartReferenceExplanation").innerText(), /Execution not observed/);
@@ -485,6 +500,23 @@ test("comparison help delegates to the existing roster without rendering a secon
         window.context = { ...window.context, mode: "comparison", key: "accepted-comparison" };
     });
     await page.locator("#openChartReference").click();
+    assert.equal(await page.locator("#meaning").evaluate(node => node.matches(":modal")), true);
+    const reopened = await page.evaluate(() => {
+        const root = document.getElementById("meaning");
+        window.guide.close();
+        const [closing] = root.getAnimations();
+        const finish = closing.onfinish;
+        window.guideAccess.allowed = false;
+        window.guide.withdrawAccess();
+        const retired = !root.open && root.getAnimations().length === 0;
+        window.guideAccess.token = Object.freeze({});
+        window.guideAccess.allowed = true;
+        window.guide.open("outcomes");
+        finish();
+        return { retired, modal: root.matches(":modal"), current: window.guide.capture()?.publicationToken === window.guideAccess.token };
+    });
+    assert.deepEqual(reopened, { retired: true, modal: true, current: true },
+        "A retired Compare glide cannot dismiss a newly authorized publication");
     assert.equal(await page.locator("#meaning .chart-reference-definition>.chart-reference-value").count(), 0);
     assert.equal(await page.locator("#meaning [role=tab],#meaning [data-period-side]").count(), 0);
     assert.deepEqual((await page.locator(".chart-reference-topic").allTextContents()).map(text => text.trim()),
@@ -495,7 +527,7 @@ test("comparison help delegates to the existing roster without rendering a secon
 
 test("the caller can restore exact-data reading only for the same accepted context", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceBack").focus();
     await page.evaluate(() => { window.savedReference = window.guide.capture(); window.guide.leave(); });
@@ -516,8 +548,8 @@ test("missing time coverage is unavailable rather than an invented zero", async 
     const page = await setup(t);
     await page.evaluate(() => {
         window.context = { ...window.context, facts: { ...window.context.facts, undatedCount: undefined } };
-        window.guide.open("time");
     });
+    await openTopic(page, "time");
     const text = await page.locator("#chartReferenceExplanation").innerText();
     assert.match(text, /Dated and undated counts are unavailable/);
     assert.doesNotMatch(text, /0 without a usable date/);
@@ -525,7 +557,7 @@ test("missing time coverage is unavailable rather than an invented zero", async 
 
 test("a queued native close event cannot close a newly restored guide", async t => {
     const page = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openTopic(page, "outcomes");
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceBack").focus();
     await page.evaluate(async () => {
@@ -545,8 +577,8 @@ test("guide details reflow in both themes and at 200% text without hidden focus"
         await page.evaluate(({ theme, scale }) => {
             document.documentElement.dataset.evidenceTheme = theme;
             document.documentElement.style.fontSize = `${scale * 100}%`;
-            window.guide.open("services");
         }, { theme, scale });
+        await openTopic(page, "services");
         await page.locator("#meaning").evaluate(async node => {
             await Promise.allSettled(node.getAnimations({ subtree: true }).map(animation => animation.finished));
         });
@@ -571,15 +603,14 @@ test("guide details reflow in both themes and at 200% text without hidden focus"
         assert.equal(focus.visible, true, `${theme}/${width}/${scale}: ${JSON.stringify(focus)}`);
         assert.equal(focus.fullyVisible, true, `${theme}/${width}/${scale}: full focus target ${JSON.stringify(focus)}`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `services-${theme}-${width}-${scale * 100}.png`), fullPage: true });
+        await page.locator("#closeChartReference").click();
     }
 });
 
 test("the flat index and exact data preserve topmost Escape without mutating chart context", async t => {
     const page = await setup(t);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    await page.locator('[data-reference-topic="services"]').click();
+    await openTopic(page, "services");
     assert.equal(await page.locator("#chartReferenceTopicTitle").innerText(), "Services and operations");
     assert.equal(await page.evaluate(() => window.context.key), "accepted-one");
     await page.locator("#chartReferenceShowData").click();
@@ -594,8 +625,7 @@ test("the flat index and exact data preserve topmost Escape without mutating cha
 test("responsive navigation keeps focus on a visible guide control", async t => {
     const page = await setup(t);
     await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    await page.locator('[data-reference-topic="services"]').focus();
+    await choice(page, "services").focus();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForFunction(() => document.activeElement.checkVisibility() && document.getElementById("meaning").contains(document.activeElement));
     const focus = await page.evaluate(() => ({

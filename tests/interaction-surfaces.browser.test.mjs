@@ -227,32 +227,35 @@ test("the real reader report action remains recognizable at rest, hover, press a
     }
 });
 
-test("chart guide topics and return actions keep the shared hover highlight despite local quiet fills", async t => {
+test("Guide topic navigation and return actions retain visible hover feedback without moving", async t => {
     const { page, url } = await native(t);
     await page.goto(url); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    const hasIndex = await page.locator("#chartReferenceAllTopics").count() === 1;
-    const sizes = hasIndex ? [[1440, 100], [375, 200]] : [[1440, 100]];
+    const sizes = [[1440, 100], [375, 200]];
     for (const theme of ["light", "dark"]) for (const [width, scale] of sizes) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(url); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
         await page.locator("#openChartReference").click(); await settle(page);
-        if (hasIndex) await page.locator("#chartReferenceAllTopics").click();
-        const topic = page.locator(".chart-reference-topic").first();
+        const topic = page.locator('#chartReferenceTopics button[data-reference-topic="services"]');
         async function highlight(control, name) {
             await control.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0); await settle(page);
             const rest = await control.evaluate(measureControlSurface);
             await control.hover(); await settle(page);
             const hover = await control.evaluate(measureControlSurface);
-            controlContrast(hover, name);
-            assert.ok(hover.borderWidth >= 2, `${name} shares the perceptible hover edge`);
+            if (name === "topic") {
+                assert.ok(contrast(hover.ink, hover.face) >= 4.5, "Topic text remains readable on hover");
+                assert.ok(contrast(rest.face, hover.face) >= 1.1, "Hover changes the topic's visible background");
+            } else {
+                controlContrast(hover, name);
+                assert.ok(hover.borderWidth >= 2, `${name} shares the perceptible hover edge`);
+            }
             assert.equal(hover.box.width, rest.box.width); assert.equal(hover.box.height, rest.box.height);
             await capture(page, `${theme}-${width}-${scale}-guide-${name}`);
         }
         await highlight(topic, "topic");
         await topic.click(); await settle(page);
-        if (hasIndex) await highlight(page.locator("#chartReferenceAllTopics"), "return");
+        await highlight(page.locator("#chartReferenceAllTopics"), "return");
         await highlight(page.locator("#chartReferenceShowData"), "exact-data");
         await page.locator("#chartReferenceShowData").click(); await settle(page);
         await highlight(page.locator("#chartReferenceBack"), "back");

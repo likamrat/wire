@@ -271,6 +271,7 @@ for (const { segmented, incompleteText = false } of [{ segmented: false }, { seg
         await page.locator("#sourceFilter-control").press("Escape");
         await closeAnalyzeFilters(page);
         await page.locator("#openChartReference").click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
         await expect(page.locator("#chartReferenceExplanation")).not.toContainText("outcome rates stay separate");
         await page.locator("#closeChartReference").click();
         await expect(page.locator("#meaning")).toBeHidden();

@@ -490,6 +490,7 @@ test("relocated launchers use native records, reference, comparison and update d
     await page.locator("#openChartReference").click();
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
     assert.equal(snapshots.length, reads, "Opening existing exact data does not read or recollect evidence");
