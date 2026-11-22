@@ -16,9 +16,12 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     }
     if (!main.querySelector("#examples,#patterns") || model.groups.some(group =>
         group.interactions.some(id => !interactions.has(id)) || group.calls.some(id => !calls.has(id)))) return null;
-    for (const reason of model.reasons) for (const call of reason.calls) {
-        if (!reasons.has(call)) reasons.set(call, []);
-        reasons.get(call).push(reason);
+    for (const reason of model.reasons) {
+        const statuses = new Map(reason.entryStatuses);
+        for (const call of reason.calls) {
+            if (!reasons.has(call)) reasons.set(call, []);
+            reasons.get(call).push({ ...reason, entryStatus: statuses.get(call) ?? null });
+        }
     }
     const order = new Map([...calls.keys()].map((id, index) => [id, index]));
     for (const owned of byInteraction.values()) owned.sort((a, b) => order.get(a) - order.get(b));
@@ -72,8 +75,10 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     }
     function diagnostic(parent, reason, call, labelCall = false) {
         const fig = el("figure", undefined, "brief-reason"), caption = el("figcaption");
-        const label = reason.label + (observations.has(call) ? ` · observation ${observations.get(call).indexOf(reason.observation) + 1}` : "")
+        const scope = labelCall && reason.entry === null ? "Call-level example · not an entry explanation · " : "";
+        const label = scope + reason.label + (observations.has(call) ? ` · observation ${observations.get(call).indexOf(reason.observation) + 1}` : "")
             + (reason.entry !== null ? ` · returned entry ${reason.entry + 1}` : "")
+            + (reason.entryStatus !== null ? ` · HTTP ${reason.entryStatus}` : "")
             + (reason.representation === "edited-copy" ? " · edited report copy" : " · masked report copy")
             + (reason.status === "partial" ? " · partial" : "");
         caption.append(el("span", label));
@@ -85,9 +90,18 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     }
     function groupBody(parent, group) {
         parent.append(el("p", group.operation, "brief-operation"));
-        const sample = group.calls.find(id => reasons.has(id));
-        if (sample) diagnostic(parent, reasons.get(sample)[0], sample, true);
-        else if (group.signal && group.calls.length === 1) {
+        let callExample;
+        for (const id of group.calls) {
+            for (const reason of reasons.get(id) ?? []) {
+                if (group.returnedStatus !== null && reason.entryStatus === group.returnedStatus) {
+                    diagnostic(parent, reason, id, true);
+                    return;
+                }
+                if (reason.entry === null) callExample ??= [reason, id];
+            }
+        }
+        if (callExample) diagnostic(parent, ...callExample, true);
+        else if (!group.returnedStatus && group.signal && group.calls.length === 1) {
             const gap = elements(calls.get(group.calls[0]), ":scope>p,:scope>ul>li").map(n => n.textContent)
                 .find(s => /^Failure reason was not saved\.|^Error details were |^The source did not supply error details\./.test(s));
             if (gap) parent.append(el("p", gap));

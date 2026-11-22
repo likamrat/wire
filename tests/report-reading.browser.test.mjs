@@ -10,6 +10,7 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { resultMetadata } from "../lib/history.mjs";
 
 test("pattern counts lead to one matching interaction and preserve the individual call links", async t => {
     const records = [403, 403, 403, 403, 404].map((statusCode, index) => {
@@ -19,10 +20,16 @@ test("pattern counts lead to one matching interaction and preserve the individua
         record.followUpPrompts = [];
         Object.assign(record.toolCalls[0], { startedAt: record.capturedAt, toolSucceeded: false,
             reportedOutcome: "failed", apiResults: [{ index: 0, statusCode }] });
-        if (statusCode === 403) record.toolCalls[0].resultEvidence = {
-            version: 1, source: "sdk-result", applicationError: true, resultCount: null, statusCode: null,
+        Object.assign(record.toolCalls[0], { requestArgs: { entityUrls: ["/me/calendars", "/me/events"] },
+            apiResults: resultMetadata(JSON.stringify({ results: [
+                { status: 200, error: { code: "OtherEntry", message: "The first room supplied a partial listing." } },
+                { status: statusCode, ...(statusCode === 403 ? { error: { code: "AccessDenied",
+                    message: "Calendar access is missing for the planning room." } } : {}) },
+            ] })) });
+        record.toolCalls[0].resultEvidence = {
+            version: 1, source: "sdk-result", applicationError: true, resultCount: 2, statusCode: null,
             contentStatus: "body-excluded", diagnostic: { version: 1, source: "mcp-result-text",
-                status: "recorded", message: "Calendar access is missing for the planning room." },
+                status: "recorded", message: "The tool could not complete the batch." },
         };
         return record;
     });
@@ -98,6 +105,11 @@ test("pattern counts lead to one matching interaction and preserve the individua
     const brief = page.getByRole("article", { name: "Report brief" });
     await expect(brief.getByRole("heading", { name: "4 calls with a returned HTTP 403" })).toBeVisible();
     await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await expect(brief.locator("figcaption")).toContainText("returned entry 2 · HTTP 403");
+    await brief.getByRole("button", { name: /1 call with a returned HTTP 404/ }).click();
+    await expect(brief.locator("blockquote")).toHaveText("The tool could not complete the batch.");
+    await expect(brief.locator("figcaption")).toContainText("Call-level example · not an entry explanation");
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
     await capture(page, "brief-narrow-dark");
     await brief.getByRole("button", { name: "Coverage", exact: true }).click();
     await expect(brief.getByRole("heading", { name: "Evidence counts" })).toBeVisible();
@@ -119,8 +131,10 @@ test("pattern counts lead to one matching interaction and preserve the individua
     const ordinal = prepared.snapshot.resultFacts.calls.findIndex(item => item.ref === owner.ref) + 1;
     const exact = brief.getByRole("button", { name: new RegExp(`^Report call ${ordinal}:`) });
     await exact.click();
-    await expect(brief).toContainText("Returned API entry 1: status 403.");
-    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await expect(brief).toContainText("Returned API entry 1: status 200");
+    await expect(brief).toContainText("Returned API entry 2: status 403");
+    for (const message of ["The first room supplied a partial listing.", "Calendar access is missing for the planning room.",
+        "The tool could not complete the batch."]) await expect(brief.locator("blockquote").filter({ hasText: message })).toHaveCount(1);
     await page.evaluate(() => dispatchEvent(new Event("beforeprint")));
     await expect(page.locator(".brief-print")).toContainText("Interaction 5");
     await expect(page.locator(".brief-print")).toContainText("Scope and coverage");

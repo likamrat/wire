@@ -436,6 +436,10 @@ For supported ordinary focused reports, Brief uses the verified manifest's
 pattern membership, call-to-interaction bindings and permitted result copies
 with the corresponding saved document anchors. It never joins a call to a
 prompt by display order or transfers a returned status to the parent outcome.
+For a returned-status finding, quoted entry text must bind to that call,
+observation, entry position and nonconflicting status. A separately labelled
+call-level example is not an entry explanation; other entries' text stays in
+the exact call view.
 The full historical reading and original files remain separate choices.
 
 Saved metadata search does not read prompt/report bodies. Global Search
