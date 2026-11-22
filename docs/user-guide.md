@@ -292,6 +292,8 @@ Long prompts start with a six-line preview so recorded activity stays close.
 Use the chevron beside the prompt author to expand or collapse the text in place.
 **Copy prompt** still copies the whole retained prompt. Search opens the full
 prompt rather than hiding a match behind the preview.
+Use **Prompt**, **Activity** or **Source** at the top of the interaction to jump
+to that section. **Reply** appears when the selected interaction has a recorded reply.
 Each call shows its own outcome, such as **1 tool call completed**, even if
 one returned entry reported an error. Its timing and any recorded reason stay
 with the call. Open the call for its exact input; **Source details** holds provenance and

@@ -168,6 +168,45 @@ async function readerShot(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png") });
 }
 
+for (const withReply of [false, true]) test(`reader section jumps pair named icons with their real destinations (reply: ${withReply})`, async t => {
+    const { page } = await setup(t, [readerRecord()], withReply ? { responseText: "The invented release notes are ready." } : {});
+    const jumps = page.getByRole("navigation", { name: "In this interaction" });
+    const destinations = [["Prompt", "prompt", "message-square"], ["Activity", "activity", "rotate-ccw-clock"],
+        ...(withReply ? [["Reply", "response", "message-square-reply"]] : []), ["Source", "source", "list-tree"]];
+    if (withReply) await expect(page.locator('[data-reader-section=response] pre')).toBeVisible();
+    await chooseTheme(page, withReply ? "light" : "dark");
+    for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 950 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await readerSettled(page);
+        await jumps.scrollIntoViewIfNeeded();
+        await readerShot(page, `section-jumps-${withReply ? "with-reply" : "ordinary"}-${width}`);
+        await expect(jumps.getByRole("button")).toHaveText(destinations.map(([label]) => label));
+        for (const [label, name, icon] of destinations) {
+            const control = jumps.getByRole("button", { name: label, exact: true });
+            await expect(control.locator("svg")).toHaveAttribute("data-lucide-icon", icon);
+            await expect(control.locator("svg")).toHaveAttribute("aria-hidden", "true");
+            await control.focus(); await page.keyboard.press("Shift");
+            await expect(control).toHaveCSS("outline-style", "solid");
+            assert.ok(await control.evaluate(node => {
+                const rect = node.getBoundingClientRect(), body = document.getElementById("contextSidebarBody");
+                const glyph = node.querySelector("svg").getBoundingClientRect(), range = document.createRange();
+                range.selectNodeContents(node.lastChild);
+                const label = range.getBoundingClientRect();
+                return rect.height >= 44 && rect.width <= body.clientWidth && body.scrollWidth <= body.clientWidth + 1
+                    && glyph.width > 0 && glyph.right < label.left && label.right <= rect.right
+                    && Math.abs((glyph.top + glyph.bottom - label.top - label.bottom) / 2) <= 2;
+            }));
+            await page.keyboard.press("Enter");
+            const section = page.locator(`[data-reader-section="${name}"]`);
+            await expect(section.locator(":scope > h2")).toBeFocused();
+            await expect(section).toHaveAttribute("data-open", "true");
+            await expect(control).toHaveAttribute("aria-current", "location");
+            await expect(jumps.locator("[aria-current]")).toHaveCount(1);
+        }
+    }
+});
+
 function longReaderRecord() {
     const record = readerRecord();
     record.userPrompt.text = Array.from({ length: 60 }, (_, i) =>

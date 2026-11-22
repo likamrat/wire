@@ -6200,7 +6200,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
-        body.append(promptSection.element, activitySection.element, sourceSection.element);
+        const jumps = el("nav", "wire-section-nav reader-section-jumps");
+        jumps.setAttribute("aria-label", "In this interaction");
+        function sectionJump(section, label, role) {
+            const control = button(label, () => {
+                if (!currentReader()) return;
+                if (!section.isOpen()) section.apply(true, false);
+                if (section === promptSection) textAccess.revealPrompt(section.body.querySelector(".full-text"));
+                const heading = section.element.querySelector("h2");
+                heading.tabIndex = -1;
+                heading.focus({ preventScroll: true });
+                contextBody.scrollTop += heading.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 8;
+            });
+            control.prepend(ux.icon(role));
+            section.element.addEventListener("focusin", () => control.setAttribute("aria-current", "location"));
+            section.element.addEventListener("focusout", event => {
+                if (!section.element.contains(event.relatedTarget)) control.removeAttribute("aria-current");
+            });
+            return control;
+        }
+        const sourceJump = sectionJump(sourceSection, "Source", "section-source");
+        jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
+        body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);
         const journey = el("ol", "journey request-context-timeline");
@@ -6549,6 +6570,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 responseList = el("ol", "journey reader-response-list");
                 responseSection.body.append(responseList);
                 sourceSection.element.before(responseSection.element);
+                sourceJump.before(sectionJump(responseSection, "Reply", "section-reply"));
             }
             const responseName = (isSelected ? "Response" : group.relation === "preceding" ? "Earlier linked response" : "Following linked response")
                 + (position?.total > 1 ? " " + (position.index + 1) : "");
@@ -6821,22 +6843,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 && !(entry.recordKind === "tool" && countedIds.has(entry.actionId))) continue;
             insertEntry(entry);
         }
-        const jumps = el("nav", "reader-section-jumps");
-        jumps.setAttribute("aria-label", "In this interaction");
-        for (const [section, label] of [[promptSection, "Prompt"], [activitySection, "Activity"],
-            [responseSection, "Reply"], [sourceSection, "Source"]]) {
-            if (!section) continue;
-            jumps.append(button(label, () => {
-                if (!currentReader()) return;
-                if (!section.isOpen()) section.apply(true, false);
-                if (section === promptSection) textAccess.revealPrompt(section.body.querySelector(".full-text"));
-                const heading = section.element.querySelector("h2");
-                heading.tabIndex = -1;
-                heading.focus({ preventScroll: true });
-                contextBody.scrollTop += heading.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 8;
-            }, "quiet"));
-        }
-        body.prepend(jumps);
         for (const { scenarioId, relation, host } of responseHosts) {
             if (relation === "selected") sourceSection.element.before(host);
             else {
