@@ -26,9 +26,13 @@ Zero and unavailable are different.
 ## Evidence and membership
 
 Named drafts are editable local selections, not prepared reports or saved
-artifacts. The Copilot picker binds them to the retained store, source
-configuration and access generation; it stores membership references, not
-chat text. Prepare checks the exact draft identity, revision and Selected IDs
+artifacts. The Copilot picker binds them to the retained store and, for an
+approved source, its database identity, configured locations and selected
+GitHub account. Without a configured source, a draft belongs to the current
+local WIRE sign-in. Restarting retires access leases, not draft ownership.
+Unverified configured accounts and older generation-only partitions are not
+adopted by guessing. The picker stores membership references, not chat text.
+Prepare checks the exact draft identity, revision and Selected IDs
 against the same state used to build the preview. Later draft edits do not
 modify that preview, any saved files, or the interaction itself.
 

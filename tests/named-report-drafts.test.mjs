@@ -4,6 +4,73 @@ import { privateFixture, fixture } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { editNamedDrafts, namedDraftCatalog, assertNamedSelection } from "../lib/named-report-drafts.mjs";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { createProfileSource, profileProjectId } from "./source-profile-fixture.mjs";
+
+async function runWriter(context, run) {
+    const access = await createCopilotRuntimeAccess(context);
+    const runtime = await startServer(context, createExportController(context), { port: 0, access, collector: { timers: false } });
+    try {
+        const base = new URL(runtime.url).origin, headers = { Origin: base, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
+        const post = async (route, body = {}, status = 200) => {
+            const response = await fetch(base + route, { method: "POST", headers, body: JSON.stringify(body) });
+            const value = await response.json();
+            assert.equal(response.status, status, value.error);
+            return value;
+        };
+        headers["X-Board-Capability"] = (await post("/api/session")).capability;
+        return await run(post);
+    } finally { await runtime.close(); await access.close(); }
+}
+
+test("a fresh authorized runtime on the same store can reopen the same named draft", async t => {
+    const { context } = await privateFixture(t, [fixture("x")]);
+    const first = await runWriter(context, async post => {
+        const catalog = await post("/api/report-drafts/list");
+        return (await post("/api/report-drafts/edit", { expected: catalog.version, scenarioId: "x", name: "Notebook", included: true })).catalog;
+    });
+    const reopened = await runWriter(context, post => post("/api/report-drafts/list"));
+    assert.deepEqual(reopened.drafts, first.drafts);
+});
+
+test("drafts survive restart for their approved source and account, not another account or copied source", async t => {
+    const cleanups = [];
+    const { context, root } = await privateFixture({ after: work => cleanups.push(work) }, [fixture("x"), fixture("y")]);
+    const a = await createProfileSource(root), otherRoot = path.join(root, "other");
+    await mkdir(otherRoot); const b = await createProfileSource(otherRoot);
+    t.after(async () => { a.db.close(); b.db.close(); for (const cleanup of cleanups.reverse()) await cleanup(); });
+    const configDir = path.join(context.dataDir, "collector"); await mkdir(configDir, { recursive: true });
+    const use = source => writeFile(path.join(configDir, "config.json"), JSON.stringify({ schemaVersion: 1, approved: true,
+        approvedAt: "2026-10-01T12:00:00.000Z", appDbPath: source.appDbPath, sessionRoot: source.sessionRoot,
+        enabled: false, windowDays: 30, pollSeconds: 60 }));
+    const list = post => post("/api/report-drafts/list");
+    const selectAccount = id => a.db.prepare("UPDATE projects SET github_account_id=? WHERE id=?").run(id, profileProjectId);
+    await use(a);
+    const first = await runWriter(context, async post => {
+        let catalog = await list(post);
+        for (const [scenarioId, name] of [["x", "Notebook"], ["y", "Calendar"]]) {
+            ({ catalog } = await post("/api/report-drafts/edit", { expected: catalog.version, scenarioId, name, included: true }));
+        }
+        return catalog;
+    });
+    assert.deepEqual(first.drafts.map(d => [d.name, d.scenarioIds]), [["Notebook", ["x"]], ["Calendar", ["y"]]]);
+    await runWriter(context, async post => {
+        assert.deepEqual((await list(post)).drafts, first.drafts);
+        selectAccount("default");
+        assert.deepEqual((await list(post)).drafts, []);
+        await post("/api/report-drafts/edit", { expected: first.version, scenarioId: "x", id: first.drafts[0].id, included: false }, 409);
+        selectAccount("workspace");
+        assert.deepEqual((await list(post)).drafts, first.drafts);
+    });
+    await use(b);
+    assert.deepEqual((await runWriter(context, list)).drafts, []);
+    await use(a);
+    assert.deepEqual((await runWriter(context, list)).drafts, first.drafts);
+});
 
 test("one interaction can belong to two drafts; removal is local to one draft after reload", async t => {
     const { context } = await privateFixture(t, [fixture("x"), fixture("y")]);
