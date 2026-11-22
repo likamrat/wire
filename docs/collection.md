@@ -601,6 +601,9 @@ For a newly verified human prompt, the assistant request may exceed the
 individual-record limit because of reply text alone. WIRE screens the full
 original, keeps only the bounded request, and requires an app-mapped start.
 The prompt, call and completion still have to qualify independently.
+A start that records only its logical tool name (such as `fetch`) can qualify
+when the app identifies that exact start as Work IQ. The name alone cannot
+qualify a call or override a conflicting recorded server.
 
 An unrelated external-tool request or canvas record can be classified when
 its matching close is the next original event. The supported forms carry no

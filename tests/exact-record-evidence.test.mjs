@@ -744,6 +744,22 @@ test("privacy and deletion veto the entire candidate, not just its displayed tex
     ]) assert.equal(decide(reads, { state: { deletion } }).excluded, 1);
 });
 
+test("a logical-only start needs its own mapping and independently unique, undeleted original chain", async () => {
+    const bare = change(s, { toolName: "fetch", mcpToolName: undefined, mcpServerName: undefined });
+    const rows = [p, a, bare, e];
+    const reads = await parts(encode([boot, ...rows]));
+    const calls = options => decide(reads, options).records.flatMap(r => r.toolCalls);
+    assert.deepEqual(calls().map(c => [c.tool, c.startEventId, c.completionEventId]), [["workiq-fetch", s.id, e.id]]);
+    assert.deepEqual(calls({ source: { ...source, managedWorkIqEventIds: ["some-other-start"] } }), []);
+    assert.deepEqual(calls({ state: { deletion: { contextCalls: [callIdentity(sessionId, s.data.toolCallId)] } } }), []);
+    const rival = { ...a, id: "another-claim", timestamp: "2026-11-02T00:00:00.000Z",
+        data: { ...a.data, originatingMessageId: "another-origin", messageId: "another-message", turnId: "another-turn" } };
+    for (const conflict of [[...rows, rival], rows.with(2, change(bare, { mcpServerName: "other" })),
+        rows.with(2, change(bare, { mcpToolName: "ask" })), rows.with(2, change(bare, { arguments: { password: "invented-value" } }))]) {
+        assert.deepEqual((await scan(conflict)).records, []);
+    }
+});
+
 test("the selected interval must contain every dependency; only starts in it count", async () => {
     const before = "2026-10-31T23:59:59.999Z", after = "2026-11-02T00:00:00.000Z";
     for (const events of [[{ ...p, timestamp: before }, a, s, e], [p, a, s, { ...e, timestamp: after }]]) {

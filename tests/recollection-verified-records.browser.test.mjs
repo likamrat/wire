@@ -42,7 +42,7 @@ const receiptFor = ({ operationId, receiptToken }) => ({ operationId, receiptTok
 const confirm = p => ({ mode, operationId: p.operationId, confirmed: true });
 const ok = r => { assert.equal(r.status, 200, r.body.error); return r.body; };
 async function fixture(t, { preservation = false, opaque = false, large = false, disjointTurns = false, causalHooks = false, anchored = false,
-    longRequest = false, denseHook = false, priorNotice = false, taskPrompt } = {}) {
+    longRequest = false, denseHook = false, priorNotice = false, logicalOnly = false, taskPrompt } = {}) {
     // WIRE forbids a store under the maintained source tree. Own one new,
     // disposable sibling directory, never a configured source or an existing store.
     const root = path.resolve("..", `.wire-verified-records-${randomUUID()}`);
@@ -156,7 +156,13 @@ async function fixture(t, { preservation = false, opaque = false, large = false,
         if (taskPrompt === "template-private") context.data.content += " api_key=invented-template-secret";
         if (taskPrompt === "template-budget") context.data.metadata.variables.invented.label = "z".repeat(18 * 1024);
     }
-    const originalBytes = encode([...knownOriginals, ...chain(day, "unknown", 20, undefined),
+    const unknown = chain(day, "unknown", 20, undefined);
+    if (logicalOnly) {
+        unknown[2].data.toolName = "fetch";
+        delete unknown[2].data.mcpToolName;
+        delete unknown[2].data.mcpServerName;
+    }
+    const originalBytes = encode([...knownOriginals, ...unknown,
         ...chain(day, "unfinished", 30, undefined, { finish: false }), ...chain(outside, "unselected", 10, true)]);
     await appendFile(file, causalHooks ? originalBytes.replace('"totalNanoAiu":123', '"totalNanoAiu": 123.0') : originalBytes);
     if (preservation) {
@@ -304,7 +310,7 @@ test("exact preview can finish validating a dense, disjoint hook without changin
 });
 
 test("history compatibility: late recovery and ordinary collection agree on the same mixed-format originals", async t => {
-    const f = await fixture(t, { denseHook: true, disjointTurns: true, causalHooks: true, longRequest: true });
+    const f = await fixture(t, { denseHook: true, disjointTurns: true, causalHooks: true, longRequest: true, logicalOnly: true });
     const ordinaryContext = { dataDir: path.join(path.dirname(f.context.dataDir), "ordinary-store") };
     const ordinary = await createCollector(ordinaryContext, { timers: false });
     try {
@@ -331,7 +337,15 @@ test("history compatibility: late recovery and ordinary collection agree on the 
     assert.deepEqual(unfinished?.slice(-2), [null, "unknown"]);
 
     await f.start();
-    ok(await f.api("/api/collection/now", {}));
+    const before = await readFile(f.checkpoint);
+    const saved = JSON.parse(before);
+    assert.ok(!saved.events.some(e => e.id === "start-unknown"));
+    assert.ok(!saved.events.some(e => e.id === "end-unknown"));
+    assert.ok(saved.events.some(e => e.id === "answer-unknown" && e.data.wireToolRequestIds.includes("call-unknown")));
+    const refreshed = ok(await f.api("/api/collection/now", {}));
+    assert.equal(refreshed.metrics.lastBytesRead, 0);
+    assert.deepEqual(refreshed.lastCheck.changes, { added: 0, updated: 0 });
+    assert.deepEqual(await readFile(f.checkpoint), before);
     assert.deepEqual(facts(await loadBoardState(f.context)), []);
     const review = ok(await f.post("preview", { ...f.scope, mode }));
     assertReview(f, review);
@@ -340,6 +354,12 @@ test("history compatibility: late recovery and ordinary collection agree on the 
     await f.start();
     assert.deepEqual(ok(await f.post("status", receiptFor(review))), receipt);
     assert.deepEqual(facts(await loadBoardState(f.context)), expected);
+    await appendFile(f.file, encode(chain(f.day, "following", 90, true, { literal: true })));
+    ok(await f.api("/api/collection/now", {}));
+    assert.deepEqual(facts(await loadBoardState(f.context)), [
+        ["call-following", "prompt-following", "user", "start-following", "end-following", "succeeded"], ...expected,
+    ]);
+    assert.deepEqual(ok(await f.post("status", receiptFor(review))), receipt);
 });
 
 test("verified preview keeps the source, parent task, interaction and originating message distinct", async t => {
