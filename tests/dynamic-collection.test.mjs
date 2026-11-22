@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, open, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, open, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -195,6 +195,49 @@ test("managed Work IQ uses event-bound app identity, including newly discovered 
     assert.equal(unchanged.metrics.lastBytesRead, 0);
     assert.deepEqual((await loadBoardState(app.context)).evidence, secondState.evidence);
     assert.deepEqual(await readFile(configFile), configBefore);
+});
+
+test("a managed mapping published during a read cannot strand the start behind a committed cursor", async t => {
+    const app = await installation(t), id = app.session();
+    app.db.exec(managedSchema);
+    const file = await logFor(app, id, [event("user.message", { source: "user", content: "Invented baseline." }), call("prior")]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const indexPath = path.join(app.context.dataDir, "collector", "index.json");
+    const indexBefore = JSON.parse(await readFile(indexPath));
+    const checkpoint = path.join(path.dirname(indexPath), indexBefore.fingerprint, id + ".json");
+    const before = await readFile(checkpoint), stateBefore = await loadBoardState(app.context);
+    const start = managedCall("racing"), end = event("tool.execution_complete", { toolCallId: "racing", success: false });
+    await appendFile(file, [start, end].map(e => JSON.stringify(e) + "\n").join(""));
+    // The app supplies the event mapping after the live-tail lookup, before cursor publication.
+    const readdir = fs.readdir;
+    let published = false;
+    const change = t.mock.method(fs, "readdir", async (...args) => {
+        if (!published && path.basename(args[0]) === BACKFILL_DIRECTORY) {
+            app.db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)").run(id, start.id, "Work IQ");
+            published = true;
+        }
+        return readdir(...args);
+    });
+    syncBuiltinESMExports();
+    try {
+        await assert.rejects(collector.collectNow(), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "membership" });
+    } finally { change.mock.restore(); syncBuiltinESMExports(); }
+    assert.equal(published, true);
+    assert.deepEqual(await readFile(checkpoint), before);
+    assert.deepEqual((await loadBoardState(app.context)).evidence, stateBefore.evidence);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, JSON.stringify(call("following")) + "\n");
+    await collector.collectNow();
+    const calls = (await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls);
+    assert.deepEqual(calls.map(c => c.toolCallId).sort(), ["following", "prior", "racing"]);
+    const recovered = calls.find(c => c.toolCallId === "racing");
+    assert.deepEqual([recovered.startEventId, recovered.completionEventId, recovered.reportedOutcome], [start.id, end.id, "failed"]);
+    assert.equal(JSON.parse(await readFile(checkpoint)).cursor.offset, (await stat(file)).size);
+    assert.equal((await collector.collectNow()).metrics.lastBytesRead, 0);
 });
 
 test("new managed identity does not reset consumed cursors; explicit recollection can recover the skipped call", async t => {
