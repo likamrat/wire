@@ -273,7 +273,8 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-content .settings-advanced>a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
 #settingsGeneralBack {margin-bottom:var(--space-sm)}
 #settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
-.general-appearance {border-top:1px solid var(--rule);padding-block:1.25rem .85rem}
+.settings-view .app-version-card + .settings-task-row {border-top:0;border-bottom:1px solid var(--rule)}
+.general-appearance {padding-block:1.25rem .85rem}
 .settings-view .general-appearance h3,.settings-preference-link strong {margin:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;min-height:44px;
  padding:.65rem 0;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
