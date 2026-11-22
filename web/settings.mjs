@@ -2,6 +2,13 @@ import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
 import { currentPaletteSwatches, paletteGallery, palettePreview } from "./palette-gallery.mjs";
 import { uxIcons } from "./ux-icons.mjs";
+import { defaultField } from "./page-defaults.mjs";
+
+function pageSettings(id, title, purpose, fields) {
+    return `<section class="settings-section" data-settings-section="${id}" aria-labelledby="${id}SettingsTitle" hidden>
+      <h2 id="${id}SettingsTitle" tabindex="-1">${title}</h2><p class="settings-intro">${purpose}</p>
+      ${fields.map(defaultField).join("")}</section>`;
+}
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -24,6 +31,7 @@ export const settingsMarkup = `
   <button id="settingsGeneralBack" type="button" class="quiet" hidden>${uxIcons.back} Back to General</button>
   <section class="settings-section" data-settings-section="general" aria-labelledby="generalTitle" hidden>
     <h2 id="generalTitle" tabindex="-1">General</h2>
+    <p class="settings-intro">Check WIRE’s update status and review your current theme and time zone.</p>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
       </div>
@@ -51,6 +59,7 @@ export const settingsMarkup = `
   </section>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
+    <p class="settings-intro">Review what WIRE keeps on this device and what you can remove.</p>
     <section id="assessmentSetupTitle" class="settings-reply-row" aria-label="Recorded replies" tabindex="-1">
       <h3 class="settings-reply-fallback">Save Copilot replies locally</h3>
       <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
@@ -70,6 +79,7 @@ export const settingsMarkup = `
   </section>
   <section class="settings-section" data-settings-section="themes" aria-labelledby="themesTitle" hidden>
     <h2 id="themesTitle" tabindex="-1">Themes</h2>
+    <p class="settings-intro">Choose the appearance and color palette for this browser.</p>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
       <h3>Appearance mode</h3><span id="settingsModeLabel"></span>
     </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
@@ -77,8 +87,9 @@ export const settingsMarkup = `
   </section>
   <section class="settings-section" data-settings-section="regional" aria-labelledby="regionalTitle" hidden>
     <h2 id="regionalTitle" tabindex="-1">Regional</h2>
+    <p class="settings-intro">Choose how WIRE displays dates and groups activity into days.</p>
     <div class="settings-field settings-display-field display-time-field">
-      <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
+      <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3><p>Saved reports keep their original time zone.</p></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
       <p id="displayTimeHelp" class="settings-help" hidden></p>
       <p id="displayTimeEffective" class="settings-help" role="status" hidden></p>
@@ -87,6 +98,7 @@ export const settingsMarkup = `
   <div id="collectionForm">
     <section class="settings-section" data-settings-section="source-access" aria-labelledby="sourceAccessTitle" hidden>
       <h2 id="sourceAccessTitle" tabindex="-1">Source access</h2>
+      <p class="settings-intro">Review which local files WIRE may read before approving or changing a source.</p>
       <section id="connectionSource" class="settings-group" aria-labelledby="connectionSourceTitle">
       <div class="settings-group-heading"><h3 id="connectionSourceTitle">GitHub Copilot app</h3></div>
       <div id="unapprovedConnection" hidden>
@@ -118,6 +130,7 @@ export const settingsMarkup = `
     </section>
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
       <h2 id="connectionTitle" tabindex="-1">Collection</h2>
+      <p class="settings-intro">Choose which approved sources WIRE reads, how much history to include, and how often to check.</p>
       <div class="settings-task-row settings-collection-state">
         <div class="settings-row-copy"><h3 id="automaticCollectionTitle">Automatic collection</h3><p id="connectionStatus" class="connection-status">Checking connection</p><p id="connectionSourceHelp" class="settings-help" hidden></p></div>
         <div id="approvedConnection" hidden><div class="settings-actions"><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" class="button-link quiet" href="/settings?section=source-access&setting=source-paths" data-settings-link hidden>View source ${uxIcons.forward}</a></div></div>
@@ -141,8 +154,13 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
+  ${pageSettings("analyze", "Analyze", "Choose how much saved activity you see when you first open Analyze.", ["analyzeRange"])}
+  ${pageSettings("trends", "Trends", "Choose which chart you see first when you open Trends.", ["trendChart"])}
+  ${pageSettings("reports", "Reports", "Set the starting choices for new reports without changing existing drafts or saved files.", ["reportFormats", "reportPeriod"])}
+  ${pageSettings("compare", "Compare", "Choose the time span WIRE uses when you start a new comparison.", ["compareDays"])}
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
     <h2 id="troubleshootingTitle" tabindex="-1">Help</h2>
+    <p class="settings-intro">Find out what WIRE’s counts and results mean, or why saved text may be missing from Search.</p>
     <section class="settings-evidence-guide" aria-labelledby="evidenceHelpTitle"><h3 id="evidenceHelpTitle">Reading your activity</h3>
       <details id="activityCountHelp" class="settings-advanced"><summary>What do the counts include?</summary><p>Counts include matching saved activity across all pages. A request group links calls to a recorded Copilot message. One group can contain several calls; Insights can include the rest of that interaction.</p></details>
       <details id="activityResultHelp" class="settings-advanced"><summary>What does a successful result mean?</summary><p>The tool reported success. That does not tell you whether the answer was correct or the whole task finished. Graph requests inside hosted Work IQ are not visible in local chat logs.</p></details>

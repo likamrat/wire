@@ -236,7 +236,7 @@ test("every registered setting and old route opens its exact live destination wi
         await page.locator("#settingsSearch").fill(entry.title);
         await page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`).click();
         let target = entry.id === "source" ? "editSource" : entry.id === "source-paths" ? "approvedSourceTitle" : entry.target;
-        if (["displayTimeZone", "collectionWindow", "collectionCadence"].includes(target)) target += "-control";
+        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
         if (entry.id === "save-preferences") {
             await expect(page.locator("#saveCollection")).toBeDisabled();
             assert.equal(await page.locator("#saveCollection").evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true);

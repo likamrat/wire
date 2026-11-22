@@ -81,6 +81,7 @@ import { activityPage } from "./activity-page.mjs";
 import { createSavedFilePreview, createPreparedFileInspection } from "./saved-file-preview.mjs";
 import { mountFirstConnection } from "./first-connection.mjs";
 import { mountAppUpdate } from "./app-update.mjs";
+import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
 
 function factories() {
@@ -89,6 +90,8 @@ function factories() {
     return {
         timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
+        createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
+        bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),
         mountAccountSettings: options => mountAccountSettingsPresentation({
             ...options, createNativeConnectionState,
             mountEnrollment: options => mountMicrosoftEnrollment({ ...options, createState: createMicrosoftEnrollmentState }),

@@ -807,6 +807,60 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.deepEqual(errors, []);
 });
 
+test("Reports starts with the configured period and files; changing defaults does not replace a frozen draft", { timeout: 60000 }, async t => {
+    const source = records().slice(0, 2);
+    for (const [index, record] of source.entries()) {
+        record.toolCalls[0].startedAt = record.capturedAt = index ? "2026-11-01T19:00:00Z" : "2026-11-08T19:00:00Z";
+    }
+    const { page, runtime, context, requests, errors } = await setup(t, {
+        source, now: "2026-11-20T19:00:00Z", route: "settings?section=reports",
+    });
+    await selectActivityOption(page, "defaultReportPeriod", "14");
+    await page.locator("#defaultFormat-markdown").check();
+    await page.locator("#defaultFormat-json").check();
+    await page.locator("#defaultFormat-html").uncheck();
+    await navigateMain(page, "reports");
+    const range = page.locator("#reportPeriodChoices [aria-pressed=true]");
+    await expect(range).toHaveText("Last 14 days");
+    await expect(page.locator("#formatOptions input:checked")).toHaveCount(2);
+    await expect(page.locator("#formatOptions input[value=markdown]")).toBeChecked();
+    await expect(page.locator("#formatOptions input[value=json]")).toBeChecked();
+    await expect(page.locator('[name=promptMode][value=masked]')).toBeChecked();
+    const effects = () => requests.filter(({ path }) => ["/api/preview", "/api/export"].includes(path));
+    assert.deepEqual(effects(), []);
+    const settings = await page.context().newPage();
+    await settings.goto(runtime.url + "settings?section=reports");
+    await expect(settings.locator("#defaultReportPeriod")).toHaveValue("14");
+    await expect(settings.locator("#defaultFormat-markdown")).toBeChecked();
+    await selectActivityOption(settings, "defaultReportPeriod", "30");
+    await settings.locator("#defaultFormat-html").check();
+    await settings.locator("#defaultFormat-markdown").uncheck();
+    await settings.locator("#defaultFormat-json").uncheck();
+    await settings.close();
+    const preview = await prepare(page, "all");
+    assert.deepEqual(preview.snapshot.dateSelection, { range: "14", from: "2026-11-07", to: "2026-11-20" });
+    assert.equal(preview.records.length, 1);
+    assert.ok(preview.records[0].prompts.some(copy => copy.text?.includes("REPORT_FIRST_0")));
+    assert.deepEqual([...preview.formats].sort(), ["json", "markdown"]);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Resume preview", exact: true }).click();
+    await expect(range).toHaveText("Last 14 days");
+    await expect(page.getByRole("button", { name: /^Files to save: .*Markdown/ })).toBeVisible();
+    assert.deepEqual(effects().map(request => request.path), ["/api/preview"]);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const [saved] = (await loadBoardState(context)).exports;
+    assert.deepEqual(Object.keys(saved.files).sort(), ["coverage-and-redaction-manifest.json", "product-report.json", "product-report.md"]);
+    for (const name of ["product-report.json", "product-report.md"]) assert.equal(await readFile(saved.files[name], "utf8"), preview.files[name]);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await expect(range).toHaveText("Last 30 days");
+    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    await page.reload();
+    await expect(range).toHaveText("Last 30 days");
+    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    assert.deepEqual(errors, []);
+});
+
 test("Files to save changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
     const chooser = page.getByRole("dialog", { name: "Files to save", exact: true });
@@ -1421,10 +1475,17 @@ test("one-chat and explicit Selected entry keep their complete scope and context
         record.sourceSessionId = index < 3 ? "first-chat" : "second-chat";
         record.sourceSessionName = index < 3 ? "First chat" : "Second chat";
     });
-    const { page, requests, errors } = await setup(t, { source, route: "#analyze?session=first-chat" });
+    source[0].toolCalls[0].startedAt = source[0].capturedAt = "2001-01-01T12:00:00Z";
+    const { page, runtime, requests, errors } = await setup(t, { source, route: "settings?section=reports" });
+    await selectActivityOption(page, "defaultReportPeriod", "30");
+    await page.locator("#defaultFormat-json").check();
+    await page.locator("#defaultFormat-html").uncheck();
+    await page.goto(runtime.url + "#analyze?session=first-chat");
     await page.locator("#createSessionReport").click();
     const chat = await prepare(page, "all");
     assert.equal(chat.records.length, 3);
+    assert.equal(chat.snapshot.dateSelection.range, "capture");
+    assert.deepEqual(chat.formats, ["html"]);
     await page.getByRole("link", { name: "Back to Analyze", exact: true }).click();
     await expect(page.locator("#chatFilter")).toHaveValue("first-chat");
     await page.locator('[data-nav="reports"]').click();

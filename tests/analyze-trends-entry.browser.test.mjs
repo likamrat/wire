@@ -8,8 +8,9 @@ import { currentStatePayload } from "../lib/server.mjs";
 import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildTrends } from "../lib/trends.mjs";
+import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { assessmentOverview, cachedAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, fulfillFixtureUpdateStatus, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
+import { fixture, UNBOUND_FIXTURE_BOOTSTRAP, automaticScoreOffSummary, fulfillFixtureUpdateStatus, navigateSettings, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const visiblePanel = page => page.locator(".trends-panel:visible");
@@ -53,6 +54,7 @@ async function setup(t, frontend, records) {
             if (p === "/api/snapshot") return json({ ...await currentStatePayload({ sessionId: "memory-only" }, { ...state, revision }, body), collection: { ...collection, revision } });
             if (p === "/api/collection/status") return json({ ...collection, revision });
             if (p === "/api/trends") { reads.push(body); return json(buildTrends({ ...state, revision }, body)); }
+            if (p === "/api/period-comparison") return json(buildPeriodComparison({ ...state, revision }, body));
             if (p === "/api/assessment/overview" || p === "/api/assessment/detail") {
                 const model = cachedAssessmentModel({ ...state, revision });
                 return json({ schemaVersion: 1, basis: model.basis, data: p.endsWith("/overview")
@@ -77,6 +79,94 @@ function records() {
         return r;
     });
 }
+async function pageEntryFixture(t) {
+    const app = await setup(t, "react", records());
+    await app.page.addInitScript(() => {
+        if (localStorage.getItem("wire.page-defaults.v1.analyzeRange") !== null) return;
+        for (const [key, value] of Object.entries({ analyzeRange: "30", trendChart: "services", compareDays: "14" }))
+            localStorage.setItem("wire.page-defaults.v1." + key, JSON.stringify(value));
+        localStorage.setItem("workiq-evidence.time-zone", "America/New_York");
+    });
+    // Already Oct 1 in the display zone, still Sep 30 in the device zone.
+    await app.page.clock.setFixedTime(new Date("2026-10-01T04:30:00Z"));
+    return app;
+}
+test("page defaults: direct Analyze and sidebar Trends use real scopes; selections, handoffs and reload win", async t => {
+    const { page, url, reads } = await pageEntryFixture(t);
+    await page.goto(url + "/"); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("30");
+    await expect(page.locator("#fromFilter")).toHaveValue("2026-09-02");
+    await expect(page.locator("#toFilter")).toHaveValue("2026-10-01");
+    await page.locator("nav [data-nav=trends]").click();
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
+    await expect(page).toHaveURL(url + "/trends?measure=services");
+    const index = page.getByRole("navigation", { name: "Trend measures" });
+    await index.getByRole("button", { name: "Prompt authors", exact: true }).click();
+    await page.reload(); await expect(visiblePanel(page)).toHaveAttribute("data-family", "authors");
+    await page.goto(url + "/?authors=user"); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("capture");
+    const count = reads.length;
+    await page.locator("#analyze-trend-tools").click();
+    await page.getByRole("button", { name: "Open trend", exact: true }).click();
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
+    assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user" }]);
+    await page.getByRole("button", { name: "Back to Analyze" }).click();
+    await expect(page).toHaveURL(url + "/?authors=user");
+    await page.goto(url + "/trends");
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
+    await page.locator("nav [data-nav=analyze]").click(); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("30");
+    await selectActivityOption(page, "dateFilter", "capture");
+    await page.reload(); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("capture");
+});
+test("page defaults: direct and sidebar Compare start on complete civil days; Back and explicit pairs win", async t => {
+    const { page, url } = await pageEntryFixture(t);
+    const pair = days => page.locator(`[data-comparison-range="${days}"]`);
+    async function check14() {
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        await expect(pair("14")).toHaveAttribute("aria-pressed", "true");
+        const p = new URL(page.url()).searchParams;
+        assert.deepEqual(["aFrom", "aTo", "bFrom", "bTo"].map(key => p.get(key)),
+            ["2026-09-03", "2026-09-16", "2026-09-17", "2026-09-30"]);
+    }
+    await page.goto(url + "/trends?section=guide");
+    await expect(page.locator(".trends-guide")).toBeVisible();
+    await page.locator("#comparePeriods").click(); await check14();
+    await pair("7").click();
+    await expect(pair("7")).toHaveAttribute("aria-pressed", "true");
+    await page.reload(); await expect(pair("7")).toHaveAttribute("aria-pressed", "true");
+    await page.goBack(); await check14();
+    await page.goBack(); await expect(page.locator(".trends-guide")).toBeVisible();
+    await page.goto(url + "/compare"); await check14();
+    await page.goBack(); await expect(page.locator(".trends-guide")).toBeVisible();
+    const bounded = url + `/trends?measure=tools&period=custom&from=${day}&to=${day}`;
+    await page.goto(bounded);
+    await page.locator("#trendsComparePeriods").click();
+    await page.getByRole("button", { name: "Open comparison" }).click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    assert.equal(new URL(page.url()).searchParams.get("bFrom"), day);
+    assert.equal(new URL(page.url()).searchParams.get("bTo"), day);
+    await page.getByRole("button", { name: "Back to Trends" }).click();
+    await expect(page).toHaveURL(bounded);
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
+});
+test("page defaults: changing a preference updates the next untouched sidebar entry, not browser Back", async t => {
+    const { page, url } = await pageEntryFixture(t);
+    await page.goto(url + "/trends");
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
+    const original = page.url();
+    await page.locator("nav [data-nav=settings]").click();
+    await navigateSettings(page, "trends");
+    await selectActivityOption(page, "defaultTrendChart", "models");
+    const sidebar = page.locator("nav [data-nav=trends]");
+    await expect(sidebar).toHaveAttribute("href", "/trends?measure=models");
+    await sidebar.click();
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "models");
+    await page.goBack(); await page.goBack(); await page.goBack();
+    await expect(page).toHaveURL(original);
+    await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
+});
 for (const frontend of ["react", "bundled"]) {
     test(`${frontend}: compatible widget scope reaches exact calls; Back and Forward retain the widget and chosen trend`, async t => {
         const { page, reads, url } = await setup(t, frontend, records());

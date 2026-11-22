@@ -236,7 +236,8 @@ For a two-period comparison or a saved copy, use
 
 Choose **Compare** in the sliding left sidebar. A fresh comparison
 shows all eligible retained activity for the last seven complete days versus the
-preceding seven. Analyze keeps its own filters and reading state.
+preceding seven unless you chose a different period in **Settings > Compare**.
+Analyze keeps its own filters and reading state.
 
 Choose 14 or 30 days, or open **Custom dates** for independent inclusive ranges.
 Use the compact activity choice for a starting point and **More options** for
@@ -367,6 +368,19 @@ Below updates, **Current theme** shows your palette name, Light or Dark mode,
 and a preview with its colors.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
 **Regional**. **Back to General** returns to the shortcut with your current choice.
+
+Under **Page settings**, choose how each page starts in this browser:
+
+| Category | What you can change |
+| --- | --- |
+| Analyze | Open on All dates, Last 7 days or Last 30 days. This filters activity already collected. |
+| Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
+| Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
+| Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
+
+Defaults do not rewrite a view you return to, an existing draft, or a saved
+report. If the browser cannot save a preference, Settings tells you that the
+choice applies only to the current panel.
 
 Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network

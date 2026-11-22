@@ -37,8 +37,11 @@ If a returned status and its diagnostic disagree, both remain visible. Recorded
 error evidence on either side qualifies for **Errors & failures**; a disagreement
 without an error does not. The tool's recorded completion stays unchanged.
 
-New reports default to **Last 7 days**, including today in the display time
-zone. **Last 14 days**, **Last 30 days** and **Custom dates** are also available.
+New reports start with **Last 7 days** (including today in the display time zone)
+and HTML unless you choose a different period or file formats in **Settings >
+Reports**. You can change either in the draft. Opening a saved report or
+resuming a draft does not apply new defaults to it. **Last 14 days**, **Last
+30 days** and **Custom dates** are also available.
 Custom dates opens the calendar directly; Cancel leaves the accepted dates
 unchanged. Undated activity is not assigned to a dated period.
 
@@ -264,7 +267,8 @@ masking cannot recognize every confidential detail.
 Open **Compare** in the left sidebar. It starts with all eligible
 retained activity, independently of Analyze filters. The
 first result compares the last seven complete days, ending yesterday, with
-the preceding seven days in the display time zone.
+the preceding seven days in the display time zone. Set another starting period
+under **Settings > Compare**.
 
 ![Compare with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
 
