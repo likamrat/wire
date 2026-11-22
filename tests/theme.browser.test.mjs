@@ -126,7 +126,21 @@ async function switchPosition(page, theme) {
 // Measure computed colors against their composed backgrounds, not source hex proxies.
 async function inspect(page) {
     const result = await page.evaluate(() => {
-        function rgba(value) { return value.match(/[\d.]+/g).map(Number); }
+        // Decode the browser's computed color, including normalized color(srgb ...)
+        // from color-mix(), onto the same 0–255 scale as rgb().
+        const pixel = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        const colors = new Map();
+        function rgba(value) {
+            if (!colors.has(value)) {
+                if (!CSS.supports("color", value)) throw new Error("Unsupported computed paint: " + value);
+                pixel.clearRect(0, 0, 1, 1);
+                pixel.fillStyle = value;
+                pixel.fillRect(0, 0, 1, 1);
+                const [r, g, b, a] = pixel.getImageData(0, 0, 1, 1).data;
+                colors.set(value, [r, g, b, a / 255]);
+            }
+            return colors.get(value);
+        }
         function background(node) {
             if (!node) return [255, 255, 255];
             const color = rgba(getComputedStyle(node).backgroundColor), alpha = color[3] ?? 1;
@@ -141,7 +155,7 @@ async function inspect(page) {
             const x = luminance(a), y = luminance(b);
             return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
         }
-        const ratios = [], failures = [], overflow = [];
+        const ratios = [], failures = [], overflow = [], cardOutcomeRatios = {};
         for (const node of document.body.querySelectorAll("*")) {
             if (!node.checkVisibility({ visibilityProperty: true }) || node.closest(".visually-hidden, .skip-link") || node.tagName === "OPTION") continue;
             const box = node.getBoundingClientRect();
@@ -158,6 +172,7 @@ async function inspect(page) {
             const ratio = contrast(rgba(style.color), bg);
             const label = node.id || node.className || node.tagName;
             ratios.push(ratio);
+            if (node.classList.contains("card-outcome-label")) cardOutcomeRatios[node.textContent.trim()] = ratio;
             if (ratio < 4.5) failures.push({ label, ratio, color: style.color, bg });
             if (node.matches("input[placeholder]")) {
                 const placeholderRatio = contrast(rgba(getComputedStyle(node, "::placeholder").color), bg);
@@ -180,7 +195,15 @@ async function inspect(page) {
         });
         const controls = [...document.querySelectorAll("select,input:not([type=checkbox]):not([type=radio])")].filter((node) => node.checkVisibility()).map((node) => {
             const style = getComputedStyle(node);
-            return Math.min(contrast(rgba(style.borderTopColor), background(node)), contrast(rgba(style.borderTopColor), background(node.parentElement)));
+            const outside = background(node.parentElement);
+            let inside = background(node), edges = [rgba(style.borderTopColor)];
+            // Search paints its face and perimeter in padding-box and border-box layers.
+            if (style.backgroundClip === "padding-box, border-box" && style.backgroundImage.includes("linear-gradient")) {
+                const stops = style.backgroundImage.match(/(?:rgba?|color)\([^)]*\)/g)?.map(rgba);
+                if (!stops || stops.length < 4) throw new Error("Unrecognized layered control paint: " + node.id);
+                inside = stops[0]; edges = stops.slice(2);
+            }
+            return Math.min(...edges.flatMap(edge => [contrast(edge, inside), contrast(edge, outside)]));
         });
         const focus = [...document.querySelectorAll(":focus-visible")].filter((node) => node.checkVisibility()).map((node) => contrast(rgba(getComputedStyle(node).outlineColor), background(node.parentElement)));
         const toggle = document.querySelector("#themePreference");
@@ -192,7 +215,7 @@ async function inspect(page) {
             return contrast(rgba(getComputedStyle(icon).color), background(surface));
         }));
         const thumbContrast = contrast(background(thumb), background(track));
-        return { textMinimum: Math.min(...ratios), markMinimum: marks.length ? Math.min(...marks) : null, controlMinimum: controls.length ? Math.min(...controls) : null, focusMinimum: focus.length ? Math.min(...focus) : null, iconContrast, thumbContrast, failures, overflow };
+        return { textMinimum: Math.min(...ratios), cardOutcomeRatios, markMinimum: marks.length ? Math.min(...marks) : null, controlMinimum: controls.length ? Math.min(...controls) : null, focusMinimum: focus.length ? Math.min(...focus) : null, iconContrast, thumbContrast, failures, overflow };
     });
     assert.deepEqual(result.failures, [], "Visible text must reach 4.5:1");
     assert.deepEqual(result.overflow, [], "No clipped or horizontally overflowing elements");
