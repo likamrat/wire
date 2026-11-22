@@ -96,29 +96,41 @@ function compactCardRecords() {
     });
 }
 
-test("Analyze distinguishes grouped tool names and keeps each count with its tool", async t => {
+test("Analyze groups exact tool names and counts in static labels beside genuine reader links", async t => {
     const records = compactCardRecords();
-    const mixed = records[0], repeated = records[1];
+    const [mixed, repeated, single, example] = records;
     const long = ["workiq-call_function", "workiq-update_entity"];
     for (const [i, name] of long.entries()) mixed.toolCalls.push({
         ...mixed.toolCalls[0], tool: name, toolCallId: `long-${i}`, startEventId: `start-long-${i}`, completionEventId: `end-long-${i}`,
     });
     repeated.toolCalls.push({ ...repeated.toolCalls[0], toolCallId: "second-read", startEventId: "start-second-read", completionEventId: "end-second-read" });
+    const retrieve = records.flatMap(record => record.toolCalls).find(c => c.tool === "workiq-retrieve" && c.toolSucceeded);
+    example.userPrompt.text = "Find the latest studio move checklist and tell me which packing tasks are still open.";
+    example.toolCalls = [retrieve, retrieve, single.toolCalls[0]].map((call, i) => ({
+        ...call, toolCallId: `checklist-${i}`, startEventId: `checklist-start-${i}`, completionEventId: `checklist-end-${i}`,
+        startedAt: new Date(Date.parse(example.capturedAt) + i * 5000).toISOString(),
+        completedAt: new Date(Date.parse(example.capturedAt) + i * 5000 + call.durationMs).toISOString(),
+    }));
     const { page } = await setup(t, "react", records);
     const cards = page.locator("#activityList .activity-card");
     const report = process.env.WIRE_TOOL_GROUP_PROOFS;
     if (report) await mkdir(report, { recursive: true });
-    for (const [width, scale, theme] of [[1440, 1, "light"], [390, 2, "dark"]]) {
+    const card = cards.filter({ hasText: example.userPrompt.text });
+    const labels = card.getByRole("listitem");
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width, height: 900 }); await chooseTheme(page, theme);
         await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
-        const field = i => cards.nth(i).locator(".card-identity-field").filter({ has: page.locator(".card-tool-item") });
-        await expect(field(0).locator(".card-tool-name")).toHaveText([...long, "workiq-fetch", "workiq-retrieve"]);
+        await expect(cards.first().locator(".card-tool-name")).toHaveText([...long, "workiq-fetch", "workiq-retrieve"]);
+        await expect(labels).toHaveText(["workiq-retrieve (2 calls)", "workiq-fetch"]);
+        assert.ok(await cards.locator(".card-tool-item").evaluateAll(items => items.every(item =>
+            item.scrollWidth <= item.clientWidth && item.getBoundingClientRect().right <= item.closest("dd").getBoundingClientRect().right + 1)),
+        `${theme}/${width}: names and counts fit within the value column`);
         if (report) {
-            for (const [i, name] of ["multiple", "repeated", "single"].entries()) {
-                await field(i).screenshot({ path: path.join(report, `${name}-${width}.png`) });
+            for (const [i, name] of ["multiple", "repeated", "single", "checklist"].entries()) {
+                await cards.nth(i).screenshot({ path: path.join(report, `after-${name}-${theme}-${width}.png`) });
             }
-            await field(0).evaluate(n => n.scrollIntoView({ block: "center" }));
-            await page.screenshot({ path: path.join(report, `screen-${width}.png`) });
+            await card.evaluate(n => n.scrollIntoView({ block: "center" }));
+            await page.screenshot({ path: path.join(report, `after-screen-${theme}-${width}.png`) });
         }
     }
     const toolList = cards.first().locator(".card-identities").getByRole("list");
@@ -126,12 +138,26 @@ test("Analyze distinguishes grouped tool names and keeps each count with its too
     await expect(cards.nth(1).locator(".card-identities").getByRole("listitem")).toHaveCount(1);
     await expect(cards.nth(1).locator(".card-tool-count")).toHaveText("(2 calls)");
     await expect(cards.nth(2).locator(".card-tool-count")).toHaveCount(0);
-    await expect(toolList.getByRole("listitem").first()).toHaveCSS("list-style-type", "disc");
+    await expect(toolList.getByRole("listitem").first()).toHaveCSS("list-style-type", "none");
     await expect(cards.nth(1).locator(".card-tool-item")).toHaveCSS("list-style-type", "none");
-    await cards.first().locator(".card-panel-link").press("Enter");
-    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(mixed.toolCalls.length);
+    const label = labels.first(), name = label.locator(".card-tool-name"), url = page.url();
+    const fill = await label.evaluate(n => getComputedStyle(n).backgroundColor);
+    assert.notEqual(fill, "rgba(0, 0, 0, 0)");
+    await name.hover();
+    await expect(name).not.toHaveCSS("cursor", "pointer");
+    await expect(label).toHaveCSS("background-color", fill);
+    await name.click(); expect(page.url()).toBe(url);
+    await expect(card.locator(".card-tool-list").getByRole("link")).toHaveCount(0);
+    const panel = card.locator(".card-panel-link");
+    await card.locator(".request-card-open").focus(); await page.keyboard.press("Tab");
+    await expect(panel).toBeFocused();
+    await expect(panel).toHaveCSS("outline-style", "solid");
+    await panel.press("Enter");
+    await expect(page.locator("#requestContent .reader-tool-name")).toHaveText(example.toolCalls.map(c => c.tool));
     await page.locator("#closeContextSidebar").press("Enter");
-    await expect(cards.first().locator(".card-panel-link")).toBeFocused();
+    await expect(panel).toBeFocused();
+    await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page); await closeAnalyzeFilters(page);
+    await expect(labels).toHaveText(["workiq-retrieve (2 results)", "workiq-fetch"]);
 });
 
 test("Analyze chart, controls and grouped interactions share the available workspace", { timeout: 60000 }, async t => {
@@ -414,22 +440,23 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     await expect(partial.locator(".card-quotation")).toHaveCount(0);
     let wrapped = false;
     for (const palette of Object.keys(palettes)) for (const mode of ["dark","light"]) {
-        await page.evaluate(id => document.documentElement.dataset.evidencePalette = id, palette);
         await chooseTheme(page, mode);
+        await page.evaluate(id => document.documentElement.dataset.evidencePalette = id, palette);
         for (const [width, scale] of [[1440,1],[1170,1],[390,2]]) {
             await page.setViewportSize({width,height:1000}); await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
             const measured = await row.evaluate(node => {
                 const list = node.querySelector(".card-tool-list"), left = list.getBoundingClientRect().left + parseFloat(getComputedStyle(list).paddingInlineStart);
                 let prevTop = -Infinity, lines = 0;
                 for (const item of list.children) {
-                    const r = item.getBoundingClientRect(), css = getComputedStyle(item);
+                    const r = item.getBoundingClientRect();
                     if (Math.abs(prevTop - r.top) > 2) lines++;
                     if (Math.abs(prevTop - r.top) > 2 && Math.abs(r.left - left) > 1 || r.right > list.getBoundingClientRect().right + 1
-                        || parseFloat(css.borderInlineStartWidth) || parseFloat(css.paddingInlineStart)) return {aligned:false};
+                        || item.scrollWidth > item.clientWidth) return {aligned:false};
                     prevTop = r.top;
                 }
                 const c = node.querySelector(".card-tool-count"), name = c.previousElementSibling, face = node.querySelector(".card-failure-face");
-                return {aligned:true, lines, paper:getComputedStyle(node.closest("#activityList")).backgroundColor, count:getComputedStyle(c).color,
+                return {aligned:true, lines, paper:getComputedStyle(node.closest("#activityList")).backgroundColor,
+                    label:getComputedStyle(c.closest("li")).backgroundColor, count:getComputedStyle(c).color,
                     failure:getComputedStyle(face).color, failPaper:getComputedStyle(face).backgroundColor,
                     author:getComputedStyle(node.querySelector(".request-card-author")).color,
                     size:getComputedStyle(c).fontSize, nameSize:getComputedStyle(name).fontSize};
@@ -437,7 +464,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
             assert.ok(measured.aligned, `${palette}/${mode} ${width}: wrapped tool names start on the value edge`);
             wrapped ||= measured.lines > 1;
             assert.equal(measured.size,measured.nameSize);
-            assert.ok(contrast(measured.count,measured.paper)>=4.5 && contrast(measured.author,measured.paper)>=4.5
+            assert.ok(contrast(measured.count,measured.label)>=4.5 && contrast(measured.author,measured.paper)>=4.5
                 && contrast(measured.failure,measured.failPaper)>=4.5, JSON.stringify(measured));
             const clipped = await partial.locator(".card-excerpt").evaluate(n => n.clientHeight < n.scrollHeight && n.clientHeight <= parseFloat(getComputedStyle(n).lineHeight)*4+1);
             assert.ok(clipped, "An incomplete URL and quotation cannot grow past the home preview.");

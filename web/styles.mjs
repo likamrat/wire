@@ -712,10 +712,9 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identity-field+.card-identity-field {margin-top:4px}.card-identity-field dt {margin:0;color:var(--muted)}
 .card-identity-values {display:flex;align-items:baseline;flex-wrap:wrap;gap:.22em 1em;margin:0;min-width:0;overflow-wrap:anywhere}
 .card-identity-values>* {min-width:0;max-width:100%}
-.card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:.25em 1.5em;margin:0;padding:0;list-style:none;max-width:100%}
-.card-tool-list:has(>li+li) {padding-inline-start:1em;list-style:disc}
-.card-tool-item {max-width:100%;min-width:0;color:var(--ink)}
-.card-tool-item::marker {color:var(--muted);font-size:.8em}
+.card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;margin:0;padding:0;list-style:none;max-width:100%}
+.card-tool-item {flex:none;max-width:100%;min-width:0;padding:2px 7px;border-radius:2px;background:var(--hover);color:var(--ink)}
+@media(forced-colors:active) {.card-tool-item {border-block-end:1px solid GrayText}}
 .card-tool-item .card-tool-name {min-width:0;overflow-wrap:anywhere}
 .card-tool-item .card-tool-count {white-space:nowrap;font:inherit;color:var(--muted);font-variant-numeric:tabular-nums}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}

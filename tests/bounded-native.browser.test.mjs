@@ -240,6 +240,9 @@ test("compiled workspace keeps the bounded completed selector private and restor
     await closeAnalyzeFilters(page);
     const link=page.locator("#activityList").getByRole("link",{name:"12 tool calls completed"});
     await expect(link).toBeVisible();
+    // The bounded card supplies names, not per-name call counts.
+    const label = page.locator("#activityList .card-identities").getByRole("listitem");
+    await expect(label).toHaveText(["mcp__m365_search__SearchM365"]);
     await expect(link).toHaveAttribute("href",/privateView=required/);
     await link.focus();await page.keyboard.press("Enter");
     const reader=page.locator("#requestContent");
@@ -248,6 +251,10 @@ test("compiled workspace keeps the bounded completed selector private and restor
     assert.ok(calls.some(c=>c.method==="detail" && c.input.section==="completed"));
     assert.doesNotMatch(page.url(),/[a-f0-9]{64}|mcp__|nativeCompletedRef/);
     await page.goBack();await expect(link).toBeFocused();
+    await page.setViewportSize({width:390,height:844});
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    assert.ok(await label.evaluate(n => n.scrollWidth <= n.clientWidth && n.querySelector(".card-tool-name").getClientRects().length > 1),
+        "The long native name wraps inside its label without clipping.");
 });
 
 test("completed native card opens only its counted calls across pages, with one arrow and group focus",

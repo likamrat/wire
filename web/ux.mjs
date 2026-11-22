@@ -477,6 +477,26 @@ export function createEvidenceUX(icons) {
         node.removeAttribute("id");
         return node;
     }
+    function cardToolList(tools) {
+        const list = document.createElement("ul");
+        list.className = "card-tool-list";
+        list.setAttribute("role", "list"); // Retain list semantics when markers are suppressed in Safari.
+        for (const { name, countLabel } of tools) {
+            const item = document.createElement("li"), label = document.createElement("span");
+            item.className = "card-tool-item";
+            label.className = "card-tool-name";
+            label.textContent = name;
+            item.append(label);
+            if (countLabel) {
+                const count = document.createElement("span");
+                count.className = "card-tool-count";
+                count.textContent = `(${countLabel})`;
+                item.append("\u00a0", count);
+            }
+            list.append(item);
+        }
+        return list;
+    }
     function cardOutcome(outcome, target = document.createElement("span")) {
         target.classList.add("request-card-exception", "card-outcome", `result-tone-${outcome.key}`);
         if (outcome.key === "failure") target.classList.add("card-failure");
@@ -715,7 +735,7 @@ export function createEvidenceUX(icons) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, cardToolList, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

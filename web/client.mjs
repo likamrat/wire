@@ -5807,15 +5807,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 gaps.set(gap.reason, { id: "Unknown", label: categories.displayEvidence(gap).label });
         }
         if (includeTools && ["tool", "reported-api"].includes(layer)) {
-            const list = el("ul", "card-tool-list");
-            for (const [name, total] of tools) {
-                const item = el("li", "card-tool-item");
-                item.append(el("span", "card-tool-name", name));
-                if (total > 1) item.append(document.createTextNode("\u00a0"), el("span", "card-tool-count",
-                    `(${count(total)} ${layer === "tool" ? "calls" : "results"})`));
-                list.append(item);
-            }
-            field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [list] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
+            const labels = Array.from(tools, ([name, total]) => ({ name,
+                countLabel: total > 1 ? `${count(total)} ${layer === "tool" ? "calls" : "results"}` : null }));
+            field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [ux.cardToolList(labels)] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
         }
         const cues = entries => [...entries.values()].map(item => serviceCue("span", item.id, item));
         const values = cues(targets);

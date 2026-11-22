@@ -264,11 +264,12 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const body = node("div", undefined, "card-reading-body"), context = node("div", undefined, "card-request-context");
         const key = node("dl", undefined, "card-identities");
         if (item.selectedRows) {
-            for (const [label, values] of [["Tools", tools.length ? [...tools, ...(item.presentation.toolCount > tools.length
-                ? [`${number(item.presentation.toolCount - tools.length)} more in the reader`] : [])] : ["Not recorded"]],
-            ["Service", ["Not identified in this record"]]]) {
+            const toolValues = tools.length ? [ux.cardToolList(tools.map(name => ({ name })))] : [node("span", "Not recorded")];
+            if (tools.length && item.presentation.toolCount > tools.length)
+                toolValues.push(node("span", `${number(item.presentation.toolCount - tools.length)} more in the reader`, "muted"));
+            for (const [label, values] of [["Tools", toolValues], ["Service", [node("span", "Not identified in this record")]]]) {
                 const line = node("div", undefined, "card-identity-field"), items = node("dd", undefined, "card-identity-values");
-                items.append(...values.map(value => node("span", value)));
+                items.append(...values);
                 line.append(node("dt", label), items); key.append(line);
             }
         }
