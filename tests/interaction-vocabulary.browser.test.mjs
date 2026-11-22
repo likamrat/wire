@@ -9,6 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast, rgb } from "./color-measurements.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
 
 function records() {
     return [
@@ -32,6 +33,22 @@ function records() {
         return record;
     });
 }
+
+test("Services and operations ends with its request rows and opens their matching calls", async t => {
+    const { runtime } = await searchFixture(t, { records: records().slice(0, 3), frontend: "react", reply: false });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(runtime.url);
+    const card = page.getByRole("region", { name: "Services and operations", exact: true });
+    for (const [label, count] of [["Search / retrieval", 2], ["Asked Copilot", 1]]) {
+        const row = card.getByRole("link", { name: new RegExp(`^${label}: ${count} of 3 Work IQ tool calls`) });
+        await expect(card.locator(".percentage-content > :last-child")).toHaveRole("list");
+        await row.click();
+        await expect(page.locator("#activityListSummary")).toContainText(`${count} matching tool call`);
+        await page.goBack();
+    }
+});
 
 test("service evidence explains significance at its call without warning on ordinary operations", { timeout: 60000 }, async t => {
     const call = (tool, requestArgs = {}) => ({
@@ -117,8 +134,6 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(page.locator('[data-service-basis="Assistance"]')).toHaveAttribute("data-count", "4");
             await expect(page.locator('[data-service-basis="Search"]')).toHaveAttribute("data-count", "5");
             await expect(page.locator('[data-service-basis="Unknown"]')).toHaveAttribute("data-count", "3");
-            await expect(page.locator('.percentage-content .percentage-service-scope')).toHaveText(
-                "Search and Copilot rows count requests, not confirmed use of particular apps.");
             const paint = await card("mixed").evaluate(node => ({
                 exception: getComputedStyle(node.querySelector(".request-card-exception")).color,
                 metadata: getComputedStyle(node.querySelector(".request-card-summary")).color,
