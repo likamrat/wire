@@ -50,6 +50,36 @@ async function ready(page) {
 }
 const dataService = item => item.locator("dt").filter({ hasText: /^Data service$/ }).evaluate(node => node.nextElementSibling.textContent);
 
+test("Guide separates an undisclosed service from an unclassified path and leads to its actual call", async t => {
+    const record = serviceEvidenceFixture();
+    const { context } = await privateFixture(t, [record]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ viewport: { width: 1350, height: 900 }, reducedMotion: "reduce" });
+    await page.goto(runtime.url); await ready(page);
+    const article = page.locator("#chartReferenceExplanation");
+    await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="services"]').click();
+    await expect(article).toContainText("Recorded path not recognized");
+    await expect(article).toContainText(/author/i);
+    await expect(article).not.toContainText("INVENTED-PRIVATE");
+    await page.locator("#chartReferenceAllTopics").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
+    await expect(article).toContainText("Recorded path not recognized");
+    await expect(article).toContainText(/open the prompt/i);
+    await page.locator("#chartReferenceShowData").click();
+    await page.locator("#chartReferenceData").getByText("/{id}/{id}", { exact: true }).click();
+    await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
+    await page.locator(".request-card-open").first().click();
+    const call = page.locator('[data-tool-call-id="service-evidence-call-3"]');
+    await expect(call).toContainText(/completed/i);
+    await expect(call).toContainText("Recorded path not recognized");
+    await expect(call).toContainText("Matches current view");
+    await call.getByRole("button", { name: /^Inspect recorded evidence/ }).click();
+    await expect(call).toContainText(/\/unsupported\/resource|\/\{id\}\/\{id\}/);
+});
+
 test("profile relationship calls show People for the complete service denominator and exact-call reader", { timeout: 30000 }, async t => {
     const source = serviceEvidenceFixture();
     source.toolCalls = ["/me/manager?$select=id", "/users/INVENTED-PERSON/directReports?$top=12"].map((target, index) => ({

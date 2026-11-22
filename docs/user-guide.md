@@ -109,6 +109,13 @@ records where available. Closing Guide returns you to Analyze. In
 **Settings > Analyze > Open Guide to**, you can choose the topic list (default)
 or the last topic read in this tab. This preference does not change the charts.
 
+**Services and operations** distinguishes a hosted Copilot request that did
+not record its downstream services from a saved target path WIRE could not
+classify. Neither tells you who wrote the prompt or whether the call failed.
+To inspect a path, use **Guide > Paths and operations > See exact numbers**,
+select the path or batch, and open the matching prompt. Read the targets and
+outcome on the individual call rather than inferring them from the interaction summary.
+
 The **Work IQ tool calls over time** chart shows individual calendar days by
 default, even with All dates or a long range. Long timelines show up to 90
 intervals at a time, starting with the latest dates. Scroll within that window,

@@ -317,7 +317,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function workedExample(topic) {
         if (context.mode !== "analyze" || context.nativeOnly) return "";
         if (topic === "outcomes" && ["tool", "reported-api"].includes(context.layer)) return "One fetch finishes and returns two entries: HTTP 200 for a file and HTTP 403 for a message. That is one completed call. The 403 is an error for the message, not a failed tool call.";
-        if (topic === "services" && context.layer === "tool") return "A fetch naming Files and Mail adds one to both service counts, but only one to the number of calls in scope.";
+        if (topic === "services" && context.layer === "tool") return "A fetch can target a known Files path and a second path WIRE does not recognize. It counts once for Files and once in the total. The second target stays unidentified even if the call completed.";
         if (topic === "categories" && context.layer === "tool") return "A fetch targeting Files and Mail counts once under More than one service, rather than once in each service category.";
         if (topic === "authors") return "A human prompt followed by four tool calls contributes one human prompt, not four agent prompts.";
         if (topic === "models") return "An interaction with two model names appears in both rows. One without a name appears in neither, but still counts toward the total.";
@@ -331,9 +331,16 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             if (section.childElementCount) host.append(section);
         }
         const meanings = group(), list = el("dl", undefined, "chart-reference-definitions");
-        if (context.layer === "tool") list.append(definition("Search / retrieval", "A tool-purpose association, not proof of downstream service execution."),
-            definition(categories.operation("workiq-ask").label, categories.operation("workiq-ask").description));
-        else list.append(definition("Evidence", help.layers[context.layer]));
+        if (context.layer === "tool") {
+            const hosted = categories.displayEvidence({ reason: "hosted-routing" }, { screen: true });
+            const unmapped = categories.displayEvidence({ reason: "unrecognized-path" }, { screen: true });
+            list.append(definition("Search / retrieval", "Counts a search request, not confirmed use of a named app."),
+                definition(hosted.label, `${categories.operation("workiq-ask").label} counts the request to Copilot. ${hosted.description}`),
+                definition(unmapped.label, unmapped.description));
+            meanings.append(list, el("p", "Open the prompt in Analyze and inspect the individual call’s targets and outcome. The service labels do not identify the prompt author or indicate failure. On their own they are not a reason to retry or sign in."));
+            host.append(meanings); return;
+        }
+        list.append(definition("Evidence", help.layers[context.layer]));
         list.append(definition("Missing service details", "Missing targets are not assigned to a service. A record can have both known targets and missing details."));
         meanings.append(list); host.append(meanings);
     }
@@ -394,6 +401,10 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         } else {
             list.append(definition("Path not recorded", "No usable path was saved."),
                 definition("Other", "Smaller groups; listed individually in Exact numbers."));
+            if (context.layer === "tool") {
+                const unmapped = categories.displayEvidence({ reason: "unrecognized-path" }, { screen: true });
+                list.append(definition(unmapped.label, `${unmapped.description} Choose See exact numbers, select the path or batch, then open the prompt. Expand the numbered call marked “Matches current view” to inspect its recorded evidence.`));
+            }
         }
         const section = group(); section.append(list); host.append(section);
     }
