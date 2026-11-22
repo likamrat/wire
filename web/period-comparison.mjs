@@ -408,7 +408,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const control = button(name, () => { if (consumer()) navigate({ comparisonView: key }); });
         control.dataset.comparisonView = key; views.append(control);
     }
-    chartControls.append(quick, optionsSlot, views);
+    chartControls.append(dateChoices, quick, optionsSlot);
     const additionalOptions = el("fieldset", undefined, "comparison-options");
     additionalOptions.append(el("legend", "Comparison"));
     function optionControl(id, label, entries, change, multiple = false) {
@@ -446,7 +446,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     inspect.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); closeInspection(true); } });
     const calls = button("View calls", () => {
-        if (selectedCallCount(consumer()) !== null) selectedPeriod = "later";
+        const value = consumer();
+        if (selectedCallCount(value) !== null) selectedPeriod = value.periods.later.rowIds.length ? "later" : "baseline";
         openInspection("calls", calls);
     });
     const callLabel = calls.firstChild;
@@ -457,8 +458,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     report.prepend(ux.icon("reports")); inspectClose.prepend(ux.icon("back"));
     footer.append(calls, numbers, report);
     scopeRow.append(dateHint, scope);
-    setup.append(title, dateChoices, status, scopeRow, searchLabel);
-    root.append(resultHeading, chartControls, footer, output, inspect);
+    setup.append(title, chartControls, status, scopeRow, searchLabel);
+    resultHeading.append(views);
+    root.append(resultHeading, output, footer, inspect);
     function selectedCallCount(value) {
         return value && chartView() === "outcomes" && !value.nativePeriods && value.periods.later.changeSummary
             ? value.periods.later.rowIds.length : null;
@@ -469,7 +471,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         report.hidden = false;
         calls.disabled = numbers.disabled = !value;
         const n = selectedCallCount(value);
-        callLabel.data = n !== null ? `View ${counted(n, "call")}` : value && value.definitions.layer !== "tool" ? "View records" : "View calls";
+        calls.hidden = !!value && !value.nativePeriods && !value.periods.baseline.rowIds.length && !value.periods.later.rowIds.length;
+        callLabel.data = n === 0 && value.periods.baseline.rowIds.length ? `View ${number(value.periods.baseline.rowIds.length)} baseline ${value.periods.baseline.rowIds.length === 1 ? "call" : "calls"}`
+            : n !== null ? `View ${counted(n, "call")}` : value && value.definitions.layer !== "tool" ? "View records" : "View calls";
     }
     function clearResults() {
         acceptedPublication = null;
@@ -729,7 +733,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const summary = side.changeSummary;
                 const { ids, value, label } = measureReading(measure, side);
                 values.push(value); affected.push(summary.affected);
-                const text = measure.share ? value === null ? "Not available" : percentage.format(value) + "%" : number(value);
+                const text = measure.share ? value === null ? "No interactions" : percentage.format(value) + "%" : number(value);
                 const cell = el("div", undefined, "compare-change-value");
                 if (ids.length) {
                     const action = button(text, () => openInspection("calls", action, { side: key, index, label }));
@@ -737,7 +741,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                     action.setAttribute("aria-label", `${measure.label}, ${key === "baseline" ? "baseline" : "selected"}: ${text}. ${label}`);
                     cell.append(action);
                 } else cell.append(numeric(text));
-                if (measure.share) cell.append(el("span", `${number(summary.affected)} of ${counted(summary.interactions, "interaction")}`, "compare-value-detail"));
+                if (measure.share && value !== null) cell.append(el("span", `${number(summary.affected)} of ${counted(summary.interactions, "interaction")}`, "compare-value-detail"));
                 return cell;
             });
             const delta = values.some(value => value === null) ? null : values[1] - values[0];
@@ -745,9 +749,12 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             if (measure.share) {
                 const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
                 const magnitude = Math.abs(delta);
-                change.append(numeric(delta === null ? "Not comparable" : `${sign}${magnitude > 0 && magnitude < 0.1 ? "<0.1" : percentage.format(magnitude)} pp`));
                 const count = affected[1] - affected[0];
-                change.append(el("span", `${signed(count)} affected interaction${Math.abs(count) === 1 ? "" : "s"}`, "compare-value-detail"));
+                if (delta === null) {
+                    change.append(numeric(count ? `${number(Math.abs(count))} ${count > 0 ? "more" : "fewer"} affected interaction${Math.abs(count) === 1 ? "" : "s"}` : "No change in count"),
+                        el("span", values.every(v => v === null) ? "Neither period has a percentage to compare" : `No ${values[0] === null ? "baseline" : "selected-period"} percentage to compare`, "compare-value-detail"));
+                } else change.append(numeric(`${sign}${magnitude > 0 && magnitude < 0.1 ? "<0.1" : percentage.format(magnitude)} pp`),
+                    el("span", `${signed(count)} affected interaction${Math.abs(count) === 1 ? "" : "s"}`, "compare-value-detail"));
             } else change.append(numeric(signed(delta)));
             const detail = button(measure.label, () => openInspection("measure", detail, { index }));
             detail.id = `compareChangeMeasure${index}`;
@@ -805,7 +812,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             const rows = sides.map(([key, side]) => {
                 const { interactions, affected } = side.changeSummary;
                 const { ids, value: measured, label } = measureReading(measure, side);
-                const amount = measure.share ? measured === null ? "No denominator" : `${number(measured)}% (${number(affected)} of ${counted(interactions, units)})` : counted(measured, units);
+                const amount = measure.share ? measured === null ? "No interactions to calculate a percentage" : `${number(measured)}% (${number(affected)} of ${counted(interactions, units)})` : counted(measured, units);
                 const action = button(label, () => openInspection("calls", trigger, { side: key, index, label }));
                 action.classList.add("icon-action"); action.append(ux.icon("forward")); action.disabled = !ids.length;
                 return [key === "baseline" ? "Baseline" : "Selected", time.formatCivilRange(side.range.from, side.range.to, value.timeContext), amount, action];
@@ -874,6 +881,24 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (serviceScope) serviceScope.textContent = "Known service matches and missing-service context are counted separately in the results.";
         syncFilters();
     }
+    function resultNote(side, source) {
+        const calls = side.resultFacts?.calls.filter(call => call.source === source) ?? [];
+        if (!calls.length) return "";
+        const errors = calls.filter(call => call.observations.some(resultObservationHasError));
+        // The broader error measure also includes timeouts and call-level diagnostics.
+        const returned = errors.every(call => call.observations.some(o =>
+            resultObservationHasError({applicationError:o.applicationError, statusCode:o.statusCode,
+                returnedEntries:o.returnedEntries?.filter(entry => !entry.statusConflict), errorDetailVersion:o.errorDetailVersion})));
+        const incomplete = calls.some(call => call.observations.some(o => o.contentStatus === "partial"
+            || o.resultCount !== null && o.retainedResultCount !== null && o.resultCount > o.retainedResultCount));
+        const missing = calls.filter(call => call.observations.every(o => !resultObservationHasError(o)
+            && o.resultVersion === null && !o.returnedEntries?.length)).length;
+        const note = !errors.length ? "" : returned ? `${counted(errors.length,"call")} returned ${errors.length === 1 ? "an error" : "errors"}.`
+            : `${counted(errors.length,"call")} had ${errors.length === 1 ? "a recorded error" : "recorded errors"}.`;
+        const limit = missing === calls.length ? "No result details recorded."
+            : missing || incomplete ? "Some result details are missing." : "";
+        return [note, limit].filter(Boolean).join(" ");
+    }
     function outcomePanel(value, sides, labels, names) {
         labels = focusedLabels(labels);
         const tool = value.definitions.layer === "tool";
@@ -895,10 +920,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (value.definitions.layer === "code-reference") {
             finding.textContent = "Execution not observed";
             explanation.textContent = "Code references show mentions, not executed operations.";
-        } else if (!a.rowIds.length || !b.rowIds.length) {
-            const missing = a.rowIds.length ? 1 : 0, present = missing ? a : b;
-            finding.textContent = `No ${noun} were found ${names[missing].phrase}.`;
-            explanation.textContent = `${names[1 - missing].label}: ${present.analytics.totals[subject]} of ${denominators[1 - missing]} ${noun} ${failure} (${rates[subject][1 - missing]}).`;
+        } else if (denominators.includes(0)) {
+            const missing = denominators[0] ? 1 : 0, present = missing ? a : b;
+            finding.textContent = `${number(present.analytics.totals[subject])} of ${number(denominators[1 - missing])} ${noun} ${failure} ${names[1 - missing].phrase}.`;
         } else {
             const rate = el("span", rates[subject][1]);
             finding.append(rate, ` of ${noun} ${failure} ${names[1].phrase}.`);
@@ -907,12 +931,21 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             explanation.textContent = `${direction} ${rates[subject][0]} ${names[0].phrase}.`;
         }
         const findings = el("div", undefined, "compare-findings");
-        findings.append(finding, explanation); node.append(findings);
+        findings.append(finding); if (explanation.textContent) findings.append(explanation); node.append(findings);
         const maximum = Math.max(...denominators);
-        node.append(el("p", `${tool ? "Call" : "Record"} count scale: 0 to ${number(maximum)}. Shares use each period's reference total.`, "compare-caption comparison-scale"));
+        node.append(el("p", `${tool ? "Call" : "Record"} count scale: 0 to ${number(maximum)}.`, "compare-caption comparison-scale"));
         for (const [index, [, side]] of sides.entries()) {
             const row = el("div", undefined, "compare-outcome-row"), heading = el("div", undefined, "compare-bar-heading");
-            heading.append(identity(names[index].label), numeric(`${number(side.rowIds.length)} ${results.columnUnit(value.definitions.layer, side.rowIds.length)}`));
+            const period = index ? "Selected" : "Baseline";
+            heading.append(identity(`${period} · ${names[index].label}`));
+            if (!side.rowIds.length) {
+                const reference = denominators[index];
+                heading.append(el("span", reference && selectedOutcomes?.length
+                    ? `No ${noun} match the outcome filter (${counted(reference, tool ? "call" : "record")} before filtering).`
+                    : `No ${noun} match these dates.`, "compare-empty-side"));
+                row.append(heading); node.append(row); continue;
+            }
+            heading.append(numeric(`${number(side.rowIds.length)} ${results.columnUnit(value.definitions.layer, side.rowIds.length)}`));
             const bar = el("div", undefined, "compare-outcome-bar"); bar.setAttribute("role", "group");
             bar.setAttribute("aria-label", `${names[index].label}: ` + Object.entries(labels).map(([key, label]) =>
                 `${label} ${side.analytics.totals[key]} (${rates[key][index] ?? "Not applicable"})`).join(", "));
@@ -926,7 +959,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 bar.append(segment);
             }
             row.append(heading, bar);
-            if (!side.rowIds.length) row.append(el("p", "No matching records", "compare-caption"));
+            const note = resultNote(side, "github-copilot");
+            if (note) row.append(el("p",note,"compare-caption comparison-application-results"));
             node.append(row);
         }
         const details = dataTable("Outcome shares and counts by period", ["Outcome", ...names.map((name, index) =>
@@ -935,6 +969,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             const heading = el("span");
             heading.append(el("span", undefined, "compare-swatch compare-mark-" + key), label);
             return [heading, ...sides.map(([sideKey, side], index) => {
+                if (!denominators[index]) return el("span", "Not available", "compare-caption");
                 const control = button("", () => openInspection("calls", control, { side: sideKey,
                     ids: side.analytics.rows.filter(row => row.outcome === key).map(row => row.id), label }));
                 control.setAttribute("aria-label", `${names[index].label}, ${label}: ${rates[key][index] ?? "share unavailable"} (${side.analytics.totals[key]} of ${denominators[index]} ${noun})`);
@@ -944,8 +979,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         }));
         details.className = "comparison-outcome-values compare-period-readings";
         node.append(details);
-        if (value.options.filters.outcomes?.length) node.append(el("p", "Shares use the same selected activity before the outcome filter.", "compare-caption"));
-        if (tool) node.append(el("p", "Results describe tool calls, not the quality of the answers.", "compare-caption"));
+        if (value.options.filters.outcomes?.length) node.append(el("p", "Percentages use counts before the outcome filter.", "compare-caption"));
+        else if (getContext().route.comparisonFocus) node.append(el("p", `Percentages use all ${noun} in each period.`, "compare-caption"));
         return node;
     }
     function matchingTimingPanel(value, names) {
@@ -1133,7 +1168,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     function paint(value, labelTime, started, publication) {
         const { baseline: a, later: b } = value.periods, sides = [["baseline", a, "A"], ["later", b, "B"]];
         const names = presentation.names([a.range, b.range], value.timeContext, labelTime);
-        const heading = "Activity comparison";
+        const heading = chartView() === "outcomes" ? "Outcome comparison" : chartView() === "tools" ? "Activity breakdown"
+            : chartView() === "timing" ? "Timing comparison" : "Activity timeline";
         const membershipKey = JSON.stringify([value.definitions.layer, a.rowIds, b.rowIds]);
         if (membershipKey !== rosterKey) { if (rosterKey !== null) selectedPeriod = "baseline"; rosterKey = membershipKey; }
         const dayCount = side => Math.round((Date.parse(side.range.to) - Date.parse(side.range.from)) / 86400000) + 1;
@@ -1155,6 +1191,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             pair.append(line);
         }
         const content = doc.createDocumentFragment(); content.append(pair);
+        if (!value.nativePeriods && value.definitions.layer === "tool")
+            content.append(el("p", "GitHub Copilot tool calls · by start date", "compare-caption compare-provenance"));
         if (value.nativePeriods) {
             const section = el("section", undefined, "compare-native");
             section.append(el("h3", "Microsoft activity"));
@@ -1176,7 +1214,13 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                         if (key === "success" && item.unit === "native-tool-call") label.style.color = "var(--tool-positive)";
                         return [label, number(item.baseline[key]), number(item.later[key]), signed(item.later[key] - item.baseline[key]), "-"];
                     });
-                return [[`${source}: ${unit}`, number(item.baseline.count), number(item.later.count),
+                const periodCount = (entry, side) => {
+                    const cell = el("div", number(entry.count));
+                    const note = item.unit === "native-tool-call" && resultNote(side,item.sourceId);
+                    if (note) cell.append(el("p",note,"compare-caption"));
+                    return cell;
+                };
+                return [[`${source}: ${unit}`, periodCount(item.baseline,a), periodCount(item.later,b),
                     signed(item.later.count - item.baseline.count), number(item.undated)], ...outcomes];
             });
             section.append(rows.length ? table("Microsoft period populations", ["Source and measure", "Baseline", "Selected", "Change", "Undated"], rows)
@@ -1194,35 +1238,25 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             "Totals are not adjusted for the different lengths.", "compare-scope-note compare-length-note"));
         if (sharedRecords || sharedInteractions) content.append(el("p",
             `${number(sharedRecords)} records and ${counted(sharedInteractions, "interaction")} appear in both periods.`, "compare-scope-note"));
-        if (chartView() === "outcomes" && !value.nativePeriods && sides.every(([, side]) => side.changeSummary))
-            content.append(changesPanel(sides));
         if (!a.rowIds.length && !b.rowIds.length) {
+            const refs = sides.map(([, side]) => side.analytics.resultFacet.totals.count);
             content.append(el("p", value.nativePeriods ? "No GitHub records match these periods. Microsoft activity is shown separately."
                 : nativeDatesUnavailable ? "No dated records match these periods. This is not a count of Microsoft calls."
-                : "No activity was found in either period. Try different dates or filters.", "compare-empty"));
+                : refs.some(Boolean) && value.options.filters.outcomes?.length
+                    ? `No ${results.columnUnit(value.definitions.layer, 2)} match the outcome filter in either period. Before that filter: ${number(refs[0])} in Baseline, ${number(refs[1])} in Selected.`
+                    : `No ${results.columnUnit(value.definitions.layer, 2)} match either period. Check the dates or filters.`, "compare-empty"));
         } else {
             const labels = results.labels(value.definitions.layer), chart = el("div", undefined, "comparison-chart");
             chart.dataset.view = chartView();
             if (chartView() === "outcomes") {
-                chart.append(outcomePanel(value, sides, labels, names));
-                for (const group of value.resultComparison?.groups ?? []) {
-                    const source = group.source === "github-copilot" ? "GitHub Copilot" : group.source === "microsoft-365-chat" ? "Microsoft 365 Chat" : "Cowork";
-                    const text = sides.map(([key], index) => {
-                        const fact = group[key];
-                        const errors = value.periods[key].resultFacts.calls.filter(call => call.source === group.source
-                            && call.observations.some(resultObservationHasError)).length;
-                        return `${names[index].label}: ${!fact ? "no application-result population" : fact.application.known
-                            ? `${fact.application.errors} explicit application errors in ${fact.application.known} calls with recorded application results; ${fact.application.unknown} unavailable`
-                            : "application-result coverage unavailable"}${!fact ? "" : errors ? `; ${errors} ${errors === 1 ? "call has" : "calls have"} recorded application/API errors` : "; no additional errors recorded"}`;
-                    }).join(". ");
-                    chart.append(el("p", `${source}. ${text}.`, "compare-caption comparison-application-results"));
-                }
+                const outcomes = outcomePanel(value, sides, labels, names);
+                if (!value.nativePeriods && sides.every(([, side]) => side.changeSummary)) {
+                    const readings = el("div", undefined, "compare-outcome-readings");
+                    readings.append(outcomes, changesPanel(sides)); chart.append(readings);
+                } else chart.append(outcomes);
             } else if (chartView() === "timing") chart.append(matchingTimingPanel(value, names), wholeTimingPanel(value, sides, names));
             else chart.append(plottedPanel(value, sides, names));
-            if (getContext().route.comparisonFocus) chart.prepend(el("p", getContext().route.comparisonFocus === "errors"
-                ? "Reading errors and failures. Call failures and explicit application/API errors stay separate; the full selected population remains the reference."
-                : "Reading completed calls. Completion does not establish task success; the full selected population remains the reference.", "compare-caption"));
-            content.append(chart, el("p", "Stored, dated activity only; differences do not establish cause.", "compare-caption"));
+            content.append(chart);
         }
         if (!readCurrent(started, publication)) return;
         syncOutcomeChoices(value);
@@ -1750,7 +1784,7 @@ export const periodComparisonStyles = `
 .comparison-outcome-values .compare-swatch{display:inline-block;margin-inline-end:8px}
 .comparison-outcome-values .percentage-value{justify-content:center;text-align:center;font:inherit}
 .compare-outcome-bar .compare-outcome-paint{height:32px}
-.comparison-application-results{margin-top:18px}
+.comparison-application-results{margin-top:2px}
 @container comparison-results (max-width:38rem){
  .comparison-chart-controls{gap:8px;margin-bottom:12px}
  .comparison-actions{gap:4px}
@@ -1765,7 +1799,7 @@ export const periodComparisonStyles = `
  .comparison-group-value>.percentage-value{grid-column:1;grid-row:2;justify-content:flex-start;text-align:start}
  .comparison-group-track{grid-row:3}
 }
-@container comparison-panel (max-width:36rem){
+@container comparison-panel (max-width:26rem){
  /* Keep the period pair together. Lift the row name above it and put its change below. */
  .compare-period-readings :is(thead,tbody){display:block}
  .compare-period-readings tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;border-bottom:1px solid var(--surface-divider);padding-block:4px}
@@ -1788,5 +1822,35 @@ export const periodComparisonStyles = `
  .comparison-calendar{padding:16px}
  .comparison-calendar .period-comparison-controls{display:block}
  .comparison-calendar fieldset+fieldset{margin-top:20px}
+}
+.period-comparing #workspace>#analyzePopulation{margin-bottom:0}
+.period-comparison{padding:var(--space-md);margin-top:var(--space-sm);background:var(--paper);border-color:var(--surface-edge)}
+.period-comparison-heading{align-items:center;margin-bottom:.5rem}
+.comparison-chart-controls{justify-content:flex-start;gap:.25rem .75rem;margin:0}
+.comparison-chart-controls>.report-period-choices{gap:2px}
+.comparison-chart-controls>.select-control{flex:none;max-width:100%}
+.comparison-chart-controls #comparisonOptionsSlot{margin-inline-start:0}
+.comparison-chart-views{display:inline-flex;width:auto;gap:2px;border:1px solid var(--surface-edge);border-radius:var(--radius-control);padding:2px}
+.comparison-chart-views button{min-height:40px}
+.comparison-actions{border-bottom:0;border-top:1px solid var(--surface-divider);padding:.5rem 0 0;margin:.75rem 0 0}
+.compare-period-key{gap:.25rem 1rem}
+.compare-period-key p+p{padding-inline-start:1rem}
+.comparison-chart{margin-top:var(--space-md)}
+.compare-provenance{margin-block:0}
+.compare-outcome-readings{display:grid;gap:var(--space-lg);align-items:start}
+.compare-outcome-readings>.compare-changes{margin:0}
+.compare-outcome-row{margin-top:.5rem}
+.compare-empty-side{color:var(--muted)}
+.comparison-outcome-values td>.compare-caption{display:inline-flex;align-items:center;justify-content:center;min-height:44px;margin:0}
+.compare-empty{padding:.5rem 0}
+@container comparison-results (min-width:64rem){
+ .compare-outcome-readings{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)}
+}
+@container comparison-results (max-width:38rem){
+ .comparison-chart-views{max-width:100%;flex-wrap:wrap}
+ .comparison-chart-views button{padding-inline:.45rem}
+ .compare-period-key{display:grid;gap:0}
+ .compare-period-key p+p{border:0;margin:0;padding:0}
+ .comparison-actions #createPeriodReport{margin-inline-start:0}
 }
 `;

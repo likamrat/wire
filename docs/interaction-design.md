@@ -605,10 +605,13 @@ Screen paint changes do not restyle saved documents.
 
 ## Compare
 
-Compare opens the period controls directly. Chart views, refinements and exact evidence belong to the accepted period pair.
+Compare has one destination. The period presets, activity selection and filters
+are local controls below the page title. The chart-view switch belongs to the
+reading, with the accepted baseline and selected dates; presets are not tabs.
 
-For a retained Work IQ tool-call comparison, Outcomes starts with **What
-changed**. Baseline and Selected show the calls and distinct originating
+For a retained Work IQ tool-call comparison, Outcomes puts **Call results**
+beside **What changed**, stacking them in that order on narrow screens.
+Baseline and Selected show the calls and distinct originating
 interactions for each period. The affected share includes an interaction once
 when a matching call failed or had a recorded application/API error. An empty
 denominator is unavailable, not 0%. Choose a period's value to inspect its
@@ -618,7 +621,12 @@ that call as failed.
 The baseline is the period to compare against; the selected period is the one
 under review. Either date opens the shared calendar on that side. Choose a measure
 name for both exact values, or a side's value for its calls. On the change-table
-view, the call-count action opens the selected period first.
+view, the call-count action opens the selected period first, or the baseline
+when only it has calls. An empty side has one dated row and no empty bar.
+Mention returned errors on the period row that contains them, counting each
+call once. Missing result details do not turn a completed call into a failure.
+If outcome filtering removed all calls, show its pre-outcome reference count;
+do not interpret no dated matches as a coverage finding.
 In **What changed** and **Call results**, read the measure or outcome on the
 left, then compare the two equal-width periods. Center each period heading,
 value and supporting count on the same axis, whether the value is clickable

@@ -286,7 +286,10 @@ additional restrictions. **Use Analyze view** explicitly brings its current
 non-date filters and authorized Search into the comparison.
 
 **Outcomes**, **Timeline**, **By tool** and **Timing** show the same pair.
-**View calls** opens the records; **View numbers** explains the exact values.
+**View calls** opens the records; when only the baseline has calls, the action
+opens those baseline calls. **View numbers** explains the exact values.
+An empty period has no rate to compare. If an outcome filter excluded all
+calls, the period's row gives the count before that filter.
 **Create report** preserves the pair for local saving. See
 [comparisons](reporting.md#compare) for scope and return behavior.
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { privateFixture, selectActivityOption, chooseTheme, closeAnalyzeFilters, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, closeAnalyzeFilters, restoreLegacySearch } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
@@ -46,6 +46,29 @@ async function dates(page, a, b) {
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
     await ready(page);
 }
+test("Compare reports returned errors once per call, separately from tool failures and missing results", async t => {
+    const records = Array.from({length: 54}, (_, index) => {
+        const r = fixture(`returns-${index}`), call = r.toolCalls[0];
+        call.startedAt = "2026-03-07T12:00:00Z";
+        if (index < 6) call.apiResults = [{index:0,statusCode:403},{index:1,statusCode:500}];
+        return r;
+    });
+    const incomplete = fixture("incomplete"), timeout = fixture("timeout");
+    incomplete.toolCalls[0].startedAt = timeout.toolCalls[0].startedAt = "2026-03-09T12:00:00Z";
+    incomplete.toolCalls[0].resultEvidence = {version:1,source:"sdk-result",contentStatus:"partial",resultCount:null,applicationError:null,statusCode:null};
+    Object.assign(timeout.toolCalls[0],{toolSucceeded:false, reportedOutcome:"failed", apiResults:[],
+        failureEvidence:{version:1,origin:"completion.toolError",reason:"tool-error",code:null,httpStatus:null,messageStatus:"text-excluded",messageSignal:"request-timeout"}});
+    const {page} = await setup(t, "compare?aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-08",
+        {frontend:"react",records:[...records,incomplete,timeout]});
+    await ready(page);
+    const notes = page.locator(".compare-outcome-row .comparison-application-results");
+    await expect(notes).toHaveText(["6 calls returned errors."]);
+    await expect(page.locator(".compare-changes tr").filter({hasText:"Failed tool calls"}).locator("td").first()).toHaveText("0");
+    await dates(page, ["2026-03-07","2026-03-07"], ["2026-03-09","2026-03-09"]);
+    await expect(notes).toHaveText(["6 calls returned errors.","1 call had a recorded error. Some result details are missing."]);
+    await page.getByRole("button",{name:"View numbers",exact:true}).click();
+    await expect(page.locator(".compare-inspection").getByRole("table",{name:"Recorded application/API errors"})).toBeVisible();
+});
 test("Compare keeps period headings, readings and exact-call actions aligned through reflow", async t => {
     const { page, comparisons } = await setup(t, "compare?aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09", { frontend: "react" });
     await ready(page);
@@ -519,7 +542,22 @@ test("overlap, one empty side and two empty sides retain exact membership and re
     assert.deepEqual(overlap.periods.baseline.rowIds, overlap.periods.later.rowIds);
     await expect(page.locator("#periodComparison")).toContainText(`${overlap.periods.baseline.rowIds.length} records`);
     await expect(page.locator("#periodComparison")).toContainText("appear in both periods");
+    await dates(page, ["2026-03-07", "2026-03-07"], ["2025-03-08", "2025-03-09"]);
+    const baselineCount = comparisons.at(-1).periods.baseline.rowIds.length;
+    const emptyRow = page.locator(".compare-outcome-row").last();
+    await expect(emptyRow).toContainText("Selected");
+    await expect(emptyRow).toContainText("No calls match these dates.");
+    await expect(emptyRow.locator(".compare-outcome-bar")).toHaveCount(0);
+    const baselineAction = page.getByRole("button", {name:`View ${baselineCount} baseline calls`});
+    await baselineAction.click();
+    await expect(page.locator("#comparisonExactRecordsA:visible tbody tr")).toHaveCount(baselineCount);
+    await page.getByRole("button",{name:"Back to comparison"}).click();
+    await expect(baselineAction).toBeFocused();
     await dates(page, ["2025-03-07", "2025-03-07"], ["2026-03-08", "2026-03-09"]);
+    const affectedShare = page.locator(".compare-changes tbody tr").first();
+    await expect(affectedShare).toContainText("No interactions");
+    await expect(affectedShare).toContainText("No baseline percentage to compare");
+    await expect(affectedShare).not.toContainText("0 of 0");
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
     await expect(page.locator(".compare-inspection")).toContainText("Unavailable");
@@ -528,7 +566,9 @@ test("overlap, one empty side and two empty sides retain exact membership and re
     await dates(page, ["2025-03-07", "2025-03-07"], ["2025-03-08", "2025-03-09"]);
     assert.equal(comparisons.at(-1).periods.baseline.rowIds.length + comparisons.at(-1).periods.later.rowIds.length, 0);
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
-    await expect(page.locator("#periodComparison")).toContainText("No activity was found in either period");
+    await expect(page.locator("#periodComparison")).toContainText("No calls match either period");
+    await expect(page.locator("#viewComparisonCalls")).toBeHidden();
+    await expect(page.locator(".compare-outcome-bar")).toHaveCount(0);
 });
 for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exact membership and keeps query text out of browser history (${reloadAt} reload)`, { timeout: 60000 }, async t => {
     const cleanup = [], app = await searchFixture({ after: action => cleanup.push(action) });
