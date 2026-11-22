@@ -177,7 +177,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
                 : value.artifact.artifactKind === "comparison" ? "Saved comparison deleted" : "Saved report deleted";
             scope.textContent = bulk ? "Only the reports included in the confirmed preview were removed. Newer reports are not included."
                 : `${target?.label || value.artifact.artifactId} was deleted from this app.`;
-            message(bulk ? "Saved comparisons, collected activity, draft reports and external downloads are unchanged. Unsaved comparisons using the deleted reports are no longer valid."
+            message(bulk ? "Saved comparisons, collected activity, draft reports and external downloads are unchanged."
                 : "The saved " + (value.artifact.artifactKind === "comparison" ? "comparison" : "report") + " was deleted. Source activity and other saved objects are unchanged.");
             paint();
             const displayedGeneration = generation;
@@ -260,10 +260,10 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
             ? "Permanent local deletion. This cannot be undone. If interrupted, some files may remain. Use Check deletion result to see whether cleanup has finished."
             : "Permanent local deletion. This cannot be undone.";
         scope.textContent = "Reading the exact managed files and copies. Nothing is being deleted.";
-        preservation.textContent = bulk ? "Saved comparisons, collected activity, draft reports and external downloads stay unchanged. Unsaved comparisons using these reports will become invalid."
+        preservation.textContent = bulk ? "Saved comparisons, collected activity, draft reports and external downloads stay unchanged."
             : value.artifactKind === "comparison"
             ? "Source reports, collected activity, other saved comparisons and external downloads stay unchanged."
-            : "Collected activity, draft reports, other reports, saved comparisons and external downloads stay unchanged. Unsaved comparisons using this report will become invalid.";
+            : "Collected activity, draft reports, other reports, saved comparisons and external downloads stay unchanged.";
         dependents.textContent = ""; message("");
         paint(); if (!dialog.open) dialog.showModal(); cancel.focus();
         try {
@@ -274,7 +274,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
             scope.textContent = bulk
                 ? `${preview.counts.reports.toLocaleString()} saved reports across all pages, regardless of search, will be deleted (${preview.counts.managedFiles.toLocaleString()} managed files in ${preview.counts.managedCopies.toLocaleString()} copies). New reports saved after this preview are not included.`
                 : `${preview.counts.managedFiles} managed files and ${preview.counts.managedCopies} managed copies will be removed for this saved object.`;
-            if (bulk) preservation.textContent = `${preview.counts.savedComparisons.toLocaleString()} saved comparison${preview.counts.savedComparisons === 1 ? " keeps its" : "s keep their"} frozen information${preview.counts.savedDependentComparisons ? `; ${preview.counts.savedDependentComparisons.toLocaleString()} will lose links to the deleted originals` : ""}. Collected activity, draft reports and external downloads stay unchanged. Unsaved comparisons using these reports will become invalid.`;
+            if (bulk) preservation.textContent = `${preview.counts.savedComparisons.toLocaleString()} saved comparison${preview.counts.savedComparisons === 1 ? " keeps its" : "s keep their"} frozen information${preview.counts.savedDependentComparisons ? `; ${preview.counts.savedDependentComparisons.toLocaleString()} will lose links to the deleted originals` : ""}. Collected activity, draft reports and external downloads stay unchanged.`;
             dependents.textContent = !bulk && preview.counts.savedDependentComparisons
                 ? `${preview.counts.savedDependentComparisons} saved comparison${preview.counts.savedDependentComparisons === 1 ? "" : "s"} ${preview.counts.savedDependentComparisons === 1 ? "keeps" : "keep"} frozen information. Links to this original report become unavailable.`
                 : "";

@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -265,9 +266,7 @@ test("saved report and comparison entries use the same danger treatment without 
             await controller.review("synthetic-action-state", preview.previewId, true);
             saved.push((await controller.confirm("synthetic-action-state", preview.previewId, true)).bundle);
         }
-        const preview = await controller.previewComparison("synthetic-action-state", saved[0].bundleId, saved[1].bundleId, { formats: ["json"] });
-        await controller.reviewComparison("synthetic-action-state", preview.previewId, true);
-        await controller.confirmComparison("synthetic-action-state", preview.previewId, true);
+        const preview = await historicalComparison(context, saved[0].bundleId, saved[1].bundleId, { formats: ["json"] });
     });
     const before = await loadBoardState(context);
     const files = before.exports.flatMap(bundle => Object.values(bundle.files));

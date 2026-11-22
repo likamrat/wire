@@ -173,16 +173,6 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
                 if(await inspection.evaluate(n=>!!n.closest("dialog:modal"))) await blockedByModal(page,page.locator("dialog:modal"));
                 else {await dragOn(page,label,inspection);await page.getByRole("button",{name:"Back to comparison",exact:true}).click();}
             }
-            await page.locator("#compareSectionSaved").click();
-            for (const [i,label] of ["Baseline report","Selected report"].entries()) {
-                await page.getByRole("combobox",{name:label,exact:true}).click();
-                await page.locator(`.select-popup [data-value="${bundles[i].bundleId}"]`).click();
-            }
-            await drag("Compare saved report choices", "#comparisonWorkspace");
-            await page.getByRole("button",{name:"Compare reports",exact:true}).click();
-            const files = page.getByRole("tab",{name:/^Files \(/}); await expect(files).toBeVisible();
-            await drag("saved-report comparison preview", "#comparisonWorkspace");
-            await files.click(); await drag("comparison files", "#comparisonWorkspace"); await expect(files).toHaveAttribute("aria-selected","true");
         }
         if (group === "Settings") {
             for (const section of ["general","connection","source-access","themes","regional","privacy","troubleshooting"]) {

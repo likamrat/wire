@@ -47,7 +47,6 @@ import { createAssessmentControls } from "./assessment-controls.mjs";
 import { mountConsentSetup } from "./assessment-control-views.mjs";
 import { createAssessmentExperience } from "./assessment-experience.mjs";
 import { createReportComparison } from "./report-comparison.mjs";
-import { mountReportComparisonJourney } from "./report-comparison-journey.mjs";
 import { createSavedArtifactDeletion } from "./saved-artifact-deletion.mjs";
 import { createPeriodComparisonState, createPeriodComparisonPresentation, mountPeriodComparison } from "./period-comparison.mjs";
 import { mountTrends } from "./trends.mjs";
@@ -112,7 +111,7 @@ function factories() {
         createExperience: createAssessmentExperience, readerSections: createReaderSections,
         createPresentation: contract => createAssessmentPresentation({ ...contract, timing, wording }),
         createControls: createAssessmentControls, mountConsent: mountConsentSetup,
-        createReportComparison: () => createReportComparison(wording, timing.duration), mountComparison: mountReportComparisonJourney,
+        createReportComparison: () => createReportComparison(wording, timing.duration),
         createArtifactDeletion: options => createSavedArtifactDeletion({ ...options, createEligibilityState: createArtifactEligibilityState }),
         mountRecollection, describeRecollection,
     };

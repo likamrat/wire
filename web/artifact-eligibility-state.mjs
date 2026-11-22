@@ -25,7 +25,7 @@ export function createArtifactEligibilityState() {
             pending = null;
             const artifact = value?.artifact;
             const keys = ["bundleId", "kind", "preparedAt", "preparedAtDisplay", "title", "formats", "promptMode",
-                "canDelete", "reportType", "population", "requestGroupCount", "nativeConversationCount", "comparisonEligibility",
+                "canDelete", "reportType", "population", "requestGroupCount", "nativeConversationCount",
                 "retainedComparisonCount", "sourceReports"];
             if (!value || Object.keys(value).length !== 1 || !artifact || Object.getPrototypeOf(artifact) !== Object.prototype
                 || Object.keys(artifact).some(key => !keys.includes(key)) || artifact.bundleId !== current.target.artifactId

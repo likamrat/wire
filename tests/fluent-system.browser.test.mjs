@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
@@ -12,7 +11,6 @@ import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { loadBoardState } from "../lib/store.mjs";
 
 const proofs = process.env.WORKIQ_FLUENT_PROOFS;
 const baseline = process.env.WORKIQ_FLUENT_BASELINE === "1";
@@ -281,104 +279,4 @@ test("actual text and icon groups remain centered with generated and existing pr
         }
     }
     if (proofs) await writeFile(path.join(proofs, "actual-control-centering.json"), JSON.stringify(matrix, null, 2));
-});
-
-test("populated saved-report comparison inherits Fluent roles without changing frozen source reports", { timeout: 90000 }, async t => {
-    const records = ["earlier", "later"].map(id => {
-        const record = fixture(`fluent-${id}`);
-        record.userPrompt.sourceEventId = `fluent-${id}-message`;
-        return record;
-    });
-    records[1].toolCalls[0].toolSucceeded = false;
-    records[1].toolCalls[0].reportedOutcome = "failed";
-    const cleanup = [], { context } = await privateFixture({ after: action => cleanup.push(action) }, records);
-    const controller = createExportController(context), bundles = [];
-    const timeContext = { timeZone: "UTC", locale: "en-US" };
-    for (const record of records) {
-        const state = await loadBoardState(context);
-        const preview = await controller.preview("fluent-report-seed", undefined,
-            { promptMode: "none", formats: ["html", "json"], timeContext },
-            { kind: "selected", revision: state.revision, scenarioIds: [record.scenarioId] });
-        await controller.review("fluent-report-seed", preview.previewId, true, timeContext);
-        bundles.push((await controller.confirm("fluent-report-seed", preview.previewId, true, timeContext)).bundle);
-    }
-    const hashSources = async () => Promise.all(bundles.flatMap(bundle => Object.values(bundle.files)).map(async file =>
-        createHash("sha256").update(await readFile(file)).digest("hex")));
-    const original = await hashSources();
-    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
-    const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
-    const errors = [];
-    page.on("pageerror", error => errors.push(error.message));
-    page.setDefaultTimeout(7000);
-    t.after(async () => {
-        await browser.close(); await runtime.close();
-        try {
-            assert.deepEqual(await hashSources(), original, "Viewing and resizing never rewrites saved source report bytes");
-            assert.deepEqual(errors, []);
-        } finally { for (const action of cleanup) await action(); }
-    });
-    await page.goto(runtime.url + "#reports");
-    await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.locator("#savedLibraryTitle").click();
-    await page.locator("#reportCompareLink").click();
-    const workspace = page.locator("#comparisonWorkspace");
-    await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
-    for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
-        await workspace.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${bundles[index].bundleId}"]`).click();
-    }
-    await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await workspace.locator(".report-comparison").waitFor();
-    const matrix = [];
-    for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 1200, 2560]) for (const scale of [1, 2]) {
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await page.evaluate(() => document.fonts.ready);
-        const result = await workspace.evaluate(root => ({
-            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith('"Asta Sans"') && document.fonts.check('14px "Asta Sans"'),
-            pageOverflow: document.documentElement.scrollWidth - innerWidth,
-            overflow: root.scrollWidth - root.clientWidth,
-            fields: [...root.querySelectorAll(".comparison-report-choice>.select-field")].map(field => {
-                const labelNode = field.querySelector(":scope>label");
-                const label = labelNode.getBoundingClientRect();
-                const control = field.querySelector(":scope>.select-control").getBoundingClientRect();
-                const text = document.createRange(); text.selectNodeContents(labelNode);
-                return { gap: control.top - label.bottom, height: field.getBoundingClientRect().height,
-                    contentHeight: label.height + control.height, labelHeight: label.height,
-                    textLines: new Set([...text.getClientRects()].map(rect => rect.y)).size,
-                    lineHeight: parseFloat(getComputedStyle(labelNode).lineHeight) };
-            }),
-            samples: [...root.querySelectorAll("h2,h3,caption,.comparison-meta,.comparison-metric-value,button,.select-trigger")]
-                .filter(node => node.checkVisibility()).map(node => {
-                    const style = getComputedStyle(node), box = node.getBoundingClientRect();
-                    return { tag: node.tagName, className: node.className, font: style.fontFamily, size: style.fontSize,
-                        weight: style.fontWeight, leading: style.lineHeight, radius: style.borderRadius,
-                        height: box.height, clipped: node.scrollWidth > node.clientWidth + 1 };
-                }),
-        }));
-        assert.equal(result.fontLoaded, true);
-        assert.ok(result.pageOverflow <= 1 && result.overflow <= 1, `${theme}/${width}/${scale}: comparison fits without global clipping`);
-        assert.equal(result.fields.length, 2);
-        for (const field of result.fields) {
-            assert.ok(Math.abs(field.gap - 4) <= 1, `${theme}/${width}/${scale}: comparison label and control share the 4px field gap ${JSON.stringify(field)}`);
-            assert.ok(Math.abs(field.height - field.contentHeight - 4) <= 1, "No stretched blank label region");
-            assert.ok(field.labelHeight <= field.textLines * field.lineHeight + 1, `${theme}/${width}/${scale}: label height follows rendered text, not a vertical flex basis ${JSON.stringify(field)}`);
-        }
-        for (const sample of result.samples) {
-            assert.match(sample.font, sample.className.split(" ").includes("comparison-endpoint") ? /Cascadia Mono/ : /^"Asta Sans",/, sample.className);
-            assert.equal(sample.clipped, false, `${theme}/${width}/${scale}/${sample.className}: complete text`);
-            if (sample.tag === "BUTTON") {
-                assert.equal(sample.size, `${14 * scale}px`, "Comparison actions use the same control role: " + JSON.stringify(sample));
-                assert.ok(sample.height >= 44);
-            }
-        }
-        matrix.push({ theme, width, scale, ...result });
-        if (proofs && ((width === 1200 && scale === 1) || (width === 320 && scale === 2))) {
-            await mkdir(proofs, { recursive: true });
-            await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proofs, `comparison-${theme}-${width}-${scale}.png`), fullPage: true });
-        }
-    }
-    if (proofs) await writeFile(path.join(proofs, "comparison-role-matrix.json"), JSON.stringify(matrix, null, 2));
 });

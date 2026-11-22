@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -12,7 +13,6 @@ import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { privateFixture, fixture } from "./helpers.mjs";
 import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
-import { uiFontStack } from "../lib/typeface.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
 import { adaptEvaluationReport } from "../lib/report-facts.mjs";
@@ -147,11 +147,11 @@ test("new comparison files keep long titles, source facts and readable light, da
         sources.push((await controller.confirm("output-sources", preview.previewId, true)).bundle);
     }
     const title = "Planning follow-through: comparing calendar and document retrieval across two recorded work periods";
-    const preview = await controller.previewComparison("comparison-output", sources[0].bundleId, sources[1].bundleId,
+    const preview = await historicalComparison(context, sources[0].bundleId, sources[1].bundleId,
         { title, formats: ["html", "pdf", "json", "markdown"] });
     const facts = JSON.stringify(preview.comparison);
-    await controller.reviewComparison("comparison-output", preview.previewId, true);
-    const saved = (await controller.confirmComparison("comparison-output", preview.previewId, true)).bundle;
+
+    const saved = preview.bundle;
     const state = await loadBoardState(context), files = {};
     for (const format of saved.formats) {
         const file = await readSavedComparisonFile(context, state, saved.bundleId, format);

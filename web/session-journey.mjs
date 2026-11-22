@@ -6,6 +6,7 @@ export function createSessionJourney() {
         const valid = id => typeof id === "string" && /^export-[a-f0-9-]{36}$/.test(id);
         if (valid(bundle)) { route.bundle = bundle; delete route.task; }
         else if (valid(inspect) && route.task !== "create") route.inspect = inspect;
+        if (route.task === "compare") { route.task = "library"; delete route.savedEntry; }
         if (order === "oldest") route.order = order;
         return route;
     }

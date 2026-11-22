@@ -1,6 +1,6 @@
 # Report contract
 
-For the user workflow, see [Create and compare reports](reporting.md). This
+For the user workflow, see [Create and read reports](reporting.md). This
 reference defines evidence membership, disclosure and frozen output for the
 supported GitHub Copilot experience.
 
@@ -334,9 +334,7 @@ Existing bundles stay unchanged.
 | Later draft invalidation | Does not settle the dispatched Save |
 | Partial files or absent receipt | Not rollback proof |
 
-Ordinary reports and saved comparisons share one preview owner. New Prepare
-retires the other transient preparation and save authorization but preserves
-its ordinary choices. Neither task can replace a dispatched/unconfirmed Save. Withdrawal
+A new report preparation cannot replace a dispatched or unconfirmed Save. Withdrawal
 scrubs private content while retaining only minimal original recovery identity;
 fresh readiness does not restore an old preview or replay its operations.
 
@@ -447,17 +445,14 @@ Comparisons use recorded outcomes and timing. Separately selected result copies
 must already be frozen and masked; additional masking is allowed, but fetching
 missing source text is not.
 
-Reading a pair does not save it. Preparation and explicit local Save retain
-their source checks and original-identity recovery.
-
-New saved comparisons retain schema 3 and declare
+Existing saved comparisons are read-only. Some schema-3 files declare
 `presentation.comparisonVersion: 1`. Their two `sourceIdentity` entries bind
 the exact Earlier/Later report references and hashes to manifest-declared
 titles, selected windows, time contexts and included-interaction counts.
 Missing historical metadata is explicitly null, not recovered from current
 activity or an indexed display name. Titles pass the report masking rules.
 The identity is frozen in the comparison hash, snapshot and manifest, and
-participates in preparation fingerprinting.
+is not derived from current activity.
 
 The versioned reading leads with this named pair and recorded measures.
 Selected report windows are not verified per-call coverage. Operation failure
@@ -465,7 +460,7 @@ wording names its evidence layer, and Markdown carries the same saved operation
 paths as HTML/PDF. Earlier/Later values stay adjacent when the layout reflows.
 Unmarked comparisons retain their historical wording, styles and original
 files; they acquire no inferred identity. Unsupported or mismatched new
-markers are refused. New JSON-only comparisons require the matching reader;
+markers are refused. Version-marked JSON-only comparisons require the matching reader;
 downgrading is not permission to regenerate them from current history.
 
 ### Report a retained-period comparison
@@ -497,8 +492,7 @@ expanding matching-call denominators. `records` supplies those permitted copies,
 not a union metric denominator or third cohort. Undated rows stay outside dated
 cohorts; B-minus-A shares use percentage points, not relative percent.
 
-A saved period report is one artifact with two cohorts, not an ordinary
-single-source input to saved-report comparison. New preparation never
+A saved period report is one artifact with two cohorts. New preparation never
 manufactures two source reports. Changed selected facts/authority invalidate
 preparation; unrelated accepted activity need not.
 Comparison-origin preparation and saved reading return to the accepted
@@ -518,7 +512,7 @@ and original saved files.
 | Deletion | Included / preserved |
 | --- | --- |
 | One report | Remove managed bundle, recognized copies and index entry; preserve source activity and external downloads |
-| Input to a saved comparison | Saved comparison survives with an unavailable input link; dependent unsaved preparations/save authorizations are invalidated |
+| Input to a saved comparison | Saved comparison survives with an unavailable input link |
 | All saved reports | Counted, membership/hash-bound two-minute preview across all pages/search |
 | Excluded from bulk deletion | Later reports, saved comparisons, activity, drafts and external downloads |
 

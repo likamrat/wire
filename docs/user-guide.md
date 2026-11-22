@@ -332,7 +332,7 @@ Select a saved name to read it, or use **Files** in the full library to open a
 specific format. **Back to Reports** returns to that workspace.
 Saved files preserve their original facts and text. The
 [report guide](reporting.md) explains each template's membership, how edits
-affect an unfinished copy, and how to save, reopen or compare reports.
+affect an unfinished copy, and how to save and reopen reports.
 
 ## Find saved text
 

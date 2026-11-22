@@ -3,7 +3,7 @@
 Use this reference when changing a screen's controls, reading order or return
 behavior. [Product design](design.md) owns shared typography, surfaces, targets
 and motion. For user instructions, use [Use WIRE](user-guide.md) or
-[Create and compare reports](reporting.md).
+[Create and read reports](reporting.md).
 
 | Surface | Behavior |
 | --- | --- |
@@ -555,13 +555,7 @@ Screen paint changes do not restyle saved documents.
 
 ## Compare
 
-**Periods** and **Saved reports** are local links in Compare. Changing sections
-keeps the accepted period pair separate from the two saved report choices.
-The saved-report library can also open that same comparison and retains its
-own return link. Chart views, refinements and exact evidence belong to Periods,
-not to a second level of page navigation.
-Both section links keep their calendar or document icon when inactive. A
-trailing arrow opens supporting evidence; the return action points back.
+Compare opens the period controls directly. Chart views, refinements and exact evidence belong to the accepted period pair.
 
 For a retained Work IQ tool-call comparison, Outcomes starts with **What
 changed**. Baseline and Selected show the calls and distinct originating

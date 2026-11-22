@@ -8,7 +8,6 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, selectActivityOption, closeAnalyzeFilters, chooseTheme } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
 
 const proof = process.env.WIRE_METADATA_PROOFS;
 const baseline = process.env.WIRE_METADATA_BASELINE === "1";
@@ -140,76 +139,4 @@ test("native accepted scope presents complete peer facts without parsing retaine
     }
     await page.locator("#meaning").press("Escape");
     if (proof) await writeFile(path.join(proof, "native-reachability.json"), JSON.stringify(states, null, 2));
-});
-
-test("native saved-report options retain detail and disabled reasons through the shared control", { timeout: 30000 }, async t => {
-    const { page, server } = await setup(t);
-    const artifacts = ["earlier", "unavailable", "period"].map((id, index) => ({
-        bundleId: `hierarchy-${id}`, kind: "report", title: `Invented ${id} report`,
-        preparedAt: "2026-03-07T12:00:00Z", preparedAtDisplay: "Mar 7, 2026, 7:00 AM",
-        requestGroupCount: 2, formats: ["html", "json"], promptMode: "none",
-        comparisonEligibility: index === 2 ? "period-report-has-two-cohorts-not-one-source" : index ? "unavailable" : "available",
-    }));
-    await page.route("**/api/report-artifacts/list", route => route.fulfill({ json: { artifacts } }));
-    await page.goto(server.url + "#reports"); await ready(page); await openReportComparison(page);
-    const field = page.locator("#comparisonWorkspace select").first();
-    await expect(field.locator('option[value="hierarchy-unavailable"]')).toHaveCount(1);
-    const native = await field.locator('option[value="hierarchy-unavailable"]').textContent();
-    const metadata = "Prepared Mar 7, 2026, 7:00 AM. 2 interactions. No prompts. Files: HTML, JSON. Report ID: hierarchy-unavailable";
-    assert.equal(native, "Invented unavailable report (Prepared Mar 7, 2026, 7:00 AM; 2 interactions; No prompts) (structured facts unavailable)");
-    await expect(field.locator('option[value="hierarchy-unavailable"]')).toHaveAttribute("data-detail", metadata);
-    await expect(field.locator('option[value="hierarchy-unavailable"]')).toHaveAttribute("data-disabled-reason", "structured facts unavailable.");
-    await expect(field.locator('option[value="hierarchy-earlier"]')).not.toHaveAttribute("data-disabled-reason");
-    await expect(field.locator('option[value="hierarchy-period"]')).toHaveAttribute("data-disabled-reason", "two-cohort period report; open directly.");
-    await expect(field.locator('option[value="hierarchy-period"]')).toContainText("(two-cohort period report; open directly)");
-    await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
-    const unavailable = page.locator('.select-popup [data-value="hierarchy-unavailable"]');
-    await expect(unavailable).toHaveAttribute("aria-disabled", "true");
-    await expect(unavailable).toHaveAccessibleDescription(`${metadata}; Unavailable: structured facts unavailable.`);
-    await capture(page, "native-report-option");
-    await page.keyboard.press("Escape");
-    const states = [];
-    for (const [state, reason] of [["normal", "structured facts unavailable."], ["replacement", "This saved report has no structured facts."]]) {
-        if (state === "replacement") await field.locator('option[value="hierarchy-unavailable"]').evaluate((node, reason) => {
-            node.dataset.disabledReason = reason;
-        }, reason);
-        for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-            await chooseTheme(page, theme);
-            await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
-            await unavailable.scrollIntoViewIfNeeded();
-            await expect(unavailable).toHaveAccessibleName("Invented unavailable report");
-            await expect(unavailable).toHaveAttribute("aria-disabled", "true");
-            await expect(unavailable).toHaveAccessibleDescription(`${metadata}; Unavailable: ${reason}`);
-            const detail = await unavailable.locator(".select-option-detail").textContent();
-            assert.equal(detail.split("Unavailable:").length - 1, 1);
-            await expect(field.locator('option[value="hierarchy-unavailable"]')).toHaveAttribute("data-detail", metadata);
-            await expect(field.locator('option[value="hierarchy-unavailable"]')).toHaveText(native);
-            const geometry = await unavailable.locator(".select-option-detail").evaluate(node => {
-                const box = node.getBoundingClientRect();
-                return { x: box.x, right: box.right, clipped: node.scrollWidth - node.clientWidth,
-                    vertical: node.scrollHeight - node.clientHeight };
-            });
-            assert.ok(geometry.x >= 0 && geometry.right <= width + 1 && geometry.clipped <= 1 && geometry.vertical <= 1);
-            const box = await unavailable.boundingBox();
-            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            await expect(field).toHaveValue("");
-            states.push({ state, theme, width, scale, detail, native, geometry });
-            await capture(page, `native-option-${state}-${theme}-${width}-${scale}`);
-            await page.keyboard.press("Escape");
-        }
-    }
-    await field.locator('option[value="hierarchy-earlier"]').evaluate(node => {
-        node.dataset.disabledReason = "Not applicable while this option is enabled.";
-    });
-    await page.getByRole("combobox", { name: "Baseline report", exact: true }).click();
-    const available = page.locator('.select-popup [data-value="hierarchy-earlier"]');
-    await expect(available).toHaveAttribute("aria-disabled", "false");
-    await expect(available).not.toHaveAccessibleDescription(/Not applicable/);
-    await page.getByRole("combobox", { name: "Baseline report", exact: true }).press("End");
-    await expect(page.getByRole("combobox", { name: "Baseline report", exact: true }))
-        .toHaveAttribute("aria-activedescendant", await available.getAttribute("id"));
-    await page.keyboard.press("Escape");
-    if (proof) await writeFile(path.join(proof, "report-option-contract.json"), JSON.stringify(states, null, 2));
 });

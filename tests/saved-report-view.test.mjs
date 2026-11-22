@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -126,10 +127,8 @@ test("JSON-only activity, period and comparison reports render their frozen save
     const state = await loadBoardState(context);
     const pair = buildPeriodComparison(state, { ...input, expectedRevision: state.revision });
     const period = await save(controller, context, { ...options, title: "Saved periods" }, pair);
-    const prepared = await controller.previewComparison("saved-view", first.bundleId, second.bundleId,
+    const { bundle: comparison } = await historicalComparison(context, first.bundleId, second.bundleId,
         { ...options, title: "Saved comparison" });
-    await controller.reviewComparison("saved-view", prepared.previewId, true, options.timeContext);
-    const comparison = (await controller.confirmComparison("saved-view", prepared.previewId, true, options.timeContext)).bundle;
     const bundles = [first, period, comparison], bytes = new Map();
     for (const bundle of bundles) for (const file of Object.values(bundle.files)) bytes.set(file, await readFile(file));
     await replaceEvidence(context, () => ({ records: [], importCoverage: state.importCoverage }));

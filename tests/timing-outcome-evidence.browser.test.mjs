@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
@@ -9,7 +10,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { readSavedArtifactFile, loadSavedReportSource, readSavedComparison } from "../lib/report-artifacts.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
-import { openReportComparison, prepareLandingReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 
 test("retained timeout cause stays with its tool across reader, new files, saved reading and Compare", { timeout: 90000 }, async t => {
@@ -119,17 +120,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
-    await openReportComparison(page);
-    for (const [name, id] of [["Baseline report", oldBundle.bundleId], ["Selected report", newBundle.bundleId]]) {
-        await page.getByRole("combobox", { name, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
-    }
-    const comparison = page.locator("#comparisonWorkspace");
-    await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("Request timed out (MCP -32001)");
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("allowed waiting interval");
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("These differences do not establish new executions");
-    const paired = await controller.previewComparison(owner, oldBundle.bundleId, newBundle.bundleId,
+    const paired = await historicalComparison(context, oldBundle.bundleId, newBundle.bundleId,
         { formats: ["html", "markdown", "json", "pdf"] });
     assert.equal(paired.comparison.resultComparison.shared.changedTypedFacts, 1);
     for (const [name, content] of Object.entries(paired.files)) {
@@ -137,8 +128,8 @@ test("retained timeout cause stays with its tool across reader, new files, saved
             : String(content).replaceAll("\\", "");
         assert.match(text, name.endsWith(".json") ? /timingFailure/ : /Request timed out \(MCP -32001\)/, name);
     }
-    await controller.reviewComparison(owner, paired.previewId, true);
-    const savedPair = await controller.confirmComparison(owner, paired.previewId, true);
+
+    const savedPair = paired;
     const reopened = await readSavedComparison(context, await loadBoardState(context), savedPair.bundle.bundleId);
     assert.equal(reopened.comparison.resultComparison.changes[0].later[0].timingFailure.kind, "request-timeout");
     assert.deepEqual((await loadBoardState(context)).evidence, retainedBefore);

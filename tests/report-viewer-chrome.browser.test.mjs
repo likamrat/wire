@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -241,9 +242,7 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
         await exports.review(title, prepared.previewId, true);
         await exports.confirm(title, prepared.previewId, true);
     }
-    const comparison = await exports.previewComparison("row-comparison", bundles[0].bundleId, bundles[1].bundleId, { formats: ["html"] });
-    await exports.reviewComparison("row-comparison", comparison.previewId, true);
-    await exports.confirmComparison("row-comparison", comparison.previewId, true);
+    const comparison = await historicalComparison(context, bundles[0].bundleId, bundles[1].bundleId, { formats: ["html"] });
     await updateBoardState(context, state => {
         const older = state.exports.find(entry => entry.bundleId === bundles[0].bundleId);
         delete older.promptMode; delete older.reportPeriod;

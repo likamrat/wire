@@ -8,7 +8,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { createNativeReportPublicationState } from "../web/native-report-publication-state.mjs";
 import { navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme } from "./helpers.mjs";
-import { openReportComparison, prepareLandingReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 
 const root = process.env.WIRE_NATIVE_SAVE_BACKEND_ROOT;
@@ -994,20 +994,6 @@ for (const theme of ["light", "dark"]) test(`screen notices keep report journeys
         await app.post("/api/privacy-review", { previewId: preview.previewId, disclosureReviewed: true });
         const second = (await app.post("/api/export", { previewId: preview.previewId, confirmed: true })).bundle;
         await page.goto(app.url + "#reports");
-        await openReportComparison(page);
-        const workspace = page.locator("#comparisonWorkspace");
-        for (const [label, bundle] of [["Baseline report", first], ["Selected report", second]]) {
-            await workspace.getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${bundle.bundleId}"]`).click();
-        }
-        await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
-        await expect(workspace.locator(".comparison-notice").first()).toContainText("Overlap is unverified");
-        await capture("compare-overlap");
-        await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-        await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
-        await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
-        await expect(workspace.getByRole("button", { name: "Open saved comparison", exact: true })).toBeVisible();
         assert.deepEqual(await Promise.all(Object.values(first.files).map(file => readFile(file))), files);
         if (output) await writeFile(path.join(output, `${theme}-measurements.json`), JSON.stringify(measurements, null, 2));
         for (const view of measurements) {
@@ -1297,61 +1283,6 @@ for (const [stage, failure] of [["snapshot", "missing"], ["preview", "malformed"
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeDisabled();
         assert.equal(app.writes.filter(write => write.route === "/api/export").length, 0);
         assert.equal((await app.board()).exports.length, 0);
-    });
-
-test("existing Compare screen prepares, reviews and saves Microsoft snapshots without source acquisition",
-    { skip: !root, timeout: 90000 }, async t => {
-        const app = await setup(t, { segmented: true, mixed: true }), { page } = app, saved = [];
-        for (const kind of ["all", "current"]) {
-            const state = await app.post("/api/snapshot", { layer: "tool", filters: { scope: "all" } });
-            const preview = await app.post("/api/preview", {
-                nativeViewId: kind === "all" ? state.nativeRead.allViewId : state.nativeRead.viewId,
-                selection: { kind, revision: state.revision, ...(kind === "all" ? {} : { scenarioIds: state.exportCatalog.requests.map(row => row.scenarioId) }) },
-                options: { title: `${kind} Microsoft fixture`, promptMode: "none", formats: ["html"] },
-            });
-            await app.post("/api/privacy-review", { previewId: preview.previewId, disclosureReviewed: true });
-            saved.push((await app.post("/api/export", { previewId: preview.previewId, confirmed: true })).bundle);
-        }
-        await page.goto(app.url + "#reports");
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await openReportComparison(page);
-        const workspace = page.locator("#comparisonWorkspace");
-        for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
-            await workspace.getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${saved[index].bundleId}"]`).click();
-        }
-        await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
-        await expect(workspace.locator(".comparison-native-results")).toContainText("Microsoft 365 Cowork");
-        assert.doesNotMatch(await workspace.locator(".comparison-native-results").innerText(),
-            /Counts describe retained evidence|GitHub population only|Tool execution is separate from answer accuracy/);
-        await expect(workspace.locator(".comparison-tool-results > p.comparison-meta")).toHaveText("GitHub population only.");
-        const choices = await workspace.locator(".comparison-selectors select").evaluateAll(nodes =>
-            nodes.flatMap(node => [...node.options].filter(option => option.value).map(option =>
-                ({ label: option.textContent, detail: option.dataset.detail }))));
-        for (const choice of choices) {
-            assert.doesNotMatch(choice.label + choice.detail, /Files:|Report ID:|prompt mode|export-[a-f0-9-]{36}/i);
-            assert.match(choice.detail, /Prepared .+Microsoft conversations?/);
-        }
-        await captureReportSurface(page, "native-compare");
-        for (const width of [1440, 768, 390]) {
-            await page.setViewportSize({ width, height: 1000 });
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-            if (process.env.WIRE_REPORT_PROOFS) {
-                await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
-                await page.screenshot({ path: path.join(process.env.WIRE_REPORT_PROOFS, `native-compare-${width}.png`), fullPage: true });
-            }
-        }
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await workspace.getByLabel("Report title", { exact: true }).fill("Microsoft snapshot comparison");
-        await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-        await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
-        await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
-        await expect(workspace.getByRole("button", { name: "Open saved comparison", exact: true })).toBeVisible();
-        const comparison = (await app.board()).exports.find(entry => entry.kind === "comparison");
-        assert.ok(comparison.nativeComparisonHash);
-        await workspace.getByRole("button", { name: "Open saved comparison", exact: true }).click();
-        await expect(page.locator("#savedReportReader")).toBeVisible();
     });
 
 for (const dated of [false, true]) test(`existing period Compare keeps ${dated ? "dated and undated" : "undated"} Microsoft evidence visible and creates a reviewed period report`,
@@ -1917,19 +1848,6 @@ test("a lost saved response survives collection advancement with immutable files
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
         const second = (await app.board()).exports.find(entry => entry.bundleId !== first.bundleId);
         await page.goto(app.url + "#reports");
-        await openReportComparison(page);
-        const workspace = page.locator("#comparisonWorkspace");
-        for (const [label, bundle] of [["Baseline report", first], ["Selected report", second]]) {
-            await workspace.getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${bundle.bundleId}"]`).click();
-        }
-        await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
-        await expect(workspace.locator(".comparison-native-results")).toContainText("Conversations");
-        await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-        await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
-        await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
-        await expect(workspace.getByRole("button", { name: "Open saved comparison", exact: true })).toBeVisible();
         for (const [format, bytes] of Object.entries(frozen)) {
             const result = await app.post("/api/artifact-file", { kind: "report", bundleId: first.bundleId, format });
             assert.deepEqual(Buffer.from(result.data, "base64"), bytes);

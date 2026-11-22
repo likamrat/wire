@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile, unlink, rename, readdir, lstat } from "node:fs/promises";
@@ -65,9 +66,7 @@ async function setup(t, { firstSourceFormats = ["html", "json"], comparisonForma
         await controller.review("fixture", preview.previewId, true);
         sources.push((await controller.confirm("fixture", preview.previewId, true)).bundle);
     }
-    const preview = await controller.previewComparison("fixture", sources[0].bundleId, sources[1].bundleId, { formats: comparisonFormats });
-    await controller.reviewComparison("fixture", preview.previewId, true);
-    const comparison = (await controller.confirmComparison("fixture", preview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, sources[0].bundleId, sources[1].bundleId, { formats: comparisonFormats });
     return { context, controller, sources, comparison };
 }
 

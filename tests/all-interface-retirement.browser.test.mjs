@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -53,9 +54,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     }
     const earlier = await save("fixture-owner");
     const later = await save("fixture-owner");
-    const prepared = await reports.previewComparison("fixture-owner", earlier.bundleId, later.bundleId, { formats: ["html", "json"] });
-    await reports.reviewComparison("fixture-owner", prepared.previewId, true);
-    const comparison = (await reports.confirmComparison("fixture-owner", prepared.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(f.context, earlier.bundleId, later.bundleId, { formats: ["html", "json"] });
     const frozenFiles = [earlier, later, comparison].flatMap(bundle => Object.values(bundle.files));
     const originalHashes = await Promise.all(frozenFiles.map(async file => assessmentHash(await readFile(file))));
     const ledger = JSON.stringify((await loadBoardState(f.context)).personalEvaluation.modelEvaluation);

@@ -5,8 +5,8 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, findReportCopy, openReportComparison } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture } from "./helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
 
 function record(flag) {
     const value = fixture("result-browser");
@@ -66,44 +66,6 @@ test("normal report and saved comparison separately review, save and reopen mask
         await page.locator("#reportsView[data-report-phase=saved]").waitFor();
         savedIds.push((await loadBoardState(context)).exports.at(-1).bundleId);
     }
-    await openReportComparison(page);
-    for (const [name, id] of [["Baseline report", savedIds[0]], ["Selected report", savedIds[1]]]) {
-        await page.getByRole("combobox", { name, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
-    }
-    const comparison = page.locator("#comparisonWorkspace");
-    await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("+100.0 percentage points");
-    await expect(page.locator("#comparisonResultText")).not.toBeChecked();
-    await page.locator("#comparisonResultText").check();
-    await page.locator("#comparisonResultTerms").fill("Tasks.ReadWrite");
-    const pending = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/preview"));
-    await comparison.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-    const response = await pending, prepared = await response.json();
-    assert.equal(response.status(), 200, JSON.stringify(prepared));
-    assert.equal(prepared.comparison.toolComparison.raw.change.success, 0);
-    assert.equal(prepared.comparison.resultComparison.groups[0].applicationErrorDelta, 100);
-    assert.equal(prepared.comparison.resultTextSources.sources[1].resultText.copies[0].representation, "edited-copy");
-    await expect(comparison.frameLocator(".report-frame").locator("body")).toContainText("Required scope");
-    await comparison.frameLocator(".report-frame").locator("h1").scrollIntoViewIfNeeded();
-    await expect(comparison.frameLocator(".report-frame").locator("body")).not.toContainText("Tasks.ReadWrite");
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await expect(comparison.frameLocator(".report-frame").locator("body")).toContainText("Required scope");
-        await comparison.frameLocator(".report-frame").locator("p").last().scrollIntoViewIfNeeded();
-        await comparison.frameLocator(".report-frame").locator("h1").scrollIntoViewIfNeeded();
-        // Let Chromium composite the newly reattached sandboxed document after theme repaint.
-        await page.waitForTimeout(250);
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        if (process.env.WIRE_REPORT_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_REPORT_PROOFS, `result-report-comparison-${theme}.png`), fullPage: true });
-    }
-    await comparison.getByLabel("I reviewed this frozen comparison for disclosure.", { exact: true }).check();
-    await comparison.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await expect(comparison.getByRole("button", { name: "Save comparison", exact: true })).toBeVisible();
-    assert.equal((await loadBoardState(context)).exports.filter(value => value.kind === "comparison").length, 0);
-    await comparison.getByRole("button", { name: "Save comparison", exact: true }).click();
-    await comparison.getByRole("button", { name: "Open saved comparison", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Saved file preview", exact: true }).frameLocator("iframe").locator("body")).toContainText("Required scope");
     assert.deepEqual(errors, []);
 });
 

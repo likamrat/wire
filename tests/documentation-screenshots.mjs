@@ -336,20 +336,6 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("saved-json-only", { privateOnly: true });
 
     await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
-    await page.getByRole("link", { name: "Compare saved reports", exact: true }).click();
-    const comparison = page.locator("#comparisonWorkspace");
-    for (const [label, title] of [["Baseline report", "Earlier release checklist"], ["Selected report", "Call results"]]) {
-        await comparison.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup [data-value="${seeded.get(title)}"]`).click();
-    }
-    const comparisonResponse = page.waitForResponse(item => item.url().endsWith("/api/report-comparison/preview"));
-    await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-    const comparisonPreview = await comparisonResponse;
-    assert.equal(comparisonPreview.status(), 200);
-    await expect(comparison.getByRole("button", { name: "Save comparison", exact: true })).toBeEnabled();
-    await expect(comparison.locator(".comparison-prepared-files iframe")).toBeVisible();
-    await capture("compare-saved-reports", { privateOnly: true, top: true });
-
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await capture("compare-periods");

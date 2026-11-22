@@ -101,10 +101,7 @@ test("Reports starts with creation and three recent saved names; full-library co
     await expect(page.locator("#savedReportSearch")).toBeVisible();
     await expect(page.locator(".saved-library-row")).toHaveCount(6);
     await expect(recent(page)).toHaveCount(0);
-    await page.getByRole("link", { name: "Compare saved reports" }).click();
-    await expect(page.locator("#comparisonWorkspace")).toBeVisible();
-    await page.getByRole("link", { name: "Back to saved reports" }).click();
-    await expect(page.locator("#reportCompareLink")).toBeFocused();
+    await expect(page.getByRole("link", { name: "Compare saved reports" })).toHaveCount(0);
     await selectActivityOption(page, "savedReportOrder", "oldest");
     await expect(page.locator(".saved-report-period").first()).toHaveText("Report period: Dec 29, 2025–Jan 3, 2026");
     for (const query of ["Dec 29, 2025–Jan 3, 2026", "2025-12-29", "2026-01-03 prompts and replies left out"]) {

@@ -15,7 +15,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, navigateMain, navigateSettings, revealStoredRefresh, chooseTheme, openAnalyzeFilters,
     closeAnalyzeFilters } from "./helpers.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
-import { openReportLibrary, chooseReportScope, reportContents, scanReport, openReportComparison, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
+import { openReportLibrary, chooseReportScope, reportContents, scanReport, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 async function assertSettingsCategoryNavigation(page, { keyboard = false } = {}) {
     const url = new URL(page.url()); url.hash = "";
@@ -610,15 +610,6 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Ordinary reviewed snapshot");
         await capture("saved-reader");
         await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-        await openReportComparison(page);
-        const comparison = page.locator("#comparisonWorkspace");
-        for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
-            await comparison.getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${[bundle.bundleId, reviewedBundle.bundleId][index]}"]`).click();
-        }
-        await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-        await expect(comparison.getByRole("button", { name: "Prepare comparison copy", exact: true })).toBeEnabled();
-        await capture("comparison");
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
         await expect(page.locator("#globalCollectionControls")).toBeHidden();

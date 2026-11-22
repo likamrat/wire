@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -48,12 +49,12 @@ test("114 request groups and 376 calls retain complete scanning through all-form
         { kind: "all", revision: (await loadBoardState(context)).revision });
     await controller.review("volume", next.previewId, true);
     const later = (await controller.confirm("volume", next.previewId, true)).bundle;
-    const compared = await controller.previewComparison("volume", earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
+    const compared = await historicalComparison(context, earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
     assert.equal(compared.comparison.toolComparison.raw.baseline.count, 376);
     assert.equal(compared.comparison.toolComparison.overlap.sharedCount, 376);
     assert.equal(compared.privacy.allSelectedFieldsScanned, true);
-    await controller.reviewComparison("volume", compared.previewId, true);
-    const comparison = (await controller.confirmComparison("volume", compared.previewId, true)).bundle;
+
+    const comparison = compared.bundle;
     assert.equal(comparison.kind, "comparison");
     assert.deepEqual((await loadBoardState(context)).evidence, before.evidence);
 });

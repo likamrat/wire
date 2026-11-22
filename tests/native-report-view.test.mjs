@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createExportController, takeNativeSaveRefusal, writeBundle } from "../lib/export.mjs";
@@ -317,15 +318,15 @@ test("empty source scope stays frozen through collection, actual saved formats a
     assert.equal(later.preview.snapshot.nativeEvidence.conversations.length, 1);
     const laterReviewed = await controller.review(app.owner, later.preview.previewId, true, undefined, later.services);
     const savedLater = (await controller.confirm(app.owner, later.preview.previewId, true, undefined, later.services)).bundle;
-    const comparison = await controller.previewComparison(app.owner, savedEmpty.bundleId, savedLater.bundleId,
+    const comparison = await historicalComparison(app.context, savedEmpty.bundleId, savedLater.bundleId,
         { title: "Invented source-bound comparison", formats }, app.services);
     assert.equal(comparison.comparison.status, "ready");
     const chat = comparison.comparison.nativeComparison.units.filter(unit => unit.sourceId === "microsoft-365-chat");
     assert.ok(chat.length > 0);
     assert.ok(chat.every(unit => unit.baselineCount === null && unit.delta === null && unit.baselineState === "source-not-present"),
         "No native cohort in the earlier report cannot manufacture an improvement from zero.");
-    const comparisonReviewed = await controller.reviewComparison(app.owner, comparison.previewId, true, undefined, app.services);
-    const savedComparison = (await controller.confirmComparison(app.owner, comparison.previewId, true, undefined, app.services)).bundle;
+    const comparisonReviewed = comparison;
+    const savedComparison = comparison.bundle;
     const cases = [
         [savedEmpty, reviewed, "report", "empty-native-report"],
         [savedLater, laterReviewed, "report", "later-native-report"],

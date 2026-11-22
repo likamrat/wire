@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -15,7 +16,7 @@ import { selectPersonalEvaluationCleanup, defaultPersonalEvaluation, validatePer
 import { createDeletionController } from "../lib/deletion.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { inspectComparisonPair } from "../lib/comparison-export.mjs";
+import { inspectComparisonPair } from "./historical-comparison-fixture.mjs";
 
 function invalidJsonPaths(value, prefix = "$", parents = new Set()) {
     if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)) return [];
@@ -146,9 +147,7 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
     const baseline = await saveReport(["json", "html", "markdown"]), later = await saveReport(["pdf"]);
     const pair = await inspectComparisonPair(context, await loadBoardState(context), baseline.bundleId, later.bundleId);
     assert.deepEqual(invalidJsonPaths([pair.sourceFacts, pair.comparison]), [], "Frozen comparison projection must contain only explicit JSON values");
-    const comparisonPreview = await reports.previewComparison("owner", baseline.bundleId, later.bundleId, { formats: ["json"] });
-    await reports.reviewComparison("owner", comparisonPreview.previewId, true);
-    const comparison = (await reports.confirmComparison("owner", comparisonPreview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, baseline.bundleId, later.bundleId, { formats: ["json"] });
     const frozenFiles = [baseline, later, comparison].flatMap(bundle => Object.values(bundle.files));
     const frozenHashes = await Promise.all(frozenFiles.map(async file => assessmentHash(await readFile(file))));
     state = await loadBoardState(context);
@@ -243,12 +242,6 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: freshModel.overview.interactionRefs[0],
         expectedBasis: freshModel.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
     }, capability)).status, 410);
-    const stalePreviewResponse = await post("/api/report-comparison/preview", {
-        baselineId: baseline.bundleId, laterId: later.bundleId, formats: ["json"],
-    }, capability);
-    assert.equal(stalePreviewResponse.status, 200, await stalePreviewResponse.clone().text());
-    const stalePreview = await stalePreviewResponse.json();
-    assert.equal((await post("/api/report-comparison/review", { previewId: stalePreview.previewId, disclosureReviewed: true }, capability)).status, 200);
     const beforeObject = await loadBoardState(context), sourceBeforeObject = await readFile(file);
     const survivorFiles = [later, comparison].flatMap(bundle => Object.values(bundle.files));
     const survivorHashes = await Promise.all(survivorFiles.map(async file => assessmentHash(await readFile(file))));
@@ -267,7 +260,6 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
     assert.deepEqual(await Promise.all(survivorFiles.map(async file => assessmentHash(await readFile(file)))), survivorHashes);
     for (const target of Object.values(baseline.files)) await assert.rejects(readFile(target), error => error.code === "ENOENT");
     assert.equal((await post("/api/report-file", { bundleId: baseline.bundleId, name: "product-report.json" }, capability)).status, 404);
-    assert.ok([409, 410].includes((await post("/api/report-comparison/save", { previewId: stalePreview.previewId, confirmed: true }, capability)).status));
     const opened = await (await post("/api/report-comparison/open", { bundleId: comparison.bundleId }, capability)).json();
     assert.equal(opened.sources[0].available, false);
     assert.equal(opened.sources[1].available, true);

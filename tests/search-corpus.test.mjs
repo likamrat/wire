@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
@@ -113,11 +114,10 @@ test("real report producers preserve verified titles through every Search format
         ordinary.push(bundle); saved.push({ bundle, format, title: preview.title, kind: "report" });
     }
     for (const format of formats) {
-        const preview = await controller.previewComparison("title-search", ordinary[0].bundleId, ordinary[1].bundleId, {
+        const preview = await historicalComparison(context, ordinary[0].bundleId, ordinary[1].bundleId, {
             title: "Zebra comparison", formats: [format],
         });
-        await controller.reviewComparison("title-search", preview.previewId, true);
-        const bundle = (await controller.confirmComparison("title-search", preview.previewId, true)).bundle;
+        const bundle = preview.bundle;
         saved.push({ bundle, format, title: preview.title, kind: "comparison" });
     }
     const before = await loadBoardState(context), stateBytes = JSON.stringify(before);
@@ -217,9 +217,7 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     const exports = createExportController(context);
     const original = await savedReport(context, exports, "original"), masked = await savedReport(context, exports, "masked");
     const none = await savedReport(context, exports, "none");
-    const preview = await exports.previewComparison("corpus-fixture", original.bundleId, none.bundleId, { formats: ["json"] });
-    await exports.reviewComparison("corpus-fixture", preview.previewId, true);
-    const comparison = (await exports.confirmComparison("corpus-fixture", preview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, original.bundleId, none.bundleId, { formats: ["json"] });
     let invalidations = 0;
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => { invalidations++; } });
     assert.equal(corpus.status().state, "uninitialized");
@@ -439,9 +437,8 @@ test("full retained roster includes undated and earlier interactions, with no pr
 test("frozen comparison identity survives deletion of an original source report", async t => {
     const { context } = await privateFixture(t), exports = createExportController(context);
     const first = await savedReport(context, exports, "original"), second = await savedReport(context, exports, "none");
-    const preview = await exports.previewComparison("corpus-fixture", first.bundleId, second.bundleId, { formats: ["json"] });
-    await exports.reviewComparison("corpus-fixture", preview.previewId, true);
-    const saved = (await exports.confirmComparison("corpus-fixture", preview.previewId, true)).bundle;
+    const preview = await historicalComparison(context, first.bundleId, second.bundleId, { formats: ["json"] });
+    const saved = preview.bundle;
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => {} });
     const before = (await indexed(corpus)).items.find(item => item.target.bundleId === saved.bundleId);
     const deletion = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context), onSeal: () => corpus.invalidate() });

@@ -148,7 +148,7 @@ purpose and what the saved copy includes.
 ## Compare
 
 Compare shows how Work IQ activity, call outcomes and timing differ
-[between periods or saved reports](docs/reporting.md#compare).
+[between two periods](docs/reporting.md#compare).
 That evidence helps you assess changes
 to your agents and investigate possible regressions.
 
@@ -158,7 +158,7 @@ to your agents and investigate possible regressions.
 
 - [Use WIRE](docs/user-guide.md)
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
-- [Create and compare reports](docs/reporting.md)
+- [Create and read reports](docs/reporting.md)
 - [Develop and troubleshoot](docs/development.md)
 - [Technical documentation](docs/README.md)
 

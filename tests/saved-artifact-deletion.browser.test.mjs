@@ -312,7 +312,7 @@ test("bulk confirmation names all reports across pages, preserves exclusions and
     assert.match(await dialog.innerText(), /all pages.*regardless of search/i);
     assert.match(await dialog.innerText(), /3 saved comparisons/);
     assert.match(await dialog.innerText(), /draft reports.*external downloads/i);
-    assert.match(await dialog.innerText(), /Unsaved comparisons using these reports will become invalid/);
+    assert.doesNotMatch(await dialog.innerText(), /Unsaved comparisons/);
     assert.match(await dialog.innerText(), /New reports saved after this preview are not included/);
     assert.match(await dialog.innerText(), /Permanent local deletion.*cannot be undone.*If interrupted, some files may remain/);
     assert.doesNotMatch(await dialog.innerText(), /keep the receipt|sealed|atomic/i);

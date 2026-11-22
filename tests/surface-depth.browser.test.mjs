@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { chooseTheme, navigateMain, navigateSettings, openSourceEditor, selectActivityOption } from "./helpers.mjs";
-import { chooseReportScope, reportContents, openReportLibrary, openReportComparison } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, openReportLibrary } from "./report-journey-helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { contrast, rgb, shadowPaint } from "./color-measurements.mjs";
 
@@ -220,16 +220,6 @@ test("existing screen families share soft depth and themed switches without chan
         await capture(`${theme}-review`, ["#reportCreatePanel"]);
         await page.getByRole("tab", { name: /^Files/ }).click();
         await capture(`${theme}-report-files`, ["#reportCreatePanel"]);
-        await openReportLibrary(page); await openReportComparison(page);
-        for (const [label, entry] of [["Baseline report", entries[0]], ["Selected report", entries[1]]]) {
-            await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${entry.bundleId}"]`).click();
-        }
-        const compare = page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true });
-        if (await compare.isVisible()) await compare.click();
-        await page.locator("#comparisonWorkspace").getByRole("button", { name: /^(Prepare comparison copy|Return to review)$/ }).click();
-        await page.locator("#comparisonWorkspace iframe").waitFor();
-        await capture(`${theme}-comparison`, ["#comparisonWorkspace"]);
         await openReportLibrary(page);
         await page.locator("#wireSearch").fill("Invented");
         await page.locator("#wireSearchResults button").first().waitFor();

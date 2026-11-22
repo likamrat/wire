@@ -22,7 +22,7 @@ test("lost action responses never advise repeating Save, collection or settings 
     const api = createBoardTransport(capability, () => {}, unbound);
     for (const invalid of [false, true]) {
         unreadable = invalid;
-        for (const path of ["/api/export", "/api/collection/now", "/api/collection/configure", "/api/report-comparison/save"]) {
+        for (const path of ["/api/export", "/api/collection/now", "/api/collection/configure", "/api/artifact-deletion/confirm"]) {
             const count = calls.length;
             await assert.rejects(api(path, {}), error => {
                 assert.equal(error.code, "request_outcome_unknown");

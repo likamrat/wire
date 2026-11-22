@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme, selectActivityOption } from "./helpers.mjs";
-import { chooseReportScope, reportContents, openReportLibrary, openReportComparison, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, openReportLibrary, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
@@ -148,31 +148,6 @@ test("report metadata groups preserve scope, authors, counts and saved identity 
     assert.match(await page.locator(".prompt-comparison>h4").textContent(), /\(omitted\)$/);
     assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
     await capture("omitted-copy", "#reportReviewBody");
-    await openReportLibrary(page); await openReportComparison(page);
-    const combo = page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Selected report", exact: true });
-    await combo.click();
-    const item = page.locator(`.select-option[data-value="${entries[1].bundleId}"]`);
-    assert.equal(await item.locator(".select-option-label").textContent(), title);
-    const detail = await item.locator(".select-option-detail").textContent();
-    assert.match(detail, /^Prepared .* \/ 2 interactions$/);
-    assert.doesNotMatch(detail, / · /);
-    assert.ok(await item.getAttribute("aria-describedby"));
-    const native = await page.locator("#comparisonWorkspace select").last().locator(`option[value="${entries[1].bundleId}"]`).textContent();
-    assert.equal(native, title);
-    assert.equal(await item.getAttribute("data-value"), entries[1].bundleId);
-    await page.keyboard.press("Escape");
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [390, 200]]) {
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
-        await combo.click();
-        await item.scrollIntoViewIfNeeded();
-        assert.equal(await item.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
-        if (output) await page.screenshot({ path: path.join(output, `comparison-options-${theme}-${width}-${scale}.png`) });
-        await page.keyboard.press("Escape");
-    }
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await openReportLibrary(page);
     await page.locator(`.saved-library-row[data-bundle-id="${entries[1].bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator(".saved-json-tree").waitFor();
@@ -189,23 +164,6 @@ test("report metadata groups preserve scope, authors, counts and saved identity 
     assert.equal((await loadBoardState(context)).exports.length, 2);
     assert.equal(requests.some(endpoint => ["/api/export", "/api/report-comparison/save", "/api/privacy-review"].includes(endpoint)), false);
     if (output) await writeFile(path.join(output, "metadata-geometry.json"), JSON.stringify(cases, null, 2));
-});
-
-test("unavailable saved comparison choices retain native and accessible reasons beside identity", async t => {
-    const { page, entries, requests } = await setup(t, 2);
-    await openReportComparison(page);
-    const choices = page.locator("#comparisonWorkspace select").first();
-    await choices.locator("option").nth(1).waitFor({ state: "attached" });
-    const option = choices.locator(`option[value="${entries[0].bundleId}"]`);
-    assert.equal(await option.isDisabled(), true);
-    assert.match(await option.textContent(), /structured facts unavailable/);
-    await page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Baseline report", exact: true }).click();
-    const row = page.locator(`.select-option[data-value="${entries[0].bundleId}"]`);
-    assert.equal(await row.getAttribute("aria-disabled"), "true");
-    assert.match(await row.locator(".select-option-detail").textContent(), /Unavailable: structured facts unavailable\./);
-    assert.ok(await row.getAttribute("aria-describedby"));
-    await page.keyboard.press("Escape");
-    assert.equal(requests.some(endpoint => /\/(preview|review|save|export)$/.test(endpoint)), false);
 });
 
 async function shot(page, name) {
@@ -370,21 +328,6 @@ test("six saved reports share a deliberate page frame with tasks, inspector and 
     await capture("contents-wide", "#reportCreatePanel");
     await scanReport(page);
     await capture("review-wide", "#reportCreatePanel", { wide: true });
-    await openReportLibrary(page);
-    await openReportComparison(page);
-    await page.locator("#comparisonWorkspace select").first().locator("option").nth(1).waitFor({ state: "attached" });
-    await capture("comparison-wide", "#comparisonWorkspace");
-    for (const [label, entry] of [["Baseline report", entries[0]], ["Selected report", entries[1]]]) {
-        await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${entry.bundleId}"]`).click();
-    }
-    await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
-    await page.locator("#comparisonWorkspace").getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-    await page.locator("#comparisonWorkspace .comparison-prepared-files iframe").waitFor();
-    assert.equal(await page.locator("#comparisonWorkspace .comparison-task-heading").isVisible(), false);
-    assert.equal(await page.locator("#pageTitle").evaluate(node => document.activeElement === node), true);
-    assert.equal(await page.locator("#comparisonWorkspace .report-inspection-tabs").getByRole("button", { name: "Back to comparison choices", exact: true }).isVisible(), true);
-    await capture("comparison-review-wide", "#comparisonWorkspace", { wide: true });
     await openReportLibrary(page);
     const htmlEntry = entries.find(entry => entry.formats.includes("html"));
     await page.locator(`.saved-library-row[data-bundle-id="${htmlEntry.bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();

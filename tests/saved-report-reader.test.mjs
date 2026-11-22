@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, symlink, rename, unlink, truncate } from "node:fs/promises";
@@ -328,10 +329,9 @@ test("activity, period and comparison reports preview and download their actual 
     }, undefined, pair);
     await controller.review("file-examples", period.previewId, true, timeContext);
     const savedPeriod = (await controller.confirm("file-examples", period.previewId, true, timeContext)).bundle;
-    const comparison = await controller.previewComparison("file-examples", first.bundleId, savedActivity.bundleId,
+    const comparison = await historicalComparison(context, first.bundleId, savedActivity.bundleId,
         { title: "Planning comparison - invented example", formats, timeContext });
-    await controller.reviewComparison("file-examples", comparison.previewId, true, timeContext);
-    const savedComparison = (await controller.confirmComparison("file-examples", comparison.previewId, true, timeContext)).bundle;
+    const savedComparison = comparison.bundle;
     const before = JSON.stringify(await loadBoardState(context));
     const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();

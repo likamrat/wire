@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, appendFile, readFile, unlink } from "node:fs/promises";
@@ -60,9 +61,7 @@ async function jsonValues(page) {
 test("normal literal fragments and exact anchors open all types and restore Back", { timeout: 120000 }, async t => {
     const app = await setup(t, { formats: ["html", "json", "markdown", "pdf"] });
     const { page, bundles, exports, context } = app;
-    const preview = await exports.previewComparison("live-proof", bundles[0].bundleId, bundles[1].bundleId, { formats: ["json"] });
-    await exports.reviewComparison("live-proof", preview.previewId, true);
-    await exports.confirmComparison("live-proof", preview.previewId, true);
+    const preview = await historicalComparison(context, bundles[0].bundleId, bundles[1].bundleId, { formats: ["json"] });
     const before = await loadBoardState(context);
     const initialCount = await page.locator("#activityCount").textContent();
     await page.locator("#activityList .request-card-open").first().click();

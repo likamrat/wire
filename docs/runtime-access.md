@@ -237,7 +237,7 @@ client withdrawal is independently required.
 | --- | --- | --- |
 | Collection Settings | Unsent safe window/frequency draft; original write uncertainty | Source paths/baselines, private status/errors and old read/write callbacks |
 | Reply saving | Original response-capture operation/token and unresolved outcome | Consent/source snapshots, payloads, private drafts and old detail callbacks |
-| Reports and comparisons | Minimal original Save identity/fingerprint and uncertainty | Titles, masking terms, copy overrides, prepared bytes and private frames |
+| Reports (including reports from period comparisons) | Minimal original Save identity/fingerprint and uncertainty | Titles, masking terms, copy overrides, prepared bytes and private frames |
 | Deletion/recollection | Original opaque operation/token and unknown result | Targets, counts, source lists, previews and return-focus references |
 | Recorder | Original attempt recovery | Confirmation body, timers and detached Send callbacks |
 | Search | Only intent allowed by its current explicit lifecycle contract | Results, receipts, private history/preparations, open documents and obsolete callbacks |

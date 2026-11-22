@@ -1,4 +1,4 @@
-# Create and compare reports
+# Create and read reports
 
 A report preserves selected interactions and their recorded Work IQ calls.
 Use it to explain repeated errors, operations and working patterns. The recorded
@@ -297,23 +297,9 @@ experience with the same formats, masking, optional notes and local Save.
 **Back to comparison** restores its dates, choices and reading position while
 access remains valid.
 
-For existing reports, open **Compare > Saved reports** (or **Reports > Saved library >
-Compare saved reports**), choose
-**Baseline report** and **Selected report**, then **Compare reports**. Or use
-**Compare report** on a saved-library row to start with that report selected.
-**Open baseline report** and **Open selected report** open the registered saved
-copies; **Back to comparison** returns to the pair. The comparison uses
-their frozen facts, not current history. Different definitions, missing facts
-or incompatible identities can prevent a comparison. A saved two-period report
-already contains a comparison; it cannot serve as one of these ordinary report
-inputs.
-
-The comparison opens with HTML prepared. Change its name or formats if needed,
-then select **Save comparison**. Its frozen copy can remain readable after an
-input report is deleted. Notes remain authored context, not comparable metrics.
-New comparisons name both source reports and their selected windows beside the
-first measures. These dates describe each report's selection, not verified
-per-call coverage. Older saved comparisons keep their original presentation.
+To read an existing report, open **Reports > Saved library** and choose its
+name. Previously saved comparison files open there too. They retain their
+original contents even if a source report is later deleted.
 
 ## Remove a saved copy
 

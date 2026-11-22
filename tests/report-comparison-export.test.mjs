@@ -1,134 +1,16 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, moveCard, updateBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
-import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { readSavedArtifactFile, readSavedComparison, readSavedReportView, loadSavedReportSource } from "../lib/report-artifacts.mjs";
-import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
-import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
-import { validateComparisonIdentity } from "../lib/comparison-presentation-contract.mjs";
+import { readSavedArtifactFile, readSavedComparison } from "../lib/report-artifacts.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
-
-test("new comparison freezes source titles and declared windows with qualified operation wording in every format", async t => {
-    const records = ["cedar-a", "cedar-b"].map(id => fixture(id));
-    for (const record of records) Object.assign(record.toolCalls[0], {
-        startedAt: "2026-03-08T12:00:00.000Z",
-        requestArgs: { entityUrls: ["/me/drive/root/children", "/me/messages"] },
-        apiResults: [{ index: 0, path: "/me/messages", statusCode: 403 }],
-    });
-    for (const record of records) record.toolCalls.push({
-        ...structuredClone(record.toolCalls[0]), toolCallId: `${record.scenarioId}-calendar`,
-        startEventId: `${record.scenarioId}-calendar-start`, completionEventId: `${record.scenarioId}-calendar-end`,
-        requestArgs: { entityUrls: ["/sites/cedar", "/me/calendarView"] }, apiResults: [],
-    });
-    const { context } = await privateFixture(t, records), controller = createExportController(context), sources = [];
-    for (const [index, record] of records.entries()) {
-        const state = await loadBoardState(context);
-        const preview = await controller.preview("identity", undefined, {
-            title: index ? "Cedar later - two days" : "Cedar baseline - three days", promptMode: "none", formats: ["json"],
-            dateSelection: { range: "custom", from: index ? "2026-03-08" : "2026-03-07", to: "2026-03-09" },
-            timeContext: { timeZone: "America/New_York", locale: "en-US" },
-        }, { kind: "selected", revision: state.revision, scenarioIds: [record.scenarioId] });
-        await controller.review("identity", preview.previewId, true, preview.snapshot.timeContext);
-        sources.push((await controller.confirm("identity", preview.previewId, true, preview.snapshot.timeContext)).bundle);
-    }
-    const originals = await Promise.all(sources.flatMap(source => Object.values(source.files)).map(async file => [file, hash(await readFile(file))]));
-    const preview = await controller.previewComparison("identity", sources[0].bundleId, sources[1].bundleId,
-        { formats: ["html", "pdf", "json", "markdown"] });
-    assert.equal(preview.comparison.presentation.comparisonVersion, 1);
-    const identities = preview.comparison.sourceIdentity;
-    assert.deepEqual(identities.map(side => side.title), ["Cedar baseline - three days", "Cedar later - two days"]);
-    assert.deepEqual(identities.map(side => side.dateSelection.from), ["2026-03-07", "2026-03-08"]);
-    assert.ok(identities.every(side => side.timeContext.timeZone === "America/New_York" && side.sourceCount === 1));
-    const pdf = getDocument({ data: new Uint8Array(Buffer.from(preview.files["comparison-report.pdf"].data, "base64")), useSystemFonts: false });
-    const pages = [];
-    try {
-        const document = await pdf.promise;
-        for (let number = 1; number <= document.numPages; number++)
-            pages.push((await (await document.getPage(number)).getTextContent()).items.map(item => item.str || "").join(" "));
-    } finally { await pdf.destroy(); }
-    for (const text of [preview.files["comparison-report.html"], preview.files["comparison-report.md"], pages.join(" ")]) {
-        assert.match(text, /Cedar baseline - three days/);
-        assert.match(text, /Cedar later - two days/);
-        assert.match(text, /America\/New\\?_York/);
-        assert.match(text, /selected window/i);
-        assert.match(text, /tool calls failed/i);
-        assert.doesNotMatch(text, /0 of 1 calls recorded errors/);
-        assert.match(text, /\/me\/drive\/root\/children/);
-        assert.match(text, /\/me\/messages/);
-        assert.match(text, /\/me\/calendarView/);
-    }
-    await controller.reviewComparison("identity", preview.previewId, true);
-    const saved = (await controller.confirmComparison("identity", preview.previewId, true)).bundle;
-    const state = await loadBoardState(context);
-    assert.deepEqual((await readSavedComparison(context, state, saved.bundleId)).comparison.sourceIdentity, identities);
-    for (const [file, original] of originals) assert.equal(hash(await readFile(file)), original);
-    for (const alter of [
-        model => { delete model.sourceIdentity; },
-        model => { model.presentation.comparisonVersion = 2; },
-        model => { model.sourceIdentity[0].report.bundleId = sources[1].bundleId; },
-        model => { model.sourceIdentity[0].sourceCount = -1; },
-        model => { model.sourceIdentity[0].unexpected = true; },
-        model => { model.sourceIdentity[0].timeContext.timeZone = "not-a-zone"; },
-    ]) {
-        const model = structuredClone(preview.comparison); alter(model);
-        assert.throws(() => validateComparisonIdentity(model, preview.snapshot.sourceReports));
-        assert.throws(() => renderComparisonHtml(model, preview.snapshot));
-    }
-    const legacy = structuredClone(preview.comparison);
-    delete legacy.presentation.comparisonVersion; delete legacy.sourceIdentity;
-    const legacySnapshot = { ...preview.snapshot, presentation: legacy.presentation, comparison: legacy };
-    const oldHtml = renderComparisonHtml(legacy, legacySnapshot), oldMarkdown = renderComparisonMarkdown(legacy, legacySnapshot);
-    assert.match(oldHtml, /0 of 1 calls recorded errors/);
-    assert.match(oldMarkdown, /Earlier errors \/ calls/);
-    assert.doesNotMatch(oldHtml, /comparison-reading-v1|Cedar baseline/);
-    assert.doesNotMatch(oldMarkdown, /\/me\/calendarView/);
-    const jsonOnly = await controller.previewComparison("json-identity", sources[0].bundleId, sources[1].bundleId, { formats: ["json"] });
-    await controller.reviewComparison("json-identity", jsonOnly.previewId, true);
-    const jsonSaved = (await controller.confirmComparison("json-identity", jsonOnly.previewId, true)).bundle;
-    const reading = await readSavedReportView(context, await loadBoardState(context), jsonSaved.bundleId, "comparison");
-    assert.equal(reading.sourceFormat, "json");
-    assert.match(reading.text, /Cedar baseline - three days/);
-    assert.match(reading.text, /comparison-reading-v1/);
-});
-
-test("actual saved-report traffic-mix matrix refuses a false improvement narrative", async t => {
-    function pattern(name, total, success, endpoint) {
-        return matrixRecords(name, Array.from({ length: total }, (_, index) => index < success ? "success" : "failure")).map(record => ({
-            ...record, toolCalls: record.toolCalls.map(call => ({ ...call, requestedApiPath: endpoint, requestArgs: { entityUrls: [endpoint] } })),
-        }));
-    }
-    const baseline = [...pattern("before-easy", 10, 9, "/me/messages"), ...pattern("before-hard", 10, 5, "/me/calendarView")];
-    const later = [...pattern("after-easy", 90, 81, "/me/messages"), ...pattern("after-hard", 10, 5, "/me/calendarView")];
-    const { context } = await privateFixture(t, [...baseline, ...later]);
-    const controller = createExportController(context), bundles = [];
-    for (const records of [baseline, later]) {
-        const state = await loadBoardState(context);
-        const preview = await controller.preview("matrix", undefined, { promptMode: "none", formats: ["json"] },
-            { kind: "selected", revision: state.revision, scenarioIds: records.map(record => record.scenarioId) });
-        await controller.review("matrix", preview.previewId, true);
-        bundles.push((await controller.confirm("matrix", preview.previewId, true)).bundle);
-    }
-    const pair = await controller.inspectComparison("matrix", bundles[0].bundleId, bundles[1].bundleId);
-    assert.equal(pair.comparison.toolComparison.raw.baseline.successRate.percent, 70);
-    assert.equal(pair.comparison.toolComparison.raw.later.successRate.percent, 86);
-    assert.ok(pair.comparison.toolComparison.patterns.length > 0);
-    assert.ok(pair.comparison.toolComparison.patterns.every(item => item.change.success === 0));
-    assert.equal(pair.comparison.toolComparison.matched.fixedBaselineMix.change.success, 0);
-    assert.match(pair.comparison.narrative.heading, /pattern rates did not/);
-    assert.equal(pair.comparison.narrative.tone, "neutral");
-    const comparison = await controller.previewComparison("matrix", bundles[0].bundleId, bundles[1].bundleId, { formats: ["html", "json", "markdown"] });
-    for (const name of ["comparison-report.html", "comparison-report.md"]) {
-        assert.match(comparison.files[name], /pattern rates did not/);
-        assert.doesNotMatch(comparison.files[name], /team improved|fix caused|quality improved/);
-    }
-});
 
 async function setup(t) {
     const earlier = fixture("earlier"), later = fixture("later");
@@ -146,36 +28,12 @@ async function setup(t) {
     return { context, controller, earlier: await save("earlier", ["html"]), later: await save("later", ["markdown"]) };
 }
 
-for (const source of ["earlier", "later"]) for (const stage of ["inspect", "prepare", "review", "save"]) {
-    test(`comparison ${stage} rejects a declared ${source} title mismatch without writing`, async t => {
-        const setupResult = await setup(t), { context, controller, earlier, later } = setupResult;
-        let preview;
-        if (stage === "review" || stage === "save") {
-            preview = await controller.previewComparison("title-binding", earlier.bundleId, later.bundleId, { formats: ["html"] });
-            if (stage === "save") await controller.reviewComparison("title-binding", preview.previewId, true);
-        }
-        await updateBoardState(context, state => {
-            state.exports.find(entry => entry.bundleId === setupResult[source].bundleId).title = "Not the declared source title";
-        });
-        const state = await loadBoardState(context), before = JSON.stringify(state);
-        const files = await Promise.all([earlier, later].flatMap(entry => Object.values(entry.files)).map(async file => [file, await readFile(file)]));
-        await assert.rejects(loadSavedReportSource(context, state, setupResult[source].bundleId), /title differs/);
-        const action = stage === "inspect" ? () => controller.inspectComparison("title-binding", earlier.bundleId, later.bundleId)
-            : stage === "prepare" ? () => controller.previewComparison("title-binding", earlier.bundleId, later.bundleId, { formats: ["html"] })
-                : stage === "review" ? () => controller.reviewComparison("title-binding", preview.previewId, true)
-                    : () => controller.confirmComparison("title-binding", preview.previewId, true);
-        await assert.rejects(action, /title differs|changed/i);
-        assert.equal(JSON.stringify(await loadBoardState(context)), before);
-        for (const [file, bytes] of files) assert.deepEqual(await readFile(file), bytes);
-    });
-}
-
 test("comparison titles bind every new format and verified canonical-title carrier", async t => {
     const { context, controller, earlier, later } = await setup(t);
     const title = "Calendar request comparison";
     const originalFiles = [...Object.values(earlier.files), ...Object.values(later.files)];
     const originals = await Promise.all(originalFiles.map(async file => hash(await readFile(file))));
-    const preview = await controller.previewComparison("named-comparison", earlier.bundleId, later.bundleId, {
+    const preview = await historicalComparison(context, earlier.bundleId, later.bundleId, {
         title, formats: ["html", "pdf", "json", "markdown"],
     });
     assert.equal(preview.title, title);
@@ -189,8 +47,8 @@ test("comparison titles bind every new format and verified canonical-title carri
         const text = (await (await pdf.getPage(1)).getTextContent()).items.map(item => item.str || "").join(" ");
         assert.ok(text.includes(title));
     } finally { await document.destroy(); }
-    const reviewed = await controller.reviewComparison("named-comparison", preview.previewId, true);
-    const saved = (await controller.confirmComparison("named-comparison", preview.previewId, true)).bundle;
+    const reviewed = preview;
+    const saved = preview.bundle;
     for (const [name, value] of Object.entries(reviewed.files)) {
         const expected = typeof value === "string" ? Buffer.from(value) : Buffer.from(value.data, "base64");
         assert.deepEqual(await readFile(saved.files[name]), expected);
@@ -233,11 +91,9 @@ test("comparison titles bind every new format and verified canonical-title carri
 
 test("canonical title stays absent for verified older files even when indexed or document titles exist", async t => {
     const { context, controller, earlier, later } = await setup(t);
-    const preview = await controller.previewComparison("legacy-title-carrier", earlier.bundleId, later.bundleId, {
+    const { bundle: comparison } = await historicalComparison(context, earlier.bundleId, later.bundleId, {
         formats: ["html", "pdf", "json", "markdown"],
     });
-    await controller.reviewComparison("legacy-title-carrier", preview.previewId, true);
-    const comparison = (await controller.confirmComparison("legacy-title-carrier", preview.previewId, true)).bundle;
     for (const entry of [earlier, comparison]) {
         const name = entry.kind === "comparison" ? "comparison-report.json" : "product-report.json";
         const manifestFile = entry.files["coverage-and-redaction-manifest.json"];
@@ -267,78 +123,6 @@ test("canonical title stays absent for verified older files even when indexed or
         assert.equal(value.artifact.title, "Indexed label, not a manifest-declared title");
     }
     assert.equal(Object.hasOwn(await readSavedComparison(context, state, comparison.bundleId), "canonicalTitle"), false);
-    assert.ok(await controller.inspectComparison("undeclared-source-title", earlier.bundleId, later.bundleId),
-        "An indexed legacy label does not become a manifest-declared title binding");
-});
-
-test("format-independent facts support comparison without saved source JSON", async t => {
-    const { context, controller, earlier, later } = await setup(t);
-    const inspected = await controller.inspectComparison("panel", earlier.bundleId, later.bundleId);
-    assert.equal(inspected.comparison.toolComparison.raw.baseline.success, 1);
-    assert.equal(inspected.comparison.toolComparison.raw.later.failure, 1);
-    assert.equal(inspected.comparison.metricProjectionVersion, 4);
-    assert.equal(inspected.comparison.metrics.some(metric => metric.metric === "accuracy"), false,
-        "No retired automatic-quality placeholder replaces missing personal feedback.");
-    const before = await readdir(path.join(context.dataDir, "exports"));
-    const preview = await controller.previewComparison("panel", earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
-    assert.deepEqual(await readdir(path.join(context.dataDir, "exports")), before);
-    assert.equal(preview.kind, "comparison");
-    assert.equal(preview.privacy.reviewerConfirmed, false);
-    for (const name of ["comparison-report.html", "comparison-report.md"]) {
-        assert.doesNotMatch(preview.files[name], /Partial: 0|Unknown: 0/, "Zero-only outcomes do not clutter human output");
-    }
-    assert.equal(preview.snapshot.comparison.toolComparison.raw.baseline.partial, 0);
-    assert.equal(preview.snapshot.comparison.toolComparison.raw.later.unknown, 0);
-    await assert.rejects(controller.confirmComparison("panel", preview.previewId, true), /disclosure review/);
-    const reviewed = await controller.reviewComparison("panel", preview.previewId, true);
-    assert.equal(reviewed.privacy.reviewerConfirmed, true);
-    const saved = await controller.confirmComparison("panel", preview.previewId, true);
-    assert.equal(saved.bundle.kind, "comparison");
-    assert.deepEqual(saved.bundle.sourceReports.map(source => source.bundleId), [earlier.bundleId, later.bundleId]);
-    for (const [name, content] of Object.entries(reviewed.files)) assert.equal(await readFile(saved.bundle.files[name], "utf8"), content);
-    const opened = await controller.openComparison("panel", saved.bundle.bundleId);
-    assert.deepEqual(opened.comparison, inspected.comparison);
-    assert.ok(opened.sources.every(source => source.available));
-    const text = await readFile(saved.bundle.files["comparison-report.json"], "utf8");
-    assert.doesNotMatch(text, /SYNTHETIC_PRIVATE_PROMPT|SYNTHETIC_PRIVATE_FOLLOWUP|email@example/);
-});
-
-test("deleted source report invalidates unsaved approval but saved comparisons retain their bytes", async t => {
-    const { context, controller, earlier, later } = await setup(t);
-    const preview = await controller.previewComparison("panel", earlier.bundleId, later.bundleId);
-    await controller.reviewComparison("panel", preview.previewId, true);
-    const saved = (await controller.confirmComparison("panel", preview.previewId, true)).bundle;
-    const hashes = await Promise.all(Object.values(saved.files).map(async file => hash(await readFile(file))));
-    const stale = await controller.previewComparison("panel", earlier.bundleId, later.bundleId);
-    await controller.reviewComparison("panel", stale.previewId, true);
-    await updateBoardState(context, state => { state.exports = state.exports.filter(entry => entry.bundleId !== earlier.bundleId); });
-    await assert.rejects(controller.confirmComparison("panel", stale.previewId, true), /no longer available/);
-    const opened = await controller.openComparison("panel", saved.bundleId);
-    assert.equal(opened.sources[0].available, false);
-    assert.equal(opened.sources[1].available, true);
-    assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => hash(await readFile(file)))), hashes);
-});
-
-test("source deletion or consent change rejects stale comparison review without erasing saved sources", async t => {
-    const { context, controller, earlier, later } = await setup(t);
-    const preview = await controller.previewComparison("panel", earlier.bundleId, later.bundleId);
-    await updateBoardState(context, state => {
-        state.personalEvaluation = defaultPersonalEvaluation();
-        state.personalEvaluation.consent.revision = 1;
-    });
-    await assert.rejects(controller.reviewComparison("panel", preview.previewId, true), /data or permission change/);
-    assert.equal((await loadBoardState(context)).exports.length, 2);
-    controller.invalidateDerived();
-    await assert.rejects(controller.reviewComparison("panel", preview.previewId, true), /no longer available/);
-});
-
-test("saved source reports can be compared after collected evidence is removed", async t => {
-    const { context, controller, earlier, later } = await setup(t);
-    await replaceEvidence(context, () => ({ records: [], importCoverage: {} }));
-    const result = await controller.inspectComparison("panel", earlier.bundleId, later.bundleId);
-    assert.equal(result.comparison.toolComparison.raw.baseline.count, 1);
-    assert.equal(result.comparison.toolComparison.raw.later.count, 1);
-    assert.equal((await loadBoardState(context)).exports.length, 2);
 });
 
 test("unrelated collected activity does not invalidate an unchanged selected report", async t => {

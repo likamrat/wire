@@ -1,3 +1,4 @@
+import { historicalComparison, installHistoricalFiles } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
@@ -8,7 +9,7 @@ import { buildReportFacts, assessmentHash } from "../lib/assessment-read-model.m
 import { freezeEvaluationFacts, projectCurrentEvaluationFacts, adaptEvaluationReport } from "../lib/report-facts.mjs";
 import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
-import { inspectComparisonPair, buildComparisonBundle } from "../lib/comparison-export.mjs";
+import { inspectComparisonPair, buildComparisonBundle } from "./historical-comparison-fixture.mjs";
 import { readSavedReportFile, readSavedReportDocument, readSavedComparison } from "../lib/report-artifacts.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { comparisonBodyHtml, renderComparisonHtml, renderComparisonMarkdown, reportPresentation } from "../lib/report-presentation.mjs";
@@ -82,11 +83,6 @@ async function saveHistoricalComparison(context, old, projection = 2) {
     }));
     const comparison = compareFrozenReportFacts(...envelopes, { metricProjectionVersion: projection });
     assert.equal(comparison.metricProjectionVersion, projection);
-    await assert.rejects(buildComparisonBundle({ ...currentPair, comparison }, {}, renderPdf), /current metric projection/);
-    await assert.rejects(buildComparisonBundle({ ...currentPair, comparison: { ...comparison, metricProjectionVersion: 4, presentation: currentPair.comparison.presentation } }, {}, renderPdf),
-        /rating lanes/);
-    await assert.rejects(buildComparisonBundle({ ...currentPair, comparison: { ...currentPair.comparison, presentation: reportPresentation } }, {}, renderPdf),
-        /presentation definitions without grading bands/);
     comparison.presentation = reportPresentation;
     bundle.comparison = comparison;
     bundle.snapshot.comparison = comparison;
@@ -108,7 +104,7 @@ async function saveHistoricalComparison(context, old, projection = 2) {
             .map(([name, bytes]) => [name, { sha256: assessmentHash(bytes), bytes: Buffer.byteLength(bytes) }])) });
     bundle.files["coverage-and-redaction-manifest.json"] = JSON.stringify(manifest, null, 2);
     return exclusiveBoard(context, async (state, save) => {
-        const entry = await writeBundle(context, bundle, state);
+        const entry = await installHistoricalFiles(context, bundle);
         state.exports.push(entry); state.revision++;
         await save(state);
         return { entry, comparison };
@@ -173,10 +169,10 @@ test("new reports and both comparison orientations exclude retired reviews while
                 "Missing historical timing remains explicitly one-sided, never zero.");
             }
             assert.doesNotMatch(JSON.stringify(pair.sourceFacts), /model-assessed|user-personal|synthetic-quality-fixture|assessmentAttempts|reviewStatuses/);
-            const comparison = await reports.previewComparison("report-owner", left, right, { formats: ["html", "json", "markdown"] });
+            const comparison = await historicalComparison(f.context, left, right, { formats: ["html", "json", "markdown"] });
             assert.doesNotMatch(comparison.previewHtml, /AI results|synthetic-quality-fixture/);
-            await reports.reviewComparison("report-owner", comparison.previewId, true);
-            await reports.confirmComparison("report-owner", comparison.previewId, true);
+
+
         }
     }
     const html = await readSavedReportDocument(f.context, await loadBoardState(f.context), old[0].entry.bundleId);

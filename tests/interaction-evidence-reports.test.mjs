@@ -6,7 +6,6 @@ import { buildSanitizedBundle, createExportController, writeBundle } from "../li
 import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mjs";
 import { hasCurrentReportPresentation } from "../lib/report-presentation.mjs";
 import { readSavedReportFile, reportHash } from "../lib/report-artifacts.mjs";
-import { buildComparisonBundle, inspectComparisonPair } from "../lib/comparison-export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
@@ -47,7 +46,7 @@ test("new output stamps presentation v3 with ms-first timing, leaving envelope a
     assert.equal(hasCurrentReportPresentation(bundle.snapshot), true);
 });
 
-test("saved v2 formats stay byte-identical and a v2 prepared comparison cannot become a v3 save", async t => {
+test("saved v2 formats stay byte-identical when a new report is saved", async t => {
     const { context } = await privateFixture(t, [record()]);
     const bundle = await buildSanitizedBundle([record()], key, { promptMode: "none", formats: ["html", "markdown", "json"] });
     bundle.snapshot.presentation = { schemaVersion: 2 };
@@ -73,13 +72,6 @@ test("saved v2 formats stay byte-identical and a v2 prepared comparison cannot b
     for (const [format, name] of [["html", "product-report.html"], ["markdown", "product-report.md"], ["json", "product-report.json"]]) {
         assert.equal((await readSavedReportFile(context, state, saved.bundleId, format)).bytes.toString(), bundle.files[name]);
     }
-    const pair = await inspectComparisonPair(context, state, saved.bundleId, current.bundleId);
-    const comparison = await buildComparisonBundle(pair, { formats: ["html", "markdown"] });
-    assert.equal(comparison.snapshot.presentation.schemaVersion, 3);
-    assert.match(comparison.files["comparison-report.html"], /11,850 ms \(11\.85 s\)/);
-    assert.match(comparison.files["comparison-report.md"], /11,850 ms \(11\.85 s\)/);
-    pair.comparison.presentation = { schemaVersion: 2 };
-    await assert.rejects(buildComparisonBundle(pair, { formats: ["html"] }), /current presentation/);
     for (const [file, original] of bytes) assert.deepEqual(await readFile(file), original);
     assert.equal((await loadBoardState(context)).exports.length, 2);
 });

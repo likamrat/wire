@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -34,7 +35,7 @@ test("registered mixed-origin comparison preserves overlap, per-side coverage, e
         await controller.review("fixture", preview.previewId, true);
         sources.push((await controller.confirm("fixture", preview.previewId, true)).bundle);
     }
-    const preview = await controller.previewComparison("fixture", sources[0].bundleId, sources[1].bundleId,
+    const preview = await historicalComparison(context, sources[0].bundleId, sources[1].bundleId,
         { formats: ["html", "pdf", "json", "markdown"] });
     const comparison = preview.comparison;
     assert.equal(comparison.toolComparison.overlap.sharedCount, 2);
@@ -43,8 +44,8 @@ test("registered mixed-origin comparison preserves overlap, per-side coverage, e
     assert.ok(accuracy.every(metric => metric.status === "unavailable" && metric.delta === null));
     assert.deepEqual(accuracy.find(metric => metric.baseline)?.baseline.coverage, { count: 2, eligible: 2, missing: 0 });
     assert.deepEqual(accuracy.find(metric => metric.later)?.later.coverage, { count: 1, eligible: 2, missing: 1 });
-    await controller.reviewComparison("fixture", preview.previewId, true);
-    const saved = (await controller.confirmComparison("fixture", preview.previewId, true)).bundle;
+
+    const saved = preview.bundle;
     const state = await loadBoardState(context), files = {};
     for (const format of ["html", "pdf", "json", "markdown", "manifest"]) {
         const document = await readSavedComparisonFile(context, state, saved.bundleId, format);

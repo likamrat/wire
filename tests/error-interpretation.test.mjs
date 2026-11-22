@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRecordedResults } from "../web/recorded-results.mjs";
@@ -271,7 +272,7 @@ test("saved Compare preserves both returned statuses in every format without rew
         errorDiagnostic: { version: 1, source: "result-error", status: "recorded", statusCode: 403, code: "AccessDenied", message: "Access denied" } }];
     await replaceEvidence(context, () => ({ records: [record] }));
     const later = await save();
-    const preview = await controller.previewComparison(owner, earlier, later, { formats: ["html", "markdown", "json", "pdf"] });
+    const preview = await historicalComparison(context, earlier, later, { formats: ["html", "markdown", "json", "pdf"] });
     for (const [name, content] of Object.entries(preview.files)) {
         if (name.endsWith(".json")) {
             const value = JSON.parse(content);
@@ -284,8 +285,8 @@ test("saved Compare preserves both returned statuses in every format without rew
         assert.match(text, /statuses disagree/);
         assert.doesNotMatch(text, /service understood but refused/);
     }
-    await controller.reviewComparison(owner, preview.previewId, true);
-    const saved = await controller.confirmComparison(owner, preview.previewId, true);
+
+    const saved = preview;
     const read = await readSavedComparison(context, await loadBoardState(context), saved.bundle.bundleId);
     assert.deepEqual(read.comparison.resultComparison.changes[0].later[0].returnedEntries[0].statusConflict,
         { version: 1, reported: 500, diagnostic: 403 });

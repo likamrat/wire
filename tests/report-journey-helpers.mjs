@@ -25,13 +25,6 @@ export async function openReportLibrary(page) {
     if (await page.locator("#viewAllSavedReports").isVisible()) await viewAllSavedReports(page);
 }
 
-export async function openReportComparison(page) {
-    if (!await page.locator("#comparisonWorkspace").isVisible()) {
-        if (!await page.locator("#reportCompareLink").isVisible()) await openReportLibrary(page);
-        await page.locator("#reportCompareLink").click();
-    }
-}
-
 export async function reportActivityActionGeometry(page) {
     return page.locator("#reportActivityActions").evaluate(root => {
         const box = node => {

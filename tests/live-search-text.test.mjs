@@ -1,3 +1,5 @@
+import { forbidSearchAi as forbidAi } from "./search-text-guards.mjs";
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -12,7 +14,6 @@ import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createSavedArtifactDescriptor, reportHash } from "../lib/report-artifacts.mjs";
 import { createSearchMembership } from "../web/search-membership.mjs";
-import { forbidSearchAi as forbidAi } from "./search-text-guards.mjs";
 
 test("selected masked result copies reach literal HTTP Search and verified report/comparison Open", { timeout: 30000 }, async t => {
     const guard = forbidAi(t), records = searchRecords(1);
@@ -30,10 +31,8 @@ test("selected masked result copies reach literal HTTP Search and verified repor
         await app.exports.review("result-search-proof", preview.previewId, true);
         saved.push((await app.exports.confirm("result-search-proof", preview.previewId, true)).bundle);
     }
-    const compared = await app.exports.previewComparison("result-search-proof", saved[0].bundleId, saved[1].bundleId,
+    const { bundle: comparison } = await historicalComparison(app.context, saved[0].bundleId, saved[1].bundleId,
         { formats: ["json"], resultText: true });
-    await app.exports.reviewComparison("result-search-proof", compared.previewId, true);
-    const comparison = (await app.exports.confirmComparison("result-search-proof", compared.previewId, true)).bundle;
     const panel = await streamPanel(app.runtime);
     t.after(() => panel.close());
     await panel.api("/api/search/query", { query: "FERRITE MARIGOLD", requestId: 1, types: ["report", "comparison"] });

@@ -9,9 +9,6 @@ import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, openActivitySessions } from "./helpers.mjs";
 import { reportContents, scanReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { createReportComparison } from "../web/report-comparison.mjs";
-import { createAssessmentWording } from "../web/assessment-presentation.mjs";
-import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 
 const proofs = process.env.WORKIQ_COLLAPSE_PROOFS;
 const ready = page => page.locator("#workspace[aria-busy=false]").waitFor();
@@ -434,44 +431,9 @@ test("resizing settles geometry while host motion changes preserve built-in glid
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0, "No entrance animation on reload");
 });
 
-test("synthetic comparison content and native reading dialogs fit the actual collapsed shell", { timeout: 45000 }, async t => {
+test("native reading dialogs fit the actual collapsed shell", { timeout: 45000 }, async t => {
     const { page } = await setup(t);
     await navigateMain(page, "reports"); await ready(page);
-    const report = id => ({
-        schemaVersion: 1, bundleId: `export-${id}`, snapshotHash: id.repeat(64), disclosureReviewed: true, patternVersion: 1,
-        metrics: {}, toolRows: [{ id, patternId: "mail", outcome: id === "a" ? "success" : "failure" }],
-        patterns: [{ patternId: "mail", unitKind: "tool-call", tool: "workiq-fetch", workload: "Mail",
-            attribution: "requested-single-target", targetShape: "single", available: true,
-            endpoints: [{ pathTemplate: "/me/messages", method: null, apiVersion: null, queryKeys: [] }] }],
-        scope: { selectionKind: "selected", timeZone: "UTC", collectionDefinition: "synthetic-fixture", callTimesAvailable: false, historyComplete: false },
-    });
-    // Mount the existing comparison renderer in its real shell container without
-    // creating, exporting or claiming any saved report in the isolated store.
-    await page.evaluate(({ source, wording, model }) => {
-        const script = document.createElement("script");
-        script.nonce = document.querySelector("script[nonce]").nonce;
-        script.textContent = `window.collapseComparison = (${source})((${wording})());`;
-        document.head.append(script);
-        const host = document.querySelector("#comparisonWorkspace");
-        host.hidden = false;
-        window.collapseComparison.render(host, model);
-    }, { source: createReportComparison.toString(), wording: createAssessmentWording.toString(), model: compareFrozenReportFacts(report("a"), report("b"), { identityRelation: "same-namespace" }) });
-    const comparison = page.locator("#comparisonWorkspace .report-comparison"), original = await comparison.elementHandle();
-    for (const theme of ["light", "dark"]) for (const scale of [1, 2]) {
-        await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await page.setViewportSize({ width: 1200, height: 1000 });
-        await setCollapsed(page, false);
-        const before = await comparison.boundingBox(), sidebar = (await geometry(page)).sidebar;
-        await setCollapsed(page, true);
-        const after = await comparison.boundingBox(), collapsed = (await geometry(page)).sidebar;
-        assert.ok(Math.abs(after.width - before.width - sidebar.width + collapsed.width) < 1);
-        assert.equal(await original.evaluate(node => node === document.querySelector("#comparisonWorkspace .report-comparison")), true);
-        assert.ok((await geometry(page)).overflow <= 1);
-        assert.deepEqual(await comparison.locator(".comparison-score-value,.comparison-metric-value").evaluateAll(nodes =>
-            nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
-        if (scale === 1) { await comparison.scrollIntoViewIfNeeded(); await screenshot(page, `comparison-collapsed-${theme}`); }
-    }
     await navigateMain(page, "home"); await ready(page);
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     for (const collapsed of [false, true]) {

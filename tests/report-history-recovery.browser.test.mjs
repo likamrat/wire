@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -505,9 +506,7 @@ test("UX-003 an in-flight download is not dispatched after the displayed target 
 test("UX-002 report/comparison labels preserve named actions, chooser eligibility and frozen comparison links", { timeout: 60000 }, async t => {
     const { page, context, controller } = await setup(t, 2);
     const sources = (await loadBoardState(context)).exports;
-    const preview = await controller.previewComparison("synthetic-comparison", sources[0].bundleId, sources[1].bundleId, { formats: ["html", "json"] });
-    await controller.reviewComparison("synthetic-comparison", preview.previewId, true);
-    const comparison = (await controller.confirmComparison("synthetic-comparison", preview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, sources[0].bundleId, sources[1].bundleId, { formats: ["html", "json"] });
     const bytes = await hashes([comparison]);
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
     await history(page);
@@ -526,10 +525,7 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     const opened = await controller.openComparison("synthetic-comparison", comparison.bundleId);
     assert.deepEqual(opened.sources.map(source => source.available), [false, true]);
     await page.locator("#savedReportSearch").fill(sources[1].bundleId);
-    await page.locator("#reportCompareLink").click();
-    await page.waitForFunction(() => document.querySelector("#comparisonWorkspace select")?.options.length === 2);
-    const options = await page.locator("#comparisonWorkspace select").first().locator("option").evaluateAll(nodes => nodes.map(node => node.value));
-    assert.deepEqual(options.filter(Boolean), [sources[1].bundleId], "Comparison artifacts remain ineligible as report inputs");
+    assert.equal(await page.getByRole("link", { name: "Compare saved reports" }).count(), 0);
 });
 
 test("UX-003 confirmed save with failed availability refresh stays explicit and is never replayed", { timeout: 60000 }, async t => {

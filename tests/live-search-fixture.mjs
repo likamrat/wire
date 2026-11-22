@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -113,7 +114,6 @@ export async function streamPanel(runtime, { purpose = "navigation" } = {}) {
 }
 
 export async function saveSearchComparison(app, formats) {
-    const preview = await app.exports.previewComparison("frozen-search-proof", app.bundles[0].bundleId, app.bundles[1].bundleId, { formats });
-    await app.exports.reviewComparison("frozen-search-proof", preview.previewId, true);
-    return (await app.exports.confirmComparison("frozen-search-proof", preview.previewId, true)).bundle;
+    const preview = await historicalComparison(app.context, app.bundles[0].bundleId, app.bundles[1].bundleId, { formats });
+    return preview.bundle;
 }

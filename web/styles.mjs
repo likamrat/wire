@@ -393,7 +393,7 @@ textarea:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 @media(max-width:760px) {.report-options,.prompt-pair{grid-template-columns:minmax(0,1fr)}.report-options{gap:16px}.report-options fieldset{padding:16px}.report-frame{height:440px}}
 ${uxStyles}
 .wire-section-nav{display:flex;align-items:stretch;flex-wrap:wrap;gap:0 1.25rem;margin:0 0 1rem;border-bottom:1px solid var(--surface-divider)}
-#workspace:has(>#compareSections:not([hidden]),>#trendsView:not([hidden]),>#reportsView:not([hidden]) #reportSections:not([hidden]))>.page-heading{margin-bottom:var(--space-lg)}
+#workspace:has(>#trendsView:not([hidden]),>#reportsView:not([hidden]) #reportSections:not([hidden]))>.page-heading{margin-bottom:var(--space-lg)}
 .wire-section-nav>:is(a,button){display:inline-flex;align-items:center;justify-content:flex-start;gap:.5em;min-height:44px;padding:.375em .25em;max-width:100%;box-sizing:border-box;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font:inherit;text-decoration:none}
 .wire-section-nav>:is(a,button){position:relative;isolation:isolate}
 .wire-section-nav>:is(a,button)::before{content:"";position:absolute;inset:.55em 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--section-cue,transparent)}
@@ -840,14 +840,14 @@ ${analyzeLayoutStyles}
  :root:not([data-evidence-theme]) button:disabled {color:var(--muted);--pill-ink:var(--muted);--pill-fill:transparent;--action-shadow:none}
 }
 .settings-content,.collector-panel,.collection-status-view>.settings-section,
-#activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {
+#activityList>.activity-card,#reportsView :is(.report-journey,#bundles) {
  box-shadow:var(--panel-shadow);
 }
 .select-popup,.wire-search-panel {border-color:var(--surface-edge)}
 dialog:not(#contextSidebar,.navigation-drawer) {box-shadow:var(--surface-shadow)}
 @media(forced-colors:active) {
  .settings-content,.collector-panel,.collection-status-view>.settings-section,
- #activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {outline:1px solid CanvasText;box-shadow:none}
+ #activityList>.activity-card,#reportsView :is(.report-journey,#bundles) {outline:1px solid CanvasText;box-shadow:none}
 }
 /* Screen-only semantic aliases follow shared chart CSS; saved output keeps its own palette. */
 ${screenServiceInkStyles}

@@ -8,9 +8,8 @@ export const reportFileChoices = {
 
 export function reportWorkspacePresentation(route, journey = {}) {
     const saved = Boolean(route.bundle);
-    const comparing = !saved && route.task === "compare";
-    const prepared = !saved && !comparing && (route.task === "create" && journey.step === 3 || journey.saveUnconfirmed === true);
-    return { landing: !saved && !comparing && !prepared, prepared, saved, comparing };
+    const prepared = !saved && (route.task === "create" && journey.step === 3 || journey.saveUnconfirmed === true);
+    return { landing: !saved && !prepared, prepared, saved };
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.

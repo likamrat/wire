@@ -3,10 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { retirementFixture } from "./ai-review-retirement-fixture.mjs";
 import { buildSanitizedBundle, createExportController, writeBundle } from "../lib/export.mjs";
-import { buildComparisonBundle, inspectComparisonPair } from "../lib/comparison-export.mjs";
+import { installHistoricalFiles, buildComparisonBundle, inspectComparisonPair } from "./historical-comparison-fixture.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { freezeEvaluationFacts } from "../lib/report-facts.mjs";
@@ -86,7 +85,7 @@ async function seedLegacyComparison(context, baselineId, laterId, side) {
     bundle.files["coverage-and-redaction-manifest.json"] = JSON.stringify(manifest, null, 2);
     let saved;
     await updateBoardState(context, async state => {
-        saved = await writeBundle(context, bundle, state);
+        saved = await installHistoricalFiles(context, bundle);
         state.exports.push(saved);
         state.artifactDeletion ??= { schemaVersion: 1, revision: 0, identities: [] };
         state.artifactDeletion.revision++;
@@ -94,7 +93,7 @@ async function seedLegacyComparison(context, baselineId, laterId, side) {
     return saved;
 }
 
-test("historical one-sided facts stay readable in both directions while new comparisons exclude retired feedback", { timeout: 120000 }, async t => {
+test("historical one-sided facts stay readable in both directions", { timeout: 120000 }, async t => {
     const cleanup = [];
     const { context } = await retirementFixture({ after: action => cleanup.push(action) });
     let runtime, browser;
@@ -130,68 +129,20 @@ test("historical one-sided facts stay readable in both directions while new comp
         }
         return route.continue();
     });
-    async function showReports(bundleId) {
-        await page.goto(runtime.url + "#reports");
-        await page.reload();
+    async function showReports() {
+        // Start from a fresh public location, not a reload of private search/inspector history.
+        await page.goto(runtime.url);
         await page.locator('#workspace[aria-busy="false"]').waitFor();
-        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
-        await page.locator("#savedReportSearch").fill(bundleId);
+        await page.locator('nav [data-nav="reports"]').click();
+        await page.locator("#viewAllSavedReports").click();
     }
     const item = id => page.locator(`#bundleList [data-bundle-id="${id}"]`);
-    async function select(label, id) {
-        await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
-    }
-    async function assertView(comparison) {
-        const view = page.locator("#comparisonWorkspace .report-comparison");
-        assert.equal(await view.locator(".comparison-tool-results").isVisible(), true);
-        assert.equal(await view.locator(".comparison-metrics tbody tr").count(), comparison.metrics.length);
-        assert.doesNotMatch(await view.innerText(), /Your feedback|Personal feedback|Answer correctness|Answer support|AI review/);
-    }
     for (const direction of directions) {
-        await showReports(direction.baseline.bundleId);
-        await page.locator("#reportCompareLink").click();
-        await select("Baseline report", direction.baseline.bundleId);
-        await select("Selected report", direction.later.bundleId);
-        const inspecting = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
-        await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
-        const response = await inspecting;
-        assert.equal(response.status(), 200, await response.text());
-        const compared = (await response.json()).comparison;
-        assert.equal(compared.metricProjectionVersion, 4);
-        assert.equal(personalRow(compared), undefined);
-        assert.ok(compared.metrics.length > 0 && compared.metrics.every(row => row.metric === "speed"));
-        await page.locator("#comparisonWorkspace .comparison-metrics").first().waitFor();
-        await assertView(compared);
-
-        const preview = await controller.previewComparison("new-copy", direction.baseline.bundleId, direction.later.bundleId,
-            { formats: ["html", "pdf", "json", "markdown"], timeContext });
-        await controller.reviewComparison("new-copy", preview.previewId, true, timeContext);
-        const saved = (await controller.confirmComparison("new-copy", preview.previewId, true, timeContext)).bundle;
-        const newHashes = await fileHashes(saved);
-        for (const name of ["comparison-report.html", "comparison-report.md", "comparison-report.json"]) {
-            const text = await readFile(saved.files[name], "utf8");
-            assert.doesNotMatch(text, /Your feedback|Personal feedback|user-personal|model-assessed/);
-            assert.match(text, /Recorded tool completion/);
-        }
-        const pdf = getDocument({ data: new Uint8Array(await readFile(saved.files["comparison-report.pdf"])), useSystemFonts: true });
-        try {
-            const doc = await pdf.promise, text = [];
-            for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(part => part.str ?? "").join(""));
-            assert.doesNotMatch(text.join(""), /Your feedback|Personal feedback/);
-            assert.match(text.join(""), /Recorded tool completion/);
-        } finally { await pdf.destroy(); }
-        const openedNew = await controller.openComparison("new-copy", saved.bundleId);
-        assert.equal(openedNew.comparison.metricProjectionVersion, 4);
-        assert.equal(personalRow(openedNew.comparison), undefined);
-        assert.equal(openedNew.displayCompatibility, undefined);
-        assert.deepEqual(await fileHashes(saved), newHashes);
-
-        await showReports(direction.legacy.bundleId);
-        await item(direction.legacy.bundleId).locator(".saved-report-summary").click();
+        await showReports();
+        await item(direction.legacy.bundleId).locator(".saved-report-files").click();
         const beforeOpen = await loadBoardState(context);
         const opening = page.waitForResponse(result => result.url().endsWith("/api/artifact-file"));
-        await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
+        await item(direction.legacy.bundleId).getByRole("button", { name: "Web page (HTML)", exact: true }).click();
         const openResponse = await opening;
         assert.equal(openResponse.status(), 200, await openResponse.text());
         const document = await openResponse.json();
@@ -217,13 +168,13 @@ test("historical one-sided facts stay readable in both directions while new comp
         await frame.locator(".comparison-unavailable > summary").click();
         assert.match(await frame.locator(".report-comparison").innerText(), /Not preserved/);
         assert.match(await frame.locator(".report-comparison").innerText(), /No value has been reconstructed/);
-        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
         assert.deepEqual(await fileHashes(direction.legacy), direction.legacyHashes);
     }
     assert.deepEqual(await Promise.all([withoutFeedback, withFeedback].map(fileHashes)), sourceHashes);
     // Remove only an isolated source bundle: legacy display must still use its embedded copies.
-    await showReports(withFeedback.bundleId);
-    await item(withFeedback.bundleId).locator(".saved-report-summary").click();
+    await showReports();
+    await item(withFeedback.bundleId).getByRole("button", { name: "Inspect details" }).click();
     const deletionPreview = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/preview"));
     await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).click();
     assert.equal((await deletionPreview).status(), 200);
@@ -239,10 +190,10 @@ test("historical one-sided facts stay readable in both directions while new comp
         assert.ok(opened.sources.some(source => source.bundleId === withFeedback.bundleId && source.available === false));
         assert.deepEqual(await fileHashes(direction.legacy), direction.legacyHashes);
     }
-    await showReports(directions[0].legacy.bundleId);
-    await item(directions[0].legacy.bundleId).locator(".saved-report-summary").click();
+    await showReports();
+    await item(directions[0].legacy.bundleId).locator(".saved-report-files").click();
     const reopened = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await item(directions[0].legacy.bundleId).getByRole("button", { name: "Web page (HTML)", exact: true }).click();
     assert.equal((await reopened).status(), 200);
     const frozen = page.frameLocator("#savedReportReader iframe");
     await frozen.locator(".comparison-unavailable > summary").click();

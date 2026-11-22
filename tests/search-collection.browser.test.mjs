@@ -17,9 +17,8 @@ import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-tran
 import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
 import { createNativePersistence } from "../lib/native-persistence.mjs";
 import { createNativeRuntimeAccess } from "../lib/runtime-access.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
 
-test("literal Search follows real collection advances while saved-report Compare stays frozen", { timeout: 45000 }, async t => {
+test("literal Search follows real collection advances while the saved report stays frozen", { timeout: 45000 }, async t => {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) }, []);
     const appDbPath = path.join(root, "data.db"), sessionRoot = path.join(root, "session-state"), sourceId = randomUUID();
     const db = new DatabaseSync(appDbPath);
@@ -144,15 +143,14 @@ test("literal Search follows real collection advances while saved-report Compare
     });
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await openReportComparison(page);
-    const compare = page.locator("#comparisonWorkspace");
-    for (const [index, label] of ["Baseline report", "Selected report"].entries()) {
-        await compare.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup [data-value="${saved[index].bundleId}"]`).click();
-    }
-    await compare.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await expect(compare.locator(".comparison-native-results")).toBeVisible();
-    const frozen = await compare.locator(".comparison-native-results").innerText(), before = await loadBoardState(context);
+    await page.goto(runtime.url + "reports?task=library");
+    const row = page.locator(`[data-bundle-id="${saved[0].bundleId}"]`);
+    await row.locator(".saved-report-title").click();
+    const reader = page.locator("#savedReportReader");
+    await expect(reader).toBeVisible();
+    const document = reader.frameLocator("iframe").locator("body");
+    await expect(document).toContainText("Invented earlier report");
+    const frozen = await document.innerText(), before = await loadBoardState(context);
     await page.locator("#wireSearch").fill("invented");
     await expect(page.locator("#wireSearchResults button").first()).toBeVisible();
     await expect(page.locator("#wireNativeSearch .wire-search-hit").first()).toBeVisible();
@@ -187,7 +185,7 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(page.locator("#wireNativeSearch")).toContainText("1 match across saved dates.");
     await expect(page.locator("#wireNativeSearch")).not.toContainText("0 unavailable text");
     await expect(page.locator("#wireSearchCoverage")).toBeHidden();
-    assert.equal(await compare.locator(".comparison-native-results").innerText(), frozen);
+    assert.equal(await document.innerText(), frozen);
     assert.ok(nativeSearch.at(-1).revision > before.revision);
     assert.equal((await loadBoardState(context)).nativeRetention.settings.paused, false);
     assert.ok(searchReads.length < 8, "Known read refreshes must stay bounded rather than loop.");
@@ -196,7 +194,7 @@ test("literal Search follows real collection advances while saved-report Compare
         await page.screenshot({ path: path.join(proof, "search-after-collection.png") });
         await fs.writeFile(path.join(proof, "search-advance.json"), JSON.stringify({
             beforeRevision: before.revision, afterRevision: nativeSearch.at(-1).revision,
-            captures, queryRequests: searchReads.length, comparisonUnchanged: true, ordinaryMatches: 0, microsoftMatches: 1,
+            captures, queryRequests: searchReads.length, reportUnchanged: true, ordinaryMatches: 0, microsoftMatches: 1,
             nativeTarget: nativeSearch.at(-1).page.items[0].target,
             nativeSourceRevision: nativeSearch.at(-1).sourceRevision,
         }, null, 2));
@@ -233,7 +231,7 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
-    assert.equal(await compare.locator(".comparison-native-results").innerText(), frozen);
+    assert.equal(await document.innerText(), frozen);
     await page.locator("#wireSearch").fill("No invented record matches this phrase");
     await expect(page.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.");
     await expect(page.locator("#wireSearchRetry")).toBeHidden();

@@ -1027,7 +1027,7 @@ test("new actual HTML keeps exact tool names intact in a keyboard-scrollable nar
     });
 });
 
-test("new library metadata and saved comparisons use frozen files and direct local Save", { timeout: 60000 }, async t => {
+test("new library metadata reflects ordinary reports saved locally", { timeout: 60000 }, async t => {
     const { page, context, requests, errors } = await setup(t);
     for (const preset of ["errors", "all"]) {
         await prepare(page, preset);
@@ -1045,32 +1045,7 @@ test("new library metadata and saved comparisons use frozen files and direct loc
     await viewAllSavedReports(page);
     await expect(page.locator(".saved-report-privacy").first()).toContainText("Detected personal details hidden");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
-    await page.locator("#reportCompareLink").click();
-    const entries = (await loadBoardState(context)).exports;
-    for (const [label, id] of [["Baseline report", entries[0].bundleId], ["Selected report", entries[1].bundleId]]) {
-        await page.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup [data-value="${id}"]`).click();
-    }
-    const preparation = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/preview"));
-    await page.getByRole("button", { name: "Compare reports", exact: true }).click();
-    const prepared = await preparation, body = await prepared.json();
-    assert.equal(prepared.status(), 200, body.error);
-    await expect(page.getByRole("button", { name: "Approve for local saving", exact: true })).toBeHidden();
-    await page.getByRole("tab", { name: /^Files \(/ }).click();
-    const file = page.locator("#comparisonInspectionPanel1");
-    await expect(file.frameLocator("iframe").locator("h1")).toBeVisible();
-    const frameSize = await file.locator("iframe").boundingBox();
-    assert.ok(frameSize.height >= page.viewportSize().height * .4, JSON.stringify(frameSize));
-    await file.getByRole("button", { name: "Source", exact: true }).click();
-    assert.equal(await file.locator("pre:visible").textContent(), body.files["comparison-report.html"]);
-    await page.getByRole("tab", { name: "Report", exact: true }).click();
-    await page.getByRole("button", { name: "Save comparison", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Open saved comparison", exact: true })).toBeVisible();
-    const comparison = (await loadBoardState(context)).exports.find(entry => entry.kind === "comparison");
-    assert.equal(comparison.privacyReview.reviewerConfirmed, false);
-    assert.equal(comparison.privacyReview.localSave.contentHash, body.localSaveRequest.contentHash);
-    assert.equal(requests.filter(request => /\/(?:privacy-review|report-comparison\/review)$/.test(request.path)).length, 0);
-    assert.deepEqual(errors, []);
+    await expect(page.getByRole("link", { name: "Compare saved reports" })).toHaveCount(0);
 });
 
 for (const resumePrepared of [false, true]) test(`fresh Reports entry after comparison returns to Reports (${resumePrepared ? "prepared return" : "direct Save"})`, { timeout: 30000 }, async t => {

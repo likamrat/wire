@@ -2,8 +2,7 @@ const optionRow = ".report-options-popover :is(.scope-choice,.prompt-choice,.for
 
 export const reportJourneyStyles = `
 #workspace:has(>#reportsView:not([hidden])){--report-content-width:var(--task-content-width)}
-#workspace:has(>#reportsView:not([hidden]) #reportCreatePanel:not([hidden]) #reportStage3:not([hidden]) #reportReviewBody:not([hidden])),
-#workspace:has(>#reportsView:not([hidden]) #comparisonWorkspace:not([hidden]) .comparison-prepared-files:not([hidden])){--report-content-width:86.5rem}
+#workspace:has(>#reportsView:not([hidden]) #reportCreatePanel:not([hidden]) #reportStage3:not([hidden]) #reportReviewBody:not([hidden])){--report-content-width:86.5rem}
 body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:not([hidden]))>main{display:flex;flex-direction:column;min-height:calc(100dvh - var(--app-header-height,76px));padding-block:18px 20px}
 #workspace:has(>#reportsView:not([hidden]) #savedReportReader:not([hidden])){--report-content-width:none;display:flex;flex-direction:column;flex:1;min-height:0}
 #workspace:has(>#reportsView:not([hidden]) #savedReportReader:not([hidden]))>#breadcrumbs{display:none}
@@ -11,8 +10,8 @@ body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:
 #savedReportReader #pageTitle{font-size:1.75rem;line-height:1.2;font-weight:600;letter-spacing:-.02em;margin:0;overflow-wrap:anywhere}
 #reportsView:not([hidden]):has(>#savedReportReader:not([hidden])){display:flex;flex-direction:column;flex:1;min-height:0}
 #workspace:has(>#reportsView:not([hidden]))>:is(.page-heading,#reportsView,#coverage){width:100%;max-width:var(--report-content-width)}
-#workspace:has(>#reportsView:not([hidden]) :is(#savedReportsPanel,#comparisonWorkspace):not([hidden]))>.page-heading{margin-bottom:16px}
-#workspace:has(>#reportsView:not([hidden]) :is(#savedReportsPanel,#comparisonWorkspace):not([hidden]))>#breadcrumbs{display:none}
+#workspace:has(>#reportsView:not([hidden]) #savedReportsPanel:not([hidden]))>.page-heading{margin-bottom:16px}
+#workspace:has(>#reportsView:not([hidden]) #savedReportsPanel:not([hidden]))>#breadcrumbs{display:none}
 .report-task-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0;max-width:100%}
 .report-task-nav[hidden]{display:none!important}
 .report-task-nav>a{min-height:44px;align-content:center;white-space:normal}
@@ -277,15 +276,14 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 #workspace:has(>#reportsView.report-file-stage:not([hidden])){display:flex;flex-direction:column;flex:1;min-height:0}
 #workspace:has(>#reportsView.report-file-stage:not([hidden]))>#breadcrumbs{display:none}
 #workspace:has(>#reportsView.report-file-stage:not([hidden])) #pageTitle{font-size:1.75rem;line-height:1.2;font-weight:600}
-#reportsView.report-file-stage:not([hidden]),#reportsView.report-file-stage :is(#reportCreatePanel,#reportStage3,#reportReviewBody,#comparisonWorkspace,.comparison-review,.comparison-prepared-files):not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
+#reportsView.report-file-stage:not([hidden]),#reportsView.report-file-stage :is(#reportCreatePanel,#reportStage3,#reportReviewBody):not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0}
 #reportsView.report-file-stage #reportFileInspection{flex:1;min-height:0}
-#reportsView.report-file-stage :is(#reportCreatePanel,#comparisonWorkspace){padding:0;margin:0;border:0;background:transparent}
+#reportsView.report-file-stage #reportCreatePanel{padding:0;margin:0;border:0;background:transparent}
 #reportsView.report-file-stage #reportStage3{margin-top:0}
 #reportsView.report-file-stage :is(.report-progress,.report-entry-context,#reportStepTitle3,#reportDecision,.report-approval,.comparison-disclosure){display:none}
 #reportsView.report-file-stage .report-inspection-tabs{position:static;flex:none;background:transparent;margin:0 0 12px;border-bottom:1px solid var(--surface-divider)}
 #reportsView.report-file-stage .prepared-file-reader{flex:1;height:auto;min-height:200px}
 #reportsView.report-file-stage .report-review-body>h3{display:none}
-#reportsView.report-file-stage #comparisonWorkspace .prepared-file-preview>.report-frame{height:100%;min-height:0;border:0;border-radius:0}
 .report-approval{margin-top:20px;padding-top:16px;border-top:1px solid var(--rule);scroll-margin-top:calc(var(--app-header-height,80px) + 140px)}
 .report-approval .attestation{margin:0;max-width:72ch;line-height:var(--leading-reading)}
 .report-approval>p{margin:8px 0;font-size:var(--type-body)}
@@ -332,45 +330,6 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-read-copy>pre:focus-visible,.report-exact-text:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .report-copy-controls{min-width:0;margin:0;padding:0;border:0}
 #reportsView:is([data-report-phase=saved],[data-report-phase=unavailable]) #reportStage3>.report-stage-actions{display:none}
-#reportsView #comparisonWorkspace{max-width:none;min-width:0;margin:0 0 20px;padding:20px;border:1px solid var(--surface-edge);border-radius:var(--radius);background:var(--paper);container:comparison-task / inline-size}
-#comparisonWorkspace [hidden]{display:none!important}
-#comparisonWorkspace>.comparison-task-heading{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}
-#comparisonWorkspace>.comparison-task-heading h2{margin:0;font-size:var(--type-dialog);font-weight:400;scroll-margin-top:calc(var(--app-header-height,80px) + 16px)}
-#comparisonWorkspace>.comparison-task-intro{max-width:65ch;margin:0 0 16px;color:var(--muted)}
-#comparisonWorkspace .comparison-selectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;margin:0}
-#comparisonWorkspace .comparison-report-choice{display:grid;align-content:start;gap:4px;min-width:0}
-#comparisonWorkspace .comparison-report-choice>.select-field{width:100%;max-width:100%;min-width:0}
-#comparisonWorkspace .comparison-report-choice label{font-weight:400;padding-inline:0}
-#comparisonWorkspace .comparison-report-choice .select-control{width:100%}
-#comparisonWorkspace .comparison-report-choice .select-trigger{min-height:var(--task-field-height);border-radius:var(--radius-field)}
-#comparisonWorkspace button.comparison-report-identity{justify-self:start;min-height:44px;margin:0;max-width:100%;white-space:normal;font-size:var(--type-control)}
-#comparisonWorkspace>.assessment-control-actions{justify-content:space-between;align-items:center;gap:8px 16px;margin:16px 0 0}
-#comparisonWorkspace>.assessment-control-actions>.primary{margin-inline-start:auto}
-#comparisonWorkspace>p[role]:not([hidden]){margin-top:12px}
-#comparisonWorkspace .comparison-review{margin-top:16px;min-width:0}
-#comparisonWorkspace:has(.comparison-prepared-files:not([hidden])) .comparison-review{margin-top:0}
-#comparisonWorkspace .comparison-copy-options{margin-top:16px;padding-top:16px;border-top:1px solid var(--rule)}
-#comparisonWorkspace .comparison-copy-options>button{display:block;margin-inline-start:auto}
-#comparisonWorkspace .comparison-copy-options>h3{font-size:var(--type-section);font-weight:400;margin:0 0 16px}
-#comparisonWorkspace .comparison-copy-options>fieldset{display:block;padding:0;margin:0 0 12px}
-#comparisonWorkspace .comparison-copy-options legend{font:inherit;margin:0 0 4px}
-#comparisonWorkspace .comparison-format-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;max-width:36rem}
-#comparisonWorkspace .comparison-format-choices label{min-width:0;min-height:44px;margin:0;background:transparent;font-weight:400}
-#comparisonWorkspace .comparison-prepared-files{min-width:0;margin-top:0}
-#comparisonWorkspace .comparison-prepared-files .report-frame{display:block;width:100%;height:75dvh;min-height:320px;margin:0;border:1px solid var(--rule);border-radius:var(--radius-small);background:#fff}
-#comparisonWorkspace .report-inspection-tabs{margin-bottom:16px}
-#comparisonWorkspace .comparison-inspection-actions{display:flex;flex-wrap:wrap;gap:8px 12px;min-width:0;max-width:100%}
-#comparisonWorkspace .report-inspection-tabs [aria-selected=true]{font-weight:400}
-#comparisonWorkspace .comparison-exact-file{border-top:1px solid var(--rule);margin:0;padding:0}
-#comparisonWorkspace .comparison-exact-file>summary{min-height:44px;padding:12px 0;font:inherit;overflow-wrap:anywhere}
-#comparisonWorkspace .comparison-exact-file>pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
-#comparisonWorkspace .comparison-disclosure{margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)}
-#comparisonWorkspace .comparison-disclosure>label{align-items:flex-start;min-height:44px;max-width:72ch;line-height:var(--leading-reading);padding:8px 0}
-#comparisonWorkspace .comparison-disclosure>label>input{margin-top:4px;flex:none}
-#comparisonWorkspace .comparison-decision-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 12px;margin-top:8px}
-#comparisonWorkspace :is(.comparison-decision-actions,.comparison-task-heading,.comparison-copy-options)>button{min-height:44px;max-width:100%;white-space:normal}
-@container comparison-task (max-width:40rem){#comparisonWorkspace .comparison-selectors{grid-template-columns:minmax(0,1fr)}}
-@container comparison-task (max-width:24rem){#comparisonWorkspace .comparison-format-choices{grid-template-columns:minmax(0,1fr)}}
 @container report-journey (max-width:46rem){
  .report-activity-actions{position:static}
  #reportsView .report-start #reportPreviewContext{grid-template-columns:minmax(0,1fr)}
@@ -394,7 +353,6 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
  .report-save-summary>div{grid-template-columns:minmax(0,1fr);gap:4px}
 }
 @media(max-width:700px){
- #reportsView #comparisonWorkspace{padding:16px}
  .report-journey{padding:16px}
  .report-stage>h2{font-size:var(--type-dialog)}
  .report-inspection-tabs{gap:4px}
