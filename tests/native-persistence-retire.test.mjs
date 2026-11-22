@@ -1317,6 +1317,7 @@ async function selectionPublicationFixture(t, segmented = true) {
         const entry = { bundleId, kind: "report", preparedAt, exportedAt: new Date().toISOString(), bundleDir: folder,
             privacyReview: { reviewerConfirmed: true, reviewerIdentityVerified: false, confirmedAt: bundle.privacy.confirmedAt },
             promptMode: snapshot.promptMode, formats: snapshot.formats, timeContext: snapshot.timeContext,
+            reportPeriod: structuredClone(snapshot.dateSelection),
             preparedAtDisplay: snapshot.preparedAtDisplay, snapshotHash: deletionHash(JSON.stringify(snapshot)),
             manifestHash: deletionHash(bundle.files["coverage-and-redaction-manifest.json"]),
             nativeEvidenceHash: deletionHash(JSON.stringify(snapshot.nativeEvidence)),
@@ -1345,6 +1346,7 @@ for (const segmented of [false, true]) test(`selection publication binds reviewe
     const written = (await loadBoardState(app.context)).exports.at(-1);
     assert.equal(written.manifestHash, deletionHash(app.bundle.files["coverage-and-redaction-manifest.json"]));
     assert.equal(written.nativeEvidenceHash, deletionHash(JSON.stringify(app.bundle.snapshot.nativeEvidence)));
+    assert.deepEqual(written.reportPeriod, app.bundle.snapshot.dateSelection);
     assert.equal(Object.hasOwn(written, "evaluationFactsHash"), false);
     assert.ok(written.nativeSourceBinding);
     assert.deepEqual(await app.persistence.reportSource.readSaved({ bundleIds: [written.bundleId] }, app.admission,
@@ -1378,6 +1380,15 @@ test("selection publication keeps partial files and consumes the frame when writ
     assert.ok((await readFile(path.join(app.dataDir, "exports", app.bundle.bundleId, "files", "product-report.json"))).length > 0);
     await assert.rejects(app.persistence.reportSource.commit(app.frame, app.admission, app.write, app.publication),
         { code: "NATIVE_REPORT_FRAME_CONSUMED" });
+});
+
+test("native publication refuses an index period that differs from the reviewed report", async t => {
+    const app = await selectionPublicationFixture(t), before = await app.stateHash();
+    await assert.rejects(app.persistence.reportSource.commit(app.frame, app.admission, async (state, assertCurrent) => {
+        await app.write(state, assertCurrent);
+        state.exports.at(-1).reportPeriod = { range: "custom", from: "2026-10-01", to: "2026-10-07" };
+    }, app.publication), { code: "NATIVE_REPORT_PUBLICATION_INVALID" });
+    assert.equal(await app.stateHash(), before);
 });
 
 for (const boundary of ["state-fsync", "committed-readback"]) test(`selection publication preserves uncertainty at ${boundary}`, async t => {

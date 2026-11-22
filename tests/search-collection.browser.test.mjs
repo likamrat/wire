@@ -141,9 +141,8 @@ test("literal Search follows real collection advances while the saved report sta
     page.on("response", response => {
         if (response.url().endsWith("/api/retained/microsoft/search") && response.ok()) void response.json().then(value => nativeSearch.push(value));
     });
-    await page.goto(runtime.url + "#reports");
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.goto(runtime.url + "reports?task=library");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const row = page.locator(`[data-bundle-id="${saved[0].bundleId}"]`);
     await row.locator(".saved-report-title").click();
     const savedReportReader = page.locator("#savedReportReader");
@@ -212,7 +211,10 @@ test("literal Search follows real collection advances while the saved report sta
     await expect(original).toContainText("Read the invented records.");
     await expect(original).toBeFocused();
     const readingUrl = page.url();
-    assert.equal(new URLSearchParams(new URL(readingUrl).hash.split("?")[1]).get("nativeRevision"), String(acceptedSearch.revision));
+    const nativeAddress = new URL(readingUrl);
+    assert.equal(nativeAddress.pathname, "/request");
+    assert.equal(nativeAddress.hash, "");
+    assert.deepEqual([...nativeAddress.searchParams].sort(), [["origin", "reports"], ["privateView", "required"]]);
     const expandedCall = reader.locator(".reader-call").filter({ hasText: "mcp__graph__CallGraph" });
     await expandedCall.locator(".reader-call-toggle").click();
     await expect(expandedCall.getByRole("button", { name: "Copy input", exact: true })).toBeVisible();
@@ -362,10 +364,18 @@ test("normal Search survives quiet automatic collection and fences real source c
     await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });
     const rebuilt = (await api("/api/search/status")).body;
     assert.notEqual(rebuilt.indexId, ready.indexId);
-    await page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]').first().click();
-    await expect(page).toHaveURL(/#request\?.*call=/);
+    const chosen = page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]').first();
+    const searchId = await chosen.getAttribute("data-search-id");
+    assert.ok(searchId);
+    await chosen.click();
+    await expect(page.locator("#selectedCall")).toContainText("workiq-retrieve");
+    const address = new URL(page.url());
+    assert.equal(address.pathname, "/request");
+    assert.deepEqual([...address.searchParams].sort(), [["layer", "tool"], ["privateView", "required"]]);
+    assert.equal(address.hash, "");
     await page.goBack();
     await expect(input).toHaveValue("workiq-retriev");
+    await expect(page.locator(`#wireSearchResults button[data-search-id="${searchId}"]`)).toBeFocused();
 
     db.prepare("UPDATE sessions SET archived_at=? WHERE id=?").run(new Date().toISOString(), sourceId);
     await runtime.collector.collectNow();

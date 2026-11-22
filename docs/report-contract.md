@@ -272,7 +272,9 @@ invalidate Save. Unpinned preparations must revalidate their live selected facts
 
 New ordinary saved entries retain their snapshot's date selection as `reportPeriod`,
 independently of report presets. When present it must match the frozen manifest
-and participates in the artifact fingerprint. Older entries without it remain
+and participates in the artifact fingerprint. The native publication check
+also binds the new index entry to the reviewed period before registering it.
+Older entries without it remain
 readable; missing index metadata is not evidence that the file has no period.
 Preparation timestamps never substitute for the saved date selection.
 

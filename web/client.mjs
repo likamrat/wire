@@ -5966,6 +5966,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         cardOwners.set(row, events);
         return row;
     }
+    function eraseRetiredAttribute(attribute) {
+        const owner = attribute.ownerElement;
+        if (owner?.namespaceURI !== "http://www.w3.org/2000/svg"
+            || !(owner.localName === "svg" && ["width", "height", "viewBox"].includes(attribute.name))
+                && !(owner.localName === "rect" && ["width", "height", "x", "y", "rx", "ry"].includes(attribute.name))
+                && !(owner.localName === "circle" && ["cx", "cy", "r"].includes(attribute.name))
+                && !(owner.localName === "ellipse" && ["cx", "cy", "rx", "ry"].includes(attribute.name))
+                && !(["line", "linearGradient"].includes(owner.localName) && ["x1", "x2", "y1", "y2"].includes(attribute.name))
+                && !(owner.localName === "stop" && attribute.name === "offset")) attribute.value = "";
+        owner?.removeAttributeNode(attribute);
+        attribute.value = "";
+    }
     function releaseCardPreviews(host) {
         for (const row of host.matches?.(".read-in-place") ? [host] : host.querySelectorAll(".read-in-place")) {
             const events = cardOwners.get(row);
@@ -5974,7 +5986,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const contents = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
             while (contents.nextNode()) contents.currentNode.data = "";
             for (const node of [row, ...row.querySelectorAll("*")]) for (const attr of [...node.attributes]) {
-                attr.value = ""; node.removeAttributeNode(attr);
+                eraseRetiredAttribute(attr);
             }
             row.replaceChildren();
         }
@@ -10942,17 +10954,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } catch (error) { failures.push(error); }
         }
         for (const node of textNodes) node.data = "";
-        for (const attribute of attributes) {
-            if (attribute.ownerElement?.namespaceURI !== "http://www.w3.org/2000/svg"
-                || !(attribute.ownerElement.localName === "svg" && ["width", "height", "viewBox"].includes(attribute.name))
-                    && !(attribute.ownerElement.localName === "rect" && ["width", "height", "x", "y", "rx", "ry"].includes(attribute.name))
-                    && !(attribute.ownerElement.localName === "circle" && ["cx", "cy", "r"].includes(attribute.name))
-                    && !(attribute.ownerElement.localName === "ellipse" && ["cx", "cy", "rx", "ry"].includes(attribute.name))
-                    && !(["line", "linearGradient"].includes(attribute.ownerElement.localName) && ["x1", "x2", "y1", "y2"].includes(attribute.name))
-                    && !(attribute.ownerElement.localName === "stop" && attribute.name === "offset")) attribute.value = "";
-            attribute.ownerElement?.removeAttributeNode(attribute);
-            attribute.value = "";
-        }
+        for (const attribute of attributes) eraseRetiredAttribute(attribute);
         for (const field of fields) {
             field.value = "";
             if ("checked" in field) field.checked = false;

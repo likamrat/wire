@@ -95,8 +95,10 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         const preparedCount = previews.length;
         await app.appendOnly();
         await expect.poll(async () => (await loadBoardState(app.context, { readOnly: true })).evidence.length, { timeout: 20000 }).toBe(2);
-        await expect(page.locator("#newDataNotice")).toContainText("preview stays frozen", { timeout: 15000 });
-        await expect(page.locator("#newDataNotice")).toBeVisible();
+        const previewNotice = page.locator("#reportPreviewDrawer #reportPreviewActivityNotice");
+        await expect(previewNotice).toBeVisible({ timeout: 15000 });
+        await expect(previewNotice).toContainText("This preview still shows the activity it was prepared with.");
+        await expect(page.locator("#newDataNotice")).toBeHidden();
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
         assert.equal(previews.length, preparedCount);
