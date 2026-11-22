@@ -17,7 +17,7 @@ const allFormats = ["html", "pdf", "json", "markdown"];
 
 async function setup(t, { segmented = false, mixed = false, dated = false, extraConversations = 0, shortPageSize = null,
     scheduled = false, enrolled = true, expiryClock = false, githubApproved = false, manualAcquisition = false, beforeAcquire,
-    refreshProbe = false, backfillTracking = false } = {}) {
+    refreshProbe = false, backfillTracking = false, packaged = false } = {}) {
     const { privateFixture, fixture } = await backend("tests\\helpers.mjs");
     const { chatFixture, coworkFixture } = await backend("tests\\native-read-model-fixtures.mjs");
     const { createMicrosoftNativeReadTransport } = await backend("lib\\microsoft-native-transport.mjs");
@@ -101,7 +101,7 @@ async function setup(t, { segmented = false, mixed = false, dated = false, extra
             captureWaiter?.resolve(receipt); captureWaiter = null;
         },
     });
-    runtime = await startServer(context, createExportController(context), { port: 0, access, collector: { timers: false } });
+    runtime = await startServer(context, createExportController(context), { port: 0, access, ...(packaged ? { frontend: "react" } : {}), collector: { timers: false } });
     const origin = new URL(runtime.url).origin;
     async function post(route, input, capability) {
         const response = await fetch(origin + route, { method: "POST", headers: {
@@ -176,7 +176,7 @@ async function setup(t, { segmented = false, mixed = false, dated = false, extra
             };
         });
     }
-    await page.route(origin + "/", route => route.fulfill({ contentType: "text/html", body: shell }));
+    if (!packaged) await page.route(origin + "/", route => route.fulfill({ contentType: "text/html", body: shell }));
     if (shortPageSize) {
         // Model a byte-short producer page using genuine controller cursors and membership,
         // not sliced response rows or fabricated continuations.
@@ -269,6 +269,42 @@ async function prepare(page, formats = ["html", "json"]) {
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     await expect(page.getByRole("button", { name: "Save report", exact: true, includeHidden: true })).toBeDisabled();
 }
+
+test("ordinary native All activity uses the retained population through local Save and verified Open", { skip: !root, timeout: 60000 }, async t => {
+    const app = await setup(t, { segmented: true, packaged: true }), { page } = app;
+    await expect(page.locator("body")).toHaveClass(/wire-frontend-react/);
+    await navigateMain(page, "reports");
+    await expect(page.locator("#reportDeskDates")).toHaveText("All retained dates");
+    await expect(page.locator("#reportDeskDates")).toBeDisabled();
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("all");
+    await expect(page.locator("#reportDeskFocus")).toBeDisabled();
+    let mixedStatus;
+    await page.route("**/api/preview", async route => {
+        const input = route.request().postDataJSON();
+        const invalid = await route.fetch({ postData: { ...input, options: { ...input.options,
+            reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } } } });
+        mixedStatus = invalid.status();
+        await route.continue();
+    }, { times: 1 });
+    const response = page.waitForResponse(res => res.url().endsWith("/api/preview"));
+    await page.locator("#prepareReportPreview").click();
+    const res = await response, prepared = await res.json();
+    assert.equal(res.status(), 200, prepared.error);
+    assert.equal(mixedStatus, 422, "A native view and an interaction focus cannot be combined.");
+    const request = app.previews.at(-1);
+    assert.ok(request.nativeViewId);
+    assert.equal(request.selection.kind, "all");
+    assert.equal(request.options.reportFocus, undefined);
+    assert.deepEqual(request.options.dateSelection, { range: "capture" });
+    assert.equal(prepared.snapshot.nativeEvidence.conversations.length, 2);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toBeVisible();
+    const [saved] = (await app.board()).exports;
+    assert.equal(saved.bundleId, prepared.bundleId);
+    assert.equal(await readFile(saved.files["product-report.html"], "utf8"), prepared.files["product-report.html"]);
+    assert.equal(app.writes.filter(w => w.route === "/api/export").length, 1);
+});
 
 async function captureReportSurface(page, name, { themes = ["light", "dark"] } = {}) {
     if (!process.env.WIRE_REPORT_PROOFS) return;

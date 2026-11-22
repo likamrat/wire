@@ -2061,7 +2061,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const reportPreset = time.preset(reportDates.range, viewerTime.timeZone);
         if (reportPreset && !activePreview && !reportRebuildFrom && !reportPreparing) reportDates = { range: reportDates.range, ...reportPreset };
-        if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : reportDates)) {
+        if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, effectiveReportDates())) {
             invalidatePreview("The report time or date basis changed. Return to Setup and scan again.");
         }
         renderTimeContext();
@@ -6938,6 +6938,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && (kind === "all" || kind === "current" && boundedIncludesMicrosoft()
             || kind === "selected" && selectedNative().hasSelection);
     }
+    function effectiveReportDates() {
+        return periodReport || usesBoundedReportView(reportBaseExplicit ? reportScope : "all") ? { range: "capture" } : reportDates;
+    }
     function reportNativeView(kind = reportScope) {
         return kind === "selected" ? workspaceState.evidence?.nativeRead : acceptedNativeView();
     }
@@ -7272,7 +7275,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const token = draft.token();
             draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId),
                 ...(reportScope === "selected" ? nativePickedIds : [])]);
-            draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : reportDates);
+            draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, effectiveReportDates());
             if (draft.synchronizeBasis(workspaceState.evidence, value, { paired: Boolean(periodReport) }) && periodReport) periodReportInvalid = true;
             if (periodReport && JSON.stringify(periodReport.timeContext) !== JSON.stringify(viewerTime)) periodReportInvalid = true;
             if (!draft.current(token)) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
@@ -9646,18 +9649,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             await previewExport({ contentOnly: true });
             return;
         }
-        reportPreset = preset;
         const dates = time.preset(reportDates.range, viewerTime.timeZone);
         if (dates) reportDates = { range: reportDates.range, ...dates };
         if (!reportBaseExplicit) reportScope = "all";
+        const bounded = usesBoundedReportView();
+        if (bounded && preset !== "all") {
+            announce("Microsoft conversation reports use All activity. Choose an interaction-only scope for this focus.", "stale");
+            return;
+        }
+        reportPreset = preset;
         reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
         invalidatePreview();
         draft.change({
             saveMode: "local", title: namedReport?.name, overrides: [], manualTerms: [],
             reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
-            reportFocus: { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
+            reportFocus: bounded ? undefined : { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
         });
-        draft.synchronizeTime(viewerTime, reportDates);
+        draft.synchronizeTime(viewerTime, effectiveReportDates());
         acceptNativeReportScope(); updateSelection();
         if ($("exportBtn").disabled) {
             const reason = reportJourney.reason(2) || reportJourney.snapshot().prepareIssue || "No readable interactions match this report. Change its activity or dates.";
@@ -9689,7 +9697,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportExperience?.sync();
     }
     async function changeReportDates(dates) {
-        if (exportWriting || reportJourney.snapshot().saveUnconfirmed || periodReport) return;
+        if (exportWriting || reportJourney.snapshot().saveUnconfirmed || periodReport || usesBoundedReportView(reportBaseExplicit ? reportScope : "all")) return;
         const prepared = reportJourney.snapshot().step === 3;
         invalidatePreview(undefined, { preserveFileView: true });
         reportDates = dates; reportDatesReplaced = reportBaseExplicit && reportScope === "current";
@@ -10749,7 +10757,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
         read: () => ({
             namedDrafts: namedDrafts.read()?.drafts, namedReport,
-            dates: reportDates, timeContext: viewerTime, options: draft.options(),
+            dates: effectiveReportDates(), nativeScope: usesBoundedReportView(reportBaseExplicit ? reportScope : "all"),
+            timeContext: viewerTime, options: draft.options(),
             resumePreset: (activePreview && reportJourney.snapshot().hasPreview || reportRebuildFrom) ? reportPreset : null,
             explicitScope: reportBaseExplicit, scopeIssue: reportJourney.reason(2),
             prepared: assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).prepared,

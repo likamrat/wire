@@ -21,6 +21,11 @@ You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
 **Prepare preview** opens a right-side drawer without writing files. Check the
 report there, then choose **Save report** to write the selected files locally.
+When the activity includes retained Microsoft conversations, the ordinary
+report uses **All activity** and **All retained dates** for that scope. It
+does not apply GitHub interaction presets or pretend an undated conversation
+belongs to a report date range. For two dated Microsoft periods, start in
+**Compare**, choose the periods and select **Create report**.
 If recorded activity changes while you read, a note in the drawer tells you
 that the preview still contains the activity it was prepared with.
 If you kept chat details, the confirmation names those formats. Nothing is sent.

@@ -78,7 +78,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     const desk = el("div", "report-desk"), outlineDescription = el("p", "report-outline-description");
     const outlineChoices = el("div", "report-outline-choices"), outlineAction = el("div", "report-outline-action");
-    const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
+    const prepare = button("Prepare preview", event => choose(compactFocus.value, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
     const prepareLabel = prepare.firstChild;
     prepare.prepend(ux.icon("read"));
     const prepareHint = el("p", "report-desk-hint"); prepareHint.id = "reportDeskHint"; prepareHint.setAttribute("role", "status");
@@ -298,8 +298,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
         }
-        compactFocus.disabled = value.locked || value.loading; compactFocus.value = deskFocus;
-        outlineDescription.textContent = help[deskFocus];
+        const focus = value.nativeScope ? "all" : deskFocus;
+        compactFocus.disabled = value.locked || value.loading || value.nativeScope; compactFocus.value = focus;
+        outlineDescription.textContent = value.nativeScope ? "Includes retained Microsoft conversations. Use Compare to report on two date ranges." : help[focus];
         scopeName.textContent = value.scopeLabel;
         scopeChoice.setAttribute("aria-label", "Activity: " + value.scopeLabel);
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
@@ -307,7 +308,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         prepare.disabled ||= !value.options.formats.length;
         const named = value.namedReport && draftOptions.find(d => d.id === value.namedReport.id);
         const updated = value.namedReport && named?.revision !== value.namedReport.revision;
-        const resume = !updated && value.resumePreset === deskFocus;
+        const resume = !updated && value.resumePreset === focus;
         prepareLabel.data = resume ? "Resume preview" : updated ? "Prepare updated draft" : "Prepare preview";
         const scopeIssue = !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
             ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
@@ -345,7 +346,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         scope.hidden = Boolean(value.namedReport);
         scopeCaption.hidden = !scopeCaption.textContent;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
-        dateButton.disabled = formatButton.disabled = value.locked || value.unavailable;
+        formatButton.disabled = value.locked || value.unavailable;
+        dateButton.disabled = formatButton.disabled || value.nativeScope;
         privacyButton.disabled = value.locked || value.unavailable;
         const save = byId("reportSaveActions");
         if (save && save.parentElement !== saveSlot) saveSlot.append(save);
