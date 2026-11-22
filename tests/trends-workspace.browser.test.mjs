@@ -206,7 +206,12 @@ test("custom pairs keep units, members, collapse and day through the real period
     await periodTransfer.click();await page.getByRole("button",{name:"Open comparison",exact:true}).click();
     await expect(page).toHaveURL(/\/compare\?/);
     const u=new URL(page.url());assert.deepEqual(["aFrom","aTo","bFrom","bTo"].map(k=>u.searchParams.get(k)),["2026-11-05","2026-11-11","2026-11-12","2026-11-18"]);
-    await page.getByRole("button",{name:"Back to Trends",exact:true}).click();await expect(periodTransfer).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands")).toBeHidden();
+    await expect(page.locator("#analyzeRefresh")).toBeHidden();
+    await expect(page.locator("#comparisonOptionsSlot #openAnalyzeFilters")).toBeVisible();
+    await page.getByRole("button",{name:"Back to Trends",exact:true}).press("Enter");await expect(periodTransfer).toBeFocused();
+    await expect(first).toHaveValue(JSON.stringify(["problems","problems","share"]));
+    await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
     await expect(reading).toContainText("Nov 16");await expect(reading).toContainText("180 ms");
     await pair.getByRole("button",{name:"Remove comparison"}).click();await expect(second).toHaveValue("");
     await expect(graph).toHaveCount(1);assert.equal(reads.length,1);

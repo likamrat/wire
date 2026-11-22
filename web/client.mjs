@@ -2454,7 +2454,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         history.back();
     }, "quiet");
     periodBackToTrends.prepend(ux.icon("back")); periodBackToTrends.hidden = true;
-    $("analyzeToolbar").before(periodBackToTrends);
+    $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
         root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
