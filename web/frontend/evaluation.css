@@ -25,10 +25,6 @@
     margin-bottom: 16px;
 }
 .wire-frontend-react .frontend-heading-copy { min-width: 0; flex: 1 1 14rem; }
-.wire-frontend-react #frontendHeadingActions { align-self: center; }
-.wire-frontend-react #frontendHeadingActions:not(:has(> :not([hidden]))) { display: none; }
-.wire-frontend-react.analyze-reading:not(.period-comparing) #frontendHeadingActions { margin-inline-start: auto; max-width: 100%; }
-.wire-frontend-react #frontendHeadingActions .analyze-toolbar { margin: 0; padding: 0; container: none; flex-wrap: wrap; }
 .wire-frontend-react #pagePrimaryActions:not(:has(> :not([hidden]))) { display: none; }
 .wire-frontend-react .page-heading p { margin-top: 4px; font-size: var(--type-small); }
 .wire-frontend-react input.search-capsule-input,
@@ -96,13 +92,6 @@
 }
 .wire-frontend-react #chart .dimensional-scroll { padding-bottom: 8px; }
 .wire-frontend-react #chart .dimensional-time-labels { min-height: 32px; padding-top: 8px; }
-.wire-frontend-react #frontendAnalyzeQualification { margin-top: 8px; }
-.wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary {
-    border: 0;
-    margin: 0;
-    padding: 0;
-}
-.wire-frontend-react #frontendAnalyzeQualification .analyze-scope-summary p { margin-block: 4px; }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 20px; }
@@ -175,9 +164,6 @@
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-value {
         grid-column: 3;
         justify-self: end;
-    }
-    @media (max-width: 48rem) {
-        .wire-frontend-react #frontendHeadingActions .analyze-toolbar { justify-content: flex-start; }
     }
 }
 @container analyze-view (max-width: 26rem) {

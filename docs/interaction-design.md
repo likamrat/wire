@@ -131,11 +131,14 @@ catalogs across source updates or access withdrawal.
 
 ### Chart guide
 
-Analyze's **Guide** opens from the toolbar, never from a control added to a
-chart. Open the Topic reader directly on recorded outcomes; a preference
+Under the Analyze title, the shared icon-and-label section strip offers
+**Results** and **Guide**. Keep Refresh and Filters with the accepted Results
+scope, not in the section strip or on a chart. Open the Topic reader
+directly on recorded outcomes; a preference
 under Settings > Analyze can resume the last topic read in this tab. Show
 a compact topic rail beside the reading pane, or a Topics chooser when space
-is limited. Keep Back to Analyze above the reader. Use the existing navigation
+is limited. Results and browser Back retain filters, focus and reading position.
+Keep the section strip above the reader. Use the existing navigation
 hover and focus treatment, without an underline. Label worked examples as
 illustrations and keep them distinct from the accepted view's values.
 Exact numbers, not the glossary, own

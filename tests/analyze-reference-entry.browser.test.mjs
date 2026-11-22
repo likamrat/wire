@@ -72,7 +72,7 @@ test("the single reference entry opens the native guide without a read and prese
     await page.locator("#openChartReference").press("Enter");
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#meaning").evaluate(node => node.tagName), "DIALOG");
-    await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+    await expect(page.locator("#openChartReference")).toBeFocused();
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
     await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Did the tool fail, or did it return an error?");
     await expect(page.locator(".chart-reference-example")).toContainText("Illustrative, not from your activity");
@@ -99,7 +99,7 @@ test("the single reference entry opens the native guide without a read and prese
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
     await expect(page.locator("#chartReferenceData tbody tr")).toHaveCount(4);
     assert.equal(snapshots(), reads);
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
     await expect(page.locator("#openChartReference")).toBeHidden();

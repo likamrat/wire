@@ -103,9 +103,9 @@ export const chartReferenceStyles = `
  .chart-reference-service-key,.chart-reference-service-track>i {background:CanvasText}
 }
 /* The Analyze Guide uses the workspace, not a chart overlay. Compare keeps its period panel. */
-#analyzeToolbar:has(>#analyzeReferenceEntry:not([hidden])) {flex-wrap:wrap}
-#analyzeToolbar>#analyzeReferenceEntry {flex:none}
-#workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>:not(#analyzeReference) {display:none!important}
+#workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>:not(#analyzeReference,.page-heading,#analyzeReferenceEntry) {display:none!important}
+#workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>.page-heading :is(#pagePrimaryActions,#reportSelectionBar) {display:none!important}
+#workspace>#analyzeReference #meaning[data-mode=analyze] .chart-reference-heading {display:none}
 #workspace>#analyzeReference:has(#meaning[open][data-mode=analyze]) {width:100%;max-width:none;margin-top:0}
 #meaning[data-mode=analyze] {
  position:relative;inset:auto;margin:0;width:100%;max-width:none;height:auto;max-height:none;

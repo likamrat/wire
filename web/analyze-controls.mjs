@@ -153,9 +153,9 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         $("analyzeToolbar").hidden = !active || comparing;
         const toolbar = $("analyzeToolbar");
         const entryFocus = toolbar.contains(document.activeElement) ? document.activeElement : null;
+        $("analyzeResultCommands").hidden = !active || comparing;
         if (comparing) place($("pagePrimaryActions"), toolbar);
-        else if (toolbarHost) place(toolbarHost, toolbar);
-        else if (toolbar.parentElement !== $("workspace")) $("analyzePopulation").before(toolbar);
+        else place(toolbarHost, toolbar);
         place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
         for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
         for (const control of dialog.querySelectorAll("select")) control.dataset.optionSearch = String(comparing);
@@ -241,6 +241,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         const parts = value.parts.filter((part, index) => empty || !Array.isArray(value.restrictions) || index > 1 || value.restrictions.includes(part));
         scopeCaption($("analyzeScopeCaption"), { ...value, parts, text: parts.join("; ") });
         $("analyzeScopeCaption").hidden = !parts.length;
+        $("periodResult").classList.toggle("visually-hidden", Boolean(parts.length));
         if ($("analyzeScopeStatus").textContent !== status) $("analyzeScopeStatus").textContent = status;
         $("analyzeScopeStatus").hidden = !status;
         if ($("analyzeScopeErrorText").textContent !== error) $("analyzeScopeErrorText").textContent = error;

@@ -757,7 +757,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analyzeControls = assessmentFactories.mountAnalyzeControls(ux, {
         api, motionTiming: sidebar.timing,
         closeSelect: () => selectControls?.close(), closeNavigation: () => sidebar.close(false),
-        toolbarHost: $("frontendHeadingActions"), scopeHost: $("frontendAnalyzeQualification"),
+        toolbarHost: $("analyzeResultCommands"), scopeHost: $("analyzeResultScope"),
     });
     $("meaningScopeTitle").parentElement.append($("periodHint"));
     const chartReferenceKeys = new Map();
@@ -768,6 +768,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         host: $("analyzeReference"), root: $("meaning"), trigger: $("openChartReference"),
         ux, results, help, categories, dimensional, motionTiming: sidebar.timing,
         readContext: readChartReferenceContext, renderExact: renderChartReferenceExact,
+        onAnalyzeExit: () => selectAnalyzeSection(false),
         renderQualification: analyzeControls.scopeCaption,
         openComparisonRecords: openChartReferencePeriodRecords,
         publicationToken: () => api.publicationToken(), isCurrent: token => api.isCurrent(token),
@@ -1487,7 +1488,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 && contextOwner?.interaction && sidebarIdentity === saved.reader.identity);
         }
         if (saved.chartReference && workspaceState.route.view === "analyze") {
-            if (chartReferenceUI.value().view === "closed") chartReferenceUI.restore(saved.chartReference);
+            const current = chartReferenceUI.value();
+            if (current.view !== saved.chartReference.view || current.topic !== saved.chartReference.topic) chartReferenceUI.restore(saved.chartReference);
             else chartReferenceUI.refresh();
         }
     }
@@ -2639,6 +2641,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function canonicalRoute(next) {
         next = sessionJourney.savedRoute(filterState.canonical(sessionJourney.canonical(next)));
+        if (next.analyzeSection !== "guide" || next.view !== "analyze" || next.compare) delete next.analyzeSection;
         if (next.view === "trends" && next.trendPeriod === "custom") {
             try {
                 time.calendar(next.trendFrom); time.calendar(next.trendTo);
@@ -2785,7 +2788,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
-            ...workspaceState.route, view, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
+            ...workspaceState.route, view, analyzeSection: undefined, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
             completedCalls: undefined, failedCalls: undefined,
             nativeCompletedRef: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
@@ -3826,6 +3829,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else finishSidebarMotion();
         }
         const previousRoute = workspaceState.route, clearingFilter = $("filterChips").contains(document.activeElement);
+        // A section change is a reading action: keep the accepted population, a pending read, and any staged report choices.
+        if (next.view === "analyze" && previousRoute.view === "analyze" && !next.compare && !previousRoute.compare
+            && previousRoute.analyzeSection !== next.analyzeSection
+            && readingKey({ ...previousRoute, analyzeSection: undefined }) === readingKey({ ...next, analyzeSection: undefined })
+            && (next.analysisQuery ?? null) === (previousRoute.analysisQuery ?? null)) {
+            if (workspaceState.acceptedRoute) workspaceState.positions.set(readingKey(previousRoute), captureReading());
+            workspaceState.route = next;
+            if (workspaceState.acceptedRoute) workspaceState.acceptedRoute = { ...workspaceState.acceptedRoute, analyzeSection: next.analyzeSection };
+            refreshChartReference();
+            const saved = workspaceState.positions.get(readingKey(next));
+            if (revealReferenceRecords) revealResults();
+            else if (saved) {
+                restoreReading(saved);
+                if (next.analyzeSection === "guide" && !restorePosition) $("openChartReference").focus({ preventScroll: true });
+            }
+            else if (!next.analyzeSection) $("analyzeResultsSection").focus({ preventScroll: true });
+            return true;
+        }
         const trendReturn = trendOrigin(sessionJourney.underlying(previousRoute));
         if (previousRoute.bookmark && !previousRoute.request) $("workspace").hidden = false;
         rememberBrowse();
@@ -4363,7 +4384,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         selectControls?.close(); sidebar.close(false); ux.hideTooltip();
         chartReferenceOrigin = workspaceState.positions.get(readingKey(workspaceState.route)) ?? null;
         if (underlyingRoute().compare === "periods") chartReferenceUI.open();
-        else chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"));
+        else selectAnalyzeSection(true);
+    }
+    function selectAnalyzeSection(guide) {
+        const route = workspaceState.route;
+        if (route.view !== "analyze" || route.compare || (route.analyzeSection === "guide") === guide || semanticQuery !== null && !semanticBound) return;
+        return navigate({ ...route, analyzeSection: guide ? "guide" : undefined });
     }
     function readChartReferenceContext() {
         if (underlyingRoute().compare === "periods") {
@@ -4435,7 +4461,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (isCurrent()) {
                     if (event.type !== "click" || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
                     event.preventDefault(); event.stopImmediatePropagation();
-                    const next = { ...linkTargets.get(link), search: workspaceState.acceptedRoute.search, localSearch: workspaceState.acceptedRoute.localSearch };
+                    const next = { ...linkTargets.get(link), analyzeSection: undefined, search: workspaceState.acceptedRoute.search, localSearch: workspaceState.acceptedRoute.localSearch };
                     if (readingKey(next) === readingKey(workspaceState.acceptedRoute)) { chartReferenceUI.leave(); revealResults(); }
                     else navigate(next, false, { revealReferenceRecords: true });
                     return;
@@ -4466,7 +4492,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             renderCountTable(chartReferenceCountTable, chartType, (group, label) => {
                 const changes = chartType === "time" ? { range: "custom", from: group.from, to: group.to }
                     : chartType === "endpoint" ? { endpoint: group.id } : { service: group.label };
-                    const next = canonicalRoute({ ...workspaceState.acceptedRoute, view: "analyze", request: undefined, call: undefined, callRevision: undefined,
+                    const next = canonicalRoute({ ...workspaceState.acceptedRoute, view: "analyze", analyzeSection: undefined, request: undefined, call: undefined, callRevision: undefined,
                         ...changes, ...(context.nativeView ? { source: "github-copilot" } : {}), page: undefined });
                 return guarded(viewKey(routeLink(label, next, "chart-data-action text-link"), "chart-reference:" + topic + ":" + (group.id || group.date)));
             }, { referenceKey: identity.key, isCurrent, rowQuery: presentationState.rowQuery, resetPage: presentationState.resetPage });
@@ -4500,10 +4526,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function refreshChartReference() {
         if (clearingAccess || !api.publicationToken()) return;
-        analyzeReferenceEntry.show(workspaceState.route.view === "analyze" && (semanticQuery === null || semanticBound));
-        if (workspaceState.route.view !== "analyze") chartReferenceUI.leave();
-        else chartReferenceUI.refresh();
+        const route = workspaceState.route, visible = route.view === "analyze" && !route.compare && (semanticQuery === null || semanticBound);
+        analyzeReferenceEntry.show(visible);
+        const guide = visible && route.analyzeSection === "guide";
+        for (const [id, current] of [["analyzeResultsSection", !guide], ["openChartReference", guide]]) {
+            if (current) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
+        }
+        if (guide && chartReferenceUI.value().view === "closed" && $("workspace").checkVisibility()) chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"));
+        else if (guide || route.view === "analyze" && route.compare) chartReferenceUI.refresh();
+        else chartReferenceUI.leave();
     }
+    $("analyzeResultsSection").addEventListener("click", () => selectAnalyzeSection(false));
     function setNavigationLink(node) {
         const view = node.dataset.nav;
         setRouteLink(node, Object.hasOwn(browseDefaults, view) ? browseRoute(view) : routeFor(view, { request: undefined, task: undefined }));
@@ -4515,7 +4548,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (browseDefaults[node.dataset.nav] === key) setNavigationLink(node);
     });
     function renderNavigation(references) {
-        analyzeReferenceEntry.show(workspaceState.route.view === "analyze" && (semanticQuery === null || semanticBound));
+        analyzeReferenceEntry.show(workspaceState.route.view === "analyze" && !workspaceState.route.compare && (semanticQuery === null || semanticBound));
         analyzeControls.context({ analyze: workspaceState.route.view === "analyze", compare: workspaceState.route.view === "analyze" && workspaceState.route.compare === "periods",
             ordinary: workspaceState.route.view === "analyze" && workspaceState.route.compare !== "periods" && (semanticQuery === null || semanticBound) });
         const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();

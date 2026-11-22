@@ -105,12 +105,15 @@ no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
-Open **Guide** in the Analyze toolbar to start reading about recorded outcomes.
+Under **Analyze**, choose **Results** to inspect activity or **Guide** to read
+about recorded outcomes. The underline marks the current section. **Refresh**
+and **Filters** apply to Results and stay out of the Guide.
 Pick another topic beside the explanation, or use **Topics** on a narrow
 screen. Worked examples illustrate distinctions such as a completed call
 returning an error for one item; they are not records from your activity.
 Choose **See exact numbers** for values in your current scope and matching
-records where available. Closing Guide returns you to Analyze. In
+records where available. Choose **Results** or use browser Back to return to
+the same filtered results and reading position. In
 **Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
 or the last topic read in this tab. This preference does not change the charts.
 
