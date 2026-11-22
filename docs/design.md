@@ -29,6 +29,12 @@ the action has a different meaning. Review both in their full screens at rest,
 on hover, when selected and with keyboard focus; a component preview alone
 cannot show whether it fits its surroundings.
 
+Keep choices that only change the current view beside the content they affect.
+For example, open period presets at the date control and let Custom dates expand
+there, with the current chart still in view. Cancelling must leave the applied
+range and reading position intact. Reserve a separate workspace or blocking
+dialog for a distinct task or a decision that must be resolved before continuing.
+
 | Surface | Reading and navigation role |
 | --- | --- |
 | Sliding left sidebar | Analyze, Trends, Reports and Compare as peer destinations; account, Help, Feedback and Settings at the bottom |
