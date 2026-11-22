@@ -71,9 +71,10 @@ baseline, not the icon. When it wraps, start it under the author text.
 Give the prompt and its eye separate columns inside one link. Below the prompt,
 keep the recorded outcome with the affected calls and their explanations. When a
 reason covers the full badge count, place its call numbers and tool beside that
-count. List different reasons under their own call numbers. Keep the explanation
-in normal ink; a thin matching edge and a visible label associate it with the
-failed call or the particular returned entry. Missing reasons are plain text. Green/check
+count. Use one **Problem** area for the card, with different reasons under
+their own call numbers and entry details beside their exact links. Omit the
+area on clean cards. A code-only failure that repeats its entry's code need
+not repeat it on the card; the reader retains both records. Missing reasons are plain text. Green/check
 indicates recorded tool completion; red/cross marks failed calls. Neither
 is a verdict on the prompt or the task. Returned issues keep a separate link.
 Keep provenance in Source details; name a source on the card when

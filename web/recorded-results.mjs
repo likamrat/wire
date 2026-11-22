@@ -414,6 +414,15 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         if (indexed && !call.apiResults.some(other => other !== entry && other?.index === entry.index)) return label;
         return `${label} (saved item ${call.apiResults.indexOf(entry) + 1})`;
     }
+    function entryCue(diagnostic, code, repeatedCode) {
+        if (diagnostic?.message && !genericMessage(diagnostic)) {
+            // The quoted filter is available in the exact reader; the position is enough for the card.
+            const syntax = code === "BadRequest" && /^Syntax error:\s*character\s+['‘’](\S)['‘’]\s+is not valid at position (\d+)(?:\s+in\s+.+|\.?)$/iu.exec(diagnostic.message);
+            if (syntax) return `Invalid ${syntax[1] === ":" ? "colon" : `character '${syntax[1]}'`} at position ${syntax[2]}.`;
+            if (code === repeatedCode) return shortCue(diagnostic.message);
+        }
+        return shortCue(diagnosticSummary({ ...diagnostic, code, statusCode: null }), code);
+    }
     // Keep parent calls and canonical entry rows; equal text/status is not an identity.
     function cardIssues(rows, apiRows, callFor) {
         const byParent = new Map(), groups = new Map();
@@ -423,7 +432,8 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         }
         const hasDiagnostic = d => d?.version === 1 && (d.message || d.code != null || d.statusCode >= 400 || d.details?.length);
         for (const row of new Map((rows ?? []).map(row => [row.id, row])).values()) {
-            const call = callFor(row), entries = [];
+            const call = callFor(row), entries = [], failed = row.outcome === "failure", r = call?.resultEvidence;
+            const parentCode = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
             for (const api of byParent.get(row.id) ?? []) {
                 const entry = returnedResult(call, api);
                 if (!entry) continue;
@@ -433,19 +443,20 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
                 const status = conflict ? `HTTP ${api.status}; diagnostic HTTP ${d.statusCode}`
                     : api.status != null ? `HTTP ${api.status}` : d?.statusCode != null ? `diagnostic HTTP ${d.statusCode}` : "Reported error";
                 const offset = call.apiResults.indexOf(entry);
+                const code = d?.code ?? entry.errorCode;
                 entries.push({ row: api, offset, label: `${returnedEntryLabel(call, entry)} · ${status}`,
-                    detail: shortCue(diagnosticSummary({ ...d, code: d?.code ?? entry.errorCode, statusCode: null }), d?.code ?? entry.errorCode) });
+                    code, detail: entryCue(d, code, parentCode) });
             }
             entries.sort((a,b) => a.offset - b.offset);
-            const failed = row.outcome === "failure", r = call?.resultEvidence;
             const resultIssue = !failed && r?.version === 1 && (r.applicationError === true || r.statusConflict || r.statusCode >= 400 || hasDiagnostic(r.diagnostic));
             if (!failed && !resultIssue && !entries.length) continue;
             const reason = failed ? failureReason(call, { contextual: true, includeReturned: false })
                 : resultIssue ? completionReason(call, row.outcome, true, false) : null;
             const recordedCause = failed && Boolean(recordedCallCause(call, true));
             const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, recordedCause, reason]) : JSON.stringify(["call", row.id]);
-            const code = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
-            const group = groups.get(key) ?? { rows: [], detail: shortCue(reason, code)
+            // Omit a code-only parent preview echoed by its own entry. Distinct reasons stay with their calls.
+            const redundantCode = recordedCause && reason === parentCode && entries.some(entry => entry.code === parentCode);
+            const group = groups.get(key) ?? { rows: [], detail: redundantCode ? null : shortCue(reason, parentCode)
                 ?? (failed && entries.length ? "No separate failure reason was recorded." : null),
                 recordedCause, entries, resultIssue };
             group.rows.push(row); groups.set(key, group);

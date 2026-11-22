@@ -3152,13 +3152,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!recordedCause && text === "Failure reason was not saved") return "No failure reason was saved.";
         return failureReasonText(text);
     }
-    function issueNote(label, text, channel) {
-        const note = el("p", "card-issue-note");
-        note.dataset.issueChannel = channel;
-        if (label) note.append(el("strong", "", label + ":"), " ");
-        note.append(el("span", "card-issue-detail", text));
-        return note;
-    }
     function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true } = {}) {
         const node = el(inline ? "span" : "div", "recorded-results");
         node.dataset.resultLayer = layer;
@@ -6065,8 +6058,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 else item.append(owner);
                 item.setAttribute("aria-label", name);
                 if (group.resultIssue) item.append(evidenceLink("Tool result", exact(first, "tool")));
-                if (group.detail) item.append(issueNote(group.recordedCause ? "Recorded reason" : null,
-                    callIssueText(group.detail, group.recordedCause), group.resultIssue ? "entry" : "call"));
+                if (group.detail) item.append(el("span", "card-issue-detail", callIssueText(group.detail, group.recordedCause)));
                 for (const entry of group.entries) {
                     const services = entry.row.serviceAssociation?.services;
                     const service = services?.length === 1 && services[0] !== "Unknown" ? serviceLabel(services[0]) : null;
@@ -6075,13 +6067,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     link.setAttribute("aria-label", `${name}, ${label}`);
                     const block = el("div", "card-entry-issue");
                     block.append(link);
-                    if (entry.detail) block.append(issueNote("Entry error", entry.detail, "entry"));
+                    if (entry.detail) block.append(el("span", "card-issue-detail", entry.detail));
                     item.append(block);
                 }
                 list.append(item);
             }
-            const feedback = el("div", "card-feedback");
-            orientation.replaceWith(feedback); feedback.append(orientation, list);
+            const feedback = el("div", "card-feedback"), problem = el("div", "card-problem-area");
+            problem.append(el("h3", "card-problem-title", "Problem"), list);
+            orientation.replaceWith(feedback); feedback.append(orientation, problem);
         }
         if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);

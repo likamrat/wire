@@ -770,17 +770,20 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-panel-link[aria-expanded=false]>.wire-icon:nth-of-type(2),.card-panel-link[aria-expanded=true]>.wire-icon:first-of-type {display:none}
 .card-feedback {display:grid;min-width:0}
 .card-feedback .card-orientation {gap:0 10px}
-.card-issue-list {margin:0;padding:0;list-style:none;display:grid;gap:12px;min-width:0}
+.card-problem-area {display:grid;align-content:start;gap:4px;margin-block:2px 4px;padding-inline-start:12px;border-inline-start:1px solid var(--screen-returned-issue);min-width:0}
+.card-feedback:has(.card-failure) .card-problem-area {border-color:var(--tool-negative)}
+.card-problem-title {margin:0;color:var(--ink);font:var(--weight-strong) var(--type-body)/1.5 var(--font)}
+.card-issue-list {margin:0;padding:0;list-style:none;display:grid;gap:8px;min-width:0}
 .card-issue-list>li {display:grid;justify-items:start;gap:2px;min-width:0}
 .card-issue-owner {color:var(--muted);font:var(--weight-regular) var(--type-small)/1.45 var(--font);min-width:0;overflow-wrap:anywhere}
-.card-entry-issue {display:grid;justify-items:start;max-width:100%;margin-block-start:6px}
-.card-issue-note,.reader-issue-note {--issue-ink:var(--tool-negative);margin:0 0 5px 9px;padding:4px 0 5px 13px;border-inline-start:1px solid var(--issue-ink);max-width:65ch;color:var(--ink);overflow-wrap:anywhere}
-.card-issue-note {font:var(--weight-regular) var(--type-body)/1.5 var(--font)}
+.card-entry-issue {display:flex;align-items:center;flex-wrap:wrap;gap:0 8px;max-width:100%}
+.card-issue-detail {max-width:65ch;color:var(--ink);font:var(--weight-regular) var(--type-body)/1.5 var(--font);overflow-wrap:anywhere}
+.reader-issue-note {--issue-ink:var(--tool-negative);margin:0 0 5px 9px;padding:4px 0 5px 13px;border-inline-start:1px solid var(--issue-ink);max-width:65ch;color:var(--ink);overflow-wrap:anywhere}
 .reader-issue-note {display:block;list-style:none}
 .call-reason-list:has(>.reader-issue-note) {padding-inline-start:0}
 .call-reason-list:has(>.reader-issue-note)>.call-reason-item:not(.reader-issue-note) {margin-inline-start:1.5em}
-:is(.card-issue-note,.reader-issue-note)[data-issue-channel=entry] {--issue-ink:var(--screen-returned-issue)}
-@media(forced-colors:active){.card-issue-note,.reader-issue-note {border-color:CanvasText}}
+.reader-issue-note[data-issue-channel=entry] {--issue-ink:var(--screen-returned-issue)}
+@media(forced-colors:active){.card-problem-area,.reader-issue-note {border-color:CanvasText}}
 .request-row .returned-issue-ink,.reader-returned-cue {color:var(--screen-returned-issue)}
 .reader-call-secondary .card-identities {padding:0;border:0}
 .reader-section-jumps {column-gap:var(--space-sm);margin-bottom:0}

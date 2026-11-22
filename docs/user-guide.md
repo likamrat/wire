@@ -96,7 +96,8 @@ conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 
 On an Analyze card, **2 tool calls failed** opens both failed calls. The
-short reasons identify their calls; if no reason was saved, the card says so.
+**Problem** area names the affected calls and shows what went wrong. If no
+reason was saved, the card says so.
 **Returned entry 2 · HTTP 400** opens that particular result, not the first
 error or another entry with the same status. Open the reader for the full retained
 wording, code and status. A completed tool can still return an error. A missing

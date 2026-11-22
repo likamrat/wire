@@ -44,6 +44,26 @@ test("card issues distinguish a completed tool's result, equal statuses, repeate
     assert.equal(groups[1].entries[0].label,"Returned entry 2 · HTTP 200; diagnostic HTTP 503");
 });
 
+test("a card folds a repeated error code into its entry preview without dropping a distinct call reason", () => {
+    const results = createRecordedResults({ screen: true });
+    const row = { id: "fetch", tool: "workiq-fetch", outcome: "failure" };
+    const api = { id: 'result:["fetch",0]', parentCallId: "fetch", outcome: "failure", status: 400 };
+    const message = "Syntax error: character ':' is not valid at position 16 in 'tag:cedar:review'.";
+    const call = { failureEvidence: { version: 1, reason: "error-code-recorded", code: "BadRequest" },
+        apiResults: [{ index: 1, statusCode: 400, errorCode: "BadRequest",
+            errorDiagnostic: { version: 1, code: "BadRequest", message, source: "result-error", status: "recorded" } }] };
+    const [folded] = results.cardIssues([row], [api], () => call);
+    assert.equal(folded.detail, null);
+    assert.equal(folded.entries[0].label, "Returned entry 2 · HTTP 400");
+    assert.equal(folded.entries[0].detail, "Invalid colon at position 16.");
+    assert.equal(results.returnedResult(call, api).errorDiagnostic.message, message);
+    call.failureEvidence.diagnostic = { version: 1, code: "BadRequest", message: "The batch could not be finalized.",
+        source: "completion-error", status: "recorded" };
+    const [distinct] = results.cardIssues([row], [api], () => call);
+    assert.match(distinct.detail, /batch could not be finalized/);
+    assert.equal(distinct.entries[0].row, api);
+});
+
 test("screen result details preserve dynamic source-qualified units and report defaults", () => {
     let accepted = { layer: "tool", unit: "source-qualified tool calls" };
     const results = createRecordedResults({ scope: () => accepted, screen: true });
