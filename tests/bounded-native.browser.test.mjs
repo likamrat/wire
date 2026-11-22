@@ -282,6 +282,7 @@ test("completed native card opens only its counted calls across pages, with one 
         const reader = page.locator("#detail"), callsOnPage = reader.locator("[data-native-call-id]");
         await expect(reader.getByRole("heading", { name: /Completed calls in this selection/ })).toBeFocused();
         await expect(callsOnPage).toHaveCount(10);
+        await expect(callsOnPage.first().locator(".reader-call-summary .card-outcome-face")).toHaveText("1 tool call completed");
         const ids = await callsOnPage.evaluateAll(nodes => nodes.map(node => node.dataset.nativeCallId));
         await expect(reader).not.toContainText(/MoveMessage|CallGraph|invented question/);
         await reader.getByRole("button", { name: "Next", exact: true }).click();

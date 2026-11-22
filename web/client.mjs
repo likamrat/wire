@@ -3159,7 +3159,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const item = actionable ? routeLink("", sessionRoute(sessionId, entry.key), classes + " result-link") : el("span", classes);
             item.dataset.outcome = entry.key;
             item.dataset.count = entry.count;
-            item.append(ux.icon(`${singleRecord && recordLabel ? results.icon(entry.key) : entry.icon}-compact`), el("span", "recorded-result-label",
+            const execution = singleRecord && recordLabel && layer === "tool" && summary.count === 1 && results.countedExecution(entry.key, 1);
+            if (execution) item.append(ux.cardOutcome(execution));
+            else item.append(ux.icon(`${singleRecord && recordLabel ? results.icon(entry.key) : entry.icon}-compact`), el("span", "recorded-result-label",
                 `${singleRecord && entry.count === 1 ? "" : count(entry.count) + " "}${singleRecord && summary.count === 1 && recordLabel ? recordLabel : entry.label}`));
             if (entry.reason) {
                 item.classList.add("result-explained");
@@ -6462,7 +6464,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(readerText(scenario.userPrompt, {
             key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
-            collapsePrompt: isSelected,
+            previewTitle: isSelected ? promptSection.toggle : undefined,
             originKind, visibility: isSelected ? promptSection.visibility : linkedVisibility,
             actionsHost: isSelected ? promptSection.actions : undefined,
             contextTitle: isSelected ? undefined : group.relation === "preceding" ? "Earlier message" : "Following message",

@@ -664,10 +664,10 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
 .card-request-context {min-width:0;max-width:78ch}.card-request-context .request-card-summary {margin-top:4px;gap:2px 12px}
 .card-orientation {display:grid;grid-template-columns:minmax(0,min(10em,42%)) minmax(0,1fr);align-items:center;gap:0 12px;margin-block-end:3px}
-.card-orientation .request-card-author,.card-orientation .card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
+.card-orientation .request-card-author,.card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
 .card-orientation .request-card-author {font-weight:var(--weight-strong);color:var(--ink)}
 .author-option-value,.reader-prompt-origin {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%}
-.card-orientation .wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
+.card-orientation .wire-icon,.card-outcome-face>.wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
 .author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {color:var(--prompt-author-ink,currentColor)}
 #requestContent .reader-prompt-origin {color:var(--ink);font-weight:var(--weight-strong)}
 #requestContent .reader-call-summary .result-tone-success .result-status,#requestContent .reader-call-summary.result-tone-success {color:var(--tool-positive)}
@@ -687,11 +687,13 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 }
 #requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
 .card-orientation [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
-.card-orientation .card-outcome {justify-self:start;min-height:44px;font-weight:var(--weight-medium);overflow-wrap:anywhere}
+.card-outcome {justify-self:start;font-weight:var(--weight-medium);overflow-wrap:anywhere}
+.card-orientation .card-outcome {min-height:44px}
+:root {--card-outcome-paper:var(--paper)}
 .card-outcome-face {display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-inline-start:2px solid currentColor;font:inherit}
-.card-orientation .result-tone-success {color:var(--tool-positive)}
-.card-orientation .card-failure {color:var(--tool-negative);font-weight:var(--weight-strong);text-underline-offset:3px}
-.card-orientation :is(.result-tone-success,.result-tone-failure) .card-outcome-face {background:color-mix(in srgb,currentColor 7%,var(--paper))}
+.card-outcome.result-tone-success {color:var(--tool-positive)}
+.card-outcome.card-failure {color:var(--tool-negative);font-weight:var(--weight-strong);text-underline-offset:3px}
+.card-outcome:is(.result-tone-success,.result-tone-failure) .card-outcome-face {background:color-mix(in srgb,currentColor 7%,var(--card-outcome-paper))}
 .card-orientation .result-tone-unknown {color:var(--unknown)}
 .card-orientation .result-tone-other {color:var(--muted)}
 .card-orientation .result-tone-partial {color:var(--warning)}

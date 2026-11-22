@@ -585,12 +585,12 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                 toggle.type = "button";
                 const line = node("span", undefined, "reader-call-identity-line");
                 const chevron = ux.icon("disclosure"); chevron.classList.add("reader-call-disclosure");
-                line.append(node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
                 const callNumber = item.callNumber ?? state.pageOffset + index + 1;
-                const outcome = node("span", `Call ${number(callNumber)}: ` + {
-                    success: results.labels("tool").success, failure: "failed", unknown: "result unverified" }[call.outcome],
-                    "reader-call-summary result-tone-" + call.outcome + (call.outcome === "failure" ? " request-card-failure-text" : ""));
-                outcome.prepend(ux.icon(results.icon(call.outcome)), document.createTextNode(" "));
+                line.append(node("span", `Call ${number(callNumber)}`, "reader-entry-label"), node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
+                const outcome = node("span", undefined, "reader-call-summary result-tone-" + call.outcome);
+                const execution = results.countedExecution(call.outcome, 1);
+                if (execution) outcome.append(ux.cardOutcome(execution));
+                else outcome.append(ux.icon(results.icon(call.outcome)), document.createTextNode(" result unverified"));
                 toggle.append(line, outcome); heading.append(toggle); row.append(heading);
                 const body = node("div", undefined, "reader-call-detail");
                 let open = presentation.isOpen(key("call:" + call.id), false);

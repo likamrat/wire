@@ -212,7 +212,7 @@ test("capture documentation through the normal renderer with isolated light-them
         await page.setViewportSize({ width: 2100, height: 1250 });
         await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
+        await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
         await capture("wire-overview", { top: true });
         if (analyzeOnly) {
             await finish();

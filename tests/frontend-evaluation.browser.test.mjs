@@ -335,6 +335,37 @@ test("completed status opens every counted call and no uncounted sibling", {time
     } finally {await cdp.detach();}
 });
 
+test("reader execution faces match the card without borrowing its total or a returned HTTP error", async t => {
+    const records = compactCardRecords(), mixed = records[0];
+    mixed.toolCalls.push({ ...mixed.toolCalls[1], toolCallId: "another-failure", startEventId: "another-start" });
+    const { page } = await setup(t, "react", records);
+    const row = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
+    const leftFailure = row.locator(".card-outcome-face");
+    await expect(leftFailure).toHaveText("2 tool calls failed");
+    const leftSuccess = page.locator("#activityList .card-outcome.result-tone-success .card-outcome-face").first();
+    await row.locator(".card-panel-link").click();
+    const reader = page.locator("#requestContent"), call = i => reader.locator(`[data-tool-call-id="review-call-${i}"]`);
+    const failed = call(1).locator(".reader-call-summary .card-outcome-face"), completed = call(0).locator(".reader-call-summary .card-outcome-face");
+    await expect(failed).toHaveText("1 tool call failed");
+    await expect(completed).toHaveText("1 tool call completed");
+    await expect(call(0)).toContainText("403"); await expect(call(1)).toContainText("ToolUnavailable");
+    await expect(call(2).locator(".reader-call-summary")).toContainText(/partly completed/i);
+    await expect(call(3).locator(".reader-call-summary")).toContainText(/no recorded result/i);
+    await expect(reader.locator(".card-outcome :is(a,button,[data-icon-role=forward]), .card-outcome:is(a,button,[tabindex])")).toHaveCount(0);
+    const paint = node => {
+        const css = getComputedStyle(node), icon = node.querySelector(".wire-icon"), size = icon.getBoundingClientRect();
+        return [css.color, css.fontSize, css.fontWeight, css.lineHeight, css.padding, css.columnGap,
+            css.borderInlineStart, css.backgroundColor, icon.dataset.iconRole, size.width, size.height];
+    };
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const [face, reference] of [[failed, leftFailure], [completed, leftSuccess]]) {
+            assert.deepEqual(await face.evaluate(paint), await reference.evaluate(paint), theme);
+        }
+    }
+    await page.goBack(); await expect(row.locator(".card-panel-link")).toBeFocused();
+});
+
 test("compact summaries name the scoped causes and open the full diagnostic in the exact reader", { timeout: 60000 }, async t => {
     const { page } = await setup(t, process.env.WIRE_TEST_FRONTEND ?? "react", compactCardRecords());
     const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";

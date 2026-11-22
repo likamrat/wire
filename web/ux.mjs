@@ -502,6 +502,7 @@ export function createEvidenceUX(icons) {
         if (outcome.key === "failure") target.classList.add("card-failure");
         const face = document.createElement("span"), label = document.createElement("span");
         face.className = "card-outcome-face" + (outcome.key === "failure" ? " card-failure-face" : "");
+        label.className = "card-outcome-label";
         label.textContent = outcome.label;
         face.append(icon(outcome.icon), label);
         target.replaceChildren(face);

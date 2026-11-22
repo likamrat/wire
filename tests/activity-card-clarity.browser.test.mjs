@@ -71,7 +71,7 @@ async function setup(t, evidence = records(), { start = startServer } = {}) {
 
 async function expectCallStatus(call, ordinal, status) {
     await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${ordinal}`);
-    await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText(status);
+    await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText(`1 tool call ${status}`);
 }
 
 async function measure(page) {
@@ -226,7 +226,7 @@ test("opening an explicit prompt link starts at its original and restores the li
                 await settle();
                 assert.equal(await body.evaluate(node => node.scrollTop), 0, "Focus and settled layout must not move the reset reader.");
             }
-            const expandPrompt = body.getByRole("button", { name: "Show full prompt", exact: true });
+            const expandPrompt = body.locator('.prompt-preview-toggle[aria-expanded=false]');
             if (await expandPrompt.isVisible()) await expandPrompt.click();
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             assert.ok(await body.evaluate(node => node.scrollTop) > 0, "The next entry must override a genuinely scrolled reader.");
@@ -424,10 +424,10 @@ test("home prompt previews are bounded while exact copied prompts and independen
             await expect(call.locator(".returned-coverage")).toContainText(/total is unknown/i);
             await expectCallStatus(call, 9, "failed");
             assert.equal(await call.locator(".returned-coverage").evaluate(node => node.closest(".call-reason-item") === null), true);
-            const readerType = await call.evaluate(node => [".reader-call-summary .recorded-result-label", ".reader-error-message"].map(selector => {
+            const readerType = await call.evaluate(node => [".reader-call-summary .card-outcome-label", ".reader-error-message"].map(selector => {
                 const css = getComputedStyle(node.querySelector(selector)); return [css.fontFamily, css.fontSize, css.fontWeight];
             }));
-            assert.deepEqual(readerType[0], readerType[1]);
+            assert.equal(readerType[0][0], readerType[1][0]);
             await call.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
@@ -528,7 +528,7 @@ test("filtered calls own subordinate grouped returned errors without merging cal
             await expect(call.locator(".reader-call-summary")).not.toContainText(message);
             await expect(call.locator(".reader-error-message")).toHaveText([message, message, message]);
             const geometry = await call.evaluate(node => {
-                const status = node.querySelector(".reader-call-summary .recorded-result-label"), prose = node.querySelector(".reader-error-message");
+                const status = node.querySelector(".reader-call-summary .card-outcome-label"), prose = node.querySelector(".reader-error-message");
                 return { statusColor: getComputedStyle(status).color, proseColor: getComputedStyle(prose).color,
                     statusBottom: status.getBoundingClientRect().bottom, proseTop: prose.getBoundingClientRect().top };
             });

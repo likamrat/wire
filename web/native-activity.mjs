@@ -458,10 +458,11 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             const chevron = ux.icon("disclosure");
             chevron.classList.add("reader-call-disclosure");
             line.append(chevron);
-            const result = node("span", "reader-call-summary", outcome[call.outcome.state]);
             const state = {succeeded:"success", failed:"failure", cancelled:"other", unknown:"unknown"}[call.outcome.state];
-            result.classList.add("result-tone-" + state);
-            result.prepend(ux.icon(results.icon(state)), document.createTextNode(" "));
+            const result = node("span", "reader-call-summary result-tone-" + state);
+            const execution = results.countedExecution(state, 1);
+            if (execution) result.append(ux.cardOutcome(execution));
+            else result.append(ux.icon(results.icon(state)), document.createTextNode(" " + outcome[call.outcome.state]));
             toggle.append(line, result); identity.append(toggle); heading.append(identity);
             item.append(heading);
             for (const conflict of call.conflicts) item.append(node("p", "reader-state",

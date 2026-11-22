@@ -72,7 +72,7 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
             await expect(call.locator(".journey-result .recorded-result")).toHaveAttribute("data-outcome", "success");
             await expect(call.locator(".journey-result .recorded-result")).toHaveClass(/result-tone-success/);
             await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
-            await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText("completed");
+            await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText("1 tool call completed");
             await expect(call.locator(".reader-call-summary")).not.toContainText("Worked");
             assert.equal((await call.innerText()).split(example.expected).length - 1, 1, "Expanded source error text is shown once");
             await expect(call.locator(".reader-call-summary .result-cause")).toBeHidden();

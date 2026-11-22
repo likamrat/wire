@@ -205,7 +205,8 @@ test("normal native reader shows retained error and successful description throu
     await failed.locator(".reader-call-toggle").click();
     await succeeded.locator(".reader-call-toggle").click();
     await generic.locator(".reader-call-toggle").click();
-    await expect(succeeded.locator(".reader-call-summary")).toContainText("Tool completed");
+    await expect(succeeded.locator(".reader-call-summary .card-outcome-face")).toHaveText("1 tool call completed");
+    await expect(failed.locator(".reader-call-summary .card-outcome-face")).toHaveText("1 tool call failed");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await expect(failed).toContainText("Recorded error: Permission [write] is required for {folder}.");

@@ -185,7 +185,7 @@ function longReaderRecord() {
 
 // Keep a character on the current line, not a scrollTop proxy that passes despite reflow.
 async function rememberReaderLine(page, offset = 2400) {
-    const expand = page.locator("#selectedContext").getByRole("button", { name: "Show full prompt", exact: true });
+    const expand = page.locator('[data-reader-section="prompt"] .prompt-preview-toggle[aria-expanded=false]');
     if (await expand.isVisible()) await expand.click();
     return page.locator('[data-reader-section="prompt"] pre').evaluate((node, offset) => {
         const body = document.querySelector("#contextSidebarBody"), text = node.firstChild;

@@ -342,7 +342,7 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         await capture(`${theme}-missing-reader`);
         await page.locator("#closeContextSidebar").click(); await settled();
         await page.locator('.request-row[data-view-key="request:clarity-worked"] .request-card-open').click();
-        await expect(page.locator('.call-heading [data-outcome="success"] .recorded-result-label')).toHaveText("Call 1 completed");
+        await expect(page.locator('.call-heading [data-outcome="success"] .card-outcome-label')).toHaveText("1 tool call completed");
         await expect(page.locator(".call-heading .result-cause")).toHaveCount(0);
         await capture(`${theme}-worked-reader`);
         await page.locator("#closeContextSidebar").click(); await settled();

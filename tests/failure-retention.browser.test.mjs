@@ -111,7 +111,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
             const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="call-${number}"]`);
             await expect(call.locator(".reader-call-summary")).toContainText(message);
             await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${number}`);
-            await expect(call.locator(".reader-call-summary .recorded-result-label")).toHaveText("failed");
+            await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText("1 tool call failed");
             if (await call.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await call.locator(".reader-call-toggle").click();
             await expect(call.locator(".technical-detail .reader-error-message")).toHaveText(message);
             await expect(call).toContainText("SourcePolicyUnavailable");

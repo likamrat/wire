@@ -291,7 +291,8 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-owned-text:has([data-prompt-actor=agent])>.full-text-body {border-inline-start-color:var(--prompt-author-agent)}
 #requestContent .reader-section-actions>.full-text-reader-actions {display:flex;align-items:center;gap:2px;margin:0}
 #requestContent .full-text-content.prompt-preview-clamped {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:clip}
-#requestContent .prompt-preview-toggle {--pill-fill:transparent;--pill-hover:var(--hover);--pill-pressed:var(--accent-soft);--pill-border:transparent;min-height:44px;max-width:100%;margin:4px 0 0;padding-inline:8px;color:var(--accent);font:inherit;text-align:start;white-space:normal;overflow-wrap:anywhere}
+#requestContent .reader-section-title:has(.prompt-preview-toggle) {min-width:0;max-width:100%}
+#requestContent .prompt-preview-toggle:is(:hover,:focus-visible)>.wire-icon {color:var(--ink);background:var(--hover);outline:4px solid var(--hover);border-radius:2px}
 #requestContent .reader-section .reader-facts {display:grid;gap:12px;margin:12px 0 0}
 #requestContent .reader-section .reader-facts>.reader-fields {display:grid;gap:12px;margin:0}
 #requestContent .reader-section .reader-facts>.reader-fields>div {display:flex;flex-wrap:wrap;gap:2px 8px}

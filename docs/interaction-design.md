@@ -347,9 +347,10 @@ time and display zone. Any first-action fallback stays explicitly labeled.
 
 Selected prompts exceeding six rendered lines start with those six lines visible.
 This keeps a useful exact excerpt above the recorded activity without a nested
-scroll area. Short prompts have no toggle. **Show full prompt** reveals all retained
-text; **Show less** is available above and below the expanded text and returns to
-the prompt's beginning. Width/font changes recheck actual overflow. The choice
+scroll area. Short prompts have no toggle. The author heading of a long prompt
+is a single disclosure with a chevron. It expands the exact retained text and
+collapses it back to the excerpt without moving focus to a different button.
+Copy is a separate header action. Width/font changes recheck actual overflow. The choice
 belongs to that interaction's in-memory reading state, never its stored evidence.
 Search opens the full selected prompt so the preview cannot hide matching text.
 Authorship, exact Copy and report text are unchanged.

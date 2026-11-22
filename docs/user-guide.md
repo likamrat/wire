@@ -266,11 +266,12 @@ contain a returned API error. Repeated tools show a count with its unit. Tools, 
 are separate; a search or Copilot request does not confirm which apps were used.
 When a tool fails and another call returns an issue, use their separate links.
 Long prompts start with a six-line preview so recorded activity stays close.
-Choose **Show full prompt** to read the rest, or **Show less** to return to the
-preview. Copy still includes the whole retained prompt. Search opens the full
+Use the chevron beside the prompt author to expand or collapse the text in place.
+**Copy prompt** still copies the whole retained prompt. Search opens the full
 prompt rather than hiding a match behind the preview.
-Each call keeps its own result, timing and available error details. Open a
-call's disclosure for exact input; **Source details** holds provenance and
+Each call shows its own outcome, such as **1 tool call completed**, even if
+one returned entry reported an error. Its timing and any recorded reason stay
+with the call. Open the call for its exact input; **Source details** holds provenance and
 identifiers. Close or Back returns to the originating results.
 
 **WIRE interpretation** explains a recorded condition or evidence gap separately

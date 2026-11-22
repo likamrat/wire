@@ -160,7 +160,7 @@ test("service evidence explains significance at its call without warning on ordi
         await failure.locator(".reader-call-summary").scrollIntoViewIfNeeded();
         await expect(failure).toContainText("Payload too large; downloads are limited to 4 MB.");
         await expect(failure.locator(".reader-entry-label")).toHaveText("Call #3");
-        await expect(failure.locator(".result-status")).toHaveText("failed");
+        await expect(failure.locator(".result-status")).toHaveText("1 tool call failed");
         if (phase !== "before") {
             await expect(failure.locator(".service-availability")).toHaveCount(0, "The actual failed Files call has an identified service.");
             await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toContainText(
