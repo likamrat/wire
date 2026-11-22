@@ -1,6 +1,6 @@
 // Only these React Icons components may contribute artwork to the local package.
 export {
-    LuArrowLeft, LuArrowRight, LuBookOpen, LuBot, LuCalendar, LuCalendarDays, LuChartColumn,
+    LuArrowLeft, LuArrowRight, LuArrowRightLeft, LuBookOpen, LuBot, LuCalendar, LuCalendarDays, LuChartColumn,
     LuChartNoAxesCombined, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp,
     LuCircleCheck, LuCircleDashed, LuCircleHelp, LuCircleX, LuClipboardCheck, LuClipboardList,
     LuClipboardMinus, LuClipboardPlus, LuClock, LuCodeXml,

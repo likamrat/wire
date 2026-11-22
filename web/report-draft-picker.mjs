@@ -83,7 +83,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         const actions = el("div", "draft-create-actions"); actions.append(submit, cancel); form.append(label, actions); form.hidden = true;
         const status = el("p", "draft-picker-status"); status.setAttribute("role", "status");
         const footer = el("div", "draft-picker-footer"); footer.append(create, libraryLink());
-        create.prepend(ux.icon("zoom-in")); create.disabled = true;
+        create.prepend(ux.icon("draft-create")); create.disabled = true;
         create.setAttribute("aria-expanded", "false");
         submit.disabled = true; name.oninput = () => { submit.disabled = !name.value.trim(); };
         panel.append(heading, searchLabel, fieldRoot, list, status, form, footer);

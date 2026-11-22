@@ -96,6 +96,41 @@ function compactCardRecords() {
     });
 }
 
+test("recognized Exchange ID conversions open their own call, including the earliest member of a group", async t => {
+    const records = compactCardRecords();
+    for (const [index, total] of [[0, 1], [1, 2]]) {
+        const record = records[index];
+        record.toolCalls = Array.from({ length: total + 1 }, (_, i) => ({
+            tool: "workiq-do_action", toolCallId: `exchange-${index}-${i}`, startEventId: `exchange-start-${index}-${i}`,
+            requestArgs: { actionUrl: i === total ? "/me/{id}" : i ? "/users/person/translateExchangeIds" : "/me/translateExchangeIds" },
+            startedAt: new Date(Date.parse(record.capturedAt) - i * 1000).toISOString(),
+            toolSucceeded: true, reportedOutcome: "succeeded", apiResults: [],
+        }));
+    }
+    const { page } = await setup(t, "react", records);
+    for (const [index, total] of [[0, 1], [1, 2]]) {
+        await chooseTheme(page, index ? "dark" : "light");
+        await page.setViewportSize({ width: index ? 390 : 1440, height: 1000 });
+        const card = page.locator(`[data-view-key="request:${records[index].scenarioId}"]`);
+        const text = "Exchange ID conversion", group = total > 1 ? "first of 2 calls" : "call";
+        const link = card.getByRole("link", { name: `${text}: open ${group}`, exact: true });
+        const role = '[data-icon-role="operation-exchange-id-conversion"]';
+        await expect(link.locator(role)).toHaveAttribute("data-lucide-icon", "arrow-right-left");
+        await expect(link).toHaveText(total > 1 ? `${text} (${group})` : text);
+        await expect(link.locator("[data-icon-role=forward]")).toBeVisible();
+        await expect(card.getByRole("link", { name: /Recorded path not recognized/ }).locator("svg").first())
+            .toHaveAttribute("data-icon-role", "service:unknown");
+        await link.focus(); await link.press("Enter");
+        const call = page.locator(`#requestContent [data-tool-call-id="exchange-${index}-${total - 1}"]`);
+        await expect(call).toBeFocused();
+        await call.locator(".reader-call-toggle").click();
+        await expect(call.locator(role)).toBeVisible();
+        await expect(call).toContainText("Exchange item IDs");
+        await page.goBack(); await expect(link).toBeFocused();
+        if (proofs) { await link.scrollIntoViewIfNeeded(); await capture(page, `exchange-${total}-card`); }
+    }
+});
+
 test("Analyze groups exact tool names and counts in static labels beside genuine reader links", async t => {
     const records = compactCardRecords();
     const [mixed, repeated, single, example] = records;

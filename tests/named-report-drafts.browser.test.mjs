@@ -120,6 +120,7 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
         await expect(panel.getByRole("button", { name: "New draft", exact: true })).toBeDisabled();
     } finally { releaseList.resolve(); }
     await expect(panel).toContainText("No drafts yet.");
+    await expect(panel.getByRole("button", { name: "New draft", exact: true }).locator("svg")).toHaveAttribute("data-icon-role", "draft-create");
     await expect(panel.getByLabel("Draft name", { exact: true })).toBeHidden();
     await expect(panel.getByRole("link", { name: "Saved library" })).toHaveAttribute("href", /reports\?.*task=library/);
     await capture("empty");

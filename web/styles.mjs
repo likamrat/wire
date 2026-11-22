@@ -776,9 +776,6 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
 .card-evidence-link {display:inline-flex;align-items:center;gap:.3em;min-height:44px;max-width:100%;overflow-wrap:anywhere;color:var(--ink)}
 .request-row .card-evidence-link:any-link {background:transparent;text-decoration:none}
-.card-identities .card-gap-link {min-height:24px;align-items:baseline;flex-wrap:wrap;column-gap:.65em}
-.card-gap-action {color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
-.card-gap-link:is(:hover,:focus-visible) .card-gap-action {text-decoration-thickness:2px}
 .card-evidence-link>[data-icon-role=forward] {flex:none;width:1.55em;height:1.55em;padding:.22em;border-radius:4px}
 .card-evidence-link:is(:hover,:focus-visible)>[data-icon-role=forward] {background:color-mix(in srgb,currentColor 12%,transparent)}
 .card-evidence-link:active>[data-icon-role=forward] {background:color-mix(in srgb,currentColor 24%,transparent)}

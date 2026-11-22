@@ -57,6 +57,12 @@ for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-0
         await desk.click(); await page.getByRole("button",{name:"Custom dates",exact:true}).click();
         const calendar = page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
         await expect(end).toHaveAttribute("max",today);
+        const previous = calendar.getByRole("button", { name:"Previous month" });
+        await previous.press("Enter"); await expect(previous).toBeFocused();
+        const next = calendar.getByRole("button", { name:"Next month" });
+        await next.press("Enter");
+        if (await next.isDisabled()) await expect(calendar.locator('[data-day][tabindex="0"]')).toBeFocused();
+        else await expect(next).toBeFocused();
         if (zone === "Asia/Tokyo") await calendar.getByRole("button",{name:"Next month"}).click();
         const last=calendar.locator(`[data-day="${today}"]`);
         await expect(last).toBeEnabled(); await last.focus(); await last.press("ArrowRight"); await expect(last).toBeFocused();

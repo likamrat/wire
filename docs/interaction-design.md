@@ -329,9 +329,10 @@ the original. The failed-call count opens the matching failure or set of failure
 not the first member of a plural count. Under each call, a returned-entry link opens
 that entry in its parent call, even when siblings have the same status. Unavailable
 reasons are text, not actions. Report selection is separate.
-On an Analyze tool-call card, **View call** beside a service limit opens that
-call's evidence. **First of N calls** opens the earliest matching call in the
-interaction, not the first call with a known target elsewhere on the card.
+On an Analyze tool-call card, the operation or service-limit label and its
+trailing arrow form one link to that call's evidence. **First of N calls** opens
+the earliest matching call in the interaction, not the first call with a known
+target elsewhere on the card.
 Keep the native links, text selection, focus return and disclosure controls
 independent. Opening the reader does not alter report membership.
 Back from a card opened in **Change activity selection** returns to the

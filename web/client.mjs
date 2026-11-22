@@ -1888,16 +1888,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function serviceLabel(value) { return categories.describe(value).label; }
     function categoryNoun(layer = workspaceState.scope?.layer || workspaceState.route.layer || "tool") { return layer === "tool" ? "Activity category" : "Service"; }
     function allCategories() { return categoryNoun() === "Service" ? "All services" : "All categories"; }
+    function operationForGap(row, layer, evidence) {
+        if (evidence?.reason === "exchange-item-type") return { id: "Unknown", label: "Exchange ID conversion",
+            operationRole: "operation-exchange-id-conversion", description: evidence.description };
+        if (layer === "tool" && row?.tool === "workiq-ask" && evidence?.reason === "hosted-routing")
+            return { id: "Unknown", icon: "Assistance", label: categories.operation(row.tool).label, description: evidence.description };
+        return null;
+    }
     function categoryPresentation(row, layer = "tool") {
-        const entry = categories.describe(row?.workload), evidence = categories.serviceEvidence(row, layer);
-        return layer === "tool" && row?.workload === "Unknown" && row.tool === "workiq-ask" && evidence?.reason === "hosted-routing"
-            ? { ...entry, icon: "Assistance", label: categories.operation(row.tool).label, description: evidence.description } : entry;
+        const entry = categories.describe(row?.workload);
+        return entry.id === "Unknown" ? operationForGap(row, layer, categories.serviceEvidence(row, layer)) ?? entry : entry;
     }
     function serviceCue(tag, value, presentation) {
         const entry = presentation ?? categories.describe(value), node = el(tag, `semantic-cue service-cue dimensional-tone-${dimensional.tone(entry.id)}`);
-        node.dataset.service = entry.id;
-        if (entry.icon) node.dataset.serviceIcon = entry.icon;
-        node.innerHTML = dimensionalIcons[entry.icon ?? entry.id];
+        if (entry.operationRole) {
+            node.dataset.operation = entry.operationRole;
+            node.append(ux.icon(entry.operationRole));
+        } else {
+            node.dataset.service = entry.id;
+            if (entry.icon) node.dataset.serviceIcon = entry.icon;
+            node.innerHTML = dimensionalIcons[entry.icon ?? entry.id];
+        }
         node.append(el("span", "", entry.label));
         return node;
     }
@@ -1928,13 +1939,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 missing ||= association.gaps.length > 0;
                 if (association.status === "not-applicable" && operation) {
                     activity.set(operation.label, { ...categories.describe("Discovery"), label: operation.label });
-                } else if (entry.icon === "Assistance") activity.set(entry.label, entry);
+                }
+                for (const gap of association.gaps) {
+                    const knownOperation = operationForGap(row, layer, gap);
+                    if (knownOperation) activity.set(knownOperation.label, knownOperation);
+                }
             } else if (entry.id === "Discovery") {
                 const label = operation?.label ?? entry.label;
                 activity.set(label, { ...entry, label });
             } else if (entry.id === "Unknown") {
                 missing = true;
-                if (entry.icon === "Assistance") activity.set(entry.label, entry);
+                if (entry.icon || entry.operationRole) activity.set(entry.label, entry);
             } else if (entry.id === "Multiple workloads") activity.set(entry.label, entry);
             else services.add(entry.id);
         }
@@ -1996,7 +2011,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 scope ? [scope.label + ".", scope.description].filter(Boolean).join(" ") : null,
             ].filter(Boolean).join(" ");
             cue.lastElementChild.textContent = label;
-            if (evidence && !entry.icon) cue.querySelector("svg")?.remove();
+            if (evidence && !entry.icon && !entry.operationRole) cue.querySelector("svg")?.remove();
             identity.append(cue);
             if (inlineHelp) identity.append(ux.helpButton(label, help));
             heading.append(identity);
@@ -5908,7 +5923,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const row of cardIdentityRows(rows, layer) ?? []) {
             const names = row.nativeToolNames ?? (row.tool ? [row.tool] : []);
             for (const name of new Set(names)) tools.set(name, (tools.get(name) ?? 0) + 1);
-            const association = row.serviceAssociation, presentation = categoryPresentation(row, layer);
+            const association = row.serviceAssociation;
             const dims = association?.layer === layer ? association.services : [row.workload].filter(Boolean);
             for (const id of dims) {
                 if (id === "Unknown") continue;
@@ -5920,11 +5935,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (association?.status === "not-applicable" && categories.operation(row.tool))
                 operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label });
             for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean)) {
-                const hosted = presentation.icon === "Assistance" && gap.reason === "hosted-routing";
-                const conversion = gap.reason === "exchange-item-type", owner = hosted || conversion ? operations : gaps;
-                if (!owner.has(gap.reason)) owner.set(gap.reason, { ...(hosted ? presentation : { id: "Unknown" }),
-                    label: hosted ? presentation.label : conversion ? "Exchange ID conversion" : categories.displayEvidence(gap).label,
-                    reason: gap.reason, rows: [] });
+                const operation = operationForGap(row, layer, gap), owner = operation ? operations : gaps;
+                if (!owner.has(gap.reason)) owner.set(gap.reason, {
+                    ...(operation ?? { id: "Unknown", label: categories.displayEvidence(gap).label }), reason: gap.reason, rows: [] });
                 owner.get(gap.reason).rows.push(row);
             }
         }
@@ -6031,8 +6044,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 row => row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason));
             if (!exact) return cue;
             const link = open("", "record", exact, "card-evidence-link card-gap-link");
-            const action = entry.rows.length === 1 ? "View call" : `First of ${count(entry.rows.length)} calls`;
-            link.append(cue, el("span", "card-gap-action", action));
+            const group = entry.rows.length > 1 ? `first of ${count(entry.rows.length)} calls` : null;
+            if (group) cue.lastElementChild.append(document.createTextNode(` (${group})`));
+            link.setAttribute("aria-label", `${entry.label}: open ${group ?? "call"}`);
+            link.append(cue, ux.icon("forward"));
             return link;
         }
         body.append(context, activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null }));

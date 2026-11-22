@@ -94,8 +94,7 @@ test("service limits open their own calls, not a neighboring named target or the
         const link = card.getByRole("link", { name: new RegExp(label) });
         await expect(link).toHaveCount(1);
         if (via === "keyboard") {
-            await expect(link).toContainText("First of 2 calls");
-            await expect(link.locator(".semantic-cue")).toHaveText("Asked Copilot");
+            await expect(link.locator(".semantic-cue")).toHaveText("Asked Copilot (first of 2 calls)");
             await expect(card).not.toContainText("Apps unknown");
             await link.focus(); await page.keyboard.press("Enter");
         } else await link.click();

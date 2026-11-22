@@ -49,6 +49,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
     }
     function render(focusDay) {
         if (!current() || !monthKey) return;
+        const monthControl = body.contains(doc.activeElement) ? doc.activeElement.dataset.monthStep : null;
         const limit = today(); lastToday = limit;
         for (const input of Object.values(fields)) input.max = limit;
         if (monthKey > limit.slice(0,7)) monthKey = limit.slice(0,7);
@@ -59,6 +60,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
             monthKey = month.toISOString().slice(0, 7); render();
         };
         const previous = control("", () => shift(-1)), next = control("", () => shift(1));
+        previous.dataset.monthStep = "previous"; next.dataset.monthStep = "next";
         next.disabled = monthKey >= limit.slice(0,7);
         previous.disabled = monthKey === "0001-01";
         previous.setAttribute("aria-label", (label ? label + ": " : "") + "Previous month"); previous.append(ux.icon("previous"));
@@ -111,6 +113,10 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
         for (const input of Object.values(fields)) input.setAttribute("aria-invalid", String(invalid));
         onChange();
         if (focusDay) grid.querySelector(`[data-day="${focusDay}"]`)?.focus();
+        else if (monthControl) {
+            const arrow = monthControl === "previous" ? previous : next;
+            (arrow.disabled ? grid.querySelector('[tabindex="0"]:enabled') : arrow)?.focus();
+        }
     }
     function reset(range) {
         from = range.from ?? ""; to = range.to ?? "";
