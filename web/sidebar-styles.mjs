@@ -32,12 +32,12 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px);scrollbar-gu
 :root[data-navigation=expanded][data-navigation-sized] .app-sidebar:has(#wireAccountEntry:not([hidden])) {min-width:248px}
 :root[data-navigation-sized] .app-sidebar .primary-navigation a {grid-template-columns:max(24px,1.5rem) minmax(0,1fr)}
 :root[data-navigation-sized] .app-sidebar .navigation-label {text-overflow:ellipsis}
-.navigation-resize {position:fixed;inset:var(--app-header-height) auto 0 calc(var(--app-sidebar-width) - 5px);width:12px;z-index:3;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none;outline-offset:-2px}
-.navigation-resize::before {content:"";position:absolute;inset:0 auto 0 4px;width:2px;background:var(--accent);opacity:0;transition:opacity 120ms ease-out}
+.navigation-resize {position:fixed;inset:var(--app-header-height) auto 0 calc(var(--app-sidebar-width) - 5px);width:12px;z-index:3;cursor:col-resize;touch-action:none;-webkit-user-select:none;user-select:none}
+.navigation-resize::before {content:"";position:absolute;inset:50% auto auto 3px;transform:translateY(-50%);width:4px;height:44px;border-radius:2px;background:var(--focus);opacity:0;transition:opacity 120ms ease-out}
 .navigation-resize:is(:hover,:focus-visible)::before,.app-sidebar[data-resizing]>.navigation-resize::before {opacity:1}
-.navigation-resize:focus-visible {outline:2px solid var(--focus)}
+#sidebar>.navigation-resize:focus-visible {outline:none}
 .app-sidebar[data-navigation-moving]>.navigation-resize,:root[data-navigation=collapsed] .navigation-resize {display:none}
-@media(forced-colors:active) {.navigation-resize::before {background:Highlight}}
+@media(forced-colors:active) {.navigation-resize::before {background:Highlight;forced-color-adjust:none}}
 .navigation-footer>#wireAccountEntry {position:absolute;inset:0 auto auto 0;width:max(var(--target),calc(100% - 3 * var(--target)));min-width:0;margin:0}
 .navigation-footer .wire-account-entry {width:100%;padding-top:0}
 .footer-utilities>:is(a,button) {--index:0;position:absolute;bottom:calc(var(--index) * var(--step));left:max(0px,calc(100% - (var(--index) + 1) * var(--target)));display:grid;place-items:center;width:var(--target);height:var(--target);padding:0;border:0;border-radius:var(--radius-control);background:none;box-shadow:none;color:var(--muted);text-decoration:none}

@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -119,6 +121,64 @@ test(`${frontend}: sidebar feedback prefills the GitHub new issue title and opti
         }
     }
     assert.equal(opens.length, 2);
+});
+
+test("the navigation edge never paints parallel resize lines or leaves a grip after collapse", async t => {
+    const { page } = await setup(t, { frontend: "react" });
+    const divider = page.locator(".navigation-resize"), collapse = page.locator("#navigationCollapse");
+    const rail = page.locator("#sidebar"), dir = process.env.WIRE_SIDEBAR_SEAM_PROOFS;
+    if (dir) await mkdir(dir, {recursive: true});
+    const read = async state => {
+        const r = await rail.boundingBox();
+        const clip = {x: Math.round(r.x + r.width) - 14, y: Math.round(r.y + r.height / 2) - 64, width: 30, height: 65};
+        const bytes = await page.screenshot({clip, animations:"disabled"});
+        if (dir) await page.screenshot({ path: path.join(dir, state + ".png") });
+        return page.evaluate(async ({ png }) => {
+            const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))], {type:"image/png"}));
+            const ctx = document.createElement("canvas").getContext("2d");
+            ctx.drawImage(bitmap, 0, 0);
+            const colors = new Set(["--accent", "--focus"].map(role => {
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(role).trim();
+                return ctx.fillStyle;
+            }));
+            // Sample above and through the grip: a full-height outline paints both rows.
+            return [0, bitmap.height - 1].map(y => {
+                const pixels = ctx.getImageData(0, y, bitmap.width, 1).data;
+                let runs = 0, last = false;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const ink = colors.has("#" + [...pixels.slice(i, i + 3)].map(v => v.toString(16).padStart(2, "0")).join(""));
+                    if (ink && !last) runs++;
+                    last = ink;
+                }
+                return runs;
+            });
+        }, {png: bytes.toString("base64")});
+    };
+    for (const [palette, theme] of [["blue", "light"], ["petrol", "light"], ["blue", "dark"]]) {
+        await chooseTheme(page, theme);
+        await page.evaluate(p => document.documentElement.dataset.evidencePalette = p, palette);
+        const edge = {}, record = async state => { edge[state] = await read(`${palette}-${theme}-${state}`); };
+        await page.mouse.move(900, 150);
+        await record("expanded");
+        const handle = await divider.boundingBox(), x = handle.x + handle.width / 2, y = handle.y + 90;
+        await page.mouse.move(x, y); await divider.hover(); await record("hover");
+        await page.mouse.move(x,y); await page.mouse.down(); await page.mouse.move(x + 45,y,{steps:5}); await record("drag");
+        await page.mouse.up(); await page.mouse.move(900,150);
+        await record("released");
+        const width = await rail.evaluate(n => n.offsetWidth);
+        await divider.focus(); await divider.press("ArrowRight"); await page.keyboard.press("ArrowLeft");
+        assert.ok(await divider.evaluate(n => n.matches(":focus-visible")));
+        await record("keyboard");
+        await collapse.press("Enter");
+        await expect(divider).toBeHidden();
+        await page.waitForFunction(() => !document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
+        await record("collapsed");
+        await collapse.press("Enter");
+        await expect.poll(() => rail.evaluate(n => n.offsetWidth)).toBe(width);
+        if (dir) await writeFile(path.join(dir, `${palette}-${theme}.json`), JSON.stringify(edge));
+        for (const state of ["expanded","released","collapsed"]) assert.deepEqual(edge[state], [0, 0], `${theme}/${palette}: ${state}`);
+        for (const state of ["hover","drag","keyboard"]) assert.deepEqual(edge[state], [0, 1], `${theme}/${palette}: ${state}`);
+    }
 });
 
 test("the left divider resizes live, remembers the release and leaves the narrow drawer alone", async t => {

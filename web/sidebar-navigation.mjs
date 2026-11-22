@@ -129,8 +129,7 @@ export function mountSidebarNavigation(ux, preference) {
     ux.tooltip(divider, () => drag ? "" : "Drag or use arrow keys to resize. Double-click or press Enter to reset.", { placement: "right" });
     divider.addEventListener("pointerdown", event => {
         if (!event.isPrimary || event.button !== 0 || collapsed || media.matches) return;
-        event.preventDefault();
-        ux.restoreFocus(divider); ux.hideTooltip();
+        ux.hideTooltip();
         const start = Math.round(rail.getBoundingClientRect().width);
         drag = { id: event.pointerId, x: event.clientX, start, width: start };
         rail.dataset.resizing = "";
