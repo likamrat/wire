@@ -8373,7 +8373,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 frozenFrame: assessmentFactories.liveSearch.frozenFrame, isCurrent: currentReport, toolbar: current.toolbar,
                 icon: ux.icon, title: current.title, brand: cloneReportBrand,
                 readingDocument: source => {
-                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand, saved: true });
+                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand, icon: ux.icon, saved: true });
                     // The new reading uses named, native disclosures inside the opaque frame.
                     // Never replace the verified document just to open or close one of its sections.
                     held.expandable = !source.querySelector('main[data-finding-version="1"]')
@@ -9970,7 +9970,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         forgetReading(readingSelection?.outer);
                     },
                     onReady: (source, refresh) => {
-                        if (localSave) assessmentFactories.enhanceReportReading(source);
+                        if (localSave) assessmentFactories.enhanceReportReading(source, { icon: ux.icon });
                         return assessmentFactories.decoratePreparedReport(source, {
                             preview: value, notes: draft.options().reportNotes ?? [],
                             current: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId,

@@ -41,8 +41,10 @@ body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:
 .saved-reader-file.saved-brief-host{display:block;overflow:auto;overscroll-behavior:contain;container-type:inline-size}
 .saved-brief{min-width:0;background:var(--paper)}
 .saved-brief .wire-section-nav{padding-inline:clamp(12px,3cqi,32px);margin:0;gap:0 1rem;background:var(--screen-plot)}
-.saved-brief .wire-section-nav button>span,.brief-action>span{display:inline-grid;grid-template-columns:auto minmax(0,1fr);gap:.5em;align-items:start;line-height:1.5}
-.saved-brief .wire-icon{flex:none;width:1.125em;height:1.125em;margin-top:.18em}
+.brief-action>span{display:inline-grid;grid-template-columns:auto minmax(0,1fr);gap:.5em;align-items:start;line-height:1.5}
+.brief-action .wire-icon{flex:none;width:1.125em;height:1.125em;margin-top:.18em}
+.brief-destination>span:first-child{grid-template-columns:minmax(0,1fr) auto;align-items:center}
+.brief-destination>span:first-child>.wire-icon{margin:0;width:1em;height:1em}
 .brief-page{padding:clamp(16px,3cqi,32px);max-width:76rem;margin:auto;overflow-wrap:anywhere}
 .brief-page h2{margin:0 0 .38em;font-size:var(--type-section-title,1.5rem);line-height:1.25;color:var(--ink)}
 .brief-page h3{margin:0 0 .35em;font-size:var(--type-body);font-weight:var(--weight-medium)}
@@ -79,7 +81,7 @@ body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:
 .brief-finding-spread .brief-facts>div{grid-template-columns:1fr 1fr;gap:.5rem}
 .brief-finding-spread dd[data-tone=error]{color:var(--danger)}.brief-finding-spread dd[data-tone=completed]{color:var(--success);font-weight:var(--weight-medium)}
 #savedReportReader .brief-bar-link{display:flex;align-items:stretch;flex-direction:column;width:100%;min-height:44px}
-.brief-bar-link>span:first-child{align-items:baseline}
+.brief-bar-link>span:first-child{align-items:center}
 .brief-bar-link .brief-bar-track{display:block;background:var(--surface-divider);height:.35rem;padding:0}
 .brief-bar-track i{display:block;height:100%;background:var(--muted)}.brief-bar-link:first-of-type i{background:var(--accent)}
 @container(max-width:42rem){.brief-finding-spread{grid-template-columns:1fr;gap:0}.brief-finding-spread>section+section{border:0;padding:0}}

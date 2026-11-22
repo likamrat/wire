@@ -37,8 +37,11 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     };
     const action = (caption, glyph, fn, cls = "brief-action") => {
         const n = el("button", undefined, cls); n.type = "button";
-        const face = el("span"); if (glyph) face.append(icon(glyph));
-        face.append(el("span", caption)); n.append(face);
+        const face = cls ? el("span") : n;
+        if (glyph && glyph !== "forward") face.append(icon(glyph));
+        face.append(el("span", caption));
+        if (glyph === "forward") { face.append(icon(glyph)); n.classList.add("brief-destination"); }
+        if (face !== n) n.append(face);
         n.onclick = () => { if (live()) fn(n); };
         return n;
     };
@@ -52,7 +55,7 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     const live = () => !disposed && host.isConnected && isCurrent() && !disposed;
     const sections = [["findings", "Findings", "section-guide"], ["interactions", "Interactions", "search-interaction"],
         ["calls", "Tool results", "search-tool"], ["coverage", "Coverage", "report-all"]];
-    const jump = (caption, glyph, next) => action(caption, glyph, trigger => {
+    const jump = (caption, glyph, next) => action(caption, frozenFinding ? "forward" : glyph, trigger => {
         // Keep the actual origin nodes: open follow-ups, focus and reading position survive Back.
         stack.push({ nodes: [...panel.childNodes], showing, trigger, top: host.scrollTop, windowY: doc.defaultView.scrollY });
         render(next, true);

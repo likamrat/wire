@@ -127,6 +127,7 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await capture(page, "brief-wide");
     await brief.getByRole("button", { name: /returned HTTP 403 · 4 interactions/ }).click();
     const matching = brief.getByRole("button", { name: heading, exact: true });
+    await expect(matching.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
     await matching.click();
     const owner = prepared.snapshot.reportPatterns.calls.find(item => item.scenarioRef === expected);
     const ordinal = prepared.snapshot.resultFacts.calls.findIndex(item => item.ref === owner.ref) + 1;
@@ -152,6 +153,8 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await saved.locator('.report-nav a[href$="#patterns"]').click();
     const singleRow = saved.locator(".report-pattern-table tbody tr").filter({ hasText: "404" });
     const one = singleRow.getByRole("link", { name: /^1 matching interaction:/ });
+    await expect(one.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
+    await expect(saved.locator('.report-nav a[href$="#patterns"] [data-icon-role="section-charts"]')).toBeVisible();
     await capture(page, "saved-narrow-dark");
     await one.click();
     await expect(saved.locator(":target")).toHaveAttribute("id", single.interactionRefs[0]);

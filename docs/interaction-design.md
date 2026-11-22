@@ -433,6 +433,12 @@ result authority.
 
 ## Reports
 
+In the finding-first reader, section icons precede their labels and destination
+arrows follow them. Open a matching interaction or call with that arrow; use
+a section's disclosure to expand content in place. Returned status lines are
+evidence, not another level of navigation. These cues are applied in WIRE,
+not written into an existing saved report.
+
 ### Landing and saved list
 
 Reports opens with New report on the left and up to three recent reports on the
