@@ -131,6 +131,40 @@ test("recognized Exchange ID conversions open their own call, including the earl
     }
 });
 
+test("discovery, schema, agent, retrieval and named Graph actions retain distinct roles through reading", async t => {
+    const records = compactCardRecords();
+    const inputs = [
+        ["search_paths", {query:"Find paths"}, "API discovery"],
+        ["get_schema", {path:"/me/messages/{id}/send"}, "Schema lookup"],
+        ["list_agents", {}, "Agent discovery"],
+        ["retrieve", {query:"Find notes"}, "Search requested"],
+        ["ask", {question:"Ask for notes"}, "Asked Copilot"],
+        ["do_action", {actionUrl:"/me/messages/{id}/microsoft.graph.replyAll"}, "Reply all"],
+        ["call_function", {functionUrl:"/me/calendar/getSchedule"}, "Get schedule"],
+    ];
+    for (const [i,[tool, args]] of inputs.entries()) records[i].toolCalls = [{
+        tool:`workiq-${tool}`, requestArgs:args, startEventId:`op-start-${i}`, toolCallId:`op-call-${i}`,
+        startedAt:records[i].capturedAt, toolSucceeded:true, reportedOutcome:"succeeded", apiResults:[],
+    }];
+    const { page } = await setup(t, "react", records);
+    for (const [i,[tool,,label]] of inputs.entries()) {
+        const card = page.locator(`[data-view-key="request:${records[i].scenarioId}"]`);
+        const role = `operation-${tool.replaceAll("_","-")}`;
+        await expect(card.locator(`.card-tool-name [data-icon-role="${role}"]`)).toBeVisible();
+        const operation = card.locator(".service-cue").filter({hasText:label});
+        await expect(operation).toHaveCount(1);
+        const subject = await operation.locator("svg").getAttribute("data-icon-role");
+        assert.ok(subject.startsWith("operation-"));
+        await card.locator(".card-panel-link").click();
+        const call = page.locator(`#requestContent [data-tool-call-id="op-call-${i}"]`);
+        await expect(call.locator(`.reader-tool-name [data-icon-role="${role}"]`)).toBeVisible();
+        await expect(call.locator(`.reader-call-services [data-icon-role="${subject}"]`)).toBeVisible();
+        if (tool === "get_schema") await expect(call.locator('[data-icon-role="operation-graph-send"]')).toHaveCount(0);
+        await page.goBack(); await expect(card.locator(".card-panel-link")).toBeFocused();
+    }
+    if (proofs) await capture(page, "named-operation-roles");
+});
+
 test("Analyze groups exact tool names and counts in static labels beside genuine reader links", async t => {
     const records = compactCardRecords();
     const [mixed, repeated, single, example] = records;

@@ -936,7 +936,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             link.addEventListener("click", open, { capture: true });
             link.addEventListener("auxclick", open, { capture: true });
             if (member.id === saved?.member) returnLink = link;
-            row.append(link, el("span", "muted", member.operation)); dialogBody.append(row);
+            row.append(link, ux.showTool(el("span", "muted", member.operation), member.tool)); dialogBody.append(row);
         }
         if (returnLink) { dialogBody.scrollTop = saved.top; returnLink.focus({ preventScroll: true }); }
     }

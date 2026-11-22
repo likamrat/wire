@@ -8,6 +8,28 @@ import { componentName, serviceIconSources, iconProps } from "../web/icon-roles.
 import { lucideIcon, lucideLicense, uxIcons, uxIconSources } from "../web/ux-icons.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
+import { recognizedOperations, normalizeEndpoint } from "../lib/analytics.mjs";
+import { createOperationIcons } from "../web/operation-icons.mjs";
+
+test("every admitted tool and named Graph operation resolves to registered art without inferring an invocation", () => {
+    const ops = createOperationIcons();
+    assert.equal(new Set(Object.values(ops.sources)).size, Object.keys(ops.sources).length,
+        "Distinct named operation roles do not collapse onto the same glyph");
+    for (const name of [...recognizedOperations.tools, "owned-graph-http"]) assert.ok(uxIcons[ops.toolRole(name)], name);
+    const projected = (name, tool, layer = "tool") => ops.pathOperations({tool, endpoint:normalizeEndpoint(`/me/${name}`)}, layer);
+    for (const name of recognizedOperations.graph) {
+        const exact = projected(name, "workiq-do_action");
+        assert.ok(exact.length === 1 && uxIcons[exact[0].operationRole], name);
+        assert.deepEqual(projected(`microsoft.graph.${name}(q='private')`, "workiq-call_function"), exact, name);
+        assert.deepEqual(projected(name, "workiq-get_schema"), []);
+        assert.deepEqual(projected(name, "workiq-fetch"), []);
+        assert.deepEqual(projected(name, "workiq-do_action", "reported-api"), []);
+    }
+    assert.equal(ops.toolRole("unverified-fetch"), null);
+    assert.equal(ops.toolRole("constructor"), null);
+    assert.deepEqual(projected("unknownAction", "workiq-do_action"), []);
+    assert.deepEqual(ops.pathOperations({tool:"workiq-do_action",endpoint:normalizeEndpoint("/users/send")}, "tool"), []);
+});
 
 test("each UI and service glyph is the selected React Icons component with its semantic role, geometry and size", () => {
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));

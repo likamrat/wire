@@ -1,5 +1,5 @@
 // Kept self-contained because the local shell serializes this function into its nonce-authorized script.
-export function createEvidenceUX(icons) {
+export function createEvidenceUX(icons, operations) {
     const descriptions = new WeakMap();
     const tooltipOptions = new WeakMap();
     const disabledReasons = new WeakMap();
@@ -524,6 +524,15 @@ export function createEvidenceUX(icons) {
         node.removeAttribute("id");
         return node;
     }
+    function showTool(node, name) {
+        const role = operations?.toolRole(name);
+        if (role) {
+            const glyph = icon(role);
+            glyph.classList.add("operation-inline");
+            node.prepend(glyph);
+        }
+        return node;
+    }
     function cardToolList(tools) {
         const list = document.createElement("ul");
         list.className = "card-tool-list";
@@ -533,7 +542,7 @@ export function createEvidenceUX(icons) {
             item.className = "card-tool-item";
             label.className = "card-tool-name";
             label.textContent = name;
-            item.append(label);
+            item.append(showTool(label, name));
             if (countLabel) {
                 const count = document.createElement("span");
                 count.className = "card-tool-count";
@@ -790,7 +799,7 @@ export function createEvidenceUX(icons) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, operations, showTool, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

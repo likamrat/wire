@@ -272,7 +272,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ]) } : {}) };
     }
     const renderedContextBundles = new Set();
-    const ux = createEvidenceUX(uxIcons);
+    const ux = createEvidenceUX(uxIcons, assessmentFactories.createOperationIcons());
     const searchFields = assessmentFactories.createSearchFields(ux);
     let namedReport = null;
     const namedDrafts = assessmentFactories.createReportDraftPicker({ api, ux, searchFields, normalize: assessmentFactories.normalizeSearchText,
@@ -1892,11 +1892,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (evidence?.reason === "exchange-item-type") return { id: "Unknown", label: "Exchange ID conversion",
             operationRole: "operation-exchange-id-conversion", description: evidence.description };
         if (layer === "tool" && row?.tool === "workiq-ask" && evidence?.reason === "hosted-routing")
-            return { id: "Unknown", icon: "Assistance", label: categories.operation(row.tool).label, description: evidence.description };
+            return { id: "Unknown", operationRole: ux.operations.toolRole(row.tool), label: categories.operation(row.tool).label, description: evidence.description };
         return null;
     }
     function categoryPresentation(row, layer = "tool") {
         const entry = categories.describe(row?.workload);
+        if (layer === "tool" && categories.operation(row?.tool)?.category === "Discovery")
+            return { ...entry, label: categories.operation(row.tool).label, operationRole: ux.operations.toolRole(row.tool) };
         return entry.id === "Unknown" ? operationForGap(row, layer, categories.serviceEvidence(row, layer)) ?? entry : entry;
     }
     function serviceCue(tag, value, presentation) {
@@ -1935,10 +1937,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const association = row.serviceAssociation?.layer === layer ? row.serviceAssociation : null;
             const entry = categoryPresentation(row, layer), operation = layer === "tool" ? categories.operation(row.tool) : null;
             if (association) {
-                for (const service of association.services) services.add(service);
+                for (const service of association.services) {
+                    if (association.basis === "tool-purpose" && service === "Search") {
+                        activity.set("Search requested", { id:service, label:"Search requested", operationRole:ux.operations.toolRole(row.tool) });
+                    } else services.add(service);
+                }
                 missing ||= association.gaps.length > 0;
                 if (association.status === "not-applicable" && operation) {
-                    activity.set(operation.label, { ...categories.describe("Discovery"), label: operation.label });
+                    activity.set(operation.label, { ...categories.describe("Discovery"), label: operation.label, operationRole:ux.operations.toolRole(row.tool) });
                 }
                 for (const gap of association.gaps) {
                     const knownOperation = operationForGap(row, layer, gap);
@@ -1952,6 +1958,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (entry.icon || entry.operationRole) activity.set(entry.label, entry);
             } else if (entry.id === "Multiple workloads") activity.set(entry.label, entry);
             else services.add(entry.id);
+            for (const op of ux.operations.pathOperations(row, layer)) activity.set(op.operationRole, { id:"Unknown", ...op });
         }
         const known = categories.entries.filter(entry => services.has(entry.id));
         const items = known.slice(0, compact ? 2 : undefined).map(entry => serviceCue("span", entry.id));
@@ -5771,7 +5778,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         card.dataset.sessionId = row.sourceSessionId;
         const recordedLabel = workspaceState.scope.layer === "code-reference" ? "Reference recorded" : workspaceState.scope.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(workspaceState.scope.layer) ? "Request site recorded" : "Action recorded";
-        card.append(el("p", "", workspaceState.scope.layer === "tool" ? results.callOperation(row) : row.tool || results.unit(workspaceState.scope.layer, 1)),
+        const identity = el("p", "", workspaceState.scope.layer === "tool" ? results.callOperation(row) : row.tool || results.unit(workspaceState.scope.layer, 1));
+        if (["tool","http"].includes(workspaceState.scope.layer)) ux.showTool(identity, row.tool);
+        card.append(identity,
             el("p", "muted", "The owning interaction was not retained."),
             recordedCategory([row], workspaceState.scope.layer),
             resultLine(workspaceState.scope.layer, results.summarize([row]), { rows: [row], singleRecord: true,
@@ -5929,11 +5938,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (id === "Unknown") continue;
                 if (id === "Discovery" || association?.basis === "tool-purpose" && id === "Search") {
                     const title = categories.operation(row.tool)?.label ?? (id === "Search" ? "Search requested" : serviceLabel(id));
-                    operations.set(title, { id, label: title });
+                    operations.set(title, { id, label: title, operationRole: ux.operations.toolRole(row.tool) });
                 } else targets.set(id, categories.describe(id));
             }
             if (association?.status === "not-applicable" && categories.operation(row.tool))
-                operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label });
+                operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label, operationRole: ux.operations.toolRole(row.tool) });
+            for (const op of ux.operations.pathOperations(row, layer)) {
+                if (!operations.has(op.operationRole)) operations.set(op.operationRole, { id:"Unknown", ...op, rows:[] });
+                operations.get(op.operationRole).rows.push(row);
+            }
             for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean)) {
                 const operation = operationForGap(row, layer, gap), owner = operation ? operations : gaps;
                 if (!owner.has(gap.reason)) owner.set(gap.reason, {
@@ -5948,7 +5961,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const cues = entries => [...entries.values()].map(item => {
             const cue = serviceCue("span", item.id, item);
-            return item.reason && inspectGap ? inspectGap(item, cue) : cue;
+            return item.rows && inspectGap ? inspectGap(item, cue) : cue;
         });
         const values = cues(targets);
         if (values.length > 3 && includeTools) {
@@ -6041,7 +6054,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         function inspectGap(entry, cue) {
             const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
                 workspaceState.evidence.scenarios, entry.rows, { ...target, layer }, workspaceState.evidence.revision,
-                row => row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason));
+                row => entry.reason ? row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason)
+                    : ux.operations.pathOperations(row, layer).some(op => op.operationRole === entry.operationRole));
             if (!exact) return cue;
             const link = open("", "record", exact, "card-evidence-link card-gap-link");
             const group = entry.rows.length > 1 ? `first of ${count(entry.rows.length)} calls` : null;
@@ -6438,7 +6452,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         function callHeading(name, result, { tool = false, duration, durationLabel = "Call duration" } = {}) {
             const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
-            if (tool) identity.append(el("span", "reader-tool-name", name));
+            if (tool) identity.append(ux.showTool(el("span", "reader-tool-name", name), name));
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
             summary.append(result);
@@ -6900,6 +6914,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const item = viewKey(el("li", "journey-item"), key);
             const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true, singleRecord: true, inline: true }),
                 { duration: callInvestigation.duration(record, "http"), durationLabel: "Recorded duration" });
+            ux.showTool(heading.querySelector(".reader-record-name"), "owned-graph-http");
             item.append(heading, fields([["Service", identityValues(httpRows, "http")]]),
                 el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
             actionContext(item, workspaceState.scope.layer === "http" ? httpRows : []);
@@ -10988,6 +11003,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     text.append(part);
                 });
                 replacePrivateChoices(node, text);
+                return;
+            }
+            if (id === "toolFilter") {
+                const role = ux.operations.toolRole(value);
+                if (role) node.prepend(ux.icon(role));
                 return;
             }
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {

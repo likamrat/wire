@@ -691,7 +691,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             for (const id of ids) {
                 const peers = sides.map(([key]) => rows[key].find(row => row.id === id));
                 const label = peers.find(Boolean).label, group = el("div", undefined, "comparison-group");
-                group.append(el("h4", label));
+                const heading = el("h4", label);
+                if (!["endpoint", "workload"].includes(getContext().route.chart)) ux.showTool(heading, label);
+                group.append(heading);
                 group.append(el("p", `Later minus earlier: ${signed((peers[1]?.count ?? 0) - (peers[0]?.count ?? 0))} ${results.columnUnit(value.definitions.layer, 2)}.`, "compare-caption"));
                 for (const [index, [key, side]] of sides.entries()) {
                     const fact = peers[index], count = fact?.count ?? 0, peer = peers[1 - index]?.count ?? 0;
@@ -1059,6 +1061,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                         const toolName = knownTool ? row.tool : "Tool not recorded";
                         if (!knownTool) link.textContent = toolName;
                         link.classList.add("icon-action");
+                        if (["tool","http"].includes(value.definitions.layer)) ux.showTool(link, row.tool);
                         link.append(ux.icon("forward"));
                         link.id = `comparison-record-${name}-${row.id}`;
                         link.setAttribute("aria-label", `${toolName}, ${title || "Retained interaction"}, ${startedAt}, record ${rowIndex + 1}`);

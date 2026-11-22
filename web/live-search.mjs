@@ -463,7 +463,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             const categoryLabel = ({ interaction: "Interaction", context: "Prompt context", reply: "Reply", action: "Recorded action",
                 tool: "Tool", service: "Service", report: "Report", comparison: "Comparison", view: "View", setting: "Setting" })[hit.type];
             const kindLabel = layer ? results.unit(layer, 1) : categoryLabel;
-            const icon = hit.type === "service" ? serviceIcon(hit.target) : ux.icon("search-" + hit.type);
+            const toolRole = hit.type === "tool" || hit.type === "action" && ["tool","http"].includes(layer) ? ux.operations.toolRole(hit.title) : null;
+            const icon = hit.type === "service" ? serviceIcon(hit.target) : ux.icon(toolRole ?? "search-" + hit.type);
             if (icon?.localName !== "svg") throw new TypeError("Search result icon is unavailable.");
             const slot = el("span", undefined, "wire-search-type-icon");
             slot.setAttribute("aria-hidden", "true"); slot.append(icon); target.append(slot);

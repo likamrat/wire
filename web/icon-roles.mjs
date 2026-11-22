@@ -1,4 +1,7 @@
+import { createOperationIcons } from "./operation-icons.mjs";
+
 export const uxIconSources = Object.freeze({
+    ...createOperationIcons().sources,
     copy: "copy", check: "check", warning: "triangle-alert", unobserved: "circle-question-mark", info: "info", account: "user-round",
     "result-success": "circle-check", "result-failure": "circle-x", "result-partial": "circle-dashed", "result-other": "info", "result-transport": "unplug",
     "result-success-compact": "circle-check", "result-failure-compact": "circle-x", "unobserved-compact": "circle-question-mark",
@@ -11,7 +14,6 @@ export const uxIconSources = Object.freeze({
     export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
     "navigation-reports": "clipboard-list", "navigation-settings": "settings", "navigation-help": "circle-question-mark",
     "report-add": "clipboard-plus", "report-member": "clipboard-check", "report-remove": "clipboard-minus", "draft-create": "plus",
-    "operation-exchange-id-conversion": "arrow-right-left",
     "navigation-trends": "chart-no-axes-combined", "navigation-feedback": "message-circle-heart",
     "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
     "navigation-collapse": "panel-left", "navigation-expand": "panel-left",
@@ -44,7 +46,7 @@ export const serviceIconSources = Object.freeze({
     Mail: "mail", Calendar: "calendar", Files: "folder", Teams: "users-round",
     People: "user-round", Tasks: "list-todo", Notes: "notebook", Directory: "network",
     Search: "search", Discovery: "book-open", "Multiple workloads": "grid-2x2", "Platform metadata": "code-xml",
-    Unknown: "circle-question-mark", "group:other": "layout-grid", Assistance: "message-circle",
+    Unknown: "circle-question-mark", "group:other": "layout-grid",
 });
 
 export const serviceIconRole = service => "service:" + service.toLowerCase().replaceAll(" ", "-");

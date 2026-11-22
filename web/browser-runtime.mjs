@@ -4,6 +4,7 @@ import { createBoardTransport } from "../lib/client-transport.mjs";
 import { createReportDraft, createReportSaveIdentity } from "./report-draft.mjs";
 import { createEvidenceUX } from "./ux.mjs";
 import { uxIcons } from "./ux-icons.mjs";
+import { createOperationIcons } from "./operation-icons.mjs";
 import { mountThemeControl } from "./theme-control.mjs";
 import { createTimeContext } from "../lib/time.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
@@ -91,7 +92,7 @@ function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
-        timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
+        createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),

@@ -411,7 +411,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         await card("copilot").scrollIntoViewIfNeeded();
         if (proof) await card("copilot").screenshot({ path: path.join(proof, `vocabulary-${phase}-${theme}-${width}-card.png`) });
         await card("copilot").click();
-        const cue = page.locator("#requestContent [data-service-icon=Assistance]").first();
+        const cue = page.locator("#requestContent [data-operation=operation-ask]").first();
         const cueStyle = await cue.evaluate(node => {
             const style = getComputedStyle(node), root = getComputedStyle(document.documentElement);
             const icon = node.querySelector(".wire-icon"), range = document.createRange(); range.selectNodeContents(node.querySelector("span"));

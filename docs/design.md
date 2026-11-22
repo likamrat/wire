@@ -184,6 +184,14 @@ service glyph keeps its service ink even in Search, outside the chart legend.
 Navigation and ordinary actions inherit their control's ink; they are not
 additional data categories.
 
+Screen operation roles live in `web/operation-icons.mjs`. A recorded tool name
+identifies the tool, not a service, a result, or proof that a referenced API
+was called. API discovery, schema lookup, agent discovery, retrieval and
+Copilot assistance use different glyphs. A named Graph action or function
+uses its own glyph only on a matching recorded action/function call. A schema
+argument, code reference, returned status, or unknown name does not acquire
+an execution glyph. The role coverage test follows the analytics allowlists.
+
 This rule is for screen glyphs, not all SVGs. WIRE and provider marks, profile
 imagery, chart geometry and the versioned artwork embedded in reports retain
 their own paint. Native form controls keep their platform affordances.
