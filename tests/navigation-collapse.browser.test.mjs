@@ -24,7 +24,7 @@ const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/me/c
         return row;
     }));
 
-async function setup(t, { empty = false, ...options } = {}) {
+async function setup(t, { empty = false, additionalReads = [], ...options } = {}) {
     const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, empty ? [] : records);
     const before = await loadBoardState(context);
@@ -43,7 +43,7 @@ async function setup(t, { empty = false, ...options } = {}) {
             for (const key of ["cards", "evidence", "exports", "pseudonymKey"]) assert.deepEqual(after[key], before[key], key);
             assert.deepEqual(errors, []);
             assert.ok(requests.every(url => ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail",
-                "/api/assessment/overview", "/api/preview", "/api/cancel-preview"].includes(url)), `No collection, export, feedback or data mutations: ${requests}`);
+                "/api/assessment/overview", "/api/preview", "/api/cancel-preview", ...additionalReads].includes(url)), `No collection, export, feedback or data mutations: ${requests}`);
         } finally { for (const action of cleanup) await action(); }
     });
     await page.goto(runtime.url + "#home?chart=workload"); await ready(page);
@@ -61,9 +61,9 @@ async function geometry(page) {
             return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right };
         };
         return { sidebar: box("#sidebar"), main: box("#main"), header: box(".app-header"), chart: box(".chart-panel"),
-            scene: box(".dimensional-plot"), filters: box("#filters"), overflow: document.documentElement.scrollWidth - innerWidth,
+            scene: box("#chart .flat-comparison"), filters: box("#filters"), overflow: document.documentElement.scrollWidth - innerWidth,
             offset: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-sidebar-width")),
-            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check("14px Arial"),
+            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check('14px "Asta Sans"'),
             scrollY, route: location.hash };
     });
 }
@@ -80,14 +80,14 @@ async function setCollapsed(page, collapsed) {
 }
 
 test("pointer and keyboard collapse reclaim actual chart width and retain tooltip dismissal and all destinations", { timeout: 60000 }, async t => {
-    const { page, requests } = await setup(t);
-    const before = await geometry(page), scene = await page.locator(".dimensional-plot").elementHandle();
+    const { page, requests } = await setup(t, { additionalReads: ["/api/trends", "/api/period-comparison"] });
+    const before = await geometry(page), scene = await page.locator("#chart .flat-comparison").elementHandle();
     const snapshotReads = requests.filter(url => url === "/api/snapshot").length;
-    assert.equal(before.loaded, true); assert.match(before.font, /^Arial,/);
+    assert.equal(before.loaded, true); assert.match(before.font, /^"Asta Sans",/);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     const documentNode = await cdp.send("DOM.getDocument");
-    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: documentNode.root.nodeId, selector: "#navigationExplore" });
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: documentNode.root.nodeId, selector: '.primary-navigation [data-nav="analyze"] .navigation-label' });
     const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
     assert.ok(fonts.some(font => font.isCustomFont && /Asta/i.test(font.familyName)), "Navigation actually paints with embedded Asta, not fallback");
     await cdp.detach();
@@ -97,15 +97,15 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     assert.equal(tooltip.x, button.x + button.width + 8);
     assert.ok(Math.abs(tooltip.y + tooltip.height / 2 - button.y - button.height / 2) < 1);
     await screenshot(page, "desktop-expanded-tooltip-light");
-    await toggle(page).click();
+    await setCollapsed(page, true);
     const collapsed = await geometry(page);
-    assert.equal(collapsed.sidebar.width, 69);
+    assert.ok(before.sidebar.width - collapsed.sidebar.width > 100);
     assert.equal(collapsed.main.x, collapsed.offset);
     assert.equal(collapsed.main.width - before.main.width, before.sidebar.width - collapsed.sidebar.width);
     assert.equal(collapsed.chart.width - before.chart.width, before.sidebar.width - collapsed.sidebar.width);
-    assert.ok(collapsed.scene.width > before.scene.width, "Existing chart ResizeObserver uses released space");
+    assert.ok(collapsed.scene.width > before.scene.width, "The plotted data uses the released space");
     assert.deepEqual(collapsed.header, before.header);
-    assert.equal(await scene.evaluate(node => node === document.querySelector(".dimensional-plot")), true, "No chart remount");
+    assert.equal(await scene.evaluate(node => node === document.querySelector("#chart .flat-comparison")), true, "No chart remount");
     assert.equal(requests.filter(url => url === "/api/snapshot").length, snapshotReads, "Collapse does not reload evidence");
     assert.equal(await toggle(page).getAttribute("aria-label"), "Expand navigation");
     await page.waitForTimeout(350);
@@ -115,23 +115,23 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     assert.equal(await toggle(page).getAttribute("aria-label"), "Collapse navigation");
     await toggle(page).press("Space");
     assert.equal(await toggle(page).getAttribute("aria-label"), "Expand navigation");
-    await page.keyboard.press("Tab");
-    await page.getByRole("tooltip", { name: "Home", exact: true }).waitFor();
-    assert.equal(await nav(page, "home").evaluate(node => node.matches(":focus-visible")), true);
+    const analyze = nav(page, "analyze");
+    for (let i = 0; i < 12 && !await analyze.evaluate(node => node === document.activeElement); i++) await page.keyboard.press("Tab");
+    await page.getByRole("tooltip", { name: "Analyze", exact: true }).waitFor();
+    assert.equal(await analyze.evaluate(node => node.matches(":focus-visible")), true);
     await page.keyboard.press("Escape");
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
-    await page.keyboard.press("Shift+Tab");
+    for (let i = 0; i < 12 && !await toggle(page).evaluate(node => node === document.activeElement); i++) await page.keyboard.press("Shift+Tab");
     await page.getByRole("tooltip", { name: "Expand navigation", exact: true }).waitFor();
     await page.keyboard.press("Escape");
     await page.mouse.move(1435, 950);
-    for (const route of ["activity", "reports", "collection-status", "settings", "home"]) {
-        const link = nav(page, route), name = await link.getAttribute("aria-label");
+    for (const route of ["trends", "reports", "compare", "settings", "analyze"]) {
+        const link = page.locator(`#sidebar a[data-nav="${route}"]`), name = await link.getAttribute("aria-label");
         await link.hover();
         await page.getByRole("tooltip", { name, exact: true }).waitFor();
         await link.click(); await ready(page);
         assert.equal(await link.getAttribute("aria-current"), "page");
-        assert.equal(await link.locator('svg[data-fluent-icon$="_filled"]').isVisible(), true);
-        assert.equal(await link.locator('svg[data-fluent-icon$="_regular"]').isVisible(), false);
+        assert.equal(await link.locator(`svg[data-icon-role="navigation-${route}"]`).isVisible(), true);
         assert.equal(await link.evaluate(node => getComputedStyle(node).textDecorationLine), "none");
         assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
         await page.waitForTimeout(200);
@@ -326,20 +326,21 @@ test("sidebar and content glide together through intermediate widths, reverse wi
             const label = document.querySelector(".navigation-label"), header = document.querySelector(".app-header").getBoundingClientRect();
             window.navigationMotionFrames.push({
                 time: performance.now(), width: sidebar.width, mainX: content.x, mainWidth: content.width,
+                layoutWidth: document.documentElement.getBoundingClientRect().width,
                 chartWidth: document.querySelector(".chart-panel").getBoundingClientRect().width,
                 headerHeight: header.height, opacity: Number(getComputedStyle(label).opacity),
-                overflow: document.documentElement.scrollWidth - innerWidth,
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
             });
         });
         window.navigationMotionObserver.observe(rail);
     });
-    const scene = await page.locator(".dimensional-plot").elementHandle(), route = page.url();
+    const scene = await page.locator("#chart .flat-comparison").elementHandle(), route = page.url();
     const reads = requests.filter(url => url === "/api/snapshot").length;
     const samples = [];
     for (const collapsed of [true, false]) {
-        const start = await toggle(page).evaluate(node => {
+        const start = await page.locator("#sidebar").evaluate(rail => {
             window.navigationMotionFrames = [];
-            return { time: performance.now(), width: node.closest("aside").getBoundingClientRect().width };
+            return { time: performance.now(), width: rail.getBoundingClientRect().width };
         });
         await toggle(page).click();
         assert.equal(await page.locator("#sidebar").getAttribute("data-navigation-moving"), "");
@@ -352,7 +353,7 @@ test("sidebar and content glide together through intermediate widths, reverse wi
         assert.ok(measured.at(-1).time - measured[0].time >= 250, "The rendered glide itself lasts long enough to be perceptible");
         for (const [index, frame] of measured.entries()) {
             assert.ok(Math.abs(frame.mainX - frame.width) < 1, "The same observed width drives the main edge every frame");
-            assert.ok(Math.abs(frame.mainWidth + frame.width - 1440) < 1);
+            assert.ok(Math.abs(frame.mainWidth + frame.width - frame.layoutWidth) < 1, "Sidebar and main fill the layout viewport");
             assert.ok(frame.overflow <= 1, "No transient horizontal overflow");
             assert.equal(frame.headerHeight, measured[0].headerHeight);
             if (index) assert.ok(collapsed ? frame.width <= measured[index - 1].width + 1 : frame.width >= measured[index - 1].width - 1, "Monotonic glide, no width bounce");
@@ -367,15 +368,16 @@ test("sidebar and content glide together through intermediate widths, reverse wi
     await toggle(page).click();
     await page.waitForTimeout(95);
     const reversal = await toggle(page).evaluate(node => {
-        const before = node.closest("aside").getBoundingClientRect().width;
+        const rail = document.getElementById("sidebar");
+        const before = rail.getBoundingClientRect().width;
         node.click();
-        return { before, after: node.closest("aside").getBoundingClientRect().width };
+        return { before, after: rail.getBoundingClientRect().width };
     });
     assert.ok(Math.abs(reversal.before - reversal.after) < 1, "Rapid reversal starts at the current rendered width");
     await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.equal(await toggle(page).getAttribute("aria-expanded"), "true");
-    assert.equal((await geometry(page)).sidebar.width, 208);
-    assert.equal(await scene.evaluate(node => node === document.querySelector(".dimensional-plot")), true);
+    assert.equal((await geometry(page)).sidebar.width, samples[0].start.width);
+    assert.equal(await scene.evaluate(node => node === document.querySelector("#chart .flat-comparison")), true, "No chart remount");
     assert.equal(page.url(), route);
     assert.equal(requests.filter(url => url === "/api/snapshot").length, reads);
     assert.equal(await toggle(page).evaluate(node => node === document.activeElement), true);

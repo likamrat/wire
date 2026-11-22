@@ -223,7 +223,7 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
     assert.ok(reads.every(route => ["/api/snapshot", "/api/collection/status", "/api/assessment/consent", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(route)));
 });
 
-test("every registered setting and old route opens its exact live destination without an action", { timeout: 45000 }, async t => {
+test("every registered setting and old route reaches its control or explains its unavailability without an action", { timeout: 45000 }, async t => {
     const { page, origin } = await setup(t);
     const navigation = createSettingsNavigation(createLocalSearch(), { updates: false });
     const route = async hash => {
@@ -233,18 +233,32 @@ test("every registered setting and old route opens its exact live destination wi
     for (const entry of navigation.entries) {
         await route("#settings?section=troubleshooting");
         await page.locator("#settingsSearch").fill(entry.title);
-        await page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`).click();
-        let target = entry.id === "source" ? "editSource" : entry.id === "source-paths" ? "approvedSourceTitle" : entry.target;
-        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
-        if (entry.id === "save-preferences") {
-            await expect(page.locator("#saveCollection")).toBeDisabled();
-            assert.equal(await page.locator("#saveCollection").evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true);
+        const result = page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`);
+        let target = entry.target;
+        if (["microsoft-collection", "microsoft-collection-state", "microsoft-collect-now", "global-collection"].includes(entry.id)) {
+            await expect(result).toHaveCount(0);
+            await route(`#settings?setting=${entry.id}`);
+            await expect(page.locator("#settingsRouteNotice")).toContainText("not available");
+            target = "connectionTitle";
         } else {
-            const node = page.locator(`#${target}`);
-            await expect(node).toBeVisible();
-            if (await node.evaluate(node => node.tagName === "DETAILS")) await expect(node.locator("summary")).toBeFocused();
-            else await expect(node).toBeFocused();
+            if (entry.id === "microsoft-connection") await expect(result).toContainText("Unavailable in this runtime");
+            await result.click();
+            if (entry.id === "microsoft-connection") {
+                await expect(page.locator("#settingsRouteNotice")).toHaveText("Microsoft 365 connection is not available in this runtime.");
+                await expect(page.locator("#wireMicrosoftConnection")).toBeHidden();
+                target = "connectionTitle";
+            } else if (entry.id === "save-preferences") {
+                await expect(page.locator("#preferenceActions")).toBeHidden();
+                await expect(page.locator("#saveCollection")).toBeDisabled();
+                target = "connectionTitle";
+            } else if (entry.id === "source") target = "editSource";
+            else if (entry.id === "source-paths") target = "approvedSourceTitle";
         }
+        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
+        const node = page.locator(`#${target}`);
+        await expect(node).toBeVisible();
+        if (await node.evaluate(node => node.tagName === "DETAILS")) await expect(node.locator("summary")).toBeFocused();
+        else await expect(node).toBeFocused();
         assert.equal(await page.locator("dialog[open]").count(), 0, entry.id);
     }
     for (const [legacy, canonical] of Object.entries(navigation.sectionAliases)) {

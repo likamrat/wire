@@ -150,7 +150,7 @@ test("shipped icons and chart primitives retire without attribute parser errors"
     assert.equal(await page.evaluate(() => heldGeometry.every(attribute => attribute.value === "")), true);
     assert.deepEqual(await page.evaluate(() => privateRemovals), []);
     const inventory = await page.evaluate(() => svgInventory);
-    assert.deepEqual(Object.keys(inventory), ["a", "circle", "defs", "ellipse", "g", "line", "linearGradient", "path", "rect", "stop", "svg"]);
+    assert.deepEqual(Object.keys(inventory), ["a", "circle", "defs", "ellipse", "g", "line", "linearGradient", "path", "polygon", "polyline", "rect", "stop", "svg"]);
     t.diagnostic(JSON.stringify(inventory));
 });
 
