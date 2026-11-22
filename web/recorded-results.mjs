@@ -684,6 +684,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         const result = returnedResult(call, row);
         const explicit = result?.requestedApiPath ?? result?.path;
         if (explicit != null) return { path: pathText(explicit), source: "returned" };
+        if (row.endpoint?.id === "operation:divergent-result-target") return { path: null, source: "unattributed" };
         if (discovery) return { path: null, source: "missing" };
         const paths = callPaths(call);
         return paths.length === 1 && paths[0] !== null

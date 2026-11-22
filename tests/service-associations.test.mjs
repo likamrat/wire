@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { buildActivityAnalytics, buildRequestActivity, getActivityDrilldown } from "../lib/activity-analytics.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { adaptEvaluationReport, freezeEvaluationFacts } from "../lib/report-facts.mjs";
+import { buildSanitizedBundle } from "../lib/export.mjs";
 import { serviceCategories, createServiceCategories } from "../lib/service-categories.mjs";
 import { classifyWorkload } from "../lib/graph-history.mjs";
 import { executeAction } from "../lib/server.mjs";
@@ -261,6 +262,26 @@ test("returned results match only their own supported target, never parent multi
     assert.equal(context.apiCoverage.eligibleToolCalls, 2);
     assert.ok(context.apiCoverage.returnedResultUnits >= context.apiCoverage.selectedResultUnits);
     assert.equal(buildActivityAnalytics([record], { layer: "http" }).totals.count, 0);
+});
+
+test("a different returned target rules out the single requested target as a fallback for a pathless sibling", async () => {
+    const record = serviceEvidenceFixture();
+    const call = record.toolCalls[1]; record.toolCalls = [call];
+    call.requestArgs.entityUrls = ["/me/messages"];
+    call.apiResults = [{ index: 0, statusCode: 200, path: "/me/calendarView" }, { index: 1, statusCode: 403 }];
+    const snapshot = buildActivityAnalytics([record], { layer: "reported-api" });
+    assert.deepEqual(snapshot.rows.map(r => [r.status, r.endpoint.path, r.serviceAssociation.services]), [
+        [200, "/me/calendarView", ["Calendar"]], [403, null, []],
+    ]);
+    const report = await buildSanitizedBundle([record], "b".repeat(64), { formats: ["json"], promptMode: "none" });
+    const facts = JSON.parse(report.files["product-report.json"]).evaluationFacts;
+    const patterns = facts.patterns.filter(p => p.pattern.unitKind === "returned-api-entry").map(p => p.pattern.display);
+    assert.equal(patterns.length, 2);
+    assert.deepEqual(patterns.map(p => p.workload).sort(), ["Calendar", "Unknown"]);
+    assert.deepEqual(patterns.flatMap(p => p.endpoints.map(e => e.pathTemplate)), ["/me/calendarView"]);
+    // A legacy response with no differing target can still show the requested path as context.
+    delete call.apiResults[0].path;
+    assert.ok(buildActivityAnalytics([record], { layer: "reported-api" }).rows.every(r => r.endpoint.path === "/me/messages"));
 });
 
 test("association enrichment preserves published category-v3 frozen facts and canonical membership bytes", () => {

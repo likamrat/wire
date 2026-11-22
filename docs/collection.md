@@ -236,6 +236,9 @@ individual result. When its completion matches one recorded Work IQ start,
 WIRE keeps the normalized path beside that result's status, without query
 values, bodies or literal identifiers. A sibling's path is never substituted.
 An older result saved without that path does not gain one on reopen.
+A lone requested target can supply explicitly labeled request context, but
+not if another result reports a different path. A pathless sibling then
+keeps its status and no service assignment.
 
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain

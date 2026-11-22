@@ -100,7 +100,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     const now = Date.now() - 60000;
     const activityEvents = [
         { type: "user.message", data: { content: prompt } },
-        start("read", "workiq-fetch", { entityUrls: ["/me/calendarView", "/me/messages", "/me/people"] }),
+        start("read", "workiq-fetch", { entityUrls: ["/me/messages"] }),
         end("read", true, { structuredContent: { results: [{ statusCode: 200, path: "/me/calendarView" },
             { statusCode: 403, errorCode: "AccessDenied" }] } }),
         start("lookup", "workiq-retrieve", { query: "Willow handover" }), end("lookup", false),
@@ -178,7 +178,8 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const picker = page.locator("#reportActivityOptions .read-in-place").filter({ hasText: "Keep both original dates" });
-    await expect(picker.locator(".card-identities")).toContainText("People");
+    await expect(picker.locator(".card-identities")).toContainText("Mail");
+    await expect(picker.locator(".card-identities")).not.toContainText("Calendar");
     const quote = picker.locator(".card-quotation");
     await quote.locator("summary").focus(); await page.keyboard.press("Enter");
     await expect(quote).toHaveAttribute("open", ""); await expect(quote).toContainText("> Wednesday: west stairs");
