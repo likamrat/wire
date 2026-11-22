@@ -75,9 +75,9 @@ test("legacy Calls becomes scoped Activity without interpreting its old sort or 
         const elapsed = page.locator("#requestContent [data-reader-section=activity] .reader-call-duration");
         assert.deepEqual(await elapsed.locator(".call-duration").evaluateAll(nodes => nodes.map(node => node.getAttribute("value"))),
             ["0", "7", "900", null]);
-        await expect(elapsed).toHaveText(["Tool latency: 0 ms", "Tool latency: 7 ms", "Tool latency: 900 ms", "Tool latency: Not recorded"]);
+        await expect(elapsed).toHaveText(["Call duration: 0 ms", "Call duration: 7 ms", "Call duration: 900 ms", "Call duration: Not recorded"]);
         await expect(page.locator(".reader-timing-column")).toHaveCount(0);
-        await expect(elapsed.locator(".reader-duration-label")).toHaveText(["Tool latency:", "Tool latency:", "Tool latency:", "Tool latency:"]);
+        await expect(elapsed.locator(".reader-duration-label")).toHaveText(["Call duration:", "Call duration:", "Call duration:", "Call duration:"]);
         await page.locator("#closeContextSidebar").click(); await settled(page);
     }
 });
@@ -126,10 +126,10 @@ test("API result offsets, parent identity and snapshot revision fail closed inst
     await expect(parent).toHaveAttribute("data-tool-call-id", "investigate-09");
     await expect(parent.locator(":scope > .technical-detail")).toBeHidden();
     await capture(page, "exact-api-result");
-    await expect(page.locator(".selected-api-result .returned-api-entries .api-result-entry")).toHaveCount(6);
-    await expect(page.locator(".returned-api-entries .reader-api-duration data").filter({ hasText: "0 s" })).toHaveAttribute("value", "0");
-    await page.getByRole("button", { name: "Next returned results", exact: true }).click();
-    await expect(page.locator(".selected-api-result .returned-api-entries .api-result-entry")).toHaveCount(2);
+    const siblings = parent.locator(".returned-api-entries .api-result-entry");
+    await expect(siblings).toHaveCount(9);
+    await expect(siblings.last()).toHaveAttribute("data-result-id", api.id);
+    await expect(parent.locator(".reader-api-duration data").filter({ hasText: /^0 ms$/ })).toHaveAttribute("value", "0");
     records[1].toolCalls[9].apiResults.shift();
     await replaceEvidence(context, () => ({ records }));
     await app.acceptFixtureChange();

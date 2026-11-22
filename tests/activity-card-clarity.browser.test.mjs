@@ -1001,7 +1001,7 @@ test("Reader call disclosure groups identity and result without a blank target r
     await expect(toggle.locator(".reader-call-summary")).toContainText("Work IQ required sign-in at the time");
     await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Target");
     await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Mail");
-    await expect(call.locator(".reader-call-secondary .reader-call-duration")).toContainText("Tool latency:");
+    await expect(call.locator(".reader-call-identity .reader-call-duration")).toContainText("Call duration:");
     await expect(toggle.locator("button,a,input")).toHaveCount(0);
     const geometry = await toggle.evaluate(toggle => {
         const identity = toggle.querySelector(".reader-call-identity-line").getBoundingClientRect();

@@ -327,6 +327,12 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-call-summary .result-cause {color:var(--ink);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
 #requestContent .reader-call-row>.returned-api-entries,#requestContent .reader-call-row>.selected-api-result {margin:16px 0 0 8px;padding:0 0 0 16px;border-inline-start:1px solid var(--rule);min-width:0}
 #requestContent .returned-entries-heading {margin:0 0 8px;color:var(--muted);font:var(--weight-medium) var(--type-small)/1.5 var(--font)}
+#requestContent .reader-returned-facts .returned-entries-heading {display:none}
+#requestContent .reader-batch-gap {margin:8px 12px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
+#requestContent .reader-entry-problem {margin:4px 0 0;color:var(--ink);font:var(--type-reading)/1.5 var(--font)}
+#requestContent .reader-diagnostic {max-width:100%;min-width:0}
+#requestContent .reader-diagnostic summary {width:fit-content;min-height:44px;align-content:center;cursor:pointer;color:var(--accent);font:var(--type-small)/1.5 var(--font)}
+#requestContent .reader-diagnostic[open]>.reader-error-details {margin:2px 0 8px;padding-inline-start:12px;border-inline-start:1px solid var(--rule)}
 #requestContent .api-result-entry+.api-result-entry {margin-top:16px;padding-top:16px;border-top:1px solid var(--surface-divider)}
 #requestContent .api-result-entry {padding:10px 12px;min-width:0;border-radius:4px}
 #requestContent .api-result-entry:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}

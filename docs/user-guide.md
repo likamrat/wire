@@ -313,8 +313,10 @@ prompt rather than hiding a match behind the preview.
 Use **Prompt**, **Activity** or **Source** at the top of the interaction to jump
 to that section. **Reply** appears when the selected interaction has a recorded reply.
 Each call shows its own outcome, such as **1 tool call completed**, even if
-one returned entry reported an error. Its timing and any recorded reason stay
-with the call. Open the call for its exact input; **Source details** holds provenance and
+one returned entry reported an error. **Call duration** measures the whole call.
+Returned entries stay in order and carry their own statuses and timing. If an
+error message is shortened, **Full diagnostic** opens its saved wording.
+Open the call for its exact input; **Source details** holds provenance and
 identifiers. Close or Back returns to the originating results.
 
 **WIRE interpretation** explains a recorded condition or evidence gap separately

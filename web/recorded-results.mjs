@@ -359,9 +359,10 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         return validateInterpretation({ version: 2, items: items.filter(item =>
             item.channel !== "result" || !items.some(other => other.channel === "call" && other.kind === item.kind)) });
     }
-    function interpretationItems(value, { includeReturned = true } = {}) {
+    function interpretationItems(value, { includeReturned = true, omitCallKind } = {}) {
         const groups = new Map();
-        for (const item of validateInterpretation(value).items.filter(item => includeReturned || item.channel !== "returned-entry")) {
+        for (const item of validateInterpretation(value).items.filter(item => (includeReturned || item.channel !== "returned-entry")
+            && !(item.channel === "call" && item.kind === omitCallKind))) {
             const key = JSON.stringify([item.channel, item.kind]);
             const group = groups.get(key) ?? { ...item, indexes: [] };
             if (item.entryIndex !== null) group.indexes.push(item.entryIndex + 1);
@@ -376,7 +377,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
                 : item.text, interpretation: true,
         }));
     }
-    function callReasonItems(call, outcome, { includeReturned = true } = {}) {
+    function callReasonItems(call, outcome, { includeReturned = true, omitCallKind } = {}) {
         const reason = outcome === "failure" ? failureReason(call, { contextual: true, includeReturned: false })
             : completionReason(call, outcome, true, false);
         const items = reason ? reason.split("\n").map(text => ({ label: null, text })) : [];
@@ -393,7 +394,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             }
         }
         if (includeReturned) items.push(...returnedErrorGroups(call));
-        if (screen) items.push(...interpretationItems(interpretation(call, outcome), { includeReturned }));
+        if (screen) items.push(...interpretationItems(interpretation(call, outcome), { includeReturned, omitCallKind }));
         return items;
     }
     function callOperation(row) {
@@ -721,5 +722,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, recordedCallCause, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, recordedCallCause, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, entryCue, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

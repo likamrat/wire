@@ -837,6 +837,33 @@ test("the prompt leads and a separate evidence link names the scoped failure", a
     await capture(page, "visual-failure-rows");
 });
 
+test("a failed call keeps its returned entries in order and gives the concrete diagnostic once", async t => {
+    const records = compactCardRecords(), [scenario] = records;
+    const call = scenario.toolCalls[0];
+    const message = "Syntax error: character ':' is not valid at position 16 in 'tag:cedar:review'.";
+    Object.assign(call, { durationMs: 2422, reportedOutcome: "failed", toolSucceeded: false,
+        failureEvidence: { version: 1, reason: "error-code-recorded", code: "BadRequest" },
+        apiResults: [{ index: 0, statusCode: 200 }, { index: 1, statusCode: 400, errorCode: "BadRequest",
+            errorDiagnostic: { version: 1, status: "recorded", source: "result-error", code: "BadRequest", message, details: [] } }] });
+    const { page } = await setup(t, "react", records);
+    const jump = page.locator('#activityList [data-view-key="request:review-plural-activity"] .returned-issue-ink');
+    await jump.click();
+    const parent = page.locator('#requestContent [data-tool-call-id="review-call-0"]');
+    await expect(parent.locator(".reader-call-duration")).toHaveText("Call duration: 2.422 s");
+    await expect(parent.locator(".api-result-entry .recorded-result-label")).toHaveText([
+        /Returned entry 1: Tool-reported HTTP 200/, /Returned entry 2: Tool-reported HTTP 400: BadRequest/,
+    ]);
+    await expect(parent.locator(".reader-batch-gap")).toHaveText("No per-entry paths or durations were recorded for this batch.");
+    await expect(parent).not.toContainText("This status alone does not identify");
+    const selected = parent.locator(".api-result-entry").nth(1);
+    await expect(selected).toBeFocused();
+    await expect(selected.locator(".reader-entry-problem")).toHaveText("Invalid colon at position 16.");
+    assert.ok(!(await parent.innerText()).includes(message));
+    await selected.getByText("Full diagnostic", { exact: true }).click();
+    await expect(selected.locator(".reader-error-message")).toHaveText(message);
+    await page.goBack(); await expect(jump).toBeFocused();
+});
+
 test("plural reading groups call identities and each call's returned evidence without singleton paging", async t => {
     const { page } = await setup(t, "react", reviewRecords());
     await page.locator('#activityList [data-view-key="request:review-plural-activity"] .request-card-open').click();

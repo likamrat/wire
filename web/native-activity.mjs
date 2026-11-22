@@ -219,10 +219,9 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             return list;
         };
         function duration(milliseconds) {
-            const value = node("data", "call-duration"), [primary, equivalent] = timing.duration(milliseconds).split(" (");
+            const value = node("data", "call-duration");
             value.value = String(milliseconds);
-            value.append(node("span", "duration-primary", primary));
-            if (equivalent) value.append(" ", node("span", "duration-equivalent", "(" + equivalent));
+            value.append(node("span", "duration-primary", timing.readerDuration(milliseconds)));
             return value;
         }
         function copyText(value, label, className = "reader-message-text") {

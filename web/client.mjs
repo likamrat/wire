@@ -3152,7 +3152,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!recordedCause && text === "Failure reason was not saved") return "No failure reason was saved.";
         return failureReasonText(text);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true } = {}) {
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true, omitCallKind } = {}) {
         const node = el(inline ? "span" : "div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
@@ -3198,7 +3198,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     const status = el("span", "result-status result-tone-" + entry.key);
                     status.append(...item.childNodes);
                     const call = sourceCallFor(rows[0]);
-                    const reasons = callReasonList(results.callReasonItems(call, rows[0].outcome, { includeReturned }), { inline: true });
+                    const reasons = callReasonList(results.callReasonItems(call, rows[0].outcome, { includeReturned, omitCallKind }), { inline: true });
                     if (rows[0].outcome === "failure") {
                         const first = reasons.querySelector(".call-reason-item:not([data-interpretation])");
                         if (first && !first.querySelector(".call-reason-label")) {
@@ -3270,7 +3270,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         value.append(recordedPathValue(path, missing));
         list.append(el("dt", "api-path-label", label), value);
     }
-    function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, includeMissing = true, returned = false } = {}) {
+    function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, includeMissing = true, returned = false, sharedBatchGap = false } = {}) {
         const list = el("dl", "action-fields");
         const operation = !returned ? categories.operation(call?.tool || row?.tool) : null;
         const discovery = operation?.category === "Discovery";
@@ -3279,7 +3279,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const unassignedBatch = includeService && path?.source === "unattributed" && returnedAssociation?.services.length === 0
             && returnedAssociation.gaps.length === 1 && returnedAssociation.gaps[0].reason === "unattributed-result";
         if (includeTool) list.append(el("dt", "", "Tool"), el("dd", "action-tool", call?.tool || row?.tool || "Not recorded"));
-        if (includeService) {
+        if (includeService && !sharedBatchGap) {
             const service = el("dd", "action-service");
             let serviceContext;
             if (unassignedBatch) {
@@ -3319,7 +3319,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             list.append(el("dt", "", "Why this category"), el("dd", "", evidence.description));
         }
         if (returned) {
-            if (!unassignedBatch) pathField(list, "API path", path.path, path.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
+            if (!sharedBatchGap && !unassignedBatch) pathField(list, "API path", path.path, path.source === "unattributed" ? "Not attributed to a target in this batch" : "Not recorded");
             if (path.source === "call") {
                 const note = el("dd", "path-attribution");
                 note.textContent = "Call target; no separate path returned.";
@@ -3379,12 +3379,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
-        const interpretations = results.interpretation(call, row.outcome);
-        const renderEntry = entry => {
+        const ordered = apiRows.map(entry => {
+            const retained = results.returnedResult(call, entry);
+            return { entry, retained, offset: retained ? call.apiResults.indexOf(retained) : Infinity };
+        }).sort((a,b) => a.offset - b.offset);
+        const sharedBatchGap = ordered.length > 1 && ordered.every(({entry, retained}) => retained
+            && results.returnedPath(call, entry, {discovery:categories.operation(call.tool)?.category === "Discovery"}).source === "unattributed"
+            && entry.serviceAssociation?.layer === "reported-api" && !entry.serviceAssociation.services.length
+            && entry.serviceAssociation.gaps.length === 1 && entry.serviceAssociation.gaps[0].reason === "unattributed-result");
+        const sharedDurationGap = ordered.length > 1 && ordered.every(({retained}) => callInvestigation.duration(retained, "reported-api") === null);
+        const renderEntry = ({entry, retained}) => {
             const item = viewKey(el("div", "api-result-entry"), "returned:" + entry.id);
             item.dataset.resultId = entry.id;
             const parent = el("p", "returned-call-parent", `${call.tool ?? "Tool not recorded"} · ${results.labels("tool")[row.outcome] ?? "Outcome unavailable"}`);
-            const retained = results.returnedResult(call, entry);
             const code = retained?.errorCode;
             const status = entry.status != null ? `Tool-reported HTTP ${entry.status}` : code ? "Tool-reported error" : null;
             const recordLabel = (retained ? results.returnedEntryLabel(call, retained) + ": " : "")
@@ -3399,54 +3406,57 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }));
             if (diagnostic) {
                 const message = diagnostic.querySelector(".reader-error-message");
-                if (message) {
-                    message.classList.add("reader-issue-note");
-                    message.dataset.issueChannel = "entry";
-                    message.prepend(el("strong", "", "Entry error:"), " ");
-                }
-                item.append(diagnostic);
+                const cue = message && results.entryCue(retained.errorDiagnostic, retained.errorDiagnostic?.code ?? code, retained.errorDiagnostic?.code ?? code);
+                if (cue && cue !== message.textContent) {
+                    item.append(el("p", "reader-entry-problem", cue));
+                    const exact = el("details", "reader-diagnostic");
+                    exact.append(el("summary", "", "Full diagnostic"), diagnostic);
+                    if (selectedId === entry.id && searchOpenedRequest === workspaceState.route.request) exact.open = true;
+                    item.append(exact);
+                } else item.append(diagnostic);
             }
-            const explanation = results.interpretationItems({ ...interpretations,
-                items: interpretations.items.filter(value => value.channel === "returned-entry" && value.entryIndex === retained?.index) });
+            const interpretation = results.interpretation({apiResults:retained ? [retained] : []}, row.outcome);
+            const explanation = results.interpretationItems({ ...interpretation,
+                items: interpretation.items.filter(value => value.channel === "returned-entry") });
             if (explanation.length) item.append(callReasonList(explanation));
-            const facts = actionFields(call, entry, { includeTool: false, returned: true, includeService: !results.inheritsCallService(call, entry, row) });
-            const duration = el("dd", "reader-api-duration");
-            duration.append(durationValue(callInvestigation.duration(retained, "reported-api")));
-            facts.append(el("dt", "", "API result duration"), duration);
+            const facts = actionFields(call, entry, { includeTool: false, returned: true, sharedBatchGap, includeService: !results.inheritsCallService(call, entry, row) });
+            if (!sharedDurationGap) {
+                const duration = el("dd", "reader-api-duration");
+                duration.append(durationValue(callInvestigation.duration(retained, "reported-api"), true));
+                facts.append(el("dt", "", "Entry duration"), duration);
+            }
             if (retained?.evidenceLevel && !(status?.startsWith("Tool-reported") && retained.evidenceLevel === "intermediary-reported")) facts.append(el("dt", "", "Result attribution"), el("dd", "",
                 retained.evidenceLevel === "intermediary-reported" ? "Reported by the tool" : retained.evidenceLevel));
-            item.append(facts);
+            if (facts.childElementCount) item.append(facts);
             if (entry.id === selectedId) {
                 item.id = "selectedCall";
                 item.tabIndex = -1;
                 item.setAttribute("aria-current", "true");
-                item.prepend(el("h4", "context-selected-label", "Selected returned API result"));
                 actionContext(item, [entry]);
             }
             return item;
         };
         const list = el("div", "returned-api-entries"), pages = el("div", "returned-entries-pages");
-        list.append(el("h4", "returned-entries-heading", "Returned results"), pages);
-        const otherRows = selectedId ? apiRows.filter(entry => entry.id !== selectedId) : apiRows;
-        const hasErrors = otherRows.some(entry => ["failure", "transport"].includes(entry.outcome)
-            || results.diagnosticDetails(results.returnedResult(call, entry)?.errorDiagnostic).length);
-        pagedList(pages, otherRows, {
-            key: "returned:" + row.id, noun: call.resultEvidence?.contentStatus === "partial"
+        list.append(el("h4", "returned-entries-heading", `${count(ordered.length)} returned ${ordered.length === 1 ? "entry" : "entries"}`), pages);
+        const hasErrors = ordered.some(({entry, retained}) => ["failure","transport"].includes(entry.outcome)
+            || retained?.errorCode || results.diagnosticDetails(retained?.errorDiagnostic).length);
+        const size = hasErrors ? Math.max(6, ordered.length) : 6, key = "returned:" + row.id;
+        if (selectedId) {
+            const selected = ordered.findIndex(({entry}) => entry.id === selectedId);
+            if (selected >= 0) presentation.setPage(key, Math.floor(selected / size));
+        }
+        pagedList(pages, ordered, {
+            key, noun: call.resultEvidence?.contentStatus === "partial"
                 ? "retained entries" : "returned results",
-            size: hasErrors ? Math.max(6, otherRows.length) : 6,
+            size,
             hideSinglePage: true,
             renderItem: renderEntry,
         });
         const coverage = results.returnedCoverage(call);
         if (coverage) list.prepend(el("p", "returned-coverage", coverage.text));
-        if (selectedId) {
-            const section = el("section", "selected-api-result");
-            section.append(renderEntry(apiRows.find(entry => entry.id === selectedId)),
-                el("p", "context-help-note", "This returned entry belongs to the recorded tool call above. Its status is not a separate observed HTTP execution."));
-            if (otherRows.length) section.append(list);
-            else if (coverage) section.append(el("p", "returned-coverage", coverage.text));
-            return section;
-        }
+        if (sharedBatchGap || sharedDurationGap) list.append(el("p", "reader-batch-gap", sharedBatchGap && sharedDurationGap
+            ? "No per-entry paths or durations were recorded for this batch."
+            : sharedBatchGap ? "No per-entry paths were recorded for this batch." : "No per-entry durations were recorded for this batch."));
         return list;
     }
     function actionContext(item, rows) {
@@ -5767,10 +5777,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         row.append(el("dt", "", cardKey(label)), definition);
         return row;
     }
-    function durationValue(milliseconds) {
+    function durationValue(milliseconds, reader = false) {
         if (milliseconds === null) return el("span", "call-duration", "Not recorded");
         const value = el("data", "call-duration");
-        const [primary, secondary] = timingPresentation.duration(milliseconds).split(" (");
+        const [primary, secondary] = (reader ? timingPresentation.readerDuration(milliseconds) : timingPresentation.duration(milliseconds)).split(" (");
         value.append(el("span", "duration-primary", primary));
         if (secondary) value.append(" ", el("span", "duration-equivalent", "(" + secondary));
         value.value = String(milliseconds);
@@ -6410,16 +6420,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             return node;
         }
-        function callHeading(name, result, { tool = false, duration, durationLabel = "Tool latency" } = {}) {
+        function callHeading(name, result, { tool = false, duration, durationLabel = "Call duration" } = {}) {
             const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
             if (tool) identity.append(el("span", "reader-tool-name", name));
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
             summary.append(result);
             if (duration !== undefined) {
-                const elapsed = el("span", "reader-call-duration"), value = durationValue(duration);
+                const elapsed = el("span", "reader-call-duration"), value = durationValue(duration, true);
                 elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
-                secondary.append(elapsed);
+                if (tool) identity.append(elapsed); else secondary.append(elapsed);
             }
             heading.append(identity, summary, secondary);
             return heading;
@@ -6745,17 +6755,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const operation = categories.operation(tool.tool);
             const recordLabel = callOutcomeLabel(row?.outcome);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
-            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length });
+            const issue = row?.outcome === "failure" && apiRows?.length && results.cardIssues([row], apiRows, () => sourceCall)[0];
+            const echoedCode = Boolean(issue && issue.detail === null && issue.entries.length && issue.recordedCause);
+            // The call's bare BadRequest glossary adds nothing when its own entry supplies the specific diagnostic.
+            const explainedBadRequest = echoedCode && issue.entries.some(({row: entry, code}) => {
+                const diagnostic = results.returnedResult(sourceCall, entry)?.errorDiagnostic;
+                return code === "BadRequest" && diagnostic?.message && diagnostic.status === "recorded"
+                    && !/^(?:error|failure|bad\s?request|invalid request)[.!]?$/i.test(diagnostic.message.trim());
+            });
+            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length, omitCallKind: explainedBadRequest ? "http-400" : undefined });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
             item.append(heading);
             const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];
-            if (explanations.length) {
-                const interpretation = el("div", "reader-interpretation call-reason-list");
-                interpretation.setAttribute("role", "list");
-                interpretation.append(...explanations);
-                item.append(interpretation);
+            explanations.forEach(node => node.remove());
+            if (echoedCode) {
+                // The call's code matches an entry and has no independent explanation.
+                heading.querySelector(".reader-issue-note")?.remove();
             }
+            for (const list of heading.querySelectorAll(".call-reason-list:empty")) list.remove();
             const serviceValues = activityIdentities(row ? [{ ...row, tool: tool.tool }] : undefined, "tool", { includeTools: false });
             serviceValues.classList.add("reader-call-services");
             if (serviceValues.childElementCount) heading.querySelector(".reader-call-secondary").prepend(serviceValues);
@@ -6772,16 +6790,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows,
                     workspaceState.scope.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
-                if (returned && canonical.length > 1 && workspaceState.scope.layer === "tool") {
-                    // Summarize each distinct returned issue here; keep every returned entry
-                    // (including successful siblings) and original interpretation in the same reader.
+                if (returned && canonical.length > 1 && workspaceState.scope.layer === "tool"
+                    && !apiRows.some(entry => ["failure", "transport"].includes(entry.outcome)
+                        || results.returnedResult(sourceCall, entry)?.errorCode || results.diagnosticDetails(results.returnedResult(sourceCall, entry)?.errorDiagnostic).length)) {
                     const detail = el("details", "reader-returned-facts");
                     detail.append(el("summary", "", `${count(apiRows.length)} returned ${apiRows.length === 1 ? "entry" : "entries"}`), returned);
-                    for (const reason of results.returnedErrorGroups(sourceCall)) {
-                        item.append(el("p", "reader-returned-cue", `${reason.label}: ${reason.text}`));
-                    }
                     item.append(detail);
                 } else if (returned) item.append(returned);
+            }
+            if (explanations.length) {
+                const interpretation = el("div", "reader-interpretation call-reason-list");
+                interpretation.setAttribute("role", "list"); interpretation.append(...explanations);
+                item.append(interpretation);
             }
             callDetails(item, heading, key, groupVisibility, row?.id, visibility => {
             const expert = el("div");

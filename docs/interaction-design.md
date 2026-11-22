@@ -399,9 +399,13 @@ a sibling's input or inferred parent cause.
 Linked context stays in its existing separate disclosure. It cannot transfer
 intent or outcomes between interactions.
 
-Tool latency and qualified prompt-to-final-response timing stay beside their
-subjects. Display milliseconds first, preserve zero/precision, and do not sum
-concurrent calls or infer a missing end timestamp. Model provenance remains
+The call reader places **Call duration** beside the ordinal and tool name.
+Use one unit (milliseconds below a second, seconds otherwise). Entry duration
+belongs to its own result. Keep returned entries in recorded order, including
+when one is selected. Where every retained entry lacks its own path or duration,
+state the common gap once. Keep the specific problem with the entry that reported
+it; **Full diagnostic** opens the original when the preview is shorter.
+Do not sum concurrent calls or infer a missing end timestamp. Model provenance remains
 interaction-scoped. An automatic continuation with no new message is distinct
 from an unavailable prompt, and its author remains independently qualified.
 
