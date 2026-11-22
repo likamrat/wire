@@ -381,11 +381,15 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
         }
     }
     await expect(top.locator(".card-failure")).toHaveText("2 tool calls failed");
-    await expect(top).toContainText("Calls #2–3", { timeout: 1000 });
+    await expect(top.locator(".card-orientation .card-issue-owner")).toHaveText("Calls #2–3 · workiq-ask", { timeout: 1000 });
+    await expect(top.locator(".card-issue-note > strong")).toHaveText("Recorded reason:");
     await expect(top.locator(".card-issue-detail")).toHaveText(`${message} (PolicyUnavailable)`);
     await expect(cardFor(mixed)).toContainText("NotReady");
-    await expect(cardFor(mixed)).toContainText("Failure reason was not saved");
-    await expect(cardFor(mixed).locator("a").filter({hasText:"Failure reason was not saved"})).toHaveCount(0);
+    await expect(cardFor(mixed).locator(".card-orientation .card-issue-owner")).toHaveText("Calls #1–2 · workiq-retrieve");
+    await expect(cardFor(mixed)).toContainText("No failure reason was saved.");
+    await expect(cardFor(mixed).locator("a").filter({hasText:"No failure reason was saved."})).toHaveCount(0);
+    await expect(lower.locator(".card-issue-note > strong")).toHaveText(["Recorded reason:", "Entry error:", "Entry error:"]);
+    await expect(lower.locator(".card-issue-detail").first()).toHaveText("The tool reported a bad request (BadRequest).");
     await expect(top.locator(".returned-issue-ink")).toHaveCount(0);
     await top.locator(".card-failure").focus(); await page.keyboard.press("Enter");
     await expect(reader.locator(".reader-section-heading")).toContainText("2 failed calls");
@@ -395,7 +399,7 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
         const box = s=>n.querySelector(s).getBoundingClientRect();
         return { metadataFirst: box(".card-metadata").bottom < box(".request-card-open").top,
             eyeSeparate: box(".card-excerpt").right < box("[data-icon-role=read]").left,
-            outcomeBeforeReason: box(".card-failure").bottom <= box(".card-issue-owner").top };
+            outcomeBeforeReason: box(".card-failure").bottom <= box(".card-issue-note").top };
     });
     assert.deepEqual(layout, {metadataFirst:true,eyeSeparate:true,outcomeBeforeReason:true});
     const links = lower.locator(".returned-issue-ink");
@@ -455,12 +459,12 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     await expect(card.locator(".card-tool-item").filter({hasText:"workiq-fetch"})).toHaveText("workiq-fetch (3 calls)");
     await expect(card.locator(".card-identities")).toContainText("Mail");
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
-    await expect(card.locator(".request-card-cause").filter({ hasText: "workiq-retrieve" })).toContainText("ToolUnavailable");
+    await expect(card.getByRole("listitem", { name: "Call #2 · workiq-retrieve" })).toContainText("ToolUnavailable");
     await expect(card.locator(".request-card-cause").filter({ hasText: "returned entry 2" })).toContainText("AccessDenied");
     const timestampSize = await card.locator(".request-card-time").evaluate(el => parseFloat(getComputedStyle(el).fontSize));
     const reasons = await card.locator(".request-card-cause").evaluateAll(nodes => nodes.map(el => parseFloat(getComputedStyle(el).fontSize)));
     assert.ok(reasons.every(size => size > timestampSize), "Both failure explanations must read as body text, not timestamp captions.");
-    await expect(card.locator(".card-issue-owner")).toHaveText(["Call #1 · workiq-fetch", "Call #2 · workiq-retrieve"]);
+    await expect(card.locator(".card-issue-owner")).toHaveText(["Call #2 · workiq-retrieve", "Call #1 · workiq-fetch"]);
     await expect(card).not.toContainText(/Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
     await expect(card.locator("button,input,details")).toHaveCount(1);

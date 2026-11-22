@@ -98,14 +98,17 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             || evidence.diagnostic.details?.length)) return "Recorded error details";
         return null;
     }
+    function recordedCallCause(call, contextual = false) {
+        // A legacy summary derived from returned entries is not an independent invocation cause.
+        const entrySummary = !call?.failureEvidence?.diagnostic && call?.failureEvidence?.messageSource === "workiq-error-json"
+            && call.failureEvidence.messageSignal === "response-processing-error" && returnedErrorSummary(call);
+        return entrySummary ? null : primaryFailureCause(call, contextual);
+    }
     function failureCause(call, contextual = false, includeReturned = true) {
         const diagnostic = call?.resultEvidence?.version === 1 ? call.resultEvidence.diagnostic : null;
         const result = diagnostic?.version === 1 && !genericMessage(diagnostic) ? diagnosticSummary(diagnostic) : "";
         const duplicate = diagnostic && JSON.stringify(diagnostic) === JSON.stringify(call?.failureEvidence?.diagnostic);
-        // A legacy summary derived from returned entries is not an independent invocation cause.
-        const entrySummary = !call?.failureEvidence?.diagnostic && call?.failureEvidence?.messageSource === "workiq-error-json"
-            && call.failureEvidence.messageSignal === "response-processing-error" && returnedErrorSummary(call);
-        return [entrySummary ? null : primaryFailureCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
+        return [recordedCallCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
             includeReturned ? returnedErrorSummary(call) : null].filter(Boolean).join("\n") || null;
     }
     function reportedStatus(status, subject = "The tool") {
@@ -439,9 +442,12 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             if (!failed && !resultIssue && !entries.length) continue;
             const reason = failed ? failureReason(call, { contextual: true, includeReturned: false })
                 : resultIssue ? completionReason(call, row.outcome, true, false) : null;
-            const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, reason]) : JSON.stringify(["call", row.id]);
+            const recordedCause = failed && Boolean(recordedCallCause(call, true));
+            const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, recordedCause, reason]) : JSON.stringify(["call", row.id]);
             const code = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
-            const group = groups.get(key) ?? { rows: [], detail: shortCue(reason, code), entries, resultIssue };
+            const group = groups.get(key) ?? { rows: [], detail: shortCue(reason, code)
+                ?? (failed && entries.length ? "No separate failure reason was recorded." : null),
+                recordedCause, entries, resultIssue };
             group.rows.push(row); groups.set(key, group);
         }
         return [...groups.values()];
@@ -702,5 +708,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, recordedCallCause, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

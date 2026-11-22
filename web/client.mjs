@@ -3148,6 +3148,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function failureReasonText(reason) {
         return Object.hasOwn(failureReasonCopy, reason) ? failureReasonCopy[reason] : reason;
     }
+    function callIssueText(text, recordedCause) {
+        if (recordedCause && text === "BadRequest") return "The tool reported a bad request (BadRequest).";
+        if (!recordedCause && text === "Failure reason was not saved") return "No failure reason was saved.";
+        return failureReasonText(text);
+    }
+    function issueNote(label, text, channel) {
+        const note = el("p", "card-issue-note");
+        note.dataset.issueChannel = channel;
+        if (label) note.append(el("strong", "", label + ":"), " ");
+        note.append(el("span", "card-issue-detail", text));
+        return note;
+    }
     function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true } = {}) {
         const node = el(inline ? "span" : "div", "recorded-results");
         node.dataset.resultLayer = layer;
@@ -3193,7 +3205,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     if (["failure", "partial", "transport"].includes(entry.tone ?? entry.key)) item.classList.add("result-story-problem");
                     const status = el("span", "result-status result-tone-" + entry.key);
                     status.append(...item.childNodes);
-                    const reasons = callReasonList(results.callReasonItems(sourceCallFor(rows[0]), rows[0].outcome, { includeReturned }), { inline: true });
+                    const call = sourceCallFor(rows[0]);
+                    const reasons = callReasonList(results.callReasonItems(call, rows[0].outcome, { includeReturned }), { inline: true });
+                    if (rows[0].outcome === "failure") {
+                        const first = reasons.querySelector(".call-reason-item:not([data-interpretation])");
+                        if (first && !first.querySelector(".call-reason-label")) {
+                            const text = first.querySelector(".call-reason-text"), cause = Boolean(results.recordedCallCause(call, true));
+                            if (cause) first.prepend(el("strong", "", "Recorded reason:"), " ");
+                            text.textContent = callIssueText(text.textContent, cause);
+                            first.classList.add("reader-issue-note");
+                        }
+                    }
                     reasons.classList.add("result-cause");
                     item.append(status, reasons);
                     const coverage = includeReturned && results.returnedCoverage(sourceCallFor(rows[0]));
@@ -3383,7 +3405,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             });
             item.append(parent, resultLine("reported-api", results.summarize([entry]), {
                 heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }));
-            if (diagnostic) item.append(diagnostic);
+            if (diagnostic) {
+                const message = diagnostic.querySelector(".reader-error-message");
+                if (message) {
+                    message.classList.add("reader-issue-note");
+                    message.dataset.issueChannel = "entry";
+                    message.prepend(el("strong", "", "Entry error:"), " ");
+                }
+                item.append(diagnostic);
+            }
             const explanation = results.interpretationItems({ ...interpretations,
                 items: interpretations.items.filter(value => value.channel === "returned-entry" && value.entryIndex === retained?.index) });
             if (explanation.length) item.append(callReasonList(explanation));
@@ -6017,25 +6047,42 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (issues.length) {
             const ordinals = requestContext.actionOrdinals(scenario), ordinal = r => ordinals.get(sourceCallFor(r));
             const list = el("ul", "card-issue-list");
-            for (const group of issues.sort((a,b) => (ordinal(a.rows[0]) ?? Infinity) - (ordinal(b.rows[0]) ?? Infinity))) {
+            const ownsBadge = group => group.rows[0].outcome === outcome?.key && group.rows.length === summary[outcome.key];
+            if (outcome?.key === "failure" && !issues.some(ownsBadge)) {
+                const affected = issues.flatMap(group => group.rows).filter(row => row.outcome === "failure");
+                const numbers = affected.map(ordinal), tools = new Set(affected.map(row => row.tool).filter(Boolean));
+                if (numbers.length === summary.failure && numbers.every(Number.isSafeInteger))
+                    orientation.append(el("span", "card-issue-owner", [results.callGroupLabel(numbers),
+                        tools.size === 1 ? [...tools][0] : null].filter(Boolean).join(" · ")));
+            }
+            for (const group of issues.sort((a,b) => Number(ownsBadge(b)) - Number(ownsBadge(a))
+                || Number(b.rows[0].outcome === "failure") - Number(a.rows[0].outcome === "failure")
+                || (ordinal(a.rows[0]) ?? Infinity) - (ordinal(b.rows[0]) ?? Infinity))) {
                 const first = group.rows[0], numbers = group.rows.map(ordinal);
                 const name = [numbers.every(Number.isSafeInteger) && results.callGroupLabel(numbers), first.tool].filter(Boolean).join(" · ");
                 const item = el("li", "request-card-cause screen-explanation");
-                item.append(el("span", "card-issue-owner", name));
+                const owner = el("span", "card-issue-owner", name);
+                if (ownsBadge(group)) orientation.append(owner);
+                else item.append(owner);
+                item.setAttribute("aria-label", name);
                 if (group.resultIssue) item.append(evidenceLink("Tool result", exact(first, "tool")));
-                if (group.detail) item.append(el("span", "card-issue-detail", failureReasonText(group.detail)));
+                if (group.detail) item.append(issueNote(group.recordedCause ? "Recorded reason" : null,
+                    callIssueText(group.detail, group.recordedCause), group.resultIssue ? "entry" : "call"));
                 for (const entry of group.entries) {
                     const services = entry.row.serviceAssociation?.services;
                     const service = services?.length === 1 && services[0] !== "Unknown" ? serviceLabel(services[0]) : null;
                     const label = entry.label + (service ? ` · ${service}` : "");
                     const link = evidenceLink(label, exact(entry.row, "reported-api"));
                     link.setAttribute("aria-label", `${name}, ${label}`);
-                    item.append(link);
-                    if (entry.detail) item.append(el("span", "card-issue-detail", entry.detail));
+                    const block = el("div", "card-entry-issue");
+                    block.append(link);
+                    if (entry.detail) block.append(issueNote("Entry error", entry.detail, "entry"));
+                    item.append(block);
                 }
                 list.append(item);
             }
-            context.append(list);
+            const feedback = el("div", "card-feedback");
+            orientation.replaceWith(feedback); feedback.append(orientation, list);
         }
         if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
