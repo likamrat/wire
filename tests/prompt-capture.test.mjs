@@ -10,7 +10,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
-import { buildSanitizedRecord } from "../lib/export.mjs";
+import { buildSanitizedRecord, buildSanitizedBundle } from "../lib/export.mjs";
 import { eventIdentity, filterDeletedRecords } from "../lib/deletion-identities.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 
@@ -302,6 +302,47 @@ test("new explicit evidence conflicting with a saved origin qualifies the link w
     assert.equal(state.evidence.length, 1);
     assert.equal(state.evidence[0].userPrompt.text, "Synthetic first association");
     assert.equal(state.evidence[0].userPrompt.capture.reason, "ambiguous-link");
+});
+
+test("a later claim naming a different origin withdraws direct linkage from the reader and a new report", async t => {
+    const request = (id, msg, call, at) => event(id, "assistant.message", {
+        originatingMessageId: msg, turnId: "turn-one", toolRequests: [{ toolCallId: call }],
+    }, at);
+    const app = await installation(t, [
+        prompt("Invented first request", { messageId: "one" }),
+        request("first-claim", "one", "first", 1), start("first", 2),
+        prompt("Invented second request", { messageId: "two" }, "other", 3),
+        request("second-claim", "two", "second", 4), start("second", 5),
+    ]);
+    const before = await app.collect();
+    assert.deepEqual([...buildAssessmentModel(before).details.values()].map(v => v.interaction.message.association),
+        ["explicit-source-link", "explicit-source-link"]);
+    await app.restart();
+    await app.append([
+        request("competes-first", "two", "first", 1), request("competes-second", "missing-original", "second", 4),
+        event("first-end", "tool.execution_complete", { toolCallId: "first", success: true }, 10),
+        event("second-end", "tool.execution_complete", { toolCallId: "second", success: true }, 11),
+    ]);
+    const after = await app.collect();
+    const expected = "The saved links disagree about which request started this activity.";
+    const bundle = await buildSanitizedBundle(after.evidence, "a".repeat(64), { formats: ["json"] });
+    assert.deepEqual(JSON.parse(bundle.files["product-report.json"]).records.map(r => r.promptAssociation), [expected, expected]);
+    assert.deepEqual([...buildAssessmentModel(after).details.values()].map(v => v.interaction.message.association), ["unverified", "unverified"]);
+    const { searchFixture } = await import("./live-search-fixture.mjs");
+    const { chromium, expect } = await import("@playwright/test");
+    const { runtime } = await searchFixture(t, { records: after.evidence, reply: false });
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        await page.goto(runtime.url);
+        for (const record of after.evidence) {
+            await page.locator(`[data-view-key="request:${record.scenarioId}"] .request-card-open`).click();
+            const reader = page.locator("#contextSidebar");
+            await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+            await expect(reader.locator(`[data-context-group="${record.scenarioId}"] .reader-record-limits p`).first()).toHaveText(expected);
+            await page.locator("#closeContextSidebar").click();
+        }
+    } finally { await browser.close(); }
 });
 
 test("a complete prompt exactly at the initial byte-window boundary is not discarded as a partial line", async t => {
