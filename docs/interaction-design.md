@@ -636,8 +636,11 @@ turns green when an update is available, even after the notice is dismissed.
 It still only checks; **Update** installs the build. Below updates,
 show the current theme with a miniature WIRE screen, its name and mode,
 and swatches drawn from the active screen palette. Each category opens with its
-title and one sentence explaining what changes there. Place decision help
-between the relevant setting label and its controls. Keep current values,
+title and a short sentence explaining what changes there. Read the sentence,
+field labels, help and control values together: state scope once, name the
+choice in its label, and reserve help for a constraint or consequence. Let
+necessary text wrap at narrow widths and larger text sizes. Place decision
+help between the relevant setting label and its controls. Keep current values,
 warnings and unavailable states beside their controls. The preview and
 **Change theme** share one link to Themes; the effective time zone links
 to Regional. The whole shortcut stays clickable, but hover and press tint
