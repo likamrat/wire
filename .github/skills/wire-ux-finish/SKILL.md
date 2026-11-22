@@ -42,6 +42,11 @@ surfaces actually affected. Keep unrelated redesign opportunities out of scope.
   hierarchy through alignment, regular typography and purposeful spacing.
 - Use concise, concrete wording. Retain necessary uncertainty and exact evidence
   without exposing every stored field, repeated heading or engineering recital.
+- Use the `humanizer` skill when writing or reviewing user-facing copy. Read the
+  label with its heading, neighboring rows and destination. Could someone explain
+  what happened or what to do next without knowing how WIRE stores the data?
+  Put the answer first. If a detail is unknown and it matters to the decision,
+  say what WIRE cannot tell. Keep original diagnostic text available as evidence.
 - Preserve the current Asta Sans, Lucide, theme and sidebar conventions in the
   design contract; derive current values there rather than copying old palettes.
 - Share author, service and outcome meaning across surfaces. Labels/icons support
