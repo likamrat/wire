@@ -6336,7 +6336,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sourceJump = sectionJump(sourceSection, "Source", "section-source");
         jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
         const quickReport = underlyingRoute().view === "analyze" && namedRequest(workspaceState.route.request);
-        if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId));
+        if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId, { reader: true }));
         body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);

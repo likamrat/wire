@@ -27,7 +27,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         erase(panel); panel.remove(); trigger.setAttribute("aria-expanded", "false");
     }
     function paint(b) {
-        const id = keys.get(b);
+        const { id, reader } = keys.get(b);
         const member = catalog?.drafts.filter(d => d.scenarioIds.includes(id)) ?? [];
         const label = member.length ? `In report: ${member[0].name}${member.length > 1 ? ` (+${member.length - 1})` : ""}` : "Add to report";
         b.classList.toggle("in-draft", Boolean(member.length));
@@ -36,7 +36,10 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         if (b.lastElementChild.textContent !== label) b.lastElementChild.textContent = label;
         const name = member.length ? `Report drafts: ${member.map(d => d.name).join(", ")}. Add or remove interaction` : label;
         b.setAttribute("aria-label", name);
-        b.title = name;
+        if (reader) {
+            const value = b.lastElementChild;
+            ux.tooltip(b, () => b.getAttribute("aria-expanded") !== "true" && value.scrollWidth > value.clientWidth ? value.textContent : "");
+        } else b.title = name;
     }
     function accept(value) {
         if (value && catalog?.source === value.source
@@ -45,11 +48,11 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         close(); catalog = value ?? null;
         for (const b of document.querySelectorAll("button.report-draft-trigger")) paint(b);
     }
-    function make(id) {
+    function make(id, { reader = false } = {}) {
         const authority = api.publicationToken();
         const b = el("button", "report-draft-trigger");
         b.type = "button"; b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("aria-expanded", "false");
-        b.append(ux.icon("report-add"), el("span")); keys.set(b, id); paint(b);
+        b.append(ux.icon("report-add"), el("span")); keys.set(b, { id, reader }); paint(b);
         b.onclick = () => {
             if (!b.isConnected || writing || !api.isCurrent(authority)) return;
             if (owner?.trigger === b) { close(true); return; }

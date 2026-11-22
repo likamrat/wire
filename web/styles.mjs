@@ -584,7 +584,7 @@ ${reportJourneyStyles}
  --report-remove-face:color-mix(in srgb,var(--muted) 30%,var(--paper));
 }
 .reader-section-jumps:has(.report-draft-trigger)>button{flex:none}
-.wire-section-nav.reader-section-jumps>.report-draft-trigger{flex:1 1 9em;min-width:min(9em,100%);max-width:24em;color:var(--report-action-ink)}
+.wire-section-nav.reader-section-jumps>.report-draft-trigger{min-width:0;max-width:min(24em,100%);color:var(--report-action-ink)}
 .reader-section-jumps>.report-draft-trigger>.wire-icon{color:var(--accent)}
 #activityList .card-reading-actions:has(.report-draft-trigger){display:grid;grid-template-columns:minmax(0,1fr) 9.6em;column-gap:var(--space-sm);align-items:center}
 #activityList .card-reading-actions>.report-draft-trigger{justify-self:start;display:inline-flex;align-items:center;gap:.45em;min-width:0;max-width:100%;height:44px;min-height:44px;margin:0;padding:0 .65em;position:relative;isolation:isolate;border:0;background:none;box-shadow:none;color:var(--report-action-ink);font:var(--weight-regular) var(--type-small)/1.4 var(--font);text-decoration:none}

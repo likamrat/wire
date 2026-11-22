@@ -164,7 +164,15 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
         return [s.fontSize, s.minHeight, s.columnGap, s.textDecorationLine, g.width, g.height, n.getBoundingClientRect().y];
     });
     assert.deepEqual(await style(readerAction), await style(source));
-    await readerAction.hover(); assert.equal((await style(readerAction))[3], "none");
+    const endPadding = control => control.evaluate(node => {
+        const text = document.createRange(); text.selectNodeContents(node.lastChild);
+        return node.getBoundingClientRect().right - text.getBoundingClientRect().right;
+    });
+    await readerAction.hover();
+    assert.ok(Math.abs(await endPadding(readerAction) - await endPadding(source)) <= 1, "The label uses Source's end padding, not the spare width of the strip");
+    assert.equal(await readerAction.getAttribute("title"), null);
+    await expect(page.getByRole("tooltip")).toBeHidden();
+    assert.equal((await style(readerAction))[3], "none");
     await page.mouse.down(); assert.equal((await style(readerAction))[3], "none"); await page.mouse.up();
     await page.keyboard.press("Escape"); await expect(readerAction).toBeFocused();
     await readerAction.click(); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
@@ -179,21 +187,26 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await expect(readerAction).toContainText("Release review"); await expect(readerAction).toBeFocused();
     assert.deepEqual(await anchor(), before);
     await readerAction.click(); await panel.getByRole("button", { name: "New draft" }).click();
-    await panel.getByLabel("Draft name").fill("Handoff"); await panel.getByRole("button", { name: "Create draft and add" }).click();
+    const handoff = "Handoff: regional checklist, support coverage and rollout readiness across all workspaces";
+    await panel.getByLabel("Draft name").fill(handoff); await panel.getByRole("button", { name: "Create draft and add" }).click();
     await expect(readerAction).toContainText("(+1)");
     await readerAction.click(); await panel.getByRole("searchbox").fill("lease");
-    await expect(panel.getByRole("button", { name: "Remove from Handoff" })).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: `Remove from ${handoff}` })).toHaveCount(0);
     await capture("filter"); await panel.getByRole("button", { name: "Remove from Release review" }).click();
     await expect(readerAction).toContainText("Handoff"); await expect(readerAction).not.toContainText("Release review");
     assert.deepEqual(await anchor(), before); await capture("added");
     await page.locator("#closeContextSidebar").click(); await page.reload();
     await expect(action("x")).toContainText("Release review"); await expect(action("y")).toContainText("Handoff");
     await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => document.documentElement.style.fontSize = "125%");
-    await card("y").locator(".request-card-open").click(); await readerAction.click();
+    await card("y").locator(".request-card-open").click(); await readerAction.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(`In report: ${handoff}`);
+    const box = await readerAction.boundingBox(), strip = await reader.locator(".reader-section-jumps").boundingBox();
+    assert.ok(box.height >= 44 && box.x + box.width <= strip.x + strip.width + 1, "The long name fits the strip at enlarged text");
+    await readerAction.click();
     await panel.getByRole("searchbox").fill("review"); await capture("narrow-filter"); await page.keyboard.press("Escape");
     await expect(readerAction).toBeFocused(); await expect(reader).toBeVisible(); await page.locator("#closeContextSidebar").click();
     await page.setViewportSize({ width: 1280, height: 880 }); await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
-    for (const [i, draftName] of ["Release review", "Handoff"].entries()) {
+    for (const [i, draftName] of ["Release review", handoff].entries()) {
         await navigateMain(page, "reports");
         await page.locator("#namedReportDraft").selectOption({ label: draftName });
         await page.getByRole("button", { name: /^Formats:/ }).click();

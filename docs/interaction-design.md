@@ -418,7 +418,9 @@ new line or layout shift. Failure remains explicit with manual-copy guidance.
 No Clipboard read is required.
 
 For local Copilot interactions in Analyze, the card utility and the reader
-action after Source share one named-draft picker. Search and Remove stay in
+action after Source share one named-draft picker. In the reader strip, its
+hover follows the icon and label like Source, not the remaining row width.
+Only a clipped label needs a tooltip. Search and Remove stay in
 that picker. Reading does not select or save. Other reader entry points keep
 their contextual report footer; broader scopes do not silently switch to Selected.
 
