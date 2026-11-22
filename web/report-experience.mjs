@@ -47,6 +47,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     function opener(label, panel) {
         const control = button(label, () => {}, "report-toolbar-choice");
+        ux.anchoredChoices(panel);
         control.setAttribute("popovertarget", panel.id); control.append(ux.icon("chevron"));
         return control;
     }
@@ -221,20 +222,27 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         focus.focus({ preventScroll: true });
     });
 
-    const calendar = popover("reportCustomDates", "Custom dates");
+    const calendar = el("div"); calendar.id = "reportCustomDates"; calendar.hidden = true;
+    periodPanel.firstElementChild.classList.add("visually-hidden");
+    periodPanel.append(calendar);
+    function closeDates() { periodPanel.hidePopover(); dateButton.focus({preventScroll:true}); }
+    periodPanel.addEventListener("beforetoggle", event => {
+        if (event.newState === "closed") { calendar.hidden = true; periodHost.hidden = false; calendarEditor.clear(); }
+    });
     const calendarEditor = createCalendar({ root: calendar, id: "reportDate", inputIds: { from: "reportDatefrom", to: "reportDateto" }, time, ux,
         context: () => read().timeContext, current, onChange: () => { applyDates.disabled = !calendarEditor.valid(); } });
     const calendarActions = el("div", "report-popover-actions");
     const applyDates = button("Use dates", () => {
         if (!calendarEditor.valid()) return;
-        calendar.hidePopover(); changeDates({ range: "custom", ...calendarEditor.value() });
+        const dates = calendarEditor.value(); closeDates(); changeDates({ range: "custom", ...dates });
     }, "primary");
-    calendarActions.append(button("Cancel", () => calendar.hidePopover()), applyDates);
+    calendarActions.append(button("Cancel", closeDates), applyDates);
     calendar.append(calendarActions);
     function openCalendar() {
         const value = read(), dates = value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates;
-        calendarEditor.reset(dates);
-        periodPanel.hidePopover(); calendar.showPopover(); calendarEditor.focus();
+        if (!periodPanel.matches(":popover-open")) periodPanel.showPopover({source:dateButton});
+        periodHost.hidden = true; calendar.hidden = false; calendarEditor.reset(dates);
+        calendar.querySelector("input").focus({preventScroll:true});
     }
     function showSelection() {
         if (read().locked) return;
@@ -361,19 +369,19 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             drawerTitle.textContent = title;
             if (!drawer.open) {
                 drawerHeader.after(errors, retry);
-                for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) drawer.append(panel);
+                for (const panel of [privacy, formats, refine, periodPanel, selection]) drawer.append(panel);
                 openDrawer();
                 drawerTitle.focus({ preventScroll: true });
             }
         } else if (drawer.open) {
             closeOptions(); drawer.close();
             messageAnchor.after(errors, retry);
-            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) root.append(panel);
+            for (const panel of [privacy, formats, refine, periodPanel, selection]) root.append(panel);
         }
     }
     return {
         sync, syncDrawer, backSlot, openCalendar, showSelection, selectionReturn,
-        hasDeskDraft: () => deskFocus !== "all" || calendar.matches(":popover-open"),
+        hasDeskDraft: () => deskFocus !== "all" || periodPanel.matches(":popover-open") && !calendar.hidden,
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {

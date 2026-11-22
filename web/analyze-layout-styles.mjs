@@ -225,6 +225,7 @@ export const analyzeLayoutStyles = `
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}
+.analyze-filter-dialog[open]:not(:modal){position:fixed;z-index:30}
 @media(prefers-reduced-motion:no-preference) {
  .analyze-filter-dialog::backdrop {transition:background-color 320ms cubic-bezier(.2,0,0,1)}
  .analyze-filter-dialog[data-closing]::backdrop {background:transparent}

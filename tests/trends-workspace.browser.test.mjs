@@ -148,7 +148,7 @@ test("long option finders keep the current measure, filters and time zone until 
     await page.evaluate(() => document.documentElement.style.removeProperty("font-size")); await page.setViewportSize({ width: 1280, height: 800 });
     await navigateMain(page, "analyze");
     await page.locator("#analyzeResultCommands").getByRole("button", { name: /^Filters/ }).click();
-    const filters = page.locator("#analyzeFilterDialog:modal");
+    const filters = page.locator("#analyzeFilterDialog:popover-open");
     await expect(filters.getByRole("combobox", { name: "Tool", exact: true })).toBeVisible();
     if (!await trigger("projectFilter").isVisible()) await filters.getByText("More filters", { exact: true }).click();
     for (const [id, name, query, expected] of [
@@ -411,13 +411,46 @@ test("compiled index applies every available filter, supports calendar navigatio
     await period.click();
     const retainedFocus = await region.getByRole("dialog").evaluate(async dialog => {
         const mark = document.querySelector("#trendsPlot-rhythm [data-trend-mark]");
-        const closed = new Promise(resolve => dialog.addEventListener("close", resolve, { once: true }));
-        dialog.querySelector(".trends-dialog-heading button").click();
+        const closed = new Promise(resolve => dialog.addEventListener("toggle", resolve, { once: true }));
+        dialog.hidePopover();
         mark.focus({ preventScroll: true });
         await closed;
         return document.activeElement === mark;
     });
+
     assert(retainedFocus, "A delayed close event must not steal an intentional chart focus");
+});
+
+test("Period edits stay beside their trigger without shifting the chart or reading unapplied dates", async t => {
+        const {page,reads}=await setup(t,true), period=page.locator("#trendsPeriod"), panel=page.locator("#trendsLocalChoices");
+        const count=page.locator('[data-family=rhythm] .trends-index-scope');
+        const before=reads.length;
+        for(const [width,scale] of [[1280,1],[390,1.5]]){
+            await page.setViewportSize({width,height:850});
+            await page.evaluate(s=>document.documentElement.style.fontSize=`${s*100}%`,scale);
+            await period.scrollIntoViewIfNeeded();
+            const plot=page.locator("#trendsPlot-rhythm");
+            await plot.evaluate(n=>{window.periodProbe={svg:n.firstElementChild,top:n.getBoundingClientRect().top,scroll:scrollY}});
+            await period.tap(); await expect(panel).toBeVisible();
+            await screenshot(page,`local-period-${width}`);
+            await panel.getByRole("button",{name:"Custom dates"}).tap();
+            assert.equal(await page.locator(":modal:visible").count(),0);
+            await expect(panel).toContainText("Inclusive dates · UTC");
+            const geometry=await panel.evaluate(n=>{const r=n.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:document.documentElement.clientWidth,height:innerHeight}});
+            assert.ok(geometry.left>=0&&geometry.right<=geometry.width+1&&geometry.top>=0&&geometry.bottom<=geometry.height,JSON.stringify(geometry));
+            assert(await plot.evaluate(n=>window.periodProbe.svg===n.firstElementChild&&Math.abs(n.getBoundingClientRect().top-window.periodProbe.top)<1&&scrollY===window.periodProbe.scroll));
+            await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
+            await screenshot(page,`local-custom-${width}`);
+            await panel.getByRole("button",{name:"Cancel"}).tap();await expect(period).toBeFocused();
+            assert.equal(reads.length,before);
+            await expect(count).toContainText("4 dated calls");
+        }
+        await period.tap();await panel.getByRole("button",{name:"Custom dates"}).tap();
+        await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
+        await panel.getByLabel("Trends to",{exact:true}).fill("2026-11-16");
+        await panel.getByRole("button",{name:"Apply dates"}).tap();
+        await expect(count).toContainText("3 dated calls");
+        assert.equal(reads.length,before+1);assert.equal(reads.at(-1).from,reads.at(-1).to);
 });
 
 test("compiled Trends uses the exact daily populations on both chart types and keeps dates, data and comparisons independent", { timeout: 90000 }, async t => {

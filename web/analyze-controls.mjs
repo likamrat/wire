@@ -20,6 +20,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     let active = false, comparing = false, referenceAvailable = false, withdrawn = false, withdrawalRevision = 0;
     let motion = null, closing = false, restoreAfterClose = false;
     const panel = $("analyzeFilterPanel");
+    const narrowFilters = window.matchMedia("(max-width:699px)");
     const publicationToken = () => api.publicationToken();
     const isCurrent = token => token != null && typeof token.then !== "function" && api.isCurrent(token) === true;
     const canPublish = () => isCurrent(publicationToken());
@@ -100,7 +101,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (!active || withdrawn || !canPublish()) return;
         closeSelect(); closeNavigation(); ux.hideTooltip();
         position();
-        if (!dialog.open) dialog.showModal();
+        if (!dialog.open) narrowFilters.matches ? dialog.showModal() : dialog.show();
         move(true);
         trigger.setAttribute("aria-expanded", "true");
         ux.restoreFocus($(comparing ? "toolFilter-control" : "dateFilter-control"));
@@ -109,6 +110,20 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     $("closeAnalyzeFilters").addEventListener("click", () => close());
     dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     ux.dismissOnOutside(dialog, () => close());
+    document.addEventListener("pointerdown", event => {
+        if (dialog.open && !dialog.matches(":modal") && !dialog.contains(event.target) && !trigger.contains(event.target)) close(false);
+    }, true);
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !event.defaultPrevented && dialog.open && !dialog.matches(":modal")) {
+            event.preventDefault(); close();
+        }
+    });
+    narrowFilters.addEventListener("change", () => {
+        if (!dialog.open || closing) return;
+        const focus = document.activeElement;
+        closeSelect(); dialog.close(); open();
+        if (dialog.contains(focus) && focus.checkVisibility()) focus.focus({preventScroll:true});
+    });
     dialog.addEventListener("close", () => {
         if (dialog.open) return;
         closing = false; finishMotion();

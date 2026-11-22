@@ -49,6 +49,11 @@ When a destination needs a new stored read, select it and show its loading
 state immediately. Do not present the old charts as its accepted population.
 Failed reads restore the accepted origin; later navigation wins over held reads.
 
+Keep a local choice at the control that owns it. Choosing dates, arranging
+charts, or adjusting report options does not start a new task. Preserve
+the accepted reading and its scroll position until the user applies a change.
+Exact evidence, preparation and irreversible decisions keep their own surfaces.
+
 The [runtime-access contract](runtime-access.md#client-publication-and-withdrawal)
 defines when pending reads and return state lose permission to publish.
 
@@ -70,7 +75,9 @@ incompatible Microsoft 365 conversations stay separately unavailable. Exact
 counts and provenance definitions live in Guide, not another drilldown.
 
 Filters opens one panel with the existing controls, applied chips and separate
-View group. Fields/labels wrap; accepting a restriction must not move focus.
+View group. On desktop the workspace remains interactive; outside dismissal
+does not submit a draft. Narrow screens retain the focused sheet. Fields/labels
+wrap; accepting a restriction must not move focus.
 Both Trends measure selectors and long project, chat, tool, category, service,
 path and time-zone selectors find words anywhere in their option labels. Keep
 the finder inside the open picker; opening on touch does not focus a text
@@ -177,7 +184,8 @@ Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
 Use the full workspace in both orientations without scaling text. Narrow
 layouts wrap the legend; the plot scrolls horizontally. **Period → Custom
-dates** opens the existing calendar. The period control (or the title in
+dates** expands the existing calendar at the same trigger. Filters and Arrange
+charts likewise open at their own controls. The period control (or the title in
 All charts) names the accepted range. Presets and Apply update the charts
 together; drafts, Cancel, pending reads and failed reads retain the
 accepted range. Today remains a current-day label, not a claim of full-day coverage.
@@ -463,7 +471,8 @@ has its own primary destination. One focus selector works at every width.
 Changing focus shows what the report includes; it never prepares or saves.
 The report period is visible, defaults to
 Last 7 days, and offers 14/30/custom choices. Custom dates opens its calendar
-directly. A fresh report ignores old Analyze restrictions.
+in the same anchored panel. File, text and inclusion choices stay anchored to
+their controls. A fresh report ignores old Analyze restrictions.
 Report text is visible before the choices and defaults to Mask detected details.
 Changing it updates the draft without preparing or saving. The same control moves
 into the report toolbar; its choice reaches the initial preparation unchanged.
@@ -612,8 +621,9 @@ change below it; keep the periods side by side.
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with
 the preceding seven; 14/30-day choices follow the same rule. Custom dates uses
-the shared calendar, with independent inclusive ranges and cancellation that
-keeps the accepted pair.
+the shared calendar beside the trigger, with independent inclusive ranges and
+cancellation that keeps the accepted pair. Opening a period's own date label
+edits only that side; the Custom dates action can edit both before applying once.
 
 Use the compact, report-colored five-choice menu. Keep Outcomes, Timeline,
 By tool and Timing visible inside the chart and More options in its corner.

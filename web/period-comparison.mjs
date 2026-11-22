@@ -311,8 +311,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     title.id = "periodComparisonTitle"; title.tabIndex = -1;
     function stop() { navigate({ compare: undefined }); toggle.focus(); }
     const form = el("form", undefined, "period-comparison-controls");
-    const calendar = el("dialog", undefined, "comparison-calendar report-options-popover");
+    const calendar = el("section", undefined, "comparison-calendar report-options-popover");
     calendar.id = "comparisonCustomDates"; calendar.setAttribute("aria-labelledby", "comparisonCalendarTitle");
+    calendar.setAttribute("role","dialog");
+    const calendarChoices = ux.anchoredChoices(calendar);
+    let calendarSide = null;
     const calendarTitle = el("h2", "Custom dates"); calendarTitle.id = "comparisonCalendarTitle";
     const calendarNote = el("p", undefined, "report-period-caption"); calendarNote.id = "comparisonCalendarZone";
     calendar.append(calendarTitle, calendarNote, form);
@@ -327,20 +330,24 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     const apply = el("button", "Use dates", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
     const calendarActions = el("div", undefined, "report-popover-actions");
-    const cancelCalendar = button("Cancel", () => calendar.close());
+    const cancelCalendar = button("Cancel", () => calendarChoices.close());
     calendarActions.append(cancelCalendar, apply); form.append(calendarActions); setup.append(calendar);
     const dateChoices = el("div", undefined, "report-period-choices"); dateChoices.setAttribute("role", "group");
     dateChoices.setAttribute("aria-label", "Comparison period");
-    function openCalendar(side = "a") {
+    function openCalendar(side, trigger) {
         const context = getContext(), ranges = periods(context.route);
+        calendarSide = side;
+        for (const [id,group] of [["a",form.firstElementChild],["b",form.children[1]]]) group.hidden = Boolean(side && side !== id);
+        calendar.dataset.single = String(Boolean(side));
         calendarNote.textContent = `Inclusive dates · ${context.options.timeContext.timeZone}`;
         calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
-        calendar.showModal(); calendars[side].focus();
+        calendarChoices.open(trigger);
+        form.querySelector("fieldset:not([hidden]) input").focus({preventScroll:true});
     }
     for (const days of ["7", "14", "30", "custom"]) {
         const control = button(days === "custom" ? "Custom dates" : `Last ${days} days`, () => {
             if (!publicationCurrent(publicationToken())) return;
-            if (days === "custom") openCalendar();
+            if (days === "custom") openCalendar(null,control);
             else navigate({ ...presentation.completeDays(Number(days), getContext().options.timeContext), compare: "periods" });
         });
         control.dataset.comparisonRange = days; dateChoices.append(control);
@@ -527,9 +534,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 [side + "From", editor.value().from], [side + "To", editor.value().to],
             ]));
             if (!publicationCurrent(publication)) { withdrawAccess(); return; }
-            completionIntent = { trigger: doc.activeElement, readingIntent: context.readingIntent, labelTime, publication,
+            completionIntent = { side: calendarSide, readingIntent: context.readingIntent, labelTime, publication,
                 key: signature({ ...context, route: { ...context.route, ...changes, compare: "periods" } }) };
-            calendar.close(); requestKey = ""; navigate({ ...changes, compare: "periods" });
+            calendarChoices.close();
+            completionIntent.trigger = doc.activeElement;
+            requestKey = ""; navigate({ ...changes, compare: "periods" });
         } catch (error) {
             if (!publicationCurrent(publication)) { withdrawAccess(); return; }
             completionIntent = null;
@@ -1134,9 +1143,10 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             const line = el("p");
             const role = index ? "b" : "a";
             const edit = button(dateRange(side), () => {
-                if (readCurrent(started, publication) && edit.isConnected) openCalendar(role);
+                if (readCurrent(started, publication) && edit.isConnected) openCalendar(role,edit);
             });
             edit.classList.add("icon-action");
+            edit.dataset.editPeriod = role;
             edit.append(ux.icon("chevron"));
             edit.setAttribute("aria-haspopup", "dialog");
             edit.setAttribute("aria-label", `Change ${index ? "selected" : "baseline"} period: ${dateRange(side)}`);
@@ -1245,7 +1255,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             completionIntent = null; entryIntent = null;
             generation++; machine?.leave(); requestKey = ""; contextKey = ""; lastRoute = "";
             onPairChange?.(null);
-            if (calendar.open) calendar.close();
+            calendarChoices.close(false);
             additionalOptions.hidden = true;
             return;
         }
@@ -1342,11 +1352,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             onAccepted?.();
             if (!readCurrent(started, publication)) return;
             const orient = submitted && publicationCurrent(submitted.publication) && completionIntent === submitted && submitted.readingIntent === current.readingIntent
-                && doc.activeElement === submitted.trigger;
+                && (doc.activeElement === submitted.trigger || !submitted.trigger.isConnected && doc.activeElement === doc.body);
             completionIntent = null;
             if (orient) {
-                resultTitle.focus({ preventScroll: true });
-                resultTitle.scrollIntoView({ block: "start" });
+                const trigger = submitted.side ? output.querySelector(`[data-edit-period="${submitted.side}"]`) : submitted.trigger;
+                trigger?.focus({ preventScroll: true });
             }
         } catch (error) {
             if (!readCurrent(started, publication) || signature(getContext()) !== contextKey) return;
@@ -1433,7 +1443,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         callLabel.data = "View calls";
         scope.textContent = ""; scope.hidden = true;
         searchInput.value = ""; searchInput.defaultValue = "";
-        if (calendar.open) calendar.close();
+        calendarChoices.close(false);
+        for (const editor of Object.values(calendars)) editor.clear();
+        calendarNote.textContent = "";
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(outcomeLayer);
         if (control) {
             for (const option of [...control.options]) {
@@ -1696,7 +1708,11 @@ export const periodComparisonStyles = `
 .comparison-options>label{display:grid;gap:4px;min-width:0}
 .comparison-options legend{font-size:var(--type-section);padding:0}
 .comparison-calendar{width:min(54rem,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:24px;background:var(--floating-paper,var(--paper));color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius-dialog)}
-.comparison-calendar::backdrop{background:var(--scrim)}
+.comparison-calendar.wire-local-choices[data-single=false]{inline-size:min(48rem,calc(100vw - 24px))}
+.comparison-calendar[data-single=true] .period-comparison-controls{display:block}
+.comparison-calendar .period-comparison-controls fieldset[hidden]{display:none}
+.comparison-calendar[data-single=true] .period-comparison-controls fieldset+fieldset{margin:0;padding:0;border:0}
+.comparison-calendar[data-single=true] .period-comparison-controls fieldset+fieldset::before{content:none}
 .comparison-calendar .period-comparison-controls fieldset{display:block}
 .comparison-calendar .period-comparison-controls legend{float:none;margin-bottom:12px}
 .comparison-calendar .report-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}

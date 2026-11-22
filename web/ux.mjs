@@ -175,6 +175,50 @@ export function createEvidenceUX(icons) {
         window.addEventListener("blur", enteredFrame, { signal });
         return () => window.removeEventListener("blur", enteredFrame);
     }
+    // Local choices stay beside their owner; the native popover supplies light
+    // dismissal without making the workspace inert or changing document flow.
+    function anchoredChoices(panel) {
+        let anchor, listeners;
+        panel.popover = "auto";
+        panel.classList.add("wire-local-choices");
+        function place() {
+            if (!panel.matches(":popover-open")) return;
+            if (!anchor?.checkVisibility()) { panel.hidePopover(); return; }
+            const box = anchor.getBoundingClientRect(), gap = 6, pad = 8;
+            const availableBelow = innerHeight - box.bottom - gap - pad, availableAbove = box.top - gap - pad;
+            const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
+            panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
+            panel.style.left = Math.max(pad, Math.min(box.left, document.documentElement.clientWidth - panel.offsetWidth - pad)) + "px";
+            panel.style.top = Math.max(pad, above ? box.top - gap - panel.offsetHeight : box.bottom + gap) + "px";
+        }
+        panel.addEventListener("beforetoggle", event => {
+            listeners?.abort();
+            if (event.newState === "closed") { anchor?.setAttribute("aria-expanded", "false"); return; }
+            anchor = event.source || anchor;
+            anchor?.setAttribute("aria-expanded", "true");
+            listeners = new AbortController();
+            window.addEventListener("resize", place, {signal:listeners.signal});
+            document.addEventListener("scroll", event => { if (!panel.contains(event.target)) place(); }, {capture:true, passive:true, signal:listeners.signal});
+            const sizes = new ResizeObserver(place);
+            sizes.observe(panel);
+            listeners.signal.addEventListener("abort", () => sizes.disconnect(), {once:true});
+        });
+        panel.addEventListener("toggle", place);
+        return {
+            open(trigger) {
+                anchor = trigger;
+                trigger.setAttribute("aria-controls",panel.id);
+                trigger.setAttribute("aria-haspopup","dialog");
+                panel.showPopover({source:trigger}); place();
+            },
+            close(restore = true) {
+                if (!panel.matches(":popover-open")) return;
+                panel.hidePopover();
+                if (restore && anchor?.checkVisibility()) anchor.focus({preventScroll:true});
+            },
+            place,
+        };
+    }
     // Embedded documents do not bubble pointer/focus events into the shell.
     // Keep native auto-popover dismissal without inspecting or modifying the frame.
     dismissOnFrameFocus(frame => {
@@ -743,7 +787,7 @@ export function createEvidenceUX(icons) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

@@ -222,6 +222,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     exact.tabIndex = 0; exact.setAttribute("role", "region"); exact.setAttribute("aria-label", "Daily exact values");
     inspection.append(inspectionCaption, inspectionBody, exact);
     const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div", "trends-dialog-body"), dialogHeader = el("div", "trends-dialog-heading");
+    const localPanel = el("section","trends-local-choices"), local = el("div");
+    localPanel.id = "trendsLocalChoices"; localPanel.setAttribute("role","dialog"); localPanel.append(local); root.append(localPanel);
+    const localChoices = ux.anchoredChoices(localPanel);
+    localPanel.addEventListener("toggle", () => { if (!localPanel.matches(":popover-open")) scrub(local); });
+    function beginChoices(title, trigger) {
+        if (!current()) return false;
+        hideHover(); scrub(local); localPanel.setAttribute("aria-label",title);
+        localChoices.open(trigger); return true;
+    }
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
     const feedback = el("div", "trends-read-feedback");
@@ -432,7 +441,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (current()) paint();
     });
     doc.addEventListener("keydown", event => {
-        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || !enabled) return;
+        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || localPanel.matches(":popover-open") || !enabled) return;
         if (!tooltip.hidden) { hideHover(); return; }
         if (family) { event.preventDefault(); restore(); }
     });
@@ -454,7 +463,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
     }
     function openComparison(card) {
-        if (!openDialog("Arrange charts")) return;
+        if (!beginChoices("Arrange charts",card.arrange)) return;
         const choices = el("div", "trends-compare-choices");
         for (const id of order.filter(id => id !== activeMeasure)) {
             const label = el("label"), check = el("input");
@@ -463,25 +472,26 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
         const actions = el("div", "trends-dialog-actions");
         actions.append(button("All charts", () => {
-            dialog.close(); family = null; allCharts = true; hideHover(); paint();
+            localChoices.close(); family = null; allCharts = true; hideHover(); paint();
             collapseAll.focus({ preventScroll: true });
-        }), button("Cancel", () => dialog.close()), button("Apply comparison", () => {
+        }), button("Cancel", () => localChoices.close()), button("Apply comparison", () => {
             compared = new Set([...choices.querySelectorAll("input:checked")].map(check => check.value));
-            dialog.close(); paintStable(card);
+            localChoices.close(); paintStable(card);
         }, "primary"));
-        dialogBody.append(choices, actions);
+        local.append(choices, actions); localChoices.place(); choices.querySelector("input")?.focus({preventScroll:true});
     }
     function openPeriod() {
-        if (!openDialog("Period")) return;
+        if (!beginChoices("Period",periodButton)) return;
         const presets = el("div", "trends-periods");
         for (const days of ["7", "14", "30"]) {
             const control = button(`Last ${days} days`, () => {
-                dialog.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
+                localChoices.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
             });
             control.setAttribute("aria-pressed", String(period === days)); presets.append(control);
         }
-        const customRange = button("Custom dates", () => { const origin = dialogOrigin; openDates(); dialogOrigin = origin; });
-        dialogBody.append(el("p", "muted", `Inclusive dates · ${getContext().timeContext.timeZone}`), presets, customRange);
+        const customRange = button("Custom dates", () => openDates(periodButton));
+        presets.append(customRange); local.append(presets); localChoices.place();
+        (presets.querySelector('[aria-pressed=true]') || customRange).focus({preventScroll:true});
     }
     function openTable(card) {
         if (!openDialog("Data table")) return;
@@ -560,6 +570,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 return await read({ ...next, initial: false, range: { from: time.addDays(to, -6), to }, period: "latest" });
             }
             evidenceReturn = null;
+            localChoices.close(false);
             if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
             const changedPopulation = changedRange || JSON.stringify(filters) !== JSON.stringify(next.filters) || lastRevision !== context.revision;
@@ -619,31 +630,35 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         hideHover(); dialogOrigin = doc.activeElement; scrub(dialogTitle); dialogTitle.append(doc.createTextNode(name)); scrub(dialogBody);
         if (!dialog.open) dialog.showModal(); return true;
     }
-    function openDates() {
-        if (!openDialog("Custom dates")) return;
+    function openDates(origin) {
+        if (!beginChoices("Custom dates",origin === periodButton ? periodButton : custom)) return;
         const host = el("div"), actions = el("div", "trends-dialog-actions");
         const calendar = createCalendar({ root: host, id: "trendsCalendar", label: "Trends", time, ux,
             context: () => getContext().timeContext, current, onChange: () => {} });
         calendar.reset(range);
-        actions.append(button("Cancel", () => dialog.close()), button("Apply dates", () => {
+        actions.append(button("Cancel", () => localChoices.close()), button("Apply dates", () => {
             if (!calendar.valid()) return;
-            const selected = calendar.value(); dialog.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
+            const selected = calendar.value(); localChoices.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
         }, "primary"));
-        dialogBody.append(host, actions);
+        local.append(host, actions); localChoices.place(); host.querySelector("input").focus({preventScroll:true});
     }
     function openFilters() {
-        if (!openDialog("Filter activity")) return;
+        if (!beginChoices("Filter activity",filtersButton)) return;
         filtersButton.setAttribute("aria-expanded", "true");
         const author = select("Prompt authors", [["", "All, including unverified"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
         const tool = select("Tool", [["", "All tools"], ...data.definitions.tools.map(row => [row.id, row.label])], () => {});
         const service = select("Service", [["", "All services"], ...data.definitions.services.map(row => [row.id, row.label]), ["Discovery", "Discovery / preparation"], ["missing", "Missing service detail"]], () => {});
         author.field.value = filters.author ?? ""; tool.field.value = filters.tool ?? ""; service.field.value = filters.service ?? "";
-        dialogBody.append(author.label, tool.label, service.label);
+        local.append(author.label, tool.label, service.label);
         const actions = el("div", "trends-dialog-actions");
-        actions.append(button("Cancel", () => dialog.close()), button("Apply filters", () => {
+        actions.append(button("Cancel", () => localChoices.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
-            dialog.close(); void read({ range, period, filters: next, offset, remember: "filters" });
-        }, "primary")); dialogBody.append(actions);
+            localChoices.close(); void read({ range, period, filters: next, offset, remember: "filters" });
+        }, "primary")); local.append(actions); localChoices.place();
+        requestAnimationFrame(() => {
+            if (current() && localPanel.matches(":popover-open") && doc.activeElement === filtersButton)
+                (local.querySelector(".select-trigger") || author.field).focus({preventScroll:true});
+        });
     }
     function valueText(value, card) {
         const amount = card.chart.metric(value, card.id, card.mode);
@@ -1034,6 +1049,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "charts") { paintInspection(); paintExact(); }
     }
     function withdrawAccess() {
+        localChoices.close(false); scrub(local);
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         workspace.before(feedback);
@@ -1067,15 +1083,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             clearPending(); evidenceReturn = null; failedRead = null;
             if (entryKey !== acceptedEntry) entryKey = null;
             enabled = false; pending++; requestedKey = acceptedKey; root.setAttribute("aria-busy", "false");
-            hideHover(); if (dialog.open) dialog.close(); return;
+            hideHover(); localChoices.close(false); if (dialog.open) dialog.close(); return;
         }
         enabled = true;
-        if (!context.publication || context.stale) { hideHover(); return; }
+        if (!context.publication || context.stale) { hideHover(); localChoices.close(false); return; }
         if (data && !api.isCurrent(bound)) { withdrawAccess(); enabled = true; }
         const nextSection = context.section ?? "charts", changedSection = nextSection !== section;
         section = nextSection; guide.hidden = section !== "guide"; landing.hidden = section !== "overview"; chartSection.hidden = section !== "charts";
         landingGrid.hidden=section!=="overview";landingExtra.hidden=section!=="overview"||!data;
-        if (changedSection) hideHover();
+        if (changedSection) { hideHover(); localChoices.close(false); }
         for (const node of sections.children) {
             if (node.dataset.section === section) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current");
         }
@@ -1115,10 +1131,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     return { update, withdrawAccess,
         evidenceOrigin: () => current() ? evidenceReturn?.origin ?? null : null,
-        leave: () => { hideHover(); clearPending(); if (dialog.open) dialog.close(); } };
+        leave: () => { hideHover(); clearPending(); localChoices.close(false); if (dialog.open) dialog.close(); } };
 }
 
 export const trendsStyles = `
+.trends-local-choices .trends-periods{display:grid;gap:0}.trends-local-choices .trends-periods button{text-align:start;justify-content:flex-start}
+.trends-local-choices:has(.trends-periods){inline-size:min(14rem,calc(100vw - 24px))}
+.trends-local-choices .trends-control{display:grid;gap:.25rem;margin-block-end:.5rem}
 :root{--trends-series-1:#315fad;--trends-series-2:#007a78;--trends-series-3:#7957a0;--trends-series-4:#967000;--trends-series-5:#b14767;--trends-series-6:#467435;--trends-series-7:#006b97;--trends-series-8:#4d56ab;--trends-series-9:#ab6029;--trends-series-10:#8e3f91;--trends-series-11:#b04435;--trends-series-12:#526c80}
 :root[data-evidence-theme=dark]{--trends-series-1:#8fb6f2;--trends-series-2:#65c8c0;--trends-series-3:#b99add;--trends-series-4:#d9b866;--trends-series-5:#ed8aa3;--trends-series-6:#9ac58c;--trends-series-7:#63bee4;--trends-series-8:#9da4ec;--trends-series-9:#e5a377;--trends-series-10:#d899d9;--trends-series-11:#e8998b;--trends-series-12:#9eb8ce}
 #trendsView{min-width:0;container-type:inline-size}
