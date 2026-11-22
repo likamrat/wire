@@ -95,7 +95,6 @@ async function captureSwitchState(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
 }
 async function category(page, value) {
-    if (value === "troubleshooting") { await page.locator("#openEvidenceHelp").click(); return; }
     if (value === "display") value = "themes";
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const anchor = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
@@ -450,7 +449,7 @@ test("unapproved source search stays read-only and stale AI status cannot restor
     assert.equal(await page.locator("dialog[open]").count(), 0);
 });
 
-test("four current groups retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
+test("Settings categories retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     const evidence = [], proofs = process.env.WIRE_SETTINGS_ORGANIZATION_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
