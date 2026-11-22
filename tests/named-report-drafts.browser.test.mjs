@@ -59,7 +59,9 @@ test("report actions and call counts keep their columns while palettes distingui
             const verify = async control => { const [fg,bg] = await ink(control); assert.ok(contrast(fg,bg) >= 4.5, `${palette}/${theme}: ${fg} on ${bg}`); };
             await page.mouse.move(0, 0); await verify(action); await action.hover(); await verify(action);
             await action.click();
-            if (await picker.getByLabel("Draft name").isVisible()) {
+            await expect(picker.getByRole("button", { name: "New draft", exact: true })).toBeEnabled();
+            if (await picker.getByRole("button", { name: "Add to Launch readiness" }).count() === 0) {
+                await picker.getByRole("button", { name: "New draft", exact: true }).click();
                 await picker.getByLabel("Draft name").fill("Launch readiness"); await picker.getByRole("button", { name: "Create draft and add" }).click();
             } else await picker.getByRole("button", { name: "Add to Launch readiness" }).click();
             await expect(notice).toHaveText("Added to Launch readiness"); await verify(notice);
@@ -100,9 +102,46 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     const action = id => card(id).locator(".report-draft-trigger");
     const panel = page.getByRole("dialog", { name: "Report drafts", exact: true });
     const reader = page.locator("#contextSidebar"), readerAction = reader.locator(".reader-section-jumps .report-draft-trigger");
-    await action("x").click(); await panel.getByLabel("Draft name").fill("Release review");
+    const delayedList = Promise.withResolvers(), releaseList = Promise.withResolvers();
+    await page.route("**/api/report-drafts/list", async route => {
+        delayedList.resolve(); await releaseList.promise; await route.continue();
+    }, { times: 1 });
+    t.after(() => releaseList.resolve());
+    const staleTab = await profile.newPage();
+    await staleTab.goto(server.url + "#analyze");
+    await expect(staleTab.locator("#activityList .report-draft-trigger").first()).toBeVisible();
+    await action("x").click();
+    await delayedList.promise;
+    await expect(panel.getByRole("searchbox")).toBeVisible();
+    try {
+        await expect(panel.getByRole("searchbox", { name: "Search drafts" })).toBeFocused();
+        await expect(panel).toContainText("Loading drafts");
+        await expect(panel).not.toContainText("No drafts yet.");
+        await expect(panel.getByRole("button", { name: "New draft", exact: true })).toBeDisabled();
+    } finally { releaseList.resolve(); }
+    await expect(panel).toContainText("No drafts yet.");
+    await expect(panel.getByLabel("Draft name", { exact: true })).toBeHidden();
+    await expect(panel.getByRole("link", { name: "Saved library" })).toHaveAttribute("href", /reports\?.*task=library/);
+    await capture("empty");
+    await panel.getByRole("button", { name: "New draft", exact: true }).click();
+    await expect(panel.getByRole("searchbox")).toBeVisible();
+    const fieldHeights = await panel.locator("input").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
+    assert.ok(fieldHeights.every(h => h > 0 && h <= 40), `Compact search and name fields: ${fieldHeights}`);
+    await capture("create");
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "New draft", exact: true })).toBeFocused();
+    await panel.getByRole("button", { name: "New draft", exact: true }).press("Enter");
+    await panel.getByLabel("Draft name").fill("Release review");
     await panel.getByRole("button", { name: "Create draft and add" }).click();
     await expect(action("x")).toContainText("Release review");
+    // This panel's accepted Analyze snapshot predates creation in the other panel.
+    await staleTab.locator("#activityList .report-draft-trigger").first().click();
+    const stalePicker = staleTab.getByRole("dialog", { name: "Report drafts", exact: true });
+    await expect(stalePicker.locator(".draft-choice")).toHaveText(/Release review/);
+    await stalePicker.getByRole("link", { name: "Saved library", exact: true }).click();
+    await expect(staleTab).toHaveURL(/\/reports\?.*task=library/);
+    await expect(stalePicker).toHaveCount(0);
+    await staleTab.close();
     await card("y").locator(".request-card-open").click(); await expect(readerAction).toBeVisible();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await page.waitForFunction(() => document.querySelector("#contextSidebar").dataset.mode === "docked" && !document.getAnimations().some(a => a.playState === "running"));
@@ -128,7 +167,15 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await readerAction.hover(); assert.equal((await style(readerAction))[3], "none");
     await page.mouse.down(); assert.equal((await style(readerAction))[3], "none"); await page.mouse.up();
     await page.keyboard.press("Escape"); await expect(readerAction).toBeFocused();
-    await readerAction.click(); await capture("picker"); await panel.getByRole("button", { name: "Add to Release review" }).click();
+    await readerAction.click(); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
+    await capture("picker");
+    await panel.getByRole("searchbox").fill("name that does not exist");
+    await expect(panel).toContainText("No matching drafts."); await expect(panel).not.toContainText("No drafts yet.");
+    await expect(panel.getByLabel("Draft name", { exact: true })).toBeHidden();
+    await panel.getByRole("button", { name: "Clear draft search" }).click();
+    await panel.getByRole("searchbox").press("ArrowDown");
+    await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(readerAction).toContainText("Release review"); await expect(readerAction).toBeFocused();
     assert.deepEqual(await anchor(), before);
     await readerAction.click(); await panel.getByRole("button", { name: "New draft" }).click();

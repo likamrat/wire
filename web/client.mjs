@@ -277,6 +277,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let namedReport = null;
     const namedDrafts = assessmentFactories.createReportDraftPicker({ api, ux, searchFields, normalize: assessmentFactories.normalizeSearchText,
         announce, erase: erasePreparedNodes,
+        libraryLink: () => link("Saved library", "reports", { task: "library", request: undefined, inspect: undefined, bundle: undefined }, "text-link"),
         blocked: () => workspaceState.loading || workspaceState.stale || clearingAccess ? "Wait for current activity." : "",
         changed: () => { if (workspaceState.route.view === "reports") reportExperience?.sync(); },
     });

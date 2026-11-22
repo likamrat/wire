@@ -68,8 +68,9 @@ contents scroll together, without a second scroll area inside the interaction li
 Failure summaries keep the recorded tool name; open an interaction to read its
 exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
 On Analyze, choose **Add to report** on the card or after **Source** in
-the reader. Pick a local report draft, search by name, or
-choose **New draft**. To remove the interaction from just one draft, reopen
+the reader. Pick an existing draft or use **Search drafts** to filter by name.
+To create one, choose **New draft**, enter its name, then **Create draft and add**.
+For a previously saved report, choose **Saved library** instead. To remove the interaction from just one draft, reopen
 the picker and choose that draft's **Remove** row. Other drafts and the
 recorded interaction are unchanged.
 

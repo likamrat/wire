@@ -1,5 +1,5 @@
 // Shared by the renderer bundle and the standalone shell.
-export function createReportDraftPicker({ api, ux, searchFields, normalize, blocked, changed, announce, erase }) {
+export function createReportDraftPicker({ api, ux, searchFields, normalize, blocked, changed, announce, erase, libraryLink }) {
     let catalog = null, owner = null, lastId = null, writing = false, timer = null, notice = null;
     const keys = new WeakMap();
     const el = (tag, cls, text) => {
@@ -61,25 +61,32 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
     }
     function show(trigger, id) {
         close();
-        const publication = api.publicationToken(), offered = catalog, events = new AbortController(), opt = { signal: events.signal };
+        const publication = api.publicationToken(), source = catalog.source, events = new AbortController(), opt = { signal: events.signal };
+        let offered = null, readFailed = false;
         const panel = el("section", "report-draft-picker"), heading = el("h2", "", "Report drafts");
         panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", heading.textContent);
         const fieldRoot = el("div", "search-capsule"), searchIcon = el("span", "wire-search-icon"), input = el("input", "search-capsule-input");
         const clear = el("button", "quiet search-capsule-clear"); clear.type = "button"; clear.hidden = true;
-        input.type = "search"; input.autocomplete = "off"; input.spellcheck = false; input.placeholder = "Search report drafts";
-        input.setAttribute("aria-label", input.placeholder);
+        const searchLabel = el("label", "draft-search-label", "Search drafts");
+        input.id = "draftPickerSearch"; searchLabel.htmlFor = input.id;
+        input.type = "search"; input.autocomplete = "off"; input.spellcheck = false; input.placeholder = "Search by name";
         searchIcon.append(ux.icon("search")); fieldRoot.append(searchIcon, input, clear);
         const list = el("div", "report-draft-options"), create = el("button", "quiet", "New draft");
+        list.setAttribute("aria-busy", "true");
         create.type = "button";
         const form = el("form"), label = el("label", "", "Draft name"), name = el("input"), submit = el("button", "", "Create draft and add");
         name.maxLength = 100; name.required = true; name.autocomplete = "off"; label.append(name); submit.type = "submit";
-        form.append(label, submit);
-        const status = el("p", "context-help-note"); status.hidden = true; status.setAttribute("role", "status");
-        panel.append(heading, fieldRoot, list, create, form, status);
-        form.hidden = Boolean(offered.drafts.length); create.hidden = fieldRoot.hidden = !offered.drafts.length;
+        const cancel = el("button", "quiet", "Cancel"); cancel.type = "button";
+        const actions = el("div", "draft-create-actions"); actions.append(submit, cancel); form.append(label, actions); form.hidden = true;
+        const status = el("p", "draft-picker-status"); status.setAttribute("role", "status");
+        const footer = el("div", "draft-picker-footer"); footer.append(create, libraryLink());
+        create.prepend(ux.icon("zoom-in")); create.disabled = true;
+        create.setAttribute("aria-expanded", "false");
+        submit.disabled = true; name.oninput = () => { submit.disabled = !name.value.trim(); };
+        panel.append(heading, searchLabel, fieldRoot, list, status, form, footer);
         function current() { return owner?.panel === panel && trigger.isConnected && api.isCurrent(publication) && !blocked(); }
         async function edit(command, text) {
-            if (!current() || writing) return;
+            if (!current() || !offered || writing) return;
             writing = true; panel.setAttribute("aria-busy", "true");
             try {
                 const result = await api("/api/report-drafts/edit", { expected: offered.version, scenarioId: id, ...command });
@@ -97,7 +104,13 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
             } finally { writing = false; }
         }
         form.onsubmit = e => { e.preventDefault(); const title = name.value.trim(); if (title) void edit({ name: title, included: true }, `Added to ${title}`); };
-        create.onclick = () => { form.hidden = false; create.hidden = true; name.focus(); place(); };
+        function toggleCreate(show) {
+            form.hidden = !show; create.hidden = show; create.setAttribute("aria-expanded", String(show));
+            if (!show) { name.value = ""; submit.disabled = true; }
+            place(); (show ? name : create).focus({ preventScroll: true });
+        }
+        create.onclick = () => toggleCreate(true);
+        cancel.onclick = () => toggleCreate(false);
         function place() {
             if (!trigger.isConnected) { close(); return; }
             const r = trigger.getBoundingClientRect(), w = document.documentElement.clientWidth, h = innerHeight;
@@ -110,7 +123,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
             if (list.hasChildNodes()) erase(list);
             list.replaceChildren();
             const needle = normalize(input.value.trim());
-            const rows = offered.drafts.filter(d => normalize(d.name).includes(needle)).sort((a,b) => Number(b.id === lastId) - Number(a.id === lastId));
+            const rows = (offered?.drafts ?? []).filter(d => normalize(d.name).includes(needle)).sort((a,b) => Number(b.id === lastId) - Number(a.id === lastId));
             for (const d of rows) {
                 const included = d.scenarioIds.includes(id), row = el("button", "draft-choice");
                 row.type = "button"; row.append(ux.icon("reports"), el("span", "", d.name));
@@ -119,14 +132,37 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
                 row.onclick = () => void edit({ id: d.id, included: !included }, `${included ? "Removed from" : "Added to"} ${d.name}`);
                 list.append(row);
             }
-            status.textContent = rows.length || !input.value ? "" : "No matching drafts."; status.hidden = !status.textContent;
+            status.textContent = readFailed ? "Drafts unavailable. Refresh Analyze and try again."
+                : !offered ? "Loading drafts…" : !offered.drafts.length ? "No drafts yet." : !rows.length ? "No matching drafts." : "";
+            status.hidden = !status.textContent;
             if (panel.isConnected) place();
         }
         const field = searchFields.mount(input, { clearLabel: "Clear draft search", onInput: filter });
         owner = { panel, trigger, events, field }; filter();
         (trigger.closest("dialog:modal") || document.body).append(panel); panel.showPopover(); place();
         trigger.setAttribute("aria-expanded", "true");
-        (form.hidden ? list.querySelector("button") || input : name).focus({ preventScroll: true });
+        input.focus({ preventScroll: true });
+        // A draft may have been created in another tab since the last Analyze snapshot.
+        void (async () => {
+            try {
+                const latest = await api("/api/report-drafts/list", {});
+                if (owner?.panel !== panel || !api.isCurrent(publication)) return;
+                if (!latest || latest.source !== source || catalog?.source !== source) {
+                    readFailed = true;
+                } else {
+                    if (latest.revision >= catalog.revision && latest.boardRevision >= catalog.boardRevision) catalog = latest;
+                    offered = catalog;
+                    for (const b of document.querySelectorAll("button.report-draft-trigger")) paint(b);
+                    create.disabled = false;
+                }
+            } catch (error) {
+                if (owner?.panel !== panel || !api.isCurrent(publication)) return;
+                readFailed = true;
+                status.title = error.message;
+            }
+            list.setAttribute("aria-busy", "false");
+            filter();
+        })();
         document.addEventListener("pointerdown", e => { if (!panel.contains(e.target) && !trigger.contains(e.target)) close(); }, { ...opt, capture: true });
         document.addEventListener("focusin", e => { if (!panel.contains(e.target) && e.target !== trigger) close(); }, opt);
         document.addEventListener("keydown", e => {
