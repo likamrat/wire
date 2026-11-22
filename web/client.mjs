@@ -2973,14 +2973,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!replace) for (const [key, entry] of historyViews) if (entry.position >= historyPosition) historyViews.delete(key);
         if (privateKey) historyViews.set(privateKey, { fields: privateFields, publication, position: historyPosition });
         const previousShortcut = replace && history.state?.wireAccess?.owner === historyOwner ? history.state?.evidenceView?.generalShortcut : undefined;
-        const sameOwner = history.state?.wireAccess?.owner === historyOwner && history.state.wireAccess.epoch === publication.epoch;
-        const helpOrigin = next.view !== "help" || !sameOwner ? undefined
-            : workspaceState.route.view === "help" || replace ? history.state.evidenceView?.helpOrigin
-            : { position: historyPosition - 1, label: compareDestination(workspaceState.route) ? "Compare" : ({
-                settings: "Settings", analyze: "Analyze", reports: "Reports", trends: "Trends", request: "interaction", "collection-status": "Collection status",
-            })[workspaceState.route.view] };
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
-            evidenceView: { url, privateKey, analysisKey, position: historyPosition, helpOrigin,
+            evidenceView: { url, privateKey, analysisKey, position: historyPosition,
             generalShortcut: next.view === "settings" && !next.setting && (generalShortcut || previousShortcut === next.section) ? next.section : undefined,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
@@ -10587,12 +10581,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     $("checkActivity").addEventListener("click", checkActivity);
     $("settingsGeneralBack").onclick = () => { if (!$("settingsGeneralBack").hidden && !appUpdate?.locked()) history.back(); };
-    function currentHelpOrigin() {
-        const state = history.state, origin = state?.evidenceView?.helpOrigin;
-        return workspaceState.route.view === "help" && state?.wireAccess?.owner === historyOwner
-            && state.wireAccess.epoch === api.publicationToken()?.epoch && Number.isSafeInteger(origin?.position)
-            && origin.position >= 0 && origin.position < historyPosition && origin.label ? origin : null;
-    }
     function renderWireHelp() {
         const topic = workspaceState.route.section || "reports";
         for (const article of $("wireHelpView").querySelectorAll("[data-help-article]")) article.hidden = article.dataset.helpArticle !== topic;
@@ -10600,9 +10588,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (link.dataset.helpTopic === topic) link.setAttribute("aria-current", "page");
             else link.removeAttribute("aria-current");
         }
-        const origin = currentHelpOrigin();
-        $("wireHelpBack").hidden = !origin;
-        if (origin) setText($("wireHelpBack").lastElementChild, "Back to " + origin.label);
     }
     for (const link of [$("openEvidenceHelp"), ...$("wireHelpView").querySelectorAll("[data-help-topic]")]) {
         link.addEventListener("click", event => {
@@ -10614,10 +10599,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             navigate({ view: "help", section, analysisQuery: null });
         });
     }
-    $("wireHelpBack").onclick = () => {
-        const origin = currentHelpOrigin();
-        if (origin && !appUpdate?.locked()) history.go(origin.position - historyPosition);
-    };
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

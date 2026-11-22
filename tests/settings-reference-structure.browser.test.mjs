@@ -717,9 +717,8 @@ test("Help returns to unified Activity without losing scope, private query or se
     for (const topic of ["counts", "results"]) {
         await page.locator("#openEvidenceHelp").click();
         await page.locator(`[data-help-topic="${topic}"]`).click();
-        const link = page.getByRole("button", { name: "Back to Analyze", exact: true });
-        await link.focus();
-        await page.keyboard.press("Enter");
+        await page.goBack(); await expect(page.locator("#help-reports")).toBeVisible();
+        await page.goBack();
         await expect(page.locator("#activityTitle")).toHaveText("Activity");
         const params = new URL(page.url()).searchParams;
         assert.equal(params.has("project"), false);

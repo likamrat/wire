@@ -292,7 +292,9 @@ test("footer Help opens the one help destination without collecting and returns 
     await expect(page.locator("#openEvidenceHelp")).toHaveAttribute("aria-current", "page");
     await page.locator('[data-help-topic="counts"]').click();
     await expect(page.locator("#help-counts")).toBeVisible();
-    await page.getByRole("button", { name: "Back to Analyze" }).click();
+    await page.goBack();
+    await expect(page.locator("#help-reports")).toBeVisible();
+    await page.goBack();
     await expect(page.locator("#firstConnection")).toBeVisible();
     await expect(page.locator("#openEvidenceHelp")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });

@@ -710,8 +710,8 @@ metadata and navigates; it never clicks an action or reads private path values.
 The sidebar footer pairs the account avatar and name with Help, Feedback and
 Settings icons. The icons have accessible names and on-demand tooltips. Help
 opens the standalone WIRE Help reader. Topic links open a direct answer followed
-by steps or a worked example. Back returns to the originating workspace or
-Settings category; a direct visit has no invented return. Feedback asks for a required title and
+by steps or a worked example. Like other top-level destinations, Help uses
+browser history and sidebar navigation, not a parent-workspace link. Feedback asks for a required title and
 optional description for a WIRE bug or feature suggestion, not a rating of a
 recorded interaction. **Open on GitHub** prefills the same two fields on the
 new issue form; posting is a separate action on GitHub. The

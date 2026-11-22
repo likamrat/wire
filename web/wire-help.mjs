@@ -1,5 +1,3 @@
-import { uxIcons } from "./ux-icons.mjs";
-
 const topics = [
     ["reports", "Prepare a report", `<p>A preview lets you check the included activity and text before you save any files.</p>
         <ol><li>Open <strong>Reports</strong>. In <strong>New report</strong>, choose the activity to include. Check the dates shown: <strong>All retained dates</strong> includes the full retained history for that scope.</li>
@@ -21,8 +19,7 @@ const topics = [
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>
   <div class="wire-help-layout"><nav class="wire-help-topics" aria-label="Help topics"><h2>Help topics</h2>
     ${topics.map(([id, title]) => `<a href="/help?topic=${id}" data-help-topic="${id}">${title}</a>`).join("")}</nav>
-    <div class="wire-help-reading">${topics.map(([id, title, content]) => `<article data-help-article="${id}" aria-labelledby="help-${id}" hidden><h2 id="help-${id}" tabindex="-1">${title}</h2>${content}</article>`).join("")}</div></div>
-  <button id="wireHelpBack" type="button" class="quiet" hidden>${uxIcons.back} <span></span></button></section>`;
+    <div class="wire-help-reading">${topics.map(([id, title, content]) => `<article data-help-article="${id}" aria-labelledby="help-${id}" hidden><h2 id="help-${id}" tabindex="-1">${title}</h2>${content}</article>`).join("")}</div></div></section>`;
 
 export const wireHelpStyles = `
 .wire-help{max-width:64rem;padding:var(--space-xl);background:var(--paper);border-radius:var(--radius)}
@@ -36,6 +33,6 @@ export const wireHelpStyles = `
 .wire-help-reading{min-width:0;max-width:64ch;font-size:var(--type-reading);line-height:var(--leading-reading)}
 .wire-help-reading h2{font-size:var(--type-section);margin:0}.wire-help-reading h3{font-size:var(--type-reading);margin:var(--space-lg) 0 0}
 .wire-help-reading p{margin:var(--space-sm) 0 0}.wire-help-reading ol{padding-inline-start:1.5em;margin:var(--space-lg) 0 0}.wire-help-reading li+li{margin-top:var(--space-sm)}
-#wireHelpBack{display:inline-flex;align-items:center;gap:var(--space-sm);margin-top:var(--space-lg)}#wireHelpBack[hidden],.wire-help[hidden]{display:none}
+.wire-help[hidden]{display:none}
 @media(max-width:52rem){.wire-help{padding:var(--space-lg)}.wire-help-layout{grid-template-columns:minmax(0,1fr);gap:var(--space-lg)}.wire-help-topics{border-inline-end:0;border-block-end:1px solid var(--surface-divider);padding:0 0 var(--space-md)}}
 @media(forced-colors:active){.wire-help-topics a[aria-current=page]{outline:1px solid CanvasText}}`;

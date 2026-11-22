@@ -657,7 +657,8 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
         await navigateSettings(page, "troubleshooting");
         await page.locator('[data-help-topic="history"]').click();
         await capture(page, `help-history-${width}-${theme}`);
-        await page.getByRole("button", { name: "Back to Settings" }).click();
+        await page.goBack(); await expect(page.locator("#help-reports")).toBeVisible();
+        await page.goBack();
         await page.locator("#settingsSearch").fill("no-such-setting");
         await expect(page.locator("#settingsSearchCount")).toContainText("No settings match");
         await capture(page, `settings-empty-search-${width}-${theme}`);

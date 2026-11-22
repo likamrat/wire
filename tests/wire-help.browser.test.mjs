@@ -12,7 +12,7 @@ test("sidebar Help reads topics and returns to the exact workspace without chang
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
     const effects = [];
     page.on("request", r => { if (r.method() !== "GET" && /\/api\/(?:collection\/(?:now|configure|enabled)|preview|export)$/.test(r.url())) effects.push(r.url()); });
-    for (const [origin, label, narrow] of [["/settings?section=reports", "Settings", false], ["/trends?measure=rhythm", "Trends", true]]) {
+    for (const [origin, narrow] of [["/settings?section=reports", false], ["/?range=14", true]]) {
         await page.goto(new URL(origin, runtime.url).href);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         const previous = page.url();
@@ -29,6 +29,7 @@ test("sidebar Help reads topics and returns to the exact workspace without chang
         await page.locator("#openEvidenceHelp").click();
         const nav = page.getByRole("navigation", { name: "Help topics" });
         await expect(page.getByRole("heading", { level: 1, name: "WIRE Help" })).toBeVisible();
+        await expect(page.locator("#wireHelpView").getByRole("button", { name: /^Back to / })).toHaveCount(0);
         await expect(page.getByRole("heading", { level: 2, name: "Prepare a report" })).toBeVisible();
         const topic = nav.getByRole("link", { name: "Understand activity counts" });
         await topic.focus(); await page.keyboard.press("Enter");
@@ -42,13 +43,17 @@ test("sidebar Help reads topics and returns to the exact workspace without chang
             await mkdir(proof, { recursive: true });
             await page.screenshot({ path: path.join(proof, narrow ? "help-narrow-enlarged.png" : "help-desktop.png"), fullPage: narrow });
         }
-        await page.getByRole("button", { name: "Back to " + label }).click();
+        await page.goBack();
+        await expect(nav.getByRole("link", { name: "Prepare a report" })).toHaveAttribute("aria-current", "page");
+        await page.goBack();
         await expect(page).toHaveURL(previous);
         assert.equal(await page.evaluate(() => JSON.stringify(localStorage)), prefs);
     }
+    await page.goto(new URL("/help", runtime.url).href);
+    await expect(page.locator("#help-reports")).toBeVisible();
+    await expect(page.locator("#wireHelpView").getByText(/^Back to /)).toHaveCount(0);
     await page.goto(new URL("/settings?section=troubleshooting&setting=activity-counts", runtime.url).href);
     await expect(page.locator("#help-counts")).toBeVisible();
     await expect(page).toHaveURL(/\/help\?topic=counts$/);
-    await expect(page.locator("#wireHelpBack")).toBeHidden();
     assert.deepEqual(effects, []);
 });
