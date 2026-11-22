@@ -1,5 +1,5 @@
 // Read-only presentation over the accepted snapshot; never looks up source records.
-export function createCallInvestigation() {
+export function createCallInvestigation(compareEntries) {
     const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
     const duration = (row, layer = "tool") => ["tool", "reported-api", "http"].includes(layer)
         && Number.isFinite(row?.durationMs) && row.durationMs >= 0 ? row.durationMs : null;

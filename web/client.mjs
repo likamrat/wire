@@ -654,7 +654,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     const requestContext = createRequestContext();
-    const callInvestigation = createCallInvestigation();
+    const callInvestigation = createCallInvestigation(requestContext.compare);
     let detailOwner = "page";
     let collection, collectionSettings, sourceSettings, firstConnection, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const privateObjectUrls = new Set();
