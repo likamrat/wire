@@ -1,13 +1,13 @@
 export const pageDefaultSpecs = {
-    analyzeRange: { id: "defaultAnalyzeRange", label: "Date range", help: "Filters saved activity without changing collection.", initial: "capture",
+    analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity without changing collection.", initial: "capture",
         choices: [["capture", "All dates"], ["7", "Last 7 days"], ["30", "Last 30 days"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "A direct link opens its own chart.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
-    reportFormats: { id: "defaultReportFormats", label: "File formats", help: "Choose at least one.", initial: ["html"],
+    reportFormats: { id: "defaultReportFormats", label: "Default file formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
-    reportPeriod: { id: "defaultReportPeriod", label: "Reporting period", help: "Includes today in your display time zone.", initial: "7",
+    reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Includes today in your display time zone.", initial: "7",
         choices: [["7", "Last 7 days"], ["14", "Last 14 days"], ["30", "Last 30 days"]] },
-    compareDays: { id: "defaultCompareDays", label: "Period length", help: "The latest period ends yesterday.", initial: "7",
+    compareDays: { id: "defaultCompareDays", label: "Default comparison period", help: "The two periods are consecutive and equal in length. The latest ends yesterday.", initial: "7",
         choices: [["7", "Last 7 complete days"], ["14", "Last 14 complete days"], ["30", "Last 30 complete days"]] },
 };
 

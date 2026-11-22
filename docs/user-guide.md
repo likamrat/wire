@@ -370,7 +370,7 @@ and a preview with its colors.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
 **Regional**. **Back to General** returns to the shortcut with your current choice.
 
-Under **Page settings**, choose how each page starts in this browser:
+Under **Page defaults**, choose how each page starts in this browser:
 
 | Category | What you can change |
 | --- | --- |

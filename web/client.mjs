@@ -10403,7 +10403,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     for (const category of settingsNavigation.categories) {
         if (category.id === "analyze" || category.headerEntry) {
-            $("settingsCategoryNav").append(el("span", "settings-nav-group", category.headerEntry ? "Support" : "Page settings"));
+            $("settingsCategoryNav").append(el("span", "settings-nav-group", category.headerEntry ? "Support" : "Page defaults"));
         }
         const anchor = el("a");
         setRouteLink(anchor, routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));

@@ -13,10 +13,20 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     await expect(page.locator("#generalTitle")).toBeVisible();
     const nav = page.locator("#settingsCategoryNav");
     await expect(nav.getByRole("link")).toHaveCount(11);
+    await expect(nav.getByText("Page defaults", { exact: true })).toBeVisible();
+    const namedDefaults = {
+        analyze: [["defaultAnalyzeRange-control", "Default date range"]],
+        trends: [["defaultTrendChart-control", "Default trend chart"]],
+        reports: [["defaultReportFormats", "Default file formats"], ["defaultReportPeriod-control", "Default reporting period"]],
+        compare: [["defaultCompareDays-control", "Default comparison period"]],
+    };
     const ids = await nav.getByRole("link").evaluateAll(links => links.map(a => a.dataset.category));
     for (const id of ids) {
         await nav.locator(`[data-category="${id}"]`).click();
         await expect(page.locator(`[data-settings-section="${id}"] > h2 + .settings-intro`)).toBeVisible();
+        for (const [control, name] of namedDefaults[id] ?? []) {
+            await expect(page.locator("#" + control)).toHaveAccessibleName(name);
+        }
     }
     const query = page.getByRole("searchbox", { name: "Search settings" });
     await query.fill("default file formats");

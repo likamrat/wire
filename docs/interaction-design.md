@@ -650,7 +650,9 @@ Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,
 Source access, Themes, Regional, Privacy & saved data, and Help. Under **Page
-settings**, Analyze, Trends, Reports and Compare own their opening defaults.
+defaults**, Analyze, Trends, Reports and Compare own their opening defaults.
+Name each default in its visible control label or group legend so its purpose
+is clear even without the navigation. Explain when it applies in the category intro.
 General does not repeat this directory. Apply a default only to a fresh entry;
 an explicit link, a return position, a selected period or a resumed draft keeps
 its own context. Report format defaults select files, not a disclosure policy
