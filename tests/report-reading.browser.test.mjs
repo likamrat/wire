@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
@@ -9,6 +10,99 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+
+test("pattern counts lead to one matching interaction and preserve the individual call links", async t => {
+    const records = [403, 403, 403, 403, 404].map((statusCode, index) => {
+        const record = fixture(`pattern-count-${index}`);
+        record.capturedAt = new Date().toISOString();
+        record.userPrompt.text = `Check the calendar for Cedar planning session ${index + 1}.`;
+        record.followUpPrompts = [];
+        Object.assign(record.toolCalls[0], { startedAt: record.capturedAt, toolSucceeded: false,
+            reportedOutcome: "failed", apiResults: [{ index: 0, statusCode }] });
+        return record;
+    });
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
+    let runtime, browser;
+    t.after(async () => { await browser?.close(); await runtime?.close(); for (const fn of cleanup) await fn(); });
+    await updateBoardState(context, state => { state.pseudonymKey = "1".padStart(64, "0"); });
+    runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
+    browser = await chromium.launch();
+    const profile = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await profile.newPage();
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseTheme(page, "light");
+    const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
+    await prepareLandingReport(page, "errors");
+    const prepared = await (await response).json(), frame = page.frameLocator(".report-contained-frame");
+    const [group, single] = prepared.snapshot.reportPatterns.groups.filter(g => g.kind === "errors");
+    assert.deepEqual([group.interactionRefs.length, single.interactionRefs.length], [4, 1]);
+    const expected = group.interactionRefs[0], call = group.callRefs.at(-1);
+    const heading = "Interaction " + (prepared.records.findIndex(record => record.scenarioId === expected) + 1);
+    const row = surface => surface.locator('.report-pattern-table tbody tr').filter({ hasText: "403" });
+    const count = surface => row(surface).locator('[data-label="Interactions"] a');
+    const disclosure = surface => row(surface).locator('[data-label="Calls"] summary');
+    const proofs = process.env.WIRE_PATTERN_COUNT_PROOFS;
+    async function capture(surface, name) {
+        if (!proofs) return;
+        await mkdir(proofs, { recursive: true });
+        await surface.screenshot({ path: path.join(proofs, name + ".png"), animations: "disabled" });
+    }
+    await frame.locator('.report-nav a[href$="#patterns"]').click();
+    await expect(count(frame)).toHaveText("4");
+    await expect(count(frame)).toHaveAttribute("href", `about:srcdoc#${expected}`);
+    await capture(page, "reader");
+    await page.keyboard.press("Tab");
+    await expect(count(frame)).toBeFocused();
+    await expect(count(frame)).toHaveCSS("outline-style", "solid");
+    await expect(count(frame)).toHaveAccessibleName(`4 matching interactions: go to ${heading}`);
+    await capture(page, "keyboard-focus");
+    await page.keyboard.press("Enter");
+    await expect(frame.locator(`[id="${expected}"]`)).toBeFocused();
+    await expect(frame.locator(`[id="${expected}"] > h3`)).toHaveText(heading);
+    await expect(frame.locator(".wire-reading-interaction[open]")).toHaveCount(1);
+    await capture(page, "destination");
+    await frame.locator('.report-nav a[href$="#patterns"]').click();
+    await disclosure(frame).click();
+    await row(frame).locator(`a[href$="#${call}"]`).click();
+    await expect(frame.locator(`[id="${call}"]`)).toBeFocused();
+
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const file = (await loadBoardState(context)).exports[0].files["product-report.html"];
+    const savedHtml = await readFile(file, "utf8");
+    assert.equal(savedHtml, prepared.files["product-report.html"]);
+    if (proofs) await writeFile(path.join(proofs, "synthetic-report.html"), savedHtml);
+    const html = await profile.newPage();
+    await html.goto(pathToFileURL(file).href);
+    await html.locator('.report-nav a[href="#patterns"]').click();
+    await capture(html, "html");
+    await count(html).click();
+    await expect(html.locator(":target")).toHaveAttribute("id", expected);
+    await html.goBack();
+    await disclosure(html).click();
+    await row(html).locator(`a[href="#${call}"]`).click();
+    await expect(html.locator(":target")).toHaveAttribute("id", call);
+    await expect(count(html)).toHaveCSS("text-decoration-line", "none");
+    await expect(count(html)).toHaveAccessibleName(`4 matching interactions: go to ${heading}`);
+
+    await html.close();
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 540, height: 900 });
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    const saved = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
+    await saved.locator('.report-nav a[href$="#patterns"]').click();
+    const singleRow = saved.locator(".report-pattern-table tbody tr").filter({ hasText: "404" });
+    const one = singleRow.getByRole("link", { name: /^1 matching interaction:/ });
+    await capture(page, "saved-narrow-dark");
+    await one.click();
+    await expect(saved.locator(":target")).toHaveAttribute("id", single.interactionRefs[0]);
+    await expect(saved.locator(".wire-reading-interaction[open]")).toHaveCount(1);
+    await saved.locator('.report-nav a[href$="#patterns"]').click();
+    await singleRow.getByRole("link", { name: /^Report call / }).click();
+    await expect(saved.locator(":target")).toHaveAttribute("id", single.callRefs[0]);
+    assert.equal(await readFile(file, "utf8"), prepared.files["product-report.html"]);
+});
 
 test("edited reports give actual HTML a reading pane without opening text inspection", { timeout: 60000 }, async t => {
     const records = Array.from({ length: 127 }, (_, index) => {

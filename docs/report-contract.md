@@ -198,6 +198,13 @@ nor success. Unverified authors remain available through All.
 
 `reportPatterns` v3 binds normalized operations and distinct error channels to
 their calls and interactions. It does not infer root causes or prompt similarity.
+In a new HTML pattern table, the arrow beside **Interactions** links to one
+example, not a filtered list: its destination is the group's first stored
+interaction reference. The link names the total and the destination's report
+number. The in-app report reader opens that interaction's disclosure. In v3
+error rows, **Calls** links to the individual report call, or expands a list of
+call links when there are several. Plain call totals are not actions. These
+reading controls do not change membership or rewrite earlier saved HTML.
 For conflicting returned statuses with error evidence, patterns preserve both
 the reported and diagnostic sides and label the conflict. Version 1 patterns and
 all saved population flags retain their original frozen meaning; they are not
