@@ -156,23 +156,8 @@ export const settingsMarkup = `
   </div>
   ${pageSettings("analyze", "Analyze", "Choose the default date range and how Guide opens.", ["analyzeRange", "guideStart"])}
   ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
-  ${pageSettings("reports", "Reports", "Set the default formats and period for new reports only.", ["reportFormats", "reportPeriod"])}
+  ${pageSettings("reports", "Reports", "Set defaults for new reports. Existing drafts and saved files stay as they are.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}
-  <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
-    <h2 id="troubleshootingTitle" tabindex="-1">Help</h2>
-    <p class="settings-intro">Interpret your activity or troubleshoot missing results.</p>
-    <section class="settings-evidence-guide" aria-labelledby="evidenceHelpTitle"><h3 id="evidenceHelpTitle">Reading your activity</h3>
-      <details id="activityCountHelp" class="settings-advanced"><summary>What do the counts include?</summary><p>Counts include matching saved activity across all pages. A request group links calls to a recorded Copilot message. One group can contain several calls; Insights can include the rest of that interaction.</p></details>
-      <details id="activityResultHelp" class="settings-advanced"><summary>What does a successful result mean?</summary><p>The tool reported success. That does not tell you whether the answer was correct or the whole task finished. Graph requests inside hosted Work IQ are not visible in local chat logs.</p></details>
-    </section>
-    <section class="settings-group" aria-labelledby="historyHelpTitle">
-      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Check which chats WIRE could read. Changing a date filter does not collect more history.</p></div><a class="button-link quiet" href="/collection-status" data-settings-link>Open collection status ${uxIcons.forward}</a></div>
-    </section>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link quiet" href="/collection-status?setting=network-diagnostic" data-settings-link>View diagnostic ${uxIcons.forward}</a></div>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="/" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="/" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search uses saved activity and reports. Check collection status for missing history.</p></details>
-  </section>
   </div>
   </div>
 </section>

@@ -12,10 +12,10 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     await page.goto(new URL("/settings", runtime.url).href);
     await expect(page.locator("#generalTitle")).toBeVisible();
     const nav = page.locator("#settingsCategoryNav");
-    await expect(nav.getByRole("link")).toHaveCount(11);
+    await expect(nav.getByRole("link")).toHaveCount(10);
     const group = nav.getByRole("group", { name: "WIRE defaults" });
     await expect(group.getByRole("link")).toHaveText(["Analyze", "Trends", "Reports", "Compare"]);
-    await expect(nav.getByRole("link", { name: "Help" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Help" })).toHaveCount(0);
     const namedDefaults = {
         analyze: [["defaultAnalyzeRange-control", "Default date range"], ["defaultGuideStart-control", "Open Guide to"]],
         trends: [["defaultTrendChart-control", "Default trend chart"]],

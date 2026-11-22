@@ -20,8 +20,8 @@ import { openReportLibrary, chooseReportScope, reportContents, scanReport, selec
 async function assertSettingsCategoryNavigation(page, { keyboard = false } = {}) {
     const url = new URL(page.url()); url.hash = "";
     const categories = [
-        ["privacy", "dataManagementTitle"], ["display", "displayTitle"],
-        ["troubleshooting", "troubleshootingTitle"], ["connection", "connectionTitle"],
+        ["privacy", "dataManagementTitle"], ["themes", "themesTitle"],
+        ["regional", "regionalTitle"], ["connection", "connectionTitle"],
     ];
     for (const [category, heading] of categories) {
         if (keyboard) {
@@ -307,7 +307,7 @@ test("fresh Copilot-only ordinary app preserves Settings category navigation and
         await assertSettingsCategoryNavigation(page, { keyboard: true });
         await expect(page.locator("#settingsCategories")).not.toHaveAttribute("open");
         await page.goBack();
-        await expect(page.locator("[data-settings-section=troubleshooting]")).toBeVisible();
+        await expect(page.locator("[data-settings-section=regional]")).toBeVisible();
         await page.goForward();
         await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
         await page.setViewportSize({ width: 1440, height: 1000 });

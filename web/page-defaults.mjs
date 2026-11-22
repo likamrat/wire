@@ -2,7 +2,7 @@ const recentDays = ["7", "14", "30"];
 const rollingPeriods = recentDays.map(days => [days, `Last ${days} days`]);
 
 export const pageDefaultSpecs = {
-    analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity without changing collection.", initial: "capture",
+    analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },

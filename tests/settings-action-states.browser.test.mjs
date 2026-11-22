@@ -117,13 +117,13 @@ test("Settings current location, transient hover and keyboard focus are distinct
         const focus = await paint(current);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-settings-focus.png`) });
         await page.keyboard.press("Enter");
-        for (const category of ["display", "privacy", "troubleshooting", "connection"]) {
+        for (const category of ["themes", "privacy", "regional", "connection"]) {
             await navigateSettings(page, category);
             await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", category);
             await expect(page.locator("[data-settings-section]:visible")).toHaveAttribute("data-settings-section", category);
         }
         await page.goBack();
-        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "troubleshooting");
+        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "regional");
         await page.goForward();
         await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "connection");
         await page.reload();

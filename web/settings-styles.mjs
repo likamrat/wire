@@ -74,7 +74,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-categories {padding:0}
 .settings-categories>summary {display:none}
 .settings-categories nav,.settings-default-links {display:flex;flex-direction:column}
-.settings-default-links {margin-block:var(--space-lg) var(--space-sm);padding-block-end:var(--space-sm);border-block-end:1px solid var(--surface-divider)}
+.settings-default-links {margin-block-start:var(--space-lg)}
 .settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:var(--space-md);border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
 .settings-categories a>.wire-icon {width:1.125rem;height:1.125rem;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}

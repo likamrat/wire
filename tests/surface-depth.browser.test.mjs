@@ -170,7 +170,7 @@ test("existing screen families share soft depth and themed switches without chan
         await page.locator("#closeContextSidebar").click();
         await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
         await navigateMain(page, "settings");
-        for (const category of ["connection", "privacy", "display", "troubleshooting"]) {
+        for (const category of ["connection", "privacy", "themes", "regional"]) {
             await navigateSettings(page, category);
             await capture(`${theme}-settings-${category}`, [".settings-content"]);
             if (category === "connection") {

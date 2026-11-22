@@ -682,9 +682,9 @@ current value and keep keyboard focus visible around the link.
 Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,
-Source access, Themes, Regional, Privacy & saved data, and Help. **WIRE
+Source access, Themes, Regional, and Privacy & saved data. **WIRE
 defaults** groups the four destinations with starting preferences in this
-browser: Analyze, Trends, Reports and Compare. Help remains a separate link.
+browser: Analyze, Trends, Reports and Compare. The first group starts at General without a heading.
 Name each default in its visible control label or group legend so its purpose
 is clear even without the navigation. The category intro names the default
 behavior being changed even on direct entry.
@@ -699,12 +699,14 @@ metadata and navigates; it never clicks an action or reads private path values.
 
 The sidebar footer pairs the account avatar and name with Help, Feedback and
 Settings icons. The icons have accessible names and on-demand tooltips. Help
-opens the existing Help destination. Feedback asks for a required title and
+opens the standalone WIRE Help reader. Topic links open a direct answer followed
+by steps or a worked example. Back returns to the originating workspace or
+Settings category; a direct visit has no invented return. Feedback asks for a required title and
 optional description for a WIRE bug or feature suggestion, not a rating of a
 recorded interaction. **Open on GitHub** prefills the same two fields on the
 new issue form; posting is a separate action on GitHub. The
 account menu shows the complete bound identity even if the name is clipped.
-Keep static explanations of counts and recorded tool outcomes there. Coverage
+Keep static explanations of counts and recorded tool outcomes in Help. Coverage
 warnings belong with the affected activity and link to Collection status.
 
 While a Settings query is present, replace the category list with grouped

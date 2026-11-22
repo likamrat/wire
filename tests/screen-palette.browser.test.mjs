@@ -236,7 +236,7 @@ test("the built workbench carries each palette through screens and nested readin
         assert.equal(await editorBody.innerText(),previous);
         await control.locator(`.palette-option:has(#palette-${palette})`).click(); await control.close();
         await navigateMain(page, "settings");
-        for (const category of ["connection", "privacy", "themes", "regional", "troubleshooting"]) {
+        for (const category of ["connection", "privacy", "themes", "regional"]) {
             await navigateSettings(page, category);
             await inspect(`settings-${category}`, theme);
         }

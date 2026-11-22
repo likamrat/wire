@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
-import { privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
+import { privateFixture, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
@@ -198,8 +198,9 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
     await navigateMain(page, "analyze");
     await expect(page.locator("#activityView details#coverage")).toHaveCount(0);
-    await page.locator("#openEvidenceHelp").click();
-    await page.getByRole("link", { name: "Open collection status", exact: true }).click(); await ready(page);
+    await navigateMain(page, "settings");
+    await navigateSettings(page, "connection");
+    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
     await expect(page.locator("#coverageBody")).toContainText("2 interactions");
     await page.locator("#wireAccountTrigger").click(); await page.locator("#wireAccountGate").click();
@@ -287,18 +288,18 @@ test("footer Help opens the one help destination without collecting and returns 
     await page.keyboard.press("Escape");
     await page.locator("#openEvidenceHelp").focus();
     await page.keyboard.press("Enter");
-    await expect(page.locator("#troubleshootingTitle")).toBeFocused();
-    await expect(page.locator('[data-category="troubleshooting"]')).toHaveAttribute("aria-current", "page");
-    await page.locator("#activityCountHelp summary").click();
-    await expect(page.locator("#activityCountHelp p")).toBeVisible();
-    await page.goBack();
+    await expect(page.locator("#pageTitle")).toBeFocused();
+    await expect(page.locator("#openEvidenceHelp")).toHaveAttribute("aria-current", "page");
+    await page.locator('[data-help-topic="counts"]').click();
+    await expect(page.locator("#help-counts")).toBeVisible();
+    await page.getByRole("button", { name: "Back to Analyze" }).click();
     await expect(page.locator("#firstConnection")).toBeVisible();
     await expect(page.locator("#openEvidenceHelp")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#navigationToggle").click();
     await page.locator("#navigationDrawer #openEvidenceHelp").click();
     await expect(page.locator("#navigationDrawer")).toBeHidden();
-    await expect(page.locator("#troubleshootingTitle")).toBeFocused();
+    await expect(page.locator("#pageTitle")).toHaveText("WIRE Help");
     assert.equal(mutations.length, 0);
 });
 

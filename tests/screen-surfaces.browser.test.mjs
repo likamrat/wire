@@ -281,7 +281,7 @@ test("production screens use cool-neutral surfaces, Asta Sans and Petrol and cor
         await inspect("report-setup", theme);
         fontPaint.push(await paintedFont(".report-author-choice>label"));
         await navigateMain(page, "settings");
-        for (const category of ["connection", "privacy", "ai", "display", "troubleshooting"]) {
+        for (const category of ["connection", "privacy", "themes", "regional"]) {
             await navigateSettings(page, category);
             await inspect(`settings-${category}`, theme);
         }

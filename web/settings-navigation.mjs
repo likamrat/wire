@@ -11,13 +11,11 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "trends", title: "Trends", heading: "trendsSettingsTitle", group: "defaults" },
         { id: "reports", title: "Reports", heading: "reportsSettingsTitle", group: "defaults" },
         { id: "compare", title: "Compare", heading: "compareSettingsTitle", group: "defaults" },
-        { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle" },
     ];
     const sectionAliases = {
         ...(updates ? { updates: { section: "general" } } : {}),
         display: { section: "themes" },
         theme: { section: "themes" },
-        help: { section: "troubleshooting" },
         collection: { section: "connection", setting: "history-window" },
         history: { section: "connection", setting: "history-window" },
         data: { section: "privacy", setting: "delete-activity" },
@@ -57,11 +55,6 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "collection-details", view: "collection-status", title: "Collection technical details", context: "Open Collection status for last check, source counts and explained reading limits.", synonyms: "diagnostics checked timestamp freshness technical status limits advanced", target: "collectionSetup" },
         { id: "collection-status", view: "collection-status", title: "Collection status", context: "Read current history coverage and connection issues. No source check is started.", synonyms: "troubleshooting health reading status", target: "pageTitle" },
         { id: "network-diagnostic", view: "collection-status", title: "Optional network diagnostic", context: "Read the saved HTTP recorder status. A new public Graph request needs separate confirmation.", synonyms: "http recorder graph test diagnostic", target: "recorderDiagnostics" },
-        { id: "activity-counts", section: "troubleshooting", title: "What do the counts include?", context: "Distinguish matching calls, request groups and complete interactions across all pages.", synonyms: "counters filters insights totals scope measures", target: "activityCountHelp" },
-        { id: "recorded-results", section: "troubleshooting", title: "What does a successful result mean?", context: "Understand recorded tool outcomes and what cannot be inferred about task completion.", synonyms: "success failure tool call evidence Graph hosted", target: "activityResultHelp" },
-        { id: "service-provenance", section: "troubleshooting", title: "How services are identified", context: "Understand missing or unsupported service targets without guessing which service ran.", synonyms: "service details mapping attribution provenance unknown files tools calls", target: "serviceProvenanceHelp" },
-        { id: "author-provenance", section: "troubleshooting", title: "How prompt authors are identified", context: "Understand missing or conflicting sender evidence. The prompt author and tool executor are different.", synonyms: "prompt authors user agent author unverified attribution provenance sender", target: "authorProvenanceHelp" },
-        { id: "settings-search", section: "troubleshooting", title: "Missing search results", context: "Find text in saved activity and reports, and understand incomplete results.", synonyms: "search troubleshooting help no matches local text query partial results", target: "settingsSearchDetails" },
     ];
     function resolve(route) {
         let section = route.section || categories[0].id, setting = route.setting, warning = "";
@@ -72,6 +65,9 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         }
         if (Object.hasOwn(settingAliases, setting)) setting = settingAliases[setting];
         const entry = entries.find(entry => entry.id === setting);
+        const oldHelp = { "activity-counts": "counts", "recorded-results": "results", "service-provenance": "results", "author-provenance": "results", "settings-search": "history" };
+        if (!entry && (section === "troubleshooting" || section === "help" || Object.hasOwn(oldHelp, setting)))
+            return { view: "help", section: Object.hasOwn(oldHelp, setting) ? oldHelp[setting] : "reports", warning: "" };
         if (entry?.view === "collection-status" || (!entry && (route.view === "collection-status" || section === "diagnostics"))) {
             return { view: "collection-status", section: undefined, setting: entry?.id,
                 warning: setting && !entry ? "Unknown collection detail. Showing Collection status." : "" };

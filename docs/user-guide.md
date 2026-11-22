@@ -481,8 +481,12 @@ Drag the sidebar's right edge to resize it. With the divider focused, use the
 left and right arrow keys. WIRE remembers your width in this browser;
 double-click the edge or press Enter on it to restore the default.
 
-Use **Help** at the bottom of the sidebar for the meaning of counts
-and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
+Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
+**Find missing activity**, **Understand activity counts**, or **Read tool results**.
+Select a topic to read its answer, or use **Back to** to return to where you
+opened Help. Chart definitions and examples stay in the Analyze and Trends guides.
+
+In Collection status, **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
 

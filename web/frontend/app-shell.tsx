@@ -183,7 +183,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <div className="navigation-bottom"><div id="navigationFooter" className="navigation-footer">
                 <div id="wireAccountEntry" hidden />
                 <nav className="footer-utilities" aria-label="Utility navigation">
-                    <a id="openEvidenceHelp" href="/settings?section=troubleshooting" aria-label="Help" data-settings-link />
+                    <a id="openEvidenceHelp" href="/help" aria-label="Help" />
                     <button type="button" id="wireFeedback" className="icon-only" aria-label="Feedback" aria-haspopup="dialog" popoverTarget="wireFeedbackPanel" />
                     <a href="/settings" data-nav="settings" aria-label="Settings" aria-current={state.active === "settings" ? "page" : undefined}
                         onClick={event => navigate(event.currentTarget, event.nativeEvent)} />

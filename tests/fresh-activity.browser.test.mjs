@@ -1715,7 +1715,7 @@ test("Refresh and its completion stay in Analyze and the source task, not unrela
     assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
     assert.deepEqual(await peers(), ["connectionSource", "freshActivity", "connectionPreferences"]);
     await capture("connection-completed");
-    for (const section of ["display", "privacy", "ai", "troubleshooting"]) {
+    for (const section of ["themes", "privacy", "regional"]) {
         await navigateSettings(page, section);
         assert.equal(await page.locator("#checkActivity").isVisible(), false);
         assert.equal(await page.locator("#freshStatus").isVisible(), false);

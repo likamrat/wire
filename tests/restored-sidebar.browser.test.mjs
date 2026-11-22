@@ -147,7 +147,7 @@ test("Settings retains access to the existing Analyze sidebar actions", async t 
     await navigateMain(page, "settings"); await ready(page);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        for (const section of ["connection", "privacy", "display", "troubleshooting"]) {
+        for (const section of ["connection", "privacy", "themes", "regional"]) {
             await navigateSettings(page, section);
             await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
             for (const id of ["comparePeriods", "pageAction"]) {

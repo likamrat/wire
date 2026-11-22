@@ -11,7 +11,7 @@ import { navigateSettings, chooseTheme, selectActivityOption } from "./helpers.m
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_COMPACT_SETTINGS_PROOFS;
-const categories = ["connection", "privacy", "display", "troubleshooting"];
+const categories = ["connection", "privacy", "regional"];
 
 async function setup(t, { unknownBilling = false } = {}) {
     const cleanups = [], denied = [], errors = [], posts = [];
@@ -113,7 +113,7 @@ test("compact Settings keeps four current categories readable, bounded and actio
                 assert.ok(value.rows[index].y - value.rows[index - 1].bottom <= 1, "One divider, not stacked margins and padding between peer rows");
             }
             if (width === 1440) {
-                const limits = { connection: 490, privacy: 430, ai: 165, display: 225, troubleshooting: 375 };
+                const limits = { connection: 490, privacy: 430, regional: 225 };
                 assert.ok(value.pane.height <= limits[category], `${category} pane stays compact: ${value.pane.height}; rows=${JSON.stringify(value.rows)}`);
             }
             measures.push({ theme, width, ...value });

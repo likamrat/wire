@@ -11,7 +11,7 @@ import { navigateMain, navigateSettings, chooseTheme, selectActivityOption, open
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_SETTINGS_REDESIGN_PROOFS;
-const categories = ["connection", "privacy", "themes", "regional", "troubleshooting"];
+const categories = ["connection", "privacy", "themes", "regional"];
 
 async function setup(t, { unknownBilling = false, preferenceSave = false, announcementProbe = false } = {}) {
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -262,7 +262,6 @@ test("Settings action boundaries remain clearly visible against their surface in
             ["privacy", ["#recollectActivity", '[data-settings-section=privacy] a.button-link']],
             ["connection", ["#pauseCollection"]],
             ["source-access", ["#editSource"]],
-            ["troubleshooting", ['[data-settings-section=troubleshooting] a.button-link']],
         ]) {
             await navigateSettings(page, category);
             await capture(page, `action-boundaries-${category}-${theme}`);
@@ -656,11 +655,9 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await navigateSettings(page, "troubleshooting");
-        for (const id of ["serviceProvenanceHelp", "authorProvenanceHelp", "settingsSearchDetails"]) {
-            const details = page.locator("#" + id);
-            if (!await details.evaluate(node => node.open)) await details.locator("summary").click();
-        }
-        await capture(page, `troubleshooting-expanded-${width}-${theme}`);
+        await page.locator('[data-help-topic="history"]').click();
+        await capture(page, `help-history-${width}-${theme}`);
+        await page.getByRole("button", { name: "Back to Settings" }).click();
         await page.locator("#settingsSearch").fill("no-such-setting");
         await expect(page.locator("#settingsSearchCount")).toContainText("No settings match");
         await capture(page, `settings-empty-search-${width}-${theme}`);
@@ -1058,13 +1055,14 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
     }, null, 2));
 });
 
-test("Troubleshooting converges collection investigation but keeps the unrelated HTTP diagnostic distinct", { timeout: 30000 }, async t => {
+test("Collection keeps its status destination distinct from the optional HTTP diagnostic", { timeout: 30000 }, async t => {
     const { page, posts } = await setup(t);
-    await navigateSettings(page, "troubleshooting");
+    await navigateSettings(page, "connection");
     await expect(page.locator('#settingsView a[href="/collection-status"]:visible')).toHaveCount(1);
     await expect(page.locator('#settingsView a[href="/collection-status?setting=issues"]:visible')).toHaveCount(0);
     await expect(page.locator('#settingsView a[href="/collection-status?setting=collection-details"]:visible')).toHaveCount(0);
-    const diagnostic = page.locator('#settingsView a[href="/collection-status?setting=network-diagnostic"]');
+    await page.locator("#settingsSearch").fill("Optional network diagnostic");
+    const diagnostic = page.locator('#settingsSearchResults a[data-setting="network-diagnostic"]');
     await expect(diagnostic).toBeVisible();
     await diagnostic.click();
     await expect(page.locator("#recorderDiagnostics")).toHaveAttribute("open", "");
@@ -1072,7 +1070,7 @@ test("Troubleshooting converges collection investigation but keeps the unrelated
     await expect(page.locator("#recorderPurpose")).toContainText("not collection");
     assert.equal(posts.includes("/api/record"), false);
     await page.goBack();
-    await expect(page.locator("[data-settings-section=troubleshooting]")).toBeVisible();
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     await page.locator('#settingsView a[href="/collection-status"]:visible').click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
     assert.equal(posts.some(value => /\/(?:record|confirm|approve|configure|enabled|now)$/.test(value)), false);

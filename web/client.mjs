@@ -2973,8 +2973,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!replace) for (const [key, entry] of historyViews) if (entry.position >= historyPosition) historyViews.delete(key);
         if (privateKey) historyViews.set(privateKey, { fields: privateFields, publication, position: historyPosition });
         const previousShortcut = replace && history.state?.wireAccess?.owner === historyOwner ? history.state?.evidenceView?.generalShortcut : undefined;
+        const sameOwner = history.state?.wireAccess?.owner === historyOwner && history.state.wireAccess.epoch === publication.epoch;
+        const helpOrigin = next.view !== "help" || !sameOwner ? undefined
+            : workspaceState.route.view === "help" || replace ? history.state.evidenceView?.helpOrigin
+            : { position: historyPosition - 1, label: compareDestination(workspaceState.route) ? "Compare" : ({
+                settings: "Settings", analyze: "Analyze", reports: "Reports", trends: "Trends", request: "interaction", "collection-status": "Collection status",
+            })[workspaceState.route.view] };
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
-            evidenceView: { url, privateKey, analysisKey, position: historyPosition,
+            evidenceView: { url, privateKey, analysisKey, position: historyPosition, helpOrigin,
             generalShortcut: next.view === "settings" && !next.setting && (generalShortcut || previousShortcut === next.section) ? next.section : undefined,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
@@ -4032,7 +4038,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!workspaceState.analytics || queryChanged || workspaceState.loading) {
             if (workspaceState.analytics && (workspaceState.route.view !== previousRoute.view || workspaceState.route.compare !== previousRoute.compare)) {
                 const destination = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view;
-                const name = { analyze: "Analyze", trends: "Trends", compare: "Compare", reports: "Reports", settings: "Settings",
+                const name = { analyze: "Analyze", trends: "Trends", compare: "Compare", reports: "Reports", settings: "Settings", help: "WIRE Help",
                     request: "Interaction", "collection-status": "Collection status" }[destination];
                 const active = destination === "request" ? "analyze" : destination === "collection-status" ? "settings" : destination;
                 for (const node of document.querySelectorAll("nav [data-nav]")) {
@@ -4096,6 +4102,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 revealSetting();
                 if (restorePosition && position && (!workspaceState.route.setting || position.focus?.key?.startsWith("settings-search:")
                     || $(position.focus?.id)?.hasAttribute("data-general-shortcut"))) restoreReading(position);
+            }
+            else if (workspaceState.route.view === "help" && !restorePosition) {
+                const target = previousRoute.view === "help" ? $("help-" + (workspaceState.route.section || "reports")) : $("pageTitle");
+                target?.focus();
             }
             else if (workspaceState.route.view === "collection-status") {
                 revealCollectionStatus();
@@ -4560,7 +4570,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || workspaceState.route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
         const active = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view === "request" ? underlyingRoute().view === "trends" ? "trends" : "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
-        document.title = ({ analyze: "Analyze", trends: "Trends", reports: "Reports", compare: "Compare", settings: "Settings" }[active] || "Analyze") + " | WIRE";
+        document.title = ({ analyze: "Analyze", trends: "Trends", reports: "Reports", compare: "Compare", settings: "Settings", help: "WIRE Help" }[active] || "Analyze") + " | WIRE";
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
             setNavigationLink(node);
@@ -4570,8 +4580,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         periodBackToTrends.hidden = !(trendPeriodVisit && api.isCurrent(trendPeriodVisit.publication)
             && trendPeriodVisit.destination === historyPosition && workspaceState.route.compare === "periods"
             && trendPeriodVisit.target === readingKey(workspaceState.route));
-        const settings = workspaceState.route.view === "settings", operational = workspaceState.route.view === "collection-status", configurationOrStatus = settings || operational;
-        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView", ...($("frontendBreakdowns") ? ["frontendBreakdowns"] : [])], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
+        const settings = workspaceState.route.view === "settings", operational = workspaceState.route.view === "collection-status", help = workspaceState.route.view === "help", configurationOrStatus = settings || operational || help;
+        if (help) {
+            renderWireHelp();
+            $("openEvidenceHelp").setAttribute("aria-current", "page");
+        } else $("openEvidenceHelp").removeAttribute("aria-current");
+        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView", ...($("frontendBreakdowns") ? ["frontendBreakdowns"] : [])], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], help: ["wireHelpView"], "collection-status": ["collectionStatusView"] })) {
             for (const id of ids) $(id).hidden = workspaceState.route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
         }
         const expired = expiredTrendEntry(workspaceState.route);
@@ -4602,7 +4616,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             reports: [workspaceState.route.bundle ? savedReportView?.bundleId === workspaceState.route.bundle && savedReportView.entryKey === workspaceState.route.savedEntry
                 ? savedReportView.title : savedTitle(workspaceState.evidence.exports?.find(item => item.bundleId === workspaceState.route.bundle))
                 : workspaceState.route.task === "create" ? "Create a report" : "Reports", ""],
-            settings: ["Settings", ""],
+            settings: ["Settings", ""], help: ["WIRE Help", ""],
             "collection-status": ["Collection status", ""],
         };
         setPageHeading(titles[workspaceState.route.view][0]);
@@ -7446,7 +7460,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activitySelectionContext").hidden = !activity && !hasBaseSelection;
         if (workspaceState.route.view === "request") $("reportContextAction").hidden = !hasBaseSelection;
         $("activityClearSelection").hidden = !activity && !hasBaseSelection;
-        $("reportSelectionBar").hidden = ["request", "reports", "settings", "collection-status"].includes(workspaceState.route.view)
+        $("reportSelectionBar").hidden = ["request", "reports", "settings", "help", "collection-status"].includes(workspaceState.route.view)
             || !hasBaseSelection && !unknownSelected;
         updateRequestReportActions();
         document.querySelectorAll("[data-clear-selection]").forEach(control => {
@@ -8847,7 +8861,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && collection.revision === model.sourceFailure.revision
             && collection.lastCheck?.id === model.sourceFailure.lastCheckId
             && collection.error === model.sourceFailure.error;
-        host.hidden = ["settings", "collection-status"].includes(workspaceState.route.view) || !notice
+        host.hidden = ["settings", "help", "collection-status"].includes(workspaceState.route.view) || !notice
             || ["reports", "request", "trends"].includes(workspaceState.route.view) && notice?.severity === "normal"
             || workspaceState.route.view === "analyze" && notice?.severity === "normal" && collection?.state === "paused" && collection?.config?.approved
             || !$("message").hidden && $("message").dataset.connectionFailure === "true"
@@ -10573,10 +10587,40 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     $("checkActivity").addEventListener("click", checkActivity);
     $("settingsGeneralBack").onclick = () => { if (!$("settingsGeneralBack").hidden && !appUpdate?.locked()) history.back(); };
+    function currentHelpOrigin() {
+        const state = history.state, origin = state?.evidenceView?.helpOrigin;
+        return workspaceState.route.view === "help" && state?.wireAccess?.owner === historyOwner
+            && state.wireAccess.epoch === api.publicationToken()?.epoch && Number.isSafeInteger(origin?.position)
+            && origin.position >= 0 && origin.position < historyPosition && origin.label ? origin : null;
+    }
+    function renderWireHelp() {
+        const topic = workspaceState.route.section || "reports";
+        for (const article of $("wireHelpView").querySelectorAll("[data-help-article]")) article.hidden = article.dataset.helpArticle !== topic;
+        for (const link of $("wireHelpView").querySelectorAll("[data-help-topic]")) {
+            if (link.dataset.helpTopic === topic) link.setAttribute("aria-current", "page");
+            else link.removeAttribute("aria-current");
+        }
+        const origin = currentHelpOrigin();
+        $("wireHelpBack").hidden = !origin;
+        if (origin) setText($("wireHelpBack").lastElementChild, "Back to " + origin.label);
+    }
+    for (const link of [$("openEvidenceHelp"), ...$("wireHelpView").querySelectorAll("[data-help-topic]")]) {
+        link.addEventListener("click", event => {
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            if (!api.publicationToken()) { navigateAccessShell("help"); return; }
+            const section = link.dataset.helpTopic || "reports";
+            if (workspaceState.route.view === "help" && (workspaceState.route.section || "reports") === section) return;
+            navigate({ view: "help", section, analysisQuery: null });
+        });
+    }
+    $("wireHelpBack").onclick = () => {
+        const origin = currentHelpOrigin();
+        if (origin && !appUpdate?.locked()) history.go(origin.position - historyPosition);
+    };
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        if (node.id === "openEvidenceHelp" && !api.publicationToken()) { navigateAccessShell("settings"); return; }
         const target = readRoute(node.getAttribute("href"), null);
         const changes = { section: target.section, setting: target.setting, issues: undefined };
         const mode = new URLSearchParams(node.search).get("mode");
@@ -11147,7 +11191,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("accessShell").hidden = false;
         const active = compareDestination(workspaceState.route) ? "compare" : workspaceState.route.view === "request" ? "analyze" : workspaceState.route.view === "collection-status" ? "settings" : workspaceState.route.view;
         workspaceState.present({ active, view: workspaceState.route.view });
-        const title = { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports", trends: "Trends" }[active] || "Analyze";
+        const title = { analyze: "Analyze", compare: "Compare", settings: "Settings", reports: "Reports", trends: "Trends", help: "WIRE Help" }[active] || "Analyze";
         setText($("accessPageTitle"), title);
         document.title = title + " | WIRE";
         $("accessSettings").hidden = active === "settings";
@@ -11170,7 +11214,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         history.replaceState(safe, "");
     }
     function navigateAccessShell(view) {
-        if (!["analyze", "compare", "reports", "settings", "trends"].includes(view) || clearingAccess) return;
+        if (!["analyze", "compare", "reports", "settings", "trends", "help"].includes(view) || clearingAccess) return;
         sidebar.close(false);
         initialRoute = null;
         const url = view === "analyze" ? "/" : "/" + view;
@@ -11197,7 +11241,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.view !== "settings" || !["connection", "source-access"].includes(settingsNavigation.resolve(workspaceState.route).section)
             || value.mode !== "enforced" || value.state?.wire !== "signed-in"
             || !value.readable && value.reason !== "generation-changed") return false;
-        for (const id of ["homeView", "activityView", "requestView", "reportsView", "collectionStatusView",
+        for (const id of ["homeView", "activityView", "requestView", "reportsView", "wireHelpView", "collectionStatusView",
             "filters", "appliedFilters", "filterChips", "coverageNotice", "pagePrimaryActions",
             "pageIntro", "pageIdentity", "pageProject", "analyzeTools", "analyzeToolbar"]) $(id).hidden = true;
         $("settingsView").hidden = false;

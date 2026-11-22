@@ -177,10 +177,11 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             }
         }
         if (group === "Settings") {
-            for (const section of ["general","connection","source-access","themes","regional","privacy","troubleshooting"]) {
+            for (const section of ["general","connection","source-access","themes","regional","privacy"]) {
                 await go("/settings?section="+section);
                 await drag("Settings: "+section, `[data-settings-section="${section}"]`);
             }
+            await go("/help"); await drag("WIRE Help", "#wireHelpView");
             await go("/settings?section=source-access");
             await page.locator("#editSource").click(); await drag("source review draft", "#sourceEditor");
             await go("/settings?section=privacy");

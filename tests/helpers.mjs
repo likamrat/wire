@@ -104,7 +104,7 @@ export async function navigateSettings(page, category) {
     if (category === "troubleshooting") {
         if (!await page.locator("#openEvidenceHelp").isVisible()) await page.locator("#navigationToggle").click();
         await page.locator("#openEvidenceHelp").click();
-        await page.locator('[data-settings-section="troubleshooting"]').waitFor({ state: "visible" });
+        await page.locator("#wireHelpView").waitFor({ state: "visible" });
         return;
     }
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
