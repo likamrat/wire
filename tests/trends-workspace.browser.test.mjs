@@ -184,6 +184,60 @@ async function screenshot(page, name) {
     await page.screenshot({ path: path.join(proof, `${name}.png`) });
 }
 
+test("service columns share their card surface and label sparse daily groups without losing any series", async t => {
+    const { page, index } = await setup(t,true);
+    await index.getByRole("button",{name:"Services",exact:true}).click();
+    const card = panelOf(page,"services"), plot = card.locator(".trends-plot");
+    for (const theme of ["light","dark"]) {
+        await chooseTheme(page,theme);
+        const surface = await card.evaluate(card => {
+            const plot=card.querySelector(".trends-plot");
+            return [getComputedStyle(card).backgroundColor,getComputedStyle(plot).backgroundColor,getComputedStyle(plot.querySelector(".trends-y-axis rect")).fill];
+        });
+        assert.equal(surface[1],surface[0]); assert.equal(surface[2],surface[0]);
+    }
+    for (const name of ["Mail","Files"]) await expect(plot.getByRole("button",{name:`Nov 16, 2026: ${name}, 2 calls`})).toHaveText(`${name} 2`);
+    await expect(plot.getByText("0",{exact:true})).toHaveCount(6); // Five all-zero days and the scale origin.
+    await expect(plot.locator("[data-trend-mark]")).toHaveCount(21);
+    await plot.getByRole("button",{name:"Nov 16, 2026: Mail, 2 calls"}).tap();
+    await card.getByRole("button",{name:"View 2 calls"}).click();
+    await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
+});
+
+test("aligned call heights agree and changing weeks keep their own denominators", async t => {
+    const records=callsFixture(), sun=fixture("harbor-sunday");
+    Object.assign(sun.toolCalls[0],{startedAt:"2026-11-15T12:00:00Z"});
+    const {page}=await setup(t,false,{records:[...records,sun]});
+    await page.getByRole("navigation",{name:"Trends sections"}).getByRole("button",{name:"Overview"}).click();
+    const landing=page.locator(".trends-landing:visible");
+    await expect(landing).toContainText("No matching dated calls");
+    await expect(landing.getByRole("button",{name:/Nov 17.*no matching dated calls/i})).toHaveAccessibleName(/0 interactions/);
+    await expect(landing.getByRole("button",{name:"Nov 15, 2026: Errors & failures, 0 interactions",exact:true})).toBeVisible();
+    await page.getByRole("button",{name:"Call volume and duration",exact:true}).click();
+    const pair=page.locator(".trends-panel-pair"), plots=pair.locator(".trends-plot:visible");
+    const select=(i,v)=>selectActivityOption(page,`trendsPairMeasure${i}`,JSON.stringify(v));
+    await select(2,["tools","workiq-retrieve","count"]);
+    await pair.getByRole("button",{name:"Aligned charts",exact:true}).click();
+    const heights=await plots.evaluateAll(plots=>plots.map(plot=>{
+        const ys=plot.querySelectorAll(".trends-y-axis text"), baseline=+ys[0].getAttribute("y")-4;
+        const mark=plot.querySelector('[aria-label^="Nov 16, 2026:"] :is(circle[cx], rect[x])');
+        return {axis:[...ys].map(n=>n.textContent),height:baseline-(mark.tagName==="rect"?+mark.getAttribute("y")+mark.getBBox().height/2:+mark.getAttribute("cy"))};
+    }));
+    assert.deepEqual(heights[0].axis,heights[1].axis); assert.ok(Math.abs(heights[0].height-3*heights[1].height)<1);
+    await select(1,["rhythm","rhythm","share"]);
+    await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
+    await expect(plots.first().locator("[data-week-boundary]")).toHaveCount(1);
+    for (const [date,share,dates] of [[15,"100%","Nov 12 – Nov 15"],[16,"75%","Nov 16 – Nov 18"]]){
+        const mark=plots.first().getByRole("button",{name:new RegExp(`Nov ${date}.*${share}`)});
+        await mark.focus(); await mark.press("Enter");
+        await expect(pair.locator(".trend-pair-readings")).toContainText(dates);
+        await expect(page.locator("#trendsTooltip")).toContainText(dates);
+    }
+    await pair.getByText("Daily values",{exact:true}).click();
+    await expect(pair.getByRole("row",{name:/Nov 16, 2026/})).toContainText("3 of 4");
+    await expect(pair.getByRole("row",{name:/Nov 16, 2026/})).toContainText("Nov 16 – Nov 18");
+});
+
 test("compiled index applies every available filter, supports calendar navigation and pages without changing the full period", { timeout: 90000 }, async t => {
     const { page, reads } = await setup(t), region = page.locator("#trendsView"), card = panelOf(page, "rhythm");
     const period = page.locator("#trendsPeriod"), filter = region.locator(".filter-entry");
@@ -277,7 +331,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         assert.deepEqual(await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label"))), names);
         await panel.getByRole("button", { name: "Columns", exact: true }).click();
         if (id !== "timing") {
-            await panel.getByRole("button", { name: "Percentage", exact: true }).click();
+            await panel.getByRole("button", { name: id === "rhythm" ? "Share within week" : "Percentage", exact: true }).click();
             await panel.getByRole("button", { name: "Count", exact: true }).click();
         }
         for (const check of await panel.locator(".trends-series input").all()) { await check.uncheck(); await expect(check).not.toBeChecked(); }

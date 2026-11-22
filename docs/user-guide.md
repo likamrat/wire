@@ -143,7 +143,9 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 ## Trends
 
 Choose **Trends** in the sidebar. **Overview** shows the daily number of
-interactions with a recorded error or failure. Select a day to inspect its
+interactions with a recorded error or failure. A cross at zero means no matching
+dated calls; a circle at zero means there was activity but no recorded error.
+Select a day to inspect its
 supporting calls in **Charts**. Charts lists all seven measures; **Chart guide**
 explains what each counts. Use Back to return to the chart you were reading. On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
@@ -191,6 +193,9 @@ from an example on Overview. For example, compare **Errors & failures ·
 interaction share** with a tool's **interaction reach**. Both count matching
 interactions that day, so they can share one graph. Call share uses a different
 denominator; call volume and duration use different units. These use aligned charts.
+Aligned charts share a vertical scale when their units and denominators match.
+**Share within week** marks each week boundary; its line stops there because the
+next point uses a different denominator. Select a date to see that week's selected dates.
 
 Select a point for its exact daily reading and matching calls. **Remove
 comparison** drops the second measure; **Collapse chart** keeps your choices.
@@ -199,14 +204,15 @@ correlation describes that page's paired daily values, not causation or
 individual calls. **Compare periods** instead compares this period with the
 preceding period of equal length. Review the dates and scope before opening
 Compare; **Back to Trends** returns to the pair and selected day.
-On an individual chart, **Data table** includes daily numbers and period
+On grouped columns, one zero under a date means all **shown** series are zero.
+Unavailable measurements use a dash instead. On an individual chart, **Data table** includes daily numbers and period
 totals, including series hidden in the chart.
 
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
 | Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
-| Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; shaded partial weeks include only selected dates. |
+| Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; a short rule along the date axis marks partial weeks. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |

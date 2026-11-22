@@ -398,7 +398,7 @@ test("weekly shares name clipped calendar windows", { timeout: 30000 }, async t 
     const { page } = await setupIndex(t);
     await dates(page, "2026-08-01", "2026-08-03");
     const panel = page.locator('[data-family="rhythm"]');
-    await panel.getByRole("button", { name: "Percentage", exact: true }).click();
+    await panel.getByRole("button", { name: "Share within week", exact: true }).click();
     const mark = panel.locator("[data-trend-mark]").last();
     await mark.focus();
     await expect(page.locator("#trendsTooltip")).toBeVisible();

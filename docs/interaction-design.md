@@ -206,7 +206,7 @@ redefine the underlying evidence. Omit redundant subheaders and the repeated
 "tool calls" caption beneath the Tool calls total.
 Duration shortcuts and legend checkboxes share one series-visibility state.
 Weekly shares name the actual calendar week and its selected-date denominator;
-partial-week shading and week boundaries distinguish denominator changes without
+partial-week rules and week boundaries distinguish denominator changes without
 changing daily membership or the calculation. Exact tables retain every column
 in a keyboard-scrollable region with intrinsic column sizing and semantic headers.
 Collapsed rows contain the title, applied date range and sizing controls, not

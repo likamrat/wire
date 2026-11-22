@@ -252,7 +252,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
     let pairActive=false;
     pairHost.hidden=landingExtra.hidden=true;
-    const pair = mountTrendPair({root:pairHost,el,button,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,
+    const pair = mountTrendPair({root:pairHost,el,button,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,
         evidence:(choice,day,ids,origin)=>openMembers(day,choice.label,ids,origin,choice.key),
         close:()=>{pairActive=false;paint();index.querySelector(`[data-measure="${activeMeasure}"]`).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
@@ -330,7 +330,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (id !== "timing") {
             const units = el("div", "trends-switch");
             units.setAttribute("role", "group"); units.setAttribute("aria-label", `${spec.label} units`);
-            for (const [value, label] of [["count", "Count"], ["share", "Percentage"]]) {
+            for (const [value, label] of [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
                 const control = button(label, () => {
                     if (!current()) return;
                     card.mode = value === "share" && id === "tools" ? card.percentMode : value;
@@ -759,7 +759,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         } else if (id === "timing" && allCharts) limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         else if (id === "rhythm" && mode === "share" && source.days.some(day => weekContext(day).partial))
-            limits.push("Shaded partial weeks use only the selected dates.");
+            limits.push("Underlined weeks include only the selected dates.");
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${number(totals.calls)} calls timed`
@@ -806,7 +806,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const dates = (from, to) => from === to ? time.formatDate(from, data.timeContext, true)
             : `${time.formatDate(from, data.timeContext)} – ${time.formatDate(to, data.timeContext, true)}`;
         return { from, to, partial, label: `Week ${dates(from, to)}`,
-            detail: `${number(day.values.rhythm[0].eligible)} calls on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
+            detail: `${number(day.values.rhythm[0].eligible)} ${day.values.rhythm[0].eligible === 1 ? "call" : "calls"} on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
     }
     function dayScope(day, card) {
         const scope = card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
@@ -1000,14 +1000,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "overview") {
             const card = cards.get("problems");
             landingOpen.disabled = false;
-            landingScope.textContent = ["Affected interactions per day", restrictionText.textContent, card.limits.textContent,
+            landingScope.textContent = ["Affected interactions per day", data.totals.calls && data.days.some(day => !day.calls) ? "× No matching dated calls" : "",
+                restrictionText.textContent, card.limits.textContent,
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;
             landingDetail.textContent = card.emptyDetail.textContent;
             landingRecover.hidden = card.showWeek.hidden; landingRecover.textContent = card.showWeek.textContent;
             if (landingSource !== data) {
                 landingSource = data;
-                if (data.totals.calls) landingChart.render(data, "problems", "count", new Set(), null, "lines", true);
+                if (data.totals.calls) landingChart.render(data, "problems", "count", new Set(), null, "lines", true, {distinguishEmpty:true});
                 else { landingChart.withdrawAccess(); landingWindow.hidden = true; }
             }
         }
@@ -1173,9 +1174,9 @@ export const trendsStyles = `
 .trends-summary{min-width:0;container:trend-summary / inline-size;max-height:var(--trends-plot-height);overflow:auto;scrollbar-gutter:stable}
 .trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:0}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .trends-stat-value{font-size:1.25rem;line-height:var(--leading-heading);font-weight:var(--weight-regular);font-variant-numeric:tabular-nums}
-.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);background:var(--canvas);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
+.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);background:var(--paper);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
-.trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
+.trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-baseline{stroke:var(--muted)}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}
