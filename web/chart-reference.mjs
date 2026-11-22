@@ -36,6 +36,7 @@ export const chartReferenceMarkup = `
   <p id="chartReferenceStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
   <section id="chartReferenceIndex" class="chart-reference-index" aria-labelledby="chartReferenceIndexTitle" hidden>
     <h3 id="chartReferenceIndexTitle" tabindex="-1">Choose a chart</h3>
+    <button id="chartReferenceTopicToggle" type="button" class="quiet" aria-expanded="false" aria-controls="chartReferenceTopics" hidden>Topics</button>
     <nav id="chartReferenceTopics" class="chart-reference-topics" aria-label="Chart guide topics"></nav>
   </section>
   <div id="chartReferenceGuide" class="chart-reference-layout">
@@ -112,11 +113,11 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (className) node.className = className;
         return node;
     };
-    const control = (text, action, className = "quiet") => {
+    const control = (text, action, className = "quiet", views = ["guide", "index"]) => {
         const button = el("button", text, className), token = contextToken;
         button.type = "button";
         button.addEventListener("click", () => {
-            if (button.isConnected && root.open && !closing && ["guide", "index"].includes(state.value().view)
+            if (button.isConnected && root.open && !closing && views.includes(state.value().view)
                 && button.checkVisibility() && currentView(token)) action();
         });
         return button;
@@ -315,13 +316,39 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         return [...new Set([...usual, ...outcomeKeys.filter(key => context.model?.outcomes.rows.some(row => row.id === key && row.count > 0))])];
     }
     function workedExample(topic) {
-        if (context.mode !== "analyze" || context.nativeOnly) return "";
-        if (topic === "outcomes" && ["tool", "reported-api"].includes(context.layer)) return "One fetch finishes and returns two entries: HTTP 200 for a file and HTTP 403 for a message. That is one completed call. The 403 is an error for the message, not a failed tool call.";
-        if (topic === "services" && context.layer === "tool") return "One interaction asks Copilot for help, then fetches a file. Files is the fetch target. The Ask record does not list the apps Copilot used, so the fetch does not establish that Copilot used Files.";
+        if (topic === "outcomes" && !context.nativeOnly && ["tool", "reported-api"].includes(context.layer)) return "Two calls in one interaction can report different kinds of errors. The retrieval below failed; the fetch finished but returned an error for one item.";
+        if (topic === "services" && !context.nativeOnly && context.layer === "tool") return "One interaction asks Copilot for help, then fetches two targets. Only one target is recognized as Files. That tells you about the fetch, not which apps Copilot used.";
         if (topic === "categories" && context.layer === "tool") return "A fetch targeting Files and Mail counts once under More than one service, rather than once in each service category.";
         if (topic === "authors") return "A human prompt followed by four tool calls contributes one human prompt, not four agent prompts.";
         if (topic === "models") return "An interaction with two model names appears in both rows. One without a name appears in neither, but still counts toward the total.";
+        if (topic === "time") return "An undated record can count toward the selected period but cannot be assigned to Tuesday. Moving the visible window does not change the period total.";
+        if (topic === "tools") return context.layer === "tool" ? "Three separate fetch calls count three times. One fetch requesting three targets counts once." : "One tool can account for several records. Its record count is not a separate count of invocations.";
+        if (topic === "paths") return context.layer === "code-reference" ? "A path mentioned in code is still a reference when no execution or response was observed." : "Two paths on one batch do not prove that the first returned item belongs to the first path.";
+        if (topic === "outcomes" && context.layer === "code-reference") return "A request mentioned in a script is a reference, not a successful or failed execution.";
+        if (topic === "outcomes" && context.layer === "tool") return "A call without a usable result is not a failed call. A source that explicitly reports partial completion has supplied a different outcome.";
+        if (topic === "outcomes") return "An HTTP 403 is evidence about that recorded response, not proof that the entire interaction failed.";
+        if (topic === "services" || topic === "categories") return "A record with no qualified service target cannot be counted as activity in Mail simply because another record mentions Mail.";
         return "";
+    }
+    function examplePanel(topic) {
+        const example = el("aside", undefined, "chart-reference-example");
+        example.append(el("h4", "Worked example"), el("p", "Illustrative, not from your activity", "guide-example-caption"), el("p", workedExample(topic)));
+        const cases = !context.nativeOnly && context.layer === "tool" && ({
+            outcomes: [["workiq-retrieve", "Tool failed", "A recorded ToolUnavailable error belongs to this invocation."],
+                ["workiq-fetch", "Tool completed", "Returned entries: HTTP 200 for a file and HTTP 403 for a message."]],
+            services: [["workiq-ask", "No downstream app list", "The request to Copilot is recorded; the apps used internally are not."],
+                ["workiq-fetch", "One of two targets identified", "One path identifies Files. The other path was saved, but WIRE cannot classify it."]],
+        })[topic];
+        if (cases) {
+            const list = el("div", undefined, "guide-example-calls");
+            cases.forEach(([tool, result, detail], i) => {
+                const entry = el("details"), summary = el("summary");
+                summary.append(el("span", `Call ${i + 1} · ${tool}`, "guide-example-caption"), el("span", result), ux.icon("next"));
+                entry.append(summary, el("p", detail)); list.append(entry);
+            });
+            example.append(list);
+        }
+        return example;
     }
     function serviceGuide(host) {
         const section = group(), data = context.model?.services;
@@ -408,55 +435,84 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         }
         const section = group(); section.append(list); host.append(section);
     }
+    function readingTopic(key) {
+        const tool = context.layer === "tool";
+        return {
+            outcomes: tool ? ["A tool call failed", "Did the tool fail, or did it return an error?"]
+                : context.layer === "code-reference" ? ["Execution not observed", "Does a reference mean the code ran?"]
+                    : ["Recorded outcomes", "What do the recorded statuses tell me?"],
+            services: ["A service is unidentified", "Why is the service unidentified?"],
+            time: tool ? ["When calls happened", "When did calls start?"] : ["Activity over time", "When was the activity recorded?"],
+            tools: tool ? ["Which tools ran", "How often was each tool used?"] : ["Tools behind records", "Which tools are associated with these records?"],
+            authors: ["Recorded prompt authors", "What is recorded about the prompt author?"],
+            models: ["Which models appeared", "Which response models were recorded?"],
+            categories: ["How activity is grouped", tool ? "How are calls with several targets grouped?" : "How are records assigned to a category?"],
+            paths: ["Which path was requested", "Which path or operation was requested?"],
+        }[key];
+    }
+    function setTopicChooser(open) {
+        $("chartReferenceTopicToggle").setAttribute("aria-expanded", String(open));
+    }
     function renderIndex() {
         const { topic, view } = state.value(), navigation = $("chartReferenceTopics");
         navigation.replaceChildren();
         const comparison = context.mode === "comparison";
         const sets = comparison ? [["", ["outcomes", "time", "categories"]]] : [
-            [context.layer === "tool" ? "Tool calls" : "Recorded activity", ["outcomes", "time", "tools", "services"]],
-            ["Interactions", ["authors", "models"]], ["Other chart groupings", ["categories", "paths"]],
+            ["Investigate a result", ["outcomes", "services"]], ["Read a measure", ["time", "tools", "authors", "models", "categories", "paths"]],
         ];
         for (const [title, keys] of sets) {
             const list = el("div", undefined, "chart-reference-topic-group");
             if (title) list.append(el("h4", title));
             for (const key of keys) {
-                const button = control(topicName(key), () => navigate("guide", key), "chart-reference-topic");
+                const button = control(comparison ? topicName(key) : readingTopic(key)[0], () => {
+                    setTopicChooser(false);
+                    if (navigate("guide", key) && !comparison && currentView()) $("chartReferenceTopicTitle").focus({ preventScroll: true });
+                }, "chart-reference-topic", comparison ? ["guide", "index"] : ["guide", "data"]);
                 button.dataset.referenceTopic = key;
-                if (view === "guide" && key === topic) button.setAttribute("aria-current", "page");
+                if (view !== "index" && key === topic) button.setAttribute("aria-current", "page");
                 button.setAttribute("aria-controls", "chartReferenceExplanation"); list.append(button);
             }
             navigation.append(list);
         }
-        $("chartReferenceIndexTitle").textContent = comparison ? "Compare" : "Choose a topic";
+        $("chartReferenceIndexTitle").textContent = comparison ? "Compare" : "Topics";
+        const toggle = $("chartReferenceTopicToggle");
+        toggle.hidden = comparison;
+        if (!comparison) toggle.replaceChildren(doc.createTextNode("Topics · " + readingTopic(topic)[0]), ux.icon("next"));
         $("chartReferenceAllTopics").replaceChildren(ux.icon("back"), doc.createTextNode("All topics"));
     }
     function renderGuide() {
         const topic = state.value().topic;
         renderIndex();
         const host = $("chartReferenceExplanation");
-        const title = el("h3", topicName(topic)); title.id = "chartReferenceTopicTitle"; title.tabIndex = -1;
+        const analyze = context.mode === "analyze";
+        const title = el("h3", analyze ? readingTopic(topic)[1] : topicName(topic)); title.id = "chartReferenceTopicTitle"; title.tabIndex = -1;
         host.replaceChildren(title);
+        if (analyze) {
+            const chartName = el("p", undefined, "guide-chart-name");
+            chartName.append(ux.icon("section-guide"), doc.createTextNode(topicName(topic))); title.before(chartName);
+        }
         const introduction = context.nativeOnly ? topic === "outcomes" && context.layer === "tool"
             ? "Each call counts once. Completion does not establish answer correctness." : "" : intro(topic);
         if (introduction) host.append(el("p", introduction, "chart-reference-intro"));
         qualify(host);
-        if (context.nativeView) nativeGuide(host, topic);
+        const reading = analyze ? el("div", undefined, "guide-reading") : host;
+        if (analyze) reading.append(el("h4", "How to read it"));
+        if (context.nativeView) nativeGuide(reading, topic);
         if (!context.nativeOnly) {
-            if (context.nativeView) host.append(el("h3", "GitHub Copilot"));
-            if (topic === "outcomes") outcomeGuide(host);
-            else if (topic === "services") serviceGuide(host);
-            else otherGuide(host, topic);
+            if (context.nativeView) reading.append(el("h4", "GitHub Copilot"));
+            if (topic === "outcomes") outcomeGuide(reading);
+            else if (topic === "services") serviceGuide(reading);
+            else otherGuide(reading, topic);
         }
-        const sample = workedExample(topic);
-        if (sample) {
-            const example = el("aside", undefined, "chart-reference-example");
-            example.append(el("h4", "Example"), el("p", sample)); host.append(example);
+        if (analyze) {
+            const spread = el("div", undefined, "guide-reading-spread");
+            spread.append(reading, examplePanel(topic)); host.append(spread);
         }
         if (topic === "outcomes" && context.mode === "analyze" && context.layer === "tool" && !context.nativeOnly) {
             const related = el("details", undefined, "chart-reference-related");
             related.append(el("summary", "Returned API entries"), el("p", help.layers["reported-api"]),
                 el("p", "A retained entry with no usable status is still an entry. A call with no returned entries adds nothing to that total. A recorder connection failure without a response is a separate HTTP record."));
-            host.append(related);
+            reading.append(related);
         }
         const actions = $("chartReferenceActions");
         actions.replaceChildren();
@@ -479,13 +535,14 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const backToPage = $("closeChartReference");
         backToPage.setAttribute("aria-label", context.mode === "comparison" ? "Close chart guide" : "Back to Analyze");
         if (backToPage.dataset.mode !== context.mode) {
-            backToPage.replaceChildren(...(context.mode === "comparison" ? [ux.icon("close")] : [ux.icon("back"), doc.createTextNode("Analyze")]));
+            backToPage.replaceChildren(...(context.mode === "comparison" ? [ux.icon("close")] : [ux.icon("back"), doc.createTextNode("Back to Analyze")]));
             backToPage.dataset.mode = context.mode;
         }
         exactRender = null;
         exactQualification();
         $("chartReferenceGuide").hidden = !guide;
-        $("chartReferenceIndex").hidden = !index && !(guide && context.mode === "analyze");
+        $("chartReferenceIndex").hidden = !index && context.mode !== "analyze";
+        $("chartReferenceAllTopics").hidden = context.mode === "analyze";
         $("chartReferenceExact").hidden = current.view !== "data";
         $("chartReferenceSource").hidden = !context.canOpenData;
         $("chartReferenceNotice").textContent = context.notice || "";
@@ -495,7 +552,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (index) renderIndex();
         else if (guide) renderGuide();
         else {
+            if (context.mode === "analyze") renderIndex();
             $("chartReferenceDataTitle").textContent = topicName(current.topic);
+            $("chartReferenceBack").replaceChildren(ux.icon("back"), doc.createTextNode("Back to explanation"));
             $("chartReferenceFind").hidden = current.topic !== "paths";
             $("chartReferenceFindInput").value = rowQuery;
             $("chartReferenceFindInput").disabled = !context.canOpenData;
@@ -537,6 +596,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             trigger.setAttribute("aria-expanded", "false");
             if (root.open) root.close();
             host.hidden = true;
+            setTopicChooser(false);
             if (restoreFocus && currentView(token) && !root.open && state.value().view === "closed" && returnFocus?.checkVisibility()) {
                 if (root.dataset.mode === "analyze") doc.defaultView.scrollTo(0, returnY);
                 returnFocus.focus({ preventScroll: true });
@@ -627,6 +687,10 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     $("chartReferenceAllTopics").addEventListener("click", () => {
         if (root.open && !closing && state.value().view === "guide" && currentView()) navigate("index");
     });
+    $("chartReferenceTopicToggle").addEventListener("click", () => {
+        const toggle = $("chartReferenceTopicToggle");
+        if (root.open && !closing && toggle.checkVisibility() && currentView()) setTopicChooser(toggle.getAttribute("aria-expanded") !== "true");
+    });
     $("chartReferenceFindInput").addEventListener("input", event => {
         if (!root.open || closing || state.value().view !== "data" || state.value().topic !== "paths" || !currentView() || !context.canOpenData) return;
         rowQuery = event.target.value;
@@ -635,7 +699,11 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     root.addEventListener("cancel", event => { event.preventDefault(); dismiss(); });
     root.addEventListener("keydown", event => {
         if (event.key !== "Escape" || event.defaultPrevented || !root.open || root.dataset.mode !== "analyze") return;
-        event.preventDefault(); dismiss();
+        event.preventDefault();
+        const toggle = $("chartReferenceTopicToggle");
+        if (toggle.checkVisibility() && toggle.getAttribute("aria-expanded") === "true") {
+            setTopicChooser(false); toggle.focus();
+        } else dismiss();
     });
     ux.dismissOnOutside(root, dismiss);
     root.addEventListener("close", () => { if (!root.open && state.value().view !== "closed") navigate("closed"); });
@@ -728,7 +796,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     return {
         open: topic => sync({ view: "guide", topic }),
-        openAnalyze: start => start === "last" && lastAnalyzeTopic ? sync({ view: "guide", topic: lastAnalyzeTopic }) : sync({ view: "index", topic: "outcomes" }),
+        openAnalyze: start => sync({ view: "guide", topic: start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
         close: requestClose,
         leave: () => sync({ view: "closed" }),
         refresh: () => {

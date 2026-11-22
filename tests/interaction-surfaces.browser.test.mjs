@@ -253,9 +253,13 @@ test("Guide topic navigation and return actions retain visible hover feedback wi
             assert.equal(hover.box.width, rest.box.width); assert.equal(hover.box.height, rest.box.height);
             await capture(page, `${theme}-${width}-${scale}-guide-${name}`);
         }
+        const toggle = page.locator("#chartReferenceTopicToggle");
+        if (await toggle.isVisible()) {
+            await highlight(toggle, "topics");
+            await toggle.click(); await settle(page);
+        }
         await highlight(topic, "topic");
         await topic.click(); await settle(page);
-        await highlight(page.locator("#chartReferenceAllTopics"), "return");
         await highlight(page.locator("#chartReferenceShowData"), "exact-data");
         await page.locator("#chartReferenceShowData").click(); await settle(page);
         await highlight(page.locator("#chartReferenceBack"), "back");

@@ -104,7 +104,7 @@ async function setup(t, { layer = "tool", source } = {}) {
 
         document.getElementById("openChartReference").addEventListener("click", () => {
             if (window.context.mode === "comparison") window.guide.open();
-            else window.guide.openAnalyze("index");
+            else window.guide.openAnalyze("outcomes");
         });
     }, {
         factories: { mount: mountChartReference.toString(), state: createChartReferenceState.toString(), facts: chartReferenceFacts.toString(),
@@ -120,6 +120,8 @@ async function setup(t, { layer = "tool", source } = {}) {
 const choice = (page, topic) => page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`);
 async function openTopic(page, topic) {
     await page.locator("#openChartReference").click();
+    const toggle = page.locator("#chartReferenceTopicToggle");
+    if (await toggle.isVisible()) await toggle.click();
     await choice(page, topic).click();
 }
 
@@ -352,8 +354,9 @@ test("chart guide uses accepted chart facts, native exact links and a text-only 
     const page = await setup(t);
     await page.locator("#openChartReference").click();
     assert.equal(await page.locator("#openChartReference svg").count(), 0);
-    assert.equal(await page.locator("#meaning").getAttribute("data-reference-view"), "index");
-    await choice(page, "outcomes").click();
+    assert.equal(await page.locator("#meaning").getAttribute("data-reference-view"), "guide");
+    assert.equal(await choice(page, "outcomes").getAttribute("aria-current"), "page");
+    await page.locator("#chartReferenceExplanation summary").filter({ hasText: "workiq-fetch" }).click();
     const article = await page.locator("#chartReferenceExplanation").innerText();
     assert.match(article, /6 Work IQ tool calls/);
     assert.match(article, /HTTP 403/);
@@ -430,7 +433,6 @@ test("source-defined units keep counts without pooled outcome or service shares"
     assert.match(await page.locator("#chartReferenceExplanation").innerText(), /These results use different source units/);
     assert.match(await page.locator("#chartReferenceExplanation").innerText(), /6 Work IQ tool calls/);
     assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /66\.7%/);
-    await page.locator("#chartReferenceAllTopics").click();
     await choice(page, "services").click();
     assert.equal(await page.locator("#chartReferenceExplanation .chart-reference-share").count(), 0);
     assert.equal(await page.locator(".chart-reference-service-track:visible").count(), 0);
@@ -475,14 +477,14 @@ for (const layer of ["tool", "reported-api", "direct-request", "recorded-http", 
         const page = await setup(t, { layer, source });
         const title = layer === "tool" ? "Tool call outcomes" : createRecordedResults().outcomeTitle(layer);
         await page.locator("#openChartReference").click();
-        assert.equal(await choice(page, "outcomes").innerText(), title);
         await choice(page, "outcomes").click();
-        assert.equal(await page.locator("#chartReferenceTopicTitle").innerText(), title);
+        assert.match(await page.locator("#chartReferenceTopicTitle").innerText(), /\?$/);
+        assert.ok((await page.locator("#chartReferenceExplanation").innerText()).includes(title));
         assert.match(await page.locator("#chartReferenceExplanation").innerText(),
             new RegExp(`${expected.totals.count} ${createRecordedResults().unit(layer, expected.totals.count)}`));
         if (layer === "code-reference") {
             assert.match(await page.locator("#chartReferenceExplanation").innerText(), /Execution not observed/);
-            assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /HTTP 2xx|Worked/);
+            assert.doesNotMatch(await page.locator("#chartReferenceExplanation").innerText(), /HTTP 2xx|^Worked$/m);
         }
         await page.locator("#chartReferenceShowData").click();
         assert.equal(await page.locator("#chartReferenceDataTitle").innerText(), title);
@@ -607,11 +609,22 @@ test("guide details reflow in both themes and at 200% text without hidden focus"
     }
 });
 
-test("the flat index and exact data preserve topmost Escape without mutating chart context", async t => {
+test("compact topic selection and exact data preserve topmost Escape without mutating chart context", async t => {
     const page = await setup(t);
     await page.setViewportSize({ width: 390, height: 844 });
     await openTopic(page, "services");
-    assert.equal(await page.locator("#chartReferenceTopicTitle").innerText(), "Services and operations");
+    assert.match(await page.locator("#chartReferenceTopicTitle").innerText(), /\?$/);
+    assert.equal(await choice(page, "services").getAttribute("aria-current"), "page");
+    assert.equal(await page.locator("#chartReferenceTopics").isVisible(), false);
+    assert.equal(await page.evaluate(() => window.context.key), "accepted-one");
+    await page.locator("#chartReferenceShowData").click();
+    const toggle = page.locator("#chartReferenceTopicToggle");
+    assert.equal(await toggle.isVisible(), true);
+    await toggle.click();
+    assert.equal(await choice(page, "services").getAttribute("aria-current"), "page");
+    await choice(page, "outcomes").click();
+    assert.equal(await page.locator("#chartReferenceTopics").isVisible(), false);
+    assert.equal(await page.locator("#meaning").getAttribute("data-reference-topic"), "outcomes");
     assert.equal(await page.evaluate(() => window.context.key), "accepted-one");
     await page.locator("#chartReferenceShowData").click();
     await page.keyboard.press("Escape");
@@ -633,5 +646,9 @@ test("responsive navigation keeps focus on a visible guide control", async t => 
         visible: document.activeElement.checkVisibility() && document.getElementById("meaning").contains(document.activeElement),
     }));
     assert.equal(focus.visible, true, JSON.stringify(focus));
-    assert.equal(focus.topic, "services");
+    assert.equal(await page.locator("#chartReferenceTopicToggle").isVisible(), true);
+    await page.locator("#chartReferenceTopicToggle").press("Enter");
+    await choice(page, "services").press("Enter");
+    assert.equal(await choice(page, "services").getAttribute("aria-current"), "page");
+    assert.equal(await page.locator("#chartReferenceTopics").isVisible(), false);
 });

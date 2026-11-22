@@ -132,11 +132,13 @@ catalogs across source updates or access withdrawal.
 ### Chart guide
 
 Analyze's **Guide** opens from the toolbar, never from a control added to a
-chart. Default to the topic list; a preference under Settings > Analyze can
-resume the last topic read in this tab. Use the existing navigation hover
-and focus treatment, without an underline. Narrow screens move between the
-index and article; wide screens keep the topics beside the article. Examples
-explain consequential distinctions. Exact numbers, not the glossary, own
+chart. Open the Topic reader directly on recorded outcomes; a preference
+under Settings > Analyze can resume the last topic read in this tab. Show
+a compact topic rail beside the reading pane, or a Topics chooser when space
+is limited. Keep Back to Analyze above the reader. Use the existing navigation
+hover and focus treatment, without an underline. Label worked examples as
+illustrations and keep them distinct from the accepted view's values.
+Exact numbers, not the glossary, own
 the breakdown. Definitions and table counts use the same accepted facts. A row finder filters
 only table labels, not analytical membership or totals. Overflow remains
 local, keyboard/touch accessible and truthful; do not shrink type or hide data.

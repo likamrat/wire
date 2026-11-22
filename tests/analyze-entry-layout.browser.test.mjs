@@ -281,6 +281,7 @@ test("Filters consume nested outside clicks and Escape backs out of Guide exact 
     await expect(page.locator("#openChartReference")).toBeFocused();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#openChartReference").click();
+    await page.locator("#chartReferenceTopicToggle").click();
     await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await page.keyboard.press("Escape");

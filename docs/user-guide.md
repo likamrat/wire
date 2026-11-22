@@ -105,12 +105,13 @@ no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
-Open **Guide** in the Analyze toolbar to read what each chart counts. The topic
-list separates calls from interactions and alternate chart groupings. Examples
-show distinctions such as a completed call returning an error for one item.
+Open **Guide** in the Analyze toolbar to start reading about recorded outcomes.
+Pick another topic beside the explanation, or use **Topics** on a narrow
+screen. Worked examples illustrate distinctions such as a completed call
+returning an error for one item; they are not records from your activity.
 Choose **See exact numbers** for values in your current scope and matching
 records where available. Closing Guide returns you to Analyze. In
-**Settings > Analyze > Open Guide to**, you can choose the topic list (default)
+**Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
 or the last topic read in this tab. This preference does not change the charts.
 
 **Services and operations** distinguishes a hosted Copilot request that did

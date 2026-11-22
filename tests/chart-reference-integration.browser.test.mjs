@@ -15,7 +15,7 @@ import { createServiceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 const proof = process.env.WIRE_CHART_GUIDE_PROOFS;
 async function captureNative(page, name) {
@@ -108,8 +108,8 @@ async function exact(page, topic) {
 }
 
 async function topicChoice(page, topic) {
-    if (await page.locator("#chartReferenceExact").isVisible()) await page.locator("#chartReferenceBack").click();
-    if (await page.locator("#chartReferenceAllTopics").isVisible()) await page.locator("#chartReferenceAllTopics").click();
+    const toggle = page.locator("#chartReferenceTopicToggle");
+    if (await toggle.isVisible() && !await page.locator("#chartReferenceTopics").isVisible()) await toggle.click();
     await page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`).click();
 }
 
@@ -125,23 +125,32 @@ async function assertInPageReader(page) {
     assert.equal(reader.inside, true);
 }
 
-test("the in-page Analyze Guide routes every topic, index and exact view with Back and focus", { timeout: 60000 }, async t => {
+test("the in-page Analyze Guide routes every topic from the article or exact data with Back and focus", { timeout: 60000 }, async t => {
     const { page } = await setup(t, pathRecords());
     await page.locator("#openChartReference").click();
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
+    await expect(page.locator('#chartReferenceTopics [aria-current="page"]')).toHaveAttribute("data-reference-topic", "outcomes");
+    await expect(page.locator("#chartReferenceAllTopics")).toBeHidden();
     for (const topic of ["outcomes", "time", "services", "models", "authors", "tools", "categories", "paths"]) {
-        await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "index");
-        await assertInPageReader(page);
-        await page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`).click();
+        const button = page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`);
+        await button.click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", topic);
+        await expect(page.locator("#chartReferenceTopicTitle")).toBeVisible();
+        await expect(page.locator("#chartReferenceTopicTitle")).toHaveText(/\?$/);
         await assertInPageReader(page);
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "data");
+        await expect(button).toBeVisible();
+        await expect(button).toHaveAttribute("aria-current", "page");
         await assertInPageReader(page);
         await page.locator("#chartReferenceBack").click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
         await expect(page.locator("#chartReferenceShowData")).toBeFocused();
-        await page.locator("#chartReferenceAllTopics").click();
     }
+    await page.locator("#chartReferenceShowData").click();
+    await topicChoice(page, "services");
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", "services");
+    await expect(page.locator("#chartReferenceTopicTitle")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("#meaning")).not.toBeVisible();
     await expect(page.locator("#openChartReference")).toBeFocused();
@@ -472,10 +481,10 @@ async function inspectGuide(page, name) {
         if (await control.isDisabled()) continue;
         await control.focus();
         const visible = await control.evaluate(node => {
-            const r = node.getBoundingClientRect(), root = document.getElementById("meaning").getBoundingClientRect();
+            const r = node.getBoundingClientRect();
             const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
             return { id: node.id, text: node.textContent, width: r.width, height: r.height,
-                full: r.top >= root.top + 3 && r.bottom <= root.bottom - 3 && r.left >= root.left + 3 && r.right <= root.right - 3,
+                full: r.top >= -1 && r.bottom <= innerHeight + 1 && r.left >= -1 && r.right <= innerWidth + 1,
                 hit: hit === node || node.contains(hit) };
         });
         assert.ok(visible.full && visible.hit, JSON.stringify({ name, ...visible }));
@@ -500,8 +509,12 @@ test("the whole native guide reflows in both themes, long tables, phone, tablet 
             await page.locator("#meaning").evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
             await page.locator("#chartReferenceTitle").focus();
             await inspectGuide(page, `${theme}-${name}-guide`);
-            await page.locator("#chartReferenceAllTopics").click();
-            await inspectGuide(page, `${theme}-${name}-index`);
+            const toggle = page.locator("#chartReferenceTopicToggle");
+            if (await toggle.isVisible()) {
+                await toggle.click();
+                await expect(page.locator("#chartReferenceTopics")).toBeVisible();
+                await inspectGuide(page, `${theme}-${name}-topics`);
+            }
             await topicChoice(page, "paths");
             await page.locator("#chartReferenceShowData").click();
             await page.locator("#chartReferenceDataTitle").focus();
@@ -583,14 +596,17 @@ async function guideControlPaint(page, locator) {
     await locator.scrollIntoViewIfNeeded();
     const state = await locator.evaluate(node => {
         const css = getComputedStyle(node), box = node.getBoundingClientRect();
-        const dialog = document.getElementById("meaning").getBoundingClientRect();
         const ring = css.outlineStyle === "none" ? 0 : parseFloat(css.outlineWidth) + parseFloat(css.outlineOffset);
+        const clips = [{ left: 0, top: 0, right: innerWidth, bottom: innerHeight }];
+        for (let n = node.parentElement; n; n = n.parentElement) {
+            if (getComputedStyle(n).overflow !== "visible") clips.push(n.getBoundingClientRect());
+        }
         return { x: box.x, y: box.y, width: box.width, height: box.height,
-            surface: getComputedStyle(document.getElementById("meaning")).backgroundColor, color: css.color,
+            color: css.color,
             outline: { color: css.outlineColor, width: parseFloat(css.outlineWidth), style: css.outlineStyle },
             weight: Number(css.fontWeight), focused: node.matches(":focus-visible"), hover: node.matches(":hover"),
-            ringVisible: box.left - ring > dialog.left && box.right + ring < dialog.right
-                && box.top - ring > dialog.top && box.bottom + ring < dialog.bottom };
+            ringVisible: clips.every(clip => box.left - ring >= clip.left && box.right + ring <= clip.right
+                && box.top - ring >= clip.top && box.bottom + ring <= clip.bottom) };
     });
     const image = await page.screenshot();
     const fill = await page.evaluate(async ({ image, x, y }) => {
@@ -602,7 +618,8 @@ async function guideControlPaint(page, locator) {
         if (pixel[3] !== 255) throw new Error("The control paint sample must be inside the captured viewport.");
         return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
     }, { image: image.toString("base64"), x: state.x + state.width - 8, y: state.y + state.height / 2 });
-    return { ...state, fill };
+    const { backdrop: surface } = await locator.evaluate(measureControlSurface);
+    return { ...state, fill, surface };
 }
 
 for (const theme of ["light", "dark"]) test(`native guide topic and exact-action feedback separates hover, current and keyboard focus (${theme})`, { timeout: 30000 }, async t => {
@@ -628,7 +645,9 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     assert.ok(selected.weight > idle.weight && selected.fill !== idle.fill, "Current page has a persistent indicator beyond color alone");
     await expect(current).toHaveAttribute("aria-current", "page");
     await expect(page.locator("#chartReferenceTopics [aria-pressed]")).toHaveCount(0);
-    await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Activity over time");
+    const heading = page.locator("#chartReferenceTopicTitle");
+    await expect(heading).toHaveText(/\?$/);
+    const timeQuestion = await heading.innerText();
     await current.hover();
     const selectedHover = await capture("current-hover", current);
     assert.ok(selectedHover.weight > hover.weight, "Hover must not erase the current-topic indicator");
@@ -643,7 +662,8 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     await page.keyboard.press("Enter");
     await expect(other).toHaveAttribute("aria-current", "page");
     await expect(page.locator('#chartReferenceTopics [aria-current="page"]')).toHaveCount(1);
-    await expect(page.locator("#chartReferenceTopicTitle")).toHaveText(await other.textContent());
+    await expect(heading).toHaveText(/\?$/);
+    await expect(heading).not.toHaveText(timeQuestion);
     await page.mouse.move(0, 0);
     const actionIdle = await capture("action-idle", exact);
     await exact.hover();
@@ -655,9 +675,9 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     const actionFocus = await capture("action-keyboard", exact);
     assert.ok(actionFocus.focused && actionFocus.outline.width >= 2 && actionFocus.ringVisible
         && contrast(actionFocus.outline.color, actionFocus.surface) >= 3);
-    for (const state of Object.values(measurements)) {
+    for (const [name, state] of Object.entries(measurements)) {
         assert.ok(state.width >= 44 && state.height >= 44);
-        assert.ok(contrast(state.color, state.fill) >= 4.5, "Control text must remain readable in every state");
+        assert.ok(contrast(state.color, state.fill) >= 4.5, `Unreadable ${name}: ${state.color} on ${state.fill}`);
     }
     await page.keyboard.press("Enter");
     await expect(page.locator("#chartReferenceData table")).toBeVisible();

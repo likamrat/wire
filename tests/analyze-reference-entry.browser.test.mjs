@@ -59,7 +59,6 @@ async function setup(t, { textSearch = false } = {}) {
 
 async function openOutcomeGuide(page) {
     await page.locator("#openChartReference").click();
-    await page.locator('#chartReferenceTopics [data-reference-topic="outcomes"]').click();
 }
 
 test("the single reference entry opens the native guide without a read and preserves applicability", { timeout: 30000 }, async t => {
@@ -74,7 +73,12 @@ test("the single reference entry opens the native guide without a read and prese
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#meaning").evaluate(node => node.tagName), "DIALOG");
     await expect(page.locator("#chartReferenceTitle")).toBeFocused();
-    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "index");
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
+    await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Did the tool fail, or did it return an error?");
+    await expect(page.locator(".chart-reference-example")).toContainText("Illustrative, not from your activity");
+    const sample = page.locator(".guide-example-calls details").last();
+    await sample.locator("summary").press("Enter");
+    await expect(sample.locator("p")).toBeVisible();
     const toolTopic = page.locator('#chartReferenceTopics [data-reference-topic="tools"]');
     const paint = node => ({
         color: getComputedStyle(node).color, surface: getComputedStyle(node).backgroundColor,
@@ -86,7 +90,6 @@ test("the single reference entry opens the native guide without a read and prese
     await toolTopic.hover();
     await expect.poll(() => toolTopic.evaluate(paint)).toEqual(navHover);
     expect(navHover.decoration).toBe("none");
-    await page.locator('#chartReferenceTopics [data-reference-topic="outcomes"]').click();
     await expect(page.locator("#chartReferenceExplanation")).toContainText("HTTP 403");
     await expect(page.locator("#chartReferenceExplanation")).not.toContainText("Connection failed");
     await page.locator("#chartReferenceShowData").click();

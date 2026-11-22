@@ -622,7 +622,6 @@ test("native Analyze uses ordinary outcome rings, tool bars, exact columns and r
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
         await page.locator("#chartReferenceBack").click();
-        await page.locator("#chartReferenceAllTopics").click();
         await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("Paths are unavailable");

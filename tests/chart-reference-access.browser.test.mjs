@@ -95,7 +95,7 @@ test("publication withdrawal retires the in-page reader and its exact return syn
     assert.deepEqual(result.after, { texts: result.before.texts.map(() => ""), open: false, animations: 0, rows: 0, focused: [] });
     assert.equal(result.restored, false);
     assert.ok(result.freshOpen);
-    assert.equal(result.freshView, "index", "Retired exact return cannot replace a newly authorized reader");
+    assert.equal(result.freshView, "guide", "Retired exact return cannot replace a newly authorized article");
 });
 
 for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/find/source state locally (${initiallyOpen ? "open" : "already closed"})`, { timeout: 30000 }, async t => {

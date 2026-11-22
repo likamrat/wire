@@ -4,8 +4,8 @@ const rollingPeriods = recentDays.map(days => [days, `Last ${days} days`]);
 export const pageDefaultSpecs = {
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity without changing collection.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
-    guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose how to open Guide from Analyze. This does not change the charts.", initial: "index",
-        choices: [["index", "Topic list"], ["last", "Last topic read in this tab"]] },
+    guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
+        choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "A direct link opens its own chart.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
     reportFormats: { id: "defaultReportFormats", label: "Default file formats", help: "Choose at least one.", initial: ["html"],
@@ -36,7 +36,10 @@ export function createPageDefaults(specs, host = window) {
             return;
         }
         if (raw !== null) {
-            try { value = valid(key, JSON.parse(raw)); }
+            try {
+                const stored = JSON.parse(raw);
+                value = valid(key, key === "guideStart" && stored === "index" ? "outcomes" : stored);
+            }
             catch (error) { if (!(error instanceof SyntaxError)) throw error; }
         }
         messages.set(key, raw !== null && value === null ? "Saved preference is invalid. Using the standard default." : "");

@@ -106,29 +106,52 @@ export const chartReferenceStyles = `
 #analyzeToolbar:has(>#analyzeReferenceEntry:not([hidden])) {flex-wrap:wrap}
 #analyzeToolbar>#analyzeReferenceEntry {flex:none}
 #workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>:not(#analyzeReference) {display:none!important}
+#workspace>#analyzeReference:has(#meaning[open][data-mode=analyze]) {width:100%;max-width:none;margin-top:0}
 #meaning[data-mode=analyze] {
- position:relative;inset:auto;width:100%;max-width:none;height:auto;max-height:none;
- background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);
- box-shadow:none;overflow:visible;scroll-margin-top:var(--app-header-height)
+ position:relative;inset:auto;margin:0;width:100%;max-width:none;height:auto;max-height:none;
+ background:transparent;border:0;box-shadow:none;overflow:visible;scroll-margin-top:var(--app-header-height)
 }
-#meaning[data-mode=analyze] .chart-reference-heading {padding:12px 24px}
-#meaning[data-mode=analyze] #closeChartReference {width:auto;display:inline-flex;align-items:center;gap:8px}
+#meaning[data-mode=analyze] .chart-reference-heading {display:grid;justify-content:start;gap:var(--space-xs);padding:0;border:0;margin-bottom:var(--space-lg)}
+#meaning[data-mode=analyze] #chartReferenceTitle {font-size:var(--type-title)}
+#meaning[data-mode=analyze] #closeChartReference {grid-row:1;justify-self:start;width:auto;display:inline-flex;align-items:center;gap:var(--space-sm);padding-inline:0 var(--space-sm);color:var(--muted)}
 #meaning[data-mode=analyze] .chart-reference-related {margin-block:14px 0;max-width:65ch}
 #meaning[data-mode=analyze] .chart-reference-related summary {cursor:pointer;min-height:44px;align-content:center}
-#meaning[data-mode=analyze] .chart-reference-body {display:grid;align-content:start;overflow:visible;padding:20px 24px 24px;gap:0}
+#meaning[data-mode=analyze] .chart-reference-body {display:grid;align-items:start;align-content:start;overflow:visible;padding:0;grid-template-columns:minmax(12rem,15rem) minmax(0,1fr);gap:0 var(--space-xl)}
 #meaning[data-mode=analyze] :is(.chart-reference-explanation,.chart-reference-index,.chart-reference-exact) {overflow:visible;scrollbar-gutter:auto;padding:0}
 #meaning[data-mode=analyze] :is(.chart-reference-return,#chartReferenceBack) {margin:0 0 12px}
-#meaning[data-mode=analyze] .chart-reference-actions {max-height:none;overflow:visible;padding:12px 0 0;border:0}
-#meaning[data-mode=analyze] .chart-reference-intro {margin:12px 0 16px}
-#meaning[data-mode=analyze] .chart-reference-explanation {max-width:68ch}
-#meaning[data-mode=analyze] .chart-reference-definition {grid-template-columns:minmax(8rem, .42fr) minmax(0, 1fr);gap:8px 20px;padding:10px 0}
+#meaning[data-mode=analyze] :is(#chartReferenceGuide,#chartReferenceExact) {min-width:0;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);padding:clamp(var(--space-lg),2.3cqi,var(--space-2xl))}
+#meaning[data-mode=analyze] .chart-reference-actions {max-height:none;overflow:visible;justify-content:start;padding:var(--space-md) 0 0;border:0}
+#meaning[data-mode=analyze] :is(#chartReferenceShowData,#chartReferenceBack,#chartReferenceTopicToggle) {--pill-hover:var(--hover);--pill-hover-border:var(--control);--pill-ink:var(--ink)}
+#meaning[data-mode=analyze] :is(#chartReferenceShowData,#chartReferenceBack,#chartReferenceTopicToggle):hover:not(:disabled)::before {border:2px solid var(--control)}
+#meaning[data-mode=analyze] .chart-reference-intro {margin:var(--space-sm) 0 var(--space-lg);max-width:68ch}
+#meaning[data-mode=analyze] .chart-reference-explanation>h3 {font-size:var(--type-title)}
+#meaning[data-mode=analyze] .chart-reference-definition {grid-template-columns:minmax(7rem,.42fr) minmax(0,1fr);gap:var(--space-sm) var(--space-lg);padding-block:var(--space-md)}
 #meaning[data-mode=analyze] .chart-reference-definition-copy {grid-column:2;grid-row:1;color:var(--ink)}
-#meaning[data-mode=analyze] .chart-reference-group {padding-block:4px}
-.chart-reference-example {position:static;width:auto;height:auto;padding:14px 16px;margin:18px 0 4px;background:var(--accent-soft);border-radius:var(--radius);color:var(--ink)}
-.chart-reference-example h4,.chart-reference-example p {margin:0}
-.chart-reference-example p {margin-top:4px}
+#meaning[data-mode=analyze] .chart-reference-group {padding-block:var(--space-xs)}
+.guide-chart-name {display:flex;align-items:center;gap:var(--space-sm);margin:0 0 var(--space-sm);color:var(--muted);font-size:var(--type-control)}
+.guide-chart-name .wire-icon {width:1.125rem;height:1.125rem;flex:none}
+.guide-reading-spread {display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,1fr);gap:var(--space-2xl);padding-top:var(--space-xl);border-top:1px solid var(--surface-divider)}
+.guide-reading,.chart-reference-example {min-width:0;max-width:72ch}
+.guide-reading p,.chart-reference-example>p {max-width:65ch}
+.guide-reading h4,.chart-reference-example h4 {font-size:var(--type-section);font-weight:var(--weight-medium);line-height:var(--leading-section);margin:0 0 var(--space-sm)}
+.chart-reference-example {position:static;width:auto;height:auto;padding:0 0 0 var(--space-xl);margin:0;border:0;border-inline-start:1px solid var(--surface-divider);background:transparent;color:var(--ink)}
+.chart-reference-example p {margin:0 0 var(--space-sm)}
+.guide-example-caption {font-size:var(--type-control);color:var(--muted)}
+.guide-example-calls {background:var(--canvas);border-radius:var(--radius-small);padding:0 var(--space-md);margin-top:var(--space-lg)}
+.guide-example-calls details+details {border-top:1px solid var(--surface-divider)}
+.guide-example-calls summary {display:grid;grid-template-columns:1fr auto;align-content:center;align-items:center;gap:2px var(--space-sm);min-height:44px;padding:var(--space-sm);cursor:pointer;border-radius:var(--radius-small);list-style:none}
+.guide-example-calls summary::-webkit-details-marker {display:none}
+.guide-example-calls summary>.wire-icon {grid-column:2;grid-row:1/3;width:1rem;height:1rem;color:var(--muted)}
+.guide-example-calls summary>span:not(.wire-icon) {grid-column:1}
+.guide-example-calls details[open] summary>.wire-icon {transform:rotate(90deg)}
+.guide-example-calls summary:hover {background:var(--hover)}
+.guide-example-calls details>p {margin:0;padding:0 var(--space-sm) var(--space-md)}
 .chart-reference-topic-group h4 {margin:0 0 4px;font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--muted)}
-#meaning[data-mode=analyze] .chart-reference-topics {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:20px;margin-top:20px}
+#meaning[data-mode=analyze] .chart-reference-index {position:sticky;top:calc(var(--app-header-height) + var(--space-lg))}
+#meaning[data-mode=analyze] #chartReferenceIndexTitle,#chartReferenceTopicToggle {display:none}
+#meaning[data-mode=analyze] .chart-reference-topics {display:grid;gap:var(--space-lg);padding-block:var(--space-lg)}
+#meaning[data-mode=analyze] .chart-reference-topic-group h4 {padding-inline:var(--space-sm);color:var(--ink);font-size:var(--type-control);font-weight:var(--weight-strong)}
+#meaning[data-mode=analyze] .chart-reference-topic-group+.chart-reference-topic-group {border-top:1px solid var(--surface-divider);padding-top:var(--space-lg)}
 #meaning .chart-reference-topic {display:flex;justify-content:flex-start;min-height:44px;padding:8px 10px;color:var(--muted);line-height:var(--leading-control);font-weight:var(--weight-regular);font-size:var(--type-control);text-decoration:none;transition:var(--control-paint-transition)}
 #meaning .chart-reference-topic::before {content:none}
 #meaning .chart-reference-topic[aria-current=page] {background:var(--control-sheen),var(--accent-soft);box-shadow:var(--control-sheen-edge);color:var(--ink);font-weight:var(--weight-medium)}
@@ -136,18 +159,21 @@ export const chartReferenceStyles = `
 #meaning .chart-reference-topic:active {color:var(--ink);background:var(--pill-pressed)}
 #meaning .chart-reference-topic:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 #meaning[data-mode=analyze] #chartReferenceNotice {margin:0 0 16px;grid-column:1/-1}
-@container chart-reference (min-width:48rem) {
- #meaning[data-mode=analyze][data-reference-view=guide] .chart-reference-body {grid-template-columns:minmax(11rem,14rem) minmax(0,1fr);gap:0 clamp(24px,4vw,64px)}
- #meaning[data-mode=analyze][data-reference-view=guide] .chart-reference-topics {display:grid;grid-template-columns:1fr;margin-top:0}
- #meaning[data-mode=analyze][data-reference-view=guide] #chartReferenceIndexTitle {display:none}
+@container chart-reference (max-width:65rem) {
+ .guide-reading-spread {grid-template-columns:minmax(0,1fr);gap:var(--space-lg)}
+ .chart-reference-example {border-inline-start:0;border-top:1px solid var(--surface-divider);padding:var(--space-lg) 0 0}
 }
-@container chart-reference (max-width:47.99rem) {
- #meaning[data-mode=analyze][data-reference-view=guide] #chartReferenceIndex {display:none}
+@container chart-reference (max-width:48rem) {
+ #meaning[data-mode=analyze] .chart-reference-body {grid-template-columns:minmax(0,1fr);gap:var(--space-sm)}
+ #meaning[data-mode=analyze] .chart-reference-index {position:static}
+ #meaning[data-mode=analyze] #chartReferenceTopicToggle {display:flex;align-items:center;justify-content:space-between;width:100%;font-size:var(--type-control);padding-inline:var(--space-md);--pill-border:var(--control);--pill-fill:var(--paper)}
+ #chartReferenceTopicToggle .wire-icon {width:1rem;height:1rem;transform:rotate(90deg)}
+ #chartReferenceTopicToggle[aria-expanded=true] .wire-icon {transform:rotate(-90deg)}
+ #meaning[data-mode=analyze] #chartReferenceTopicToggle[aria-expanded=false]+nav {display:none}
 }
 @container chart-reference (max-width:32rem) {
  #meaning[data-mode=analyze] .chart-reference-definition {display:block}
  #meaning[data-mode=analyze] .chart-reference-definition-copy {margin-top:2px}
- #meaning[data-mode=analyze] .chart-reference-body {padding:16px}
 }
 @media(forced-colors:active) {
  #meaning .chart-reference-topic[aria-current=page]:not(:focus-visible) {outline:1px solid CanvasText}

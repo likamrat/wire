@@ -17,6 +17,11 @@ test("only valid defaults survive reload; an unavailable write applies to this p
     values.set("wire.page-defaults.v1.trendChart", '"obsolete"');
     assert.equal(load().get("trendChart"), "problems");
     assert.match(load().message("trendChart"), /invalid/i);
+    values.set("wire.page-defaults.v1.guideStart", '"index"');
+    assert.equal(load().get("guideStart"), "outcomes");
+    assert.equal(load().message("guideStart"), "");
+    prefs.set("guideStart", "last");
+    assert.equal(load().get("guideStart"), "last");
     host.localStorage.setItem = () => { throw new DOMException("Full", "QuotaExceededError"); };
     prefs.set("analyzeRange", "30");
     assert.equal(prefs.get("analyzeRange"), "30");

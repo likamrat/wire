@@ -61,6 +61,8 @@ async function ready(page) {
 }
 async function expand(page) {
     await page.locator("#openChartReference").click();
+    const toggle = page.locator("#chartReferenceTopicToggle");
+    if (await toggle.isVisible()) await toggle.click();
     await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceSource>summary").press("Enter");
