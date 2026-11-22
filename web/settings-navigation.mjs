@@ -7,6 +7,10 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
         { id: "themes", title: "Themes", heading: "themesTitle" },
         { id: "regional", title: "Regional", heading: "regionalTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
+        { id: "analyze", title: "Analyze", heading: "analyzeSettingsTitle" },
+        { id: "trends", title: "Trends", heading: "trendsSettingsTitle" },
+        { id: "reports", title: "Reports", heading: "reportsSettingsTitle" },
+        { id: "compare", title: "Compare", heading: "compareSettingsTitle" },
         { id: "troubleshooting", title: "Help", heading: "troubleshootingTitle", headerEntry: true },
     ];
     const sectionAliases = {
@@ -25,6 +29,11 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
             { id: "app-update", section: "general", title: "Check for WIRE updates", context: "Check for a newer build from main. Checking does not install it.", synonyms: "version application upgrade manual release", target: "appUpdateCheck" },
             { id: "automatic-updates", section: "general", title: "Automatically check for updates", context: "Check on opening WIRE and daily while it stays open. Installing always requires choosing Update.", synonyms: "automatic update checks preferences enable disable scheduled", target: "appUpdateAuto" },
         ] : []),
+        { id: "analyze-range", section: "analyze", title: "Date range when opening Analyze", context: "Choose All dates, Last 7 days or Last 30 days for a fresh Analyze view.", synonyms: "default starting period filter", target: "defaultAnalyzeRange" },
+        { id: "trend-chart", section: "trends", title: "Default trend chart", context: "Choose the first chart on opening Trends. Direct chart links keep their measure.", synonyms: "homepage errors failures tool calls usage services call duration prompt authors response models", target: "defaultTrendChart" },
+        { id: "report-formats", section: "reports", title: "Default file formats", context: "Choose the file formats preselected for each new report.", synonyms: "HTML PDF Markdown JSON export save", target: "defaultFormat-html" },
+        { id: "report-period", section: "reports", title: "Default reporting period", context: "Choose how many days to include in a new report. Includes today in your display time zone.", synonyms: "dates range last 7 14 30", target: "defaultReportPeriod" },
+        { id: "comparison-period", section: "compare", title: "Default comparison period", context: "Compare the last complete days with the preceding period of equal length.", synonyms: "date range new comparison 7 14 30", target: "defaultCompareDays" },
         { id: "assessment-evidence", section: "privacy", title: "Save Copilot replies locally", context: "Keep recorded replies with your activity. Turning this off deletes saved response text and dependent retained annotations, not saved reports.", synonyms: "optional evidence answer response capture consent permission revoke", target: "assessmentSetupTitle" },
         { id: "delete-activity", section: "privacy", title: "Review deletion", context: "Preview and permanently delete all collected records or a date range. Saved reports and Copilot sources stay unchanged.", synonyms: "delete collected activity clear remove reset purge records data", target: "deleteActivity" },
         { id: "recollect-activity", section: "privacy", title: "Read history again", context: "Choose chats to preview available history from approved sources. Only explicit confirmation starts recollection.", synonyms: "recollect activity regenerate reread restore deleted history records recovery", target: "recollectActivity" },

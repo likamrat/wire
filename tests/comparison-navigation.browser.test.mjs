@@ -427,7 +427,8 @@ test("later period choices win over held replies without relabeling unsupported 
     const accepted = comparisons.at(-1).periods;
     release();
     await expect.poll(() => comparisons.length).toBeGreaterThan(3);
-    await expect(page.locator(".compare-date-qualification").last()).toContainText("Feb 8, 2026");
+    await expect(page.getByRole("button", { name: /^Change selected period: Feb 8.*Mar 9, 2026$/ })).toBeVisible();
+    await expect(page.locator('nav [data-nav="compare"]')).toHaveAttribute("href", /bFrom=2026-02-08&bTo=2026-03-09/);
     assert.equal(accepted.later.range.from, "2026-02-08");
 });
 test("access withdrawal scrubs comparison marks, inspection and held links without replay", { timeout: 60000 }, async t => {

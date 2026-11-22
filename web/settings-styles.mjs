@@ -143,10 +143,18 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
 .settings-view .settings-section>h2 {margin:0}
-.settings-view [data-settings-section=general]>h2 {margin-block-end:1.5rem}
 .settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
+.settings-nav-group {padding:var(--space-md) 12px 0;color:var(--muted);font-size:var(--type-caption)}
+.settings-view .page-default-field {min-width:0;margin:0;padding:0;border:0}
+.settings-view .page-default-field+.page-default-field {margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--rule)}
+.page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
+.settings-view .page-default-field>.settings-help {margin:.35rem 0 .65rem}
+.page-default-field>.select-control {width:min(100%,22rem)}
+.page-default-formats {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:0 .75rem}
+.page-default-formats label {display:flex;align-items:center;gap:.55rem;min-height:44px;cursor:pointer}
+.page-default-formats input[type=checkbox] {margin:0;min-height:0;width:1rem;height:1rem;accent-color:var(--toggle-on)}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
 .settings-section-heading p,.settings-help {color:var(--muted)}
 .settings-section p {margin-top:8px;max-width:70ch}

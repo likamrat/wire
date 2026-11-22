@@ -174,6 +174,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }, { capture: true });
     }
     const time = createTimeContext();
+    const pageDefaults = assessmentFactories.createPageDefaults();
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
@@ -207,6 +208,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const [incomingView, incomingQuery = ""] = currentAddress().split("?");
     const incomingParameters = new URLSearchParams(incomingQuery);
     const incomingNavigationKey = incomingParameters.get("privateView") ?? history.state?.wirePrivateNavigation;
+    // Capture freshness before legacy normalization or the access shell replaces history.
+    let pendingFreshBrowse = !incomingQuery && incomingNavigationKey === undefined && !history.state?.evidenceView;
     let legacyHandoffTarget;
     if (incomingView.startsWith("#") && incomingParameters.has("privateView")) {
         incomingParameters.delete("privateView");
@@ -240,6 +243,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let semanticMembership, semanticQuery = incomingNavigationKey === undefined ? null : incomingNavigation?.analysisQuery ?? "",
         semanticComplete = false, semanticBound = false, semanticStatus = "stale";
     const browseStates = new Map();
+    const browseDefaults = { analyze: "analyzeRange", trends: "trendChart", compare: "compareDays" };
     const analysisNavigations = new Map();
     let switchingAnalysis = false;
     let searchOpenedRequest = null, searchTargetInvalid = false;
@@ -250,6 +254,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const draft = createReportDraft({ contextSelector: createRequestContext() });
     draft.change({ saveMode: "local" });
     let reportExperience, reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
+    let initialReportChoices = { range: "7", formats: ["html"] }, reportDefaultsVisit = null;
     let reportBaseExplicit = false, reportDatesReplaced = false, reportRebuildFrom = null, reportUpdateTimer;
     let reportPreparing = false, reportPreparationOwner = null, reportUpdateAgain = false, saveAfterMask = false;
     let reportPreset = null, reportLandingOrigin = null;
@@ -1702,7 +1707,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
         for (const pane of document.querySelectorAll("[data-settings-section]")) pane.hidden = pane.dataset.settingsSection !== section;
-        for (const anchor of $("settingsCategoryNav").children) {
+        for (const anchor of $("settingsCategoryNav").querySelectorAll("a[data-category]")) {
             const selected = anchor.dataset.category === section;
             if (selected) anchor.setAttribute("aria-current", "page");
             else anchor.removeAttribute("aria-current");
@@ -2459,7 +2464,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onSectionChange: (section, measure) => {
             const route = workspaceState.route;
             if (route.view !== "trends" || expiredTrendEntry(route)) return;
-            navigate({ ...route, trendSection: section, ...(measure ? { trendMeasure: measure } : {}) }, false, { keepFocus: true });
+            navigate({ ...route, entryDefault: undefined, trendSection: section, ...(measure ? { trendMeasure: measure } : {}) }, false, { keepFocus: true });
         },
         returnToAnalyze: () => {
             const from = trendOrigin(workspaceState.route);
@@ -2493,7 +2498,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } };
         },
         navigate: changes => Object.hasOwn(changes, "compare") && changes.compare === undefined
-            ? navigateBrowse("analyze") : navigate(routeFor("analyze", changes), false, { keepFocus: true }),
+            ? navigateBrowse("analyze", { returning: true }) : navigate(routeFor("analyze", changes), false, { keepFocus: true }),
         open: () => navigateBrowse("compare"),
         useAnalyze: () => navigateBrowse("compare", { useAnalyze: true }),
         onPairChange: pair => {
@@ -2768,7 +2773,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
-            ...workspaceState.route, view, bookmark: undefined, searchOwned: undefined,
+            ...workspaceState.route, view, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
             completedCalls: undefined,
             nativeCompletedRef: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
@@ -2788,9 +2793,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...changes,
         });
     }
-    function comparisonExitRoute(origin = underlyingRoute()) {
-        return browseStates.get("analyze")?.route ?? { view: "analyze", search: "", analysisQuery: null };
-    }
     function browseName(value) {
         const origin = sessionJourney.underlying(value);
         return origin?.view === "analyze" ? origin.compare === "periods" ? "compare" : "analyze" : origin?.view === "trends" ? "trends" : null;
@@ -2804,21 +2806,41 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const origin = sessionJourney.underlying(workspaceState.route);
         browseStates.set(name, { publication: api.publicationToken(), route: { ...origin, search, analysisQuery: semanticQuery } });
     }
-    function browseRoute(name, { useAnalyze = false } = {}) {
+    function freshBrowseRoute(name, context = viewerTime) {
+        const entryDefault = pageDefaults.get(browseDefaults[name]);
+        const route = { view: name === "trends" ? "trends" : "analyze", search: "", analysisQuery: null, entryDefault };
+        if (name === "analyze") return entryDefault === "capture" ? route
+            : { ...route, range: entryDefault, ...time.preset(entryDefault, context.timeZone) };
+        // Overview already opens on Errors & failures. Only other defaults need a Charts address.
+        if (name === "trends") return entryDefault === "problems" ? route : { ...route, trendMeasure: entryDefault };
+        return { ...route, compare: "periods", bucket: "day",
+            ...assessmentFactories.periodComparison.createPresentation(time).completeDays(entryDefault, context) };
+    }
+    function browseRoute(name, { useAnalyze = false, returning = false } = {}) {
         const saved = browseStates.get(useAnalyze ? "analyze" : name);
         if (useAnalyze && !saved) throw new Error("Open an available Analyze view before using it in this comparison.");
         if (saved && !api.isCurrent(saved.publication)) {
             throw new Error("The earlier view is no longer authorized. Open a current view before using it.");
         }
-        if (name === "trends") return saved?.route ?? { view: "trends", search: "", analysisQuery: null };
-        const value = saved?.route ?? { view: "analyze", search: "", analysisQuery: null };
-        if (name === "analyze") return { ...value, compare: undefined };
-        const pair = underlyingRoute().compare === "periods" ? underlyingRoute() : saved?.route;
-        return { ...value, view: "analyze", compare: "periods", request: undefined, task: undefined,
+        if (!useAnalyze) {
+            if (name === "compare" && compareDestination(workspaceState.route)) {
+                const current = underlyingRoute();
+                if (current?.aFrom && current.aTo && current.bFrom && current.bTo)
+                    return { ...current, search, analysisQuery: semanticQuery };
+            }
+            const route = saved?.route;
+            // A previously untouched landing can use a newly chosen default. A filter,
+            // deep link, history return or bounded handoff is a visit in its own right.
+            if (!route || !returning && route.entryDefault && route.entryDefault !== pageDefaults.get(browseDefaults[name]) && !route.search && route.analysisQuery == null)
+                return freshBrowseRoute(name);
+            return route;
+        }
+        const value = saved.route, pair = underlyingRoute();
+        return { ...value, view: "analyze", compare: "periods", entryDefault: undefined, request: undefined, task: undefined,
             range: undefined, from: undefined, to: undefined, page: undefined,
             ...(pair?.aFrom && pair?.aTo && pair?.bFrom && pair?.bTo
                 ? { aFrom: pair.aFrom, aTo: pair.aTo, bFrom: pair.bFrom, bTo: pair.bTo }
-                : assessmentFactories.periodComparison.createPresentation(time).completeDays(7, viewerTime)),
+                : assessmentFactories.periodComparison.createPresentation(time).completeDays(pageDefaults.get("compareDays"), viewerTime)),
             bucket: value.bucket ?? "day", timelineFrom: undefined };
     }
     function navigateBrowse(name, options) {
@@ -3925,7 +3947,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         rememberRoute(workspaceState.route, true);
         if (workspaceState.route.view === "reports" && !workspaceState.route.bundle && !workspaceState.route.inspect && workspaceState.route.task !== "compare") {
             const journey = reportJourney?.snapshot();
-            if (workspaceState.route.task !== "create" && journey?.step !== 1 && !journey?.saveUnconfirmed) reportJourney?.go(1);
+            if (workspaceState.route.task !== "create" && journey && journey.step !== 1 && !journey.saveUnconfirmed) returnToReportOutline();
             else if (workspaceState.route.task === "create" && journey?.hasPreview && journey.step !== 3) reportJourney.go(3);
         }
         if (!workspaceState.evidence) showConnectionSettings(api.accessState());
@@ -4459,7 +4481,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.view !== "analyze") chartReferenceUI.leave();
         else chartReferenceUI.refresh();
     }
-    function renderNavigation(navigationOrigin = underlyingRoute(), references) {
+    function setNavigationLink(node) {
+        const view = node.dataset.nav;
+        setRouteLink(node, Object.hasOwn(browseDefaults, view) ? browseRoute(view) : routeFor(view, { request: undefined, task: undefined }));
+    }
+    // Keep native link activation (including opening in another tab) in step with ordinary clicks.
+    pageDefaults.subscribe(key => {
+        if (clearingAccess || !api.publicationToken()) return;
+        for (const node of document.querySelectorAll("[data-nav]"))
+            if (browseDefaults[node.dataset.nav] === key) setNavigationLink(node);
+    });
+    function renderNavigation(references) {
         analyzeReferenceEntry.show(workspaceState.route.view === "analyze" && (semanticQuery === null || semanticBound));
         analyzeControls.context({ analyze: workspaceState.route.view === "analyze", compare: workspaceState.route.view === "analyze" && workspaceState.route.compare === "periods",
             ordinary: workspaceState.route.view === "analyze" && workspaceState.route.compare !== "periods" && (semanticQuery === null || semanticBound) });
@@ -4470,9 +4502,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.title = ({ analyze: "Analyze", trends: "Trends", reports: "Reports", compare: "Compare", settings: "Settings" }[active] || "Analyze") + " | WIRE";
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
-            const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin)
-                : view === "trends" ? browseRoute("trends") : routeFor(view, { request: undefined, task: undefined });
-            setRouteLink(node, target, Boolean(target.search?.trim() || target.analysisQuery != null));
+            setNavigationLink(node);
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
@@ -4642,6 +4672,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportExperience?.syncDrawer(drawer, current?.saveUnconfirmed ? "Check save status" : current?.phase === "saved"
             ? "Report saved" : current?.phase === "unavailable" ? "Report unavailable" : "Report preview");
     }
+    function returnToReportOutline() {
+        const newOrdinaryDraft = reportJourney.snapshot().completed && !reportBaseExplicit && !periodReport && !selected.size;
+        if (!reportJourney.go(1)) return false;
+        if (newOrdinaryDraft) applyReportDefaults();
+        return true;
+    }
     function backToReports() {
         const current = reportJourney?.snapshot();
         if (exportWriting || current?.saveUnconfirmed) { announce("Check or finish the current save before leaving this report.", "stale"); return false; }
@@ -4649,7 +4685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const origin = periodReport?.returnTo ?? reportEntry?.returnTo ?? reportLandingOrigin?.route
             ?? routeFor("reports", { task: undefined, bundle: undefined, inspect: undefined });
         const reading = reportLandingOrigin?.reading;
-        if (!reportJourney.go(1)) return false;
+        if (!returnToReportOutline()) return false;
         const publication = api.publicationToken(), intent = workspaceState.readingIntent;
         const result = navigate(origin, false, { restorePosition: true });
         const restore = loaded => {
@@ -7039,6 +7075,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         periodReport = null; periodReportInvalid = false;
         selected.clear();
         draft.clearSelection();
+        initialReportChoices = { range: "7", formats: ["html"] };
+        reportDefaultsVisit = null;
         draft.change({ saveMode: "local", promptMode: "masked", formats: ["html"], manualTerms: [], recordedContext: false });
         reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
         reportBaseExplicit = reportDatesReplaced = false;
@@ -7525,8 +7563,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!active && savedListOwner) retireSavedList();
         if (library) $("reportCreatePanel").hidden = true;
     }
+    function hasReportDraftChoices() {
+        return reportPreset || selected.size || periodReport || reportBaseExplicit || reportRebuildFrom
+            || reportDates.range !== initialReportChoices.range || reportExperience?.hasDeskDraft()
+            || draft.hasUnsavedChoices(initialReportChoices.formats) || reportAuthors.length !== authorship.selection().length;
+    }
+    function applyReportDefaults() {
+        const range = pageDefaults.get("reportPeriod"), formats = pageDefaults.get("reportFormats");
+        initialReportChoices = { range, formats };
+        reportDates = { range, ...time.preset(range, viewerTime.timeZone) };
+        if (JSON.stringify(draft.options().formats) !== JSON.stringify(formats)) draft.change({ formats });
+        $("formatError").hidden = true;
+    }
+    function initializeReportChoices() {
+        if (reportDefaultsVisit === workspaceState.navigationGeneration) return;
+        const { route } = workspaceState, journey = reportJourney.snapshot();
+        if (route.view !== "reports" || route.task === "library" || route.inspect || route.request
+            || !assessmentFactories.reportWorkspacePresentation(route, journey).landing
+            || exportWriting || reportPreparing || journey.saveUnconfirmed || journey.completed || journey.hasPreview || activePreview
+            // Prepare navigates from the outline into its drawer; use the choices already shown.
+            || reportLandingOrigin || hasReportDraftChoices()) return;
+        reportDefaultsVisit = workspaceState.navigationGeneration;
+        applyReportDefaults();
+    }
     function renderReports() {
         if (workspaceState.route.bundle) { renderSavedReader(); return; }
+        initializeReportChoices();
         captureReading();
         $("reportTimeContext").textContent = `Report dates use ${time.label(workspaceState.scope.timeContext)} (${workspaceState.scope.timeContext.locale}). `
             + (periodReport?.value.nativePeriods ? "Qualified Microsoft activity dates are included; raw source identifiers stay withheld." : "Source event timestamps stay withheld.");
@@ -8466,7 +8528,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.stale || Boolean(search.trim()) || Boolean(workspaceState.route.withinServices));
         const references = chatCopy.references(workspaceState.evidence.sessions, workspaceState.evidence.scenarios);
         renderTimeContext();
-        renderControls(references); renderNavigation(requestRoute ? sessionJourney.underlying(requestRoute) : undefined, references); renderFilterChips(); renderViewingContext();
+        renderControls(references); renderNavigation(references); renderFilterChips(); renderViewingContext();
         const sourceCoverage = renderSessionAnalysis();
         analyzeControls.sourceCoverage(sourceCoverage);
         chartReferenceSourceCoverage = sourceCoverage?.textContent || "";
@@ -10326,7 +10388,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
     for (const category of settingsNavigation.categories) {
-        if (category.headerEntry) continue;
+        if (category.id === "analyze" || category.headerEntry) {
+            $("settingsCategoryNav").append(el("span", "settings-nav-group", category.headerEntry ? "Support" : "Page settings"));
+        }
         const anchor = el("a");
         setRouteLink(anchor, routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
         // Static shell links use live navigation guards, not a pre-admission data publication.
@@ -10463,6 +10527,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     function traverse() {
         if (appUpdate?.locked()) { rememberRoute(workspaceState.route, true); return; }
+        pendingFreshBrowse = false;
         initialRoute = null;
         if (!api.publicationToken()) {
             workspaceState.route = readRoute(currentAddress(), null);
@@ -10634,6 +10699,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
+    assessmentFactories.bindPageDefaults(pageDefaults, () => selectControls?.sync());
     selectControls = createSelectControls(ux, {
         matchesOption: (query, label) => !query.trim() || localSearch.phrase(query, [label]),
         pagingFor: nativeInventoryPaging,
@@ -10750,6 +10816,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportPreparing = false; reportPreparationOwner = null;
         pendingReportReading = null;
         reportBaseExplicit = reportDatesReplaced = false;
+        initialReportChoices = { ...initialReportChoices, range: "7" };
         reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
         reportPickerEvents?.abort(); reportPickerEvents = null;
         nativePublication.withdraw(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
@@ -10943,7 +11010,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sidebar.close(false);
         initialRoute = null;
         const url = view === "analyze" ? "/" : "/" + view;
-        if (api.publicationToken()) return navigate(readRoute(url, null));
+        if (api.publicationToken()) return navigate(Object.hasOwn(browseDefaults, view) ? freshBrowseRoute(view) : readRoute(url, null));
+        pendingFreshBrowse = true;
         history.pushState({}, "", url);
         workspaceState.route = readRoute(url, null);
         showAccessUnavailable(api.accessState());
@@ -11052,6 +11120,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         claimIncomingNavigation();
         workspaceState.route = readRoute();
+        const freshPage = pendingFreshBrowse && browseName(workspaceState.route);
+        if (freshPage && workspaceState.route.view !== "request") workspaceState.route = freshBrowseRoute(freshPage, displayTimeSettings.resolve());
+        pendingFreshBrowse = false;
         search = workspaceState.route.search || "";
         initialRoute = null;
         syncControls();
@@ -11073,9 +11144,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return "Save or cancel your Settings changes and resolve any unconfirmed changes before updating.";
         }
         if (exportWriting || pendingSaveOwner || reportPreparing || report?.saveUnconfirmed || report?.phase === "scanning"
-            || !report?.completed && (report?.hasPreview || reportPreset || selected.size
-                || periodReport || reportBaseExplicit || reportRebuildFrom || reportDates.range !== "7" || reportExperience?.hasDeskDraft() || draft.hasUnsavedChoices()
-                || reportAuthors.length !== authorship.selection().length)) {
+            || !report?.completed && (report?.hasPreview || hasReportDraftChoices())) {
             return "Finish or discard your report draft and resolve any unconfirmed save before updating.";
         }
         const reread = recollectionUI?.snapshot(), refresh = fresh.snapshot();

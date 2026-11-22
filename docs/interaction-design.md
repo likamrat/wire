@@ -634,10 +634,10 @@ Settings opens in **General**, with the installed WIRE build, last check and
 turns green when an update is available, even after the notice is dismissed.
 It still only checks; **Update** installs the build. Below updates,
 show the current theme with a miniature WIRE screen, its name and mode,
-and swatches drawn from the active screen palette. Use headings without a
-routine explanatory subtitle across Settings. Keep supporting text when it
-identifies an effective value, an unavailable setting, or a consequence of
-changing it. The preview and
+and swatches drawn from the active screen palette. Each category opens with its
+title and one sentence explaining what changes there. Place decision help
+between the relevant setting label and its controls. Keep current values,
+warnings and unavailable states beside their controls. The preview and
 **Change theme** share one link to Themes; the effective time zone links
 to Regional. The whole shortcut stays clickable, but hover and press tint
 only the destination label and chevron. Center them together beside the
@@ -645,7 +645,12 @@ current value and keep keyboard focus visible around the link.
 Each row opens its existing category without changing anything.
 Back restores the activating row and its current value. Direct category and
 search entries do not gain a false General return. The other categories are Collection,
-Source access, Themes, Regional, and Privacy & saved data. Keep one
+Source access, Themes, Regional, Privacy & saved data, and Help. Under **Page
+settings**, Analyze, Trends, Reports and Compare own their opening defaults.
+General does not repeat this directory. Apply a default only to a fresh entry;
+an explicit link, a return position, a selected period or a resumed draft keeps
+its own context. Report format defaults select files, not a disclosure policy
+or permission to save. Keep one
 focused pane; on narrow screens the same categories collapse into a chooser.
 Source access owns approval and paths; Collection owns cadence, Pause and
 one-time checks. Opening either area never approves a source. Search finds fixed setting

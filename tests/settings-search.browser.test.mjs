@@ -172,11 +172,11 @@ test("Settings search groups all existing title, description and keyword matches
             assert.equal(await page.locator("#" + heading + ">span").textContent(), entry.category);
         }
         await expect(page.locator("#settingsCategories")).toBeHidden();
-        await expect(page.locator("#settingsStatusLink")).toBeHidden();
+        await expect(page.locator("#settingsView .settings-rail #settingsStatusLink")).toHaveCount(0);
         await expect(page.locator("#settingsSearchCount")).toContainText(`${expected.length} setting`);
     }
     await page.locator("#settingsSearch").fill("city");
-    await expect(page.locator("#settingsSearchResults")).toHaveText("DisplayTime zone");
+    await expect(page.locator("#settingsSearchResults")).toHaveText("RegionalTime zone");
     await page.locator("#settingsSearch").fill("TIME-zone");
     await expect(page.locator("#settingsSearchResults mark")).toHaveText(["Time", "zone"]);
     await page.locator("#settingsSearch").fill("<img src=x onerror=alert(1)> [.*]");
@@ -203,6 +203,7 @@ test("Settings results reveal every available destination without changing data 
     const { page } = await setup(t);
     const targets = {
         source: "editSource", "source-paths": "approvedSourceTitle", "microsoft-connection": "connectionTitle",
+        "save-preferences": "connectionTitle", // No outstanding collection draft in this fixture.
     };
     for (const entry of navigation.entries.filter(entry => !unavailableHere.has(entry.id))) {
         await navigateMain(page, "settings");
@@ -211,14 +212,14 @@ test("Settings results reveal every available destination without changing data 
         await expect(result).toBeVisible();
         await result.click();
         let target = targets[entry.id] || entry.target;
-        if (["displayTimeZone", "collectionWindow", "collectionCadence"].includes(target)) target += "-control";
+        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
         const destination = page.locator("#" + target);
         await expect(destination).toBeVisible();
         if (await destination.evaluate(node => node.tagName === "DETAILS")) await expect(destination.locator("summary")).toBeFocused();
         else if (await destination.evaluate(node => node.disabled === true)) {
             assert.equal(await destination.evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true, entry.id);
         } else await expect(destination).toBeFocused();
-        assert.equal(new URL(page.url()).hash.includes("setting=" + entry.id), true);
+        assert.equal(new URL(page.url()).searchParams.get("setting"), entry.id);
         await expect(page.locator("dialog[open]")).toHaveCount(0);
         await expect(page.locator("#sourceEditor")).toBeHidden();
         if (entry.view !== "collection-status") {

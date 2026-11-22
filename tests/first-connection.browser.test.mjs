@@ -283,7 +283,7 @@ test("footer Help opens the one help destination without collecting and returns 
     await page.locator("#openEvidenceHelp").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#troubleshootingTitle")).toBeFocused();
-    await expect(page.locator('[data-category="troubleshooting"]')).toHaveCount(0);
+    await expect(page.locator('[data-category="troubleshooting"]')).toHaveAttribute("aria-current", "page");
     await page.locator("#activityCountHelp summary").click();
     await expect(page.locator("#activityCountHelp p")).toBeVisible();
     await page.goBack();
