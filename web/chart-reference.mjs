@@ -337,7 +337,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             list.append(definition("Search / retrieval", "Counts a search request, not confirmed use of a named app."),
                 definition(hosted.label, `${categories.operation("workiq-ask").label} counts the request to Copilot. ${hosted.description}`),
                 definition(unmapped.label, unmapped.description));
-            meanings.append(list, el("p", "On the Analyze card, select the tool-call count to open the interaction. Expand a numbered call to inspect its targets and outcome. A service label does not tell you who wrote the prompt or whether the call failed."));
+            meanings.append(list, el("p", "Where a service label offers View call, use it to inspect that call. If several calls match, the link opens the earliest one. The tool-call count opens the whole interaction. A service label does not tell you who wrote the prompt or whether the call failed."));
             host.append(meanings); return;
         }
         list.append(definition("Evidence", help.layers[context.layer]));
