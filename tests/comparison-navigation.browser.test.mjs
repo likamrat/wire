@@ -10,11 +10,11 @@ import { periodFixture } from "./period-comparison-fixture.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 
-async function setup(t, hash = "#analyze?tool=workiq-ask", { enforced = false, records = periodFixture().records } = {}) {
+async function setup(t, hash = "#analyze?tool=workiq-ask", { enforced = false, records = periodFixture().records, frontend } = {}) {
     let removeFixture;
     const { context } = await privateFixture({ after: cleanup => { removeFixture = cleanup; } }, records);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
-    const server = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, ...(access ? { access } : {}),
+    const server = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false }, ...(access ? { access } : {}),
         evaluation: { evaluatorFactory() { throw new Error("No provider in comparison proof."); },
             readSource() { throw new Error("No source access in comparison proof."); } } });
     const browser = await chromium.launch();
@@ -46,6 +46,65 @@ async function dates(page, a, b) {
     await page.getByRole("button", { name: "Use dates", exact: true }).click();
     await ready(page);
 }
+test("Compare keeps period headings, readings and exact-call actions aligned through reflow", async t => {
+    const { page, comparisons } = await setup(t, "compare?aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09", { frontend: "react" });
+    await ready(page);
+    for (const [width, scale] of [[1440, 100], [390, 100], [390, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+        await page.evaluate(() => document.fonts.ready);
+        for (const selector of [".compare-changes table", ".comparison-outcome-values"]) {
+            const layout = await page.locator(selector).evaluate(table => {
+                const center = box => box.left + box.width / 2;
+                // Measure text, not the full-width button or its flex wrapper.
+                const ink = el => {
+                    const range = document.createRange(), walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), boxes = [];
+                    while (walker.nextNode()) if (walker.currentNode.textContent.trim()) {
+                        range.selectNodeContents(walker.currentNode);
+                        boxes.push(range.getBoundingClientRect());
+                    }
+                    return { x: (Math.min(...boxes.map(b => b.left)) + Math.max(...boxes.map(b => b.right))) / 2,
+                        y: Math.min(...boxes.map(b => b.top)) };
+                };
+                // The compact layout places Change on a separate, labeled line.
+                const headers = [...table.tHead.rows[0].cells].slice(1).filter(th => th.getBoundingClientRect().width > 1);
+                const columns = headers.map(th => th.getBoundingClientRect());
+                const offsets = headers.map((th, i) => ink(th).x - center(columns[i]));
+                const rowOffsets = [...table.tBodies[0].rows].flatMap(tr => {
+                    const peers = columns.map((_, i) => {
+                        const values = [...tr.cells[i + 1].querySelectorAll(".compare-change-value > *, .percentage-value")].map(ink);
+                        offsets.push(...values.map(value => value.x - center(columns[i])));
+                        return values;
+                    });
+                    return peers.slice(1).flatMap(peer => peer.map((value, i) => value.y - peers[0][i].y));
+                });
+                return { widths: columns.map(box => box.width), offsets, rowOffsets };
+            });
+            const where = `${selector} at ${width}px/${scale}%: ${JSON.stringify(layout)}`;
+            assert.ok(Math.abs(layout.widths[0] - layout.widths[1]) <= 1, where);
+            assert.ok([...layout.offsets, ...layout.rowOffsets].every(v => Math.abs(v) < 2), where);
+        }
+        const output = process.env.WIRE_COMPARISON_PROOFS;
+        if (output) {
+            await mkdir(output, { recursive: true });
+            await page.evaluate(() => scrollTo(0, 0));
+            await page.mouse.move(0, 0);
+            await page.screenshot({ path: path.join(output, `period-tables-${width}-${scale}.png`), fullPage: true });
+        }
+        const baseline = page.locator("#compareChange-0-baseline");
+        const selected = page.getByRole("button", { name: /Mar 8.*Tool completed: 50.00% \(2 of 4 calls\)/ });
+        const { periods } = comparisons.at(-1);
+        const completed = periods.later.analytics.rows.filter(row => row.outcome === "success").map(row => row.id);
+        for (const [action, side, ids] of [[baseline, "A", periods.baseline.changeSummary.issueRowIds], [selected, "B", completed]]) {
+            await action.focus(); await page.keyboard.press("Enter");
+            const records = page.locator(`#comparisonExactRecords${side} tbody tr th a`);
+            await expect(records).toHaveCount(ids.length);
+            assert.deepEqual((await records.evaluateAll(links => links.map(a => a.id))).sort(), ids.map(id => `comparison-record-${side}-${id}`).sort());
+            await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+            await expect(action).toBeFocused();
+        }
+    }
+});
 test("Compare sections keep the period view and saved report choices across keyboard navigation and Back", async t => {
     const app = await searchFixture(t, { records: periodFixture().records.slice(1, 5), frontend: "react", reply: false,
         formats: ["json", "html"], reportTitles: ["Earlier weekly review", "Later weekly review"] });

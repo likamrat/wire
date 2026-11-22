@@ -575,6 +575,11 @@ The baseline is the period to compare against; the selected period is the one
 under review. Either date opens the shared calendar on that side. Choose a measure
 name for both exact values, or a side's value for its calls. On the change-table
 view, the call-count action opens the selected period first.
+In **What changed** and **Call results**, read the measure or outcome on the
+left, then compare the two equal-width periods. Center each period heading,
+value and supporting count on the same axis, whether the value is clickable
+or plain text. When space is tight, put the row label above the pair and the
+change below it; keep the periods side by side.
 
 Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with

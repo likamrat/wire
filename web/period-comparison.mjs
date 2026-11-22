@@ -744,7 +744,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             detail.append(ux.icon("forward"));
             return [detail, ...cells, change];
         });
-        node.append(table("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
+        const readings = dataTable("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows);
+        readings.className = "compare-period-readings";
+        node.append(readings);
         return node;
     }
     function numbersPanel(value, sides, names) {
@@ -929,7 +931,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 return control;
             })];
         }));
-        details.className = "comparison-outcome-values compare-values-table";
+        details.className = "comparison-outcome-values compare-period-readings";
         node.append(details);
         if (value.options.filters.outcomes?.length) node.append(el("p", "Shares use the same selected activity before the outcome filter.", "compare-caption"));
         if (tool) node.append(el("p", "Results describe tool calls, not the quality of the answers.", "compare-caption"));
@@ -1553,9 +1555,15 @@ export const periodComparisonStyles = `
 .compare-answer-grid>.compare-panel>:is(h3,.compare-findings,.compare-caption,.compare-values-table){margin:0}
 .compare-panel h3{font-size:1.125rem;margin:0 0 8px}
 .compare-panel h4{font-size:.875rem;margin:0}
-.compare-changes{margin-block:var(--space-lg)}
-.compare-change-value{display:grid;justify-items:end;gap:2px;font-variant-numeric:tabular-nums}
-.compare-changes .period-comparison-table tr>:not(:first-child){text-align:end}
+.compare-changes{margin-block:var(--space-lg);padding-inline:0}
+.compare-period-readings{width:100%;table-layout:fixed;border-collapse:collapse;margin-top:8px;font-size:var(--type-small);font-variant-numeric:tabular-nums}
+.compare-period-readings :is(th,td){padding:6px 8px;border-bottom:1px solid var(--surface-divider);font-weight:var(--weight-regular);vertical-align:middle;text-align:center;overflow-wrap:anywhere}
+.compare-period-readings tr>:first-child{width:40%;padding-inline-start:0;text-align:start}
+.compare-period-readings tr>*+*{border-inline-start:1px solid var(--surface-divider)}
+.compare-period-readings thead{color:var(--muted)}
+.compare-period-readings th button{--pill-inset:0px;text-align:start}
+.compare-changes tbody :is(th,td){vertical-align:top}
+.compare-change-value{display:grid;justify-items:center;align-items:center;grid-template-rows:minmax(var(--pill-height),auto);gap:2px}
 .compare-change-value .compare-value-detail{color:var(--muted);font-size:var(--type-small)}
 .compare-findings{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:8px 0}
 .compare-findings>p{margin:0}
@@ -1717,10 +1725,10 @@ export const periodComparisonStyles = `
 .period-comparison .comparison-chart-mark:hover{background:var(--report-note)}
 .period-comparison .comparison-chart-mark::before{display:none}
 .compare-outcome-row{margin-top:24px}
-.comparison-outcome-values{width:100%;margin-top:16px}
-.comparison-outcome-values button{min-height:44px;font:inherit;width:100%}
+.comparison-outcome-values{margin-top:16px}
+.comparison-outcome-values button{font:inherit;width:100%;padding-inline:4px}
 .comparison-outcome-values .compare-swatch{display:inline-block;margin-inline-end:8px}
-.comparison-outcome-values .percentage-value{display:inline-flex;font:inherit}
+.comparison-outcome-values .percentage-value{justify-content:center;text-align:center;font:inherit}
 .compare-outcome-bar .compare-outcome-paint{height:32px}
 .comparison-application-results{margin-top:18px}
 @container comparison-results (max-width:38rem){
@@ -1737,13 +1745,17 @@ export const periodComparisonStyles = `
  .comparison-group-value>.percentage-value{grid-column:1;grid-row:2;justify-content:flex-start;text-align:start}
  .comparison-group-track{grid-row:3}
 }
-@container comparison-results (min-width:18rem){
- .comparison-outcome-values{display:table;table-layout:fixed}
- .comparison-outcome-values thead{display:table-header-group;position:static;width:auto;height:auto;clip-path:none}
- .comparison-outcome-values tbody{display:table-row-group}
- .comparison-outcome-values :is(thead,tbody) tr{display:table-row}
- .comparison-outcome-values :is(th,td){display:table-cell;width:33.333%;padding:8px 4px;vertical-align:top}
- .comparison-outcome-values td::before{display:none}
+@container comparison-panel (max-width:36rem){
+ /* Keep the period pair together. Lift the row name above it and put its change below. */
+ .compare-period-readings :is(thead,tbody){display:block}
+ .compare-period-readings tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;border-bottom:1px solid var(--surface-divider);padding-block:4px}
+ .compare-period-readings tr>*{width:auto;border:0;padding-inline:2px}
+ .compare-period-readings tr>:first-child{width:auto;grid-column:1/-1}
+ .compare-period-readings thead tr>:is(:first-child,:nth-child(4)){position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%)}
+ .compare-period-readings tr>:nth-child(3){border-inline-start:1px solid var(--surface-divider)}
+ .compare-changes tr>td:last-child{grid-column:1/-1;display:flex;justify-content:center;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
+ .compare-changes tr>td:last-child::before{content:attr(data-label);color:var(--muted)}
+ .compare-changes td:last-child .compare-change-value{display:contents}
 }
 @container comparison-results (max-width:18rem){
  .comparison-chart-controls>.select-control{flex:1 0 100%}
