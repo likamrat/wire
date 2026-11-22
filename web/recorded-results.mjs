@@ -397,22 +397,54 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             .map(target => [target.method, target.apiVersion, target.path].filter(Boolean).join(" ")))];
         return [row?.tool || "Tool not recorded", paths.length ? "Requested: " + paths.join("; ") : null].filter(Boolean).join(" \u00b7 ");
     }
-    // Preview one scoped reason; the link keeps its exact call/entry, with full text in the reader.
-    function issueCue(call, outcome, entry) {
-        if (!call) return null;
-        const value = call.resultEvidence;
-        let detail;
-        if (entry) {
-            const diagnostic = entry.errorDiagnostic;
-            if (diagnostic?.statusCode != null && entry.statusCode != null && diagnostic.statusCode !== entry.statusCode)
-                detail = `Returned HTTP ${entry.statusCode}; diagnostic HTTP ${diagnostic.statusCode}`;
-            else detail = diagnosticSummary({ ...diagnostic, code: diagnostic?.code ?? entry.errorCode }, entry.statusCode);
-        } else if (outcome === "failure") detail = failureReason(call, { contextual: true, includeReturned: false });
-        else if (value?.version === 1) detail = completionReason(call, outcome, true, false);
+    function shortCue(detail, code) {
         if (!detail) return null;
         const first = Array.from(detail.split("\n").find(Boolean)?.trim() ?? "");
         if (!first.length) return null;
-        return first.length > 160 ? first.slice(0, 157).join("") + "..." : first.join("");
+        if (first.length <= 160) return first.join("");
+        const prefix = first.slice(0, 157).join("").trimEnd();
+        return prefix + "..." + (code != null && code !== "failure" && !prefix.includes(String(code)) ? ` (${code})` : "");
+    }
+    function returnedEntryLabel(call, entry) {
+        const indexed = Number.isSafeInteger(entry.index) && entry.index >= 0;
+        const label = indexed ? `Returned entry ${entry.index + 1}` : "Returned entry";
+        if (indexed && !call.apiResults.some(other => other !== entry && other?.index === entry.index)) return label;
+        return `${label} (saved item ${call.apiResults.indexOf(entry) + 1})`;
+    }
+    // Keep parent calls and canonical entry rows; equal text/status is not an identity.
+    function cardIssues(rows, apiRows, callFor) {
+        const byParent = new Map(), groups = new Map();
+        for (const row of apiRows ?? []) {
+            if (!byParent.has(row.parentCallId)) byParent.set(row.parentCallId, []);
+            byParent.get(row.parentCallId).push(row);
+        }
+        const hasDiagnostic = d => d?.version === 1 && (d.message || d.code != null || d.statusCode >= 400 || d.details?.length);
+        for (const row of new Map((rows ?? []).map(row => [row.id, row])).values()) {
+            const call = callFor(row), entries = [];
+            for (const api of byParent.get(row.id) ?? []) {
+                const entry = returnedResult(call, api);
+                if (!entry) continue;
+                const d = entry.errorDiagnostic;
+                const conflict = d?.statusCode != null && api.status != null && d.statusCode !== api.status;
+                if (!conflict && api.outcome !== "failure" && !entry.errorCode && !hasDiagnostic(d)) continue;
+                const status = conflict ? `HTTP ${api.status}; diagnostic HTTP ${d.statusCode}`
+                    : api.status != null ? `HTTP ${api.status}` : d?.statusCode != null ? `diagnostic HTTP ${d.statusCode}` : "Reported error";
+                const offset = call.apiResults.indexOf(entry);
+                entries.push({ row: api, offset, label: `${returnedEntryLabel(call, entry)} · ${status}`,
+                    detail: shortCue(diagnosticSummary({ ...d, code: d?.code ?? entry.errorCode, statusCode: null }), d?.code ?? entry.errorCode) });
+            }
+            entries.sort((a,b) => a.offset - b.offset);
+            const failed = row.outcome === "failure", r = call?.resultEvidence;
+            const resultIssue = !failed && r?.version === 1 && (r.applicationError === true || r.statusConflict || r.statusCode >= 400 || hasDiagnostic(r.diagnostic));
+            if (!failed && !resultIssue && !entries.length) continue;
+            const reason = failed ? failureReason(call, { contextual: true, includeReturned: false })
+                : resultIssue ? completionReason(call, row.outcome, true, false) : null;
+            const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, reason]) : JSON.stringify(["call", row.id]);
+            const code = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
+            const group = groups.get(key) ?? { rows: [], detail: shortCue(reason, code), entries, resultIssue };
+            group.rows.push(row); groups.set(key, group);
+        }
+        return [...groups.values()];
     }
     function returnedCoverage(call) {
         const result = call?.resultEvidence, retained = call?.apiResults?.length ?? 0;
@@ -669,5 +701,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, issueCue, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

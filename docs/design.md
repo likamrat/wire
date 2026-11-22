@@ -54,8 +54,9 @@ evidence that limits a conclusion must remain explicit. Do not repeat the same
 fact in a badge, paragraph, warning and disclosure.
 
 On interaction cards, identify the prompt author with a high-contrast label
-and its Human, Agent or unverified icon. Put recorded tool outcomes in the
-same second header slot, above the prompt, for every author. Green/check
+and its Human, Agent or unverified icon. Keep the date beside the author.
+Give the prompt and its eye separate columns inside one link. Below the prompt,
+keep the recorded outcome with the affected calls and their explanations. Green/check
 indicates recorded tool completion; red/cross marks failed calls. Neither
 is a verdict on the prompt or the task. Returned issues keep a separate link.
 Keep provenance in Source details; name a source on the card when

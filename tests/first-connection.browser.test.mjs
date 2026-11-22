@@ -124,7 +124,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await expect(card.locator(".card-quotation")).toHaveCount(0);
     await expect(page.locator("#activityView").getByText("Scope details", { exact: true })).toHaveCount(0);
     await expect(page.locator("#activityListSummary")).toContainText("2 interactions");
-    const fail = card.getByRole("link", { name: "1 tool call failed" }), issue = card.getByRole("link", { name: /result: HTTP 403/i });
+    const fail = card.getByRole("link", { name: "1 tool call failed" }), issue = card.getByRole("link", { name: /returned entry 2 · HTTP 403/i });
     await expect(fail).toBeVisible(); await expect(issue).toBeVisible();
     for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1440, 1], ["dark", 390, 1], ["light", 390, 2], ["light", 1024, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
@@ -188,7 +188,8 @@ test("enforced React activity caps the home preview while keeping the full reque
     assert.equal(await picker.locator("input[type=checkbox]").isChecked(), selected);
     await page.evaluate(() => {
         const row = document.querySelector("#reportActivityOptions .read-in-place");
-        window.heldCard = [row.querySelector(".request-card-open").firstChild, row.querySelector(".request-card-open").getAttributeNode("href")];
+        window.heldCard = [document.createTreeWalker(row.querySelector(".request-card-open"), NodeFilter.SHOW_TEXT).nextNode(),
+            row.querySelector(".request-card-open").getAttributeNode("href")];
     });
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
     await navigateMain(page, "analyze");

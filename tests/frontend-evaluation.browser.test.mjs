@@ -335,6 +335,80 @@ test("completed status opens every counted call and no uncounted sibling", {time
     } finally {await cdp.detach();}
 });
 
+test("failed-call and returned-entry cards keep all counted evidence, exact destinations and reading order", { timeout: 90000 }, async t => {
+    const records = compactCardRecords(), [ask, fetch, mixed] = records;
+    const original = ask.toolCalls[1];
+    ask.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    ask.userPrompt.text = "Read the Cedar handover and the planning notes. Identify the decisions that still need an owner and include the dates from the original documents. Keep the two reviews separate, and distinguish an agreed date from a proposed date.";
+    const message = "The archive could not load the collection policy for the Cedar planning notes. The request stopped before the notes were opened.";
+    ask.toolCalls = [ask.toolCalls[0], ...[0,1].map(i => ({
+        ...original, tool: "workiq-ask", toolCallId: "ask-" + i, startEventId: "start-ask-" + i,
+        failureEvidence: { ...original.failureEvidence, code: "PolicyUnavailable",
+            diagnostic: { version: 1, source: "completion-error", status: "recorded", code: "PolicyUnavailable", message, details: [] } },
+    }))];
+    ask.toolCalls[0].apiResults = [];
+    mixed.toolCalls = ["NotReady", null].map((code,i) => ({ ...original, toolCallId: "mixed-"+i, startEventId: "mixed-start-"+i,
+        startedAt: mixed.capturedAt, failureEvidence: code ? { ...original.failureEvidence, code } : undefined }));
+    fetch.userPrompt.authorship = { actor: "user", basis: "source-user" };
+    fetch.userPrompt.text = "Read the Cedar release decisions from the message and the two attached notes. Identify the agreed milestones, then flag the entries that still need review.";
+    const call = fetch.toolCalls[0];
+    call.tool = "workiq-fetch"; call.requestArgs = { entityUrls: ["/me/messages", "/me/events"] }; delete call.requestedApiPath;
+    call.failureEvidence = { ...original.failureEvidence, code: "BadRequest" };
+    call.apiResults = [200, 400, 400].map((statusCode, index) => ({ index, statusCode, ...(index ? {
+        errorCode: "BadRequest", errorDiagnostic: { version: 1, source: "result-error", status: "recorded", code: "BadRequest",
+            message: `The ${index === 1 ? "date" : "owner"} field was rejected.`, details: [] },
+    } : {}) }));
+    const { page } = await setup(t, "react", records);
+    const cardFor = record => page.locator(`#activityList [data-view-key="request:${record.scenarioId}"]`);
+    const top = cardFor(ask), lower = cardFor(fetch);
+    const reader = page.locator("#requestContent [data-reader-section=activity]");
+    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 390, 2]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 980 });
+        await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
+        await top.locator(".request-card-open").hover();
+        if (proofs) {
+            await mkdir(proofs, { recursive: true });
+            const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";
+            await top.locator(".request-card-author").evaluate(n=>n.closest("article").scrollIntoView({block:"start"}));
+            await capture(page, `failure-cards-${phase}-${theme}`);
+            await lower.screenshot({path:path.join(proofs, `returned-entries-${phase}-${theme}.png`)});
+            await top.locator(".card-failure").click();
+            await expect(reader.locator(".reader-call-row").first()).toBeVisible();
+            await capture(page, `failure-reader-${phase}-${theme}`);
+            await page.goBack(); await expect(top.locator(".card-failure")).toBeFocused();
+        }
+    }
+    await expect(top.locator(".card-failure")).toHaveText("2 tool calls failed");
+    await expect(top).toContainText("Calls #2–3", { timeout: 1000 });
+    await expect(top.locator(".card-issue-detail")).toHaveText(`${message} (PolicyUnavailable)`);
+    await expect(cardFor(mixed)).toContainText("NotReady");
+    await expect(cardFor(mixed)).toContainText("Failure reason was not saved");
+    await expect(cardFor(mixed).locator("a").filter({hasText:"Failure reason was not saved"})).toHaveCount(0);
+    await expect(top.locator(".returned-issue-ink")).toHaveCount(0);
+    await top.locator(".card-failure").focus(); await page.keyboard.press("Enter");
+    await expect(reader.locator(".reader-section-heading")).toContainText("2 failed calls");
+    assert.deepEqual(await reader.locator(".reader-call-row").evaluateAll(ns=>ns.map(n=>n.dataset.toolCallId)),["ask-0","ask-1"]);
+    await page.goBack(); await expect(top.locator(".card-failure")).toBeFocused();
+    const layout = await top.evaluate(n => {
+        const box = s=>n.querySelector(s).getBoundingClientRect();
+        return { metadataFirst: box(".card-metadata").bottom < box(".request-card-open").top,
+            eyeSeparate: box(".card-excerpt").right < box("[data-icon-role=read]").left,
+            outcomeBeforeReason: box(".card-failure").bottom <= box(".card-issue-owner").top };
+    });
+    assert.deepEqual(layout, {metadataFirst:true,eyeSeparate:true,outcomeBeforeReason:true});
+    const links = lower.locator(".returned-issue-ink");
+    await expect(links).toHaveCount(2);
+    for (const [offset,word] of [[0,"date"],[1,"owner"]]) {
+        await expect(links.nth(offset)).toHaveAccessibleName(new RegExp(`returned entry ${offset+2}.*HTTP 400`, "i"));
+        await links.nth(offset).click();
+        const reached = reader.locator(".api-result-entry:focus");
+        await expect(reached).toContainText(`Returned entry ${offset+2}`);
+        await expect(reached).toContainText(`The ${word} field was rejected.`);
+        await page.goBack(); await expect(links.nth(offset)).toBeFocused();
+    }
+});
+
 test("reader execution faces match the card without borrowing its total or a returned HTTP error", async t => {
     const records = compactCardRecords(), mixed = records[0];
     mixed.toolCalls.push({ ...mixed.toolCalls[1], toolCallId: "another-failure", startEventId: "another-start" });
@@ -376,7 +450,7 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const promptLink = card.locator(".request-card-open");
     await expect(card).toContainText("Review the Cedar handover");
-    await expect(card.locator(".request-card-exception")).toHaveText(["1 tool call failed", /result: HTTP 403/]);
+    await expect(card.locator(".request-card-exception")).toHaveText(["1 tool call failed", "Returned entry 2 · HTTP 403 · Mail"]);
     await expect(card.locator(".card-tool-item").filter({hasText:"workiq-fetch"})).toHaveText("workiq-fetch (3 calls)");
     await expect(card.locator(".card-identities")).toContainText("Mail");
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
@@ -385,7 +459,8 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     const timestampSize = await card.locator(".request-card-time").evaluate(el => parseFloat(getComputedStyle(el).fontSize));
     const reasons = await card.locator(".request-card-cause").evaluateAll(nodes => nodes.map(el => parseFloat(getComputedStyle(el).fontSize)));
     assert.ok(reasons.every(size => size > timestampSize), "Both failure explanations must read as body text, not timestamp captions.");
-    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|flag alone|completion event|end time/);
+    await expect(card.locator(".card-issue-owner")).toHaveText(["Call #1 · workiq-fetch", "Call #2 · workiq-retrieve"]);
+    await expect(card).not.toContainText(/Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
     await expect(card.locator("button,input,details")).toHaveCount(0);
     await promptLink.focus(); await page.keyboard.press("Enter");
@@ -573,7 +648,7 @@ test("exact evidence links keep hover and press paint off the full hit target", 
         await page.setViewportSize({width, height: 900});
         await chooseTheme(page, mode);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        for (const [selector, name] of [[".returned-issue-ink", "Mail result: HTTP 403"], [".card-failure", "1 tool call failed"]]) {
+        for (const [selector, name] of [[".returned-issue-ink", "Call #1 · workiq-fetch, Returned entry 2 · HTTP 403 · Mail"], [".card-failure", "1 tool call failed"]]) {
             const link = card.locator(selector);
             await link.scrollIntoViewIfNeeded();
             await page.mouse.move(0, 0);

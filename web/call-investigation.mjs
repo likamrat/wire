@@ -1,5 +1,5 @@
 // Read-only presentation over the accepted snapshot; never looks up source records.
-export function createCallInvestigation(compareEntries) {
+export function createCallInvestigation() {
     const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
     const duration = (row, layer = "tool") => ["tool", "reported-api", "http"].includes(layer)
         && Number.isFinite(row?.durationMs) && row.durationMs >= 0 ? row.durationMs : null;
@@ -60,6 +60,12 @@ export function createCallInvestigation(compareEntries) {
         candidates.sort((a, b) => compareEntries(a, b) || a.index - b.index);
         return candidates[0]?.target ?? null;
     }
-    const firstFailure = (...args) => firstToolCall(...args, row => row.outcome === "failure");
-    return { duration, order, resolve, firstFailure, firstToolCall };
+    function countedIds(rows, request, outcome) {
+        if (!rows?.length || !["success", "failure"].includes(outcome)) return null;
+        if (outcome === "success" && rows.some(row => row.outcome !== "success")) return null;
+        const members = rows.filter(row => row.outcome === outcome);
+        if (members.some(row => !row.id || !(row.scenarioIds?.length ? row.scenarioIds : [row.scenarioId]).includes(request))) return null;
+        return new Set(members.map(row => row.id));
+    }
+    return { duration, order, resolve, countedIds, firstToolCall };
 }

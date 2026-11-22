@@ -300,8 +300,10 @@ matching records, not the current account: exact tools, recorded targets,
 operations and applicable gaps. The reader keeps complete-parent ordinals.
 The panel glyph beside the call count opens the right-hand activity reader;
 when that panel is open the same control closes it. A prompt link opens
-the original; tool failure and
-returned-result links resolve their own evidence. Report selection is separate.
+the original. The failed-call count opens the matching failure or set of failures,
+not the first member of a plural count. Under each call, a returned-entry link opens
+that entry in its parent call, even when siblings have the same status. Unavailable
+reasons are text, not actions. Report selection is separate.
 On an Analyze tool-call card, **View call** beside a service limit opens that
 call's evidence. **First of N calls** opens the earliest matching call in the
 interaction, not the first call with a known target elsewhere on the card.

@@ -62,5 +62,22 @@ export function createRequestContext() {
             limitation: "Available retained context only, not a complete conversation. The normal source keeps at most the nearest following message per group; other messages or replies may be missing.",
         };
     }
-    return { select, compare };
+    function actionOrdinals(scenario) {
+        const items = [];
+        function add(sources, identity) {
+            const seen = new Map();
+            for (const source of sources ?? []) {
+                const id = identity(source);
+                if (id && seen.has(id)) { seen.get(id).push(source); continue; }
+                const members = [source];
+                items.push({ at: source.startedAt, members });
+                if (id) seen.set(id, members);
+            }
+        }
+        add(scenario.toolCalls, call => call.toolCallId ? `call:${call.toolCallId}` : call.startEventId && `start:${call.startEventId}`);
+        add(scenario.graphActivities, site => site.activityId);
+        add(scenario.httpRecords, record => record.recordId);
+        return new Map(items.sort(compare).flatMap(({ members }, index) => members.map(source => [source, index + 1])));
+    }
+    return { select, compare, actionOrdinals };
 }

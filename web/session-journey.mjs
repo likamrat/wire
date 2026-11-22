@@ -92,6 +92,7 @@ export function createSessionJourney() {
             if (typeof value[key] === "string") origin[key] = value[key];
         }
         if (value.completedCalls) origin.completedCalls = structuredClone(value.completedCalls);
+        if (value.failedCalls) origin.failedCalls = structuredClone(value.failedCalls);
         return origin;
     }
     return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin,

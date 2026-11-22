@@ -292,13 +292,12 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const date = dated ? dateLabel + ": " + formatDate(dates.firstAt)
             + (formatDate(dates.lastAt) !== formatDate(dates.firstAt) ? " - " + formatDate(dates.lastAt) : "")
             + (dates.undatedRows ? ` / ${number(dates.undatedRows)} undated` : "") : "Activity date unavailable";
-        facts.append(node("span", date, "request-card-time"));
+        const header = ux.cardMetadata(author, node("span", date, "request-card-time"), node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
-        const orientation = node("div", undefined, "card-orientation"); orientation.append(author);
+        const orientation = node("div", undefined, "card-orientation");
         if (toolOutcome) orientation.append(ux.cardOutcome(toolOutcome, toolOutcome.key === "success" && completedCard(view, item)
             && view.page.items.includes(item) ? link("card-evidence-link", "completed") : undefined));
-        facts.prepend(node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
-        context.append(orientation, action, facts);
+        context.append(header, action, facts, orientation);
         body.append(context, key);
         if (selection) article.append(selection);
         const foot = node("div", undefined, "card-reading-actions");

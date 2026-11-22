@@ -90,10 +90,11 @@ doesn't tell you who asked for the work. Microsoft 365
 conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 
-On an Analyze card, the failed-call link opens the first matching failed
-call. Its short reason comes from that call; a returned-entry issue has a
-separate link to that entry. Open the reader for the full retained wording,
-code and status. A completed tool can still return an error. A missing
+On an Analyze card, **2 tool calls failed** opens both failed calls. The
+short reasons identify their calls; if no reason was saved, the card says so.
+**Returned entry 2 · HTTP 400** opens that particular result, not the first
+error or another entry with the same status. Open the reader for the full retained
+wording, code and status. A completed tool can still return an error. A missing
 completion does not establish that anyone cancelled the call.
 
 Dates filter retained activity; they do not approve older source reads.

@@ -17,6 +17,33 @@ test("call group labels preserve retained ordinals without implying unselected c
     }
 });
 
+test("card issues distinguish a completed tool's result, equal statuses, repeated source indexes and a gap-only diagnostic", () => {
+    const results = createRecordedResults({ screen: true });
+    const rows = ["a", "b", "outside"].map(id => ({id, tool:"workiq-fetch", outcome:"success"}));
+    const calls = {
+        a: {apiResults:[
+            {index:0,statusCode:200,errorDiagnostic:{version:1,status:"not-supplied"}},
+            {index:1,statusCode:400}, {index:1,statusCode:400},
+        ]},
+        b: {resultEvidence:{version:1,applicationError:true}, apiResults:[
+            {index:1,statusCode:200,errorDiagnostic:{version:1,status:"recorded",statusCode:503}},
+        ]},
+        outside: {apiResults:[{index:1,statusCode:400}]},
+    };
+    const entries = rows.flatMap(call=>calls[call.id].apiResults.map((entry,i)=>({
+        id:`result:${JSON.stringify([call.id,i])}`,parentCallId:call.id,status:entry.statusCode,outcome:entry.statusCode>=400?"failure":"success",
+    })));
+    const groups = results.cardIssues(rows.slice(0,2),entries.reverse(),r=>calls[r.id]);
+    assert.deepEqual(groups.map(g=>g.rows.map(r=>r.id)),[["a"],["b"]]);
+    assert.deepEqual(groups[0].entries.map(e=>[e.label,e.row.id]),[
+        ["Returned entry 2 (saved item 2) · HTTP 400",'result:["a",1]'],
+        ["Returned entry 2 (saved item 3) · HTTP 400",'result:["a",2]'],
+    ]);
+    assert.equal(groups[1].resultIssue,true);
+    assert.match(groups[1].detail,/application error/);
+    assert.equal(groups[1].entries[0].label,"Returned entry 2 · HTTP 200; diagnostic HTTP 503");
+});
+
 test("screen result details preserve dynamic source-qualified units and report defaults", () => {
     let accepted = { layer: "tool", unit: "source-qualified tool calls" };
     const results = createRecordedResults({ scope: () => accepted, screen: true });

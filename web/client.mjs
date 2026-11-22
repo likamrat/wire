@@ -654,7 +654,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     const requestContext = createRequestContext();
-    const callInvestigation = createCallInvestigation(requestContext.compare);
+    const callInvestigation = createCallInvestigation();
     let detailOwner = "page";
     let collection, collectionSettings, sourceSettings, firstConnection, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const privateObjectUrls = new Set();
@@ -787,7 +787,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return origin.view === "reports" && origin.task === "create";
     }
     function requestIdentity(value = workspaceState.route) { return JSON.stringify([value.request, value.call, value.callRevision,
-        value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal, value.completedCalls?.key, value.nativeCompletedRef]); }
+        value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal, value.completedCalls?.key, value.failedCalls?.key, value.nativeCompletedRef]); }
     function sidebarAnchor() {
         if (underlyingRoute().view === "trends") return trendsUI.evidenceOrigin()?.closest(".trends-panel,.trends-panel-pair") ?? null;
         return (workspaceState.route.inspect ? savedInspector?.anchor || keyed("bundle:" + workspaceState.route.inspect) : null)
@@ -1258,7 +1258,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         const completedHeading = workspaceState.route.nativeCompletedRef ? readerSections?.revealTarget?.("completed")
-            : workspaceState.route.completedCalls && contextBody.querySelector('[data-reader-section="activity"] .reader-section-heading');
+            : (workspaceState.route.completedCalls || workspaceState.route.failedCalls) && contextBody.querySelector('[data-reader-section="activity"] .reader-section-heading');
         const anchor = $("selectedCall") || $("unavailableCall") || completedHeading || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
         readerSections?.reveal(anchor);
         contextBody.scrollTop = anchor ? contextBody.scrollTop + anchor.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - timingInset(anchor) : 0;
@@ -2634,7 +2634,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } catch { next = { view: "trends", trendUnavailable: true }; }
         }
         if (next.view !== "request") {
-            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, nativeCompletedRef, completedCalls, bookmark, searchOwned, ...rest } = next;
+            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, nativeCompletedRef, completedCalls, failedCalls, bookmark, searchOwned, ...rest } = next;
             next = rest;
         }
         if (next.view !== "request" && Object.hasOwn(next, "call")) next = { ...next, call: undefined };
@@ -2774,7 +2774,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
             ...workspaceState.route, view, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
-            completedCalls: undefined,
+            completedCalls: undefined, failedCalls: undefined,
             nativeCompletedRef: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
             returnToResults: view === "request" ? workspaceState.route.returnToResults : undefined,
@@ -3077,16 +3077,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return results.summarize(rows) ? rows.filter(row => idsFor(row).includes(scenarioId)) : undefined;
     }
     // Keep counted IDs in the existing publication-fenced private route, never its URL.
-    function completedCallView(rows, request) {
-        if (!rows?.length || rows.some(row => row.outcome !== "success" || !idsFor(row).includes(request))) return null;
-        return { key: crypto.randomUUID(), revision: workspaceState.evidence.revision, ids: [...new Set(rows.map(row => row.id))] };
+    function countedCallTarget(rows, target, outcome) {
+        if (!["success", "failure"].includes(outcome)) return null;
+        const ids = callInvestigation.countedIds(rows, target.request, outcome);
+        if (!ids?.size) return null;
+        if (outcome === "failure" && ids.size === 1) return { ...target, layer: "tool", call: [...ids][0] };
+        return { ...target, [outcome === "failure" ? "failedCalls" : "completedCalls"]: {
+            key: crypto.randomUUID(), revision: workspaceState.evidence.revision, ids: [...ids],
+        } };
     }
-    function currentCompletedCalls(route) {
-        const view = route.completedCalls;
+    function currentOutcomeCalls(route) {
+        const view = route.failedCalls ?? route.completedCalls;
         if (!view || view.revision !== workspaceState.evidence.revision || !Array.isArray(view.ids) || !view.ids.length) return null;
         const expected = new Set(view.ids);
         const rows = route.origin === "reports" ? fullRowsFor(route.request, "tool") : rowsFor(route.request);
-        if (!rows || rows.some(row => row.outcome !== "success" || !expected.has(row.id)) || new Set(rows.map(row => row.id)).size !== expected.size) return null;
+        const actual = callInvestigation.countedIds(rows, route.request, route.failedCalls ? "failure" : "success");
+        if (actual?.size !== expected.size || [...expected].some(id => !actual.has(id))) return null;
         return expected;
     }
     function sourceCallFor(row) {
@@ -3351,7 +3357,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const retained = results.returnedResult(call, entry);
             const code = retained?.errorCode;
             const status = entry.status != null ? `Tool-reported HTTP ${entry.status}` : code ? "Tool-reported error" : null;
-            const recordLabel = (Number.isSafeInteger(retained?.index) && retained.index >= 0 ? `Returned entry ${retained.index + 1}: ` : "")
+            const recordLabel = (retained ? results.returnedEntryLabel(call, retained) + ": " : "")
                 + (["partial", "unknown"].includes(entry.outcome)
                 ? results.labels("reported-api")[entry.outcome] + (status ? ": " + status : "")
                 : status || results.labels("reported-api")[entry.outcome]) + (code ? ": " + code : "");
@@ -5862,12 +5868,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) : rowsFor(scenario.scenarioId);
         const target = routeFor("request", { request: scenario.scenarioId });
         const summary = results.summarize(rows), outcome = layer === "tool" ? results.toolCardOutcome(summary) : null;
-        const completed = outcome?.key === "success" ? completedCallView(rows, scenario.scenarioId) : null;
-        const completedTarget = completed ? { ...target, completedCalls: completed } : null;
+        const statusTarget = countedCallTarget(rows, target, outcome?.key);
         if (nativeActivity.isNative(scenario)) return nativeActivity.card({
-            record: scenario, setHref: (link, done) => setRouteLink(link, done ? completedTarget : target), rows: rows ?? [], layer,
-            contextDateBasis: nativeContextDateBasis(scenario.scenarioId), canOpenCompleted: Boolean(completedTarget),
-            onOpen: (id, done) => navigate(done ? completedTarget : target),
+            record: scenario, setHref: (link, counted) => setRouteLink(link, counted ? statusTarget : target), rows: rows ?? [], layer,
+            contextDateBasis: nativeContextDateBasis(scenario.scenarioId), canOpenCounted: Boolean(statusTarget),
+            onOpen: (id, counted) => navigate(counted ? statusTarget : target),
         });
         const row = viewKey(el("article", "request-row activity-card read-in-place"), "request:" + scenario.scenarioId);
         const events = new AbortController();
@@ -5889,7 +5894,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     closeContextSidebar(); return;
                 }
                 if (focus === "prompt") textAccess.setOpen("request:" + target.request, true);
-                if (exact.completedCalls) navigate(exact);
+                if (exact.completedCalls || exact.failedCalls) navigate(exact);
                 else navigate(target, false, { cardTarget: { target: exact, revision: workspaceState.evidence.revision, focus } });
             }, { signal });
             return link;
@@ -5901,7 +5906,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const openPrompt = text => open(text, "prompt", target, "request-card-open recognition-row");
         const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt, home: !reportPicker }) : el("p", "request-card-prompt");
         if (!description.hasText) prompt.append(openPrompt((description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice));
-        prompt.querySelector(".request-card-open").append(ux.icon("read"));
+        const promptLink = prompt.querySelector(".request-card-open");
+        if (!promptLink.querySelector(".card-excerpt")) {
+            const passage = el("span", "card-excerpt");
+            passage.append(...promptLink.childNodes); promptLink.append(passage);
+        }
+        promptLink.append(ux.icon("read"));
         const sourceIdentity = filterState.sourceIdentity(rows);
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);
@@ -5909,9 +5919,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         author.prepend(ux.icon(authorship.iconRole(actor)));
         const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
         const facts = el("div", "request-card-summary");
-        if (sourceIdentity && sharedNativeView()?.aggregates.conversations)
-            facts.append(el("span", "request-card-source", `Source: ${sourceIdentity.label}`));
-        facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
+        const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
+            sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         }
@@ -5920,8 +5929,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (description.hasText && description.notice) facts.append(el("span", "request-card-availability", description.notice));
         const body = el("div", "card-reading-body"), context = el("div", "card-request-context");
         const orientation = el("div", "card-orientation");
-        orientation.append(author);
-        context.append(orientation, prompt, facts);
+        context.append(header, prompt, facts, orientation);
         function inspectGap(entry, cue) {
             const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
                 workspaceState.evidence.scenarios, entry.rows, { ...target, layer }, workspaceState.evidence.revision,
@@ -5935,12 +5943,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.append(context, activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null }));
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
-        const failure = layer === "tool" && summary?.failure && callInvestigation.firstFailure(workspaceState.evidence.requestActivity,
-            workspaceState.evidence.scenarios, rows, { ...target, layer }, workspaceState.evidence.revision);
-        if (failure) {
-            const failed = rows.find(r => r.id === failure.call), hint = failed && results.issueCue(sourceCallFor(failed), "failure");
-            if (failed && hint) facts.append(el("span", "request-card-cause screen-explanation", `${failed.tool}: ${failureReasonText(hint)}`));
-        }
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         function evidenceLink(label, destination, status) {
             const link = open(label, "record", destination);
@@ -5949,29 +5951,30 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             link.append(ux.icon("forward"));
             return link;
         }
-        if (outcome) orientation.append(failure || completedTarget ? evidenceLink("", failure || completedTarget, outcome) : ux.cardOutcome(outcome));
-        const parentIds = new Set(rows?.map(row => row.id));
-        const apis = layer === "tool" ? fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => parentIds.has(r.parentCallId)) : null;
-        const issue = apis?.find(r => {
-            const entry = results.returnedResult(sourceCallFor(r), r);
-            return r.outcome === "failure" || entry?.errorCode || results.diagnosticDetails(entry?.errorDiagnostic).length;
-        });
-        if (issue) {
-            const result = results.returnedResult(sourceCallFor(issue), issue), diagnostic = result?.errorDiagnostic?.statusCode;
-            const service = issue.serviceAssociation?.services?.length === 1 ? serviceLabel(issue.serviceAssociation.services[0]) : "Returned";
-            const cue = results.issueCue(sourceCallFor(issue), issue.outcome, result);
-            const label = diagnostic != null && issue.status != null && diagnostic !== issue.status ? "statuses disagree"
-                : issue.status != null ? `HTTP ${issue.status}` : "reported error";
-            foot.append(evidenceLink(`${service} result: ${label}`, exact(issue, "reported-api")));
-            if (cue && (result?.errorCode || result?.errorDiagnostic?.message || result?.errorDiagnostic?.details?.length)) {
-                const name = Number.isSafeInteger(result.index) && result.index >= 0 ? `returned entry ${result.index + 1}` : "returned entry";
-                facts.append(el("span", "request-card-cause screen-explanation", `${issue.tool}, ${name}: ${cue}`));
+        if (outcome) orientation.append(statusTarget ? evidenceLink("", statusTarget, outcome) : ux.cardOutcome(outcome));
+        const issues = layer === "tool" ? results.cardIssues(rows, fullRowsFor(scenario.scenarioId, "reported-api"), sourceCallFor) : [];
+        if (issues.length) {
+            const ordinals = requestContext.actionOrdinals(scenario), ordinal = r => ordinals.get(sourceCallFor(r));
+            const list = el("ul", "card-issue-list");
+            for (const group of issues.sort((a,b) => (ordinal(a.rows[0]) ?? Infinity) - (ordinal(b.rows[0]) ?? Infinity))) {
+                const first = group.rows[0], numbers = group.rows.map(ordinal);
+                const name = [numbers.every(Number.isSafeInteger) && results.callGroupLabel(numbers), first.tool].filter(Boolean).join(" · ");
+                const item = el("li", "request-card-cause screen-explanation");
+                item.append(el("span", "card-issue-owner", name));
+                if (group.resultIssue) item.append(evidenceLink("Tool result", exact(first, "tool")));
+                if (group.detail) item.append(el("span", "card-issue-detail", failureReasonText(group.detail)));
+                for (const entry of group.entries) {
+                    const services = entry.row.serviceAssociation?.services;
+                    const service = services?.length === 1 && services[0] !== "Unknown" ? serviceLabel(services[0]) : null;
+                    const label = entry.label + (service ? ` · ${service}` : "");
+                    const link = evidenceLink(label, exact(entry.row, "reported-api"));
+                    link.setAttribute("aria-label", `${name}, ${label}`);
+                    item.append(link);
+                    if (entry.detail) item.append(el("span", "card-issue-detail", entry.detail));
+                }
+                list.append(item);
             }
-        }
-        const reported = !issue && layer === "tool" && rows?.find(r => results.explainedEntries(layer, [r], sourceCallFor).some(v => v.tone && v.tone !== v.key));
-        if (reported) {
-            const cue = results.issueCue(sourceCallFor(reported), reported.outcome);
-            foot.append(evidenceLink(cue ? `${reported.tool} result: ${cue}` : "Reported result issue", exact(reported, layer)));
+            context.append(list);
         }
         if (!outcome && exception !== "Reported result issue") {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
@@ -6111,13 +6114,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         detailOwner = "request:" + workspaceState.route.request;
         viewKey(body, detailOwner);
-        const completedIds = workspaceState.route.completedCalls ? currentCompletedCalls(workspaceState.route) : null;
-        if (workspaceState.route.completedCalls && !completedIds) {
-            const notice = empty("These completed calls are unavailable", "The matching evidence changed. Return to the card to open its current calls.");
+        const scopedCalls = workspaceState.route.failedCalls ?? workspaceState.route.completedCalls;
+        const stateLabel = workspaceState.route.failedCalls ? "failed" : "completed";
+        const countedIds = scopedCalls ? currentOutcomeCalls(workspaceState.route) : null;
+        if (scopedCalls && !countedIds) {
+            const notice = empty(`These ${stateLabel} calls are unavailable`, "The matching evidence changed. Return to the card to open its current calls.");
             notice.id = "unavailableCall"; notice.tabIndex = -1; body.append(notice);
             return;
         }
-        const completedTitle = completedIds ? `${count(completedIds.size)} completed ${completedIds.size === 1 ? "call" : "calls"}` : "";
+        const countedTitle = countedIds ? `${count(countedIds.size)} ${stateLabel} ${countedIds.size === 1 ? "call" : "calls"}` : "";
         if (sourceCollection.active && workspaceState.route.nativeSource !== undefined) {
             const ordinal = workspaceState.route.nativeOrdinal === undefined ? undefined : Number(workspaceState.route.nativeOrdinal);
             const revision = Number(workspaceState.route.nativeRevision);
@@ -6159,7 +6164,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const native = workspaceState.evidence.scenarios.find(record => record.scenarioId === workspaceState.route.request && nativeActivity.isNative(record));
         if (native) {
-            readerSections = nativeActivity.mountReader({ root: body, record: native, target, completedIds, completedTitle,
+            readerSections = nativeActivity.mountReader({ root: body, record: native, target, countedIds, countedTitle,
                 contextDateBasis: nativeContextDateBasis(native.scenarioId),
                 isCurrent: () => workspaceState.route.view === "request" && requestRenderKey === renderKey && !requestInvalidated });
             if (!api.isCurrent(publication) || !readerSections) return;
@@ -6192,7 +6197,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         readerSections = sections;
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
-        const activitySection = sections.add("activity", completedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
+        const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         body.append(promptSection.element, activitySection.element, sourceSection.element);
@@ -6467,10 +6472,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const source = sessionSource(scenario.sourceSessionId);
         const sourceProject = source || scenario;
         const originKind = authorship.originKind?.(scenario);
-        if (completedIds && isSelected) {
+        if (countedIds && isSelected) {
             const allCalls = results.summarize(fullRowsFor(scenario.scenarioId, "tool"))?.count;
-            if (allCalls > completedIds.size) {
-                intro.append(el("p", "reader-scope", `${count(completedIds.size)} of ${count(allCalls)} recorded calls match this view.`));
+            if (allCalls > countedIds.size) {
+                intro.append(el("p", "reader-scope", `${count(countedIds.size)} of ${count(allCalls)} recorded calls match this view.`));
                 const parent = routeFor("request", { request: scenario.scenarioId });
                 activitySection.actions.append(routeLink("Show full activity", parent, "button-link quiet", {
                     cardTarget: { target: parent, revision: workspaceState.evidence.revision, focus: "activity" },
@@ -6591,16 +6596,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const actions = reportReaderActions(scenario.scenarioId);
         const entryStart = entries.length;
+        const ordinals = requestContext.actionOrdinals(scenario);
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : undefined);
         for (const [toolIndex, tool] of (scenario.toolCalls || []).entries()) {
             const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
-            if (row && (seen.has(row.id) || !isSelected && (row.id === target.actionId || completedIds?.has(row.id)))) continue;
+            if (row && (seen.has(row.id) || !isSelected && (row.id === target.actionId || countedIds?.has(row.id)))) continue;
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || ["unidentified", workspaceState.evidence.revision, toolIndex]]);
             const sourceCall = sourceCallFor(row) || tool;
             const hasInputReferences = Array.isArray(sourceCall.requestArgs?.fileUrls) && sourceCall.requestArgs.fileUrls.length > 0;
             const attribution = categories.attributionReading(row ? { ...row, tool: tool.tool } : undefined, "tool", { hasInputReferences });
-            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool",
+            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool", ordinal: ordinals.get(tool),
                 operation: attribution?.kind === "operation" ? {
                     label: categories.operation(tool.tool)?.label ?? categories.describe("Search").label, hasInputReferences,
                 } : null,
@@ -6635,7 +6641,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 context.dataset.attributionKind = attribution.kind;
                 item.append(context);
             }
-            if (!sameScope && !(isSelected && completedIds)) {
+            if (!sameScope && !(isSelected && countedIds)) {
                 actionContext(item, workspaceState.scope.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : workspaceState.scope.layer === "reported-api" ? apiRows : []);
                 const scope = item.querySelector(".action-context");
                 if (workspaceState.scope.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
@@ -6707,7 +6713,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (graphRows?.[0] && (seen.has(graphRows[0].id) || graphRows[0].id === target.actionId && !isSelected)) continue;
             if (graphRows?.[0]) seen.add(graphRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "graph", graph.activityId || ["unidentified", workspaceState.evidence.revision, graphIndex]]);
-            entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt, recordKind: layer === "code-reference" ? "reference" : "graph",
+            entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt, recordKind: layer === "code-reference" ? "reference" : "graph", ordinal: ordinals.get(graph),
                 identifiers: [["ID", graph.activityId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
@@ -6730,7 +6736,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (httpRows?.[0] && (seen.has(httpRows[0].id) || httpRows[0].id === target.actionId && !isSelected)) continue;
             if (httpRows?.[0]) seen.add(httpRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "http", record.recordId || ["unidentified", workspaceState.evidence.revision, recordIndex]]);
-            entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, recordKind: "http",
+            entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, recordKind: "http", ordinal: ordinals.get(record),
                 identifiers: [["ID", record.recordId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
@@ -6776,21 +6782,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             timingHeadingObserver = new ResizeObserver(measureHeading);
             timingHeadingObserver.observe(heading);
         }
-        const groupOrdinals = new Map();
         actionsInOrder.forEach(entry => {
-            const ordinal = (groupOrdinals.get(entry.scenarioId) ?? 0) + 1;
-            groupOrdinals.set(entry.scenarioId, ordinal);
+            const ordinal = entry.ordinal;
             const label = entry.recordKind === "tool" ? results.callLabel(ordinal)
                 : ({ reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + ordinal;
             entryLabels.set(entry.key, label);
             const home = sourceHomes.get(entry.scenarioId);
-            if (entry.operation && (!completedIds || entry.scenarioId !== workspaceState.route.request || completedIds.has(entry.actionId))) {
+            if (entry.operation && (!countedIds || entry.scenarioId !== workspaceState.route.request || countedIds.has(entry.actionId))) {
                 home.operationEntries.push({ ordinal, ...entry.operation });
             }
             home.identifiers.push(...(entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
                 .map(([kind, value]) => [label + " " + kind, value]));
         });
-        if (commonToolTiming && !completedIds) activitySection.toggle.querySelector("span").textContent =
+        if (commonToolTiming && !countedIds) activitySection.toggle.querySelector("span").textContent =
             `${count(selectedActions.length)} recorded ${selectedActions.length === 1 ? "call" : "calls"}`;
         for (const [scenarioId, home] of sourceHomes) {
             if (home.operationEntries.length) {
@@ -6813,8 +6817,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 visibility: sourceSection.visibility, render: () => fields(home.identifiers.map(([name, value]) => [name, identifier(value)])) });
         }
         for (const entry of entries) {
-            if (completedIds && entry.scenarioId === workspaceState.route.request && entry.kind === "action"
-                && !(entry.recordKind === "tool" && completedIds.has(entry.actionId))) continue;
+            if (countedIds && entry.scenarioId === workspaceState.route.request && entry.kind === "action"
+                && !(entry.recordKind === "tool" && countedIds.has(entry.actionId))) continue;
             insertEntry(entry);
         }
         const jumps = el("nav", "reader-section-jumps");

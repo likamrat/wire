@@ -497,6 +497,13 @@ export function createEvidenceUX(icons) {
         }
         return list;
     }
+    function cardMetadata(author, timestamp, source) {
+        const header = document.createElement("div");
+        header.className = "card-metadata";
+        header.append(author, timestamp);
+        if (source) header.append(source);
+        return header;
+    }
     function cardOutcome(outcome, target = document.createElement("span")) {
         target.classList.add("request-card-exception", "card-outcome", `result-tone-${outcome.key}`);
         if (outcome.key === "failure") target.classList.add("card-failure");
@@ -736,7 +743,7 @@ export function createEvidenceUX(icons) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, cardToolList, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

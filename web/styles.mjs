@@ -663,12 +663,15 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .read-in-place {container-type:inline-size}
 .read-in-place[data-detail-active] .card-reading-body,.read-in-place[data-detail-active] .card-reading-actions {background:var(--accent-soft)}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
-.card-request-context {min-width:0;max-width:78ch}.card-request-context .request-card-summary {margin-top:4px;gap:2px 12px}
-.card-orientation {display:grid;grid-template-columns:minmax(0,min(10em,42%)) minmax(0,1fr);align-items:center;gap:0 12px;margin-block-end:3px}
-.card-orientation .request-card-author,.card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
-.card-orientation .request-card-author {font-weight:var(--weight-strong);color:var(--ink)}
+.card-request-context {min-width:0;max-width:78ch;display:grid;align-content:start;gap:8px}
+.card-request-context .request-card-summary {margin:0;gap:4px 12px}
+:is(.card-request-context .request-card-summary,.card-orientation):empty {display:none}
+.card-metadata {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;min-width:0;color:var(--muted);font:var(--type-caption)/var(--leading-ui) var(--font)}
+.card-orientation {display:flex;align-items:center;flex-wrap:wrap}
+.card-metadata .request-card-author,.card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
+.card-metadata .request-card-author {font-weight:var(--weight-strong);color:var(--ink)}
 .author-option-value,.reader-prompt-origin {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%}
-.card-orientation .wire-icon,.card-outcome-face>.wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
+.card-metadata .wire-icon,.card-outcome-face>.wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
 .author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {color:var(--prompt-author-ink,currentColor)}
 #requestContent .reader-prompt-origin {color:var(--ink);font-weight:var(--weight-strong)}
 #requestContent .reader-call-summary .result-tone-success .result-status,#requestContent .reader-call-summary.result-tone-success {color:var(--tool-positive)}
@@ -687,7 +690,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
  --chart-pink-label:var(--screen-returned-issue);--chart-pink-top:var(--screen-returned-issue);--chart-pink-mid:var(--screen-returned-issue);--chart-pink-base:var(--screen-returned-issue);--chart-pink-side:var(--screen-returned-issue);--chart-pink-cap:var(--screen-returned-issue);
 }
 #requestContent .reader-call-summary>.wire-icon {inline-size:1em;block-size:1em;vertical-align:-.13em}
-.card-orientation [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
+.card-metadata [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
 .card-outcome {justify-self:start;font-weight:var(--weight-medium);overflow-wrap:anywhere}
 .card-orientation .card-outcome {min-height:44px}
 .card-outcome-face {display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font:inherit}
@@ -700,9 +703,9 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-orientation .result-tone-unknown {color:var(--unknown)}
 .card-orientation .result-tone-other {color:var(--muted)}
 .card-orientation .result-tone-partial {color:var(--warning)}
-@container(max-width:21rem) {.card-orientation {grid-template-columns:minmax(0,1fr);justify-items:start}}
-.card-request-context .request-card-open {position:relative;display:block;min-block-size:44px;padding:0;padding-inline-end:2em;border:0;background:transparent;text-decoration:none;color:var(--ink);font:inherit;white-space:pre-wrap}
-.recognition-row>[data-icon-role=read] {position:absolute;inset-block-start:0;inset-inline-end:0;width:1.55em;height:1.55em;padding:.22em;border-radius:4px;color:var(--muted)}
+.card-request-context .request-card-open.recognition-row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;width:100%;min-block-size:44px;padding:0;border:0;background:transparent;text-decoration:none;color:var(--ink);font:var(--weight-regular) var(--type-reading)/1.5 var(--font);white-space:pre-wrap}
+.recognition-row>:is(.card-excerpt,.request-card-prompt) {min-width:0}
+.recognition-row>[data-icon-role=read] {width:1.5em;height:1.5em;padding:.2em;border-radius:4px;color:var(--muted)}
 .recognition-row:is(:hover,:focus-visible)>[data-icon-role=read] {background:var(--hover);color:var(--accent)}
 .recognition-row:active>[data-icon-role=read] {background:var(--accent-soft);color:var(--ink)}
 @media(forced-colors:active) {.recognition-row:is(:hover,:active)>[data-icon-role=read] {outline:1px solid LinkText}}
@@ -741,7 +744,10 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-panel-link:is(:hover,:focus-visible)>.wire-icon {background:var(--hover);box-shadow:inset 0 0 0 1px var(--control)}
 .card-panel-link:is(:active,[aria-expanded=true])>.wire-icon {background:var(--accent-soft)}
 .card-panel-link[aria-expanded=false]>.wire-icon:nth-of-type(2),.card-panel-link[aria-expanded=true]>.wire-icon:first-of-type {display:none}
-.card-reading-actions .returned-issue-ink,.reader-returned-cue {color:var(--screen-returned-issue)}
+.card-issue-list {margin:0;padding:0;list-style:none;display:grid;gap:12px;min-width:0}
+.card-issue-list>li {display:grid;justify-items:start;gap:2px;min-width:0}
+.card-issue-owner {color:var(--muted);font:var(--weight-medium) var(--type-small)/1.45 var(--font)}
+.request-row .returned-issue-ink,.reader-returned-cue {color:var(--screen-returned-issue)}
 .reader-call-secondary .card-identities {padding:0;border:0}
 .reader-section-jumps {display:flex;flex-wrap:wrap;gap:4px;padding-block-end:6px;border-bottom:1px solid var(--rule)}
 .reader-section-jumps button,.reader-returned-facts>summary {min-height:44px}
