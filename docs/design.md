@@ -54,7 +54,8 @@ evidence that limits a conclusion must remain explicit. Do not repeat the same
 fact in a badge, paragraph, warning and disclosure.
 
 On interaction cards, identify the prompt author with a high-contrast label
-and its Human, Agent or unverified icon. Keep the date beside the author.
+and its Human, Agent or unverified icon. Align the date to the author's text
+baseline, not the icon. When it wraps, start it under the author text.
 Give the prompt and its eye separate columns inside one link. Below the prompt,
 keep the recorded outcome with the affected calls and their explanations. Green/check
 indicates recorded tool completion; red/cross marks failed calls. Neither

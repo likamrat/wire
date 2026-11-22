@@ -520,6 +520,40 @@ test("heterogeneous summary cards stay readable in complete Light Dark narrow an
     }
 });
 
+test("card dates share the author's text baseline and wrap to its text edge, not the icon", async t => {
+    const { page } = await setup(t, "react", compactCardRecords());
+    const cards = page.locator("#activityList .activity-card");
+    const offsets = [];
+    for (const [width, scale] of [[1440, 1], [390, 2]]) {
+        await page.setViewportSize({width,height:900});
+        await page.evaluate(n => { document.documentElement.style.fontSize = `${n * 100}%`; }, scale);
+        await page.evaluate(() => document.fonts.ready);
+        const meta = cards.first().locator(".card-metadata");
+        if (proofs) {
+            await mkdir(proofs,{recursive:true});
+            await meta.screenshot({path:path.join(proofs,`date-line-${width}-${process.env.WIRE_CARD_BASELINE ? "before" : "after"}.png`)});
+        }
+        const metrics = await meta.evaluate(header => {
+            function measure(selector) {
+                const host = header.querySelector(selector);
+                const text = document.createTreeWalker(host, NodeFilter.SHOW_TEXT).nextNode();
+                // A zero-height inline box sits on the alphabetic baseline regardless of type size.
+                const span = document.createElement("span"), mark = document.createElement("i");
+                mark.style.cssText = "display:inline-block;width:0;height:0";
+                text.replaceWith(span); span.append(text,mark);
+                const x = span.getBoundingClientRect().left, y = mark.getBoundingClientRect().bottom;
+                span.replaceWith(text);
+                return {x,y};
+            }
+            const author = measure(".request-card-author"), date = measure(".request-card-time");
+            return {baseline:date.y-author.y, indent:date.x-author.x};
+        });
+        offsets.push(metrics);
+    }
+    assert.ok(Math.abs(offsets[0].baseline) <= 1, `wide text baseline drift: ${offsets[0].baseline}px`);
+    assert.ok(offsets[1].baseline > 10 && Math.abs(offsets[1].indent) <= 1, `wrapped date: ${JSON.stringify(offsets[1])}`);
+});
+
 test("wrapped card identities keep their value edge, named counts and distinct origin and failure cues", { timeout: 90000 }, async t => {
     const records = compactCardRecords(), mixed = records[0], failed = mixed.toolCalls[1];
     records[1].userPrompt.status = "partial";

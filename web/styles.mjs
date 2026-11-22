@@ -666,12 +666,13 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-request-context {min-width:0;max-width:78ch;display:grid;align-content:start;gap:8px}
 .card-request-context .request-card-summary {margin:0;gap:4px 12px}
 :is(.card-request-context .request-card-summary,.card-orientation):empty {display:none}
-.card-metadata {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;min-width:0;color:var(--muted);font:var(--type-caption)/var(--leading-ui) var(--font)}
+.card-metadata {--author-icon-size:max(var(--icon-size-small),calc(1.05 * var(--type-small)));--author-gutter:calc(var(--author-icon-size) + 6px);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;padding-inline-start:var(--author-gutter);min-width:0;color:var(--muted);font:var(--type-caption)/var(--leading-ui) var(--font)}
 .card-orientation {display:flex;align-items:center;flex-wrap:wrap}
 .card-metadata .request-card-author,.card-outcome {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%;font-size:var(--type-small);line-height:1.45}
-.card-metadata .request-card-author {font-weight:var(--weight-strong);color:var(--ink)}
+.card-metadata .request-card-author {align-items:baseline;margin-inline-start:calc(-1 * var(--author-gutter));font-weight:var(--weight-strong);color:var(--ink)}
 .author-option-value,.reader-prompt-origin {display:inline-flex;align-items:center;gap:6px;max-inline-size:100%}
-.card-metadata .wire-icon,.card-outcome-face>.wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
+.card-metadata .wire-icon {width:var(--author-icon-size);height:var(--author-icon-size);align-self:center;flex:none}
+.card-outcome-face>.wire-icon,.author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {width:max(var(--icon-size-small),1.05em);height:max(var(--icon-size-small),1.05em);flex:none}
 .author-option-value>.wire-icon,.reader-prompt-origin>.wire-icon {color:var(--prompt-author-ink,currentColor)}
 #requestContent .reader-prompt-origin {color:var(--ink);font-weight:var(--weight-strong)}
 #requestContent .reader-call-summary .result-tone-success .result-status,#requestContent .reader-call-summary.result-tone-success {color:var(--tool-positive)}
