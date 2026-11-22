@@ -48,7 +48,7 @@ test("Petrol and coral screen roles keep service identity and authorship separat
         if (entry.preference === null) await page.evaluate(() => document.documentElement.removeAttribute("data-evidence-theme"));
         await page.evaluate(() => document.fonts.ready);
         const dark = entry.theme === "dark";
-        const paper = dark ? "#1c2629" : "#ffffff";
+        const paper = dark ? "#213537" : "#fcfefd";
         const roles = await page.evaluate(() => {
             const root = getComputedStyle(document.documentElement);
             return Object.fromEntries(["--page", "--paper", "--navigation-paper", "--context-paper", "--floating-paper",
@@ -58,9 +58,9 @@ test("Petrol and coral screen roles keep service identity and authorship separat
                 .map(name => [name, root.getPropertyValue(name).trim()]));
         });
         assert.equal(roles["--paper"], paper);
-        assert.equal(roles["--navigation-paper"], dark ? "#141a1c" : "#f0f3f3");
-        assert.equal(roles["--context-paper"], dark ? "#222e32" : paper);
-        assert.equal(roles["--floating-paper"], dark ? "#222e32" : paper);
+        assert.equal(roles["--navigation-paper"], dark ? "#192b2d" : "#c7dbd8");
+        assert.equal(roles["--context-paper"], dark ? "#233739" : "#f9fcfb");
+        assert.equal(roles["--floating-paper"], paper);
         assert.equal(roles["--danger"], dark ? "#f0a097" : "#af3e37");
         for (const [face, color] of Object.entries(createDimensionalCharts().servicePalette.Teams[entry.theme])) {
             assert.equal(roles["--chart-service-teams-" + face], dark && face === "label"
@@ -120,7 +120,7 @@ test("Petrol and coral screen roles keep service identity and authorship separat
         assert.equal(disabled.visible, true);
         if (dark && entry.forced === "none") {
             assert.match(disabled.fill, /^rgba\(\d+, \d+, \d+, 0\)$/);
-            assert.equal(disabled.ink, "rgb(184, 200, 204)");
+            assert.ok(contrast(disabled.ink,roles["--floating-paper"]) >= 4.5);
         }
         const menu = await page.locator(".select-popup").evaluate(node => ({
             paper: getComputedStyle(node).getPropertyValue("--paper").trim(),

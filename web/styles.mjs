@@ -637,6 +637,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
 .analyze-result-actions .report-selection-bar {margin:0}
 #activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid transparent;border-radius:var(--radius-small);background:var(--paper);margin-top:16px}
+#activityList>.activity-card[data-detail-active] {outline:1px solid var(--control);outline-offset:-1px}
 #activityList>.request-row {display:block;padding:0}
 .request-card-open {--request-card-inset:20px;display:block;min-height:44px;padding:var(--request-card-inset);color:var(--ink);border-inline-start:3px solid transparent;border-radius:inherit}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--accent);background:var(--accent-soft)}
@@ -689,11 +690,13 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-orientation [data-prompt-actor]>.wire-icon {color:var(--prompt-author-ink)}
 .card-outcome {justify-self:start;font-weight:var(--weight-medium);overflow-wrap:anywhere}
 .card-orientation .card-outcome {min-height:44px}
-:root {--card-outcome-paper:var(--paper)}
-.card-outcome-face {display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-inline-start:2px solid currentColor;font:inherit}
+.card-outcome-face {display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font:inherit}
 .card-outcome.result-tone-success {color:var(--tool-positive)}
 .card-outcome.card-failure {color:var(--tool-negative);font-weight:var(--weight-strong);text-underline-offset:3px}
-.card-outcome:is(.result-tone-success,.result-tone-failure) .card-outcome-face {background:color-mix(in srgb,currentColor 7%,var(--card-outcome-paper))}
+.card-outcome:is(.result-tone-success,.result-tone-failure) .card-outcome-face {
+ background:color-mix(in srgb,currentColor var(--outcome-tint),var(--context-paper));
+ border-color:color-mix(in srgb,currentColor 85%,var(--context-paper))
+}
 .card-orientation .result-tone-unknown {color:var(--unknown)}
 .card-orientation .result-tone-other {color:var(--muted)}
 .card-orientation .result-tone-partial {color:var(--warning)}
@@ -715,7 +718,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identity-values {display:flex;align-items:baseline;flex-wrap:wrap;gap:.22em 1em;margin:0;min-width:0;overflow-wrap:anywhere}
 .card-identity-values>* {min-width:0;max-width:100%}
 .card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;margin:0;padding:0;list-style:none;max-width:100%}
-.card-tool-item {flex:none;max-width:100%;min-width:0;padding:2px 7px;border-radius:2px;background:var(--hover);color:var(--ink)}
+.card-tool-item {flex:none;max-width:100%;min-width:0;padding:2px 7px;border-radius:2px;background:color-mix(in srgb,var(--accent) 7%,var(--paper));color:var(--ink);box-shadow:inset 0 0 0 1px var(--surface-edge)}
 @media(forced-colors:active) {.card-tool-item {border-block-end:1px solid GrayText}}
 .card-tool-item .card-tool-name {min-width:0;overflow-wrap:anywhere}
 .card-tool-item .card-tool-count {white-space:nowrap;font:inherit;color:var(--muted);font-variant-numeric:tabular-nums}

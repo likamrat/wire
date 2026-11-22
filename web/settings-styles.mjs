@@ -106,7 +106,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-search-results ul {margin:4px 0 0 1.125rem}
 .settings-search-results a {position:relative;display:grid;align-content:center;gap:2px;min-height:44px;padding:8px 8px 8px 10px;border-radius:var(--settings-nav-radius);color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-regular);overflow-wrap:anywhere}
 .settings-search-results a[aria-current=location] {color:var(--ink)}
-.settings-rail :is(.settings-categories,.settings-search-results) a:hover {background:var(--accent-soft);color:var(--ink)}
+.settings-rail :is(.settings-categories,.settings-search-results) a:hover {background:var(--hover);color:var(--ink)}
 .settings-rail :is(.settings-categories,.settings-search-results) a:active {background:var(--accent-pressed);color:var(--ink)}
 .settings-search-results a[aria-current=location]::before {content:"";position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-search-availability {font-size:var(--type-caption);color:var(--muted)}

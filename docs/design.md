@@ -127,7 +127,14 @@ Light screens use quiet cool-neutral surfaces; Dark uses separately designed
 petrol-neutral surfaces. Controls, selection and focus remain neutral rather
 than borrowing outcome colors. Dark service inks retain their identity hues
 with added lightness for contrast on selected surfaces.
-Petrol & coral remains the default. Settings > Themes separately chooses
+Use tonal layers: give navigation its own rail, the workspace a ground, and
+widgets and readers distinct reading surfaces. Charts need a track or plot well
+that remains legible inside the widget; tool-name labels must not disappear
+when their enclosing row is selected. Test an outcome's text **on its fill**
+and its fill and edge **against the actual card or reader**. A passing text
+ratio does not mean a layer is visible. Palette-specific green and red still
+mean tool completion and failure; keep the check, cross and count.
+Petrol & coral remains the default and the fallback. Settings > Themes separately chooses
 Linen & graphite, Blueprint, Field notes or Midnight in either Light or Dark.
 The screen palette catalog (`web/screen-palettes.mjs`) maps materials,
 control states, widget marks, series, services and authors to CSS roles;

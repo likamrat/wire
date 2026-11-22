@@ -394,7 +394,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-home .report-outline-action{justify-content:space-between;gap:.75rem;flex-wrap:wrap}
 .report-home .report-outline-action .screen-explanation{color:var(--muted)}
 .report-preview-drawer:not([open]){display:none}
-.report-preview-drawer{position:fixed;inset:0 0 0 auto;width:min(54rem,85vw);max-width:100vw;height:100dvh;max-height:100dvh;box-sizing:border-box;margin:0;padding:0 1rem 1rem;overflow:auto;overscroll-behavior:contain;border:0;border-inline-start:1px solid var(--surface-edge);border-radius:0;background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scrollbar-gutter:stable}
+.report-preview-drawer{position:fixed;inset:0 0 0 auto;width:min(54rem,85vw);max-width:100vw;height:100dvh;max-height:100dvh;box-sizing:border-box;margin:0;padding:0 1rem 1rem;overflow:auto;overscroll-behavior:contain;border:0;border-inline-start:1px solid var(--surface-edge);border-radius:0;background:var(--canvas);color:var(--ink);box-shadow:var(--surface-shadow);scrollbar-gutter:stable}
 .report-preview-drawer[open]{animation:report-drawer-in .2s ease-out}
 .report-preview-drawer[open]:not(:modal){inset-block-start:var(--app-header-height,76px);height:calc(100dvh - var(--app-header-height,76px));width:min(54rem,max(61vw,min(32rem,100vw)));z-index:2}
 .report-draft-background{max-width:max(14rem,calc(100vw - var(--app-sidebar-width,216px) - min(54rem,61vw) - 4rem));min-width:0}

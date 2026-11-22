@@ -44,7 +44,7 @@ export const galleryStyles = `
 .palette-rail{background:var(--screen-rail);border-inline-start:3px solid var(--accent-fill);border-radius:3px}
 .palette-sheet{display:grid;gap:8px;padding:8px;background:var(--screen-plot);border:1px solid var(--rule);border-radius:4px}
 .palette-type{display:flex;align-items:center;gap:4px}.palette-type i{height:3px;width:25%;background:var(--ink);border-radius:2px}.palette-type i+i{width:14%;background:var(--muted)}
-.palette-strip{display:grid;grid-template-columns:4fr 2fr 1fr 1fr;gap:2px;height:6px}.palette-strip i:nth-child(1){background:var(--success)}.palette-strip i:nth-child(2){background:var(--danger)}.palette-strip i:nth-child(3){background:var(--warning)}.palette-strip i:nth-child(4){background:var(--unknown)}
+.palette-strip{display:grid;grid-template-columns:4fr 2fr 1fr 1fr;gap:2px;height:6px}.palette-strip i:nth-child(1){background:var(--tool-positive)}.palette-strip i:nth-child(2){background:var(--tool-negative)}.palette-strip i:nth-child(3){background:var(--warning)}.palette-strip i:nth-child(4){background:var(--unknown)}
 .palette-swatches{display:flex;gap:3px;align-items:center}
 .palette-swatches i{width:.75rem;height:.75rem;border-radius:3px}
 ${swatchRoles.map((role, index) => `.palette-swatches i:nth-child(${index + 1}){background:var(--${role})}`).join("\n")}

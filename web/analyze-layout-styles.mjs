@@ -3,7 +3,7 @@ export const analyzeLayoutStyles = `
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);
 }
-.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {box-shadow:none}
+.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {background:var(--screen-plot);box-shadow:none}
 @media(forced-colors:active) {
  .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
 }

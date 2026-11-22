@@ -1617,6 +1617,7 @@ export const periodComparisonStyles = `
 .compare-record-identity{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
 .compare-record-identity>a{flex-shrink:0;max-width:100%}
 .compare-record-context{font-size:.8125rem;color:var(--muted);font-weight:var(--weight-regular);min-width:0;max-width:100%}
+.compare-record-panel thead{background:var(--canvas)}
 .compare-record-failure{color:var(--compare-failure,var(--chart-failure))}.compare-record-transport{color:var(--danger)}.compare-record-success{color:var(--compare-success,var(--chart-success))}
 .compare-record-partial{color:var(--warning)}.compare-record-unknown{color:var(--unknown)}
 .compare-full-timing{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px}

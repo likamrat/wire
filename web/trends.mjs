@@ -1173,9 +1173,9 @@ export const trendsStyles = `
 .trends-summary{min-width:0;container:trend-summary / inline-size;max-height:var(--trends-plot-height);overflow:auto;scrollbar-gutter:stable}
 .trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:0}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .trends-stat-value{font-size:1.25rem;line-height:var(--leading-heading);font-weight:var(--weight-regular);font-variant-numeric:tabular-nums}
-.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
+.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);background:var(--canvas);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
-.trends-grid{stroke:var(--surface-divider);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
+.trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}

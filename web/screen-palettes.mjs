@@ -13,16 +13,16 @@ const parts = (names, colors) => {
     return Object.fromEntries(names.map((name, i) => [name, values[i]]));
 };
 function paint(material, control, status, identity, categories) {
-    const surface = parts(["page", "paper", "canvas", "screen-rail", "ink", "muted", "rule", "control", "focus", "hover", "pill-pressed"], material);
+    const surface = parts(["page", "paper", "canvas", "screen-rail", "context-paper", "ink", "muted", "rule", "control", "focus", "hover", "pill-pressed"], material);
     const action = parts(["accent-fill", "on-accent", "primary-hover", "primary-pressed", "accent", "screen-plot", "screen-grid", "screen-tip", "screen-tip-ink"], control);
-    const outcomes = parts(["success", "danger", "warning", "unknown", "screen-returned-issue"], status);
+    const outcomes = parts(["success", "danger", "warning", "unknown", "screen-returned-issue", "tool-positive", "tool-negative", "disclosure-risk", "disclosure-masked"], status);
     const actors = parts(["screen-prompt-user", "screen-prompt-agent", "screen-activity-assistance"], identity);
     const inks = parts(services, categories);
     const roles = { ...surface, ...action, ...outcomes, ...actors,
-        "navigation-paper": surface.page, "context-paper": surface.canvas, "floating-paper": surface.paper,
+        "navigation-paper": surface["screen-rail"], "floating-paper": surface.paper,
         "surface-edge": surface.rule, "surface-divider": surface.rule, "report-sheet": surface.paper, "report-note": surface.canvas,
         "toggle-on": action["accent-fill"], "toggle-thumb": action["on-accent"], "toggle-off": surface["pill-pressed"],
-        "accent-soft": surface.hover, "accent-hover": surface.hover, "accent-pressed": surface["pill-pressed"],
+        "accent-soft": surface["pill-pressed"], "accent-hover": surface.hover, "accent-pressed": surface["pill-pressed"],
         "delete-fill": outcomes.danger, "delete-ink": action["on-accent"], "copilot-chat-title": inks["service-teams"],
         "performance-red": outcomes.danger, "performance-orange": outcomes["screen-returned-issue"], "performance-gold": outcomes.warning, "performance-teal": outcomes.success,
         "screen-service-files": inks["service-files"], "chart-success": outcomes.success, "chart-failure": outcomes.danger,
@@ -44,47 +44,46 @@ function paint(material, control, status, identity, categories) {
 }
 const materials = {
     midnight: {
-        light: paint("#e6f0fa #ffffff #f0f6fc #cfe3f2 #112b43 #425d76 #bfd3e4 #597b94 #004c73 #dcebf7 #c7e2f2",
-            "#006585 #ffffff #00536f #064860 #005f82 #f2f8fd #647e94 #102f49 #edf8ff",
-            "#106143 #9b3046 #745509 #4c5a73 #893f21", "#2e6078 #71506e #85426b",
+        light: paint("#d7e5f2 #fbfdff #e3eef7 #bfd5e8 #f7fbfe #112b43 #203d53 #b7cad6 #54728c #004c73 #ecf2f6 #d8e5ee",
+            "#006585 #ffffff #00536f #064860 #285f7e #f5f9fd #7793aa #102f49 #edf8ff",
+            "#106143 #9b3046 #745509 #4c5a73 #893f21 #124f42 #8d293c #91304a #245990", "#2e6078 #71506e #85426b",
             "#80511b #245899 #674598 #764473 #1c596c #4c611e #733c82 #345338 #175766 #3f4b83 #515777 #3c595f #32445a #60583c"),
-        dark: paint("#070f1c #101e31 #192a40 #14263d #ebf4ff #a9bfd5 #364c65 #819eb9 #aceaff #21364e #294561",
-            "#55d5f9 #062536 #88e5ff #34bfeb #79deff #10243a #8ca8bc #c2eeff #082638",
-            "#6cddaf #ff9c9b #efc674 #b4c3dd #f6b08c", "#96cce1 #d5b9dd #efa5d7",
+        dark: paint("#080f1e #172940 #213650 #102035 #182b42 #ebf4ff #d0e4ee #557b94 #94aec4 #aceaff #21364c #2b4055",
+            "#55d5f9 #062536 #88e5ff #34bfeb #9ad8f3 #1a2c44 #7898ad #c2eeff #082638",
+            "#6cddaf #ff9c9b #efc674 #b4c3dd #f6b08c #88e2ba #ffa69c #ffb2bb #99caff", "#96cce1 #d5b9dd #efa5d7",
             "#ebb681 #8ebeff #c4acfb #e4abda #80c7dc #c6d88c #dcb0ef #9dd5bc #8bced0 #afb8fa #c0c6e1 #a9cdca #d6e0f0 #cfc7ab"),
     },
     petrol: {
-        light: `${screenLight}--screen-rail:#e4ecec;--screen-plot:#f5f8f8;`,
-        dark: `${screenDark}--screen-rail:#26383c;--screen-plot:#222e32;`,
+        light: screenLight, dark: screenDark,
     },
     linen: {
-        light: paint("#eae5da #fffdf7 #f5f0e5 #e6dbc5 #2c2a26 #59554d #d3c9b6 #80786b #524935 #f0eadc #e5ddcb",
-            "#694525 #fff9ed #55371e #3f2a19 #694019 #faf1dc #756d58 #403522 #fff5da",
-            "#4d611a #8f254e #855009 #65576a #873b25", "#26567b #73531e #763963",
+        light: paint("#e6dfce #fffcf5 #f0e9d9 #d8ccb3 #fdf9f1 #2c2a26 #4c463c #d2c7b7 #72695b #524935 #f5f0e7 #e7decb",
+            "#694525 #fff9ed #55371e #3f2a19 #715533 #fbf7ee #93846c #403522 #fff5da",
+            "#4d611a #8f254e #855009 #65576a #873b25 #45572b #8a3444 #8a2f44 #26567b", "#26567b #73531e #763963",
             "#78421a #225d72 #634585 #753d67 #224e70 #49571c #703d88 #375333 #245964 #3b4674 #54496b #4d594f #403c45 #5e503b"),
-        dark: paint("#211f1c #2c2a26 #37342e #40392b #f7f2e7 #ccc6b8 #555044 #a69f90 #eee1c6 #413d34 #4c473c",
-            "#e8c486 #322615 #f5d8a2 #cfab70 #f0d09a #373122 #a49a7d #f1ddaf #302216",
-            "#b7d575 #f69cbc #edb86a #cac0d3 #f7b190", "#9ac7e6 #e3c88e #f2aee2",
+        dark: paint("#211e19 #353127 #433d31 #2d291f #373328 #f7f2e7 #e5dfd1 #877856 #b6ad99 #eee1c6 #403b30 #4b4335",
+            "#e8c486 #322615 #f5d8a2 #cfab70 #e4c78b #38342a #a49a7d #f1ddaf #302216",
+            "#b7d575 #f69cbc #edb86a #cac0d3 #f7b190 #c0d393 #f3a7ae #ffafbc #a9cfe9", "#9ac7e6 #e3c88e #f2aee2",
             "#edb58b #82cbd9 #c7aaed #e1a9c8 #a3c9e6 #ccce86 #ddbbea #b3d5ab #a0d4c9 #b5c3f1 #d1c2d9 #b7c8bc #e4dbe9 #d5c69e"),
     },
     blue: {
-        light: paint("#e3eaf7 #fbfcff #edf2fb #cbd9ef #1d304d #465a76 #bac9de #667995 #253f67 #e6edf9 #d7e3f5",
-            "#183e81 #ffffff #12316c #102956 #164989 #e8efff #5a7190 #152f54 #f2f6ff",
-            "#234fa8 #983d0b #735b05 #4c5a70 #89452a", "#1b6275 #675021 #863671",
+        light: paint("#dce4f3 #fcfdff #e8edf8 #c6d3ed #f9fbfe #1d304d #2c4167 #bcc9e1 #586e8d #253f67 #eef2f8 #d9e2f0",
+            "#183e81 #ffffff #12316c #102956 #345aa0 #f7f9fd #8396b6 #152f54 #f2f6ff",
+            "#234fa8 #983d0b #735b05 #4c5a70 #89452a #285a3e #9a343d #9a3045 #284c87", "#1b6275 #675021 #863671",
             "#8a491a #086758 #684291 #754067 #1e5c70 #526216 #713578 #355330 #145269 #284777 #535171 #41565f #303c50 #65604c"),
-        dark: paint("#111a2b #1c2a41 #27344e #273d60 #edf3ff #b6c8e5 #455671 #94accd #d0e2ff #293d5c #324969",
-            "#a0c4ff #102442 #bbd5ff #8face6 #a7cdff #202e4c #90a2c2 #cfdefa #162a45",
-            "#8bb5ff #ffad78 #e3cb76 #b4c3df #f1ba9c", "#89d4e4 #ddbf7c #efa7d6",
+        dark: paint("#0f1729 #21304b #2b3e5c #17253c #22324e #edf3ff #d4e0f1 #6178a0 #a3b7d7 #d0e2ff #2c3d58 #344762",
+            "#a0c4ff #102442 #bbd5ff #8face6 #a9caff #24344f #90a2c2 #cfdefa #162a45",
+            "#8bb5ff #ffad78 #e3cb76 #b4c3df #f1ba9c #a5d8ad #ffaea4 #ffacb8 #add0ff", "#89d4e4 #ddbf7c #efa7d6",
             "#edb190 #80d2ba #d2aeff #efaed5 #8ed3ec #ced791 #d6ace6 #b1d6a5 #96cccc #b1c2ff #c0badc #afc8c0 #d9e3f5 #cfbd9d"),
     },
     field: {
-        light: paint("#e6ebdf #fcfdf7 #eff3e7 #d2dfc2 #263328 #495e4a #bfccb7 #697b64 #344f39 #e6eddf #d7e3cc",
-            "#2a503a #f8fff4 #22402f #193325 #29563b #eaf1de #67785c #253b27 #f3f9e9",
-            "#08603b #a03727 #785918 #585968 #863543", "#34576b #624579 #803969",
+        light: paint("#dee7d4 #fbfdf7 #e8efdf #c8d8b9 #f8fbf3 #263328 #364c3e #bfccbe #60735d #344f39 #eef2ea #dae5d2",
+            "#2a503a #f8fff4 #22402f #193325 #416344 #f6faf1 #849778 #253b27 #f3f9e9",
+            "#08603b #a03727 #785918 #585968 #863543 #23573e #953b30 #913c40 #28596e", "#34576b #624579 #803969",
             "#83412a #445794 #85500f #713a77 #17596e #486220 #644272 #315438 #255a52 #33476b #525366 #41594b #374337 #5c513e"),
-        dark: paint("#172019 #222e25 #2b382d #304733 #f1f5ea #c0d0bf #485949 #95ab92 #ccdfc6 #344437 #3c503d",
-            "#a5d19c #182b1e #bbdfae #94b989 #b4dea8 #263728 #95ac90 #d9e8ca #243525",
-            "#83d6a5 #f69f86 #e9c678 #c5c6d6 #f6aec4", "#9cc8d8 #d6b3e8 #edaed4",
+        dark: paint("#111d16 #25382a #304536 #1d2f22 #273a2c #f1f5ea #d7e4d6 #688260 #a7bda2 #ccdfc6 #304335 #3b4b3a",
+            "#a5d19c #182b1e #bbdfae #94b989 #b4d69c #283b2d #95ac90 #d9e8ca #243525",
+            "#83d6a5 #f69f86 #e9c678 #c5c6d6 #f6aec4 #9bddb3 #f7aa91 #ffb0aa #a3cfe7", "#9cc8d8 #d6b3e8 #edaed4",
             "#f2ae92 #a7b5ee #e4b782 #d3a6dd #93cddb #d1d991 #cbb6df #afcc9d #91d3c2 #b2c5e0 #c6c1d4 #c0cdbb #e3e8db #cfbf9f"),
     },
 };
@@ -93,12 +92,4 @@ const materials = {
 export const paletteTokens = Object.entries(materials).flatMap(([id, modes]) => Object.entries(modes).map(([mode, css]) => {
     const root = `:root[data-evidence-theme=${mode}][data-evidence-palette=${id}]`;
     return `${id === "petrol" ? "" : root + ","}.palette-scene[data-preview-palette=${id}][data-preview-mode=${mode}]{color-scheme:${mode};${css}}`;
-})).join("\n") + `
-@media(forced-colors:none) {
- :root[data-evidence-palette]:not([data-evidence-palette=petrol]) {
-   .chart-panel,.percentage-card {background:var(--screen-plot)}
-   .trends-grid {stroke:var(--screen-grid)}
-   .wire-search-panel {--wire-search-match:var(--accent)}
-   .ux-tooltip {background:var(--screen-tip);color:var(--screen-tip-ink)}
- }
-}`;
+})).join("\n");
