@@ -91,7 +91,7 @@ async function switchPosition(page, theme) {
     await resolved(page, theme);
     await page.waitForFunction((expected) => {
         const thumb = document.querySelector(".theme-thumb");
-        return getComputedStyle(thumb).transform === `matrix(1, 0, 0, 1, ${expected === "dark" ? 18 : 0}, 0)`;
+        return getComputedStyle(thumb).transform === `matrix(1, 0, 0, 1, ${expected === "dark" ? 22 : 0}, 0)`;
     }, theme);
     const control = page.getByRole("switch", { name: "Dark theme", exact: true, checked: theme === "dark" });
     assert.equal(await control.count(), 1);
@@ -106,14 +106,14 @@ async function switchPosition(page, theme) {
             assets: [...node.querySelectorAll("svg")].map((icon) => icon.dataset.lucideIcon),
         };
     });
-    assert.equal(geometry.control.width, 44);
+    assert.equal(geometry.control.width, 48);
     assert.equal(geometry.control.height, 44);
-    assert.equal(geometry.track.width, 44);
+    assert.equal(geometry.track.width, 48);
     assert.equal(geometry.track.height, 26);
     assert.equal(geometry.thumb.width, 18);
     assert.equal(geometry.thumb.height, 18);
     assert.deepEqual(geometry.assets, ["sun", "moon"]);
-    assert.equal(geometry.moon.centerX - geometry.sun.centerX, 18);
+    assert.equal(geometry.moon.x - (geometry.sun.x + geometry.sun.width), 6, "Visible space between the two icon boxes");
     assert.equal(geometry.thumb.centerX, geometry[theme === "dark" ? "moon" : "sun"].centerX);
     assert.equal(geometry.thumb.centerY, geometry.sun.centerY);
     assert.equal(geometry.thumb.centerY, geometry.moon.centerY);
@@ -234,7 +234,7 @@ test("sliding switch shows both initial positions, toggles once per pointer/key 
         await page.waitForFunction(() => window.initialSwitch);
         assert.deepEqual(await page.evaluate(() => window.initialSwitch), {
             theme: initial, checked: String(initial === "dark"), icons: 2,
-            transform: `matrix(1, 0, 0, 1, ${initial === "dark" ? 18 : 0}, 0)`,
+            transform: `matrix(1, 0, 0, 1, ${initial === "dark" ? 22 : 0}, 0)`,
         }, "Saved appearance and thumb position are correct at first animation frame");
         const geometry = await switchPosition(page, initial);
         await shot(page, `switch-${initial}-${width}`);
@@ -249,8 +249,8 @@ test("sliding switch shows both initial positions, toggles once per pointer/key 
         const expectedWrites = [];
         let current = initial;
         for (const activate of [
-            () => control.click({ position: { x: 22, y: 22 } }),
-            () => control.click({ position: { x: 58, y: 22 } }),
+            () => control.click({ position: { x: geometry.sun.centerX - geometry.control.x, y: geometry.sun.centerY - geometry.control.y } }),
+            () => control.click({ position: { x: geometry.moon.centerX - geometry.control.x, y: geometry.moon.centerY - geometry.control.y } }),
             () => control.press("Enter"),
             () => control.press("Space"),
         ]) {
@@ -456,7 +456,7 @@ test("both themes cover all views, privacy preview, and 375/820/1200 layouts wit
         assert.equal(await trigger.getAttribute("aria-haspopup"), null);
         assert.equal(await trigger.getAttribute("aria-expanded"), null);
         const bounds = await trigger.boundingBox();
-        assert.equal(bounds.width, 44);
+        assert.equal(bounds.width, 48);
         assert.equal(bounds.height, 44);
         const action = `Switch to ${theme === "light" ? "dark" : "light"} theme`;
         assert.equal(await trigger.getAttribute("aria-label"), "Dark theme");

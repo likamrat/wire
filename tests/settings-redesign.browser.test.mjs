@@ -345,7 +345,7 @@ test("Settings action edges stay visible through real hover, press, focus and na
         await navigateSettings(page, "display");
         assert.deepEqual(await page.locator("#settingsThemePreference .theme-track").evaluate(node => {
             const box = node.getBoundingClientRect(); return { width: box.width, height: box.height };
-        }), { width: 44, height: 26 });
+        }), { width: 48, height: 26 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     await page.emulateMedia({ forcedColors: "active" });
