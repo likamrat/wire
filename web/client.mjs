@@ -4342,7 +4342,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analyzeControls.close(false);
         selectControls?.close(); sidebar.close(false); ux.hideTooltip();
         chartReferenceOrigin = workspaceState.positions.get(readingKey(workspaceState.route)) ?? null;
-        chartReferenceUI.open();
+        if (underlyingRoute().compare === "periods") chartReferenceUI.open();
+        else chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"));
     }
     function readChartReferenceContext() {
         if (underlyingRoute().compare === "periods") {
@@ -4433,7 +4434,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return { status: "ready" };
         }
         if (["outcomes", "services", "models", "authors", "tools"].includes(topic)) {
-            percentages.renderExact(topic, host);
+            percentages.renderExact(topic, host, presentationState);
             for (const link of host.querySelectorAll("a")) guarded(link);
         } else {
             const chartType = { time: "time", categories: "workload", paths: "endpoint" }[topic];

@@ -102,4 +102,52 @@ export const chartReferenceStyles = `
  .chart-reference .chart-reference-topic[aria-pressed=true]:not(:focus-visible) {outline:1px solid Highlight}
  .chart-reference-service-key,.chart-reference-service-track>i {background:CanvasText}
 }
+/* The Analyze Guide uses the workspace, not a chart overlay. Compare keeps its period panel. */
+#workspace:has(>#analyzeReference #meaning[open][data-mode=analyze])>:not(#analyzeReference) {display:none!important}
+#meaning[data-mode=analyze] {
+ position:relative;inset:auto;width:100%;max-width:none;height:auto;max-height:none;
+ background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius);
+ box-shadow:none;overflow:visible;scroll-margin-top:var(--app-header-height)
+}
+#meaning[data-mode=analyze] .chart-reference-heading {padding:12px 24px}
+#meaning[data-mode=analyze] #closeChartReference {width:auto;display:inline-flex;align-items:center;gap:8px}
+#meaning[data-mode=analyze] .chart-reference-related {margin-block:14px 0;max-width:65ch}
+#meaning[data-mode=analyze] .chart-reference-related summary {cursor:pointer;min-height:44px;align-content:center}
+#meaning[data-mode=analyze] .chart-reference-body {display:grid;align-content:start;overflow:visible;padding:20px 24px 24px;gap:0}
+#meaning[data-mode=analyze] :is(.chart-reference-explanation,.chart-reference-index,.chart-reference-exact) {overflow:visible;scrollbar-gutter:auto;padding:0}
+#meaning[data-mode=analyze] :is(.chart-reference-return,#chartReferenceBack) {margin:0 0 12px}
+#meaning[data-mode=analyze] .chart-reference-actions {max-height:none;overflow:visible;padding:12px 0 0;border:0}
+#meaning[data-mode=analyze] .chart-reference-intro {margin:12px 0 16px}
+#meaning[data-mode=analyze] .chart-reference-explanation {max-width:68ch}
+#meaning[data-mode=analyze] .chart-reference-definition {grid-template-columns:minmax(8rem, .42fr) minmax(0, 1fr);gap:8px 20px;padding:10px 0}
+#meaning[data-mode=analyze] .chart-reference-definition-copy {grid-column:2;grid-row:1;color:var(--ink)}
+#meaning[data-mode=analyze] .chart-reference-group {padding-block:4px}
+.chart-reference-example {position:static;width:auto;height:auto;padding:14px 16px;margin:18px 0 4px;background:var(--accent-soft);border-radius:var(--radius);color:var(--ink)}
+.chart-reference-example h4,.chart-reference-example p {margin:0}
+.chart-reference-example p {margin-top:4px}
+.chart-reference-topic-group h4 {margin:0 0 4px;font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--muted)}
+#meaning[data-mode=analyze] .chart-reference-topics {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:20px;margin-top:20px}
+#meaning .chart-reference-topic {display:flex;justify-content:flex-start;min-height:44px;padding:8px 10px;color:var(--muted);line-height:var(--leading-control);font-weight:var(--weight-regular);font-size:var(--type-control);text-decoration:none;transition:var(--control-paint-transition)}
+#meaning .chart-reference-topic::before {content:none}
+#meaning .chart-reference-topic[aria-current=page] {background:var(--control-sheen),var(--accent-soft);box-shadow:var(--control-sheen-edge);color:var(--ink);font-weight:var(--weight-medium)}
+#meaning .chart-reference-topic:hover {background:var(--hover);color:var(--ink);text-decoration:none}
+#meaning .chart-reference-topic:active {color:var(--ink);background:var(--pill-pressed)}
+#meaning .chart-reference-topic:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
+#meaning[data-mode=analyze] #chartReferenceNotice {margin:0 0 16px;grid-column:1/-1}
+@container chart-reference (min-width:48rem) {
+ #meaning[data-mode=analyze][data-reference-view=guide] .chart-reference-body {grid-template-columns:minmax(11rem,14rem) minmax(0,1fr);gap:0 clamp(24px,4vw,64px)}
+ #meaning[data-mode=analyze][data-reference-view=guide] .chart-reference-topics {display:grid;grid-template-columns:1fr;margin-top:0}
+ #meaning[data-mode=analyze][data-reference-view=guide] #chartReferenceIndexTitle {display:none}
+}
+@container chart-reference (max-width:47.99rem) {
+ #meaning[data-mode=analyze][data-reference-view=guide] #chartReferenceIndex {display:none}
+}
+@container chart-reference (max-width:32rem) {
+ #meaning[data-mode=analyze] .chart-reference-definition {display:block}
+ #meaning[data-mode=analyze] .chart-reference-definition-copy {margin-top:2px}
+ #meaning[data-mode=analyze] .chart-reference-body {padding:16px}
+}
+@media(forced-colors:active) {
+ #meaning .chart-reference-topic[aria-current=page] {outline:1px solid Highlight}
+}
 `;

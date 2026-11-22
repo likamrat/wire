@@ -154,7 +154,7 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  ${pageSettings("analyze", "Analyze", "Set the default date range for opening Analyze.", ["analyzeRange"])}
+  ${pageSettings("analyze", "Analyze", "Choose the default date range and how Guide opens.", ["analyzeRange", "guideStart"])}
   ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
   ${pageSettings("reports", "Reports", "Set the default formats and period for new reports only.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}

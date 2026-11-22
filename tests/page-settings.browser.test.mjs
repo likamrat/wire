@@ -17,7 +17,7 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     await expect(group.getByRole("link")).toHaveText(["Analyze", "Trends", "Reports", "Compare"]);
     await expect(nav.getByRole("link", { name: "Help" })).toBeVisible();
     const namedDefaults = {
-        analyze: [["defaultAnalyzeRange-control", "Default date range"]],
+        analyze: [["defaultAnalyzeRange-control", "Default date range"], ["defaultGuideStart-control", "Open Guide to"]],
         trends: [["defaultTrendChart-control", "Default trend chart"]],
         reports: [["defaultReportFormats", "Default file formats"], ["defaultReportPeriod-control", "Default reporting period"]],
         compare: [["defaultCompareDays-control", "Default comparison period"]],

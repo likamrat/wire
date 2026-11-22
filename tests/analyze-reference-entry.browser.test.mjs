@@ -57,11 +57,16 @@ async function setup(t, { textSearch = false } = {}) {
     return { app, page, requests, snapshots: () => snapshots };
 }
 
+async function openOutcomeGuide(page) {
+    await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics [data-reference-topic="outcomes"]').click();
+}
+
 test("the single reference entry opens the native guide without a read and preserves applicability", { timeout: 30000 }, async t => {
     const { page, snapshots } = await setup(t);
     await expect(page.locator("#openChartReference")).toHaveCount(1);
-    await expect(page.locator("#openChartReference")).toHaveText("Chart guide");
-    await expect(page.locator("#openChartReference")).toHaveAccessibleName("Chart guide: How to read these charts");
+    await expect(page.locator("#openChartReference")).toHaveText("Guide");
+    await expect(page.locator("#openChartReference")).toHaveAccessibleName("Guide: How to read these charts");
     assert.equal(await page.locator("#analyzeReference").evaluate(node => node.tagName), "SECTION");
     const reads = snapshots();
     await page.locator("#openChartReference").focus();
@@ -69,21 +74,29 @@ test("the single reference entry opens the native guide without a read and prese
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#meaning").evaluate(node => node.tagName), "DIALOG");
     await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "index");
+    const toolTopic = page.locator('#chartReferenceTopics [data-reference-topic="tools"]');
+    const paint = node => ({
+        color: getComputedStyle(node).color, surface: getComputedStyle(node).backgroundColor,
+        decoration: getComputedStyle(node).textDecorationLine,
+    });
+    const nav = page.locator('.primary-navigation [data-nav="trends"]');
+    await nav.hover();
+    const navHover = await nav.evaluate(paint);
+    await toolTopic.hover();
+    await expect.poll(() => toolTopic.evaluate(paint)).toEqual(navHover);
+    expect(navHover.decoration).toBe("none");
+    await page.locator('#chartReferenceTopics [data-reference-topic="outcomes"]').click();
+    await expect(page.locator("#chartReferenceExplanation")).toContainText("HTTP 403");
+    await expect(page.locator("#chartReferenceExplanation")).not.toContainText("Connection failed");
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
+    await expect(page.locator("#chartReferenceData tbody tr")).toHaveCount(4);
     assert.equal(snapshots(), reads);
     await page.locator("#closeChartReference").click();
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-    await expect(page.locator("#openChartReference")).toBeVisible();
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.locator("#openChartReference").click();
-        await expect(page.locator("#chartReferenceNotice")).toContainText("Comparison records are not available");
-        await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
-        await captureState(page, `${theme}-comparison-unavailable`);
-        await page.locator("#closeChartReference").click();
-    }
+    await expect(page.locator("#openChartReference")).toBeHidden();
     await page.locator('.primary-navigation [data-nav="analyze"]').click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#openChartReference")).toBeVisible();
@@ -94,7 +107,7 @@ test("the single reference entry opens the native guide without a read and prese
 
 test("native exact outcome links preserve the accepted cohort and return to the same guide", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     const worked = page.locator("#chartReferenceData").locator('a[href*="result=success"]');
     const href = await worked.getAttribute("href");
@@ -113,7 +126,7 @@ test("native exact outcome links preserve the accepted cohort and return to the 
 
 test("native guide links retain modified-click behavior without replacing the current view", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     const popupReady = page.context().waitForEvent("page");
     await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click({ modifiers: ["Control"] });
@@ -140,7 +153,7 @@ for (const theme of ["light", "dark"]) for (const fail of [false, true]) test(`n
         await selectActivityOption(page, "serviceAssociationFilter", "Files");
         await started;
         await closeAnalyzeFilters(page);
-        await page.locator("#openChartReference").click();
+        await openOutcomeGuide(page);
         await expect(page.locator(".chart-reference-group-heading")).toContainText("8 Work IQ tool calls");
         await expect(page.locator("#chartReferenceExplanation")).not.toContainText("Files");
         await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
@@ -164,7 +177,7 @@ test("native guide keeps a private narrowed cohort without repeating its search 
     const { page } = await setup(t);
     const phrase = "Invented delegated calendar request.";
     await restoreLegacySearch(page, phrase);
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await expect(page.locator(".chart-reference-group-heading")).toContainText("1 Work IQ tool call");
     await expect(page.locator("#meaning")).toContainText("Search applied");
     await expect(page.locator("#meaning")).not.toContainText(phrase);
@@ -185,7 +198,7 @@ for (const entry of ["native plot", "chart guide"]) test(`private modified-click
     await restoreLegacySearch(page, phrase);
     await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
     if (entry === "chart guide") {
-        await page.locator("#openChartReference").click();
+        await openOutcomeGuide(page);
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("1");
     }
@@ -240,7 +253,7 @@ test("a new tab rebinds private Search with its existing owner and never display
     await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     await page.locator("#wireSearch").press("Escape");
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     let release, requested;
     const gate = new Promise(resolve => { release = resolve; });
@@ -315,7 +328,7 @@ for (const returning of [false, true]) test(`a private Search guide ${returning 
     await page.locator("#wireSearch").focus();
     await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
     await page.locator("#wireSearch").press("Escape");
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -337,7 +350,7 @@ test("newer reading input cancels a guide Back restoration awaiting private Sear
     await page.locator("#wireSearch").focus();
     await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
     await page.locator("#wireSearch").press("Escape");
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click();
     await expect(page.locator("#activityListSummary")).toBeFocused();
@@ -437,7 +450,7 @@ test("private handoffs are recipient-bound and one-use, and blocked popups do no
     await expect(page.locator("#message")).toContainText("The new tab was blocked");
     assert.equal(page.url(), before);
     await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
-    await page.locator("#openChartReference").click();
+    await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click({ modifiers: ["Control"] });
     await expect(page.locator("#chartReferenceNotice")).toContainText("The new tab was blocked");

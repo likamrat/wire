@@ -101,7 +101,13 @@ no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
-**Chart guide** explains the displayed measures and provides exact numbers.
+Open **Guide** in the Analyze toolbar to read what each chart counts. The topic
+list separates calls from interactions and alternate chart groupings. Examples
+show distinctions such as a completed call returning an error for one item.
+Choose **See exact numbers** for values in your current scope and matching
+records where available. Closing Guide returns you to Analyze. In
+**Settings > Analyze > Open Guide to**, you can choose the topic list (default)
+or the last topic read in this tab. This preference does not change the charts.
 
 The **Work IQ tool calls over time** chart shows individual calendar days by
 default, even with All dates or a long range. Long timelines show up to 90
@@ -111,7 +117,7 @@ to reach the rest. The window names its dates; totals and filters still cover
 the whole selected period. Paging does not change which interactions a report includes.
 If an old link points outside the current dated activity, **First dates** or
 **Latest dates** returns to its recorded dates without clearing your filters.
-**Chart guide > Activity over time > See exact numbers** has the window's exact
+**Guide > Activity over time > See exact numbers** has the window's exact
 daily rows and the full selected-period dated total.
 A zero is no qualifying retained calls that day, not proof that no
 activity occurred. Undated calls stay outside the timeline. Existing links

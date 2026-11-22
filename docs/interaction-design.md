@@ -67,7 +67,7 @@ known zeros. The chart's accessible description names the total matching
 interactions, not calls, without repeating it on a separate visible line.
 For mixed sources, keep the GitHub denominator visible;
 incompatible Microsoft 365 conversations stay separately unavailable. Exact
-counts and provenance definitions live in Chart guide, not another drilldown.
+counts and provenance definitions live in Guide, not another drilldown.
 
 Filters opens one panel with the existing controls, applied chips and separate
 View group. Fields/labels wrap; accepting a restriction must not move focus.
@@ -131,8 +131,13 @@ catalogs across source updates or access withdrawal.
 
 ### Chart guide
 
-The Chart guide has one stable reading panel and exact-data destination.
-Definitions and table counts use the same accepted facts. A row finder filters
+Analyze's **Guide** opens from the toolbar, never from a control added to a
+chart. Default to the topic list; a preference under Settings > Analyze can
+resume the last topic read in this tab. Use the existing navigation hover
+and focus treatment, without an underline. Narrow screens move between the
+index and article; wide screens keep the topics beside the article. Examples
+explain consequential distinctions. Exact numbers, not the glossary, own
+the breakdown. Definitions and table counts use the same accepted facts. A row finder filters
 only table labels, not analytical membership or totals. Overflow remains
 local, keyboard/touch accessible and truthful; do not shrink type or hide data.
 Use the shared [chart encodings](design.md#chart-reading) for those facts.

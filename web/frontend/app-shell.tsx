@@ -197,8 +197,8 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
         </>, ports.heading)}
         {createPortal(<>
             <span id="analyzeReferenceEntry" hidden>
-                <button id="openChartReference" className="quiet" type="button" aria-label="Chart guide: How to read these charts" aria-controls="meaning">
-                    <span className="analyze-entry-label">Chart guide</span>
+                <button id="openChartReference" className="quiet" type="button" aria-label="Guide: How to read these charts" aria-controls="meaning">
+                    <span className="analyze-entry-label">Guide</span>
                 </button>
             </span>
             <button id="analyzeRefresh" className="quiet" type="button" aria-label="Refresh" onClick={event => refresh(event.currentTarget)}><span id="analyzeRefreshLabel">Refresh</span></button>
