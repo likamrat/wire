@@ -74,6 +74,7 @@ test("custom pairs keep units, members, collapse and day through the real period
     await mark.focus();await mark.press("Enter");
     const reading=pair.locator(".trend-pair-readings");
     await expect(reading).toContainText("50% · 1 of 2 interactions that day");
+    await expect(reading.getByRole("button",{name:"View 2 calls"}).locator('[data-icon-role="forward"]')).toBeVisible();
     await reading.getByRole("button",{name:"View 2 calls"}).click();
     await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
     const record=page.locator(".trends-evidence-row a").first();
@@ -85,6 +86,7 @@ test("custom pairs keep units, members, collapse and day through the real period
     await pair.getByRole("button",{name:"Expand",exact:true}).click();
     await select(second,["timing","timing","p95"]);await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
     await expect(reading).toContainText("180 ms");
+    await expect(pair.getByRole("button",{name:"Back to charts"}).locator('[data-icon-role="back"]')).toBeVisible();
     await nav.getByRole("button",{name:"Chart guide"}).click();await expect(page.locator(".trends-guide")).toContainText("95th percentile");
     await page.goBack();await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
     const periodTransfer=page.locator("#trendsComparePeriods");
@@ -200,6 +202,8 @@ test("service columns share their card surface and label sparse daily groups wit
     await expect(plot.getByText("0",{exact:true})).toHaveCount(6); // Five all-zero days and the scale origin.
     await expect(plot.locator("[data-trend-mark]")).toHaveCount(21);
     await plot.getByRole("button",{name:"Nov 16, 2026: Mail, 2 calls"}).tap();
+    await expect(card.getByRole("button",{name:"Data table"}).locator('[data-icon-role="forward"]')).toBeVisible();
+    await expect(card.getByRole("button",{name:"View 2 calls"}).locator('[data-icon-role="forward"]')).toBeVisible();
     await card.getByRole("button",{name:"View 2 calls"}).click();
     await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
 });

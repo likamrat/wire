@@ -29,6 +29,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const button = (label, action, cls = "quiet") => {
         const node = el("button", cls, label); node.type = "button"; node.addEventListener("click", action); return node;
     };
+    const directionButton = (label, action, direction = "forward", cls = "quiet") => {
+        const node = button("", action, `${cls} icon-action`), text = el("span", "", label);
+        node.append(text);
+        if (direction === "back") node.prepend(ux.icon(direction));
+        else node.append(ux.icon(direction));
+        return node;
+    };
     const select = (name, choices, change) => {
         const label = el("label", "trends-control"), field = el("select");
         field.id = "trends" + name.replace(/[^A-Za-z0-9]/g, "");
@@ -109,7 +116,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     guide.hidden = true;
     const guideIndex = el("nav"), guideArticle = el("article");
-    const guideContext = el("p","trends-guide-context"), guideBack = button("Back to charts",()=>{if(current())onSectionChange("charts");});
+    const guideContext = el("p","trends-guide-context"), guideBack = directionButton("Back to charts",()=>{if(current())onSectionChange("charts");},"back");
     guideIndex.setAttribute("aria-label","Chart guide topics"); guide.append(guideIndex,guideArticle);
     const guideTopics = [
         ["Compare measures", "Do two measures change on the same days?", "Choose any two readings. One graph is available when their units and counting groups match. For call volume and duration, read the same date on aligned charts with separate scales.", "In four interactions, two can have an error and three can use a tool. That is 50% and 75%; it does not tell you which interactions overlap."],
@@ -188,11 +195,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)} · ${data.timeContext.timeZone}`),
             el("p","muted",`Compare shows retained GitHub Copilot calls in these periods. The dates appear in its address.${clearMissing?" The Missing service detail filter is not available there.":""} Your chart stays here for Back.`));
         const actions=el("div","trends-dialog-actions");
-        actions.append(button("Cancel",()=>dialog.close()),button("Open comparison",()=>{
+        actions.append(button("Cancel",()=>dialog.close()),directionButton("Open comparison",()=>{
             if (!current() || data.revision!==revision || range.from!==from || range.to!==to || JSON.stringify(filters)!==JSON.stringify(selectedFilters)) return;
             dialog.close(); comparePeriods.focus({preventScroll:true});
             onComparePeriods({aFrom:priorStart,aTo:priorEnd,bFrom:from,bTo:to},selectedFilters);
-        },"primary"));dialogBody.append(actions);
+        },"forward","primary"));dialogBody.append(actions);
     });
     comparePeriods.id="trendsComparePeriods";toolbar.prepend(periodButton,comparePeriods);
     const homeBack = button("Back to Analyze", () => { if (current() && getContext().entry) returnToAnalyze?.(); });
@@ -228,7 +235,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const landingEmpty = el("div", "trends-no-activity"), landingDetail = el("p", "muted");
     const landingRecover = button("", recoverWeek);
     landingEmpty.append(el("h3", "", "No matching calls in this period"), landingDetail, landingRecover);
-    const landingOpen = button("View chart", () => openErrorsChart());
+    const landingOpen = directionButton("View chart", () => openErrorsChart());
     landingOpen.id = "trends-open-errors";
     const landingHead = el("div", "trends-landing-head"); landingHead.append(landingTitle, landingOpen);
     landing.append(landingHead, landingScope, landingEmpty, landingPlot, landingWindow); landing.hidden = true;
@@ -252,11 +259,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
     let pairActive=false;
     pairHost.hidden=landingExtra.hidden=true;
-    const pair = mountTrendPair({root:pairHost,el,button,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,
+    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,
         evidence:(choice,day,ids,origin)=>openMembers(day,choice.label,ids,origin,choice.key),
         close:()=>{pairActive=false;paint();index.querySelector(`[data-measure="${activeMeasure}"]`).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
-    examples.append(el("h2","","Compare two measures"),button("Compare measures",()=>startPair(),"primary"),el("h3","","Examples"));
+    examples.append(el("h2","","Compare two measures"),directionButton("Compare measures",()=>startPair(),"forward","primary"),el("h3","","Examples"));
     const presets=[["Errors and tool usage",["problems","share"],["tools","reach"]],["Call volume and duration",["rhythm","count"],["timing","median"]],["Response models and errors",["models","share"],["problems","share"]]];
     const exampleControls=presets.map(([label,first,second])=>{
         const node=button(label,()=>startPair(pair.choice(...first),pair.choice(...second)),"quiet trends-example");
@@ -367,11 +374,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         empty.append(emptyTitle, emptyDetail, showWeek); empty.hidden = true;
         const visibleDays = el("p", "trends-visible-days"); visibleDays.hidden = true;
         const actions = el("div", "trends-secondary");
-        const comparison = button("Compare measures", () => {
+        const comparison = directionButton("Compare measures", () => {
             const mode = id === "timing" ? card.selection?.id === "p95" ? "p95" : "median" : card.mode;
             const subject = id === "timing" ? "timing" : card.selection?.id;
             startPair(pair.choice(id,mode,subject),null,card.selection?.date);
-        }), numbers = button("Data table", () => openTable(card));
+        }), numbers = directionButton("Data table", () => openTable(card));
         const arrange = button("Arrange charts", () => openComparison(card));
         const remove = button("Remove chart", () => {
             if (!current() || !compared.has(id)) return;
@@ -385,7 +392,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const point = el("div", "trends-point"), pointDate = el("h3"), pointScope = el("div", "trends-point-scope");
         const pointText = el("span"), pointSpace = el("span", "trends-point-space"), pointActions = el("div", "trends-point-actions");
         pointSpace.setAttribute("aria-hidden", "true");
-        const evidence = button("View evidence", () => showEvidence(card));
+        const evidence = directionButton("View evidence", () => showEvidence(card));
         evidence.id = `trendsEvidence-${id}`;
         pointScope.append(pointSpace, pointText); pointActions.append(evidence); point.append(pointDate, pointScope, pointActions);
         identity.append(totals, indexScope); indexModes.append(types); summary.append(legend); body.append(summary, plot, visibleDays);
@@ -842,11 +849,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.pointDate.textContent = axisDate(day.date);
             card.pointText.textContent = [selected?.label ?? "Shown series", measure,
                 selected && card.hidden.has(selected.id) ? "Hidden in chart" : ""].filter(Boolean).join(" · ");
-            card.evidence.textContent = `View ${number(ids.size)} ${ids.size === 1 ? "call" : "calls"}`;
+            card.evidence.firstChild.textContent = `View ${number(ids.size)} ${ids.size === 1 ? "call" : "calls"}`;
             card.evidence.disabled = ids.size === 0;
             return;
         }
-        card.point.hidden = !source.totals.calls; card.evidence.textContent = "View evidence";
+        card.point.hidden = !source.totals.calls; card.evidence.firstChild.textContent = "View evidence";
         card.point.classList.toggle("trends-inspection-heading", family === card.id);
         scrub(card.pointDate); card.pointDate.append(doc.createTextNode(axisDate(day.date)));
         scrub(card.pointText); card.pointText.append(doc.createTextNode(pointScope(day, card, selected?.label ?? "Shown series", selected && !shown(selected, card))));
@@ -1044,7 +1051,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = card.indexCollapsed = false;
             card.mode = card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
-            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence,
+            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence.firstChild,
                 card.emptyTitle, card.emptyDetail, card.showWeek, card.visibleDays]) scrub(node);
         }
         const selectedText = doc.getSelection();

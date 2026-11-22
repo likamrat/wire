@@ -152,6 +152,9 @@ visible, including on narrow screens. Chart guide is an in-page destination.
 A contextual Analyze entry opens Charts on the corresponding
 measure with supported scope; related rather than equivalent views name the
 difference before switching. Return restores the widget and its reading context.
+Forward arrows on chart, comparison, table and supporting-call actions open a
+reading; the back arrow returns from it. In-place choices and disclosures
+do not use these navigation arrows.
 Changing measure, chart type, series or unit is not a new population read.
 The current measure and selected unit or chart type remain identifiable while
 hovered or pressed. Comparison choices and legend entries focus as labelled

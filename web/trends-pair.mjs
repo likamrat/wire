@@ -40,7 +40,7 @@ export function createTrendPairModel() {
     return { choices, point, compatible, correlation };
 }
 
-export function mountTrendPair({ root, el, button, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close }) {
+export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close }) {
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
     let visible = false, sourceKey = "", drawnKey = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
@@ -70,7 +70,7 @@ export function mountTrendPair({ root, el, button, scrub, mountChart, model, too
     modes.append(one,two);
     const hint = el("p", "trends-index-scope"), inspector = el("div", "trend-pair-readings"), plots = el("div");
     const when = el("h3"), readings = [0, 1].map(n => {
-        const block = el("div"), label = el("strong"), key = el("i","trend-pair-key"), value = el("p"), inspect = button("", () => {
+        const block = el("div"), label = el("strong"), key = el("i","trend-pair-key"), value = el("p"), inspect = directionButton("", () => {
             const choice = choiceAt(n), day = dayAt();
             if (!current() || !choice || !day) return;
             const point = model.point(day, choice);
@@ -84,7 +84,7 @@ export function mountTrendPair({ root, el, button, scrub, mountChart, model, too
     association.append(el("summary", "", "Do these measures move together?"), result);
     tableRegion.tabIndex = 0; tableRegion.setAttribute("role","region"); tableRegion.setAttribute("aria-label","Daily values for compared measures");
     exact.append(el("summary", "", "Daily values"), tableRegion);
-    const exit = button("Back to charts", () => { if (current()) close(); });
+    const exit = directionButton("Back to charts", () => { if (current()) close(); }, "back");
     const grid=el("div","trend-pair-grid"); grid.append(plots,inspector);
     body.append(controls, modes, hint, grid, association, exact);
     root.append(header, body, exit);
@@ -134,11 +134,11 @@ export function mountTrendPair({ root, el, button, scrub, mountChart, model, too
         when.textContent = fullDate(date);
         for (const [n, row] of readings.entries()) {
             const c = choiceAt(n); row.block.hidden = !c;
-            if (!c) { row.label.textContent = row.value.textContent = row.inspect.textContent = ""; continue; }
+            if (!c) { row.label.textContent = row.value.textContent = row.inspect.firstChild.textContent = ""; continue; }
             const p = model.point(day, c); row.label.textContent = c.label;
             row.key.style.setProperty("--series-color",color(c.id,c.family));
             row.value.textContent = `${amount(p,c)} · ${detail(p,c,day)}`; row.inspect.disabled = !p.rowIds.length;
-            row.inspect.textContent = `View ${number(p.rowIds.length)} ${p.rowIds.length === 1 ? "call" : "calls"}`;
+            row.inspect.firstChild.textContent = `View ${number(p.rowIds.length)} ${p.rowIds.length === 1 ? "call" : "calls"}`;
         }
     }
     function options(input, except) {
@@ -213,7 +213,7 @@ export function mountTrendPair({ root, el, button, scrub, mountChart, model, too
         data=null; choices=[]; a=b=sourceKey=drawnKey=""; date=null; visible=false; collapsed=false; folded=[false,false];
         root.hidden=true; for(const scene of scenes){scene.chart.withdrawAccess();scene.name.textContent="";scene.plot.removeAttribute("aria-label");}
         pickers.forEach(scrub); title.textContent="Compare measures"; when.textContent=hint.textContent=result.textContent="";
-        for(const row of readings)row.label.textContent=row.value.textContent=row.inspect.textContent="";
+        for(const row of readings)row.label.textContent=row.value.textContent=row.inspect.firstChild.textContent="";
         scrub(tableRegion); association.open=exact.open=false;
     }
     return { update,start,clear, choice:(family,mode,id)=>choices.find(c=>c.family===family && c.mode===mode && (!id||id===c.id)),
