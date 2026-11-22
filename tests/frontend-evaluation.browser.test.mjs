@@ -197,7 +197,8 @@ test("Analyze chart, controls and grouped interactions share the available works
             const prompt = rows[0].querySelector(".card-request-context");
             return {
                 frame: edges(el("#workspace")), chart: edges(chart), heading: edges(el("#workspace > .page-heading")),
-                toolbar: edges(el("#analyzeToolbar")), filters: edges(el("#openAnalyzeFilters")),
+                commands: edges(el("#analyzeResultCommands")), filters: edges(el("#openAnalyzeFilters")),
+                toolbar: edges(el("#analyzeToolbar")), stacked: el("#analyzeResultScope").getBoundingClientRect().bottom <= el("#analyzeToolbar").getBoundingClientRect().top + 1,
                 listHeading: edges(el("#activityListContext")), list: edges(list),
                 rows: rows.map(edges), chartSurface: surface(chart), listSurface: surface(list),
                 borders: rows.map(row => [getComputedStyle(row).borderTopWidth, getComputedStyle(row).borderBottomWidth].map(parseFloat)),
@@ -209,11 +210,11 @@ test("Analyze chart, controls and grouped interactions share the available works
         });
         measurements.push({ state, ...value });
         const check = (ok, label) => { if (!ok) failures.push(`${state}: ${label}`); };
-        for (const key of ["chart", "heading", "listHeading", "list"]) {
+        for (const key of ["chart", "heading", "commands", "listHeading", "list"]) {
             check(value[key].every((x, i) => Math.abs(x - value.frame[i]) <= 1), `${key} edges ${value[key]} vs ${value.frame}`);
         }
-        check(Math.abs(value.toolbar[1] - value.chart[1]) <= 1, `toolbar right ${value.toolbar[1]} vs ${value.chart[1]}`);
-        check(Math.abs(value.filters[1] - value.toolbar[1]) <= 1, "Filters ends the control row");
+        if (value.stacked) check(Math.abs(value.toolbar[0] - value.commands[0]) <= 1, "wrapped toolbar starts at the widget edge");
+        else check(Math.abs(value.filters[1] - value.chart[1]) <= 1, "Filters ends the inline command row at the widget edge");
         check(value.rows.every(row => row.every((x, i) => Math.abs(x - value.frame[i]) <= 1)), "row edges");
         check(value.listSurface.every((x, i) => x === value.chartSurface[i]), "group corner, edge and surface");
         check(value.borders[0][0] === 0 && value.borders.at(-1)[1] === 0
@@ -948,9 +949,9 @@ test("the selected evaluation layout retains complete membership, native reading
         return { overview: box("homeView").top, rows: box("activityView").top, breakdowns: box("frontendBreakdowns").top };
     });
     assert.ok(order.overview < order.rows && order.rows < order.breakdowns);
-    await expect(page.locator("#frontendHeadingActions #openAnalyzeFilters")).toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeToolbar #openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#pageIntro")).toBeHidden();
-    await expect(page.locator("#analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
     await expect(page.locator("#activityListScope")).toBeHidden();
     await expect(page.locator("#analyzeScopeStatus")).toContainText("Checked history is unknown");
     await capture(page, "react-analyze-light");

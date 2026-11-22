@@ -70,10 +70,12 @@ test("Analyze Refresh shares the guarded history check and read-only recovery be
     await app.runtime().collector.collectNow();
     await page.goto(app.runtime().url + "#analyze"); await ready(page);
     const refresh = page.getByRole("button", { name: "Refresh", exact: true });
-    await expect(page.locator("#analyzeToolbar #analyzeRefresh")).toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeToolbar #analyzeRefresh")).toBeVisible();
     await expect(refresh).toHaveCount(1);
     await expect(refresh).toHaveAccessibleName("Refresh");
-    await page.locator("#openChartReference").focus(); await page.keyboard.press("Tab");
+    await page.locator("#analyzeResultsSection").focus(); await page.keyboard.press("Tab");
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(refresh).toBeFocused();
     await page.keyboard.press("Tab"); await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     await appendFile(source.file, jsonl([call("two"), complete("two")]));
@@ -108,9 +110,12 @@ test("Analyze Refresh shares the guarded history check and read-only recovery be
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; scrollTo(0, 0); }, scale);
         const bounds = await page.locator("#analyzeRefresh").boundingBox(), filters = await page.locator("#openAnalyzeFilters").boundingBox();
         assert.ok(bounds.height >= 44 && bounds.width >= 44);
-        assert.ok(bounds.x + bounds.width <= filters.x && Math.abs(bounds.y - filters.y) < 2);
+        const toolbar = await page.locator("#analyzeToolbar").boundingBox();
+        if (bounds.width + filters.width + 8 <= toolbar.width + 1) {
+            assert.ok(bounds.x + bounds.width <= filters.x && Math.abs(bounds.y - filters.y) < 2);
+        } else assert.ok(bounds.y + bounds.height <= filters.y, "Filters follows Refresh on a wrapped command row");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        assert.equal(await page.locator("#analyzeRefreshLabel").isVisible(), scale === 1);
+        await expect(page.locator("#analyzeRefreshLabel")).toBeVisible();
         if (output) {
             await mkdir(output, { recursive: true });
             await page.screenshot({ path: path.join(output, `toolbar-${theme}-${width}-${scale}.png`) });
@@ -188,7 +193,8 @@ test("Refresh proportions keep pending geometry and separate notices from adjace
                 assert.ok(measurement.overflow <= 1, `${state}: no horizontal overflow`);
                 if (!measurement.settingsVisible) {
                     assert.ok(measurement.refresh.rect.width >= 44 && measurement.refresh.rect.height >= 44);
-                    assert.ok(measurement.refresh.rect.right <= measurement.filters.rect.left);
+                    assert.ok(measurement.refresh.rect.right <= measurement.filters.rect.left
+                        || measurement.refresh.rect.bottom <= measurement.filters.rect.top, "Refresh and Filters never overlap");
                 } else {
                     assert.equal(measurement.manual.weight, "400", "Refresh status is body text, not another heading");
                     assert.ok(measurement.manual.fontSize < measurement.freshHeading.fontSize, "The section heading outranks its status");

@@ -141,7 +141,7 @@ for (const width of [1440, 760, 390]) test(`built shared filter: ${width}px pend
     await page.route(url => url.origin !== new URL(runtime.url).origin, route => route.abort());
     await page.goto(runtime.url); await ready(page);
     await page.evaluate(() => document.fonts.ready);
-    const shell = [".app-header", "#sidebar", "#openAnalyzeFilters", "#analyzeRefresh", "#openChartReference", "#wireSearch", "#navigationFooter"];
+    const shell = [".app-header", "#sidebar", "#analyzeResultsSection", "#openChartReference", "#analyzeRefresh", "#openAnalyzeFilters", "#wireSearch", "#navigationFooter"];
     const controls = ["#dateFilter-control", "#closeAnalyzeFilters"];
     await startProbe(page, "openAnalyzeFilters", [...shell, ...controls]);
     await page.locator("#openAnalyzeFilters").hover(); await frames(page);

@@ -28,13 +28,14 @@ for (const [width, scale, theme] of [[1440, 1, "light"], [390, 2, "dark"]]) {
             document.documentElement.style.fontSize = `${100 * scale}%`; await document.fonts.ready;
         }, scale);
         const trigger = page.locator("#openAnalyzeFilters");
-        const targets = page.locator("#openAnalyzeFilters, #analyzeRefresh, #openChartReference");
+        const targets = page.locator("#analyzeReferenceEntry button, #analyzeToolbar #analyzeRefresh, #analyzeToolbar #openAnalyzeFilters");
         const geometry = () => targets.evaluateAll(nodes => nodes.filter(n => n.checkVisibility()).map(node => {
             const { x, y, width, height } = node.getBoundingClientRect();
-            return { x: Math.round(x), y: Math.round(y + scrollY), width: Math.round(width), height: Math.round(height) };
+            return { id: node.id, x: Math.round(x), y: Math.round(y + scrollY), width: Math.round(width), height: Math.round(height) };
         }));
         await expect(trigger).toHaveText("Filters", { useInnerText: true });
         const defaultBoxes = await geometry();
+        assert.deepEqual(defaultBoxes.map(box => box.id), ["analyzeResultsSection", "openChartReference", "analyzeRefresh", "openAnalyzeFilters"]);
         await selectActivityOption(page, "toolFilter", "workiq-fetch"); await ready(page);
         await closeAnalyzeFilters(page); await capture(page, `analyze-${theme}-one`);
         await expect(trigger).toHaveText("1 filter applied");

@@ -95,7 +95,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("dashboard-no-reviews", page.locator("main"), true);
     await page.locator("#openChartReference").click();
     await capture("chart-data-and-definitions", page.locator("#meaning"));
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
     await page.locator("#openAnalyzeFilters").click();
     const filterIds = await page.locator('#analyzeFilterDialog [data-select-id]').evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => node.dataset.selectId));
     assert.ok(filterIds.length > 0);

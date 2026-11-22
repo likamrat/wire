@@ -105,7 +105,7 @@ test("Filters and view discloses the same controls without querying, resetting o
     await expect(page.locator("#openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#filters")).not.toBeVisible();
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("15");
     await page.evaluate(() => {
@@ -209,7 +209,7 @@ test("closed-panel captions keep accepted membership through pending and failed 
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Current collection/);
     await expect(page.locator("#openAnalyzeFilters")).not.toHaveAccessibleDescription(/Service: Files/);
     await expect(page.locator("#analyzeScopeStatus")).not.toBeVisible();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await expect(page.locator("#analyzeScopeError")).not.toBeVisible();
     release(); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("7");
@@ -253,7 +253,7 @@ test("routine pending reads do not add text, a divider or height to Recorded out
     if (proof) await mkdir(proof, { recursive: true });
     const geometry = () => page.locator(".analyze-outcome-summary").evaluate(node => ({
         height: node.getBoundingClientRect().height,
-        footerVisible: document.getElementById("analyzeScopeSummary").checkVisibility(),
+        scopeInWidget: node.contains(document.getElementById("analyzeScopeSummary")),
         total: node.querySelector(".percentage-total-value").textContent,
         caption: document.getElementById("analyzeScopeCaption").textContent,
         revision: document.getElementById("analyzeScopeSummary").dataset.revision,
@@ -389,7 +389,7 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     await page.locator("#resetView").click(); await ready(page);
     await closeAnalyzeFilters(page);
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
     await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
     await expect(page.locator("#activitySelectionSummary")).toHaveText(selection);
@@ -489,12 +489,15 @@ test("relocated launchers use native records, reference, comparison and update d
     }), "The records list has visible focus context, never a clipped semantic heading");
     await page.locator("#openChartReference").click();
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
-    await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands")).toBeHidden();
     await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
     assert.equal(snapshots.length, reads, "Opening existing exact data does not read or recollect evidence");
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary")).toBeVisible();
 
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();

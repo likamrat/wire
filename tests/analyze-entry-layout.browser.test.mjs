@@ -62,14 +62,48 @@ async function geometry(page, compare = false) {
                 overflow: node.scrollWidth - node.clientWidth,
                 icon: icon ? box(icon) : null, label: label ? box(label) : null };
         };
-        const anchor = document.querySelector(compare ? "#periodComparisonResults" : ".analyze-chart-grid");
+        const anchor = document.querySelector(compare ? "#comparisonOptionsSlot" : ".analyze-dashboard");
         return { guide: control(guide), filters: control(filters), anchor: box(anchor),
+            results: control(document.getElementById("analyzeResultsSection")), refresh: control(document.getElementById("analyzeRefresh")),
+            strip: box(document.getElementById("analyzeReferenceEntry")), commands: box(document.getElementById("analyzeResultCommands")),
+            scope: box(document.getElementById("analyzeResultScope")),
+            title: box(document.getElementById("pageTitle")),
             row: box(document.getElementById("analyzeToolbar")), overflow: document.documentElement.scrollWidth - innerWidth };
     }, compare);
 }
 
-test("Analyze entry controls share the widget edge, target and painted baseline at every supported size", { timeout: 60000 }, async t => {
+function checkAnalyzeGeometry(value, check) {
+    const { results, guide, refresh, filters, anchor, strip, commands, scope, title, row } = value;
+    check(title.bottom <= strip.top + 1 && strip.bottom <= commands.top + 1, "section strip sits between title and result commands");
+    check(Math.abs(strip.left - anchor.left) <= 1 && Math.abs(strip.right - anchor.right) <= 1, "strip spans the widget frame");
+    check(Math.abs(results.left - strip.left) <= 1 && results.right <= guide.left && guide.right <= strip.right + 1,
+        "Results and Guide have separate targets at the start of the strip");
+    check(Math.abs(results.top - guide.top) <= 1 && Math.abs(results.height - guide.height) <= 1, "section buttons align");
+    check(Math.abs(commands.left - anchor.left) <= 1 && Math.abs(commands.right - anchor.right) <= 1, "command group spans the widget frame");
+    if (scope.bottom <= row.top + 1 || row.bottom <= scope.top + 1) check(Math.abs(row.left - anchor.left) <= 1, "wrapped toolbar starts at the widget edge");
+    else check(scope.right <= row.left && Math.abs(filters.right - anchor.right) <= 1, "inline commands follow scope and end at the widget edge");
+    check(anchor.top - commands.bottom >= 8 && anchor.top - commands.bottom <= 16, "command row stays attached to the widgets");
+    for (const target of [results, guide, refresh, filters]) {
+        check(target.height >= 44 && target.left >= anchor.left - 1 && target.right <= anchor.right + 1, "full targets inside widget edges");
+        check(target.overflow <= 1, "unclipped control");
+    }
+    const fitsOneRow = refresh.width + filters.width + 8 <= row.width + 1;
+    if (fitsOneRow) {
+        check(refresh.right + 7 <= filters.left && Math.abs(refresh.top - filters.top) <= 1, "Refresh and Filters share a row");
+    } else check(refresh.bottom <= filters.top, "commands reflow without overlap");
+    check(Math.abs(refresh.height - filters.height) <= 1 && refresh.paintTop === filters.paintTop
+        && refresh.paintBottom === filters.paintBottom, "command targets and painted faces align");
+    check(refresh.fontSize === filters.fontSize && refresh.lineHeight === filters.lineHeight, "one command type scale");
+    check(value.overflow <= 1, "no page overflow");
+}
+
+test("Analyze section strip and result commands align with the widgets at every supported size", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
+    const sections = page.locator(".page-heading + nav#analyzeReferenceEntry.wire-section-nav");
+    await expect(sections.locator("button")).toHaveText(["Results", "Guide"]);
+    await expect(sections.locator("button[aria-current=page]")).toHaveAttribute("id", "analyzeResultsSection");
+    await expect(page.locator("#analyzeResultCommands #analyzeToolbar #analyzeRefresh")).toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeToolbar #openAnalyzeFilters")).toBeVisible();
     const proof = process.env.WIRE_ANALYZE_ENTRY_PROOFS;
     if (proof) await mkdir(proof, { recursive: true });
     const measurements = [], failures = [];
@@ -84,17 +118,9 @@ test("Analyze entry controls share the widget edge, target and painted baseline 
             await page.screenshot({ path: path.join(proof, `${name}-overview.png`) });
             await page.screenshot({ path: path.join(proof, `${name}-full.png`), fullPage: true });
         }
-        const { guide, filters, anchor, row } = value;
+        const { filters } = value;
         const check = (ok, message) => { if (!ok) failures.push(name + ": " + message); };
-        check(Math.abs(row.right - anchor.right) <= 1 && Math.abs(filters.right - anchor.right) <= 1, "controls must end at the widget grid edge");
-        check(Math.abs(guide.top - filters.top) <= 1 && Math.abs(guide.height - filters.height) <= 1, "one shared target row");
-        check(guide.height >= 44 && filters.height >= 44, "44px minimum targets");
-        check(guide.paintTop === filters.paintTop && guide.paintBottom === filters.paintBottom, "shared painted baseline");
-        check(guide.right + 7 <= filters.left && filters.right <= anchor.right + 1, "separate non-overlapping entries");
-        check(guide.left >= anchor.left - 1, "the complete hit area stays inside the widget edge");
-        check(anchor.top - row.bottom >= 8 && anchor.top - row.bottom <= 16, "entries remain attached to the widget grid");
-        check(guide.fontSize === filters.fontSize && guide.lineHeight === filters.lineHeight, "one control type scale");
-        check(guide.overflow <= 1 && filters.overflow <= 1 && value.overflow <= 1, "no clipped controls or page overflow");
+        checkAnalyzeGeometry(value, check);
         if (filters.label && filters.icon) {
             check(Math.abs((filters.icon.top + filters.icon.bottom) / 2 - (filters.label.top + filters.label.bottom) / 2) <= 1,
                 "filter icon and text share the same centerline");
@@ -134,8 +160,11 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
         const count = reads.length;
         await guide.press("Enter");
         await expect(page.locator("#meaning")).toBeVisible();
+        await expect(guide).toBeFocused();
+        await expect(page.locator("#analyzeResultCommands")).toBeHidden();
         await expect(page.locator("#analyzeFilterDialog")).not.toBeVisible();
         await page.keyboard.press("Escape");
+        await expect(page.locator("#meaning")).toBeHidden();
         await expect(guide).toBeFocused();
         await filter.press("Enter");
         await expect(page.locator("#dateFilter-control")).toBeFocused();
@@ -161,9 +190,8 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
     await page.setViewportSize({ width: 375, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; scrollTo(0, 0); });
     const active = await geometry(page);
-    assert.ok(active.guide.right + 7 <= active.filters.left && active.filters.right <= 375
-        && active.guide.left >= active.anchor.left - 1 && active.guide.overflow <= 1
-        && active.overflow <= 1 && active.filters.overflow <= 1, JSON.stringify(active));
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary")).toBeVisible();
+    checkAnalyzeGeometry(active, (ok, message) => assert.ok(ok, `${message}: ${JSON.stringify(active)}`));
     if (proof) {
         await page.screenshot({ path: path.join(proof, "375-2-light-active-overview.png") });
         await page.screenshot({ path: path.join(proof, "375-2-light-active-full.png"), fullPage: true });
@@ -171,9 +199,8 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.locator("#comparePeriods").click();
-    await guide.click();
-    await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
-    await page.keyboard.press("Escape");
+    await expect(guide).toBeHidden();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     for (const side of ["A", "B"]) for (const bound of ["From", "To"]) {
         await page.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
     }
@@ -184,11 +211,10 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; scrollTo(0, 0); }, scale);
         await chooseTheme(page, theme);
         const value = await geometry(page, true);
-        assert.ok(Math.abs(value.filters.right - value.anchor.right) <= 1, JSON.stringify(value));
-        assert.ok(value.guide.right + 7 <= value.filters.left && value.overflow <= 1);
-        assert.ok(value.guide.left >= value.anchor.left - 1 && value.guide.overflow <= 1 && value.filters.overflow <= 1);
-        assert.equal(value.guide.height, value.filters.height);
-        await expect(filter).toHaveAccessibleName("2 filters applied");
+        await expect(guide).toBeHidden();
+        await expect(filter).toBeVisible();
+        assert.ok(value.filters.left >= value.anchor.left - 1 && value.filters.right <= value.anchor.right + 1);
+        assert.ok(value.filters.height >= 44 && value.filters.overflow <= 1 && value.overflow <= 1);
         if (proof) {
             await page.screenshot({ path: path.join(proof, `${width}-${scale}-${theme}-compare-overview.png`) });
             await page.screenshot({ path: path.join(proof, `${width}-${scale}-${theme}-compare-full.png`), fullPage: true });
@@ -196,12 +222,14 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
     }
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     const count = reads.length;
-    await guide.click();
-    await expect(page.locator("#chartReferenceShowData")).toBeEnabled();
-    await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#comparisonRecordsB")).toBeFocused();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    await expect(page.locator(".compare-inspection table").first()).toBeVisible();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     assert.equal(reads.length, count);
 });
@@ -221,10 +249,8 @@ test("Analyze entry alignment and disclosure remain intact at actual 200% browse
     for (const theme of ["dark", "light"]) {
         await chooseTheme(page, theme);
         await page.evaluate(() => document.fonts.ready);
-        const { guide, filters, anchor, overflow } = await geometry(page);
-        assert.ok(Math.abs(filters.right - anchor.right) <= 1 && guide.right + 7 <= filters.left);
-        assert.equal(guide.height, filters.height);
-        assert.ok(overflow <= 1 && guide.overflow <= 1 && filters.overflow <= 1);
+        const value = await geometry(page);
+        checkAnalyzeGeometry(value, (ok, message) => assert.ok(ok, `${message}: ${JSON.stringify(value)}`));
         if (proof) {
             const capture = await page.context().newCDPSession(page);
             const image = await capture.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
@@ -237,7 +263,7 @@ test("Analyze entry alignment and disclosure remain intact at actual 200% browse
         await page.keyboard.press("Escape");
         await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
         await page.locator("#openChartReference").click();
-        await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+        await expect(page.locator("#openChartReference")).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(page.locator("#openChartReference")).toBeFocused();
         assert.equal(reads.length, count);

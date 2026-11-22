@@ -629,7 +629,7 @@ test("native Analyze uses ordinary outcome rings, tool bars, exact columns and r
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
         await expect(page.locator("#chartReferenceData .native-reference")).not.toContainText("MoveMessage");
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("3 tool calls.");
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await page.locator("#percentageCharts .percentage-label").filter({ hasText: "mcp__graph__CallGraph" }).click();
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
         await expect(page.locator("#activityList .request-card-count")).toContainText("1 tool call");

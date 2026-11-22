@@ -55,7 +55,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
         await guideData.locator(".percentage-reference-notes>summary").click();
     };
     const closeModelData = async () => {
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await expect(page.locator("#meaning")).toBeHidden();
     };
     const reset = async () => {

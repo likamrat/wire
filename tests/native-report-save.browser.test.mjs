@@ -339,7 +339,8 @@ async function captureCombinedRefresh(page, name) {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         if (await page.locator("#analyzeRefresh").isVisible()) {
             const action = await page.locator("#analyzeRefresh").boundingBox(), filters = await page.locator("#openAnalyzeFilters").boundingBox();
-            assert.ok(action.width >= 44 && action.height >= 44 && action.x + action.width <= filters.x);
+            assert.ok(action.width >= 44 && action.height >= 44);
+            assert.ok(action.x + action.width <= filters.x || action.y + action.height <= filters.y, "Refresh and Filters never overlap");
         }
         await page.screenshot({ path: path.join(output, `${name}-${theme}-${width}-${scale}.png`), fullPage: true });
     }

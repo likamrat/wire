@@ -263,7 +263,7 @@ test("Guide topic navigation and return actions retain visible hover feedback wi
         await highlight(page.locator("#chartReferenceShowData"), "exact-data");
         await page.locator("#chartReferenceShowData").click(); await settle(page);
         await highlight(page.locator("#chartReferenceBack"), "back");
-        await page.locator("#closeChartReference").click(); await settle(page);
+        await page.locator("#analyzeResultsSection").click(); await settle(page);
     }
 });
 

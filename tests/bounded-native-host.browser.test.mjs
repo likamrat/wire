@@ -111,7 +111,7 @@ for (const { segmented, incompleteText = false } of [{ segmented: false }, { seg
                     fullPage: ["analyze", "context-only"].includes(name) });
                     if (process.env.WIRE_VISUAL_FINISH_PROOFS) {
                         const metrics = await page.evaluate(() => [...document.querySelectorAll(
-                            ".notice,.empty-state,.percentage-card-heading,#collectionNotice,#boundedFilterNotice,.wire-search-set>h3,.wire-search-set>p,.filter-chip,.analyze-filter-heading,.section-heading,#openChartReference,#analyzeRefresh,#openAnalyzeFilters",
+                            ".notice,.empty-state,.percentage-card-heading,#collectionNotice,#boundedFilterNotice,.wire-search-set>h3,.wire-search-set>p,.filter-chip,.analyze-filter-heading,.section-heading,#analyzeResultsSection,#openChartReference,#analyzeRefresh,#openAnalyzeFilters",
                         )].filter(node => node.checkVisibility({ visibilityProperty: true })).map(node => {
                             const style = getComputedStyle(node), rect = node.getBoundingClientRect(), next = node.nextElementSibling;
                             return { id: node.id, className: node.className, text: node.textContent.trim().slice(0, 120),
@@ -124,11 +124,11 @@ for (const { segmented, incompleteText = false } of [{ segmented: false }, { seg
                                 next: next?.id || next?.tagName, nextGap: next ? next.getBoundingClientRect().top - rect.bottom : null };
                         }));
                         await writeFile(path.join(proofs, `v2-${name}-${theme}-${width}-${text}.json`), JSON.stringify(metrics, null, 2));
-                        const toolbar = metrics.filter(item => ["openChartReference", "analyzeRefresh", "openAnalyzeFilters"].includes(item.id));
-                        for (const [index, a] of toolbar.entries()) for (const b of toolbar.slice(index + 1)) {
+                        const entries = metrics.filter(item => ["analyzeResultsSection", "openChartReference", "analyzeRefresh", "openAnalyzeFilters"].includes(item.id));
+                        for (const [index, a] of entries.entries()) for (const b of entries.slice(index + 1)) {
                             const horizontal = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
                             const vertical = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-                            assert.ok(horizontal <= 1 || vertical <= 1, `${name}/${width}/${text}: toolbar targets do not overlap`);
+                            assert.ok(horizontal <= 1 || vertical <= 1, `${name}/${width}/${text}: section and command targets do not overlap`);
                         }
                         if (name === "context-only") {
                             await expect(page.locator("#analyzeEmptyScope")).toBeHidden();
@@ -242,7 +242,7 @@ for (const { segmented, incompleteText = false } of [{ segmented: false }, { seg
         await captureCopy("analyze");
         await captureCopy("filters", () => openAnalyzeFilters(page), () => closeAnalyzeFilters(page));
         await captureCopy("guide", () => page.locator("#openChartReference").click(), async () => {
-            await page.locator("#closeChartReference").click();
+            await page.locator("#analyzeResultsSection").click();
             await expect(page.locator("#meaning")).toBeHidden();
         });
         await expect(page.locator("#outcomeChart")).not.toContainText("Outcome rates are not combined");
@@ -273,7 +273,7 @@ for (const { segmented, incompleteText = false } of [{ segmented: false }, { seg
         await page.locator("#openChartReference").click();
         await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
         await expect(page.locator("#chartReferenceExplanation")).not.toContainText("outcome rates stay separate");
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await expect(page.locator("#meaning")).toBeHidden();
         await page.locator("#activityList .request-card-open").filter({ hasText: "SYNTHETIC_PRIVATE_PROMPT" }).click();
         await expect(page.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");

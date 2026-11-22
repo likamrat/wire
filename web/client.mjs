@@ -4537,6 +4537,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else chartReferenceUI.leave();
     }
     $("analyzeResultsSection").addEventListener("click", () => selectAnalyzeSection(false));
+    $("analyzeReferenceEntry").addEventListener("keydown", event => {
+        if (event.key === "Escape" && !event.defaultPrevented && chartReferenceUI.value().view !== "closed") {
+            event.preventDefault(); selectAnalyzeSection(false);
+        }
+    });
     function setNavigationLink(node) {
         const view = node.dataset.nav;
         setRouteLink(node, Object.hasOwn(browseDefaults, view) ? browseRoute(view) : routeFor(view, { request: undefined, task: undefined }));

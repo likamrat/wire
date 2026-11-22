@@ -113,7 +113,7 @@ test("the desktop sidebar resizes at each built WIRE destination", { timeout: 36
             await expect(page.locator("#analyzeFilterDialog")).toBeHidden();
             await page.locator("#openChartReference").click();
             await drag("in-page Analyze Guide", "#meaning");
-            await page.locator("#closeChartReference").click();
+            await page.locator("#analyzeResultsSection").click();
             await page.locator("#activityList .card-panel-link").first().click();
             const reader = seen("#contextSidebar"); await expect(reader).toBeVisible();
             if (await reader.evaluate(n => n.matches(":modal"))) await blockedByModal(page, reader);

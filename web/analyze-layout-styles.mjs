@@ -197,9 +197,9 @@ export const analyzeLayoutStyles = `
 
 .analyze-toolbar {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-sm);min-width:0;max-width:100%}
 #workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
-#workspace>#analyzeResultCommands {display:flex;align-items:center;justify-content:space-between;gap:var(--space-xs) var(--space-md);flex-wrap:wrap;max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-xs) var(--space-md);flex-wrap:wrap;max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands[hidden] {display:none}
-#analyzeResultScope {flex:1 1 15rem;min-width:0}
+#analyzeResultScope {flex:1 1 15rem;min-width:0;align-self:center}
 #analyzeResultScope .analyze-scope-summary {margin:0;padding:0;border:0}
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
@@ -220,9 +220,8 @@ export const analyzeLayoutStyles = `
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @media(max-width:550px) {
- #analyzeResultScope {flex-basis:100%}
+ #analyzeResultScope {order:1;flex-basis:100%}
  #analyzeResultCommands .analyze-toolbar {justify-content:flex-start}
- #analyzeResultCommands #openAnalyzeFilters {inline-size:auto;min-width:max(7em,44px)}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}
