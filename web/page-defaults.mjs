@@ -1,7 +1,7 @@
 export const pageDefaultSpecs = {
     analyzeRange: { id: "defaultAnalyzeRange", label: "Date range", help: "Filters saved activity without changing collection.", initial: "capture",
         choices: [["capture", "All dates"], ["7", "Last 7 days"], ["30", "Last 30 days"]] },
-    trendChart: { id: "defaultTrendChart", label: "Chart", help: "A direct link opens its own chart.", initial: "problems",
+    trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "A direct link opens its own chart.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
     reportFormats: { id: "defaultReportFormats", label: "File formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },

@@ -31,7 +31,7 @@ export const settingsMarkup = `
   <button id="settingsGeneralBack" type="button" class="quiet" hidden>${uxIcons.back} Back to General</button>
   <section class="settings-section" data-settings-section="general" aria-labelledby="generalTitle" hidden>
     <h2 id="generalTitle" tabindex="-1">General</h2>
-    <p class="settings-intro">Check for WIRE updates or change your theme and time zone.</p>
+    <p class="settings-intro">View WIRE’s update status or change your theme and time zone.</p>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
       </div>
@@ -155,7 +155,7 @@ export const settingsMarkup = `
     </section>
   </div>
   ${pageSettings("analyze", "Analyze", "Choose which dates to show when Analyze opens.", ["analyzeRange"])}
-  ${pageSettings("trends", "Trends", "Choose which chart opens first.", ["trendChart"])}
+  ${pageSettings("trends", "Trends", "This preference applies in this browser.", ["trendChart"])}
   ${pageSettings("reports", "Reports", "Changes apply to new reports, not drafts or saved files.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "New comparisons use two consecutive periods of equal length.", ["compareDays"])}
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
