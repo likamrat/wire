@@ -11123,7 +11123,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analysisNavigations.clear();
         historyViews.clear();
         linkTargets = new WeakMap();
-        $("compareSectionPeriods").href = "/compare";
         initialRoute = null;
         searchOpenedRequest = searchReturnMarker = null; searchTargetInvalid = true;
         incomingNavigation = null;
