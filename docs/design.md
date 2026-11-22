@@ -232,6 +232,7 @@ Ordinary text actions share an 8px corner, 12px side padding and an 8px
 icon-to-label gap. At default text size a 32px face sits inside a 44px target;
 let the target grow with wrapped or enlarged text. Keep widths content-sized
 and preserve geometry when focus, hover, press or pending paint changes.
+Hover and press tint the existing face, not the transparent space around it.
 For a directional row, keep its arrow visible and tint its surface or ink on
 hover/press; don't underline or embolden the label. Keyboard focus keeps an
 outline. The underline below an active section marks location; an underline

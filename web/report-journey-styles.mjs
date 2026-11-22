@@ -477,9 +477,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-outline-description{margin:.45rem 0 1.15rem;line-height:1.5;max-width:65ch}
 .report-outline-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.15rem .75rem;min-width:0;border-bottom:1px solid var(--surface-divider);padding:.35rem 0}
 .report-outline-row>.report-toolbar-choice,.report-outline-row>.report-toolbar-group{margin-left:auto}
-.report-outline-row .report-toolbar-choice{border-color:transparent;background:transparent;justify-content:flex-start;min-width:0;max-width:100%;text-align:left}
-.report-outline-row .report-toolbar-choice:is(:hover,:focus-visible):not(:disabled){background:var(--hover);border-color:var(--surface-divider)}
-.report-outline-row .report-toolbar-choice:active:not(:disabled){background:var(--pill-pressed)}
+.report-outline-row .report-toolbar-choice{justify-content:flex-start;min-width:0;max-width:100%;text-align:left}
 .report-outline-row>.report-privacy-control{width:100%;margin:0;max-width:none}
 .report-outline-row .report-privacy-control .report-toolbar-group{display:flex;justify-content:space-between;flex-wrap:wrap}
 .report-outline-row .report-privacy-control .report-toolbar-group>label{display:block}
