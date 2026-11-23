@@ -1,17 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { createReportScope } from "../web/report-scope.mjs";
-import { buildExportCatalog, summarizeExportSelection } from "../lib/export-selection.mjs";
+import { buildExportCatalog, buildNativeExportRequests, summarizeExportSelection } from "../lib/export-selection.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { fixture } from "./helpers.mjs";
 import { nativeReportFrame } from "./native-report-fixtures.mjs";
 
-test("native conversations keep separate report counts and cannot be silently removed by GitHub author filtering",
-    { skip: !process.env.WIRE_BOUNDED_BACKEND_ROOT }, async () => {
-    const { buildNativeExportRequests } = await import(pathToFileURL(
-        path.join(process.env.WIRE_BOUNDED_BACKEND_ROOT, "lib", "export-selection.mjs")).href);
+test("native conversations keep separate report counts and cannot be silently removed by GitHub author filtering", () => {
     const github = buildExportCatalog([fixture()]);
     const native = buildNativeExportRequests(nativeReportFrame().records);
     const scope = createReportScope(promptAuthorship);
