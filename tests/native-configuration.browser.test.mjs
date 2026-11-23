@@ -603,7 +603,7 @@ test("in-flight original Connect keeps normal Settings stable across access-watc
         await expect(page.locator("#wireMicrosoftAction")).toBeEnabled();
         assert.equal(app.writes.filter(row => row.body.action === "microsoft-connect").length, 1);
         assert.ok(staleReads > 0);
-        assert.equal(new URL(page.url()).hash, "#settings?section=connection");
+        await expect(page).toHaveURL(new URL("settings?section=connection", app.runtimeUrl).href);
         assert.equal(app.acquisitions, 0);
         t.diagnostic(JSON.stringify({ transitions, watchResponses: watches.length, staleSnapshotRefusals: staleReads,
             originalConnects: app.writes.filter(row => row.body.action === "microsoft-connect").length,

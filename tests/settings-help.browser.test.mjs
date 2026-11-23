@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
@@ -38,7 +39,7 @@ async function setup(t, approved = true) {
     const mutations = [], errors = [], rejected = [];
     let release, hold = false, fail = false, reads = 0;
     const server = createServer(async (req, res) => {
-        if (req.method === "GET" && req.url === "/") {
+        if (req.method === "GET" && isPagePath(req.url.split("?")[0])) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "settings-help", UNBOUND_FIXTURE_BOOTSTRAP));
         }
@@ -100,8 +101,8 @@ test("benign Settings messages stay with their originating section while uncerta
         await openSourceEditor(page);
         if (changed) await page.locator("#sourceDatabase").fill("C:\\synthetic\\unsaved-data.db");
         await page.locator("#cancelSource").click();
-        if (changed) assert.match(await page.locator("#settingsMessage").textContent(), /^Source edits discarded/);
-        else assert.equal(await page.locator("#settingsMessage").isVisible(), false, "Closing an unchanged editor needs no cancellation notice");
+        assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+        assert.equal(await page.locator("#approvedDatabase").textContent(), state.status().config.appDbPath);
         await navigateSettings(page, "data");
         assert.equal(await page.locator("#settingsMessage").isVisible(), false);
         await navigateSettings(page, "display");
@@ -136,7 +137,7 @@ test("benign Settings messages stay with their originating section while uncerta
     await navigateSettings(page, "collection");
     await selectActivityOption(page, "collectionCadence", "30");
     await page.locator("#cancelPreferences").click();
-    assert.match(await page.locator("#settingsMessage").textContent(), /Preference edits discarded.*Saved collection settings are unchanged/);
+    assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), false);
     await navigateSettings(page, "collection");
@@ -146,7 +147,7 @@ test("benign Settings messages stay with their originating section while uncerta
     await page.locator("#reloadSettings").waitFor();
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), true);
-    assert.match(await page.locator("#settingsMessage").textContent(), /Synthetic unconfirmed write.*No success is assumed/);
+    assert.match(await page.locator("#settingsMessage").textContent(), /Synthetic unconfirmed write.*Change unconfirmed/);
     assert.equal(await page.locator("#reloadSettings").isVisible(), true);
     assert.equal(state.mutations.length, 2, "Navigation and cancellation never repeat either explicit write");
 });

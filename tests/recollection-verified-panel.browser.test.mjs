@@ -6,6 +6,7 @@ import { describeRecollection, mountRecollection, recollectionMarkup, recollecti
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { createSearchFields } from "../web/search-field.mjs";
+import { createDateRangeCalendar } from "../web/date-range-calendar.mjs";
 
 const mode = "verified-records-only", coverage = "day-incomplete";
 const operationId = "11111111-2222-4333-8444-555555555555", continuation = "22222222-3333-4444-8555-666666666666";
@@ -44,7 +45,7 @@ async function fixture(t) {
         await page.addScriptTag({ content: `
             const ux = (${createEvidenceUX})(${JSON.stringify(uxIcons)});
             window.panel = (${mountRecollection})({ api: Object.assign(panelApi, { publicationToken: () => 1, isCurrent: t => t === 1 }),
-                time: (${createTimeContext})(), timeContext: () => (${JSON.stringify(timeContext)}), ux, describe: ${describeRecollection},
+                time: (${createTimeContext})(), timeContext: () => (${JSON.stringify(timeContext)}), createCalendar: ${createDateRangeCalendar}, ux, describe: ${describeRecollection},
                 searchFields: (${createSearchFields})(ux), search: { matches: () => true }, onCommitted: async () => true,
                 pageSources: (host, rows, row) => host.replaceChildren(...rows.map(row)) });` });
     }

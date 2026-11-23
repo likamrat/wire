@@ -42,10 +42,10 @@ test("typed localhost entry redirects before app authority and preserves fragmen
         assert.equal(runtime.server.address().address, "127.0.0.1");
         const response = await page.goto(`http://localhost:${actualPort}/${route}`);
         assert.equal(response.status(), 200);
-        assert.equal(page.url(), runtime.url + route, "The browser must preserve the original fragment through redirect.");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        await expect(page).toHaveURL(new URL(route === "#analyze" ? "/" : "settings?section=connection", runtime.url).href);
         if (route === "#analyze") await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
-        else await expect(page.locator("#settingsView")).toContainText("Connection & updates");
+        else await expect(page.locator("#connectionTitle")).toBeVisible();
         const previous = response.request().redirectedFrom();
         assert.ok(previous);
         assert.equal(new URL(previous.url()).hostname, "localhost");

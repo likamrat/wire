@@ -57,6 +57,7 @@ async function setup(t) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         if (route.request().url() === "http://source-controls.fixture.invalid/") return route.fulfill({ contentType: "text/html", body: html() });
+        if (route.request().method() === "GET" && route.request().url() === "http://source-controls.fixture.invalid/favicon.svg") return route.fulfill({ status: 204 });
         unexpected.push(route.request().url()); return route.abort();
     });
     t.after(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(unexpected, []); });

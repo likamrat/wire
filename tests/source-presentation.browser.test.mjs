@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
@@ -23,11 +24,11 @@ async function setup(t) {
     const records = [fixture("source-presentation")], writes = [], errors = [];
     let currentPaths = paths;
     const server = createServer(async (req, res) => {
-        if (req.url === "/" && req.method === "GET") {
+        if (req.method === "GET" && isPagePath(req.url.split("?")[0])) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "source-presentation-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         const collection = {

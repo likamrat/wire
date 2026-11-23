@@ -612,7 +612,7 @@ test("settled Settings save retires its blocked-history announcement without rep
     await page.evaluate(() => { location.hash = "#settings?section=privacy"; });
     await expect(page.locator("#message.pending-save")).toContainText("Wait for the current local save to finish");
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
-    await expect(page).toHaveURL(/#settings\?section=connection$/);
+    await expect(page).toHaveURL(/\/settings\?section=connection$/);
     held.resolve();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
     await expect(page.locator("#message")).toBeHidden();
