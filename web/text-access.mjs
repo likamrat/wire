@@ -325,7 +325,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             }
             const onPreviewToggle = () => setExpanded(!presentation.isOpen(stateKey, false), true);
             toggle.addEventListener("click", onPreviewToggle);
-            promptReveals.set(root, () => setExpanded(true));
+            promptReveals.set(root, { reveal: () => setExpanded(true), measure });
             const observer = new ResizeObserver(measure);
             observer.observe(pre);
             document.fonts.ready.then(measure);
@@ -416,7 +416,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return root;
     }
     return { excerpt, renderExcerpt, renderCardPreview, render, caption, describePrompt,
-        revealPrompt(root) { promptReveals.get(root)?.(); },
+        revealPrompt(root) { promptReveals.get(root)?.reveal(); },
+        measurePrompt(root) { promptReveals.get(root)?.measure(); },
         release(root) { bindings.get(root)?.(); bindings.delete(root); },
         isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
         setOpen: (key, open) => presentation.setOpen("text:" + key, open) };
