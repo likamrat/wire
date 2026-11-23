@@ -23,7 +23,7 @@ test("account presentation hosts are real, empty and hidden before activation", 
     }
     assert.equal(await page.locator("#wireAccountEntry").evaluate(node =>
         node.parentElement.id === "navigationFooter" && node.parentElement.firstElementChild === node
-        && node.parentElement.parentElement.id === "navigationContent"), true);
+        && node.closest("#navigationContent") !== null), true);
     assert.equal(await page.locator("#microsoftConnectionHost").evaluate(node =>
         node.parentElement.dataset.settingsSection === "connection" && node.nextElementSibling.id === "connectionPreferences"), true);
     assert.deepEqual(requests, []);

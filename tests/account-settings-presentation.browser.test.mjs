@@ -43,7 +43,7 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: false });
 }
 
-async function setup(t, options = {}) {
+async function setup(t, options = {}, section = "connection") {
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, ...options });
     const errors = [], external = [], warnings = [];
@@ -51,7 +51,7 @@ async function setup(t, options = {}) {
     page.on("console", message => { if (message.type() === "warning") warnings.push(message.text()); });
     await page.route("https://wire.example.invalid/**", route => {
         if (new URL(route.request().url()).pathname === "/") return route.fulfill({
-            contentType: "text/html", body: renderAccountSettingsFixture(),
+            contentType: "text/html", body: renderAccountSettingsFixture(section),
         });
         external.push(route.request().url());
         return route.abort();
@@ -130,7 +130,11 @@ test("documented lifecycle fixtures cannot activate commands or replace Settings
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     assert.equal(await draft.evaluate(node => node.value), "7");
     await capture(page, "light-paused-draft");
-    await page.locator("#cancelPreferences").click();
+    assert.deepEqual(await page.evaluate(() => window.fixtureWrites), []);
+});
+
+test("account presentation updates preserve an unsaved draft on Source access", async t => {
+    const { page } = await setup(t, {}, "source-access");
     await page.locator("#editSource").click();
     await page.locator("#sourceDatabase").fill("C:\\synthetic\\edited.db");
     const sourceDraft = await page.locator("#sourceDatabase").elementHandle();

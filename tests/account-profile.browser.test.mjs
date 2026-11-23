@@ -286,7 +286,7 @@ test("withdrawal during the second Connect preflight retires the continuation ev
     let armed = false, preflights = 0, connections = 0;
     const app = await setup(t, { sourceAware: true, qualified: false, connect: async () => { connections++; } });
     const page = await app.panel(async page => {
-        await page.route(url => url.pathname === "/", async route => {
+        await page.route(url => url.pathname === "/settings", async route => {
             const response = await route.fetch();
             let html = await response.text();
             const transport = createBoardTransport.toString(), presenter = mountAccountSettingsPresentation.toString();
@@ -914,7 +914,7 @@ for (const boundary of ["withdrawal", "owner-replacement"]) test(`automatic Conn
         throw new MicrosoftSessionError("transport-failed");
     } });
     const page = await app.panel(async page => {
-        await page.route(url => url.pathname === "/", async route => {
+        await page.route(url => url.pathname === "/settings", async route => {
             const response = await route.fetch(), html = await response.text(), transport = createBoardTransport.toString();
             assert.equal(html.split(transport).length, 2);
             await route.fulfill({ response, body: html.replace(transport,
