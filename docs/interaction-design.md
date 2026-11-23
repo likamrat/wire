@@ -333,6 +333,10 @@ conversation; opening it uses its own authorized reader.
 The origin and date identify the request. The identity key describes the
 matching records, not the current account: exact tools, recorded targets,
 operations and applicable gaps. The reader keeps complete-parent ordinals.
+When a legacy interaction and full history refer to the same recorded call,
+keep the legacy prompt for context. Show the call's input, timing and returned
+entries from the canonical owner together. If that call cannot be identified
+uniquely, say so instead of borrowing details from the legacy copy.
 The outcome and its trailing arrow form one link to the right-hand reader.
 The arrow's tip also appears on keyboard focus. Close, Escape or Back returns
 to the link. The failed-call count opens the matching failure or set of failures,

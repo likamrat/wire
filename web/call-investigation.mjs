@@ -11,6 +11,13 @@ export function createCallInvestigation(compareEntries) {
         });
     }
     const only = values => values?.length === 1 ? values[0] : null;
+    function sourceToolCall(scenario, row) {
+        if (!scenario?.sourceSessionId || scenario.scenarioId !== row?.scenarioId
+            || row.sourceSessionId != null && row.sourceSessionId !== scenario.sourceSessionId) return null;
+        const id = row.parentCallId ?? row.id;
+        return only(scenario.toolCalls?.filter(call => row.toolCallId ? call.toolCallId === row.toolCallId
+            : call.startEventId && id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`));
+    }
     function resolve(activity, records, route, revision) {
         if (route.call === undefined) return { status: "none" };
         const unavailable = { status: "unavailable" }, layer = route.layer || "tool";
@@ -37,8 +44,7 @@ export function createCallInvestigation(compareEntries) {
         const source = ["tool", "reported-api"].includes(layer)
             ? scenario.recordKind === "native-conversation"
                 ? scenario.nativeConversation.calls.find(call => call.key === parent.id && call.nativeCallId === parent.toolCallId)
-                : scenario.toolCalls?.find(call => parent.toolCallId ? call.toolCallId === parent.toolCallId
-                : call.startEventId && parent.id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`)
+                : sourceToolCall(scenario, parent)
             : layer === "http" ? scenario.httpRecords?.find(record => record.recordId === row.recordId)
                 : scenario.graphActivities?.find(record => record.activityId === row.activityId);
         return source ? { status: "available", row, source, actionId: parent.id } : unavailable;
@@ -67,5 +73,5 @@ export function createCallInvestigation(compareEntries) {
         if (members.some(row => !row.id || !(row.scenarioIds?.length ? row.scenarioIds : [row.scenarioId]).includes(request))) return null;
         return new Set(members.map(row => row.id));
     }
-    return { duration, order, resolve, countedIds, firstToolCall };
+    return { duration, order, resolve, sourceToolCall, countedIds, firstToolCall };
 }
