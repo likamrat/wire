@@ -216,6 +216,18 @@ browser check uses invented Microsoft activity and a disposable store. It
 needs no live Microsoft account or separate backend checkout. It runs
 separately from `npm test`.
 
+Two other checks need an explicit environment. Use a fresh PowerShell session
+for each:
+
+- **Browser zoom:** With Chrome installed and the client built, set
+  `$env:WIRE_CHART_NATIVE_ZOOM = '1'`. Run
+  `node --test --test-concurrency=1 --test-name-pattern="actual 200% browser zoom|complete filter qualifications until reset \(native zoom\)" tests/analyze-entry-layout.browser.test.mjs tests/chart-reference-integration.browser.test.mjs`.
+  These checks zoom the browser itself, not just the page font.
+- **Offline operator and transport:** On a clean Windows checkout, set
+  `$env:WIRE_HISTORY_TEST_COMMIT = (git rev-parse HEAD)`. Run
+  `node --test --test-concurrency=1 --test-name-pattern="offline clean candidate:" tests/microsoft-engineering-admission.test.mjs tests/microsoft-native-transport.test.mjs`.
+  This exercises startup, cancellation and cleanup without launching a live provider.
+
 ### Changing a Copilot journal format
 
 Run `npm run test:history-compatibility` when changing source recognition,
