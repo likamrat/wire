@@ -484,15 +484,19 @@ test("qualified completion reaches normal cards, reader, report facts, analytics
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         for (const theme of ["light", "dark"]) {
             await chooseTheme(page, theme);
-            const card = page.locator(".request-card-open");
-            await expect(card).toContainText("Recorded tool call completed.");
-            await expect(card).toContainText("1 recorded call");
-            await expect(card).not.toContainText("1 failed");
-            await card.click();
+            const card = page.locator("#activityList article").filter({ hasText: "Read the invented file." });
+            await expect(card.locator(".card-outcome")).toHaveText("1 tool call completed");
+            const calls = card.locator(".card-panel-link");
+            await expect(calls).toHaveText("1 tool call");
+            await calls.click();
             const call = page.locator('[data-reader-section=activity] [data-tool-call-id="call"]');
-            await expect(call).toContainText("Call #1 completed");
-            await expect(call).toContainText("2,021 ms");
-            await expect(call).toContainText("fetch_blob");
+            await expect(call).toBeVisible();
+            await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
+            await expect(call.locator(".card-outcome-label")).toHaveText("1 tool call completed");
+            await expect(call.locator("data.call-duration")).toHaveAttribute("value", "2021");
+            await expect(call).toContainText("2.021 s");
+            await expect(call).toContainText("workiq-fetch_blob");
+            await call.locator(".reader-call-toggle").click();
             await expect(page.locator("#requestContent")).not.toContainText("EXCLUDED_BODY_");
             await page.locator("#closeContextSidebar").click();
             await page.waitForFunction(() => !document.querySelector("#contextSidebar").open
