@@ -229,6 +229,12 @@ test("conflicted and unidentifiable calls cannot narrow service membership witho
     assert.equal(bundle.snapshot.summary.metrics[0].count, 1, "Existing operational analytics deduplicates the shared start identity");
     assert.match(bundle.files["product-report.md"], /Service coverage is 0 of 1 report calls/);
     assert.match(bundle.files["product-report.md"], /Only some recorded actions can be linked/);
+    const other = matrixRecords("attributable-service", ["success"])[0];
+    const mixed = [...records, other];
+    const expected = freeze([other]).recordedOutcomes.find(row => row.kind === "tool-call").memberRef;
+    const mixedBundle = await buildSanitizedBundle(mixed, key, { promptMode: "none", formats: ["markdown"] }, undefined, undefined, freeze(mixed));
+    assert.deepEqual(mixedBundle.snapshot.resultFacts.calls.map(call => call.ref), [expected]);
+    assert.deepEqual(mixedBundle.snapshot.evaluationFacts.serviceInvolvement.memberRefs, [expected]);
     delete records[0].toolCalls[0].toolCallId;
     delete records[0].toolCalls[0].startEventId;
     const partial = freeze(records);
