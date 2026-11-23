@@ -210,6 +210,12 @@ Use `npm run test:packaging` for the production-only installation check. It
 builds the browser assets, then checks the packaged browser and local Search
 against the same disposable install.
 
+For changes to native report selection, saving or recovery, run `npm run build`
+followed by `node --test tests/native-report-save.qualification.mjs`. This
+browser check uses invented Microsoft activity and a disposable store. It
+needs no live Microsoft account or separate backend checkout. It runs
+separately from `npm test`.
+
 ### Changing a Copilot journal format
 
 Run `npm run test:history-compatibility` when changing source recognition,
