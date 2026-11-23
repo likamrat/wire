@@ -6,6 +6,7 @@ import { fontDataUrl, fontFaceStyles, uiFontStack } from "../lib/typeface.mjs";
 import { typographyTokens, tokens, screenTokens, screenFontStack } from "../web/tokens.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
+import { dimensionalColumnStyles } from "../web/dimensional-charts-styles.mjs";
 
 test("the retained Asta asset stays licensed and the report font stack is preserved", () => {
     const font = readFileSync(new URL("../assets/fonts/asta-sans-latin-variable.woff2", import.meta.url));
@@ -20,6 +21,12 @@ test("the retained Asta asset stays licensed and the report font stack is preser
     assert.match(fontFaceStyles, /unicode-range:U\+0000-00FF/);
     assert.equal(uiFontStack, 'Arial,"Helvetica Neue","Segoe UI",sans-serif');
     assert.match(uiFontStack, /sans-serif$/);
+    for (const [asset, digest] of [
+        [tokens, "bc1c376cd50c984b828eb834fb239fcaee543fdcee860faddfd3753921e27900"],
+        [typographyTokens, "0647f3f7c10ec869b55c08c783ab7e2b5a9585f219218564f4002386d3c1edfc"],
+        [fontFaceStyles, "0ab1b95c57a5e174e0f445aa734e50d5d4654056d0c451bb69312ababcb99beb"],
+        [dimensionalColumnStyles, "35ca34cf435141877bac1e6d295abca78481cd47f6016ed7cf124a07ff71548d"],
+    ]) assert.equal(createHash("sha256").update(asset).digest("hex"), digest, "Historical report style bytes");
 });
 
 test("the shell uses the exact retained IQOS Asta asset without changing report typography or loading a remote font", () => {
