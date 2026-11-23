@@ -6140,7 +6140,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!api.isCurrent(authority)) { event.preventDefault(); return; }
                 if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
                 event.preventDefault();
-                if (!window.getSelection()?.isCollapsed && row.contains(window.getSelection()?.anchorNode)) return;
+                const selection = window.getSelection();
+                if (event.detail && !selection?.isCollapsed && link.contains(selection?.anchorNode)) return;
                 row.querySelector("[data-card-origin]")?.removeAttribute("data-card-origin");
                 link.dataset.cardOrigin = "";
                 if (link.classList.contains("card-panel-link") && link.getAttribute("aria-expanded") === "true"
@@ -6178,6 +6179,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
+        } else if (!reportPicker && outcome && summary[outcome.key] < summary.count) {
+            facts.append(el("span", "request-card-count", `${count(summary.count)} tool calls`));
         }
         if (description.hasText && ["partial", "truncated"].includes(scenario.userPrompt.status))
             facts.append(el("span", "request-card-availability", "Part of the prompt was retained."));

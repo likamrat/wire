@@ -219,9 +219,11 @@ test("capture documentation through the normal renderer with isolated light-them
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
         await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
         await capture("wire-overview", { top: true });
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Activity", exact: true }).click();
+        await page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle[aria-expanded=true]').click();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
         await card.evaluate(n => scrollBy(0, n.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom - 64));
         await capture("interaction", { hover: outcome.locator('[data-icon-role="forward"]') });
         if (analyzeOnly) { await finish(); return; }
