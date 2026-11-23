@@ -1284,15 +1284,25 @@ test("An empty retained agent message remains recognizable without pretending it
     await expect(open).toBeFocused();
 });
 
-test("bounded card preview still opens the full exact authorized message and returns to its link", async t => {
-    const { page } = await setup(t);
-    const card = promptLink(page, "card-clarity-2");
-    await expect(card.locator("button,input,a")).toHaveCount(0);
-    await card.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(longPrompt);
-    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(6);
+test("the counted failure link preserves the full prompt and can expand to the six original calls", async t => {
+    const record = records()[2];
+    record.userPrompt.text = `${longPrompt}\n\n`.repeat(4) + "Keep this final workshop note.";
+    const { page } = await setup(t, [record]);
+    const card = interactionCard(page, record.scenarioId);
+    assert.ok(await card.locator(".card-excerpt").evaluate(n => n.scrollHeight > n.clientHeight), "The card shows a bounded excerpt");
+    const failed = card.getByRole("link", { name: "3 tool calls failed", exact: true });
+    const ids = () => page.locator("#requestContent .reader-call-row").evaluateAll(rows => rows.map(row => row.dataset.toolCallId));
+    const all = record.toolCalls.map(call => call.toolCallId);
+    const failures = record.toolCalls.filter(call => call.toolSucceeded === false).map(call => call.toolCallId);
+    await failed.press("Enter");
+    assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), record.userPrompt.text);
+    assert.deepEqual(await ids(), failures);
     await page.goBack();
-    await expect(card).toBeFocused();
+    await expect(failed).toBeFocused();
+    await failed.press("Enter");
+    const fullActivity = page.getByRole("link", { name: "Show full activity", exact: true });
+    await fullActivity.press("Enter");
+    await expect.poll(ids).toEqual(all);
 });
 
 test("unavailable and empty nonautomatic records retain their own identity without false continuation or recovery", async t => {
