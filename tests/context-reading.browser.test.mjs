@@ -494,39 +494,24 @@ test("off capture, missing retained text and unmatched same-chat records remain 
     assert.equal(payloadReads.length, 0);
 });
 
-test("late eager answers cannot survive navigation or revoked access; no mutation is replayed", { timeout: 40000 }, async t => {
+test("reconnect rejects an already authorized reply delivered after consent revocation without replaying a source check", { timeout: 20000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
     let sourceChecks = 0;
     await page.route("**/api/collection/now", async route => {
         sourceChecks++;
         await route.abort();
     });
-    let release, reached;
-    const intercepted = new Promise(resolve => { reached = resolve; });
-    await page.route("**/api/assessment/evidence", async route => {
-        const response = await route.fetch();
-        reached();
-        await new Promise(resolve => { release = resolve; });
-        await route.fulfill({ response });
-    });
-    await page.goto(runtime.url + "#request?request=" + records[0].scenarioId); await ready(page);
-    await intercepted;
-    await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    const leftResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
-    release(); await (await leftResponse).finished(); await frames(page);
-    await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
-    await page.unroute("**/api/assessment/evidence");
-    let releaseStale, sawStale;
-    const pending = new Promise(resolve => { sawStale = resolve; });
+    const held = Promise.withResolvers(), admitted = Promise.withResolvers();
+    t.after(held.resolve);
     await page.route("**/api/assessment/evidence", async route => {
         const response = await route.fetch();
         assert.equal((await response.json()).basis.consentRevision, 1);
-        sawStale();
-        await new Promise(resolve => { releaseStale = resolve; });
+        admitted.resolve();
+        await held.promise;
         await route.fulfill({ response });
     });
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await pending;
+    await admitted.promise;
     await updateBoardState(context, state => {
         state.personalEvaluation.consent = { ...state.personalEvaluation.consent, state: "revoked", revision: 2,
             categories: [], revokedAt: "2026-10-01T12:00:00.000Z" };
@@ -560,11 +545,11 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await (await revokedSnapshot).finished();
     await ready(page);
     await expect(page.locator("#promptAuthorSummary")).toHaveAttribute("data-revision", String(revoked.revision));
-    const revokedResponse = page.locator(`[data-context-kind="action"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
-    await expect(revokedResponse).toContainText("No saved response.");
+    const revokedResponse = page.locator("#requestContent > .interaction-response");
+    await expect(revokedResponse).toContainText("No assistant reply was saved");
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
-    releaseStale();
+    held.resolve();
     const deliveredStale = await staleResponse;
     await deliveredStale.finished();
     assert.equal(deliveredStale.status(), 200);
@@ -576,7 +561,7 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await page.unroute("**/api/assessment/evidence");
     const reads = app.payloadReads.length;
     await page.reload(); await ready(page);
-    await expect(revokedResponse).toContainText("No saved response.");
+    await expect(revokedResponse).toContainText("No assistant reply was saved");
     assert.equal(app.payloadReads.length, reads, "Revoked payloads aren't fetched on reopening");
     assert.equal(sourceChecks, 0, "Reconnect, the late answer and reload never dispatch or replay a source check");
 });

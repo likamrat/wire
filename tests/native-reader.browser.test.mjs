@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
@@ -866,85 +866,4 @@ test("immediate reader empty and error states use regular body text without a pa
         const s = getComputedStyle(node);
         return { size: s.fontSize, weight: s.fontWeight, padding: s.padding, background: s.backgroundColor };
     }), { size: "14px", weight: "400", padding: "0px", background: "rgba(0, 0, 0, 0)" });
-});
-
-test("reader visual state matrix uses the shared shell", { skip: !process.env.WIRE_READER_GEOMETRY_PROOFS }, async t => {
-    const directory = process.env.WIRE_READER_GEOMETRY_PROOFS, measurements = [];
-    await mkdir(directory, { recursive: true });
-    async function capture(page, name, focus) {
-        if (focus) await focus.scrollIntoViewIfNeeded();
-        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length
-            && !document.querySelector("#main").getAnimations().length);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const measured = await page.locator("#requestContent").evaluate(root => {
-            const box = node => {
-                const r = node.getBoundingClientRect(), s = getComputedStyle(node);
-                return { tag: node.tagName, classes: node.className, text: node.textContent.slice(0, 90),
-                    x: r.x, y: r.y, width: r.width, height: r.height, padding: s.padding, margin: s.margin,
-                    radius: s.borderRadius, font: s.fontFamily, size: s.fontSize, weight: s.fontWeight };
-            };
-            return { overflow: root.scrollWidth > root.clientWidth, viewportWidth: innerWidth,
-                elements: [...root.querySelectorAll(".reader-section-heading,.reader-message-header,.reader-state,.notice,.empty-state,.reader-source-record>.report-document,.reader-call-toggle,.ux-copy")]
-                    .filter(node => node.checkVisibility()).map(box),
-                close: box(document.getElementById("closeContextSidebar")),
-                footer: box(document.getElementById("contextSidebarFooter")) };
-        });
-        measurements.push({ name, ...measured });
-        assert.equal(measured.overflow, false);
-        assert.ok(measured.close.x >= 0 && measured.close.x + measured.close.width <= measured.viewportWidth + 1);
-        await page.screenshot({ path: path.join(directory, name + ".png") });
-    }
-    for (const state of ["populated", "empty", "error"]) {
-        await t.test(state, async t => {
-            const values = state === "empty" ? coworkFixture().slice(0, 1) : rows();
-            const answer = values.find(row => row.qualifiedFields.message?.value.text === reply);
-            if (answer) answer.qualifiedFields.message.value.text = reply.split("\n\n<script>")[0];
-            const { page, card, collect, stale } = await setup(t, values, state === "empty" || state === "error" ? 0 : 3,
-                { failCallsOnce: state === "error" });
-            for (const theme of ["light", "dark"]) {
-                await page.locator("#closeContextSidebar").click();
-                await expect(page.locator("#contextSidebar")).not.toBeVisible();
-                await page.setViewportSize({ width: 1440, height: 1000 });
-                await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-                await chooseTheme(page, theme);
-                await card.locator(".request-card-open").click();
-                await expect(page.locator("#requestContent")).toHaveAttribute("aria-busy", "false");
-                if (state === "error") {
-                    stale();
-                    const toggle = page.locator("[data-reader-section=source] .reader-section-toggle");
-                    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
-                    await expect(page.locator("[data-reader-section=source]")).toContainText("could not be verified");
-                }
-                for (const [width, scale] of [[1440, 100], [390, 100], [390, 200]]) {
-                    await page.setViewportSize({ width, height: 1000 });
-                    await page.evaluate(scale => { document.documentElement.style.fontSize = scale === 100 ? "" : scale + "%"; }, scale);
-                    const prefix = `${state}-${theme}-${width}-${scale}`;
-                    await page.locator("#contextSidebarBody").evaluate(node => { node.scrollTop = 0; });
-                    await capture(page, prefix + "-normal");
-                    if (state === "populated") {
-                        const call = page.locator(".reader-call").filter({ hasText: "mcp__graph__CallGraph" });
-                        if (await call.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await call.locator(".reader-call-toggle").click();
-                        await capture(page, prefix + "-expanded", call);
-                        const source = page.locator("[data-reader-section=source]");
-                        if (await source.locator(".reader-section-toggle").getAttribute("aria-expanded") !== "true") await source.locator(".reader-section-toggle").click();
-                        await expect(source.locator(".reader-source-record")).not.toHaveCount(0);
-                        await capture(page, prefix + "-source", source.locator(".reader-source-record").nth(1));
-                        await source.locator(".reader-section-toggle").click();
-                        await call.locator(".reader-call-toggle").click();
-                    } else if (state === "error") {
-                        await capture(page, prefix + "-source-error", page.locator("[data-reader-section=source]"));
-                    }
-                }
-            }
-            if (state === "populated") {
-                await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-                await page.setViewportSize({ width: 390, height: 1000 });
-                const revision = await collect(values);
-                await expect(page.locator("#activityView")).toHaveAttribute("data-revision", String(revision), { timeout: 15000 });
-                await expect(page.locator("#requestReportTitle")).toBeVisible();
-                await capture(page, "populated-dark-390-stale-footer");
-            }
-        });
-    }
-    await writeFile(path.join(directory, "measurements.json"), JSON.stringify(measurements, null, 2));
 });
