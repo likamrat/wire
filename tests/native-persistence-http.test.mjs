@@ -1318,7 +1318,7 @@ test("ordinary GitHub artifact metadata cannot expose or imply deletion through 
     const hiddenId = `export-${randomUUID()}`, hiddenTitle = "Private dependency title";
     await updateBoardState(app.context, state => {
         state.exports.push({ bundleId: hiddenId, kind: "comparison", title: hiddenTitle,
-            nativeEvidenceHash: "a".repeat(64), nativeSourceBinding: { schemaVersion: 1, account: "0".repeat(64) },
+            comparisonHash: "a".repeat(64), nativeComparisonHash: "a".repeat(64), nativeSourceBinding: { schemaVersion: 1, account: "0".repeat(64) },
             sourceReports: saved.map(item => ({ bundleId: item.bundleId, snapshotHash: item.snapshotHash })), formats: [], files: {} });
     });
     const target = saved[0].bundleId;
