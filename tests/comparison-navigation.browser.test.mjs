@@ -9,7 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { fixture, privateFixture, selectActivityOption, chooseTheme, closeAnalyzeFilters, restoreLegacySearch } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
-import { searchFixture } from "./live-search-fixture.mjs";
+import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 
 async function setup(t, hash = "#analyze?tool=workiq-ask", { enforced = false, records = periodFixture().records, frontend } = {}) {
     let removeFixture;
@@ -607,7 +607,9 @@ test("overlap, one empty side and two empty sides retain exact membership and re
     await expect(page.locator(".compare-outcome-bar")).toHaveCount(0);
 });
 for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exact membership and keeps query text out of browser history (${reloadAt} reload)`, { timeout: 60000 }, async t => {
-    const cleanup = [], app = await searchFixture({ after: action => cleanup.push(action) });
+    const cleanup = [], records = searchRecords();
+    records[0].toolCalls[0].startedAt = "2026-09-30T12:15:00Z";
+    const app = await searchFixture({ after: action => cleanup.push(action) }, { records });
     const browser = await chromium.launch(), page = await browser.newPage({ timezoneId: "America/New_York" }), comparisons = [], errors = [];
     t.after(async () => { await browser.close(); for (const action of cleanup) await action(); assert.deepEqual(errors, []); });
     page.on("pageerror", error => errors.push(error.message));
@@ -642,6 +644,8 @@ for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exa
         searchParams.sort(); return pathname + "?" + searchParams;
     };
     const pair = comparisons.at(-1), origin = locationKey();
+    assert.deepEqual(pair.periods.baseline.rowIds, []);
+    assert.deepEqual(pair.periods.later.rowIds, ['call:["test-session","test-call-search-0"]']);
     await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     const call = page.locator("#comparisonExactRecordsB a").first(), id = await call.getAttribute("id");

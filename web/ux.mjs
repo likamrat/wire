@@ -205,6 +205,9 @@ export function createEvidenceUX(icons, operations) {
             const sizes = new ResizeObserver(place);
             sizes.observe(panel);
             listeners.signal.addEventListener("abort", () => sizes.disconnect(), {once:true});
+            // Native popover toggles may arrive after paint. A reopened menu must
+            // not spend its first frame at the previous viewport's coordinates.
+            requestAnimationFrame(place);
         });
         panel.addEventListener("toggle", place);
         return {

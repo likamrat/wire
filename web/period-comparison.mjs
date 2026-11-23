@@ -1821,7 +1821,8 @@ export const periodComparisonStyles = `
 .comparison-chart-controls>.report-period-choices{gap:2px}
 .comparison-chart-controls>.select-control{flex:none;max-width:100%}
 .comparison-chart-controls #comparisonOptionsSlot{margin-inline-start:0}
-.comparison-chart-controls .workspace-command-tools>.select-control{width:auto;max-width:100%;min-width:0}
+.comparison-chart-controls .workspace-command-tools>.select-control{width:auto;max-width:100%;min-width:0;align-self:center}
+.comparison-chart-controls #comparisonDates{min-height:max(44px,calc(1lh + 16px));padding-block:8px}
 .comparison-chart-views{display:inline-flex;width:auto;gap:2px}
 .comparison-chart-views button{min-height:40px}
 .comparison-actions{border-bottom:0;border-top:1px solid var(--surface-divider);padding:.5rem 0 0;margin:.75rem 0 0}

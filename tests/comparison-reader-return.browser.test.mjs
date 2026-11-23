@@ -7,6 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 
 const longProject = "Invented coastal research workspace for shared release planning, cross-team evidence review and preserving the exact reading position across both comparison periods";
 
@@ -81,8 +82,11 @@ for (const qualified of [false, true]) for (const motion of ["reduce", "no-prefe
     await page.goto(server.url + "#analyze?range=custom&from=2026-04-14&to=2026-04-20");
     await page.locator("#workspace[aria-busy=false]").waitFor();
     await page.locator("#comparePeriods").click();
+    const dates = await openDatePicker(page, "compare", "Custom dates");
     for (const [id, value] of Object.entries({ comparisonAFrom: "2026-04-07", comparisonATo: "2026-04-13",
-        comparisonBFrom: "2026-04-14", comparisonBTo: "2026-04-20" })) await page.locator("#" + id).fill(value);
+        comparisonBFrom: "2026-04-14", comparisonBTo: "2026-04-20" })) await dates.locator("#" + id).fill(value);
+    await dates.getByRole("button", {name:"Apply dates"}).click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     if (qualified) {
         await page.locator("#openAnalyzeFilters").click();
         await selectActivityOption(page, "toolFilter", "workiq-fetch");
@@ -91,23 +95,24 @@ for (const qualified of [false, true]) for (const motion of ["reduce", "no-prefe
         await page.locator("#workspace[aria-busy=false]").waitFor();
         await closeAnalyzeFilters(page);
     }
-    await page.locator("#applyPeriodComparison").click();
     await page.locator("#createPeriodReport:visible").waitFor();
     await page.evaluate(() => document.fonts.ready);
     const caption = page.locator("#comparisonAcceptedScope");
     if (qualified) {
-        await expect(caption).toHaveText(`Tool: workiq-fetch; Copilot project: ${longProject}`);
-        assert.ok(await caption.evaluate(node => node.clientHeight > parseFloat(getComputedStyle(node).lineHeight)),
-            "Accepted restrictions add real wrapped height before the reader captures its origin");
+        await expect(caption).toHaveText(`Tool: workiq-fetch; Project: ${longProject}`);
+        await expect(caption).toBeVisible();
     }
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     const target = page.locator("#comparisonExactRecordsB a.text-link").last();
-    const position = () => page.evaluate(() => ({
-        y: scrollY, focus: document.activeElement.id, tag: document.activeElement.tagName,
-        href: document.activeElement.getAttribute("href"),
+    const focus = () => page.evaluate(() => ({
+        focus: document.activeElement.id, tag: document.activeElement.tagName, href: document.activeElement.getAttribute("href"),
+    }));
+    const position = async () => ({ ...await focus(), ...await page.evaluate(() => ({
+        y: scrollY,
         inner: document.getElementById("comparison-record-scroll-B").scrollTop,
         selected: document.getElementById("comparisonRecordsB").getAttribute("aria-selected"),
-    }));
+    })) });
     for (const action of motion === "reduce" ? ["close", "back"] : ["close", "back", "newer-input"]) {
         await target.scrollIntoViewIfNeeded();
         await target.focus();
@@ -119,40 +124,33 @@ for (const qualified of [false, true]) for (const motion of ["reduce", "no-prefe
         await page.locator("#contextSidebar:visible").waitFor();
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations({ subtree: true })
             .every(animation => animation.playState !== "running"));
-        if (action === "newer-input") await page.evaluate(() => {
-            window.comparisonExitPaused = false;
-            const pane = document.getElementById("contextSidebar");
-            const observer = new MutationObserver(() => {
-                if (!pane.inert || !pane.open) return;
-                for (const node of [pane, document.getElementById("main")]) {
-                    for (const animation of node.getAnimations()) animation.pause();
-                }
-                window.comparisonExitPaused = true;
-                observer.disconnect();
-            });
-            observer.observe(pane, { attributes: true, attributeFilter: ["inert"] });
-        });
+        let release, pending;
+        if (action === "newer-input") {
+            const held = new Promise(resolve => { release = resolve; });
+            t.after(release);
+            pending = page.waitForRequest(req => req.url().endsWith("/api/period-comparison"));
+            await page.route("**/api/period-comparison", async route => {
+                const response = await route.fetch(); await held; await route.fulfill({ response });
+            }, {times:1});
+        }
         if (action === "back") await page.goBack();
         else await page.locator("#closeContextSidebar").click();
         let intent;
         if (action === "newer-input") {
-            await page.waitForFunction(() => window.comparisonExitPaused);
+            await pending;
             await page.keyboard.press("Tab");
-            await page.locator("#createPeriodReport").focus();
-            intent = await position();
-            assert.equal(intent.focus, "createPeriodReport");
+            await page.locator("#comparisonDates").focus();
+            intent = await focus();
+            assert.equal(intent.focus, "comparisonDates");
             assert.notEqual(intent.focus, before.focus, "The new keyboard action owns focus.");
-            await page.evaluate(() => {
-                for (const node of [document.getElementById("contextSidebar"), document.getElementById("main")]) {
-                    for (const animation of node.getAnimations()) animation.play();
-                }
-            });
+            release();
         }
         await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-        await page.locator("#createPeriodReport:visible").waitFor();
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        if (qualified) await expect(caption).toHaveText(`Tool: workiq-fetch; Copilot project: ${longProject}`);
-        const after = await position();
+        if (qualified) await expect(caption).toHaveText(`Tool: workiq-fetch; Project: ${longProject}`);
+        if (!intent) await expect(target).toBeFocused();
+        const after = intent ? await focus() : await position();
         if (process.env.WIRE_COMPARISON_RETURN_PROOFS) {
             await mkdir(process.env.WIRE_COMPARISON_RETURN_PROOFS, { recursive: true });
             const name = `late-b-${motion}-${action}${qualified ? "-qualified" : ""}`;

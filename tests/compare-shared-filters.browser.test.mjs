@@ -14,7 +14,7 @@ const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-b
 
 const longProject = "Invented coastal research workspace for shared release planning and cross-team evidence review";
 
-async function setup(t, { longNames = false } = {}) {
+async function setup(t, { longNames = false, analyzeSearch } = {}) {
     const cleanup = [], { records } = periodFixture();
     if (longNames) for (const record of records) {
         record.projectId = "paired-scope-project";
@@ -53,8 +53,10 @@ async function setup(t, { longNames = false } = {}) {
     await page.evaluate(() => {
         window.originalFilterFields = [...document.querySelectorAll("#filters select")];
     });
+    if (analyzeSearch) await restoreLegacySearch(page, analyzeSearch);
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     return { page, runtime, requests, comparisons: () => requests.filter(value => value.path === "/api/period-comparison") };
 }
 
@@ -70,6 +72,26 @@ async function compare(page) {
     const value = await (await response).json();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     return value;
+}
+// Paired refinements commit each choice. Unlike Analyze, there is no Apply
+// inside the outcome/author list, and the service selector allows a union.
+async function toggleChoice(page, id, value) {
+    await page.locator(`#${id}-control`).click();
+    await page.locator(`.select-popup:visible [data-value=${JSON.stringify(value)}]`).click();
+}
+async function refine(page, id, value) {
+    const applied = page.waitForResponse(r => r.url().endsWith("/api/period-comparison") && r.ok());
+    await toggleChoice(page, id, value);
+    const result = await (await applied).json();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    return result;
+}
+async function keepOnly(page, id, value) {
+    const selected = await page.locator(`#${id}`).evaluate(node => [...node.selectedOptions].map(o => o.value));
+    assert.ok(selected.includes(value));
+    let result;
+    for (const item of selected.filter(item => item !== value)) result = await refine(page,id,item);
+    return result;
 }
 async function ordinary(page) {
     await closeAnalyzeFilters(page);
@@ -109,6 +131,7 @@ async function capture(page, name, { top = false } = {}) {
 
 test("Compare keeps the same quiet filter entry and dialog without expanding filters in its date card", { timeout: 30000 }, async t => {
     const { page, comparisons } = await setup(t);
+    const accepted = comparisons().map(r => r.input.periods);
     await expect(page.locator("#openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#filters")).not.toBeVisible();
     await expect(page.locator("#analyzePopulation #filters")).toHaveCount(0);
@@ -127,11 +150,13 @@ test("Compare keeps the same quiet filter entry and dialog without expanding fil
     assert.equal(await page.evaluate(() => window.originalFilterFields.every(node => node === document.getElementById(node.id))), true);
     assert.equal(await page.locator("#filters").count(), 1);
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
-    assert.equal(comparisons().length, 0, "Opening filters does not submit blank periods");
+    assert.equal(accepted.length, 1);
+    assert.deepEqual(comparisons().map(r => r.input.periods), accepted, "Opening filters leaves the default pair alone");
     await page.keyboard.press("Escape");
     await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
-    await expect(page.locator("#comparisonAFrom")).toHaveValue("");
-    await expect(page.locator("#comparisonBTo")).toHaveValue("");
+    await openDatePicker(page,"compare","Custom dates");
+    await expect(page.locator("#comparisonAFrom")).toHaveValue(accepted[0].baseline.from);
+    await expect(page.locator("#comparisonBTo")).toHaveValue(accepted[0].later.to);
     await expect(page.locator("#openChartReference")).toHaveCount(1);
     await expect(page.locator("#meaning")).toHaveCount(1);
 });
@@ -158,7 +183,7 @@ test("Compare's shared filter entry and fields reflow in both themes at narrow a
         await expect(page.locator("#toolFilter-control")).toBeFocused();
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
         const fields = [];
-        for (const id of ["toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter",
+        for (const id of ["toolFilter", "comparisonServices", "outcomeFilter", "promptAuthorFilter",
             "serviceFilter", "projectFilter", "chatFilter", "layerFilter", "scopeFilter"]) {
             const control = page.locator("#" + id + "-control");
             await control.scrollIntoViewIfNeeded();
@@ -183,26 +208,25 @@ test("Compare's shared filter entry and fields reflow in both themes at narrow a
         await page.keyboard.press("Escape");
         await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     }
-    assert.equal(comparisons().length, 0);
+    assert.equal(comparisons().length, 1);
     if (proof) await writeFile(path.join(proof, "geometry.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("real shared filter gestures preserve date drafts, both accepted periods and ordinary exit/Back", { timeout: 45000 }, async t => {
-    const { page, comparisons } = await setup(t);
-    await restoreLegacySearch(page, periodQuery);
+    const { page, comparisons } = await setup(t,{analyzeSearch:periodQuery});
+    const prior = comparisons().length;
     await fillPeriods(page);
+    assert.equal(comparisons().length, prior, "Typing dates did not submit either endpoint");
+    await compare(page);
     await page.locator("#openAnalyzeFilters").click();
-    await selectActivityOption(page, "toolFilter", "workiq-fetch"); await ready(page);
-    await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
-    await selectActivityOption(page, "outcomeFilter", ["failure"]); await ready(page);
-    await selectActivityOption(page, "promptAuthorFilter", ["user"]); await ready(page);
+    await refine(page,"toolFilter","workiq-fetch");
+    await refine(page,"comparisonServices","Files");
+    await refine(page,"comparisonMissingService","true");
+    await keepOnly(page,"outcomeFilter","failure");
+    const value = await keepOnly(page,"promptAuthorFilter","user"), input = comparisons().at(-1).input;
     await expect(page.locator("#analyzeFilterDialog")).toBeVisible();
-    assert.equal(comparisons().length, 0, "Non-date choices cannot submit uncommitted period drafts");
-    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-07");
-    await expect(page.locator("#comparisonBTo")).toHaveValue("2026-03-09");
-    await noOrdinaryAuthority(page);
-    const value = await compare(page), input = comparisons().at(-1).input;
-    assert.equal(comparisons().length, 1);
+    await expect(page.locator('[data-edit-period="a"]')).toHaveAccessibleName(/Mar 7/);
+    await expect(page.locator('[data-edit-period="b"]')).toHaveAccessibleName(/Mar 8.*9/);
     assert.deepEqual(input.periods, { baseline: { from: "2026-03-07", to: "2026-03-07" }, later: { from: "2026-03-08", to: "2026-03-09" } });
     assert.deepEqual(input.options.filters.tools, ["workiq-fetch"]);
     assert.deepEqual(input.options.filters.services, ["Files"]);
@@ -212,12 +236,13 @@ test("real shared filter gestures preserve date drafts, both accepted periods an
     assert.deepEqual(value.periods.baseline.rowIds, ['call:["period-chat-0","period-call-0"]']);
     assert.deepEqual(value.periods.later.rowIds, ['call:["period-chat-2","period-call-2"]']);
     assert.ok(!JSON.stringify(input).includes(periodQuery));
+    await closeAnalyzeFilters(page);
     await capture(page, "accepted-shared-filters", { top: true });
     await page.locator("#openAnalyzeFilters").click();
     await expect(page.locator('#outcomeFilter option[value="success"]')).toContainText("A: 0; B: 1");
     await expect(page.locator('#outcomeFilter option[value="failure"]')).toContainText("A: 1; B: 1");
-    await expect(page.locator("#serviceAssociationFilter-control")).toHaveAccessibleDescription(/counted separately in the results/);
-    await noOrdinaryAuthority(page, 6);
+    await expect(page.locator("#comparisonMissingService")).toHaveValue("true");
+    await noOrdinaryAuthority(page, 5);
     await ordinary(page);
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     const query = new URLSearchParams(page.url().split("?")[1]);
@@ -225,7 +250,9 @@ test("real shared filter gestures preserve date drafts, both accepted periods an
     await page.locator("#openAnalyzeFilters").click();
     await expect(page.locator("#dateFilter-control")).toBeVisible();
     assert.equal(await page.locator("#dateFields").evaluate(node => node.inert), false);
+    await selectActivityOption(page, "dateFilter", "custom");
     await expect(page.locator("#fromFilter")).toHaveValue("2026-03-07");
+    await page.locator("#analyzeDates").getByRole("button",{name:"Cancel",exact:true}).click();
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Mar 7/);
     await closeAnalyzeFilters(page);
     await page.goBack(); await ready(page);
@@ -233,8 +260,8 @@ test("real shared filter gestures preserve date drafts, both accepted periods an
     await page.locator("#openAnalyzeFilters").click();
     await expect(page.locator("#dateFilter-control")).not.toBeVisible();
     await expect(page.locator("#toolFilter")).toHaveValue("workiq-fetch");
-    await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
-    await noOrdinaryAuthority(page, 6);
+    assert.ok(!page.url().includes(periodQuery));
+    await noOrdinaryAuthority(page, 5);
 });
 
 test("pending and failed paired reads keep the shared panel and newer filter input intact", { timeout: 45000 }, async t => {
@@ -255,22 +282,21 @@ test("pending and failed paired reads keep the shared panel and newer filter inp
     await page.locator("#openAnalyzeFilters").click();
     await page.locator("#outcomeFilter-control").click();
     const popup = page.locator(".select-popup:visible");
-    await popup.locator('[data-value="failure"]').click();
     const draft = await popup.getByRole("option").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-selected")));
     await noOrdinaryAuthority(page);
     await capture(page, "pending-pair-newer-draft");
     release();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#analyzeFilterDialog")).toBeVisible();
-    await expect(page.locator("#outcomeFilter-control")).toBeFocused();
+    await expect(popup).toBeVisible();
     assert.deepEqual(await popup.getByRole("option").evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-selected"))), draft);
     await page.keyboard.press("Escape");
     await expect(page.locator("#analyzeFilterDialog")).toBeVisible();
     await page.route("**/api/period-comparison", route => route.fulfill({ status: 503, json: { error: "Invented paired-read failure." } }), { times: 1 });
-    await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
+    await toggleChoice(page,"comparisonServices","Files"); await ready(page);
     await expect(page.locator("#periodComparisonStatus")).toContainText("Invented paired-read failure");
     await expect(page.locator("#analyzeFilterDialog")).toBeVisible();
-    await expect(page.locator("#serviceAssociationFilter-control")).toBeFocused();
+    await expect(page.locator("#comparisonServices-control")).toBeFocused();
     await expect(page.locator("#periodComparisonResults .compare-outcomes")).toHaveCount(0);
     await expect(page.locator("#homeView")).not.toBeVisible();
     await expect(page.locator("#activityView")).not.toBeVisible();
@@ -283,11 +309,11 @@ test("pending and failed paired reads keep the shared panel and newer filter inp
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     assert.deepEqual(recovered.periods.baseline.range, accepted.periods.baseline.range);
     assert.deepEqual(recovered.periods.later.range, accepted.periods.later.range);
-    await expect(page.locator("#serviceAssociationFilter")).toHaveValue("Files");
-    await noOrdinaryAuthority(page, 2);
+    await expect(page.locator("#comparisonServices")).toHaveValues(["Files"]);
+    await noOrdinaryAuthority(page, 1);
 });
 
-test("the existing Reset Analyze action remains reachable without making a second reset owner", { timeout: 30000 }, async t => {
+test("Reset filters clears Compare restrictions in place and retains both periods", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await fillPeriods(page);
     await compare(page);
@@ -295,13 +321,15 @@ test("the existing Reset Analyze action remains reachable without making a secon
     await selectActivityOption(page, "toolFilter", "workiq-fetch"); await ready(page);
     await expect(page.locator("#resetView")).toBeVisible();
     await page.locator("#resetView").click(); await ready(page);
-    await expect(page.locator("#periodComparisonSetup")).not.toBeVisible();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await expect(page.locator('[data-edit-period="a"]')).toHaveAccessibleName(/Mar 7/);
+    await expect(page.locator('[data-edit-period="b"]')).toHaveAccessibleName(/Mar 8.*9/);
     await expect(page.locator("#openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     await page.locator("#openAnalyzeFilters").click();
-    await expect(page.locator("#dateFilter-control")).toBeVisible();
+    await expect(page.locator("#dateFilter-control")).toBeHidden();
     await expect(page.locator("#toolFilter")).toHaveValue("all");
-    assert.equal(await page.locator("#dateFields").evaluate(node => node.inert), false);
+    assert.equal(await page.locator("#dateFields").evaluate(node => node.inert), true);
 });
 
 test("native Search qualification and clearing keep the shared Compare filter entry truthful", { timeout: 30000 }, async t => {
@@ -309,7 +337,7 @@ test("native Search qualification and clearing keep the shared Compare filter en
     await fillPeriods(page); await compare(page);
     await page.locator("#wireSearch").fill(periodQuery);
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Partial searchable coverage");
+    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Some saved text could not be searched");
     await expect(page.locator("#periodComparisonResults .compare-outcomes")).toHaveCount(0);
     await expect(page.locator("#homeView")).not.toBeVisible();
     await expect(page.locator("#activityView")).not.toBeVisible();
@@ -346,7 +374,8 @@ test("Reset from Compare does not replace newer input while its ordinary read is
     await page.locator("#wireSearch").click();
     release(); await ready(page);
     await expect(page.locator("#wireSearch")).toBeFocused();
-    await expect(page.locator("#periodComparisonSetup")).not.toBeVisible();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await noOrdinaryAuthority(page);
 });
 
 test("accepted restrictions stay visible with Filters closed and are withdrawn with invalidated paired results", { timeout: 30000 }, async t => {
@@ -354,14 +383,13 @@ test("accepted restrictions stay visible with Filters closed and are withdrawn w
     await fillPeriods(page); await compare(page);
     await expect(page.locator("#comparisonAcceptedScope")).toHaveCount(0);
     await page.locator("#openAnalyzeFilters").click();
-    const updated = page.waitForResponse(value => value.url().endsWith("/api/period-comparison") && value.ok());
-    await selectActivityOption(page, "outcomeFilter", ["failure"]);
-    const value = await (await updated).json();
+    const value = await keepOnly(page,"outcomeFilter","failure");
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await closeAnalyzeFilters(page);
     assert.ok(Object.values(value.periods).every(side => side.analytics.totals.count > 0
         && side.analytics.totals.failure === side.analytics.totals.count));
-    await expect(page.locator("#periodComparisonResults .compare-outcomes")).toContainText("100.00%");
+    await expect(page.locator(".comparison-outcome-values")).toContainText("20.00%");
+    await expect(page.locator(".comparison-outcome-values")).toContainText("25.00%");
     const caption = page.locator("#comparisonAcceptedScope");
     await expect(caption).toBeVisible();
     await expect(caption).toHaveText("Outcome: Tool failed");
@@ -370,11 +398,9 @@ test("accepted restrictions stay visible with Filters closed and are withdrawn w
     await expect(caption.locator("button,a,input")).toHaveCount(0);
     assert.equal(await caption.evaluate(node => node.tagName), "P");
     assert.ok(await caption.evaluate(node => {
-        const dates = document.querySelector("#periodComparisonResults > .compare-period-key");
-        const answers = document.querySelector("#periodComparisonResults > .compare-answer-grid");
-        return Boolean(dates.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
-            && Boolean(node.compareDocumentPosition(answers) & Node.DOCUMENT_POSITION_FOLLOWING);
-    }), "Restrictions follow named periods and precede the accepted results");
+        return node.parentElement.matches(".workspace-command-row") &&
+            Boolean(node.compareDocumentPosition(document.querySelector(".compare-period-key")) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }), "Accepted restrictions accompany the commands above the period readings");
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(await caption.textContent());
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleName("1 filter applied");
     await expect(page.locator("#openAnalyzeFilters")).toHaveText("1 filter applied");
@@ -384,17 +410,10 @@ test("accepted restrictions stay visible with Filters closed and are withdrawn w
     await expect(caption).toHaveAttribute("data-pair-key", key);
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription("Outcome: Tool failed");
     assert.equal(comparisons().length, reads, "Ordinary status presentation does not replace paired authority or query again");
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#meaning")).toBeVisible();
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveText("Outcome: Tool failed");
-    await page.locator("#meaning").press("Escape");
+    await openDatePicker(page,"compare","Custom dates");
     await page.locator("#comparisonATo").fill("2026-03-08");
-    await expect(page.locator("#periodComparisonResults")).toBeEmpty();
-    await expect(caption).toHaveCount(0);
-    await noOrdinaryAuthority(page);
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveCount(0);
-    await page.locator("#meaning").press("Escape");
+    await expect(caption).toHaveAttribute("data-pair-key",key);
+    assert.equal(comparisons().length,reads,"Unapplied dates do not invalidate the accepted reading");
     await compare(page);
     await expect(caption).toHaveText("Outcome: Tool failed");
     await page.locator("#openAnalyzeFilters").click();
@@ -407,15 +426,16 @@ test("accepted restrictions stay visible with Filters closed and are withdrawn w
     await noOrdinaryAuthority(page);
 });
 
-test("accepted restrictions wrap as plain caption text with the same guide and entry authority", { timeout: 60000 }, async t => {
+test("accepted restrictions wrap as plain caption text alongside the matching filter entry", { timeout: 60000 }, async t => {
     const { page } = await setup(t, { longNames: true }), measurements = [];
     await fillPeriods(page);
+    await compare(page);
     await page.locator("#openAnalyzeFilters").click();
-    for (const [id, value] of [
-        ["toolFilter", "workiq-fetch"], ["serviceAssociationFilter", "Files"], ["outcomeFilter", ["failure"]],
-        ["promptAuthorFilter", ["user"]], ["projectFilter", "paired-scope-project"],
-    ]) { await selectActivityOption(page, id, value); await ready(page); }
-    const accepted = await compare(page);
+    await refine(page,"toolFilter","workiq-fetch"); await refine(page,"comparisonServices","Files");
+    await refine(page,"comparisonMissingService","true"); await keepOnly(page,"outcomeFilter","failure");
+    await keepOnly(page,"promptAuthorFilter","user");
+    const accepted = await refine(page,"projectFilter","paired-scope-project");
+    await closeAnalyzeFilters(page);
     const caption = page.locator("#comparisonAcceptedScope");
     await expect(caption).toContainText(longProject);
     await expect(caption).toContainText("Outcome: Tool failed");
@@ -441,13 +461,13 @@ test("accepted restrictions wrap as plain caption text with the same guide and e
                 const range = document.createRange(); range.selectNodeContents(part.firstChild);
                 return [...range.getClientRects()].map(r => ({ x: r.x, right: r.right, y: r.y, bottom: r.bottom }));
             });
-            return { caption: rect(node), dates: rect(node.previousElementSibling), answers: rect(document.querySelector(".compare-answer-grid")),
+            return { caption: rect(node), dates: rect(document.querySelector(".compare-period-key")),
                 lines,
                 overflow: document.documentElement.scrollWidth - innerWidth,
                 clipped: node.scrollWidth - node.clientWidth, verticalClip: node.scrollHeight - node.clientHeight };
         });
         assert.ok(geometry.caption.x >= 0 && geometry.caption.right <= width + 1);
-        assert.ok(geometry.dates.bottom <= geometry.caption.y && geometry.caption.bottom <= geometry.answers.y);
+        assert.ok(geometry.caption.bottom <= geometry.dates.y);
         assert.ok(geometry.overflow <= 1 && geometry.clipped <= 1 && geometry.verticalClip <= 1);
         assert.ok(geometry.lines.every(line => line.x >= geometry.caption.x - 1 && line.right <= geometry.caption.right + 1
             && line.y >= geometry.caption.y - 1 && line.bottom <= geometry.caption.bottom + 1));
@@ -456,11 +476,10 @@ test("accepted restrictions wrap as plain caption text with the same guide and e
         await capture(page, `scope-${theme}-${width}-${scale}`, { top: true });
         await caption.scrollIntoViewIfNeeded();
         await capture(page, `scope-reading-${theme}-${width}-${scale}`);
-        await page.locator("#openChartReference").click();
-        await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveText(await caption.textContent());
-        await capture(page, `scope-guide-${theme}-${width}-${scale}`);
-        await page.locator("#meaning").press("Escape");
-        await expect(page.locator("#openChartReference")).toBeFocused();
+        await page.locator("#openAnalyzeFilters").click();
+        await expect(page.locator("#projectFilter")).toHaveValue("paired-scope-project");
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     }
     if (process.env.WIRE_COMPARE_FILTER_PROOFS) await writeFile(path.join(process.env.WIRE_COMPARE_FILTER_PROOFS, "scope-geometry.json"),
         JSON.stringify(measurements, null, 2));
@@ -501,36 +520,35 @@ test("late older paired reads cannot replace newer accepted restrictions or ordi
     }, { times: 1 });
     await page.locator("#openAnalyzeFilters").click();
     const pending = page.waitForRequest(request => request.url().endsWith("/api/period-comparison"));
-    await selectActivityOption(page, "outcomeFilter", ["failure"]); await pending;
+    await toggleChoice(page, "comparisonServices", "Files"); await pending;
     await expect(page.locator("#comparisonAcceptedScope")).toHaveCount(0);
     await noOrdinaryAuthority(page);
-    await selectActivityOption(page, "outcomeFilter", ["success"]); await ready(page);
+    await toggleChoice(page, "toolFilter", "workiq-fetch"); await ready(page);
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     const caption = page.locator("#comparisonAcceptedScope");
-    await expect(caption).toHaveText("Outcome: Worked");
+    await expect(caption).toContainText("Tool: workiq-fetch");
+    const accepted = await caption.textContent();
     const key = await caption.getAttribute("data-pair-key");
     const stale = page.waitForResponse(response => response.url().endsWith("/api/period-comparison")
-        && response.request().postDataJSON().options.filters.outcomes.includes("failure"));
+        && response.request().postDataJSON().options.filters.services.includes("Files") && !response.request().postDataJSON().options.filters.tools);
     release(); await stale;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await expect(caption).toHaveText("Outcome: Worked");
+    await expect(caption).toHaveText(accepted);
     await expect(caption).toHaveAttribute("data-pair-key", key);
-    await noOrdinaryAuthority(page, 1);
+    await noOrdinaryAuthority(page, 2);
     await ordinary(page);
     await expect(caption).toHaveCount(0);
     await expect(page.locator("#openAnalyzeFilters")).not.toHaveAttribute("data-pair-key");
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Mar 7.*Outcome: Worked/);
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toContainText(["Mar 7, 2026; Outcome: Worked"]);
-    await page.locator("#meaning").press("Escape");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Mar 7/);
+    await expect(page.locator("#openAnalyzeFilters")).not.toHaveAccessibleDescription(/workiq-fetch|Files only/);
 });
 
-for (const holdCollectionStatus of [false, true]) test("an open Compare guide follows the existing pending-to-accepted refresh without retaining old qualification"
+for (const holdCollectionStatus of [false, true]) test("exact numbers and their scope follow the accepted read, not a collection poll"
     + (holdCollectionStatus ? " without a collection-status response" : ""), { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await fillPeriods(page);
-    await selectActivityOption(page, "outcomeFilter", ["failure"]); await ready(page); await compare(page);
-    // Pair acceptance must refresh the guide, not the unrelated collection poll.
+    await compare(page); await page.locator("#openAnalyzeFilters").click();
+    await keepOnly(page,"outcomeFilter","failure");
     if (holdCollectionStatus) await page.route("**/api/collection/status", () => {});
     let release;
     const gate = new Promise(resolve => { release = resolve; });
@@ -539,15 +557,16 @@ for (const holdCollectionStatus of [false, true]) test("an open Compare guide fo
         const response = await route.fetch(); await gate; await route.fulfill({ response });
     }, { times: 1 });
     const pending = page.waitForRequest(request => request.url().endsWith("/api/period-comparison"));
-    await selectActivityOption(page, "serviceAssociationFilter", "Files"); await pending;
+    await toggleChoice(page,"comparisonServices","Files"); await pending;
     await closeAnalyzeFilters(page);
     await expect(page.locator("#comparisonAcceptedScope")).toHaveCount(0);
-    await page.locator("#openChartReference").click();
-    const qualification = page.locator("#chartReferenceGuide .chart-reference-qualification");
-    await expect(qualification).toHaveCount(0);
+    const numbers = page.getByRole("button",{name:"View numbers",exact:true});
+    await expect(numbers).toBeDisabled();
     release();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await expect(qualification).toHaveText("Service: Files; Missing-service context allowed; Outcome: Tool failed");
-    assert.equal(await page.locator("#meaning").evaluate(node => node.contains(document.activeElement)), true);
-    await page.locator("#meaning").press("Escape");
+    await expect(page.locator("#comparisonAcceptedScope")).toHaveText("Service: Files only; Outcome: Tool failed");
+    await numbers.click();
+    await expect(page.getByRole("table",{name:"Exact outcome counts and shares"}).getByRole("row",{name:/Tool failed/})).toContainText("1 of");
+    await page.getByRole("button",{name:"Back to comparison",exact:true}).click();
+    await expect(numbers).toBeFocused();
 });

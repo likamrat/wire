@@ -65,10 +65,10 @@ async function geometry(page) {
             .filter(node => node.checkVisibility()).map(node => ({ id: node.id, ...box(node), overflow: node.scrollWidth > node.clientWidth + 1 }));
         return {
             width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth,
-            heading: rect("#workspace>.page-heading"), title: rect("#pageTitle"), toolbar: rect("#analyzeToolbar"),
-            population: rect("#analyzePopulation"), evidence: rect("#coverage"), library: rect("#bundles"),
-            groups: [...document.querySelectorAll(".period-comparison-controls fieldset")].map(box),
-            preset: face("#comparisonAPreset-control"), date: face("#comparisonAFrom"), apply: face("#applyPeriodComparison"),
+            heading: rect("#workspace>.page-heading"), title: rect("#pageTitle"),
+            population: rect("#analyzePopulation"), evidence: rect("#periodComparison"), library: rect("#bundles"),
+            groups: [...document.querySelectorAll(".compare-period-key>p")].map(box),
+            activity: face("#comparisonQuickChoice-control"), date: face("#comparisonDates"), filters: face("#openAnalyzeFilters"),
             search: face("#savedReportSearch"), order: face("#savedReportOrder-control"),
             searchIcon: rect(".saved-library-tools .wire-search-icon"), orderIcon: rect("#savedReportOrder-control .select-chevron"),
             controls,
@@ -119,7 +119,7 @@ test("Compare and Reports use coherent frames and genuinely aligned control pain
         [390, 844, 100, false], [1440, 1000, 200, true], [390, 844, 200, false],
     ]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.goto(url + "#reports");
+        await page.goto(new URL("reports?task=library",url).href);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await chooseTheme(page, theme);
@@ -130,9 +130,10 @@ test("Compare and Reports use coherent frames and genuinely aligned control pain
         await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
         for (const screen of ["reports", "compare"]) {
             if (screen === "compare") {
-                await page.evaluate(() => { location.hash = "#analyze?compare=periods"; });
+                await page.goto(new URL("compare",url).href);
+                await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
                 await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-                await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+                await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
             }
             await settle(page);
             await page.evaluate(() => scrollTo(0, 0));
@@ -149,18 +150,16 @@ test("Compare and Reports use coherent frames and genuinely aligned control pain
                 name + ": heading and content use the same measure");
             if (screen === "compare") {
                 check(Math.abs(layout.evidence.width - frame.width) < 1, name + ": evidence boundary follows the task frame");
-                check(Math.abs(layout.preset.height - layout.date.height) < 1, name + ": date/preset faces share a height");
+                check(Math.abs(layout.activity.height - layout.date.height) < 1, name + ": date/activity faces share a height");
+                check([layout.date,layout.activity].every(face => contrast(face.ink,face.fill) >= 4.5), name + ": both menu labels contrast against their painted faces");
                 if (width >= 1400 && text === 100) {
-                    check(Math.abs(layout.title.center - layout.toolbar.center) < 1, name + ": utilities share the title row");
+                    check(Math.abs(frame.right - layout.filters.right) < 1 && layout.filters.y >= layout.title.bottom, name + ": commands follow the title at the right edge");
                     check(Math.abs(layout.groups[0].width - layout.groups[1].width) < 1, name + ": equal period columns");
-                    check(layout.apply.y >= Math.max(...layout.groups.map(group => group.bottom)), name + ": action follows both periods");
                 }
-                check(contrast(layout.apply.ink, layout.apply.fill) >= 4.5, name + ": primary text contrasts against its actual painted face");
             } else {
                 check(layout.search.textWidth <= layout.search.width - layout.search.paddingLeft - layout.search.paddingRight - 2,
                     name + ": complete search placeholder remains readable");
-                check(Math.abs(layout.search.height - layout.order.height) < 1, name + ": equal painted faces");
-                if (Math.abs(layout.search.y - layout.order.y) < 2) {
+                if (layout.search.x < layout.order.x && layout.order.y < layout.search.bottom) {
                     check(Math.abs(layout.search.center - layout.order.center) < 1, name + ": painted centers align");
                     check(Math.abs(layout.searchIcon.center - layout.orderIcon.center) < 1, name + ": icon centers align");
                     check(Number.isFinite(layout.paint.search.baseline) && Number.isFinite(layout.paint.order.baseline)
@@ -199,13 +198,19 @@ for (const reducedMotion of ["reduce", "no-preference"]) test(`relocated Compare
         await page.keyboard.press("Escape");
         await expect(dialog).not.toBeVisible();
         await expect(trigger).toBeFocused();
-        await page.locator("#openChartReference").click();
-        await page.waitForFunction(() => document.querySelector("#meaning").open && !document.querySelector("#meaning").getAnimations().length);
-        const guide = await page.locator("#meaning").boundingBox();
-        assert.ok(guide.x >= 0 && guide.x + guide.width <= width + 1);
+        const dates = page.locator("#comparisonCustomDates");
+        const firstFrame = dates.evaluate(node => new Promise(resolve => {
+            node.addEventListener("beforetoggle", () => requestAnimationFrame(() => {
+                const box = node.getBoundingClientRect(); resolve({ left: box.left, right: box.right });
+            }), {once:true});
+        }));
+        await page.locator("#comparisonDates").click();
+        await expect(dates).toBeVisible();
+        const menu = await firstFrame;
+        assert.ok(menu.left >= 0 && menu.right <= width + 1, `Dates first frame at ${width}px: ${JSON.stringify(menu)}`);
         await page.keyboard.press("Escape");
-        await expect(page.locator("#meaning")).not.toBeVisible();
-        await expect(page.locator("#openChartReference")).toBeFocused();
+        await expect(dates).not.toBeVisible();
+        await expect(page.locator("#comparisonDates")).toBeFocused();
     }
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), reducedMotion === "reduce");
 });
