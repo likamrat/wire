@@ -133,6 +133,13 @@ process.send({ url: runtime.url });
     await expect(page.locator("body")).toHaveClass(/wire-frontend-react/);
     await expect(page.locator(".frontend-record-slot").first()).toBeAttached();
     await expect(page.locator("#wireSearchHome svg[data-icon-role=search]")).toHaveCount(1);
-    await expect(page.locator("#activityList svg[data-icon-role='activity-panel']").first()).toBeVisible();
+    const outcome = page.locator("#activityList .request-card-open");
+    await expect(outcome).toContainText("1 tool call completed");
+    await outcome.click();
+    const call = page.locator('#requestContent [data-tool-call-id="test-call-production-browser"]');
+    await expect(call).toBeVisible();
+    await expect(call.locator(".reader-call-summary")).toContainText("1 tool call completed");
+    await page.goBack();
+    await expect(outcome).toBeFocused();
     assert.deepEqual(errors, []);
 }
