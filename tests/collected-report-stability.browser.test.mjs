@@ -129,7 +129,9 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         await expect(page.locator("#activityList .activity-card")).toHaveCount(2);
         await navigateMain(page, "reports");
         await page.locator(".saved-shelf .saved-report-title").first().click();
-        await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Stable collected GitHub report");
+        const reader = page.locator("#savedReportReader");
+        await expect(reader.getByRole("heading", { level: 1 })).toHaveText("Stable collected GitHub report");
+        await expect(reader.getByRole("article", { name: "Report brief" })).toContainText(/1 interaction\b/);
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
     });
