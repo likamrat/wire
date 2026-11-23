@@ -71,8 +71,8 @@ sign out or read new history.
 Open **Filters** to check how much history WIRE has checked. A routine partial
 check stays there while results are available. An empty result can explain
 what history was checked; an actual read error still appears with the results.
-Find the prompt in the list, then open its row to see the tools, services and
-results in the right-hand reader. A note such as **1 tool call failed** or
+Find the prompt in the list and follow its outcome link to see the tools,
+services and results in the right-hand reader. A note such as **1 tool call failed** or
 **Reported result issue** helps identify exceptions. These are different:
 a completed tool call can return an error for an individual item.
 
@@ -148,10 +148,9 @@ looked for available paths, not a later call that fetched data. Without a
 matching retained call, the label has no link. **Exchange ID conversion** identifies a request to
 convert item IDs; it does not identify the mailbox item. If several calls match,
 the link says **first of N calls**.
-The **tool-call count** opens the whole interaction. Expand a numbered call
-to see which target and result belong to that call.
+In the reader, expand a numbered call to see its target and result.
 To inspect a path, use **Guide > Paths and operations > See exact numbers**,
-select the path or batch, and open the matching prompt. Read the targets and
+select the path or batch, then inspect the matching interaction. Read the targets and
 outcome on the individual call rather than inferring them from the interaction summary.
 
 The **Work IQ tool calls over time** chart shows individual calendar days by
