@@ -865,7 +865,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function readerBounds() {
         const unit = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        const available = document.documentElement.clientWidth - $("main").getBoundingClientRect().left;
+        const available = document.body.getBoundingClientRect().right - $("main").getBoundingClientRect().left;
         return { unit, available, min: 26 * unit, max: Math.min(46 * unit, available - 36 * unit), split: available >= 62 * unit };
     }
     function currentReaderLayoutSize() {
@@ -877,7 +877,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const viewport = contextBody.getBoundingClientRect(), walker = document.createTreeWalker(contextBody, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
             const node = walker.currentNode, parent = node.parentElement;
-            if (!node.data.trim() || !parent.checkVisibility() || parent.closest('[inert],.reader-section-heading,button')) continue;
+            if (!node.data.trim() || !parent.checkVisibility() || parent.closest('[inert],.visually-hidden,.reader-section-heading,button')) continue;
             const range = document.createRange();
             range.selectNodeContents(node);
             const rect = [...range.getClientRects()].find(rect => rect.width && rect.top >= viewport.top + 16 && rect.bottom < viewport.bottom);
@@ -886,7 +886,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const caret = document.caretPositionFromPoint?.(x, y);
             const legacy = caret ? null : document.caretRangeFromPoint?.(x, y);
             const text = caret?.offsetNode ?? legacy?.startContainer, offset = caret?.offset ?? legacy?.startOffset;
-            if (text?.nodeType !== Node.TEXT_NODE || !contextBody.contains(text) || offset >= text.length) continue;
+            // Clipped labels and overlaid headings have layout boxes too. Anchor only
+            // when the character under this visible line belongs to the line we measured.
+            if (text !== node || offset >= text.length) continue;
             range.setStart(text, offset); range.setEnd(text, offset + 1);
             return { node: text, offset, top: range.getBoundingClientRect().top - viewport.top };
         }
