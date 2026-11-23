@@ -831,7 +831,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 :is(.reader-returned-facts,.card-more-targets,.card-quotation)>summary:active {color:var(--ink)}
 .reader-returned-cue {font-size:var(--type-small);overflow-wrap:anywhere}
 .returned-call-parent {display:none;color:var(--muted);font-size:var(--type-small)}
-.api-result-entry:focus .returned-call-parent,.api-result-entry[aria-current=true] .returned-call-parent {display:block}
+.api-result-entry:focus-within .returned-call-parent,.api-result-entry[aria-current=true] .returned-call-parent {display:block}
 @container(max-width:57rem) {.card-reading-body {grid-template-columns:minmax(0,1fr);gap:8px}.card-reading-body>.card-identities {padding:6px 0 0;border-inline-start:0;border-top:1px solid var(--rule)}}
 @container(max-width:57rem) {
  .card-reading-body:has(>.card-reading-details) {grid-template-columns:minmax(0,1fr);gap:12px}

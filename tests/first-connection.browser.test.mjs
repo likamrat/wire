@@ -140,10 +140,12 @@ test("enforced React activity caps the home preview while keeping the full reque
         await expect(batchHelp).toBeVisible();
         const box = await exact.evaluate(entry => {
             const outer = entry.getBoundingClientRect(), fact = entry.querySelector(".returned-target-help"), text = fact.firstElementChild;
-            const first = entry.querySelector(".returned-call-parent").getBoundingClientRect(), help = fact.lastElementChild.getBoundingClientRect();
+            const first = entry.querySelector(".returned-call-parent").getBoundingClientRect(), help = fact.querySelector("button").getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(fact.querySelector(".metadata-tail-text"));
             return { inset: first.left - outer.left, end: outer.right-help.right, hit: help.height,
                 leading: parseFloat(getComputedStyle(text).lineHeight) / parseFloat(getComputedStyle(text).fontSize),
-                fits: text.getBoundingClientRect().right <= help.left };
+                fits: range.getBoundingClientRect().right <= help.left };
         });
         assert.ok(box.inset >= 10 && box.end >= 10 && box.hit >= 44 && box.leading <= 1.65 && box.fits, JSON.stringify(box));
         await expect(page.locator('#requestContent [data-reader-section="activity"] .reader-call-row')).toHaveCount(4);

@@ -406,6 +406,9 @@ Authorship, exact Copy and report text are unchanged.
 Build exact call arguments only while their disclosure is open; clear them
 when it closes. Returned entries keep their own path/status/identity, never
 a sibling's input or inferred parent cause.
+When a batch entry has no returned path, keep its help icon beside the last
+word of the explanation. Moving focus to the icon must not hide the parent
+call or shift the entry.
 
 Linked context stays in its existing separate disclosure. It cannot transfer
 intent or outcomes between interactions.
