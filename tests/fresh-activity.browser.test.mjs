@@ -655,7 +655,7 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     await page.goto(app.runtime().url + url.hash); await ready(page);
     await verify("restart-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await dates(time.addDays(date, -60), next);
-    assert.equal(await page.locator("#periodCoverageText").innerText(), "Some of this period is outside checked history; activity may be missing.");
+    assert.equal(await page.locator("#periodCoverageText").innerText(), "The last history check covered only part of this period.");
     assert.equal(await page.locator("#periodHistoryLink").isVisible(), true);
     await dates(time.addDays(next, 7), time.addDays(next, 8));
     await verify("future-empty-not-a-source-query", []);

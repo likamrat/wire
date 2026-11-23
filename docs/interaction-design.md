@@ -115,6 +115,9 @@ inclusivity or the configured zone under a valid date range. Show the zone
 when it explains a cutoff, fallback or consequential operation. Undated records
 stay explicit. Missing history cannot be assigned to the current filtered
 slice from source-wide diagnostics.
+Analyze keeps the note about the last history check in Filters. If a
+date range has no matching activity, show the coverage note beside the empty
+result as well. A date range extending past the last check is not a source failure.
 Analyze's time chart defaults to individual calendar days, including All dates
 and long ranges; it does not silently combine them into weeks or months.
 Every day between the first and last qualifying dated records remains reachable.

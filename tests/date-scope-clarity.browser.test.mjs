@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain, openAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain, navigateSettings, openAnalyzeFilters } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DATE_CLARITY_PROOF;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -98,18 +98,19 @@ test("Dates keeps Custom dates beside the same presets across all four workspace
     }
 });
 
-test("October headline names the applied month and the notice distinguishes unchecked history without competing dates", async t => {
+test("Analyze keeps routine date coverage in Filters, beside the history settings", async t => {
     const page = await setup(t);
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("43");
-    await expect(page.locator("#periodHint")).toHaveText("25 interactions · 15 Copilot chats");
+    await expect(page.locator("#periodHint .analyze-scope-part")).toHaveText([/25 interactions/, "15 Copilot chats"]);
     if (proof) {
         await mkdir(proof, { recursive: true });
         await page.evaluate(async () => { await document.fonts.ready; document.activeElement.blur(); scrollTo(0, 0); });
         await page.screenshot({ path: path.join(proof, "october-desktop.png"), fullPage: true });
     }
     await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
-    await expect(page.locator("#periodCoverageText")).toHaveText("Some of this period is outside checked history; activity may be missing.");
+    await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
+    await expect(page.locator("#periodCoverageText")).toHaveText("The last history check covered only part of this period.");
     await expect(page.locator("#periodHistoryLink")).toHaveText("History settings");
     const evidence = [];
     for (const [width, scale, theme] of [[1440, 1, "dark"], [1200, 1, "light"], [390, 2, "light"]]) {
@@ -127,7 +128,7 @@ test("October headline names the applied month and the notice distinguishes unch
             return { lines, textSize: parseFloat(getComputedStyle(text).fontSize),
                 sameRow: Math.abs(textBox.y + textBox.height / 2 - linkBox.y - linkBox.height / 2) < 2,
                 overflow: document.documentElement.scrollWidth > innerWidth + 1,
-                clipped: [node, text, link, document.querySelector("#periodResult")].some(item => item.scrollWidth > item.clientWidth + 1),
+                clipped: [node, text, link].some(item => item.scrollWidth > item.clientWidth + 1),
                 linkHeight: linkBox.height };
         });
         assert.equal(geometry.overflow, false); assert.equal(geometry.clipped, false);
@@ -136,12 +137,12 @@ test("October headline names the applied month and the notice distinguishes unch
         else assert.ok(geometry.lines > 1, "Enlarged narrow text wraps rather than shrinking.");
         evidence.push({ width, scale, theme, ...geometry, headline: await page.locator("#periodResult").textContent(),
             notice: await page.locator("#periodCoverageText").textContent() });
-        if (proof) await page.locator("#periodFeedback").screenshot({ path: path.join(proof, `feedback-${width}-${scale}-${theme}.png`) });
+        if (proof) await page.locator("#periodCoverage").screenshot({ path: path.join(proof, `feedback-${width}-${scale}-${theme}.png`) });
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await page.locator("#periodHistoryLink").click();
-    await expect(page).toHaveURL(/#settings.*section=connection.*setting=history-window/);
+    await expect(page).toHaveURL(/settings.*section=connection.*setting=history-window/);
     await expect(page.locator("#collectionWindow-control")).toBeFocused();
     await page.goBack(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
@@ -154,6 +155,11 @@ test("October headline names the applied month and the notice distinguishes unch
 
 test("every Dates choice keeps its caption with accepted counts, including unapplied custom drafts and other units", async t => {
     const page = await setup(t);
+    await navigateMain(page, "settings"); await navigateSettings(page, "analyze");
+    await selectActivityOption(page, "defaultAnalyzeRange", "30");
+    await navigateMain(page, "analyze"); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (Sep 14–Oct 13, 2026)");
+    await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
     for (const [value, calls, caption] of [
         ["day", 0, "Oct 13, 2026"], ["week", 3, "Oct 12–13, 2026"],
         ["month", 43, "Oct 1–13, 2026"], ["7", 18, "Oct 7–13, 2026"],
@@ -161,6 +167,8 @@ test("every Dates choice keeps its caption with accepted counts, including unapp
     ]) {
         await selectActivityOption(page, "dateFilter", value); await ready(page);
         await expect(page.locator("#periodResult")).toHaveText(`${calls} Work IQ tool calls (${caption})`);
+        if (value === "day") await expect(page.locator("#analyzeScopeStatus")).toContainText("The last history check covered only part of this period.");
+        if (value === "30") await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
     }
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-10-12");
@@ -205,7 +213,7 @@ test("the accepted checked window, not old imported dates, controls the notice w
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
     checkedWindow = null;
     await selectActivityOption(page, "dateFilter", "week"); await ready(page);
-    await expect(page.locator("#periodCoverageText")).toHaveText("These counts use saved activity. WIRE can’t tell how much history it checked for these dates.");
+    await expect(page.locator("#periodCoverageText")).toHaveText("The dates of the last history check are unavailable.");
     await expect(page.locator("#collectionNotice")).toBeVisible();
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
 });

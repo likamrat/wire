@@ -40,11 +40,12 @@ export function createPeriodFlow(time, copy = chatCopy) {
                 if (Number.isFinite(since) && Number.isFinite(until) && since <= until) {
                     if (from < since || elapsedTo > until) {
                         const outside = from > until || elapsedTo < since;
-                        warning = `${outside ? "This period is" : "Some of this period is"} outside checked history; activity may be missing.`;
+                        warning = outside ? "This period falls outside the dates WIRE last checked."
+                            : "The last history check covered only part of this period.";
                         historyLink = true;
                     }
                 } else {
-                    warning = "These counts use saved activity. WIRE can’t tell how much history it checked for these dates.";
+                    warning = "The dates of the last history check are unavailable.";
                     historyLink = true;
                 }
             }

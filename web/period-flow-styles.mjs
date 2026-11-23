@@ -53,7 +53,7 @@ export const periodFlowStyles = `
 #homeView>.insight-header {padding:0 0 12px;justify-content:flex-start}
 #periodResult {font-size:1rem;font-weight:600}
 #periodHint {font-size:1rem;color:var(--muted);margin-top:4px}
-.period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding:4px 16px;border-left:3px solid var(--warning);background:var(--paper);border-radius:var(--radius-small)}
+.period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding-block:4px;color:var(--muted)}
 .period-coverage p {font-size:1rem;margin:0;max-width:100%;overflow-wrap:anywhere}
 .period-coverage a {display:inline-flex;min-height:44px;max-width:100%;align-items:center;white-space:normal;overflow-wrap:anywhere}
 .fresh-activity {margin:0 0 16px;container:fresh-activity / inline-size}

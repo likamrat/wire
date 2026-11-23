@@ -5078,6 +5078,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             notice?.severity === "error" ? notice.text : "",
             updateState.readFailed || updateState.sourceFailure ? updateState.message : "",
         ].filter(Boolean);
+        const empty = workspaceState.analytics.totals.count === 0 && !slice?.scenarios.length && !sharedNativeView()?.aggregates.conversations && !workspaceState.loading && !workspaceState.stale;
         const status = [
             nativeActivityDatesUnavailable() && (workspaceState.scope.filters.from || workspaceState.scope.filters.to)
                 ? workspaceState.analytics.population?.coverage?.messageCreationDatesAvailable && workspaceState.analytics.population.contextOnlyScenarioIds?.length
@@ -5086,10 +5087,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             !updateExplained && (update.entry.attention || update.reread?.needsReceipt) && (!updateError || update.entry.pending) ? update.label : "",
             !updateExplained && updateState.sourceUnknown ? "A local history check is unconfirmed. It will not be repeated." : "",
             !updateExplained && updateState.sourceBlocked ? "Source checks are read-only in this tab." : "",
-            period.warning,
+            empty ? period.warning : "",
         ].filter(Boolean);
-        analyzeControls.caption({ ...description, status: [...new Set(status)].join(" "), error: [...new Set(errors)].join(" "), revision: workspaceState.evidence.revision,
-            empty: workspaceState.analytics.totals.count === 0 && !slice?.scenarios.length && !sharedNativeView()?.aggregates.conversations && !workspaceState.loading && !workspaceState.stale });
+        analyzeControls.caption({ ...description, status: [...new Set(status)].join(" "), error: [...new Set(errors)].join(" "), revision: workspaceState.evidence.revision, empty });
         publishAcceptedListScope(description);
         return description;
     }

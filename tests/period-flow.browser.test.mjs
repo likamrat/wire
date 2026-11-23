@@ -202,7 +202,7 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)");
     assert.match(await page.locator("#periodHint").innerText(), /^Jul 29, 2026 - Oct 5, 2026/);
     assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator("#periodCoverageText").innerText(), "Some of this period is outside checked history; activity may be missing.");
+    assert.equal(await page.locator("#periodCoverageText").innerText(), "The last history check covered only part of this period.");
     assert.match(await page.locator("#homeInsightScope").textContent(), /3 request groups.*full retained interaction/);
     assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)").length), 1);
     await page.locator("#pageAction").click(); await ready(page);

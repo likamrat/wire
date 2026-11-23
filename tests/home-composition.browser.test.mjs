@@ -150,7 +150,7 @@ test("Home date/result apply, clear, Back and failed reads keep one accepted cha
 test("Home leaves missing coverage explicit rather than removing it to simplify the page", async t => {
     const { page } = await setup(t, { knownCoverage: false });
     await expect(page.locator("#periodCoverage")).toBeVisible();
-    await expect(page.locator("#periodCoverageText")).toHaveText("These counts use saved activity. WIRE can’t tell how much history it checked for these dates.");
+    await expect(page.locator("#periodCoverageText")).toHaveText("The dates of the last history check are unavailable.");
     await expect(page.locator("#periodResult")).toHaveText("121 Work IQ tool calls (Sep 21 - Sep 27, 2026)");
     await picture(page, "home-missing-coverage");
 });
