@@ -1388,7 +1388,7 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         assert.equal(await page.locator("#chart").innerHTML(), previous);
         assert.equal(await page.locator("#percentageCharts").innerHTML(), previousPercentages);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
-        assert.equal(await page.locator("#freshIssues").getAttribute("href"), "#settings?section=connection&setting=source-paths");
+        assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=source-access&setting=source-paths");
         app.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
         let oldSnapshot;
         await page.route("**/api/snapshot", async route => { const response = await route.fetch(); oldSnapshot = await response.json(); await route.fulfill({ response }); });

@@ -9234,7 +9234,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("freshStatus").dataset.severity = model.phase === "error" || model.sourceFailure ? "error"
             : model.combined?.problem || model.phase === "partial" ? "warning" : "normal";
         $("freshIssues").hidden = model.recovery !== "source";
-        $("freshIssues").href = "/settings?section=connection&setting=source-paths";
         setText($("freshIssues"), "Review source");
         $("freshResult").hidden = $("freshStatus").hidden && !model.context && !model.sourceWarning && !completed && !collectionReadError && !workspaceState.stale;
         const gapDetails = $("freshCoverageDetails");
