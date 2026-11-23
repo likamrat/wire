@@ -33,7 +33,11 @@ test("the shell uses the exact retained IQOS Asta asset without changing report 
     for (const role of ["caption", "small", "body", "reading", "control", "title", "section", "dialog", "data-value", "score"]) {
         assert.ok(typographyTokens.includes(`--type-${role}:`), `${role} is a shared role`);
     }
-    assert.doesNotMatch(html.replace(fontFaceStyles, ""), /url\(["']?https?:\/\/|<link[^>]+fonts\./i);
+    const head = html.slice(0, html.indexOf("</head>"));
+    const css = [...head.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(match => match[1]).join("\n");
+    assert.ok(css.includes(fontFaceStyles));
+    assert.doesNotMatch(css, /(?:url\(\s*|@import\s+)["']?(?:https?:)?\/\//i);
+    assert.doesNotMatch(head, /<link\b[^>]*\bhref=["'](?:https?:)?\/\//i);
 });
 
 test("reference typography embeds PDF subsets without reader system-font fallback", async () => {

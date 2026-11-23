@@ -8,7 +8,7 @@ import { createDeletionController } from "../lib/deletion.mjs";
 import { appendFile, mkdir, readFile, rename } from "node:fs/promises";
 import { deletionHash } from "../lib/deletion-identities.mjs";
 import path from "node:path";
-import { chooseReportScope, reportContents, scanReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { time } from "../lib/time.mjs";
@@ -108,19 +108,29 @@ test("deleted source activity stays absent until an explicit source-backed recol
     await f.collector.collectNow();
     assert.deepEqual((await loadBoardState(f.context)).evidence.flatMap(row => row.toolCalls.map(call => call.toolCallId)), ["selected-A"]);
     await navigateMain(page, "reports");
-    await chooseReportScope(page, "all"); await reportContents(page);
-    await page.locator("[name=promptMode][value=original]").check();
-    const report = await scanReport(page);
+    await page.getByRole("button", { name: /^Activity source:/ }).click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^All collected activity/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator(".report-before-prepare input[value=original]").check();
+    const [response] = await Promise.all([
+        page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),
+    ]);
+    assert.equal(response.status(), 200);
+    const report = await response.json();
     assert.equal(report.records.flatMap(row => row.toolCalls).length, 1);
     await page.frameLocator(".report-frame").locator("h1").waitFor();
     assert.match(await page.frameLocator(".report-frame").locator("body").textContent(), /Synthetic request selected-A/);
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await page.getByRole("button", { name: "Save report", exact: true }).click();
+    const confirm = page.getByRole("button", { name: "Save with chat details", exact: true });
+    await confirm.waitFor();
+    assert.equal((await loadBoardState(f.context)).exports.length, 0);
+    await confirm.click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await capture(page, "recollection-new-report-saved");
-    assert.equal((await loadBoardState(f.context)).exports.length, 1);
+    const { exports: saved } = await loadBoardState(f.context);
+    assert.equal(saved.length, 1);
+    assert.match(await readFile(saved[0].files["product-report.html"], "utf8"), /Synthetic request selected-A/);
     assert.deepEqual(await Promise.all([...f.files, f.dbPath].map(async file => deletionHash(await readFile(file)))), sourceHashes);
 });
 

@@ -56,7 +56,8 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || [
+        if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" ||
+            url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status" || [
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/period-comparison",
         ].includes(url.pathname))) return route.continue();
@@ -110,8 +111,13 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     assert.ok(analytics.otherGroup && analytics.groups.length > analytics.visibleGroups.length);
     await expect(page.locator("#chart .flat-comparison-count").first()).toHaveText("92.9% (1,001)");
     const widgetRows = await page.locator("#percentageCharts .percentage-legend-row,#outcomeChart .percentage-legend-row")
-        .evaluateAll(rows => rows.map(row => ({ count: Number(row.dataset.count), value: row.querySelector(".percentage-value").textContent })));
-    for (const row of widgetRows) assert.equal(row.value, `${percentages.percent(row.count, analytics.totals.count)} (${row.count.toLocaleString()})`);
+        .evaluateAll(rows => rows.map(row => ({ chart: row.closest("[data-breakdown]").dataset.breakdown,
+            count: Number(row.dataset.count), value: row.querySelector(".percentage-value").textContent })));
+    assert.ok(widgetRows.some(row => row.chart === "authors" && row.count === source.length));
+    for (const row of widgetRows) {
+        const total = ["authors", "models"].includes(row.chart) ? source.length : analytics.totals.count;
+        assert.equal(row.value, `${percentages.percent(row.count, total)} (${row.count.toLocaleString()})`, row.chart);
+    }
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await capture(`paths-${theme}`, ".analyze-dashboard");
@@ -125,8 +131,13 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     assert.equal(filtered.totals.count, 3);
     await expect(page.locator("#chart .flat-comparison-count")).toHaveText("100% (3)");
     const control = page.locator("#chart .flat-comparison-action");
+    const drilldown = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
     await control.focus(); await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/endpoint=/);
+    const accepted = (await (await drilldown).json()).analytics;
+    assert.deepEqual(accepted.rows.map(row => row.id).sort(), [...filtered.groups[0].drilldownIds].sort());
+    await expect(page).toHaveURL(/privateView=required/);
+    assert.equal(new URL(page.url()).searchParams.has("endpoint"), false);
+    await expect(page.locator("#activityList .request-card-prompt")).toHaveText(source[2].userPrompt.text);
     await page.goBack(); await ready();
     await expect(page.locator("#chart .flat-comparison-count")).toHaveText("100% (3)");
 
@@ -151,7 +162,9 @@ test("normal grouped widgets and live comparisons use complete accepted populati
                     count: side.analytics.resultFacet.totals.count })), key);
                 return `${rates[index] ?? "share unavailable"} (${side.analytics.totals[key].toLocaleString()})`;
             });
-            assert.deepEqual(await page.locator(".compare-outcome-row").nth(index).locator(".percentage-value").allTextContents(), expected);
+            const values = page.getByRole("table", { name: "Outcome shares and counts by period" })
+                .locator(`tbody td:nth-child(${index + 2}) .percentage-value`);
+            await expect(values).toHaveText(expected);
         }
     };
     await outcomeValues(await pair(""));
@@ -166,7 +179,9 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     await expect(page.locator(".comparison-outcome-values .percentage-value").first()).not.toHaveText("100.00% (3)");
     const tools = await pair("&comparisonView=tools");
     await chooseTheme(page, "light");
-    for (const group of await page.locator(".comparison-group").all()) {
+    const groups = page.locator(".comparison-group");
+    assert.deepEqual((await groups.locator("h4").allTextContents()).sort(), ["workiq-fetch", "workiq-get_schema"]);
+    for (const group of await groups.all()) {
         const label = await group.locator("h4").textContent();
         const expected = Object.values(tools.periods).map(side => {
             const count = side.analytics.rows.filter(row => row.tool === label).length;

@@ -123,7 +123,7 @@ test("ordinary app consolidates real stopped collection, healthy recovery and gl
         await expect(page.locator("#collectionNoticeText")).toHaveText(
             "Automatic Microsoft collection stopped after an error. Start a new collection in Settings.");
         await expect(page.locator("#collectionNotice a")).toHaveAttribute("href",
-            "#settings?section=connection&setting=microsoft-collection");
+            "/settings?section=connection&setting=microsoft-collection");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(2);
         assert.equal(acquisitions, 1);
         assert.equal(opens, 1);

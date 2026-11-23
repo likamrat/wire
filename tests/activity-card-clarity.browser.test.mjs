@@ -1264,13 +1264,12 @@ test("Activity bands remain separate at wide and enlarged widths without clippin
 
 test("An empty retained agent message remains recognizable without pretending its arguments are a prompt", async t => {
     const { page } = await setup(t);
-    const card = promptLink(page, "card-clarity-1");
-    await expect(card).not.toContainText("Prompt not available");
-    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
-    await expect(card).toContainText("Work continued without a new message.");
-    await expect(card).not.toContainText("workiq-retrieve");
+    const card = interactionCard(page, "card-clarity-1"), preview = card.locator(".request-card-prompt");
+    await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+    await expect(preview).toHaveText("Work continued without a new message.");
     await expect(card).not.toContainText("SYNTHETIC_ARGUMENT_NOT_A_PROMPT");
-    await card.click();
+    const open = card.locator(".request-card-open");
+    await open.click();
     await expect(page.locator("#requestContent")).toContainText("Work IQ required sign-in at the time");
     await expect(page.locator("#requestContent .reader-tool-name")).toHaveText("workiq-retrieve");
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(1);
@@ -1282,7 +1281,7 @@ test("An empty retained agent message remains recognizable without pretending it
     await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
     await capture(page, "automatic-reader", []);
     await page.goBack();
-    await expect(card).toBeFocused();
+    await expect(open).toBeFocused();
 });
 
 test("bounded card preview still opens the full exact authorized message and returns to its link", async t => {
@@ -1304,11 +1303,12 @@ test("unavailable and empty nonautomatic records retain their own identity witho
     const { page } = await setup(t, evidence);
     for (const [index, label, notice] of [[0, "Human activity", "Prompt text unavailable"],
         [1, "Agent activity", "Prompt text unavailable"], [2, "Author unverified", "No prompt text retained"]]) {
-        const card = promptLink(page, `card-clarity-${index}`);
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText(label);
+        const card = interactionCard(page, `card-clarity-${index}`);
+        await expect(card.locator(".request-card-author")).toHaveText(label);
         await expect(card).toContainText(notice);
         await expect(card).not.toContainText("Automatic continuation");
-        await card.click();
+        await expect(card).not.toContainText("EXCLUDED_TEXT_MUST_NOT_APPEAR");
+        await card.locator(".request-card-open").click();
         const prompt = page.locator('[data-reader-section="prompt"]');
         await expect(prompt).toContainText(notice + ".");
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
@@ -1331,15 +1331,14 @@ test("cards and the reader distinguish observed automatic control, known gaps an
         [0, "Author unverified", "Prompt unavailable: a saved history entry could not be read."],
         [2, "Author unverified", "No prompt text retained"],
     ]) {
-        const card = promptLink(page, `card-clarity-${index}`);
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText(label);
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
-        await expect(card).toContainText(notice);
+        const card = interactionCard(page, `card-clarity-${index}`);
+        await expect(card.locator(".request-card-author")).toHaveText(label);
+        await expect(card.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
+        await expect(card.locator(".request-card-prompt")).toContainText(notice);
         if (index === 1) {
-            await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText("Work continued without a new message.");
-            await expect(card.locator("xpath=ancestor::article[1]").locator("[data-prompt-actor=agent]")).toHaveCount(0);
+            await expect(card.locator("[data-prompt-actor=agent]")).toHaveCount(0);
         }
-        await card.click();
+        await card.locator(".request-card-open").click();
         const prompt = page.locator('[data-reader-section="prompt"]');
         await expect(prompt).toContainText(notice);
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);

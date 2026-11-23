@@ -61,7 +61,7 @@ test("weekly column and outcome segment reach different exact populations and Ba
     const failed = page.locator("a.time-segment-link[data-segment=failure]");
     await failed.click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("3");
-    const prompts = page.locator("#activityList .request-card-open");
+    const prompts = page.locator("#activityList .request-card-prompt");
     assert.deepEqual((await prompts.allTextContents()).sort(), [0,6,12].map(i => `Synthetic chart request 14 ${i}`).sort());
     assert.equal(new URL(page.url()).searchParams.get("from"), "2026-09-14");
     assert.equal(new URL(page.url()).searchParams.get("to"), "2026-09-20");
