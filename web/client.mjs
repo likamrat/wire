@@ -7033,7 +7033,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             const completion = fields([
-                ...(row?.outcome === "success" ? [["Completion evidence", "The source recorded a successful tool completion. This does not establish answer correctness or overall task success."]] : []),
+                ...(row?.outcome === "success" ? [["Completion evidence", tool.completionEventId
+                    ? "The source recorded a successful tool completion. This does not establish answer correctness or overall task success."
+                    : "The tool reported success, but no completion event reference was saved."]] : []),
                 ...consistentCompletion ? [] : [["Reported outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded]],
             ]);
             if (completion.childElementCount) expert.append(completion);
