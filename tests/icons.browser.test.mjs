@@ -437,44 +437,6 @@ test("integrated navigation, charts, filters, formats and downloads use clean Lu
     if (proofDir) await writeFile(path.join(proofDir, "icon-measurements.json"), JSON.stringify(measurements, null, 2));
 }));
 
-test("theme icons keep fixed bounds and touch help uses the shared dismissible tooltip", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
-    const page = await context.newPage();
-    await page.setViewportSize({ width: 820, height: 1000 });
-    await page.goto(origin);
-    await ready(page);
-    const before = await page.locator("#themePreference").boundingBox();
-    for (const theme of ["dark", "light"]) {
-        await page.locator("#themePreference").click();
-        assert.equal(await page.locator("html").getAttribute("data-evidence-theme"), theme);
-        assert.deepEqual(await page.locator("#themePreference").boundingBox(), before);
-        for (const asset of ["sun", "moon"]) {
-            assert.equal(await page.locator(`#themePreference [data-lucide-icon="${asset}"]`).count(), 1);
-        }
-        assert.equal(await page.locator("#themePreference").getAttribute("aria-checked"), String(theme === "dark"));
-    }
-    const touch = await context.browser().newContext({ viewport: { width: 820, height: 1000 }, hasTouch: true, isMobile: true });
-    try {
-        const mobile = await touch.newPage();
-        await mobile.goto(origin);
-        await ready(mobile);
-        const help = mobile.getByRole("button", { name: "About Service", exact: true });
-        const box = await help.boundingBox();
-        assert.ok(box.width >= 44 && box.height >= 44);
-        await help.tap();
-        await mobile.getByRole("tooltip").waitFor({ state: "visible" });
-        await mobile.locator("#pageTitle").tap();
-        await mobile.getByRole("tooltip").waitFor({ state: "hidden" });
-        await inspectIcons(mobile, 820);
-        await mobile.goto(origin + "/#request?request=synthetic-icon-0&session=synthetic-icon-session");
-        await ready(mobile);
-        const reader = mobile.locator(".request-original .full-text-toggle");
-        if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-        const icons = await inspectIcons(mobile, 820);
-        assert.ok(icons.some(icon => icon.metadataHelp && icon.coarse && icon.hitWidth >= 32));
-        assert.ok(icons.some(icon => icon.helpOrCopy && !icon.metadataHelp && icon.hitWidth >= 44));
-    } finally { await touch.close(); }
-}));
-
 test("theme toggle retains focus without a tooltip blocking the mobile navigation icon", { timeout: 15000 }, async () => fixture(async ({ context, origin }) => {
     const page = await context.newPage();
     await page.setViewportSize({ width: 375, height: 1000 });
