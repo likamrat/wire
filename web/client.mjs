@@ -3372,8 +3372,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const service = el("dd", "action-service");
             let serviceContext;
             if (unassignedBatch) {
-                service.append(el("span", "", "No path returned for this batch entry."),
-                    ux.helpButton("batch target", "The entry's position does not identify a requested target. Its recorded status still counts."));
+                service.append(metadata.item("No path returned for this batch entry.", {
+                    helpLabel: "batch target", help: "The entry's position does not identify a requested target. Its recorded status still counts.",
+                }));
                 service.classList.add("returned-target-help");
             } else if (returned) {
                 const association = returnedAssociation;
