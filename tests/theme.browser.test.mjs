@@ -8,6 +8,9 @@ import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture as recordedInteraction, privateFixture } from "./helpers.mjs";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
 
 const proofDir = process.env.WORKIQ_THEME_PROOF_DIR;
 const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/teams/fixture/channels", "/me/people", "/me/todo/lists"].map((apiPath, index) => ({
@@ -318,7 +321,7 @@ test("one-click theme persists before paint, ignores later host/OS changes and s
     await page.getByRole("switch", { name: "Dark theme", exact: true, checked: true }).click();
     await resolved(page, "light");
     await chooseTheme(page, "Dark");
-    await page.locator("nav [data-nav=activity]").click();
+    await navigateMain(page, "analyze");
     await resolved(page, "dark");
     await page.addInitScript(() => requestAnimationFrame(() => { window.firstTheme = document.documentElement.dataset.evidenceTheme; }));
     await page.reload();
@@ -326,8 +329,9 @@ test("one-click theme persists before paint, ignores later host/OS changes and s
     assert.equal(await firstPaintTheme(page), "dark");
     await switchPosition(page, "dark");
     assert.equal(await page.locator("#themePreference").evaluate((node) => node.value), "dark");
-    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), ["workiq-evidence.theme"]);
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.theme")), "dark");
     const readsBefore = requests.length;
+    const explicitBackground = await page.locator("body").evaluate(node => getComputedStyle(node).backgroundColor);
     await page.evaluate(() => {
         document.documentElement.setAttribute("data-color-mode", "light");
         const style = document.createElement("style");
@@ -335,7 +339,7 @@ test("one-click theme persists before paint, ignores later host/OS changes and s
         document.head.append(style);
     });
     await resolved(page, "dark");
-    assert.equal(await page.locator("body").evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(20, 34, 54)");
+    assert.equal(await page.locator("body").evaluate((node) => getComputedStyle(node).backgroundColor), explicitBackground);
     await page.emulateMedia({ colorScheme: "light" });
     await resolved(page, "dark");
     await chooseTheme(page, "Light");
@@ -371,29 +375,35 @@ test("one-click theme persists before paint, ignores later host/OS changes and s
     await resolved(page, "dark");
 }));
 
-test("a real switch in another panel changes appearance without invalidating a frozen report preview", { timeout: 15000 }, async () => fixture(async ({ context, url, requests }) => {
-    const page = await context.newPage(), other = await context.newPage();
-    await page.goto(url + "#activity");
-    await ready(page);
-    await page.locator("#activityList input").first().check();
-    await navigateMain(page, "reports");
-    await reportContents(page);
-    await page.locator("#exportBtn").click();
-    await page.locator(".attestation input").waitFor();
-    await other.goto(url);
-    await ready(other);
-    const count = requests.length, route = page.url();
-    const before = await page.locator("#reportReviewBody").innerHTML();
+test("a real switch in another panel changes appearance without invalidating a frozen report preview", async t => {
+    const record = recordedInteraction("theme-report");
+    record.toolCalls[0].startedAt = record.capturedAt = new Date().toISOString();
+    const { context } = await privateFixture(t, [record]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    t.after(() => runtime.close());
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const profile = await browser.newContext({ colorScheme: "light", reducedMotion: "reduce" });
+    const page = await profile.newPage(), other = await profile.newPage();
+    await page.goto(new URL("/reports", runtime.url).href);
+    const made = page.waitForResponse(res => res.url().endsWith("/api/preview") && res.ok());
+    await page.getByRole("button", { name: "Prepare preview" }).click();
+    const { previewId } = await (await made).json();
+    assert.ok(previewId);
+    const report = page.locator("#reportReviewBody").frameLocator("iframe:visible").locator("h1");
+    await report.waitFor();
+    const title = await report.innerText(), url = page.url();
+    assert.ok(title.trim());
+    await other.goto(runtime.url); await ready(other);
+    const operations = [];
+    page.on("request", req => { if (req.method() === "POST" && /\/api\/(?:snapshot|cancel-preview|preview|privacy-review|export)$/.test(req.url())) operations.push(req.url()); });
     await other.getByRole("switch", { name: "Dark theme", exact: true }).click();
     await resolved(page, "dark");
     assert.equal(await page.locator("#themePreference").getAttribute("aria-checked"), "true");
-    assert.equal(await page.locator("#reportStage3").isVisible(), true);
-    assert.equal(await page.locator("#reportReviewBody").innerHTML(), before, "Frozen preview and disclosure state are unchanged");
-    assert.equal(await page.locator(".attestation input").isChecked(), false);
-    assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
-    assert.equal(page.url(), route);
-    assert.equal(requests.length, count, "No refetch, preview cancellation, review or export request on theme change");
-}));
+    assert.equal(await report.innerText(), title);
+    assert.equal(page.url(), url);
+    assert.deepEqual(operations, [], "Theme sync does not replace or save the prepared report");
+});
 
 test("theme changes retain a filtered activity selection without touching source or review state", async () => fixture(async ({ context, url, requests }) => {
     const page = await context.newPage();

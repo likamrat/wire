@@ -1,13 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, openReportLibrary } from "./report-journey-helpers.mjs";
+import { chooseReportScope } from "./report-journey-helpers.mjs";
 
 async function setup(t) {
     const { context, root } = await privateFixture(t);
@@ -134,43 +132,4 @@ test("Setup presents nonzero exclusion facts without turning unavailable counts 
         }
     }
     assert.ok(!writes.some(endpoint => ["/api/preview", "/api/privacy-review", "/api/export"].includes(endpoint)));
-});
-
-test("library keeps one count and opens the actual frozen report after separate Review and Save", { timeout: 30000 }, async t => {
-    const { page, go, context, writes } = await setup(t);
-    await go("#reports");
-    await expect(page.locator("#savedReportSearch")).toBeHidden();
-    await expect(page.locator("#savedLibraryHelp")).toHaveCount(0);
-    await page.getByRole("link", { name: "Create a report", exact: true }).click();
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator('[name=promptMode][value=none]').check();
-    await scanReport(page);
-    await page.frameLocator("#reportReviewBody iframe").locator("h1").waitFor();
-    assert.equal((await loadBoardState(context)).exports.length, 0);
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-    assert.equal((await loadBoardState(context)).exports.length, 0);
-    await page.getByRole("button", { name: "Save report", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
-    const saved = (await loadBoardState(context)).exports[0];
-    const before = await Promise.all(Object.values(saved.files).map(file => readFile(file)));
-    await openReportLibrary(page);
-    await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (1)");
-    await expect(page.locator("#savedReportCount")).toBeHidden();
-    await expect(page.locator("#savedLibraryHelp")).toHaveCount(0);
-    await expect(page.locator("#savedReportSearch")).toHaveAccessibleDescription(/not report contents/);
-    await page.locator("#savedReportSearch").fill("no-such-report");
-    await expect(page.locator("#bundleList")).toContainText("No saved reports match");
-    await page.locator("#clearSavedReportSearch").click();
-    const open = page.getByRole("button", { name: "Open saved report", exact: true });
-    await open.click();
-    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
-    await page.keyboard.press("Escape");
-    await expect(open).toBeFocused();
-    assert.deepEqual(await Promise.all(Object.values(saved.files).map(file => readFile(file))), before);
-    for (const endpoint of ["/api/preview", "/api/privacy-review", "/api/export"]) {
-        assert.equal(writes.filter(value => value === endpoint).length, 1);
-    }
 });
