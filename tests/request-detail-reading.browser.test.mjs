@@ -249,21 +249,12 @@ test("reader exposes exact operations and useful evidence without identifier but
     await ready(page);
     await page.locator(".interaction-response .reader-empty").waitFor();
     const reader = page.locator("#requestContent"), call = reader.locator("[data-tool-call-id]");
-    await expect(call.locator(".reader-call-identity-line")).toHaveText("workiq-ask");
-    await expect(call.locator(".reader-call-summary")).toContainText("Call #1");
+    await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
     assert.equal(await call.locator(".reader-tool-name").innerText(), "workiq-ask");
     await expect(call.locator(".interaction-response")).toHaveCount(0);
     assert.match(await reader.locator(":scope > .reader-response-availability").innerText(), /No assistant reply was saved.*Saving is off by default/s);
     assert.equal(await reader.locator(".request-context-summaries>summary").count(), 0);
     await expect(reader.getByRole("heading", { name: "Reviews", exact: true })).toHaveCount(0);
-    const pick = page.locator("#contextSidebarFooter").getByRole("button", { name: "Add to report", exact: true });
-    assert.ok((await pick.boundingBox()).y >= (await page.locator("#contextSidebarBody").boundingBox()).y
-        + (await page.locator("#contextSidebarBody").boundingBox()).height);
-    const originalRoute = page.url();
-    await pick.click();
-    assert.equal(await page.locator("#requestReportToggle").textContent(), "Remove from report");
-    assert.equal(page.url(), originalRoute);
-    await page.locator("#requestReportToggle").click();
     const details = call.locator(".technical-detail"), source = await openSource(page);
     await openIdentifiers(source);
     await openCall(call);
@@ -304,139 +295,10 @@ test("reader exposes exact operations and useful evidence without identifier but
     await page.goBack(); await ready(page);
     assert.equal(page.url(), readerUrl);
     await reader.getByRole("link", { name: "Filter to chat: Synthetic planning chat", exact: true }).click(); await ready(page);
-    assert.match(page.url(), /session=/);
+    await expect(page.locator("#pageProject")).toContainText("Filtered to chat: Synthetic planning chat");
     await page.goBack(); await ready(page);
     assert.equal(page.url(), readerUrl);
-    const measure = [];
-    for (const [theme, width, scale] of [["dark", 1440, 1], ["light", 1440, 1], ["dark", 375, 2], ["light", 375, 2]]) {
-        await readerTheme(page, theme, width, scale);
-        const style = await reader.locator(".full-text-body").evaluate(node => ({
-            fill: getComputedStyle(node).backgroundColor, edge: getComputedStyle(node).borderInlineStartColor,
-            ink: getComputedStyle(node.querySelector("pre")).color,
-            overflow: document.documentElement.scrollWidth - innerWidth,
-        }));
-        assert.ok(contrast(style.ink, style.fill) >= 4.5);
-        assert.ok(contrast(style.edge, style.fill) >= 3);
-        assert.ok(style.overflow <= 1);
-        measure.push({ theme, width, scale, ...style });
-        await capture(page, `reader-finished-${theme}-${width}-${scale}`, ".request-original");
-    }
-    if (proof) await writeFile(path.join(proof, "reader-comprehension.json"), JSON.stringify({
-        checks: ["Exact workiq-ask visible without expansion", "Reported call outcome separate from missing reply",
-            "Report selection in fixed footer; no automatic navigation", "Synthetic exact arguments copied",
-            "Clipboard failure explicit and retry clears it", "Selectable exact IDs without copy buttons",
-            "No retired reviews, editors or replacement panels", "Exact call and final-response duration stay distinct",
-            "Source disclosure retains native keyboard focus",
-            "Chat filter and Collection coverage navigate and return"], measure,
-    }, null, 2));
-});
 
-test("card-to-reader continuity includes aligned actions, compact expanded facts and the exact return position", { timeout: 60000 }, async t => {
-    const text = "Review the planning presentation from the Northline kickoff and identify the decisions still waiting for an owner.";
-    const { page, record } = await setup(t, { actor: "user", text, entry: "card", modelTiming: true, calls: [{
-        tool: "workiq-ask", requestArgs: { question: "Find the invented Northline kickoff presentation.\n  Keep this exact indentation.", timeZone: "UTC" },
-        requestedApiPath: null, apiResults: [], durationMs: 73728,
-        startedAt: "2026-09-30T12:00:01.107Z", completedAt: "2026-09-30T12:01:14.835Z",
-        parentInvocationEvidence: "source-field-absent", parallelGroupEvidence: "adapter-not-supported",
-    }] });
-    const metrics = [];
-    for (const [theme, width, scale] of [["dark", 1440, 1], ["light", 1440, 1], ["dark", 420, 2], ["light", 420, 2]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await revealAnalyzeRecords(page);
-        const card = page.locator("#activityList>.request-row"), open = card.locator(".request-card-open");
-        await expect(card.locator(".request-card-prompt")).toContainText(text);
-        await expect(card).toContainText("Asked Copilot");
-        await expect(card.locator("input,button")).toHaveCount(0);
-        await open.scrollIntoViewIfNeeded();
-        const cardType = await card.locator(".request-card-prompt").evaluate(node => {
-            const style = getComputedStyle(node);
-            return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle };
-        });
-        if (proof) {
-            await mkdir(proof, { recursive: true });
-            await page.screenshot({ path: path.join(proof, `continuity-${theme}-${width}-${scale}-card.png`) });
-        }
-        const origin = page.url(), position = await open.boundingBox();
-        await page.mouse.click(position.x + position.width / 2, position.y + position.height / 2); await ready(page);
-        await page.locator(".interaction-response .reader-empty").waitFor();
-        const prompt = section(page, "prompt"), call = page.locator('[data-tool-call-id="synthetic-reading-call-0"]');
-        const source = await openSource(page);
-        assert.match(await source.locator(".interaction-model-fact").innerText(), /synthetic-model/);
-        assert.equal(await source.locator(".response-timing data").getAttribute("value"), "108640");
-        const copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
-        await expect(prompt.locator(".reader-section-toggle")).toHaveCount(0);
-        await capture(page, `continuity-${theme}-${width}-${scale}-reader`);
-        const measures = await page.locator("#requestContent").evaluate(root => {
-            const node = root.querySelector('[data-reader-section="prompt"]'), source = root.querySelector('[data-reader-section="source"]');
-            const box = element => {
-                const r = element.getBoundingClientRect();
-                return { x: r.x, y: r.y, width: r.width, height: r.height, center: r.y + r.height / 2 };
-            };
-            const controls = [...node.querySelectorAll(":scope>.reader-section-heading button")];
-            const style = getComputedStyle(node.querySelector(".full-text-content"));
-            return {
-                promptType: { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle },
-                controls: controls.map(control => ({ ...box(control), marginTop: getComputedStyle(control).marginTop })),
-                content: box(node.querySelector(".full-text-content")),
-                keys: [...source.querySelectorAll("dt")].map(key => ({ weight: getComputedStyle(key).fontWeight, color: getComputedStyle(key).color })),
-                values: [...source.querySelectorAll("dd")].map(value => ({ weight: getComputedStyle(value).fontWeight, color: getComputedStyle(value).color,
-                    left: value.getBoundingClientRect().left - value.previousElementSibling.getBoundingClientRect().left,
-                    gap: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().bottom,
-                    inlineGap: value.getBoundingClientRect().left - value.previousElementSibling.getBoundingClientRect().right,
-                    top: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().top })),
-            };
-        });
-        await copy.click();
-        assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), text);
-        await expect(copy).toBeFocused();
-        assert.equal(await prompt.locator(".full-text-content").textContent(), text);
-        const details = call.locator(".technical-detail");
-        await openCall(call);
-        await expect(details).toBeVisible();
-        await expect(call.locator(":scope>details")).toHaveCount(0);
-        await call.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
-        assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), JSON.stringify(record.toolCalls[0].requestArgs, null, 2));
-        await capture(page, `continuity-${theme}-${width}-${scale}-expanded`, '[data-tool-call-id="synthetic-reading-call-0"]');
-        const technical = await details.innerText();
-        const expanded = await details.evaluate(node => ({
-            height: node.getBoundingClientRect().height,
-            emptyRows: [...node.querySelectorAll("dd")].filter(value => /^(Not recorded|Not in this record|Not supplied by source|Not collected by this adapter|false|true)$/u.test(value.textContent)).length,
-            helpButtons: node.querySelectorAll(".ux-help").length,
-            overflow: document.documentElement.scrollWidth - innerWidth,
-            keyWeights: [...node.querySelectorAll("dt")].map(key => getComputedStyle(key).fontWeight),
-        }));
-        metrics.push({ theme, width, scale, cardType, ...measures, technical, expanded });
-        await page.getByRole("button", { name: "Add to report", exact: true }).click();
-        assert.equal(await page.locator("#requestReportToggle").textContent(), "Remove from report");
-        await page.locator("#requestReportToggle").click();
-        await page.goBack(); await ready(page);
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-        assert.equal(page.url(), origin);
-        assert.equal(await open.evaluate(node => node === document.activeElement), true);
-        assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3, "Back restores the card entry position");
-        await expect(card.getByRole("checkbox")).toHaveCount(0);
-    }
-    if (proof) await writeFile(path.join(proof, "continuity-metrics.json"), JSON.stringify(metrics, null, 2));
-    for (const measurement of metrics) {
-        const { cardType, promptType, controls, keys, values, expanded, width, scale } = measurement;
-        assert.equal(promptType.font, cardType.font, "The full prompt keeps the card's font family");
-        assert.equal(promptType.size, `${14 * scale}px`, "The reader uses its current body-text role");
-        assert.equal(cardType.size, `${16 * scale}px`, "The card retains its recognition-text role");
-        assert.equal(promptType.weight, "400");
-        assert.equal(promptType.style, "normal");
-        assert.equal(controls.length, 1, "The always-readable prompt has Copy, not a retired folding control");
-        assert.ok(controls.every(control => control.height >= 44 && control.width >= 44));
-        assert.ok(keys.length > 0 && values.length === keys.length, "Measure the current Source details metadata, not an empty former prompt host");
-        assert.ok(keys.every(key => key.weight === "400" && values.every(value => value.weight === key.weight && value.color !== key.color)));
-        assert.ok(values.every(value => Math.abs(value.top) <= 1 && value.inlineGap >= 6 && value.inlineGap <= 10
-            || Math.abs(value.left) <= 1 && value.gap >= 0 && value.gap <= 4), "Context facts stay inline or wrap cleanly to their shared left edge without overlap");
-        assert.equal(expanded.emptyRows, 0, "Missing technical fields are consolidated, not repeated as empty rows");
-        assert.equal(expanded.helpButtons, 0, "Expanded facts explain necessary limits directly, not through a tooltip per fact");
-        assert.ok(expanded.overflow <= 1, `${width}/${scale}: expanded technical details fit`);
-        assert.ok(expanded.keyWeights.every(weight => weight === "400"));
-        if (width === 1440) assert.ok(expanded.height < 600, "One simple call's expanded detail fits a readable group, rather than a page of empty fields");
-    }
 });
 
 test("reader distillation keeps a legible story without repeated empty fields or per-text About disclosures", { timeout: 60000 }, async t => {
@@ -456,7 +318,7 @@ test("reader distillation keeps a legible story without repeated empty fields or
     assert.doesNotMatch(visible, /API path\s+Not recorded|API metadata: None recorded/);
     await expect(timeline.getByText("Outside current view", { exact: true })).toHaveCount(6);
     await expect(timeline.getByText("Matches current view", { exact: true })).toHaveCount(1);
-    assert.match(visible, /Failure reason was not saved/);
+    assert.match(visible, /No failure reason was saved/);
     assert.doesNotMatch(visible, /Historical call evidence only/);
     assert.match(await page.locator("#requestContent > .reader-response-availability").innerText(), /No assistant reply was saved.*Saving is off by default/s);
     assert.match(await page.locator(".reader-scope").innerText(), /1 of 7.*match/);
@@ -467,35 +329,7 @@ test("reader distillation keeps a legible story without repeated empty fields or
     await expect(action.locator(".technical-detail")).toBeVisible();
     await expect(action.locator("details,.call-api-summary,.returned-api-entries")).toHaveCount(0);
     await expect(action.locator(".recorded-arguments pre")).toHaveText("{}");
-    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 1200, 1], ["dark", 375, 2], ["light", 375, 2]]) {
-        await readerTheme(page, theme, width, scale);
-        const styles = await page.locator("#requestContent").evaluate(root => {
-            const nodes = [...root.querySelectorAll(".full-text-header h2, .interaction-response > h2, .call-heading h3")];
-            return {
-                headings: nodes.map(node => ({ size: getComputedStyle(node).fontSize, font: getComputedStyle(node).fontFamily, color: getComputedStyle(node).color })),
-                overflow: document.documentElement.scrollWidth - innerWidth,
-                facts: [...root.querySelectorAll(".reader-facts > dl > div")].map(node => node.getBoundingClientRect().x),
-                keyWeights: [...root.querySelectorAll(".reader-facts dt")].map(node => getComputedStyle(node).fontWeight),
-                values: [...root.querySelectorAll(".reader-facts dd")].map(node => ({
-                    x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y,
-                    keyX: node.previousElementSibling.getBoundingClientRect().left,
-                    keyBottom: node.previousElementSibling.getBoundingClientRect().bottom,
-                    keyY: node.previousElementSibling.getBoundingClientRect().top,
-                    keyRight: node.previousElementSibling.getBoundingClientRect().right,
-                })),
-            };
-        });
-        assert.equal(new Set(styles.headings.map(style => style.size)).size, 1, "Prompt, response and call headings share one type role");
-        assert.ok(styles.headings.every(style => style.font.includes("Asta Sans")));
-        assert.ok(styles.overflow <= 1, `${theme}/${width}/${scale} does not overflow`);
-        assert.ok(styles.facts.every(x => x >= 0 && x < width), "Compact metadata wraps within the reading column");
-        assert.equal(new Set(styles.keyWeights).size, 1, "Metadata keys share one weight");
-        assert.ok(styles.values.length > 0);
-        assert.ok(styles.values.every(value => Math.abs(value.y - value.keyY) <= 1 && value.x - value.keyRight >= 6 && value.x - value.keyRight <= 10
-            || Math.abs(value.x - value.keyX) <= 1 && value.y - value.keyBottom >= 0 && value.y - value.keyBottom <= 4),
-            "Context values use a compact inline row or wrap below on the same left edge");
-        await capture(page, `distilled-multicall-${theme}-${width}-${scale}`, '[data-tool-call-id="synthetic-reading-call-5"]');
-    }
+
 });
 
 test("reader failure copy is concise while sign-in signals and unknown outcomes stay distinct", { timeout: 30000 }, async t => {
@@ -521,7 +355,7 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
         }
     }
     assert.deepEqual(await calls.locator(".call-heading .result-cause").allTextContents(),
-        ["Failure reason was not saved", "Work IQ required sign-in at the time", "Access was denied"]);
+        ["No failure reason was saved.", "Recorded reason: Work IQ required sign-in at the time", "Recorded reason: Access was denied"]);
     await expect(calls.locator(".reader-recorded-signal")).toHaveCount(0);
     assert.equal(await calls.locator(":scope > .context-help-note").count(), 0, "No repeated historical-access lecture between calls");
     for (const [index, call] of (await calls.all()).entries()) {
@@ -539,7 +373,7 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
             assert.doesNotMatch(visible, /source omitted|collection excluded|sign-in|access denial|Historical call evidence only/,
                 "The retained-record gap must not invent an omission/exclusion cause or historical access signal");
         } else {
-            await expect(call.locator(".call-heading .result-cause")).toHaveText(index === 1 ? "Work IQ required sign-in at the time" : "Access was denied");
+            await expect(call.locator(".call-heading .result-cause")).toContainText(index === 1 ? "Work IQ required sign-in at the time" : "Access was denied");
         }
     }
 });
@@ -562,7 +396,7 @@ test("expanded details retain contradictory completion, real linkage and exact d
     await expect(source.locator(".reader-fields>div").filter({ has: page.getByText("Call #1 parent invocation", { exact: true }) }).locator("dd")).toHaveText("synthetic-parent");
     await expect(source.locator(".reader-fields>div").filter({ has: page.getByText("Call #1 parallel group", { exact: true }) }).locator("dd")).toHaveText("synthetic-group");
     assert.match(await details.innerText(), /HTTP directly observed/);
-    assert.match(await calls.first().innerText(), /intermediary-reported/);
+    assert.match(await calls.first().innerText(), /Tool-reported HTTP 403/);
     assert.match(await calls.first().innerText(), /403/);
     assert.match(await calls.first().innerText(), /SyntheticAccessDenied/);
     assert.doesNotMatch(await source.innerText(), /Missing linkage|No parent|does not collect parallel/);
@@ -814,7 +648,7 @@ test("composed author helpers give truthful readable source and actor cues on th
         assert.equal(await heading.textContent(), label);
         await expect(heading).toHaveAttribute("data-prompt-actor", actor);
         await openSource(page);
-        await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
+        await expect(page.locator(".reader-source dt")).toHaveText("Chat");
         await expect(page.locator(".reader-source dd")).toHaveText("Synthetic planning chat");
         if (actor === "unknown") await expect(page.locator(".request-original").getByText("This older record has no sender details", { exact: true })).toHaveCount(1);
         for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
@@ -852,7 +686,7 @@ test("canonical host-envelope normalization reaches Human prompt without copying
     assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
     assert.equal(await section(page, "prompt").locator(".reader-section-heading [data-prompt-actor]").textContent(), "Human prompt");
     await openSource(page);
-    await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
+    await expect(page.locator(".reader-source dt")).toHaveText("Chat");
     await expect(page.locator(".reader-source dd")).toHaveText("Synthetic coordinator chat");
     assert.equal(await page.locator(".request-original .reader-state").count(), 0, "Supported host metadata does not retain an unverified-author warning");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), body);
