@@ -88,7 +88,11 @@ test("closed-schema facts validate every nested field before text de-duplication
     for (const malformed of [false, 0, "", undefined]) {
         assert.throws(() => scanReportMetadata({ evaluationFacts: malformed }, generated), /Projected evaluation facts are invalid/);
         assert.throws(() => scanReportMetadata({ sourceFacts: [{ evaluationFacts: malformed }] }, generated), /Projected evaluation facts are invalid/);
+        assert.throws(() => scanReportMetadata({ resultFacts: malformed }), /Invalid frozen result facts/);
+        assert.throws(() => scanReportMetadata({ sourceFacts: [{ resultFacts: malformed }] }), /Invalid frozen result facts/);
     }
+    assert.throws(() => scanReportMetadata({ resultFacts: null }), /Invalid frozen result facts/);
+    assert.doesNotThrow(() => scanReportMetadata({ sourceFacts: [{ resultFacts: null }, {}] }));
 });
 
 test("untrusted structural and text budgets remain bounded by the original scanner limits", () => {
