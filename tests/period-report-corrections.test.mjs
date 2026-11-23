@@ -46,7 +46,19 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
         const [response] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/preview")), action()]);
         const preview = await response.json();
         assert.ok(response.ok(), preview.error);
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase","ready");
+        try {
+            await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase","ready");
+        } catch (error) {
+            const sent = response.request().postDataJSON().options;
+            t.diagnostic(JSON.stringify({
+                request: { mode: sent.promptMode, linkedContext: sent.recordedContext === true },
+                response: { mode: preview.privacy.promptMode, linkedContext: Boolean(preview.snapshot.recordedContext) },
+                phase: await page.locator("#reportsView").getAttribute("data-report-phase"),
+                notice: await page.locator("#reportJourneyError").allTextContents(),
+                saveControls: await page.getByRole("button", { name: "Save report", exact: true }).evaluateAll(nodes => nodes.map(node => ({ disabled: node.disabled }))),
+            }));
+            throw error;
+        }
         return preview;
     };
     let preview = await prepare(() => page.locator("#createPeriodReport").click());
