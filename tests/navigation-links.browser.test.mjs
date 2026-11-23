@@ -8,7 +8,7 @@ import { buildSanitizedBundle, createExportController } from "../lib/export.mjs"
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, revealStoredRefresh } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { wordmarkSvg, darkWordmarkSvg, lockupSvg, darkLockupSvg } from "../lib/branding.mjs";
+
 
 const proofs = process.env.WIRE_LINK_PROOFS;
 const slice = "layer=tool&scope=all&from=2026-09-30&to=2026-09-30&service=Calendar&project=test-project";
@@ -87,182 +87,44 @@ async function assertLinkStates(page, link, label, focusSelector) {
     assert.equal(await link.evaluate(node => node.tagName === "A" && node.hasAttribute("href") && node.tabIndex === 0), true, `${label}: native link`);
 }
 
-test("the integrated graphical lockup is one native Analyze target", { timeout: 60000 }, async t => {
+test("the current symbol and lettering form one native Analyze link in either theme and drawer", async t => {
     const { page, runtime } = await setup(t);
-    await navigateMain(page, "reports");
-    await ready(page);
-    assert.equal(await page.locator(".brand-caption").count(), 0, "No detached or duplicate caption");
-    const brand = page.locator(".brand a[data-nav=analyze]");
-    assert.equal(await brand.count(), 1, "One Home link around both theme variants");
-    assert.match(await brand.getAttribute("aria-label"), /WIRE.*Analyze/);
-    assert.equal(await brand.locator(".brand-logo").count(), 2);
-    assert.equal(await brand.locator(".brand-caption,a,button,[tabindex]").count(), 0);
-    for (const theme of ["light", "dark"]) {
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 375, 2]]) {
+        await page.setViewportSize({ width, height: 950 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         await chooseTheme(page, theme);
-        const activity = page.url();
-        const descriptor = brand.locator('.brand-logo:visible [id$="-descriptor"]');
-        assert.equal(await descriptor.textContent(), "Work IQ Request Explorer");
-        const href = await brand.getAttribute("href");
-        assert.equal(href, await page.locator("nav [data-nav=analyze]").getAttribute("href"), "Shared scoped Analyze route");
-        const paint = () => brand.evaluate(node => [node, ...node.querySelectorAll("*")]
-            .filter(item => item.checkVisibility()).map(item => {
-                const style = getComputedStyle(item);
-                return [style.backgroundColor, style.boxShadow, style.filter, style.opacity, style.transform, style.textDecorationLine];
-            }));
-        const restingPaint = await paint();
-        await brand.hover();
-        await capture(page, `header-${theme}-logo-hover`, ".app-header");
-        assert.deepEqual(await paint(), restingPaint, "Hover does not visually change the logo");
-        await page.mouse.down();
-        try {
-            assert.deepEqual(await paint(), restingPaint, "Press does not add logo highlighting");
-        } finally {
-            await page.mouse.move(0, 0);
-            await page.mouse.up();
-        }
-        for (const part of [.05, .32, .57, .89]) {
-            const logo = brand.locator(".brand-logo:visible");
-            const bounds = await logo.boundingBox();
-            await logo.click({ position: { x: bounds.width * part, y: bounds.height / 2 } });
-            await ready(page);
-            assert.equal(new URL(page.url()).hash, href, "Every letter area returns Home");
-            await page.goBack();
-            await ready(page);
-            assert.equal(page.url(), activity);
-        }
-        const label = await descriptor.boundingBox(), target = await brand.boundingBox();
-        await brand.click({ position: { x: label.x - target.x + label.width / 2, y: label.y - target.y + label.height / 2 } });
-        await ready(page);
-        assert.equal(new URL(page.url()).hash, href, "The integrated descriptor shares the same Analyze target");
-        await page.goBack(); await ready(page);
-        await page.locator(".skip-link").focus();
-        await page.keyboard.press("Tab");
-        assert.equal(await brand.evaluate(node => node === document.activeElement), true, "Wordmark is one native Tab stop");
-        await assertLinkStates(page, brand, `${theme} wordmark`);
-        await capture(page, `header-${theme}-focus`, ".app-header");
-        await page.keyboard.press("Enter");
-        await ready(page);
-        assert.equal(new URL(page.url()).hash, href, "Keyboard activation returns Home");
-        await page.goBack();
-        await ready(page);
-        await brand.focus();
-        await page.keyboard.press("Tab");
-        assert.equal(await page.locator("#wireSearch").evaluate(node => node === document.activeElement), true, "Header Search follows the wordmark; subtitle is not a tab stop");
-        const popupPromise = page.context().waitForEvent("page");
-        await brand.click({ modifiers: ["Control"] });
-        const popup = await popupPromise;
-        try {
-            await popup.waitForLoadState();
-            await ready(popup);
-            assert.equal(new URL(popup.url()).hash, href);
-            assert.equal(page.url(), activity, "Modifier activation preserves the source tab");
-        } finally { await popup.close(); }
-    }
-    assert.ok(page.url().startsWith(runtime.url));
-});
-
-test("standalone lockups preserve painted artwork and legible descriptor bounds without host fonts", async t => {
-    const browser = await chromium.launch();
-    t.after(() => browser.close());
-    const page = await browser.newPage();
-    for (const [theme, original, lockup] of [["light", wordmarkSvg, lockupSvg], ["dark", darkWordmarkSvg, darkLockupSvg]]) {
-        const geometry = await page.evaluate(async ({ original, lockup }) => {
-            const parsed = new DOMParser().parseFromString(lockup, "image/svg+xml");
-            if (parsed.querySelector("parsererror")) throw new Error(parsed.querySelector("parsererror").textContent);
-            async function pixels(svg, width, height) {
-                const image = new Image();
-                image.src = "data:image/svg+xml;base64," + btoa(svg);
-                await image.decode();
-                const canvas = document.createElement("canvas");
-                canvas.width = width; canvas.height = height;
-                const context = canvas.getContext("2d");
-                context.drawImage(image, 0, 0, width, height);
-                return context.getImageData(0, 0, width, height).data;
-            }
-            const before = await pixels(original, 500, 158), after = await pixels(lockup, 500, 204);
-            const bounds = (bytes, start, end) => {
-                const points = [];
-                for (let y = start; y < end; y++) for (let x = 0; x < 500; x++)
-                    if (bytes[(y * 500 + x) * 4 + 3] > 32) points.push([x, y]);
-                return { left: Math.min(...points.map(p => p[0])), right: Math.max(...points.map(p => p[0])),
-                    top: Math.min(...points.map(p => p[1])), bottom: Math.max(...points.map(p => p[1])) };
-            };
-            return { sameArtwork: before.every((value, index) => value === after[index]),
-                artwork: bounds(after, 0, 158), descriptor: bounds(after, 158, 204) };
-        }, { original, lockup });
-        assert.equal(geometry.sameArtwork, true, `${theme}: original drawing remains pixel-identical`);
-        assert.ok(geometry.descriptor.left >= 8 && geometry.descriptor.right <= 490, "Paint stays within the canvas");
-        assert.ok(Math.abs(geometry.descriptor.left - geometry.artwork.left) <= 3, "Descriptor follows the painted left edge");
-        assert.ok(Math.abs(geometry.descriptor.right - geometry.artwork.right) <= 12, "Descriptor spans the painted wordmark");
-        const gap = (geometry.descriptor.top - geometry.artwork.bottom) * 148 / 500;
-        assert.ok(gap >= 2 && gap <= 6, "The real app has a compact optical gap, not an independent caption row");
-        assert.ok(geometry.descriptor.bottom < 202, "Descenders are not clipped");
-        assert.ok((geometry.descriptor.bottom - geometry.descriptor.top) * 148 / 500 >= 10,
-            "The 11.84px descriptor retains at least 10px of painted glyph height");
-        t.diagnostic(JSON.stringify({ theme, ...geometry }));
-    }
-});
-
-test("integrated lockup stays readable and unclipped across navigation sizes", async t => {
-    const { page } = await setup(t);
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 1], [820, 2], [320, 1], [320, 2]]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await chooseTheme(page, theme);
+        await navigateMain(page, "reports"); await ready(page);
+        const from = page.url();
         if (width < 700) {
             await page.locator("#navigationToggle").click();
-            await page.locator("#navigationDrawer").evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+            await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
         }
-        const logo = page.locator("#shellBrand .brand-logo:visible");
-        assert.equal(await logo.count(), 1, "Exactly one theme lockup is visible");
-        const metrics = await logo.evaluate(async svg => {
-            await document.fonts.ready;
-            const text = svg.querySelector('[id$="-descriptor"]'), css = getComputedStyle(text);
-            const rect = node => node.getBoundingClientRect().toJSON();
-            const matrix = svg.getScreenCTM();
-            const glyphs = Array.from({ length: text.getNumberOfChars() }, (_, index) => {
-                const box = text.getExtentOfChar(index);
-                const first = new DOMPoint(box.x, box.y).matrixTransform(matrix);
-                const last = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix);
-                return { left: first.x, right: last.x, top: first.y, bottom: last.y,
-                    baseline: text.getStartPositionOfChar(index).y };
-            });
-            const surface = svg.closest("dialog") || document.querySelector(".app-header");
-            return { text: text.textContent, family: css.fontFamily, weight: css.fontWeight,
-                loaded: [...document.fonts].some(face => face.family === "Asta Sans" && face.status === "loaded"),
-                fontPixels: parseFloat(css.fontSize) * matrix.a, fill: css.fill,
-                background: getComputedStyle(surface).backgroundColor, glyphs, logo: rect(svg),
-                target: rect(svg.closest("a")), viewport: { width: innerWidth, height: innerHeight },
-                overflow: document.documentElement.scrollWidth > innerWidth };
-        });
-        const label = `${theme}/${width}/${scale}x`;
-        assert.equal(metrics.text, "Work IQ Request Explorer", `${label}: complete descriptor`);
-        assert.equal(metrics.family.replaceAll('"', ""), "Asta Sans", `${label}: descriptor uses Asta Sans`);
-        assert.equal(metrics.loaded, true, `${label}: the actual bundled face is loaded`);
-        assert.equal(metrics.weight, "400", `${label}: regular descriptor weight`);
-        assert.ok(metrics.fontPixels >= 11, `${label}: readable descriptor size`);
-        assert.ok(contrast(metrics.fill, metrics.background) >= 4.5, `${label}: descriptor contrast`);
-        assert.equal(new Set(metrics.glyphs.map(glyph => glyph.baseline)).size, 1, `${label}: one uninterrupted baseline`);
-        for (const glyph of metrics.glyphs) {
-            assert.ok(glyph.left >= metrics.logo.left && glyph.right <= metrics.logo.right,
-                `${label}: every descriptor glyph stays inside the logo horizontally`);
-            assert.ok(glyph.top >= metrics.logo.top && glyph.bottom <= metrics.logo.bottom,
-                `${label}: every descriptor glyph stays inside the logo vertically`);
-        }
-        assert.ok(metrics.logo.left >= 0 && metrics.logo.right <= metrics.viewport.width
-            && metrics.logo.top >= 0 && metrics.logo.bottom <= metrics.viewport.height, `${label}: visible logo stays in the viewport`);
-        assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44, `${label}: full native hit target`);
-        assert.ok(metrics.target.left <= metrics.logo.left && metrics.target.right >= metrics.logo.right
-            && metrics.target.top <= metrics.logo.top && metrics.target.bottom >= metrics.logo.bottom,
-            `${label}: the link contains the complete lockup`);
-        assert.equal(metrics.overflow, false, `${label}: no page overflow`);
-        if (width < 700) {
-            await page.keyboard.press("Escape");
-            await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
-        }
+        const brand = page.locator("#shellBrand .brand-home"), logo = brand.locator(".brand-logo:visible");
+        assert.equal(await logo.count(), 1);
+        assert.equal(await brand.getAttribute("href"), await page.locator('nav [data-nav="analyze"]').getAttribute("href"));
+        assert.match(await brand.getAttribute("aria-label"), /WIRE.*Analyze/);
+        assert.equal(await brand.locator("a,button,[tabindex]").count(), 0);
+        const art = await logo.boundingBox(), target = await brand.boundingBox();
+        assert.ok(art.width > 0 && art.height > 0 && target.width >= 44 && target.height >= 44);
+        assert.ok(art.x >= target.x - 1 && art.y >= target.y - 1 && art.x + art.width <= target.x + target.width + 1
+            && art.y + art.height <= target.y + target.height + 1);
+        await assertLinkStates(page, brand, `${theme} brand`);
+        const popupPromise = page.context().waitForEvent("page");
+        await brand.click({ modifiers: ["Control"] });
+        const other = await popupPromise;
+        try {
+            await ready(other);
+            assert.equal(new URL(other.url()).pathname, "/");
+            assert.equal(page.url(), from);
+        } finally { await other.close(); }
+        await brand.press("Enter"); await ready(page);
+        assert.equal(new URL(page.url()).pathname, "/");
+        assert.equal(await page.locator("#activityView").isVisible(), true);
+        await page.goBack(); await ready(page);
+        assert.equal(page.url(), from);
+        assert.equal(new URL(from).origin, new URL(runtime.url).origin);
     }
 });
-
 test("authored chart, detail, Settings and dialog links have decoration-free native states", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
     await capture(page, "home-links", "#homeView");

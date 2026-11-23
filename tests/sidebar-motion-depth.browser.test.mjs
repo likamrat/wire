@@ -314,7 +314,7 @@ test("unpaused shared motion reverses and replaces content without stale geometr
         await settle(true);
         phase = "both"; document.querySelector("#navigationCollapse").click(); document.querySelector("#closeContextSidebar").click();
         await settle(false);
-        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.documentElement.clientWidth - main.getBoundingClientRect().x,
+        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.body.getBoundingClientRect().right - main.getBoundingClientRect().x,
             mainAnimations: main.getAnimations().length, overflowAnchor: getComputedStyle(main).overflowAnchor };
         return { frames, events, closeState };
     });
@@ -494,7 +494,7 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
             await frame();
             await scheduler.postTask(() => rows.push({ modal: panel.matches(":modal"),
                 columnMoving: main.getAnimations().length, panelMoving: panel.getAnimations().length,
-                mainRight: main.getBoundingClientRect().right, availableRight: document.documentElement.clientWidth }));
+                mainRight: main.getBoundingClientRect().right, availableRight: document.body.getBoundingClientRect().right }));
             if (i > 2 && !panel.getAnimations().length && !document.querySelector("#sidebar").hasAttribute("data-navigation-moving")) break;
         }
         return rows;
