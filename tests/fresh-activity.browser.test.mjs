@@ -76,6 +76,8 @@ test("Analyze Refresh shares the guarded history check and read-only recovery be
     await page.locator("#analyzeResultsSection").focus(); await page.keyboard.press("Tab");
     await expect(page.locator("#openChartReference")).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(page.locator("#analyzeResultScope a:focus")).toContainText("1 Work IQ tool call");
+    await page.keyboard.press("Tab");
     await expect(refresh).toBeFocused();
     await page.keyboard.press("Tab"); await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
     await appendFile(source.file, jsonl([call("two"), complete("two")]));
@@ -1423,12 +1425,14 @@ test("unapproved Refresh reads retained activity and leaves source review as a s
         await page.goto(app.runtime().url); await ready(page);
         await app.check();
         assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Read stored activity");
-        assert.match(page.url(), /#settings/);
+        assert.equal(new URL(page.url()).pathname, "/settings");
+        assert.equal(new URL(page.url()).searchParams.get("section"), "connection");
         assert.equal(await page.locator("#freshStatus").innerText(), "Stored activity refreshed.");
         assert.match(await page.locator("#freshContextMessage").innerText(), /No source history was checked/);
         assert.equal(await page.locator("#refreshBtn").isVisible(), false);
-        assert.match(page.url(), /#settings.*section=connection/);
-        assert.equal(await page.locator("#reviewSource").isVisible(), true);
+        const review = page.locator("#collectionSourceEntry");
+        await expect(review).toBeVisible();
+        await expect(review).toHaveAttribute("href", "/settings?section=source-access&setting=source");
         assert.deepEqual(app.writes, []);
         assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
 });
