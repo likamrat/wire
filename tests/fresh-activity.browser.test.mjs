@@ -53,8 +53,9 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}, met
         await writeFile(file, jsonl([event("session.start", { sessionId: id, version: 1 }), ...events]));
         return { id, file };
     }
-    async function check() {
-        await (await revealStoredRefresh(page)).click();
+    async function check(entry = "settings") {
+        const control = entry === "analyze" ? page.locator("#analyzeRefresh") : await revealStoredRefresh(page);
+        await control.click();
         await page.waitForFunction(() => ["complete", "partial", "error", "unconfirmed"].includes(document.querySelector("#freshActivity").dataset.phase));
         await ready(page);
     }
@@ -1318,28 +1319,31 @@ test("later automatic activity retires the manual result while current gaps rema
     }
 });
 
-test("duplicate aliases and richer API metadata cannot manufacture new Home calls", { timeout: 60000 }, async t => {
+test("Analyze Refresh keeps one call across aliases, its first completion and a conflicting later completion", { timeout: 60000 }, async t => {
     const app = await fixture(t), { page } = app;
+    const check = () => app.check("analyze");
     const invocation = call("stable-call");
-    const source = await app.source([event("user.message", { content: "Synthetic metadata-only change" }), invocation, complete("stable-call")]);
-    await page.goto(app.runtime().url); await ready(page); await app.check();
+    const source = await app.source([event("user.message", { content: "Synthetic metadata-only change" }), invocation]);
+    await page.goto(app.runtime().url); await ready(page); await check();
     const original = await loadBoardState(app.context);
+    assert.ok(!original.evidence[0].toolCalls[0].completionEventId);
     await replaceEvidence(app.context, () => ({ records: [...original.evidence, {
         ...original.evidence[0], scenarioId: "synthetic-legacy-alias", isLegacy: true,
         toolCalls: original.evidence[0].toolCalls.map(call => ({ ...call, reportedOutcome: "failed", toolSucceeded: false })),
     }], importCoverage: original.importCoverage }));
-    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await check();
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     await appendFile(source.file, jsonl([invocation]));
-    await app.check();
+    await check();
     const alias = (await app.runtime().collector.status()).lastCheck;
     assert.deepEqual(alias.changes, { added: 0, updated: 0, items: [] });
     assert.ok(alias.revision >= alias.beforeRevision);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
-    await appendFile(source.file, jsonl([event("tool.execution_complete", { toolCallId: "stable-call", success: true,
-        result: { structuredContent: { results: [{ statusCode: 200, body: { "@odata.nextLink": "https://example.invalid/next" } }] } } })]));
-    await app.check();
+    const firstCompletion = event("tool.execution_complete", { toolCallId: "stable-call", success: true,
+        result: { structuredContent: { results: [{ statusCode: 200, body: { "@odata.nextLink": "https://example.invalid/next" } }] } } });
+    await appendFile(source.file, jsonl([firstCompletion]));
+    await check();
     const status = await app.runtime().collector.status(), state = await loadBoardState(app.context);
     assert.equal(status.lastCheck.changes.added, 0);
     assert.equal(status.lastCheck.changes.updated, 1);
@@ -1350,7 +1354,15 @@ test("duplicate aliases and richer API metadata cannot manufacture new Home call
     assert.equal(await page.locator("#freshContextMessage").isVisible(), false);
     const api = buildActivityAnalytics(state.evidence, { layer: "reported-api", bucket: "month", filters: { scope: "all" } });
     assert.equal(api.rows.length, 1, "New result metadata is committed without adding a tool call");
+    assert.equal(api.rows[0].status, 200);
     assert.equal(api.rows[0].parentCallId, status.lastCheck.changes.items[0].rowId);
+    const accepted = state.evidence.find(record => !record.isLegacy).toolCalls[0];
+    assert.equal(accepted.completionEventId, firstCompletion.id);
+    await appendFile(source.file, jsonl([complete("stable-call", false)]));
+    await check();
+    assert.deepEqual((await app.runtime().collector.status()).lastCheck.changes, { added: 0, updated: 0, items: [] });
+    assert.deepEqual((await loadBoardState(app.context)).evidence.find(record => !record.isLegacy).toolCalls[0], accepted);
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     if (process.env.WORKIQ_FRESH_PROOFS) {
         await mkdir(process.env.WORKIQ_FRESH_PROOFS, { recursive: true });
         await writeFile(path.join(process.env.WORKIQ_FRESH_PROOFS, "alias-and-metadata.json"), JSON.stringify({
@@ -1361,21 +1373,22 @@ test("duplicate aliases and richer API metadata cannot manufacture new Home call
     }
 });
 
-test("partial, bounded and failed checks retain honest coverage and last good Home; stale snapshots cannot complete", { timeout: 90000 }, async t => {
+test("partial, bounded and failed checks retain coverage and the last accepted Analyze view; stale snapshots cannot complete", { timeout: 90000 }, async t => {
         const app = await fixture(t), { page } = app;
+        const check = () => app.check("analyze");
         const source = await app.source([event("user.message", { content: "Synthetic reliable source" }), call("one"), complete("one")]);
-        await page.goto(app.runtime().url); await ready(page); await app.check();
+        await page.goto(app.runtime().url); await ready(page); await check();
         const missing = await app.source();
         await rm(missing.file);
         await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic partially available batch" }), call("two"), complete("two")]));
-        await app.check();
+        await check();
         assert.equal(await page.locator("#activityCount").innerText(), "2");
         assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "partial");
         assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
         await expect(page.locator("#freshCoverageAnnouncement")).toHaveText("GitHub history: 1 Copilot chat unavailable.");
         assert.match(await page.locator("#freshCheckDetails").textContent(), /1 history unavailable/);
         await appendFile(source.file, JSON.stringify(event("assistant.message", { content: "x".repeat(1024 * 1024 + 20) })) + "\n");
-        await app.check();
+        await check();
         assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
         await expect(page.locator("#freshCoverageAnnouncement")).toHaveText("GitHub history: 1 Copilot chat unavailable; 1 Copilot chat incomplete.");
         assert.match(await page.locator("#freshCheckDetails").textContent(), /with limits/);
@@ -1383,7 +1396,7 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         const previous = await page.locator("#chart").innerHTML();
         const previousPercentages = await page.locator("#percentageCharts").innerHTML();
         app.db.exec("PRAGMA user_version=174; ALTER TABLE sessions RENAME COLUMN execution_location TO removed_location");
-        await app.check();
+        await check();
         assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
         assert.match(await page.locator("#freshStatus").innerText(), /format is not supported/);
         assert.match(await page.locator("#freshContextMessage").innerText(), /Unsupported sessions mapping.*174/);
@@ -1394,11 +1407,11 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         app.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
         let oldSnapshot;
         await page.route("**/api/snapshot", async route => { const response = await route.fetch(); oldSnapshot = await response.json(); await route.fulfill({ response }); });
-        await (await revealStoredRefresh(page)).click(); await ready(page);
+        await check();
         await page.unroute("**/api/snapshot");
         await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic withheld snapshot" }), call("three"), complete("three")]));
         await page.route("**/api/snapshot", route => route.fulfill({ json: oldSnapshot }));
-        await app.check();
+        await check();
         assert.equal(await page.locator("#activityCount").innerText(), "2");
         assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
         assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "2");
@@ -1407,13 +1420,13 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         assert.equal((await loadBoardState(app.context)).evidence.flatMap(row => row.toolCalls).length, 3);
         await page.unroute("**/api/snapshot");
         const writeCount = app.writes.length;
-        await (await revealStoredRefresh(page)).click(); await ready(page);
+        await check();
         assert.equal(await page.locator("#activityCount").innerText(), "3");
         assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
         assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "partial");
         assert.equal(app.writes.length, writeCount, "Reload view recovers an apply failure without replaying collection");
-        await page.locator("#settingsStatusLink a").click();
-        assert.match(page.url(), /#collection-status/);
+        await navigateMain(page, "collection-status");
+        assert.equal(new URL(page.url()).pathname, "/collection-status");
         await page.locator(".history-reason>summary").first().click();
         await page.locator(".history-issue").first().waitFor();
         assert.match(await page.locator("#collectionIssuesBody").innerText(), /History file not found \(1\)/);
