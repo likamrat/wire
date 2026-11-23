@@ -93,8 +93,8 @@ test("one minimal card opens the full log with private input owned by its exact 
     await expect(card).not.toContainText("workiq-fetch");
     await expect(card).not.toContainText(/PRIVATE_CALL_ARGUMENT|did not respond in time/);
     const metadataType = await card.evaluate(node => {
-        const time = getComputedStyle(node.querySelector(".request-card-time"));
-        const prompt = getComputedStyle(node.querySelector(".request-card-prompt"));
+        const time = getComputedStyle(node.closest("article").querySelector(".request-card-time"));
+        const prompt = getComputedStyle(node);
         return { size: parseFloat(prompt.fontSize), timeSize: parseFloat(time.fontSize), weight: prompt.fontWeight };
     });
     assert.ok(metadataType.size > metadataType.timeSize);
@@ -104,7 +104,7 @@ test("one minimal card opens the full log with private input owned by its exact 
     await settled(page);
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(6);
     const target = page.locator('[data-tool-call-id="activity-3"]');
-    await expect(target).toBeFocused();
+    await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
     assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
     await expect(target.locator(".call-heading")).toContainText("The tool did not respond in time");
     await expect(target.locator(".call-heading")).not.toContainText("Tool failed");
@@ -124,7 +124,7 @@ test("one minimal card opens the full log with private input owned by its exact 
 test("filtered homepage failure entry is gesture-only and does not override explicit targets or Back", async t => {
     const { page, runtime } = await setup(t);
     await page.goto(runtime.url + "#analyze?tool=workiq-fetch&result=failure"); await ready(page);
-    const card = page.locator(".request-card-open");
+    const card = page.getByRole("link", { name: "1 tool call failed", exact: true });
     await card.focus();
     const origin = (await card.boundingBox()).y;
     await page.keyboard.press("Enter"); await settled(page);
@@ -142,7 +142,7 @@ test("filtered homepage failure entry is gesture-only and does not override expl
     await expect(page.locator("#selectedCall")).toBeFocused();
     await expect(page.locator("#selectedCall")).toContainText("PRIVATE_CALL_ARGUMENT_1");
     await page.goto(runtime.url); await ready(page);
-    await card.click(); await settled(page);
+    await page.locator(".request-card-open").click(); await settled(page);
     await page.reload(); await ready(page); await settled(page);
     await expect(page.locator("#contextSidebarTitle")).toBeFocused();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
@@ -287,7 +287,7 @@ test("changed retained evidence forgets the old private disclosure state", async
 test("forced colors retain keyboard focus and readable failure text without a second list mode", async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ forcedColors: "active" });
-    await page.locator(".request-card-open").focus();
+    await page.getByRole("link", { name: "workiq-retrieve: open call", exact: true }).focus();
     await page.keyboard.press("Enter"); await settled(page);
     const target = page.locator('[data-tool-call-id="activity-3"]');
     await expect(target).toBeFocused();
@@ -326,10 +326,11 @@ test("late entry retains labelled per-call timing, identity and exact target wit
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await page.locator(".request-card-open").click(); await settled(page);
+        await page.getByRole("link", { name: "1 tool call failed", exact: true }).click(); await settled(page);
         const target = page.locator('[data-tool-call-id="activity-26"]');
         await expect(target).toBeFocused();
-        await expect(page.locator("#contextSidebarTitle")).toHaveText("Find the workshop checklist.");
+        await expect(page.locator("#contextSidebar")).toHaveAccessibleName("Interaction");
+        await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText("Find the workshop checklist.");
         await expect(page.locator(".reader-call-row")).toHaveCount(26);
         const box = await page.locator("#contextSidebarBody").evaluate(body => {
             const rect = node => { const box = node.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; };

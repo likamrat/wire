@@ -206,7 +206,7 @@ test("card facts have uniform key and value ink without blank chat rows or detac
     }
 });
 
-test("in-context prompt reading preserves exact copy, touch, focus, selection, Back and source gaps", async t => {
+test("the prompt reader keeps exact text, Copy and keyboard return separate from report selection", async t => {
     const data = records();
     data.find(row => row.scenarioId === "hierarchy-archive").userPrompt = {
         ...data.find(row => row.scenarioId === "hierarchy-archive").userPrompt, status: "partial", text: longPrompt,
@@ -216,22 +216,20 @@ test("in-context prompt reading preserves exact copy, touch, focus, selection, B
         version: 1, reason: "error-code-recorded", code: "E_ACCESSDENIED", messageStatus: "text-excluded", messageSignal: "access-denial",
     };
     const { page } = await setup(t, data, { hasTouch: true });
-    const card = interaction(page, "long"), toggle = card.locator(".full-text-toggle");
+    const card = interaction(page, "long"), open = card.locator(".request-card-open");
     await expect(interaction(page, "retry").locator(".full-text-toggle")).toHaveCount(0);
-    await expect(interaction(page, "missing")).toContainText("Prompt not available");
+    await expect(interaction(page, "missing")).toContainText("Prompt text unavailable");
     await expect(interaction(page, "missing")).not.toContainText("DO_NOT_RENDER_UNAVAILABLE_TEXT");
     await expect(interaction(page, "missing").locator(".full-text-toggle,.ux-copy")).toHaveCount(0);
-    await card.locator("input").check();
     const route = page.url();
-    await toggle.focus(); await page.keyboard.press("Enter");
-    await expect(toggle).toHaveText("Read less"); await expect(toggle).toBeFocused();
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    assert.equal(await card.locator("pre").textContent(), longPrompt);
-    assert.equal(page.url(), route);
-    await expect(card.locator("input")).toBeChecked();
-    await card.getByRole("button", { name: "Copy prompt", exact: true }).tap();
+    const reader = page.locator('#contextSidebar [data-reader-section="prompt"]');
+    await open.press("Enter");
+    const original = reader.locator(".full-text-content");
+    await expect(original).toBeFocused();
+    assert.equal(await original.textContent(), longPrompt);
+    await reader.getByRole("button", { name: "Copy prompt", exact: true }).tap();
     assert.equal(await page.evaluate(() => window.copiedHierarchyText), longPrompt);
-    const selected = await card.locator("pre").evaluate(node => {
+    const selected = await original.evaluate(node => {
         const range = document.createRange(); range.setStart(node.firstChild, 5); range.setEnd(node.firstChild, 44);
         const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
         return selection.toString();
@@ -240,76 +238,64 @@ test("in-context prompt reading preserves exact copy, touch, focus, selection, B
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await refresh; await ready(page);
     assert.equal(await page.evaluate(() => getSelection().toString()), selected, "Exact-text selection survives refresh");
-    await card.locator(".request-link").click(); await ready(page);
-    await page.locator("#contextBack").click(); await ready(page);
-    await expect(card.locator(".request-link")).toBeFocused();
-    await expect(toggle).toHaveText("Read less"); await expect(card.locator("input")).toBeChecked();
+    const toggle = reader.getByRole("button", { name: "Human prompt", exact: true });
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await toggle.focus(); await page.keyboard.press("Space");
-    await expect(toggle).toHaveText("Read more"); await expect(toggle).toBeFocused();
-    await expect(card.locator(".full-text-body")).toHaveCount(0);
-    assert.equal(await toggle.evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
-    await toggle.tap(); await expect(toggle).toHaveText("Read less");
-    await toggle.tap(); await expect(toggle).toHaveText("Read more");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false"); await expect(toggle).toBeFocused();
+    await toggle.tap(); await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await page.goBack(); await expect(open).toBeFocused();
+    assert.equal(page.url(), route);
+    await expect(card.getByRole("button", { name: "Add to report", exact: true })).toBeVisible();
     const partial = interaction(page, "archive");
     for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 });
-        await expect(partial).toContainText("Only part of the original was recorded. Missing text is not reconstructed.");
-        await partial.locator(".full-text-toggle").tap();
-        await expect(partial.locator(".full-text-availability")).toBeVisible();
-        assert.equal(await partial.locator("pre").textContent(), longPrompt);
-        await partial.locator(".full-text-toggle").tap();
+        await expect(partial).toContainText("Part of the prompt was retained.");
+        const link = partial.locator(".request-card-open");
+        await link.tap();
+        assert.equal(await original.textContent(), longPrompt);
+        await page.goBack(); await expect(link).toBeFocused();
     }
-    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
-    const failure = page.locator(".matched-action").filter({ has: page.locator("[data-outcome=failure]") });
-    await expect(failure).toContainText("Tool error mentions access denial");
-    await expect(failure).toContainText("Tool error: E_ACCESSDENIED");
-    if (proofs) await shot(page, "compact-failure-with-access-denial", failure);
+    await interaction(page, "multiple").getByRole("link", { name: "1 tool call failed", exact: true }).click();
+    const failed = page.locator('[data-tool-call-id="multiple-1"]');
+    await expect(failed).toBeFocused();
+    await expect(failed).toContainText("Access was denied");
+    await page.getByRole("button", { name: "Source details", exact: true }).click();
+    await page.getByRole("button", { name: "Record identifiers", exact: true }).click();
+    const code = page.locator(".reader-identifiers").getByText("Call #2 error code", { exact: true });
+    await expect(code.locator("..").locator("dd")).toHaveText("E_ACCESSDENIED");
 });
 
-test("prompt emphasis fits the whole card's reading rhythm in both views", async t => {
-    const { page } = await setup(t), measurements = [];
+test("Analyze prompt links use regular Asta Sans and wrap within the card", async t => {
+    const { page, data } = await setup(t);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        for (const mode of ["interactions", "calls"]) {
-            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
-            for (const id of ["retry", "archive", "multiple", "missing", "long"]) {
-                const card = mode === "interactions" ? interaction(page, id) : callCard(page, id);
-                await card.evaluate(node => scrollBy(0, node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
-                await frames(page);
-                const prompt = card.locator(".full-text-preview");
-                const measured = await prompt.evaluate(node => {
-                    const css = getComputedStyle(node), rect = node.getBoundingClientRect();
-                    const card = node.closest(".activity-card"), cardBox = card.getBoundingClientRect();
-                    const range = document.createRange(); range.selectNodeContents(node);
-                    return { text: node.textContent, font: css.fontFamily, fontSize: css.fontSize, lineHeight: css.lineHeight,
-                        weight: css.fontWeight, style: css.fontStyle, textWidth: rect.width, height: rect.height,
-                        cardHeight: cardBox.height, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                        metadataSize: getComputedStyle(card.querySelector("dd")).fontSize,
-                        clipped: [...range.getClientRects()].some(box => box.left < rect.left - 1 || box.right > rect.right + 1 || box.bottom > rect.bottom + 1) };
-                });
-
-                const { root } = await cdp.send("DOM.getDocument");
-                const selector = mode === "interactions" ? `[data-view-key="request:hierarchy-${id}"] .full-text-preview`
-                    : `.matched-action:has(.request-link[href*="hierarchy-${id}"]) .full-text-preview`;
-                const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
-                const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
-                measurements.push({ theme, width, mode, id, ...measured, fonts });
-                assert.equal(measured.style, "italic");
-                assert.equal(measured.weight, "600", "Prompt emphasis uses the existing strong weight, not a heavier heading weight");
-                assert.equal(measured.fontSize, measured.metadataSize, "Prompt stays at the established body size, not a display heading");
-                assert.ok(fonts.some(font => /Asta/i.test(font.familyName) && font.glyphCount > 0), "Actual prompt glyphs use Asta, not only a declared font stack");
-                assert.equal(measured.clipped, false); assert.ok(measured.overflow <= 1);
-                if (proofs) {
-                    await mkdir(proofs, { recursive: true });
-                    await page.screenshot({ path: path.join(proofs, `prompt-${mode}-${id}-${theme}-${width}.png`) });
-                }
-            }
+        await page.evaluate(() => document.fonts.ready);
+        for (const id of ["retry", "archive", "multiple", "missing", "long"]) {
+            const selector = `[data-view-key="request:hierarchy-${id}"] .card-excerpt`;
+            const excerpt = page.locator(selector), text = data.find(row => row.scenarioId === "hierarchy-" + id).userPrompt.text;
+            assert.equal(await excerpt.textContent(), text);
+            const measured = await excerpt.evaluate(node => {
+                const css = getComputedStyle(node), card = node.closest("article"), box = card.getBoundingClientRect();
+                const range = document.createRange(); range.selectNodeContents(node);
+                return { weight: css.fontWeight, style: css.fontStyle, size: parseFloat(css.fontSize),
+                    timeSize: parseFloat(getComputedStyle(card.querySelector(".request-card-time")).fontSize),
+                    overflowsCard: [...range.getClientRects()].some(rect => rect.left < box.left - 1 || rect.right > box.right + 1),
+                    clippedVertically: node.scrollHeight > node.clientHeight + 1 };
+            });
+            assert.equal(measured.style, "normal"); assert.equal(measured.weight, "400");
+            assert.ok(measured.size > measured.timeSize);
+            assert.equal(measured.overflowsCard, false);
+            if (id === "long") assert.equal(measured.clippedVertically, true, "A long original stays bounded in the list");
+            const { root } = await cdp.send("DOM.getDocument");
+            const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+            const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+            assert.ok(fonts.some(font => /Asta/i.test(font.familyName) && font.glyphCount > 0));
         }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     }
     await cdp.detach();
-    if (proofs) await writeFile(path.join(proofs, "prompt-rhythm.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("compact author and category help stays aligned, keyboard reachable and separate from other actions", async t => {
