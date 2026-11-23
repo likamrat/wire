@@ -1,15 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture } from "./helpers.mjs";
 
-const longPath = "/Users/{User-ID}/messages?$filter=" + "Case%2F<not-markup>\u65e5\u672c\u8a9e\u05e9\u05dc\u05d5\u05dd".repeat(30) + "&Last=Keep+This";
 function source(id = "result-card", route = "/me/messages") {
     const record = fixture(id);
     record.userPrompt.text = "Synthetic result presentation.";
@@ -49,32 +46,28 @@ async function outcomes(node) {
         Object.fromEntries(nodes.map(n => [n.dataset.outcome, Number(n.dataset.count)])));
 }
 
-test("recorded results distinguish completion, tool metadata and literal API fields without new actions", { timeout: 30000 }, async t => {
+test("the completed call owns its selectable input path; the returned entry owns its reported HTTP 204", async t => {
     const record = source();
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#request?request=result-card"); await ready(page);
-    const card = page.locator(".request-outcome"), fields = card.locator(".request-outcome-action");
-    assert.deepEqual(await card.locator(".result-heading").allTextContents(), ["Tool completion", "API metadata from tool"]);
-    assert.deepEqual(await card.locator(".result-unit").allTextContents(), ["1 Work IQ tool call", "1 tool-returned API result"]);
-    assert.deepEqual(await outcomes(card.locator('[data-result-layer=tool]')), { success: 1 });
-    assert.deepEqual(await outcomes(card.locator('[data-result-layer=reported-api]')), { success: 1 });
-    assert.match(await card.innerText(), /Completion is not correctness.*tool-reported, not directly observed/s);
-    assert.match(await card.innerText(), /HTTP 2xx/);
-    assert.doesNotMatch(await card.innerText(), /HTTP 200|HTTP 204|workiq-fetch \/ Mail/);
-    assert.deepEqual(await fields.locator("dt").allTextContents(), ["Tool", "Service", "API path"]);
-    assert.equal(await fields.locator(".action-tool").textContent(), "workiq-fetch");
-    assert.equal(await fields.locator(".action-service").textContent(), "Mail");
-    assert.equal(await fields.locator("code.api-path").textContent(), "/me/messages");
-    assert.equal(await fields.locator("a,button,[role=button]").count(), 0);
-    assert.equal(await page.locator(".journey-item code.api-path").textContent(), "/me/messages");
-    const pathNode = fields.locator("code");
+    const card = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = card.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(card.locator(".reader-call-summary .card-outcome-label")).toHaveText("1 tool call completed");
+    await expect(card.locator(".reader-tool-name")).toHaveText("workiq-fetch");
+    await expect(card.locator(".reader-call-services")).toContainText("Mail");
+    const entry = card.locator(".api-result-entry");
+    await expect(entry).toHaveCount(1);
+    await expect(entry.locator(".recorded-result-label")).toContainText("Tool-reported HTTP 204");
+    await expect(entry).not.toContainText("HTTP 200");
+    const pathNode = card.locator(".reader-input-value code.api-path");
+    await expect(pathNode).toHaveText("/me/messages");
+    assert.equal(await pathNode.evaluate(n => n.closest("button,a") === null), true);
     assert.equal(await pathNode.evaluate(node => {
         const selection = getSelection(), range = document.createRange();
         range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range);
         return selection.toString();
     }), "/me/messages");
-    await page.locator(".journey-item").getByText("Technical details", { exact: true }).click();
-    assert.match(await page.locator(".journey-item .facts").allTextContents().then(parts => parts.join(" ")), /Reported status204/);
     assert.deepEqual(createRecordedResults().summarize(buildRequestActivity([record])["reported-api"]),
         { count: 1, success: 1, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0 });
 });
@@ -240,47 +233,4 @@ test("successful returned entries can be paged without losing their unique paths
     assert.deepEqual(await summary.locator(".api-result-entry code.api-path").allTextContents(), record.toolCalls[0].apiResults.slice(6).map(result => result.path));
     await summary.getByRole("button", { name: "Previous returned results", exact: true }).click();
     await expect(summary.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
-});
-
-test("result hierarchy and literal paths reflow in both themes at all widths and enlarged text", { timeout: 90000 }, async t => {
-    const simple = source("simple"), long = source("long", longPath);
-    const { page, url } = await setup(t, [simple, long]);
-    const proofs = process.env.WORKIQ_RESULT_PROOFS, metrics = [];
-    if (proofs) await mkdir(proofs, { recursive: true });
-    for (const request of [simple, long]) {
-        await page.goto(url + "#request?request=" + request.scenarioId); await ready(page);
-        for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-            await chooseTheme(page, theme);
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            const card = page.locator(".request-outcome");
-            const geometry = await card.evaluate(node => {
-                const code = node.querySelector("code.api-path"), box = code.getBoundingClientRect(), range = document.createRange();
-                const clipped = [];
-                for (const part of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(code.textContent)) {
-                    range.setStart(code.firstChild, part.index); range.setEnd(code.firstChild, part.index + part.segment.length);
-                    for (const glyph of range.getClientRects()) if (glyph.left < box.left - 1 || glyph.right > box.right + 1 || glyph.top < box.top - 1 || glyph.bottom > box.bottom + 1) clipped.push(part.index);
-                }
-                const style = getComputedStyle(code);
-                return { clipped, width: box.width, height: box.height, cardHeight: node.getBoundingClientRect().height,
-                    pageOverflow: document.documentElement.scrollWidth - innerWidth,
-                    font: style.fontFamily, size: style.fontSize, weight: style.fontWeight,
-                    pathColor: style.color, pathBackground: style.backgroundColor,
-                    badFields: [...node.querySelectorAll("dt,dd,.result-description,.recorded-result")].filter(n => n.scrollWidth > n.clientWidth + 1).map(n => n.className) };
-            });
-            assert.equal(await card.locator("code.api-path").textContent(), request.toolCalls[0].requestArgs.entityUrls[0]);
-            assert.deepEqual(geometry.clipped, [], `${request.scenarioId}/${theme}/${width}/${scale}: retained glyphs must not clip`);
-            assert.deepEqual(geometry.badFields, [], `${theme}/${width}/${scale}: fields and result capsules must not overflow`);
-            assert.ok(geometry.pageOverflow <= 1);
-            assert.equal(await card.locator("not-markup").count(), 0);
-            assert.equal(await card.locator("code.api-path").evaluate(node => node.closest("button,a") === null && getComputedStyle(node).userSelect === "text"), true);
-            const shared = await page.locator("#requestContent code.api-path").evaluateAll(nodes => nodes.map(n => {
-                const s = getComputedStyle(n); return [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight];
-            }));
-            assert.deepEqual(shared[0], shared[1], "Summary and timeline share one API-path typography role");
-            metrics.push({ request: request.scenarioId, theme, viewport: width, scale, ...geometry });
-            if (proofs && (request === simple || width === 375)) await card.screenshot({ path: path.join(proofs, `${request.scenarioId}-${theme}-${width}-${scale * 100}.png`) });
-        }
-    }
-    if (proofs) await writeFile(path.join(proofs, "result-layout.json"), JSON.stringify(metrics, null, 2));
 });

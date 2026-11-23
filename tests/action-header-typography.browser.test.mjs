@@ -39,7 +39,10 @@ async function measure(page) {
         const body = document.querySelector("#contextSidebarBody");
         const paths = [...activity.querySelectorAll("code.api-path")].filter(n => n.checkVisibility()).map(n => {
             const css = getComputedStyle(n);
-            return { text: n.textContent, wrapped: n.scrollWidth <= n.clientWidth + 1,
+            const clip = body.getBoundingClientRect(), range = document.createRange();
+            range.selectNodeContents(n);
+            const inside = [...range.getClientRects()].every(rect => rect.left >= clip.left - 1 && rect.right <= clip.right + 1);
+            return { text: n.textContent, wrapped: inside && n.scrollWidth <= n.clientWidth + 1,
                 role: Object.fromEntries(["fontFamily","fontSize","fontWeight","fontVariantLigatures","whiteSpace",
                     "overflowWrap","userSelect","backgroundColor","padding"].map(p => [p, css[p]])) };
         });
