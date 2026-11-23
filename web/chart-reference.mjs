@@ -590,7 +590,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             else data.append(el("p", context.unavailableReason, "notice"));
         }
     }
-    function sync({ view = "closed", topic = state.value().topic, restoreFocus = false, restoreQuery } = {}) {
+    function sync({ view = "closed", topic = state.value().topic, restoreFocus = false, restoreQuery, keepSearchFocus = false } = {}) {
         if (view === "closed") {
             if (contextToken !== null && !currentPublication(contextToken)) { withdrawAccess(); return false; }
             const token = contextToken;
@@ -661,13 +661,18 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             host.hidden = false;
             watchSize(token);
             if (context.mode === "comparison") root.showModal();
+            else if (keepSearchFocus) {
+                // Restoring a nonmodal Guide after Search completes must not run dialog.show()'s focusing steps.
+                returnY = doc.defaultView.scrollY;
+                root.open = true;
+            }
             else {
                 returnY = doc.defaultView.scrollY; root.show();
                 if (onAnalyzeExit) doc.defaultView.scrollTo(0, 0); else root.scrollIntoView({ block: "start" });
             }
             if (!currentView(token) || !root.open) return false;
             trigger.setAttribute("aria-expanded", "true");
-            (context.mode === "analyze" && onAnalyzeExit ? trigger : $("chartReferenceTitle")).focus({ preventScroll: true });
+            if (!keepSearchFocus) (context.mode === "analyze" && onAnalyzeExit ? trigger : $("chartReferenceTitle")).focus({ preventScroll: true });
             if (context.mode === "comparison") move(true);
         } else if (reopening) {
             move(true);
@@ -804,7 +809,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     return {
         open: topic => sync({ view: "guide", topic }),
-        openAnalyze: (start, topic) => sync({ view: "guide", topic: topics.some(([id]) => id === topic) ? topic : start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
+        openAnalyze: (start, topic, keepSearchFocus = false) => sync({ view: "guide", keepSearchFocus,
+            topic: topics.some(([id]) => id === topic) ? topic : start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
         close: requestClose,
         leave: () => sync({ view: "closed" }),
         refresh: () => {

@@ -61,6 +61,12 @@ async function openOutcomeGuide(page) {
     await page.locator("#openChartReference").click();
 }
 
+async function expectSearchMembership(page) {
+    await expect(page.locator("#activityList .request-row")).toHaveCount(1);
+    await expect(page.locator("#activityList .request-row")).toHaveAttribute("data-view-key", "request:search-0");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
+}
+
 test("the single reference entry opens the native guide without a read and preserves applicability", { timeout: 30000 }, async t => {
     const { page, snapshots } = await setup(t);
     await expect(page.locator("#openChartReference")).toHaveCount(1);
@@ -354,7 +360,7 @@ test("newer reading input cancels a guide Back restoration awaiting private Sear
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await page.locator("#wireSearch").focus();
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expectSearchMembership(page);
     await page.locator("#wireSearch").press("Escape");
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
@@ -370,8 +376,8 @@ test("newer reading input cancels a guide Back restoration awaiting private Sear
         await arrived;
         await page.locator("#wireSearch").click();
     } finally { release(); }
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
-    await expect(page.locator("#meaning")).not.toBeVisible();
+    await expectSearchMembership(page);
+    await expect(page.locator("#analyzeReferenceEntry [aria-current=page]")).toHaveAttribute("id", "openChartReference");
     await expect(page.locator("#wireSearch")).toBeFocused();
 });
 

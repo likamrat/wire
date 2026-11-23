@@ -4658,7 +4658,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const [id, current] of [["analyzeResultsSection", !guide], ["openChartReference", guide]]) {
             if (current) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
         }
-        if (guide && chartReferenceUI.value().view === "closed" && $("workspace").checkVisibility()) chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"), route.guideTopic);
+        if (guide && chartReferenceUI.value().view === "closed" && $("workspace").checkVisibility())
+            chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"), route.guideTopic, $("wireSearchHome").contains(document.activeElement));
         else if (guide || route.view === "analyze" && route.compare) chartReferenceUI.refresh();
         else chartReferenceUI.leave();
     }
