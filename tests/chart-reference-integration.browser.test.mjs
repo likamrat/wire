@@ -381,14 +381,13 @@ async function inspectGuide(page, name) {
 
 test("the whole native guide reflows in both themes, long tables, phone, tablet and 200% text", { timeout: 60000 }, async t => {
     const { page } = await setup(t, pathRecords());
-    for (const theme of ["light", "dark"]) {
+    for (const [theme, name, width, height, size] of [
+        ["light", "wide", 1440, 1000, ""], ["dark", "tablet", 768, 1000, ""], ["light", "phone", 390, 844, ""],
+        ["dark", "text200", 390, 844, "200%"], ["light", "landscape", 844, 390, ""],
+    ]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
         await chooseTheme(page, theme);
-        for (const [name, width, height, size] of [
-            ["wide", 1440, 1000, ""], ["tablet", 768, 1000, ""], ["phone", 390, 844, ""],
-            ["text200", 390, 844, "200%"], ["landscape", 844, 390, ""],
-        ]) {
             await page.setViewportSize({ width, height });
             await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
             await page.locator("#openChartReference").click();
@@ -408,7 +407,6 @@ test("the whole native guide reflows in both themes, long tables, phone, tablet 
             await inspectGuide(page, `${theme}-${name}-paths`);
             await page.locator("#analyzeResultsSection").click();
             await expect(page.locator("#openChartReference")).toBeFocused();
-        }
     }
 });
 

@@ -398,14 +398,13 @@ test("whole category view and detail explain remaining service evidence without 
     assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No matching activity/);
 });
 
-test("new readable report retains the neutral evidence reasons and safe shared-file paths", { timeout: 30000 }, async t => {
+test("readable HTML reports show service coverage and masked file paths without page overflow", async t => {
     const record = serviceEvidenceFixture(); record.toolCalls.splice(4, 1);
     const bundle = await buildSanitizedBundle([record], "e".repeat(64), { formats: ["html"], promptMode: "none" });
     const browser = await chromium.launch(); t.after(() => browser.close());
     const page = await browser.newPage({ reducedMotion: "reduce" });
     await page.setContent(bundle.files["product-report.html"]);
-    assert.match(await page.locator(".service-glossary").innerText(), /Service not shown/);
-    assert.match(await page.locator("#operations").innerText(), /Its record does not identify a service or API path/);
+    await expect(page.locator("main")).toContainText("2 calls with missing or partial service details");
     assert.match(await page.locator("#operations").innerText(), /\/shares\/\{id\}\/driveItem/);
     assert.doesNotMatch(await page.locator("main").innerText(), /INVENTED-PRIVATE|ANOTHER-INVENTED|INVENTED-SCHEMA/);
     for (const width of [1280, 375]) {
