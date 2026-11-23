@@ -6050,6 +6050,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function activityIdentities(rows, layer, { includeTools = true, inspectGap, inspectTool } = {}) {
         const group = el("dl", "card-identities"), tools = new Map(), targets = new Map(), operations = new Map(), gaps = new Map();
+        function recordToolOperation(row, id, label) {
+            if (!operations.has(row.tool)) operations.set(row.tool, { id, label, tool: row.tool,
+                operationRole: ux.operations.toolRole(row.tool), description: categories.operation(row.tool)?.description, rows: [] });
+            operations.get(row.tool).rows.push(row);
+        }
         const field = (name, values) => {
             if (!values.length) return;
             const line = el("div", "card-identity-field"), items = el("dd", "card-identity-values");
@@ -6065,11 +6070,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (id === "Unknown") continue;
                 if (id === "Discovery" || association?.basis === "tool-purpose" && id === "Search") {
                     const title = categories.operation(row.tool)?.label ?? (id === "Search" ? "Search requested" : serviceLabel(id));
-                    operations.set(title, { id, label: title, operationRole: ux.operations.toolRole(row.tool) });
+                    recordToolOperation(row, id, title);
                 } else targets.set(id, describeService(id));
             }
             if (association?.status === "not-applicable" && categories.operation(row.tool))
-                operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label, operationRole: ux.operations.toolRole(row.tool) });
+                recordToolOperation(row, "Discovery", categories.operation(row.tool).label);
             for (const op of ux.operations.pathOperations(row, layer)) {
                 if (!operations.has(op.operationRole)) operations.set(op.operationRole, { id:"Unknown", ...op, rows:[] });
                 operations.get(op.operationRole).rows.push(row);
@@ -6182,7 +6187,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         function inspectGap(entry, cue) {
             const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
                 workspaceState.evidence.scenarios, entry.rows, { ...target, layer }, workspaceState.evidence.revision,
-                row => entry.reason ? row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason)
+                row => entry.tool ? (row.tool ?? sourceCallFor(row)?.tool) === entry.tool
+                    : entry.reason ? row.serviceAssociation?.gaps.some(gap => gap.reason === entry.reason)
                     : ux.operations.pathOperations(row, layer).some(op => op.operationRole === entry.operationRole));
             if (!exact) return cue;
             const link = open("", "record", exact, "card-evidence-link card-gap-link");

@@ -51,7 +51,7 @@ export function createCallInvestigation(compareEntries) {
             const target = { ...route, call: row.id };
             const resolved = resolve(activity, records, target, revision);
             // Missing ownership cannot be repaired by selecting a neighboring call.
-            if (resolved.status !== "available") return target;
+            if (resolved.status !== "available") return null;
             if (!qualifies(resolved.row)) continue;
             const source = records.find(record => record.scenarioId === route.request);
             candidates.push({ target, at: resolved.source.startedAt, index: source.recordKind === "native-conversation"

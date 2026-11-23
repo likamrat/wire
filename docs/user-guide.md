@@ -143,7 +143,9 @@ recorded path was `/businessapps/me`; WIRE cannot identify the app. Each row
 opens its matching records. A call with several targets can appear in more
 than one row.
 On an interaction card, an operation or service detail with a right arrow
-opens the matching call. **Exchange ID conversion** identifies a request to
+opens the matching call. **API discovery**, for example, opens the call that
+looked for available paths, not a later call that fetched data. Without a
+matching retained call, the label has no link. **Exchange ID conversion** identifies a request to
 convert item IDs; it does not identify the mailbox item. If several calls match,
 the link says **first of N calls**.
 The **tool-call count** opens the whole interaction. Expand a numbered call

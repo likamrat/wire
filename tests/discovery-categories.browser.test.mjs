@@ -10,6 +10,46 @@ import { discoveryFixture } from "./discovery-fixtures.mjs";
 import { privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_DISCOVERY_PROOFS;
+test("card operations open the matching recorded call and return to the operation link", async t => {
+    const mixed = discoveryFixture(), repeated = structuredClone(mixed), unavailable = structuredClone(mixed);
+    const [api, schema, agents, , retrieval, fetch] = mixed.toolCalls;
+    mixed.toolCalls = [fetch, api, schema, agents, retrieval];
+    repeated.scenarioId = "repeated-paths"; repeated.sourceSessionId = "other-chat";
+    repeated.toolCalls = [fetch, ...[3, 1, 2].map(i => ({ ...api, toolCallId: `paths-${i}`, startEventId: `paths-start-${i}`,
+        startedAt: `2026-10-01T00:00:0${i}Z` }))];
+    unavailable.scenarioId = "missing-owner"; unavailable.sourceSessionId = "missing-chat"; unavailable.toolCalls = [schema];
+    const { context } = await privateFixture(t, [mixed, repeated, unavailable]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
+    const browser = await chromium.launch(); t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ reducedMotion: "reduce" });
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), snapshot = await response.json();
+        snapshot.requestActivity.tool = snapshot.requestActivity.tool.filter(r => r.scenarioId !== unavailable.scenarioId);
+        await route.fulfill({ response, json: snapshot });
+    });
+    await page.goto(runtime.url); await ready(page);
+    const operations = record => page.locator(`article[data-view-key="request:${record.scenarioId}"] .card-identity-field`)
+        .filter({ has: page.locator("dt", { hasText: /^Operations?$/ }) });
+    for (const [record, name, id, keyboard] of [
+        [mixed, "API discovery: open call", api.toolCallId, true],
+        [mixed, "Schema lookup: open call", schema.toolCallId, false],
+        [mixed, "Agent discovery: open call", agents.toolCallId, true],
+        [mixed, "Search requested: open call", retrieval.toolCallId, false],
+        [repeated, "API discovery: open first of 3 calls", "paths-1", true],
+    ]) {
+        const link = operations(record).getByRole("link", { name, exact: true });
+        await expect(link).toBeVisible();
+        if (record === repeated) await expect(link).toContainText("first of 3 calls");
+        if (keyboard) await link.press("Enter"); else await link.click();
+        await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", `request:${record.scenarioId}`);
+        await expect(page.locator(`[data-tool-call-id="${id}"]`)).toBeFocused();
+        if (keyboard) await page.goBack(); else await page.locator("#closeContextSidebar").click();
+        await expect(link).toBeFocused();
+    }
+    await expect(operations(unavailable)).toHaveText(/Schema lookup/);
+    await expect(operations(unavailable).getByRole("link")).toHaveCount(0);
+});
+
 async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
     const error = await page.locator("#message:is(.error,.stale):visible").allTextContents();
