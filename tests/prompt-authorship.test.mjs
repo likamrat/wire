@@ -707,10 +707,13 @@ test("metadata-only merges preserve optional field presence, call ordering and u
 });
 
 test("author corrections still merge explicit empty Graph and genuinely new Graph, tool, model and timing facts", () => {
+    const start = { toolCallId: "invented-call", order: 1, tool: "workiq-retrieve",
+        startEventId: "invented-start", startedAt: "2026-10-06T12:00:00.000Z", requestArgs: { query: "Invented query" },
+        reportedOutcome: "unknown", toolSucceeded: null, apiResults: [] };
     const before = { scenarioId: "invented-row", sourceSessionId: "invented-source",
         userPrompt: { text: "Invented retained message", sourceEventId: "invented-prompt", sourceTimestamp: "2026-10-06T12:00:00Z",
             status: "full", authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 },
-        toolCalls: [{ toolCallId: "invented-call", order: 1 }],
+        toolCalls: [start],
         originalModelEvidence: { version: 1, sourceSessionId: "invented-source", promptEventId: "invented-prompt",
             promptMessageId: "invented-message", partial: true, ambiguous: false, responses: [] } };
     const userPrompt = { ...before.userPrompt, authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: 5 };
@@ -720,7 +723,8 @@ test("author corrections still merge explicit empty Graph and genuinely new Grap
     assert.notEqual(evaluationRecordFingerprint(explicitEmpty), evaluationRecordFingerprint(before),
         "Actually recorded empty Graph remains distinct from absent Graph; the fingerprint contract is unchanged");
     const incoming = { ...before, userPrompt,
-        toolCalls: [{ toolCallId: "invented-call", order: 1, completionEventId: "invented-completion", durationMs: 100 },
+        toolCalls: [{ ...start, completionEventId: "invented-completion", completedAt: "2026-10-06T12:00:00.100Z",
+            durationMs: 100, reportedOutcome: "succeeded", toolSucceeded: true },
             { toolCallId: "invented-later-call", order: 2 }],
         graphActivities: [{ activityId: "invented-graph", toolCallId: "invented-graph-call", httpStatus: 200 }],
         originalModelEvidence: { ...before.originalModelEvidence, partial: false, responses: [
@@ -736,6 +740,51 @@ test("author corrections still merge explicit empty Graph and genuinely new Grap
     assert.deepEqual(after.originalModelEvidence.responses, incoming.originalModelEvidence.responses);
     assert.deepEqual(after.responseTiming, incoming.responseTiming);
     assert.notEqual(evaluationRecordFingerprint(after), evaluationRecordFingerprint(before));
+    for (const [prior, next] of [
+        [{ toolCallId: start.toolCallId, order: 1 }, { toolCallId: start.toolCallId, order: 1, completionEventId: "invented-completion", durationMs: 100 }],
+        [{ ...start, durationMs: 17 }, incoming.toolCalls[0]],
+        [{ ...start, resultEvidence: { version: 1 } }, incoming.toolCalls[0]],
+        [start, { ...incoming.toolCalls[0], startEventId: "another-start" }],
+        [start, { ...incoming.toolCalls[0], requestArgs: { query: "Different request" } }],
+        [start, { ...incoming.toolCalls[0], turnId: "another-turn" }],
+        [start, { ...incoming.toolCalls[0], durationMs: 99 }],
+        [start, { ...incoming.toolCalls[0], reportedOutcome: "failed" }],
+        [incoming.toolCalls[0], { ...incoming.toolCalls[0], completionEventId: "different-completion" }],
+    ]) {
+        const result = mergedRecords([{ ...before, toolCalls: [prior] }], [{ ...incoming, toolCalls: [next] }])[0];
+        assert.deepEqual(result.toolCalls, [prior]);
+        assert.deepEqual(result.userPrompt, userPrompt);
+    }
+});
+
+test("a sparse saved start receives its matching late completion and author through collection and restart", async t => {
+    const app = await promptInstallation(t), human = app.cases.find(item => item.name === "human"), file = app.sourceFiles[1];
+    const rows = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const end = rows.find(row => row.type === "tool.execution_complete" && row.data.toolCallId === human.callId);
+    await writeFile(file, rows.filter(row => row !== end).map(row => JSON.stringify(row) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const state = await loadBoardState(app.context), record = state.evidence.find(row => row.scenarioId === human.scenarioId);
+    const { completionEventId, durationMs, completedAt, ...savedStart } = record.toolCalls[0];
+    assert.deepEqual([completionEventId, durationMs, completedAt], [null, null, null]);
+    await replaceEvidence(app.context, records => ({ records: records.map(row => row.scenarioId === human.scenarioId
+        ? { ...row, toolCalls: [savedStart], userPrompt: { ...row.userPrompt,
+            authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 } } : row), importCoverage: state.importCoverage }));
+    await app.restart();
+    await appendFile(file, JSON.stringify(end) + "\n");
+    const verify = async () => {
+        await app.runtime().collector.collectNow();
+        const saved = await loadBoardState(app.context);
+        const target = saved.evidence.find(row => row.scenarioId === record.scenarioId);
+        assert.deepEqual(target.userPrompt, record.userPrompt);
+        assert.deepEqual(target.toolCalls, [{ ...savedStart, completionEventId: end.id, completedAt: end.timestamp,
+            durationMs: Date.parse(end.timestamp) - Date.parse(savedStart.startedAt), reportedOutcome: "succeeded", toolSucceeded: true,
+            resultEvidence: { version: 1, source: "sdk-result", contentStatus: "not-supplied",
+                applicationError: null, statusCode: null, resultCount: null } }]);
+        assert.equal(saved.evidence.flatMap(row => row.toolCalls).filter(call => call.toolCallId === human.callId).length, 1);
+    };
+    await verify();
+    await app.restart();
+    await verify();
 });
 
 test("qualified mode-free authors survive a stale checkpoint and late activity without another original-event lookup", async t => {

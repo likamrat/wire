@@ -197,7 +197,11 @@ The reader follows this order:
 
 Restart deduplicates canonical identities. A late completion can update an
 unknown result without adding a call; rotation/truncation cannot erase
-retained evidence. The bounded-history index barrier preserves committed
+retained evidence. A saved start may omit empty completion ID, time or duration
+fields. To fill them, the reprojected call must match the same saved prompt and
+start facts, have a recorded outcome, and have consistent completion timing.
+A call ID and order alone do not qualify. This does not widen historical reads.
+The bounded-history index barrier preserves committed
 progress. Source-reader instances use schema 3 to bind the store to its host
 and make older readers refuse rather than ignore that ownership.
 Use a compatible reader when restarting an existing store; do not remove its
