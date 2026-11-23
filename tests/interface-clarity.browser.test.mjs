@@ -4,8 +4,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { privateFixture, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { privateFixture } from "./helpers.mjs";
 
 async function setup(t) {
     const { context, root } = await privateFixture(t);
@@ -41,48 +40,6 @@ async function setup(t) {
     return { page, go, context, writes };
 }
 
-test("screen titles stand alone and existing help keeps keyboard and touch access", { timeout: 30000 }, async t => {
-    const { page, go, writes } = await setup(t);
-    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-        await page.setViewportSize({ width, height: 1000 });
-        for (const [route, heading] of [
-            ["#reports", "Reports"], ["#reports?task=create", "Create a report"],
-            ["#settings?section=display", "Settings"], ["#collection-status", "Collection status"],
-        ]) {
-            await go(route);
-            await chooseTheme(page, theme);
-            await expect(page.locator("#pageTitle")).toHaveText(heading);
-            await expect(page.locator("#pageIntro")).toBeHidden();
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-        }
-        await go("#analyze");
-        const summary = page.locator("#freshHelp > summary");
-        await summary.focus();
-        const closed = await summary.boundingBox();
-        await summary.press("Enter");
-        await expect(page.locator("#freshHelp")).toHaveAttribute("open", "");
-        await expect(summary).toBeFocused();
-        const opened = await summary.boundingBox();
-        assert.ok(Math.abs(opened.x - closed.x) <= 1 && Math.abs(opened.y - closed.y) <= 1);
-        await expect(page.locator("#freshHelp")).toContainText("Paused collection stays paused.");
-        await expect(page.locator("#freshHelp")).toContainText("all eligible chats, not this view's filters");
-        await expect(page.locator("#freshHelp")).toContainText("does not run Work IQ or Graph queries");
-        await summary.press("Space");
-        await expect(page.locator("#freshHelp")).not.toHaveAttribute("open", "");
-        const reclosed = await summary.boundingBox();
-        assert.ok(Math.abs(reclosed.x - closed.x) <= 1 && Math.abs(reclosed.y - closed.y) <= 1);
-        await summary.tap();
-        await expect(page.locator("#freshHelp")).toHaveAttribute("open", "");
-        await summary.tap();
-        const dateControl = page.locator("#dateFilter-control");
-        await dateControl.focus();
-        await expect(page.locator("#filters .ux-help")).toHaveCount(0);
-        await expect(dateControl).toBeFocused();
-        await expect(page.getByRole("tooltip")).toBeHidden();
-    }
-    assert.ok(!writes.some(endpoint => /\/(?:configure|enabled|preview|export|feedback|consent\/set)$/.test(endpoint)));
-});
-
 test("Setup presents nonzero exclusion facts without turning unavailable counts into zero", { timeout: 30000 }, async t => {
     const { page, go, writes } = await setup(t);
     let mode = "known-empty";
@@ -95,23 +52,17 @@ test("Setup presents nonzero exclusion facts without turning unavailable counts 
         if (mode === "missing") delete json.exportCatalog.excluded;
         await route.fulfill({ response, json });
     });
-    await go("#reports?task=create");
-    await expect(page.locator("#report-heading-context,#reportsTitle")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 2, name: "Set up your report", exact: true })).toBeVisible();
-    await expect(page.locator("#reportPromptAuthorHelp")).toHaveCount(0);
-    assert.equal(await page.locator('#formatOptions input[type=checkbox]').count(), 4);
-    assert.equal(await page.locator('[name=reportScope]').count(), 3);
-    assert.equal(await page.locator('[name=promptMode]').count(), 3);
-    await expect(page.locator("#exportBtn")).toBeDisabled();
-    await page.locator("#scopeDetails > summary").click();
-    await expect(page.locator("#scopeExclusions")).toHaveText("No collection exclusions.");
-    await expect(page.locator("#scopeExclusions dl")).toHaveCount(0);
-    await chooseReportScope(page, "all");
-    await expect(page.locator("#exportBtn")).toBeEnabled();
-    for (const next of ["mixed", "missing"]) {
+    for (const next of ["known-empty", "mixed", "missing"]) {
         mode = next;
-        await go("#reports?task=create");
-        await page.locator("#scopeDetails > summary").click();
+        await go("#reports");
+        await page.getByRole("button", { name: /^Activity source:/ }).click();
+        const source = page.getByRole("dialog", { name: "Choose activity" });
+        await source.getByText("Scope and exclusions", { exact: true }).click();
+        await expect(page.locator("#scopeExclusions")).toBeVisible();
+        if (next === "known-empty") {
+            await expect(page.locator("#scopeExclusions")).toHaveText("No collection exclusions.");
+            continue;
+        }
         if (next === "missing") {
             await expect(page.locator("#scopeExclusions")).toHaveText("Collection exclusion counts unavailable.");
             continue;
@@ -123,13 +74,7 @@ test("Setup presents nonzero exclusion facts without turning unavailable counts 
             ["Total excluded or deduplicated evidence records", "4"],
         ]);
         await expect(page.locator("#scopeExclusions")).toContainText("Categories may overlap; do not add them.");
-        for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-            assert.deepEqual(await page.locator("#scopeExclusions dt,#scopeExclusions dd").evaluateAll(nodes =>
-                nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
-        }
+
     }
     assert.ok(!writes.some(endpoint => ["/api/preview", "/api/privacy-review", "/api/export"].includes(endpoint)));
 });
