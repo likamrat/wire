@@ -8,7 +8,8 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
+import { privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters, restoreLegacySearch } from "./helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 
@@ -87,6 +88,17 @@ async function fillPeriods(page, a = ["2026-03-07", "2026-03-07"], b = ["2026-03
     for (const [label, value] of [
         ["Period A from", a[0]], ["Period A to", a[1]], ["Period B from", b[0]], ["Period B to", b[1]],
     ]) await page.getByLabel(label, { exact: true }).fill(value);
+}
+async function compareAnalyzeScope(page) {
+    await enterComparison(page);
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
+    await fillPeriods(calendar);
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await page.locator("#openAnalyzeFilters").click();
+    await page.getByRole("button", { name: "Use Analyze view", exact: true }).click();
+    await closeAnalyzeFilters(page);
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
 }
 async function enterComparison(page, activation = "mouse") {
     await settleLayout(page);
@@ -497,10 +509,10 @@ test("localized period summaries wrap without displacing controls and preset key
 });
 
 test("latency keeps a measured zero and withholds single-sample tails", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
-    await page.locator("#comparePeriods").click(); await fillPeriods(page); await compare(page);
-    await selectActivityOption(page, "outcomeFilter", "failure");
-    await expect(page.locator(".compare-latency tbody tr").first().locator(".compare-number")).toHaveText(["0 ms", "3,000 ms"]);
+    const { page } = await setup(t, "#analyze?result=failure");
+    await compareAnalyzeScope(page);
+    await page.getByRole("button", { name: "Timing", exact: true }).click();
+    await expect(page.locator(".compare-latency tbody tr").first().locator(".compare-number")).toHaveText(["0 ms", "3,000 ms (3 s)"]);
     const tail = page.locator(".compare-latency tbody tr").nth(1);
     await expect(tail.locator(".compare-number")).toHaveText(["Not shown (one timing)", "Not shown (one timing)"]);
     await expect(tail.locator(".compare-better,.compare-worse")).toHaveCount(0);
@@ -509,12 +521,15 @@ test("latency keeps a measured zero and withholds single-sample tails", { timeou
 
 test("comparison record return keeps the exact reading position after the accepted result arrives", { timeout: 30000 }, async t => {
     const { page } = await setup(t, "#analyze?services=Files&includeMissingService=true");
-    await page.locator("#comparePeriods").click();
-    await fillPeriods(page);
-    await compare(page);
-    const disclosure = page.locator('[data-period-side="baseline"] details').filter({ hasText: "Exact matching records" });
-    if (await disclosure.count()) await disclosure.locator("summary").click();
-    const target = page.locator("#periodComparisonResults a:visible").first();
+    await compareAnalyzeScope(page);
+    await expect(page.locator("#comparisonAcceptedScope")).toContainText("Files");
+    await page.locator("#viewComparisonCalls").click();
+    await page.locator("#comparisonRecordsA").click();
+    const links = page.locator("#comparisonExactRecordsA tbody a");
+    const expected = [[0, "period-call-0"], [0, "period-missing"], [1, "period-call-1"], [9, "period-call-9"]]
+        .map(([chat, call]) => `comparison-record-A-call:["period-chat-${chat}","${call}"]`);
+    await expect.poll(() => links.evaluateAll(nodes => nodes.map(node => node.id).sort())).toEqual(expected);
+    const target = page.locator(`[id=${JSON.stringify(expected[2])}]`);
     await target.scrollIntoViewIfNeeded();
     await target.focus();
     const position = () => page.evaluate(() => {
@@ -523,18 +538,25 @@ test("comparison record return keeps the exact reading position after the accept
         const params = new URLSearchParams(query); params.sort();
         return { y: scrollY, focusedHref: href ? `${view}?${params}` : null };
     });
-    const before = await position(), box = await target.boundingBox();
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(page.locator("#contextSidebar")).toBeVisible();
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await settleLayout(page);
-        await page.screenshot({ path: path.join(proof, "record-reader-desktop.png") });
+    const before = await position();
+    for (const exit of ["close", "back"]) {
+        await target.click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        await expect(page.locator('#contextSidebar [data-tool-call-id="period-call-1"]').first()).toBeVisible();
+        if (proof && exit === "close") {
+            await mkdir(proof, { recursive: true });
+            await settleLayout(page);
+            await page.screenshot({ path: path.join(proof, "record-reader-desktop.png") });
+        }
+        if (exit === "close") await page.locator("#closeContextSidebar").click();
+        else await page.goBack();
+        await expect(page.locator("#contextSidebar")).not.toBeVisible();
+        await expect(page.locator("#comparisonRecordsA")).toHaveAttribute("aria-selected", "true");
+        await expect(target).toBeFocused();
+        await expect.poll(position).toEqual(before);
     }
-    await page.locator("#closeContextSidebar").click();
-    await expect(page.locator("#contextSidebar")).not.toBeVisible();
-    await expect(page.locator("#createPeriodReport")).toBeVisible();
-    await expect.poll(position).toEqual(before);
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(page.locator("#createPeriodReport")).toBeEnabled();
 });
 
 test("exact late-record Close and Back preserve the native roster scroller and selected target", { timeout: 30000 }, async t => {
