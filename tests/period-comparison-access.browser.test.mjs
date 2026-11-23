@@ -213,12 +213,24 @@ for (const emptyB of [false, true]) test(`fresh access keeps safe selected B wit
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()), null);
     await expect(page.locator("#periodComparison")).toBeHidden();
     await page.evaluate(() => window.compareAccess.fresh());
-    await page.locator("#viewComparisonCalls").click();
+    // Restore the selected roster using the freshly accepted identity. The
+    // explicit "View baseline calls" button intentionally chooses A if B is empty.
+    assert.equal(await page.evaluate(() => {
+        const owner = window.periodComparisonOwner;
+        return owner.showRecords(owner.acceptedPair())?.tab.id;
+    }), "comparisonRecordsB");
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     assert.equal(await page.evaluate(() => window.compareAccess.calls), before.calls + 1);
     assert.notEqual(await page.evaluate(() => window.periodComparisonOwner.acceptedPair().key), before.key);
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.recordsTarget(window.oldEntry)), null);
-    if (emptyB) await expect(page.locator("#comparisonExactRecordsB")).toContainText("No matching activity");
+    assert.equal(await page.evaluate(() => window.periodComparisonOwner.showRecords(window.oldEntry)), null);
+    if (emptyB) {
+        await expect(page.locator("#comparisonExactRecordsB a")).toHaveCount(0);
+        await expect(page.locator("#comparisonExactRecordsB")).toContainText("0 calls across 0 interactions");
+        await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+        await page.getByRole("button", { name: /^View \d+ baseline calls$/ }).click();
+        await expect(page.locator("#comparisonRecordsA")).toHaveAttribute("aria-selected", "true");
+    }
     await page.evaluate(() => window.oldLink.click());
     assert.equal(page.url(), before.url);
 });
@@ -292,7 +304,11 @@ test("uncommitted custom dates never replace the accepted pair during withdrawal
     await page.evaluate(async () => { window.compareAccess.withdraw(); window.compareAccess.resume(); await window.compareAccess.fresh(); });
     assert.equal(await page.evaluate(() => window.compareAccess.calls), calls + 1);
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()?.comparison.periods.baseline.range.from), "2026-03-07");
-    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
+    await expect(page.locator("#comparisonCustomDates")).toBeHidden();
+    await expect(page.locator("#comparisonAFrom")).toHaveValue("");
+    const reopened = await openDatePicker(page, "compare", "Custom dates");
+    await expect(reopened.locator("#comparisonAFrom")).toHaveValue("2026-03-07");
+    assert.equal(await page.evaluate(() => window.compareAccess.calls), calls + 1);
 });
 
 for (const invalidation of ["expire", "removeMethods"]) test(`Compare fails closed when publication checks ${invalidation}`, { timeout: 30000 }, async t => {
