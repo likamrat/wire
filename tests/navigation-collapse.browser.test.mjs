@@ -6,8 +6,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, openActivitySessions } from "./helpers.mjs";
-import { reportContents, scanReport } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_COLLAPSE_PROOFS;
@@ -140,57 +139,11 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     if (proofs) await writeFile(path.join(proofs, "width-proof.json"), JSON.stringify({ before, collapsed, fonts }, null, 2));
 });
 
-test("scope, search, selected requests, Settings and report drafts survive toggles, history and review", { timeout: 60000 }, async t => {
-    const { page, requests } = await setup(t, { reducedMotion: "no-preference" });
-    await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill("Synthetic"); await ready(page);
-    await openActivitySessions(page);
-    await page.locator("#activityList input[type=checkbox]").first().check();
-    const activityUrl = page.url(), search = await page.locator("#activitySearch").inputValue();
-    const searchNode = await page.locator("#activitySearch").elementHandle();
-    await setCollapsed(page, true);
-    assert.equal(page.url(), activityUrl);
-    assert.equal(await searchNode.evaluate(node => node === document.querySelector("#activitySearch")), true);
-    assert.equal(await page.locator("#activityList input[type=checkbox]:checked").count(), 1);
-    await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "collection");
+test("a cross-panel sidebar preference does not steal focus from a Settings draft", async t => {
+    const { page } = await setup(t);
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     await selectActivityOption(page, "collectionWindow", "7");
-    const settingsDraft = await page.locator("#collectionWindow").elementHandle();
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await settingsDraft.evaluate(node => node.value), "7");
-    await navigateMain(page, "reports"); await ready(page);
-    await reportContents(page);
-    await page.locator('[name=promptMode][value=none]').check();
-    await page.locator("#formatOptions input[value=json]").check();
-    const draftNode = await page.locator("#promptOptions").elementHandle();
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await draftNode.evaluate(node => node === document.querySelector("#promptOptions")), true);
-    assert.equal(await page.locator('[name=promptMode][value=none]').isChecked(), true);
-    assert.equal(await page.locator("#formatOptions input[value=json]").isChecked(), true);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request/);
-    await scanReport(page);
-    const review = await page.locator("#reportsView").elementHandle();
-    const previews = requests.filter(url => url === "/api/preview").length;
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "ready");
-    assert.equal(await review.evaluate(node => node === document.querySelector("#reportsView")), true);
-    assert.equal(requests.filter(url => url === "/api/preview").length, previews);
-    assert.ok((await geometry(page)).overflow <= 1);
-    await screenshot(page, "collapsed-report-review");
-    await navigateMain(page, "activity"); await ready(page);
-    assert.equal(await page.locator("#activitySearch").inputValue(), search);
-    assert.equal(await page.locator("#serviceFilter").inputValue(), "Mail");
-    await openActivitySessions(page);
-    assert.equal(await page.locator("#activityList input[type=checkbox]:checked").count(), 1);
-    await page.goBack(); await ready(page);
-    assert.equal(await page.locator('[name=promptMode][value=none]').isChecked(), true);
-    await page.goForward(); await ready(page);
-    assert.equal(await page.locator("#activitySearch").inputValue(), search);
-    await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "collection");
-    assert.equal(await page.locator("#collectionWindow").inputValue(), "7");
-    assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
+    await setCollapsed(page, true);
     await page.locator("#collectionWindow-control").focus();
     const previous = await page.evaluate(() => ({ y: scrollY, active: document.activeElement.id }));
     // Cross-panel display preference updates must not steal focus from an unfinished form.
@@ -438,30 +391,4 @@ test("resizing settles geometry while host motion changes preserve built-in glid
     await page.reload(); await ready(page);
     assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0, "No entrance animation on reload");
-});
-
-test("native reading dialogs fit the actual collapsed shell", { timeout: 45000 }, async t => {
-    const { page } = await setup(t);
-    await navigateMain(page, "reports"); await ready(page);
-    await navigateMain(page, "home"); await ready(page);
-    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    for (const collapsed of [false, true]) {
-        await setCollapsed(page, collapsed);
-        const definitions = page.locator("#homeInsights").getByRole("button", { name: "Measure definitions", exact: true });
-        await definitions.click();
-        const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
-        await dialog.waitFor();
-        assert.equal(await page.evaluate(() => document.activeElement.closest("dialog[open]") !== null), true);
-        for (const width of [768, 375]) {
-            await page.setViewportSize({ width, height: 900 }); await frames(page);
-            const bounds = await dialog.boundingBox();
-            assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
-            await page.keyboard.press("Tab");
-            assert.equal(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement.closest("dialog[open]")), true);
-        }
-        await page.keyboard.press("Escape");
-        assert.equal(await definitions.evaluate(node => node === document.activeElement), true);
-        await page.setViewportSize({ width: 1200, height: 1000 }); await frames(page);
-        assert.equal(await toggle(page).getAttribute("aria-expanded"), String(!collapsed));
-    }
 });

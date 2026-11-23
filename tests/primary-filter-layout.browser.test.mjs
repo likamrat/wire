@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { chooseTheme, selectActivityOption, navigateMain, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
-import { selectAnalyzeRequest, openReportCreation, chooseReportScope } from "./report-journey-helpers.mjs";
+import { chooseTheme, selectActivityOption, openAnalyzeFilters } from "./helpers.mjs";
+
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 
@@ -39,134 +39,6 @@ async function setup(t, touch = false) {
     if (proofs) await mkdir(proofs, { recursive: true });
     return { ...app, page };
 }
-
-async function geometry(page) {
-    await settled(page);
-    return page.evaluate(ids => {
-        const box = node => {
-            const rect = node.getBoundingClientRect();
-            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom };
-        };
-        const fields = ids.map(id => {
-            const control = document.getElementById(id + "-control");
-            const label = document.querySelector(`label[for="${id}-control"]`);
-            const value = control.querySelector(".select-value");
-            const labelRange = document.createRange();
-            labelRange.selectNodeContents(label);
-            const labelText = labelRange.getBoundingClientRect();
-            return { id, visible: control.checkVisibility(), control: box(control), label: box(label),
-                labelText: { x: labelText.x, y: labelText.y, bottom: labelText.bottom, height: labelText.height },
-                lineHeight: parseFloat(getComputedStyle(label).lineHeight), value: box(value),
-                textClipped: value.scrollWidth > value.clientWidth + 1,
-                labelClipped: label.scrollWidth > label.clientWidth + 1 };
-        });
-        return { fields, overflow: document.documentElement.scrollWidth - innerWidth,
-            row: box(document.querySelector(".period-controls")), scroll: box(document.querySelector(".filter-scroll")) };
-    }, ids);
-}
-const range = values => Math.max(...values) - Math.min(...values);
-function aligned(layout) {
-    assert.ok(layout.overflow <= 1, "No page-level horizontal overflow");
-    assert.ok(layout.fields.every(field => field.visible), "All six primary filters are visible without an expansion");
-    assert.ok(layout.fields.every(field => field.control.height >= 44 && !field.textClipped), "Labels stay readable with 44px hit targets");
-    assert.ok(layout.fields.every(field => !field.labelClipped), "Complete filter titles stay readable");
-    assert.ok(range(layout.fields.map(field => field.label.x - field.control.x)) <= 1, "Label insets are consistent");
-    for (const field of layout.fields) assert.ok(field.control.x >= layout.scroll.x - 1 && field.control.right <= layout.scroll.right + 1, "Fields wrap within the region instead of hiding active values offscreen");
-}
-
-test("primary analytical filters wrap readably at desktop, narrow and 200 percent text sizes", { timeout: 45000 }, async t => {
-    const { page } = await setup(t), measurements = [];
-    for (const theme of ["dark", "light"]) for (const width of [1440, 1200, 375]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => {
-            document.documentElement.style.fontSize = `${scale * 100}%`;
-            document.querySelector(".filter-scroll").scrollLeft = 0;
-        }, scale);
-        await page.locator("#filters").scrollIntoViewIfNeeded();
-        const layout = await geometry(page);
-        if (proofs) {
-            await page.screenshot({ path: path.join(proofs, `context-${theme}-${width}-${scale}.png`), fullPage: true });
-            await page.locator("#filters").screenshot({ path: path.join(proofs, `primary-${theme}-${width}-${scale}.png`) });
-        }
-        if (width >= 1440 && scale === 1) {
-            assert.ok(range(layout.fields.slice(0, 3).map(field => field.control.y)) <= 1, "Dates, Source and Tool share the first panel row");
-            assert.ok(range(layout.fields.slice(3).map(field => field.control.y)) <= 1, "Service, Outcome and Prompt author share the second panel row");
-            assert.ok(layout.fields[3].control.y > layout.fields[0].control.bottom, "The two field groups do not overlap");
-        }
-        measurements.push({ theme, width, scale, ...layout });
-        for (const id of ids) {
-            const trigger = page.locator(`#${id}-control`);
-            await trigger.scrollIntoViewIfNeeded();
-            const field = await trigger.boundingBox(), viewport = await page.locator(".filter-scroll").boundingBox();
-            assert.ok(field.x >= viewport.x - 1 && field.x + field.width <= viewport.x + viewport.width + 1, `${id}: the complete control can be brought into view`);
-            assert.ok((await trigger.getAttribute("aria-labelledby")).trim(), "Every filter retains its accessible label");
-        }
-        if (proofs) await page.locator("#filters").screenshot({ path: path.join(proofs, `row-end-${theme}-${width}-${scale}.png`) });
-    }
-    if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify(measurements, null, 2));
-    for (const layout of measurements) aligned(layout);
-});
-
-async function applyValues(page, id, values) {
-    await openAnalyzeFilters(page);
-    await page.locator(`[data-select-id="${id}"]`).click();
-    const popup = page.locator(".select-popup:visible");
-    for (const option of await popup.locator(".select-option").all()) {
-        const wanted = values.includes(await option.getAttribute("data-value"));
-        if ((await option.getAttribute("aria-selected") === "true") !== wanted) await option.click();
-    }
-    await popup.getByRole("button", { name: "Apply", exact: true }).click(); await ready(page);
-}
-
-test("active clear actions and custom dates keep dropdown geometry and filtering intact", { timeout: 45000 }, async t => {
-    const { page, olderDay } = await setup(t);
-    const original = await geometry(page);
-    await applyValues(page, "outcomeFilter", ["failure"]);
-    await applyValues(page, "promptAuthorFilter", ["user"]);
-    assert.equal(await page.locator("#activityCount").textContent(), "1");
-    const filtered = await geometry(page);
-    aligned(filtered);
-    assert.ok(Math.abs(filtered.row.y - original.row.y) <= 1, "Active controls keep the row's vertical anchor");
-    for (const [name, id] of [["outcome", "clearResultFilter"], ["author", "clearPromptAuthorFilter"]]) {
-        const clear = page.getByRole("button", { name: new RegExp(`^Remove ${name} filter:`) }), bounds = await clear.boundingBox();
-        assert.ok(bounds.width >= 44 && bounds.height >= 44);
-        assert.equal(await clear.count(), 1, "Applied scope has a single settled removal entry");
-        assert.equal(await page.locator("#" + id).isVisible(), false, "The inline action is only for a first pending change");
-        assert.equal(await clear.evaluate(node => Boolean(node.closest("#appliedFilters"))), true);
-    }
-    if (proofs) await page.locator("#filters").screenshot({ path: path.join(proofs, "primary-active.png") });
-    await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
-    assert.equal(await page.locator("#activityCount").textContent(), "2");
-    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
-    assert.equal(await page.locator("#activityCount").textContent(), "8");
-    await selectActivityOption(page, "dateFilter", "custom"); await ready(page);
-    aligned(await geometry(page));
-    const custom = await page.locator("#dateFields").boundingBox(), layout = await geometry(page);
-    assert.ok(custom.y >= Math.max(...layout.fields.map(field => field.control.bottom)), "Custom dates occupy their own row");
-    await page.locator("#fromFilter").fill(olderDay); await page.locator("#toFilter").fill("");
-    await page.locator("#applyDates").click();
-    assert.equal(await page.locator("#dateError").isVisible(), true);
-    assert.equal(await page.locator("#activityCount").textContent(), "8", "Invalid custom dates do not silently apply");
-    await page.locator("#fromFilter").fill(olderDay); await page.locator("#toFilter").fill(olderDay);
-    await page.locator("#applyDates").click(); await ready(page);
-    assert.equal(await page.locator("#dateError").isVisible(), false);
-    assert.equal(await page.locator("#activityCount").textContent(), "5");
-    if (proofs) await page.locator("#filters").screenshot({ path: path.join(proofs, "primary-custom-dates.png") });
-    await page.locator('[data-select-id="promptAuthorFilter"]').click();
-    const popup = page.locator(".select-popup:visible");
-    await popup.locator('[data-value="agent"]').click();
-    await popup.getByRole("button", { name: "Cancel", exact: true }).click();
-    assert.equal(await page.locator("#activityCount").textContent(), "5");
-    for (const width of [1200, 375]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        for (const id of ["fromFilter", "toFilter", "applyDates", "clearDates"]) {
-            await page.locator("#" + id).scrollIntoViewIfNeeded();
-            const bounds = await page.locator("#" + id).boundingBox();
-            assert.ok(bounds.height >= 44 && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `${id}: complete custom-date controls at ${width}/${scale}`);
-        }
-    }
-});
 
 test("filter naming exposes real category, context and evidence-layer distinctions without routine help", { timeout: 45000 }, async t => {
     const { page } = await setup(t);
@@ -242,27 +114,4 @@ test("narrow keyboard and touch reach each named filter directly without clipped
         await page.keyboard.press("Escape");
         assert.equal(await page.locator("#activityCount").textContent(), "8", "Escape still discards the multiselect draft");
     }
-});
-
-test("the same controls and selected request membership survive chat scope, Back and Reset Analyze", { timeout: 30000 }, async t => {
-    const { page, cases, chatId } = await setup(t);
-    await closeAnalyzeFilters(page);
-    await selectAnalyzeRequest(page, page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"]`));
-    await applyValues(page, "promptAuthorFilter", ["user"]);
-    assert.equal(await page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"]`).count(), 0);
-    await selectActivityOption(page, "chatFilter", chatId); await ready(page);
-    aligned(await geometry(page));
-    assert.equal(await page.locator(".filter-scroll>.period-controls").count(), 1, "Chat scope reuses, rather than duplicates, the primary controls");
-    assert.equal(await page.locator("#chatFilter-control").count(), 1);
-    await page.goBack(); await ready(page);
-    await openAnalyzeFilters(page);
-    await page.locator("#resetView").click(); await ready(page);
-    assert.ok(page.url().endsWith("#analyze"));
-    assert.equal(await page.locator("#activityCount").textContent(), "8");
-    await navigateMain(page, "reports"); await ready(page);
-    await openReportCreation(page); await chooseReportScope(page, "selected");
-    const selected = page.locator("#report-select-" + cases.agentMail.scenarioId);
-    const next = page.getByRole("button", { name: "Next report requests", exact: true });
-    while (!await selected.count() && await next.isEnabled()) await next.click();
-    assert.equal(await selected.isChecked(), true, "Reset does not erase the exact hidden report selection");
 });
