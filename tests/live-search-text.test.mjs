@@ -188,7 +188,10 @@ test("an indexed title without saved manifest authority never becomes searchable
 
 test("text membership uses actual complete wire populations for both periods and frozen report scope", { timeout: 30000 }, async t => {
     const guard = forbidAi(t);
-    const records = searchRecords(63).map(record => ({ ...record, userPrompt: { ...record.userPrompt, text: "PowerPoint planning record" } }));
+    const records = searchRecords(63).map(record => ({
+        ...record, userPrompt: { ...record.userPrompt, text: "PowerPoint planning record" },
+        toolCalls: record.toolCalls.map(call => ({ ...call, startedAt: "2026-09-30T09:15:00Z" })),
+    }));
     const { runtime, context } = await searchFixture(t, { records });
     guard.connect(runtime);
     const events = [], response = Object.assign(new EventEmitter(), { destroyed: false, writableLength: 0,
