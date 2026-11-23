@@ -282,6 +282,7 @@ test("access revocation retires a maximized reader and active resize without ret
         assert.equal(page.url(), url, "A fresh access grant cannot authorize a held data link.");
         assert.equal(app.requests.filter(path => path === "/api/snapshot").length, reads);
     }
+    const initialWidth = await page.locator("#readerResize").getAttribute("aria-valuenow");
     await page.locator("#widenInteraction").click();
     await page.locator("#expandInteraction").click();
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "expanded");
@@ -294,7 +295,12 @@ test("access revocation retires a maximized reader and active resize without ret
     assert.equal(await page.locator("#main").evaluate(node => node.inert), false);
     assert.equal(await page.evaluate(() => document.body.hasAttribute("data-reader-expanded")), false);
     await app.command("wire-sign-in");
-    await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
+    // The outcome link was private to the old grant. Sign-in does not replay it.
+    await page.getByRole("button", { name: "Open this view without the private selection" }).click();
+    await expect(page.locator("#contextSidebar")).toBeHidden();
+    await page.locator(".request-card-open").first().click();
+    await expect(page.locator("#contextSidebar[open]")).toHaveAttribute("data-mode", "docked");
+    await expect(page.locator("#readerResize")).toHaveAttribute("aria-valuenow", initialWidth);
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await staleLinksCannotNavigate();
     const handle = await page.locator("#readerResize").boundingBox();
