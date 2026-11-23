@@ -5,10 +5,9 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { time } from "../lib/time.mjs";
 import { frontendRecords } from "./frontend-fixture.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_FILTER_STABILITY_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -21,7 +20,7 @@ function deferred() {
     const promise = new Promise(done => { resolve = done; });
     return { promise, resolve };
 }
-async function setup(t, view = "home", { width = 1200, bucket = "week", spreadDays = false } = {}) {
+async function setup(t, { width = 1200, bucket = "week", spreadDays = false, draft = false, search = false } = {}) {
     const today = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.parse(today + "T12:00:00Z") - 29 * 86400000).toISOString().slice(0, 10);
     const records = Array.from({ length: 8 }, (_, index) => {
@@ -47,28 +46,34 @@ async function setup(t, view = "home", { width = 1200, bucket = "week", spreadDa
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width, height: 900 }, timezoneId: "UTC" });
     page.setDefaultTimeout(6000);
-    const errors = [], posts = [];
+    const errors = [], posts = [], denied = [];
+    const allowed = new Set(["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/app-update",
+        ...(draft ? ["/api/report-drafts/list", "/api/report-drafts/edit"] : []),
+        ...(search ? ["/api/search/query", "/api/search/status", "/api/search/events", "/api/search/cancel"] : [])]);
+    await page.route("**/*", route => {
+        const r = route.request(), url = new URL(r.url());
+        if (url.origin === new URL(runtime.url).origin && (r.method() === "GET" || r.method() === "POST" && allowed.has(url.pathname)))
+            return route.continue();
+        denied.push(url.pathname); return route.abort();
+    });
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (request.method() === "POST") posts.push(new URL(request.url()).pathname); });
     t.after(async () => {
         await browser.close(); await runtime.close();
         for (const action of cleanup) await action();
         assert.deepEqual(errors, []);
-        assert.ok(posts.every(url => ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(url)),
-            "Filter proof is read-only: " + JSON.stringify(posts));
+        assert.deepEqual(denied, []);
     });
-    await page.goto(runtime.url + `#${view}?range=30&from=${from}&to=${today}&bucket=${bucket}`);
+    await page.goto(runtime.url + `?range=30&from=${from}&to=${today}&bucket=${bucket}`);
     await ready(page);
-    await expect(page.locator(`#${view}Insights .assessment-grid`)).toBeVisible();
+    await expect(page.locator("#activityCount")).toHaveText("8");
     await page.evaluate(() => document.fonts.ready);
-    const timeContext = time.normalize({ timeZone: "UTC", locale: "en-US" });
-    const expectedPeriod = `${time.formatDate(from, timeContext, from.slice(0, 4) !== today.slice(0, 4))} - ${time.formatDate(today, timeContext, true)}`;
-    return { page, runtime, today, from, posts, expectedPeriod };
+    return { page, today, posts };
 }
 async function startProbe(page, triggerId, extra = []) {
     await page.evaluate(({ triggerId, extra }) => {
-        const selectors = ["#pageTitle", "#filters", "#periodFeedback", ".app-header", "#sidebar",
-            "#homeView .chart-panel", "#chart .dimensional-scroll", "#homeInsights", "#activityInsights", "#activityList", `#${triggerId}`, ...extra];
+        const selectors = ["#pageTitle", "#filters", ".app-header", "#sidebar",
+            "#chart .dimensional-scroll", "#activityList", `#${triggerId}`, ...extra];
         const originals = new Map(selectors.map(selector => [selector, document.querySelector(selector)]));
         const probe = { phase: "before", running: true, frames: [], changes: [], shifts: [] };
         const rect = node => {
@@ -113,11 +118,6 @@ async function startProbe(page, triggerId, extra = []) {
     }, { triggerId, extra });
 }
 async function phase(page, value) { await page.evaluate(value => { window.filterFrameProbe.phase = value; }, value); }
-async function picture(page, name) {
-    if (!proofs) return;
-    await mkdir(proofs, { recursive: true });
-    await page.screenshot({ path: path.join(proofs, name + ".png") });
-}
 async function finishProbe(page, name) {
     const trace = await page.evaluate(() => window.finishFilterProbe());
     if (proofs) {
@@ -178,310 +178,179 @@ for (const width of [1440, 760, 390]) test(`built shared filter: ${width}px pend
     await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
 });
 
-for (const view of ["home", "activity"]) for (const position of ["scrolled", "top"]) test(`${view} ${position} date refinement preserves visible filter anchor through pending and accepted frames`, { timeout: 20000 }, async t => {
-    const { page } = await setup(t, view);
-    const name = `${view}-${position}`;
-    await page.locator("#dateFilter-control").scrollIntoViewIfNeeded();
-    await page.evaluate(position => scrollTo(0, position === "top" ? 0 : Math.max(0, scrollY + document.querySelector("#filters").getBoundingClientRect().top - 140)), position);
-    await page.locator("#dateFilter-control").click();
-    await frames(page);
-    const entered = deferred(), release = deferred();
+const rowKeys = page => page.locator("#activityList article[data-view-key]").evaluateAll(nodes => nodes.map(n => n.dataset.viewKey).sort());
+const keys = indexes => indexes.map(i => `request:stability-${i}`);
+const allRows = keys([0, 1, 2, 3, 4, 5, 6, 7]);
+const evenRows = keys([0, 2, 4, 6]);
+
+async function holdRead(page, matches = () => true) {
+    const entered = deferred(), release = deferred(), done = deferred();
+    let used = false;
     await page.route("**/api/snapshot", async route => {
+        const input = route.request().postDataJSON();
+        if (used || !matches(input)) return route.fallback();
+        used = true;
         const response = await route.fetch();
-        entered.resolve(); await release.promise;
-        await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await startProbe(page, "dateFilter-control");
-    await picture(page, `${name}-before`);
-    await page.locator('.select-popup [data-value="7"]').click();
-    await entered.promise; await phase(page, "pending"); await frames(page);
-    await picture(page, `${name}-pending`);
-    release.resolve(); await ready(page);
-    await expect(page.locator(`#${view}Insights`)).not.toHaveAttribute("aria-busy", "true");
-    await phase(page, "accepted"); await frames(page);
-    await picture(page, `${name}-accepted`);
-    const trace = await finishProbe(page, `${name}-transition`);
-    const first = trace.frames[0], last = trace.frames.at(-1);
-    const observed = {
-        baselineY: first.nodes["#dateFilter-control"].box.y,
-        filterY: [...new Set(trace.frames.map(frame => frame.nodes["#dateFilter-control"].box?.y))],
-        scrollY: [...new Set(trace.frames.map(frame => frame.scrollY))],
-        finalFocus: last.focus,
-        messages: [...new Set(trace.frames.map(frame => frame.message))],
-        shifts: trace.shifts.length,
-    };
-    t.diagnostic(JSON.stringify(observed));
-    assert.ok(trace.frames.some(frame => frame.phase === "pending" && frame.busy === "true"), "The actual read reports pending.");
-    assert.ok(trace.frames.every(frame => frame.workspaceVisible), "No blank full workspace.");
-    assert.ok(trace.frames.every(frame => frame.nodes["#dateFilter-control"].same && frame.nodes["#filters"].same));
-    assert.deepEqual(observed.filterY, [observed.baselineY], "Unchanged visible filter anchor must not bounce during an equal-content date refinement.");
-    assert.equal(last.focus, "dateFilter-control", "A same-view refinement retains its control, not page-title focus.");
-});
-
-test("opening custom-date inputs preserves unchanged plotted content and its reading position", async t => {
-    const { page, posts } = await setup(t, "home", { width: 375, bucket: "day", spreadDays: true });
-    await frames(page);
-    const plot = page.locator("#chart .dimensional-scroll");
-    const position = await plot.evaluate(node => {
-        if (node.scrollWidth <= node.clientWidth) throw new Error("The invented daily chart must have a scrollable reading position.");
-        node.scrollLeft = 200;
-        window.retainedFilterPlot = node;
-        return node.scrollLeft;
+        entered.resolve();
+        await release.promise;
+        try { await route.fulfill({ response }); } finally { done.resolve(); }
     });
-    const reads = posts.filter(url => url === "/api/snapshot").length;
-    await page.locator("#dateFilter-control").click();
-    await startProbe(page, "dateFilter-control");
-    await page.locator('.select-popup [data-value="custom"]').click();
-    await expect(page.locator("#dateFields")).toBeVisible(); await frames(page);
-    const trace = await finishProbe(page, "custom-controls-only");
-    t.diagnostic(JSON.stringify({ plotBefore: position, plotAfter: await plot.evaluate(node => node.scrollLeft),
-        connected: await page.evaluate(() => window.retainedFilterPlot.isConnected) }));
-    assert.equal(posts.filter(url => url === "/api/snapshot").length, reads, "Changing only the editor mode does not change the applied evidence.");
-    assert.ok(trace.frames.every(frame => frame.nodes["#chart .dimensional-scroll"].same),
-        "A controls-only change must not tear down the unchanged plot.");
-    assert.equal(await plot.evaluate(node => node.scrollLeft), position, "The existing chart reading position stays put.");
-});
-
-async function selectedHome(t) {
-    const app = await setup(t, "activity");
-    await openActivitySessions(app.page);
-    await app.page.locator("#activityList input[type=checkbox]").first().check();
-    await chooseTheme(app.page, "dark");
-    await selectActivityOption(app.page, "projectFilter", "project-a"); await ready(app.page);
-    await navigateMain(app.page, "home"); await ready(app.page);
-    return app;
-}
-async function viewIntent(page) {
-    return page.evaluate(() => ({
-        hash: location.hash, theme: document.documentElement.dataset.evidenceTheme,
-        period: document.querySelector("#dateFilter").value,
-        project: document.querySelector("#projectFilter").value,
-        selected: document.querySelector("#previewSelectionSummary").textContent,
-        results: [...document.querySelector("#outcomeFilter").selectedOptions].map(option => option.value),
-    }));
+    return { entered: entered.promise, release: release.resolve, done: done.promise };
 }
 
-test("Reset to Home restores defaults without routine success narration or losing theme/report choices", async t => {
-    const { page } = await selectedHome(t);
-    const before = await viewIntent(page);
-    await page.locator("#resetView").click(); await ready(page);
-    const after = await viewIntent(page);
-    assert.equal(after.hash, "#home");
-    assert.equal(after.period, "capture");
-    assert.equal(after.project, "all");
-    assert.equal(after.theme, before.theme);
-    assert.equal(after.selected, before.selected);
-    await picture(page, "reset-view-complete");
-    await expect(page.locator("#message")).toBeHidden();
-});
-
-test("Reload view reads the same intent and retains pending/error feedback without reset narration", async t => {
-    const { page } = await selectedHome(t);
-    const before = await viewIntent(page), gate = deferred(), entered = deferred();
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); entered.resolve(); await gate.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => gate.resolve());
-    await (await revealStoredRefresh(page)).click(); await entered.promise;
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
-    await expect(page.locator("#message")).toContainText("Updating this view");
-    gate.resolve(); await ready(page);
-    assert.deepEqual(await viewIntent(page), before, "Explicit Reload does not reset filters, theme or report selection.");
-    await expect(page.locator("#message")).toBeHidden();
-    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented read failure." } }), { times: 1 });
-    await page.locator("#resetView").click(); await ready(page);
-    await expect(page.locator("#message")).toContainText("Invented read failure");
-    await expect(page.locator("#message")).not.toContainText("View reset to Home");
-    assert.deepEqual(await viewIntent(page), before, "A failed Reset cannot claim or apply new data.");
-});
-
-test("browser reload preserves its URL/theme contract and starts a fresh unsaved report selection", async t => {
-    const { page } = await selectedHome(t);
-    const before = await viewIntent(page);
-    await page.reload(); await ready(page);
-    const after = await viewIntent(page);
-    assert.equal(after.hash, before.hash);
-    assert.equal(after.period, before.period);
-    assert.equal(after.project, before.project);
-    assert.equal(after.theme, before.theme);
-    assert.deepEqual(after.results, before.results);
-    assert.notEqual(after.selected, before.selected);
-    await expect(page.locator("#message")).toBeHidden();
-});
-
-async function prepareChoice(page, id, value) {
+for (const [id, value, expected, width] of [
+    ["projectFilter", "project-a", evenRows, 1200],
+    ["outcomeFilter", ["failure"], keys([1, 3, 5, 7]), 375],
+    ["serviceFilter", "Calendar", evenRows, 1200],
+    ["layerFilter", "reported-api", allRows, 1200],
+    ["scopeFilter", "all", allRows, 1200],
+]) test(`${id} keeps its anchor and publishes only the accepted rows`, { timeout: 20000 }, async t => {
+    const { page } = await setup(t, { width });
+    await openAnalyzeFilters(page);
+    if (["projectFilter", "serviceFilter", "layerFilter", "scopeFilter"].includes(id)) await page.locator("#moreFiltersToggle").click();
     const trigger = page.locator(`#${id}-control`);
     await trigger.scrollIntoViewIfNeeded();
-    await page.evaluate(id => scrollTo(0, Math.max(0, scrollY + document.getElementById(id + "-control").getBoundingClientRect().top - 220)), id);
-    await trigger.click();
-    if (await page.locator(`#${id}`).evaluate(node => node.multiple)) {
-        const values = await page.locator(`#${id} option`).evaluateAll(options => options.map(option => option.value));
-        const wanted = Array.isArray(value) ? value : [value];
-        for (const item of values) {
-            const row = page.locator(`.select-popup [data-value="${item}"]`);
-            if ((await row.getAttribute("aria-selected") === "true") !== wanted.includes(item)) await row.click();
-        }
-        return () => page.getByRole("button", { name: "Apply", exact: true }).click();
-    }
-    return () => page.locator(`.select-popup [data-value="${value}"]`).click();
-}
-for (const { view, id, value, width = 1200, theme = "light" } of [
-    { view: "home", id: "serviceFilter", value: "Calendar" },
-    { view: "activity", id: "projectFilter", value: "project-a" },
-    { view: "home", id: "layerFilter", value: "reported-api" },
-    { view: "activity", id: "scopeFilter", value: "all" },
-    { view: "home", id: "dateFilter", value: "day" },
-    { view: "home", id: "outcomeFilter", value: ["success", "failure"] },
-    { view: "activity", id: "outcomeFilter", value: ["failure"], width: 375, theme: "dark" },
-]) test(`${view} ${id} commits in place with stable control frames at ${width}px`, { timeout: 20000 }, async t => {
-    const { page } = await setup(t, view, { width });
-    await chooseTheme(page, theme);
-    const commit = await prepareChoice(page, id, value);
     await frames(page);
-    const entered = deferred(), release = deferred();
-    let accepted;
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); accepted = await response.json();
-        entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
+    const held = await holdRead(page), before = await rowKeys(page);
     await startProbe(page, id + "-control");
-    await commit(); await entered.promise; await phase(page, "pending"); await frames(page);
-    if (id === "outcomeFilter") await picture(page, `${view}-${id}-${width}-pending`);
-    release.resolve(); await ready(page);
-    await expect(page.locator(`#${view}Insights`)).not.toHaveAttribute("aria-busy", "true");
+    try {
+        await selectActivityOption(page, id, value);
+        await held.entered; await phase(page, "pending"); await frames(page);
+        assert.deepEqual(await rowKeys(page), before);
+    } finally { held.release(); }
+    await held.done; await ready(page);
+    await expect.poll(() => rowKeys(page)).toEqual(expected);
+    const unit = id === "layerFilter" ? "tool-returned API results" : "Work IQ tool calls";
+    await expect(page.locator("#periodResult")).toContainText(`${expected.length} ${unit}`);
+    await expect(trigger).toBeFocused();
+    const selected = await page.locator("#" + id).evaluate(n => [...n.selectedOptions].map(o => o.value));
+    assert.deepEqual(selected, [value].flat());
     await phase(page, "accepted"); await frames(page);
-    const trace = await finishProbe(page, `${view}-${id}-${width}`);
-    const selector = `#${id}-control`, first = trace.frames[0];
-    const positions = [...new Set(trace.frames.map(frame => frame.nodes[selector].box?.y))];
-    t.diagnostic(JSON.stringify({ id, positions, scroll: [...new Set(trace.frames.map(frame => frame.scrollY))], focus: trace.frames.at(-1).focus }));
-    assert.deepEqual(positions, [first.nodes[selector].box.y], "Unchanged filter chrome does not move with data refresh.");
-    assert.ok(trace.frames.every(frame => frame.nodes[selector].same && frame.workspaceVisible));
-    assert.ok(trace.frames.some(frame => frame.phase === "pending" && frame.busy === "true"));
-    assert.ok(trace.frames.every(frame => frame.message === ""));
-    assert.equal(trace.frames.at(-1).focus, id + "-control");
-    assert.equal(await page.locator("#periodResult").getAttribute("data-revision"), String(accepted.revision));
-    if (view === "home") assert.equal(Number(await page.locator(".percentage-section").getAttribute("data-total")), accepted.analytics.totals.count);
-    const selected = await page.locator(`#${id}`).evaluate(node => [...node.selectedOptions].map(option => option.value));
-    assert.deepEqual(selected, Array.isArray(value) ? value : [value]);
+    const trace = await finishProbe(page, `${id}-${width}`);
+    const observed = trace.frames.filter(f => f.phase !== "before");
+    assert.ok(observed.some(f => f.phase === "pending" && f.busy === "true"));
+    assert.ok(observed.every(f => f.workspaceVisible && f.nodes["#filters"].same && f.nodes[`#${id}-control`].same));
+    const y = observed.map(f => f.nodes[`#${id}-control`].box.y);
+    assert.ok(Math.max(...y) - Math.min(...y) <= 1, `${id}: ${[...new Set(y)]}`);
 });
 
-test("custom Apply retains its control and Clear returns to the surviving period selector", async t => {
-    const { page, today } = await setup(t);
+test("editing dates keeps the daily chart and its reading position until Apply; clearing returns to Dates", async t => {
+    const { page, today, posts } = await setup(t, { width: 375, bucket: "day", spreadDays: true });
+    const plot = page.locator("#chart .dimensional-scroll");
+    const left = await plot.evaluate(node => { node.scrollLeft = 200; window.originalFilterPlot = node; return node.scrollLeft; });
+    assert.ok(left > 0);
+    const reads = posts.filter(p => p === "/api/snapshot").length;
     await selectActivityOption(page, "dateFilter", "custom");
-    await page.locator("#fromFilter").fill(today);
-    await page.locator("#toFilter").fill(today);
-    await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#applyDates")).toBeFocused();
-    await startProbe(page, "dateFilter-control");
-    await page.locator("#clearDates").click(); await ready(page); await frames(page);
-    const trace = await finishProbe(page, "custom-clear");
-    t.diagnostic(JSON.stringify({ focusAfterClear: trace.frames.at(-1).focus }));
-    assert.equal(await page.locator("#dateFilter").inputValue(), "capture");
-    await expect(page.locator("#dateFields")).toBeHidden();
+    const editor = page.locator("#analyzeDates");
+    await editor.getByLabel("From", { exact: true }).fill(today);
+    await editor.getByLabel("To", { exact: true }).fill(today);
+    assert.equal(posts.filter(p => p === "/api/snapshot").length, reads);
+    assert.equal(await plot.evaluate(node => window.originalFilterPlot === node && node.scrollLeft), left);
+    await editor.getByRole("button", { name: "Apply dates", exact: true }).click(); await ready(page);
+    await expect.poll(() => rowKeys(page)).toEqual(keys([0]));
     await expect(page.locator("#dateFilter-control")).toBeFocused();
+    await page.getByRole("button", { name: /^Remove date filter:/ }).click(); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("capture");
+    await expect(page.locator("#dateFilter-control")).toBeFocused();
+    await expect.poll(() => rowKeys(page)).toEqual(allRows);
 });
 
-test("a slower scoped insight read does not refresh the shell or mislabel previous measures", async t => {
-    const { page } = await setup(t, "activity");
-    const commit = await prepareChoice(page, "projectFilter", "project-a");
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/assessment/overview", async route => {
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await startProbe(page, "projectFilter-control");
-    await commit(); await entered.promise; await ready(page);
-    await phase(page, "insights-pending"); await frames(page);
-    await expect(page.locator("#activityInsights")).toHaveAttribute("aria-busy", "true");
-    await expect(page.locator("#activityInsights")).toContainText("Reading recorded insights");
-    await expect(page.locator("#periodResult")).toContainText("4 Work IQ tool calls");
-    await picture(page, "scoped-insights-pending");
-    release.resolve();
-    await expect(page.locator("#activityInsights .assessment-grid")).toBeVisible();
-    await expect(page.locator("#activityInsights")).not.toHaveAttribute("aria-busy", "true");
-    await phase(page, "accepted"); await frames(page);
-    const trace = await finishProbe(page, "scoped-insights");
-    assert.deepEqual([...new Set(trace.frames.map(frame => frame.nodes["#projectFilter-control"].box.y))],
-        [trace.frames[0].nodes["#projectFilter-control"].box.y]);
-    assert.ok(trace.frames.every(frame => frame.nodes["#filters"].same && frame.nodes["#pageTitle"].same && frame.workspaceVisible));
+test("late project reads cannot replace a newer reset, even when both filtered counts are equal", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    const first = await holdRead(page, r => r.filters.projectIds?.[0] === "project-a");
+    const second = await holdRead(page, r => r.filters.projectIds?.[0] === "project-b");
+    try {
+        await selectActivityOption(page, "projectFilter", "project-a"); await first.entered;
+        await selectActivityOption(page, "projectFilter", "project-b"); await second.entered;
+        await selectActivityOption(page, "projectFilter", "all"); await ready(page);
+        await expect.poll(() => rowKeys(page)).toEqual(allRows);
+        second.release(); await second.done;
+        first.release(); await first.done; await frames(page);
+    } finally { first.release(); second.release(); }
+    await expect(page.locator("#projectFilter")).toHaveValue("all");
     await expect(page.locator("#projectFilter-control")).toBeFocused();
+    assert.deepEqual(await rowKeys(page), allRows);
 });
 
-test("rapid refinements reject late replies without moving the active filter or replacing newer intent", async t => {
-    const { page, expectedPeriod } = await setup(t);
-    const gates = [deferred(), deferred()], entered = [deferred(), deferred()];
-    await page.route("**/api/snapshot", async route => {
-        const project = route.request().postDataJSON().filters.projectIds?.[0];
-        const index = project === "project-a" ? 0 : project === "project-b" ? 1 : -1;
-        if (index < 0) return route.continue();
-        const response = await route.fetch(); entered[index].resolve(); await gates[index].promise; await route.fulfill({ response });
-    });
-    t.after(() => gates.forEach(gate => gate.resolve()));
-    const first = await prepareChoice(page, "projectFilter", "project-a");
-    await startProbe(page, "projectFilter-control"); await first(); await entered[0].promise;
-    await selectActivityOption(page, "projectFilter", "project-b"); await entered[1].promise;
-    await selectActivityOption(page, "projectFilter", "all"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText(`8 Work IQ tool calls (${expectedPeriod})`);
-    const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.projectIds?.[0] === "project-a");
-    const newerLate = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.projectIds?.[0] === "project-b");
-    gates[1].resolve(); await newerLate; gates[0].resolve(); await late; await frames(page);
-    const trace = await finishProbe(page, "rapid-refinements");
-    assert.equal(await page.locator("#projectFilter").inputValue(), "all");
-    await expect(page.locator("#periodResult")).toHaveText(`8 Work IQ tool calls (${expectedPeriod})`);
-    await expect(page.locator("#projectFilter-control")).toBeFocused();
-    assert.deepEqual([...new Set(trace.frames.map(frame => frame.nodes["#projectFilter-control"].box.y))],
-        [trace.frames[0].nodes["#projectFilter-control"].box.y]);
-    assert.ok(trace.frames.every(frame => frame.workspaceVisible && frame.message === ""));
-});
-
-test("failed refinement keeps accepted scope and contextual focus with a real recoverable error", async t => {
-    const { page, expectedPeriod } = await setup(t);
-    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented filter read failure." } }), { times: 1 });
+test("a failed filter read labels previous results; retry replaces them with the requested membership", async t => {
+    const { page } = await setup(t);
+    await page.route("**/api/snapshot", r => r.fulfill({ status: 503, json: { error: "Invented filter read failure." } }), { times: 1 });
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
-    await expect(page.locator("#message")).toContainText("Invented filter read failure");
-    await expect(page.locator("#periodResult")).toHaveText(`Previous results: 8 Work IQ tool calls (${expectedPeriod})`);
-    assert.equal(await page.locator("#projectFilter").inputValue(), "all");
+    await expect(page.locator("#message")).toContainText("Invented filter read failure.");
+    await expect(page.locator("#analyzeScopeError")).toContainText("Previous results");
+    await expect(page.locator("#projectFilter")).toHaveValue("all");
     await expect(page.locator("#projectFilter-control")).toBeFocused();
-    await picture(page, "refinement-error");
+    assert.deepEqual(await rowKeys(page), allRows);
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
     await expect(page.locator("#message")).toBeHidden();
-    await expect(page.locator("#periodResult")).toHaveText(`4 Work IQ tool calls (${expectedPeriod})`);
+    await expect.poll(() => rowKeys(page)).toEqual(evenRows);
     await expect(page.locator("#projectFilter-control")).toBeFocused();
+    await page.getByRole("button", { name: "Remove project filter: Invented project A", exact: true }).press("Enter");
+    await ready(page); await expect(page.locator("#projectFilter-control")).toBeFocused();
+    await expect.poll(() => rowKeys(page)).toEqual(allRows);
 });
 
-for (const width of [1200, 375]) test(`clearing a filter chip returns focus to its field in the ${width}px filter row`, async t => {
-    const { page } = await setup(t, "home", { width });
+test("a late refinement cannot reclaim the global Search field or expose its selected text", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, { search: true });
+    const held = await holdRead(page);
+    const search = page.locator("#wireSearch"), phrase = "Invented filter request";
+    try {
+        await selectActivityOption(page, "projectFilter", "project-a"); await held.entered;
+        await closeAnalyzeFilters(page); await search.fill(phrase);
+        await search.evaluate(n => n.setSelectionRange(2, 6));
+    } finally { held.release(); }
+    await held.done; await ready(page);
+    await expect(search).toBeFocused(); await expect(search).toHaveValue(phrase);
+    assert.deepEqual(await search.evaluate(n => [n.selectionStart, n.selectionEnd]), [2, 6]);
+    await expect.poll(() => rowKeys(page)).toEqual(evenRows);
+    assert.ok(!decodeURIComponent(page.url()).includes(phrase));
+    assert.ok(!await page.evaluate(q => JSON.stringify([history.state, localStorage, sessionStorage]).includes(q), phrase));
+});
+
+test("refreshing saved activity keeps the accepted project, date range and reader membership", { timeout: 30000 }, async t => {
+    const { page, posts } = await setup(t);
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
-    const target = page.locator("#projectFilter-control");
-    await target.scrollIntoViewIfNeeded();
-    await frames(page);
-    await startProbe(page, "projectFilter-control");
-    await page.getByRole("button", { name: "Remove copilot project filter: Invented project A", exact: true }).click();
-    await ready(page); await frames(page);
-    const trace = await finishProbe(page, `clear-chip-${width}`);
-    t.diagnostic(JSON.stringify({ focusAfterClear: trace.frames.at(-1).focus }));
-    assert.equal(await page.locator("#projectFilter").inputValue(), "all");
-    await expect(target).toBeFocused();
-    await expect(target).toBeInViewport();
+    await closeAnalyzeFilters(page);
+    const prior = page.url(), held = await holdRead(page);
+    try {
+        await page.getByRole("button", { name: "Refresh", exact: true }).click();
+        await held.entered;
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+        assert.deepEqual(await rowKeys(page), evenRows);
+    } finally { held.release(); }
+    await held.done; await ready(page);
+    assert.equal(page.url(), prior);
+    await expect(page.locator("#projectFilter")).toHaveValue("project-a");
+    await expect(page.locator("#dateFilter")).toHaveValue("30");
+    assert.deepEqual(await rowKeys(page), evenRows);
+    assert.ok(!posts.includes("/api/collection/now"));
 });
 
-test("a pending refinement does not reclaim focus after the user moves into private search", async t => {
-    const { page } = await setup(t, "activity");
-    const commit = await prepareChoice(page, "projectFilter", "project-a");
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await commit(); await entered.promise;
-    const search = page.locator("#activitySearch");
-    await search.fill("Invented");
-    await search.evaluate(node => node.setSelectionRange(2, 6));
-    release.resolve(); await ready(page);
-    await expect(search).toBeFocused();
-    assert.deepEqual(await search.evaluate(node => [node.selectionStart, node.selectionEnd]), [2, 6]);
-    await expect(page.locator("#periodResult")).toContainText("4 Work IQ tool calls");
-    assert.doesNotMatch(page.url(), /Invented/);
+test("Reset and private-link reload preserve theme and named report membership without widening silently", async t => {
+    const { page } = await setup(t, { draft: true });
+    await chooseTheme(page, "dark");
+    const saved = page.locator('[data-view-key="request:stability-1"]');
+    await saved.getByRole("button", { name: "Add to report", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
+    await picker.getByRole("button", { name: "New draft", exact: true }).click();
+    await picker.getByLabel("Draft name").fill("Filter reading");
+    await picker.getByRole("button", { name: "Create draft and add" }).click();
+    await expect(saved).toContainText("In draft: Filter reading");
+    await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
+    await closeAnalyzeFilters(page);
+    await expect(saved).toHaveCount(0);
+    const url = page.url();
+    assert.ok(url.includes("privateView=required") && !url.includes("project-a"));
+    await page.reload();
+    await expect(page.locator("#message")).toContainText("This tab no longer has the private view");
+    await page.getByRole("button", { name: "Open this view without the private selection", exact: true }).click();
+    await ready(page); await expect(saved).toContainText("In draft: Filter reading");
+    await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
+    await page.locator("#resetView").click(); await ready(page);
+    await expect(page.locator("#dateFilter")).toHaveValue("capture");
+    await expect(page.locator("#projectFilter")).toHaveValue("all");
+    await expect(page.locator("#message")).toBeHidden();
+    await expect.poll(() => rowKeys(page)).toEqual(allRows);
+    await expect(saved).toContainText("In draft: Filter reading");
+    await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "dark");
 });

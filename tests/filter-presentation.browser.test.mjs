@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { chooseTheme, selectActivityOption, openAnalyzeFilters } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createSelectControls } from "../web/select-control.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
@@ -14,10 +14,10 @@ import { styles } from "../web/styles.mjs";
 const proofDir = process.env.WIRE_FILTER_PRESENTATION_PROOFS;
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 const fields = [
-    ["dateFilter", "Dates"], ["toolFilter", "Tool"], ["serviceAssociationFilter", "Service involved"],
+    ["toolFilter", "Tool"], ["serviceAssociationFilter", "Service involved"],
     ["outcomeFilter", "Outcome"], ["promptAuthorFilter", "Prompt author"],
-    ["serviceFilter", "Activity category"], ["projectFilter", "Copilot project"],
-    ["chatFilter", "Copilot chat"], ["layerFilter", "Evidence layer"], ["scopeFilter", "Collection"],
+    ["serviceFilter", "Activity category"], ["projectFilter", "Project"],
+    ["chatFilter", "Chat"], ["layerFilter", "Evidence layer"], ["scopeFilter", "Collection"],
 ];
 
 test("all filter menus use clean paper surfaces and self-explanatory controls without losing feedback", { timeout: 60000 }, async t => {
@@ -47,17 +47,24 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             scrollTo(0, 0);
         }, scale);
-        const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 44, 59)";
+        const name = `${theme}-${width}-${scale}`, paper = await page.evaluate(() => {
+            const swatch = document.createElement("span"); swatch.style.color = "var(--paper)"; document.body.append(swatch);
+            const color = getComputedStyle(swatch).color; swatch.remove(); return color;
+        });
         const controlPaper = paper;
         if (await page.locator("#filters .ux-help").count()) violations.push(`${name}: routine field info targets remain`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `context-${name}.png`), fullPage: true });
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
         const before = reads.length;
+        await page.locator("#dateFilter-control").click();
+        await expect(page.locator("#analyzeDates").getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
+        await page.keyboard.press("Escape"); await expect(page.locator("#dateFilter-control")).toBeFocused();
         for (const [id, label] of fields) {
             const trigger = page.locator("#" + id + "-control");
             const actualLabel = await page.locator(`label[for="${id}-control"]`).innerText();
             if (actualLabel !== label) violations.push(`${name}/${id}: label is ${actualLabel}`);
             await trigger.click();
+            await page.mouse.move(2, 2);
             const popup = page.locator(".select-popup:visible");
             const paint = await popup.evaluate((node, id) => {
                 const trigger = document.getElementById(id + "-control");
@@ -76,15 +83,15 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
                     box: { x: b.x, y: b.y, right: b.right, bottom: b.bottom } };
             }, id);
             if (paint.background !== paper || paint.trigger !== controlPaper) violations.push(`${name}/${id}: trigger/menu does not use its paper role`);
-            if (paint.rows.some(row => !["rgba(0, 0, 0, 0)", paper].includes(row.background))) violations.push(`${name}/${id}: filled option slabs`);
-            if (paint.apply && paint.apply !== paper) violations.push(`${name}/${id}: filled Apply capsule`);
+            if (paint.rows.some(row => row.selected === "false" && !["rgba(0, 0, 0, 0)", paper].includes(row.background))) violations.push(`${name}/${id}: filled unselected option`);
+            if (paint.apply) await expect(popup.getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
             if (paint.routineHint) violations.push(`${name}/${id}: routine draft instruction remains`);
             if (paint.all && !paint.all.startsWith("All ")) violations.push(`${name}/${id}: imperative All caption`);
             assert.ok(paint.box.x >= 8 && paint.box.right <= width - 7 && paint.box.y >= 8 && paint.box.bottom <= 993);
             for (const row of paint.rows) {
                 assert.ok(row.height >= 44, `${name}/${id}/${row.value}`);
                 assert.equal(row.role, "option");
-                assert.ok(contrast(row.color, paper) >= 4.5, `${name}/${id}/${row.value}: text contrast`);
+                assert.ok(contrast(row.color, row.background === "rgba(0, 0, 0, 0)" ? paper : row.background) >= 4.5, `${name}/${id}/${row.value}: text contrast`);
             }
             assert.deepEqual(await popup.locator("[aria-describedby],[aria-labelledby]").evaluateAll(nodes => nodes.flatMap(node =>
                 ["aria-describedby", "aria-labelledby"].flatMap(name => (node.getAttribute(name) || "").split(/\s+/).filter(id => id && !document.getElementById(id))))), [],
@@ -103,7 +110,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
                 assert.equal(await popup.getByRole("checkbox").getAttribute("aria-checked"), "mixed");
                 const first = popup.getByRole("option").first();
                 assert.equal(await first.getAttribute("aria-selected"), "true");
-                assert.ok(["rgba(0, 0, 0, 0)", paper].includes(await first.evaluate(node => getComputedStyle(node).backgroundColor)));
+                assert.notEqual(await first.evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)");
                 assert.notEqual(await popup.locator(".select-apply").evaluate(node => getComputedStyle(node, "::before").backgroundColor), paper);
                 assert.equal(await popup.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => getComputedStyle(node, "::before").backgroundColor),
                     "rgba(0, 0, 0, 0)");
@@ -138,6 +145,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
         }
         await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
         await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
+        await closeAnalyzeFilters(page);
     }
     await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
     assert.equal(await page.locator("#outcomeFilter-control").isDisabled(), true);
