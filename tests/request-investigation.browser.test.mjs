@@ -231,6 +231,7 @@ test("selected exact request text survives rebuild but never transfers to change
     changed.userPrompt.sourceEventId = "replacement-prompt";
     changed.userPrompt.text = "Changed source identity and text; never reuse another selection.";
     await poll([changed]);
-    assert.equal(await page.locator(".request-original pre").textContent(), changed.userPrompt.text);
+    await expect(page.locator(".request-original pre")).toHaveCount(0);
     assert.equal(await page.evaluate(() => getSelection().toString()), "");
+    await expect(page.locator("#workspace")).not.toContainText(changed.userPrompt.text);
 });
