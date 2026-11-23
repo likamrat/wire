@@ -586,7 +586,8 @@ test("an existing retained kickoff gains author metadata without rewinding curso
     assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0, "Unchanged logs are not scanned again for already-qualified origins");
     const newPreview = await exports.preview("invented-panel", undefined, { promptMode: "original", formats: ["html"] },
         { kind: "selected", scenarioIds: [app.cases[0].scenarioId], revision: (await loadBoardState(app.context)).revision });
-    assert.match(newPreview.previewHtml, /<h4\b[^>]*data-prompt-actor="agent"[^>]*>Agent prompt<\/h4>/);
+    const heading = newPreview.previewHtml.match(/<h4\b[^>]*data-prompt-actor="agent"[^>]*>([^]*?)<\/h4>/);
+    assert.equal(heading?.[1].replace(/<[^>]+>/g, "").trim(), "Agent prompt");
 });
 
 test("missing original creator history never invents the legacy kickoff author", async t => {
