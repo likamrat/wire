@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
+import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { selectActivityOption, closeAnalyzeFilters, restoreLegacySearch, chooseTheme } from "./helpers.mjs";
 
@@ -18,9 +19,9 @@ async function captureState(page, name) {
     await page.screenshot({ path: path.join(proof, name + ".png") });
 }
 
-async function setup(t, { textSearch = false } = {}) {
+async function setup(t, { textSearch = false, records } = {}) {
     const cleanups = [];
-    const app = textSearch ? await searchFixture({ after: action => cleanups.push(action) })
+    const app = textSearch ? await searchFixture({ after: action => cleanups.push(action) }, { records })
         : await authorFilterFixture(t);
     const before = textSearch ? await loadBoardState(app.context) : null;
     const browser = await chromium.launch();
@@ -66,6 +67,32 @@ async function expectSearchMembership(page) {
     await expect(page.locator("#activityList .request-row")).toHaveAttribute("data-view-key", "request:search-0");
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
 }
+
+test("analytical Search counts every matched interaction once across pages and keeps an empty cohort empty", async t => {
+    const { page } = await setup(t, { textSearch: true, records: scopeRecords() });
+    const search = page.locator("#wireSearch"), summary = page.locator("#activityListSummary");
+    await search.fill(privateQuery); await selectActivityOption(page, "wireSearchScope", "analysis"); await search.focus();
+    await expect(summary).toHaveText("9 interactions · 11 matching tool calls");
+    await search.press("Escape");
+    const ids = () => page.locator("#activityList article").evaluateAll(rows => rows.map(row => row.dataset.viewKey));
+    const first = await ids();
+    await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.locator("#activityPager")).toContainText("9-9 of 9");
+    assert.deepEqual([...first, ...await ids()].sort(), Array.from({ length: 9 }, (_, i) => `request:parity-request-${i}`));
+    await expect(page.locator("#activityCount")).toHaveText("11");
+    const link = page.locator("#activityList .request-card-open"), [id] = await ids();
+    await link.press("Enter");
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", id);
+    await page.goBack(); await expect(link).toBeFocused();
+    assert.deepEqual(await ids(), [id]);
+    await search.fill("NO_PARITY_MATCH");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    await expect(page.locator("#activityList article")).toHaveCount(0);
+    await expect(page.locator("#activityList .empty-state")).toContainText("No matching interactions");
+    const stored = await page.evaluate(() => JSON.stringify([location.href, history.state, { ...localStorage }, { ...sessionStorage }]));
+    assert.doesNotMatch(stored, /INVENTED_PARITY_NEEDLE|NO_PARITY_MATCH/);
+});
 
 test("the single reference entry opens the native guide without a read and preserves applicability", { timeout: 30000 }, async t => {
     const { page, snapshots } = await setup(t);
