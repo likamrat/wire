@@ -115,8 +115,10 @@ test("supported associations deduplicate targets and calls while legacy categori
     record.toolCalls = [record.toolCalls[1]];
     record.toolCalls[0].requestArgs.entityUrls.push("/me/messages", "/me/messages");
     const before = structuredClone(record);
-    const model = buildActivityAnalytics([record, structuredClone(record)]);
+    const alias = { ...structuredClone(record), scenarioId: `${record.scenarioId}-copy` };
+    const model = buildActivityAnalytics([record, alias]);
     const row = model.rows[0], involvement = model.serviceInvolvement;
+    assert.equal(model.exclusions.duplicateRecords, 1);
     assert.deepEqual(row.serviceAssociation.services, ["Mail", "Files"]);
     assert.equal(row.serviceAssociation.status, "identified");
     assert.equal(involvement.definition.id, "wire-service-involvement");
