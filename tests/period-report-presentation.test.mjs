@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { acceptPeriodReport, freezePeriodReport, PERIOD_POPULATION, validatePeriodReport } from "../lib/period-report.mjs";
+import { acceptPeriodReport, freezePeriodReport, PERIOD_AUTHOR_POLICY, PERIOD_POPULATION, validatePeriodReport } from "../lib/period-report.mjs";
 import * as output from "../lib/period-report-output.mjs";
 
 function snapshotFixture(periods) {
@@ -102,6 +102,7 @@ test("legacy period projections retain their original presentation and current m
         const snapshot = structuredClone(snapshotFixture()), value = snapshot.periodComparison;
         value.definitions.metricProjectionVersion = version;
         value.scope.population = PERIOD_POPULATION;
+        value.scope.authorPolicy = PERIOD_AUTHOR_POLICY;
         value.scope.findings = "Full retained interactions selected by matching records; calls outside the period or filters can remain in these interaction findings and metrics.";
         value.scope.interpretation = "Observed differences only. Unequal periods, shared records, different activity and assessment coverage do not establish causal improvement.";
         Object.values(value.periods).forEach(side => { side.facts.metricProjectionVersion = version; });
