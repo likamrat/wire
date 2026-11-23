@@ -155,9 +155,12 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             assert.equal(metrics.glyph.x + 10, metrics.box.x + 22); assert.equal(metrics.glyph.y + 10, metrics.box.y + 22);
             assert.equal(metrics.gap, 12, "Removing the old collapse row leaves only the rail's normal top inset");
             assert.equal(metrics.hit, true, "The compact target cannot be covered by the toolbar");
+            const paint = node => [node, node.querySelector("svg")].map(part => [
+                getComputedStyle(part).color, getComputedStyle(part).backgroundColor, getComputedStyle(part, "::before").backgroundColor,
+            ]);
+            const rest = await toggle.evaluate(paint);
             await toggle.hover(); await expect(tip).toHaveText(compact ? "Expand navigation" : "Collapse navigation");
-            const hover = await toggle.evaluate(node => getComputedStyle(node).backgroundColor);
-            assert.notEqual(hover, "rgba(0, 0, 0, 0)");
+            await expect.poll(() => toggle.evaluate(paint)).not.toEqual(rest);
             await page.keyboard.press("Escape");
             await toggle.focus(); await page.keyboard.press("Shift");
             await expect(toggle).toBeFocused();

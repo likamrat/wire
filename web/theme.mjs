@@ -45,9 +45,17 @@ export function initializeTheme(paletteIds) {
     }
     function state() { return { preference, theme: preference, storageUnavailable, palette, paletteStorageUnavailable }; }
     function apply() {
+        const changing = root.dataset.evidenceTheme !== undefined &&
+            (root.dataset.evidenceTheme !== preference || root.dataset.evidencePalette !== palette);
+        if (changing) root.dataset.switchingAppearance = "";
         root.dataset.evidenceTheme = preference;
         root.dataset.evidenceThemePreference = preference;
         root.dataset.evidencePalette = palette;
+        if (changing) {
+            // Resolve the new ink and face together before re-enabling hover paint.
+            void root.offsetWidth;
+            delete root.dataset.switchingAppearance;
+        }
         for (const listener of listeners) listener(state());
     }
     window.addEventListener("storage", (event) => {
