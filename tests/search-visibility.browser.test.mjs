@@ -541,7 +541,8 @@ test("return restores the current results page and keyboard reading position", {
     await row.focus();
     const id = await row.getAttribute("data-search-id");
     await visibility(page, true); await visibility(page, false);
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2; 24 total");
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
+    await expect(page.locator("#wireSearchCount")).toHaveText("24 matches");
     await expect(page.locator(`[data-search-id="${id}"]`)).toBeFocused();
     await expect(page.locator("#wireSearchPanel")).toBeVisible();
 });

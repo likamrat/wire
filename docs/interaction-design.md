@@ -472,7 +472,8 @@ not written into an existing saved report.
 ### Landing and saved list
 
 Reports opens with New report on the left and up to three recent reports on the
-right. At narrow widths the recent list follows creation. Saved library holds
+right. When more are saved, the heading shows how many are visible, for example
+“Recent reports (3 of 9).” At narrow widths the recent list follows creation. Saved library holds
 the full inventory. Preparing opens the working copy in a right-side drawer;
 opening a saved name reads the verified copy in the main workspace. Each has one
 Back to Reports action; context-qualified entries retain their own origin.

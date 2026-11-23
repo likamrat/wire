@@ -65,6 +65,15 @@ async function expectRetired(page, key) {
     }, key), [false, "", "", ""]);
 }
 
+test("Recent reports distinguishes the three shown from the number saved", async t => {
+    const { page } = await setup(t, 4);
+    await expect(page.locator("#savedLibraryTitle")).toHaveText("Recent reports (3 of 4)");
+    await expect(recent(page)).toHaveCount(3);
+    await allSaved(page).click();
+    await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (4)");
+    await expect(page.locator(".saved-library-row")).toHaveCount(4);
+});
+
 test("Reports starts with creation and three recent saved names; full-library controls retain the activated item and page", { timeout: 60000 }, async t => {
     const { page, requests, bundles } = await setup(t, 9);
     const shelf = page.locator("#savedReportsPanel");
@@ -195,6 +204,7 @@ test("compact shelf reflows at doubled text, Search opens the full library, and 
 
 test("the public library reloads, a lost private filter requires explicit recovery, and an empty shelf is distinct from New report", async t => {
     const { page, context } = await setup(t, 1);
+    await expect(page.locator("#savedLibraryTitle")).toHaveText("Recent reports (1)");
     await allSaved(page).click();
     await page.reload();
     await expect(page.locator("#savedReportSearch")).toBeVisible();

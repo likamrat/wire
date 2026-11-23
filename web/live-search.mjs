@@ -524,7 +524,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             });
             previous.disabled = !pages[key]; next.disabled = pages[key] >= pageCount - 1;
             if (!isPublished(authority)) return;
-            paging.append(previous, el("span", `Page ${pages[key] + 1} of ${pageCount}; ${hits.length} total`), next);
+            const position = `Page ${pages[key] + 1} of ${pageCount}`;
+            paging.append(previous, el("span", hits.length === value.total ? position : `${position}; ${hits.length} available`), next);
         }
     }
     function receive(event, authority) {

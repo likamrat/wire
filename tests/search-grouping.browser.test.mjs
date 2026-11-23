@@ -99,7 +99,8 @@ test("grouping the full population precedes paging and preserves keyboard Open/B
     const first = await rows(page);
     assert.ok(first.every(hit => hit.type === "context"), "The first page contains the first 20 members of the complete context group.");
     await expect(page.locator(".wire-search-group-label")).toHaveText(["Conversation context"]);
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 1 of 2; 26 total");
+    await expect(page.locator("#wireSearchCount")).toHaveText("26 matches");
+    await expect(page.locator("#wireSearchPaging span").filter({ hasText: "Page" })).toHaveText("Page 1 of 2");
     await input.press("ArrowDown"); await expect(hits.first()).toBeFocused();
     await page.keyboard.press("End"); await expect(hits.last()).toBeFocused();
     await page.getByRole("button", { name: "Next results", exact: true }).click();
@@ -107,7 +108,7 @@ test("grouping the full population precedes paging and preserves keyboard Open/B
     const second = await rows(page);
     verifyPopulation([...first, ...second], ranked);
     await expect(page.locator(".wire-search-group-label")).toHaveText(["Conversation context", "Interactions"]);
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2; 26 total");
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
     const opened = second.at(-1).id;
     await page.evaluate(() => {
         window.groupedReturnEvents = [];
@@ -124,11 +125,12 @@ test("grouping the full population precedes paging and preserves keyboard Open/B
     await expect(page).toHaveURL(/request=search-1(?:&|$)/);
     await page.goBack();
     await expect(page.locator(`[data-search-id="${opened}"]`)).toBeFocused();
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2; 26 total");
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
     assert.deepEqual(await rows(page), second);
     await selectActivityOption(page, "wireSearchType", "context");
     await expect(hits).toHaveCount(20);
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 1 of 2; 25 total");
+    await expect(page.locator("#wireSearchCount")).toHaveText("25 matches");
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 1 of 2");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await expect(page.locator("#activityCount")).toHaveText("25");
     await expect(page.locator("#wireSearchType")).toBeDisabled();

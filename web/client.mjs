@@ -7827,9 +7827,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }).sort((a, b) => a.prepared === null ? b.prepared === null ? a.index - b.index : 1
             : b.prepared === null ? -1 : (library && workspaceState.route.order === "oldest" ? 1 : -1) * (a.prepared - b.prepared || a.index - b.index));
         if (!library) {
-            setText($("savedLibraryTitle"), `Recent reports (${count(savedCount)} total)`);
+            const entries = ordered.slice(0, 3);
+            setText($("savedLibraryTitle"), entries.length === savedCount ? `Recent reports (${count(savedCount)})`
+                : `Recent reports (${count(entries.length)} of ${count(savedCount)})`);
             const recent = el("div", "saved-shelf-rows");
-            for (const { bundle } of ordered.slice(0, 3)) {
+            for (const { bundle } of entries) {
                 const control = savedTitleControl(bundle, listCurrent, true, listeners);
                 control.append(ux.icon("next")); recent.append(control);
             }
