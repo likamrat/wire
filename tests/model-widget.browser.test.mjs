@@ -114,6 +114,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await page.locator("#toFilter").fill("2026-10-12");
     await page.locator("#applyDates").click();
     await exact("custom", 1, { [modelNames[2]]: 1 }, 1);
+    await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-09-30");
     await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click();
@@ -135,6 +136,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await reset();
     await restoreLegacySearch(page, "Invented model instruction 1");
     await exact("one multi-model interaction", 1, { [modelNames[1]]: 1, [modelNames[0]]: 1 }, 1);
+    await reset();
     await restoreLegacySearch(page, "no-invented-model-match");
     await ready();
     await expect(page.locator("#homeView")).toHaveAttribute("data-empty", "true");

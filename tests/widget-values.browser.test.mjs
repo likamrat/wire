@@ -179,7 +179,9 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     await expect(page.locator(".comparison-outcome-values .percentage-value").first()).not.toHaveText("100.00% (3)");
     const tools = await pair("&comparisonView=tools");
     await chooseTheme(page, "light");
-    for (const group of await page.locator(".comparison-group").all()) {
+    const groups = page.locator(".comparison-group");
+    assert.deepEqual((await groups.locator("h4").allTextContents()).sort(), ["workiq-fetch", "workiq-get_schema"]);
+    for (const group of await groups.all()) {
         const label = await group.locator("h4").textContent();
         const expected = Object.values(tools.periods).map(side => {
             const count = side.analytics.rows.filter(row => row.tool === label).length;
