@@ -210,9 +210,9 @@ export const analyzeLayoutStyles = `
 .workspace-command-context{margin-inline-end:auto;min-width:0;color:var(--muted);font-size:var(--type-control)}
 .workspace-command-tools{margin-inline-start:auto}
 #workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
-#workspace>#analyzeResultCommands {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-xs) var(--space-md);flex-wrap:wrap;max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:var(--space-xs) var(--space-md);max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands[hidden] {display:none}
-#analyzeResultScope {flex:1 1 15rem;min-width:0;align-self:center}
+#analyzeResultScope {min-width:0;align-self:center}
 #analyzeResultScope .analyze-scope-summary {margin:0;padding:0;border:0}
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
@@ -234,11 +234,13 @@ export const analyzeLayoutStyles = `
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
 @media(max-width:550px) {
- #analyzeResultScope {order:1;flex-basis:100%}
- #analyzeResultCommands .analyze-toolbar {justify-content:flex-start}
+ #workspace>#analyzeResultCommands {grid-template-columns:minmax(0,1fr)}
+ #analyzeResultScope {order:1}
+ #analyzeResultCommands .analyze-toolbar {justify-self:end}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}
+.analyze-filter-dialog {scrollbar-gutter:stable}
 .analyze-filter-dialog[open]:not(:modal){position:fixed;z-index:30}
 @media(prefers-reduced-motion:no-preference) {
  .analyze-filter-dialog::backdrop {transition:background-color 320ms cubic-bezier(.2,0,0,1)}
