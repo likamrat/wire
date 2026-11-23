@@ -517,19 +517,26 @@ test("account activation during expansion, collapse and reversal settles its rea
         await page.waitForFunction(() => !document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
         if (activation !== "pointer") await trigger.focus();
         const expected = phase === "collapse" ? "collapsed" : "expanded";
-        await page.evaluate(async phase => {
+        await page.evaluate(phase => {
             const toggle = document.getElementById("navigationCollapse");
-            const frames = async () => {
-                for (let i = 0; i < 3; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+            // Hold a real intermediate frame so native input lands on the moving
+            // button, not coordinates it vacated between automation commands.
+            const glideToFrame = () => {
+                toggle.click();
+                for (const id of ["sidebar", "shellBrand"]) {
+                    for (const animation of document.getElementById(id).getAnimations({ subtree: true })) {
+                        animation.pause(); animation.currentTime = 80;
+                    }
+                }
             };
-            toggle.click(); await frames();
-            if (phase === "reverse") { toggle.click(); await frames(); }
+            glideToFrame();
+            if (phase === "reverse") glideToFrame();
         }, phase);
         if (activation === "pointer") {
-            await trigger.hover({ force: true });
+            await trigger.hover();
             assert.equal(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")), true,
                 "Hover does not settle the glide");
-            await trigger.click({ force: true });
+            await trigger.click();
         } else await trigger.press(activation);
         await expect(menu).toBeFocused();
         const geometry = await page.evaluate(() => ({
