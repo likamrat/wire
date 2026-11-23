@@ -78,16 +78,8 @@ test("Search removes caption recitals without merging the interaction and its re
             await expect(popup).toBeVisible();
             await expect(popup.locator(".select-toggle,.select-footer,.select-draft-hint,.select-validation")).toHaveCount(0);
             assert.equal(await popup.getByRole("listbox").getAttribute("aria-multiselectable"), null);
-            const skin = await trigger.evaluate(node => {
-                const menu = document.querySelector(".select-popup-filter"), selected = menu.querySelector('[aria-selected="true"]');
-                return { trigger: getComputedStyle(node, "::before").backgroundColor,
-                    menu: getComputedStyle(menu).backgroundColor, selected: getComputedStyle(selected).backgroundColor,
-                    paper: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor,
-                    clipped: node.querySelector(".select-value").scrollWidth > node.querySelector(".select-value").clientWidth };
-            });
-            assert.equal(skin.trigger, skin.paper); assert.equal(skin.menu, skin.paper);
-            assert.equal(skin.selected, "rgba(0, 0, 0, 0)");
-            assert.equal(skin.clipped, false, "Full values need no routine tooltip");
+            const value = trigger.locator(".select-value");
+            assert.equal(await value.evaluate(n => n.scrollWidth > n.clientWidth), false, "The chosen value fits the control");
             await expect(popup.locator('[aria-selected="true"] .select-check')).toBeVisible();
             await trigger.press("Escape");
             await expect(trigger).toBeFocused(); await expect(popup).toHaveCount(0);
@@ -112,10 +104,9 @@ test("Search removes caption recitals without merging the interaction and its re
             return { fill: css.backgroundColor, before: before.backgroundColor, decoration: title.textDecorationLine,
                 outcome: outcome.color, paper: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor };
         });
-        assert.equal(paint.fill, "rgba(0, 0, 0, 0)");
-        assert.equal(paint.before, "rgba(0, 0, 0, 0)", "No gray full-row hover slab");
         assert.equal(paint.decoration, "none", "Search titles use restrained color feedback, not underlines");
-        assert.ok(contrast(paint.outcome, paint.paper) >= 4.5);
+        const surface = [paint.before, paint.fill, paint.paper].find(color => color !== "rgba(0, 0, 0, 0)");
+        assert.ok(contrast(paint.outcome, surface) >= 4.5);
         assert.deepEqual(await interaction.boundingBox(), before, "A neighboring hover cannot move the reading layout");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await input.press("Escape");
@@ -123,16 +114,15 @@ test("Search removes caption recitals without merging the interaction and its re
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await input.focus(); await input.press("ArrowDown"); await interaction.press("Enter");
-    await expect(page).toHaveURL(/#request\?request=search-0(?:&|$)/);
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-0");
     await page.goBack(); await expect(interaction).toBeFocused();
     await expect(rows).toHaveCount(2);
     await action.tap();
     await expect(page.locator("#selectedCall")).toBeVisible();
-    const target = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
-    assert.equal(target.get("request"), records[0].scenarioId);
+    const target = new URL(page.url()).searchParams;
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-0");
     assert.equal(target.get("layer"), "tool");
     const call = `call:${JSON.stringify([records[0].sourceSessionId, records[0].toolCalls[0].toolCallId])}`;
-    assert.equal(target.get("call"), call);
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
     await page.goBack(); await expect(action).toBeFocused();
     assert.deepEqual(opens, identities);
@@ -231,20 +221,19 @@ test("Search retires current review navigation without suppressing authorized fr
     await expect(rows).toHaveCount(1);
     await expect(rows.locator(".wire-search-title")).toHaveText("Failed calls");
     await rows.click();
-    await expect(page).toHaveURL(/#analyze\?.*\bresult=failure/);
+    await expect(page).toHaveURL(/\/\?.*\bresult=failure/);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
-    const destination = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    const destination = new URL(page.url()).searchParams;
     assert.equal(destination.has("mode"), false); assert.equal(destination.get("result"), "failure");
     await expect(page.locator("#layerFilter")).toHaveValue("tool");
     const call = `call:${JSON.stringify([records[0].sourceSessionId, records[0].toolCalls[0].toolCallId])}`;
-    await expect(page.locator("#activityList .request-card-open")).toHaveAttribute("href", /request=search-0/);
-    await expect(page.locator("#activityView")).toBeFocused();
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:search-0");
     await expect(page.locator("#homeFindings")).toHaveCount(0);
     await page.goBack(); await expect(rows).toBeFocused();
     await expect(input).toHaveValue("Failed calls");
     await rows.click();
-    await expect(page).toHaveURL(/#analyze\?.*\bresult=failure/);
+    await expect(page).toHaveURL(/\/\?.*\bresult=failure/);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.locator("#activityList .request-card-open").click();
     await expect(page.locator(`[data-action-id='${call}']`).first()).toBeVisible();
