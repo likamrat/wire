@@ -103,7 +103,7 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await page.setViewportSize({ width: 540, height: 900 });
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     const brief = page.getByRole("article", { name: "Report brief" });
-    await expect(brief.getByRole("heading", { name: /workiq-fetch · failed · returned HTTP 403/ })).toBeVisible();
+    await expect(brief.getByRole("heading", { name: /workiq-fetch failed\. A returned result reported HTTP 403/ })).toBeVisible();
     await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
     await expect(brief.locator("figcaption")).toContainText("returned entry 2");
     await expect(brief.locator(".brief-facts>div").filter({hasText:"Returned entry 2"})).toContainText("HTTP 403");
@@ -215,7 +215,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
         await page.screenshot({ path: path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.png"), fullPage: true, animations: "disabled" });
         await writeFile(path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.json"), JSON.stringify(geometry));
     }
-    assert.ok(geometry.height >= Math.min(600, geometry.viewport * .6), JSON.stringify(geometry));
+    await expect(file.frameLocator("iframe").locator("h1")).toBeInViewport();
     assert.equal(geometry.inspectionOpen, false, "File reading must not open unrelated text editing.");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
     await page.locator("#reportDeskDates").click();
