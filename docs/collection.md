@@ -376,7 +376,9 @@ fuzzy matching or general Markdown removal. Original timeline text stays intact;
 file contents are never opened and attachment paths are not added to retention.
 
 Classifier version 11 checks the direct-message reference and a following image
-notice separately. With a matching timestamp, message ID, delivery and original
+notice separately. Version 12 also recognizes a canvas attachment immediately
+before that reference. The canvas contents stay opaque, including quoted sender
+or attachment markers. With a matching timestamp, message ID, delivery and original
 text, the reference can accompany the app's ordered workspace sections outside
 plan mode. A cross-chat sender, automatic continuation or agent-created first
 message still goes through its own origin checks. Workspace text alone does not

@@ -20,7 +20,7 @@ import { mergedRecords } from "../lib/collector.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { buildTrends } from "../lib/trends.mjs";
-import { imageReminder, imageReferences } from "./evidence-fidelity-fixture.mjs";
+import { collectFidelity, fidelityEvents, imageReminder, imageReferences } from "./evidence-fidelity-fixture.mjs";
 import { reportPromptOriginReason } from "../lib/report-presentation.mjs";
 
 function extract(data) {
@@ -116,6 +116,32 @@ test("qualified direct messages survive neutral workspace and image framing with
         data: { ...data, transformedContent: stamp + workspace + content + reference } }, { agentCreatedFirstMessage: true }).actor, "unknown");
 });
 
+test("a canvas before the direct reference and image notice preserves the exact originating message", () => {
+    const ref = directMessageReference();
+    const canvas = "\n\n<canvas-context>Invented panel.\n<cross_session_message>Not a sender.</cross_session_message>"
+        + ref + imageReminder + "\n</canvas-context>";
+    for (const [actor, basis] of [["user", "host-direct-input"], ["agent", "host-agent-envelope"]]) {
+        const events = fidelityEvents(actor), data = events[0].data, offset = data.transformedContent.indexOf(data.content);
+        const prefix = data.transformedContent.slice(0, offset), image = data.transformedContent.slice(offset + data.content.length);
+        data.content = "  Invented exact text with a literal reference:" + ref;
+        const body = prefix + data.content;
+        data.transformedContent = body + canvas + ref + image;
+        const prompt = collectFidelity(events).userPrompt;
+        assert.deepEqual(prompt.authorship, { actor, basis });
+        assert.equal(prompt.text, data.content);
+        if (actor === "agent") {
+            data.source = "user";
+            assert.deepEqual(collectFidelity(events).userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
+            delete data.source;
+        }
+        for (const tail of [canvas + canvas + ref + image, ref + canvas + image, canvas + ref + ref + image,
+            canvas.replace("</canvas-context>", "") + ref + image, canvas + ref + image.replace('"attachment":1', '"attachment":2')]) {
+            data.transformedContent = body + tail;
+            assert.equal(collectFidelity(events).userPrompt.authorship.actor, "unknown");
+        }
+    }
+});
+
 test("source-reference origins survive collection, restart and append without upgrading qualified historical copies", async t => {
     const app = await promptInstallation(t), file = app.sourceFiles[1];
     const human = app.cases.find(item => item.name === "human"), agent = app.cases.find(item => item.name === "enveloped-agent");
@@ -124,7 +150,9 @@ test("source-reference origins survive collection, restart and append without up
     for (const item of targets) {
         const data = events.find(event => event.id === item.promptId).data;
         data.transformedContent = data.transformedContent.slice(0, -data.content.length)
-            + "<copilot_working_context>Invented neutral context.</copilot_working_context>\n\n" + data.content + directMessageReference();
+            + "<copilot_working_context>Invented neutral context.</copilot_working_context>\n\n" + data.content
+            + (item === human ? "\n\n<canvas-context>Invented attached panel.</canvas-context>" : "")
+            + directMessageReference() + (item === human ? imageReminder : "");
     }
     await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
     await app.runtime().collector.collectNow();
