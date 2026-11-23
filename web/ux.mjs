@@ -542,7 +542,7 @@ export function createEvidenceUX(icons, operations) {
             item.className = "card-tool-item";
             label.className = "card-tool-name";
             label.textContent = name;
-            item.append(showTool(label, name));
+            item.append(label);
             if (countLabel) {
                 const count = document.createElement("span");
                 count.className = "card-tool-count";

@@ -81,12 +81,16 @@ Keep provenance in Source details; name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
 the glyph beside its label. Separate the identity key from the prompt with a
-rule. In the Tools summary, give each exact name a compact, neutral surface
-without bullets. These are list items, not filters or reader links. Keep a
+rule. In the Tools summary, show exact names as plain text without icons,
+badges or bullets. These are list items, not filters or reader links. Keep a
 repeat count inside its tool’s label, as in `workiq-retrieve (2 calls)`;
 a single call reads `workiq-fetch`. Wrap labels as units where they fit and
 allow long names to break rather than truncate. On a returned result layer
-the unit is results, not calls. The reader retains every record.
+the unit is results, not calls. Keep the card's two actions with these facts,
+not beneath the taller of the prompt and metadata columns. Use the same text
+scale for labels, targets and operations. Name the recorded operation for the
+reader (for example **Reply-all draft**); its exact API path remains in the
+call reader.
 
 ### Surfaces and color
 

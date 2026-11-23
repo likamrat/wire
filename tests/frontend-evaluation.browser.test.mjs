@@ -139,8 +139,8 @@ test("discovery, schema, agent, retrieval and named Graph actions retain distinc
         ["list_agents", {}, "Agent discovery"],
         ["retrieve", {query:"Find notes"}, "Search requested"],
         ["ask", {question:"Ask for notes"}, "Asked Copilot"],
-        ["do_action", {actionUrl:"/me/messages/{id}/microsoft.graph.replyAll"}, "Reply all"],
-        ["call_function", {functionUrl:"/me/calendar/getSchedule"}, "Get schedule"],
+        ["do_action", {actionUrl:"/me/messages/{id}/microsoft.graph.replyAll"}, "Reply to all"],
+        ["call_function", {functionUrl:"/me/calendar/getSchedule"}, "Calendar availability"],
     ];
     for (const [i,[tool, args]] of inputs.entries()) records[i].toolCalls = [{
         tool:`workiq-${tool}`, requestArgs:args, startEventId:`op-start-${i}`, toolCallId:`op-call-${i}`,
@@ -150,7 +150,7 @@ test("discovery, schema, agent, retrieval and named Graph actions retain distinc
     for (const [i,[tool,,label]] of inputs.entries()) {
         const card = page.locator(`[data-view-key="request:${records[i].scenarioId}"]`);
         const role = `operation-${tool.replaceAll("_","-")}`;
-        await expect(card.locator(`.card-tool-name [data-icon-role="${role}"]`)).toBeVisible();
+        await expect(card.locator(".card-tool-name")).toHaveText(`workiq-${tool}`);
         const operation = card.locator(".service-cue").filter({hasText:label});
         await expect(operation).toHaveCount(1);
         const subject = await operation.locator("svg").getAttribute("data-icon-role");
@@ -211,14 +211,15 @@ test("Analyze groups exact tool names and counts in static labels beside genuine
     await expect(cards.nth(1).locator(".card-tool-item")).toHaveCSS("list-style-type", "none");
     const label = labels.first(), name = label.locator(".card-tool-name"), url = page.url();
     const fill = await label.evaluate(n => getComputedStyle(n).backgroundColor);
-    assert.notEqual(fill, "rgba(0, 0, 0, 0)");
+    assert.equal(fill, "rgba(0, 0, 0, 0)");
     await name.hover();
     await expect(name).not.toHaveCSS("cursor", "pointer");
     await expect(label).toHaveCSS("background-color", fill);
     await name.click(); expect(page.url()).toBe(url);
     await expect(card.locator(".card-tool-list").getByRole("link")).toHaveCount(0);
     const panel = card.locator(".card-panel-link");
-    await card.locator(".report-draft-trigger").focus(); await page.keyboard.press("Tab");
+    // This read-only fixture has no named-draft action; focus the actual call-count link.
+    await panel.focus(); await page.keyboard.press("Shift");
     await expect(panel).toBeFocused();
     await expect(panel).toHaveCSS("outline-style", "solid");
     await panel.press("Enter");
@@ -585,7 +586,8 @@ test("heterogeneous summary cards stay readable in complete Light Dark narrow an
         await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
         await page.evaluate(() => document.fonts.ready);
         await expect(page.locator("#activityList .request-card-open")).toHaveCount(8);
-        await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|The call was saved as partial|Requested:|ToolUnavailable/);
+        await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|The call was saved as partial|Requested:/);
+        await expect(page.locator("#activityList .card-problem-area").first()).toContainText("ToolUnavailable");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `compact-after-${theme}-${width}-text${scale}-full.png`), fullPage: true });
@@ -681,7 +683,8 @@ test("wrapped card identities keep their value edge, named counts and distinct o
             assert.ok(measured.aligned, `${palette}/${mode} ${width}: wrapped tool names start on the value edge`);
             wrapped ||= measured.lines > 1;
             assert.equal(measured.size,measured.nameSize);
-            assert.ok(contrast(measured.count,measured.label)>=4.5 && contrast(measured.author,measured.paper)>=4.5
+            assert.equal(measured.label, "rgba(0, 0, 0, 0)", "Static tool text has no separate painted face");
+            assert.ok(contrast(measured.count,measured.paper)>=4.5 && contrast(measured.author,measured.paper)>=4.5
                 && contrast(measured.failure,measured.failPaper)>=4.5, JSON.stringify(measured));
             const clipped = await partial.locator(".card-excerpt").evaluate(n => n.clientHeight < n.scrollHeight && n.clientHeight <= parseFloat(getComputedStyle(n).lineHeight)*4+1);
             assert.ok(clipped, "An incomplete URL and quotation cannot grow past the home preview.");

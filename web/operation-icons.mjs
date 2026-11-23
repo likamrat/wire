@@ -12,32 +12,44 @@ export function createOperationIcons(entityCollections = graphEntityCollections)
         "owned-graph-http":"globe",
     };
     const graph = {
-        delta:"history", search:"search", getByIds:"list-filter", getMemberGroups:"group", getMemberObjects:"network",
-        getSchedule:"calendar-days", findMeetingTimes:"calendar-search", getMailTips:"mail-question", getActivitiesByInterval:"chart-column",
-        getTotalFileCount:"files", getOffice365ActiveUserDetail:"user-round", getOffice365ActiveUserCounts:"users",
-        getEmailActivityUserDetail:"mail-search", getEmailActivityCounts:"file-chart-column", getTeamsUserActivityUserDetail:"message-circle-more",
-        getTeamsUserActivityCounts:"chart-bar", getOneDriveUsageAccountDetail:"folder", getSharePointSiteUsageDetail:"panels-top-left",
-        getYammerActivityUserDetail:"message-square", getMailboxUsageDetail:"inbox", getManagedDevicesWithAppFailures:"monitor",
-        getAllMessages:"messages-square", getAllRetainedMessages:"folder-archive", getAllTranscripts:"file-text", getAllRecordings:"video",
-        checkMemberGroups:"user-round-check", checkMemberObjects:"list-collapse", validateProperties:"file-check-2",
-        copy:"copy", move:"folder-input", reply:"reply", replyAll:"reply-all", forward:"forward",
-        createReply:"message-square-reply", createReplyAll:"message-circle-reply", createForward:"send-horizontal",
-        send:"send", sendMail:"mail-plus", accept:"calendar-check", tentativelyAccept:"calendar-clock",
-        decline:"calendar-x", cancel:"calendar-minus", dismissReminder:"bell-off", snoozeReminder:"alarm-clock",
-        markAsRead:"mail-open", markAsUnread:"mail", archive:"archive", unarchive:"archive-restore",
-        add:"plus", remove:"minus", complete:"list-checks", subscribeToContent:"bell-plus", unsubscribeFromContent:"bell-minus",
-        preview:"eye", invite:"user-plus", createLink:"link", assignLicense:"badge", restore:"rotate-ccw",
-        permanentDelete:"trash-2", checkout:"log-out", checkin:"log-in", refreshSession:"refresh-cw",
-        createSession:"file-plus-2", closeSession:"square-x", calculate:"calculator", addPassword:"key-round",
-        removePassword:"lock-keyhole-open", addKey:"key-square", removeKey:"key", validatePermission:"shield",
-        publish:"upload", unpublish:"download", applySensitivityLabel:"tag", getSensitivityLabels:"tags", extractSensitivityLabels:"list-end",
+        delta:["history","Change tracking"], search:["search","Search"], getByIds:["list-filter","Lookup by ID"],
+        getMemberGroups:["group","Group membership lookup"], getMemberObjects:["network","Directory membership lookup"],
+        getSchedule:["calendar-days","Calendar availability"], findMeetingTimes:["calendar-search","Meeting time search"],
+        getMailTips:["mail-question","Recipient mail tips"], getActivitiesByInterval:["chart-column","Activity by time period"],
+        getTotalFileCount:["files","File count"], getOffice365ActiveUserDetail:["user-round","Microsoft 365 user activity"],
+        getOffice365ActiveUserCounts:["users","Microsoft 365 active user counts"], getEmailActivityUserDetail:["mail-search","Email activity by user"],
+        getEmailActivityCounts:["file-chart-column","Email activity counts"], getTeamsUserActivityUserDetail:["message-circle-more","Teams activity by user"],
+        getTeamsUserActivityCounts:["chart-bar","Teams activity counts"], getOneDriveUsageAccountDetail:["folder","OneDrive usage by account"],
+        getSharePointSiteUsageDetail:["panels-top-left","SharePoint site usage"], getYammerActivityUserDetail:["message-square","Yammer activity by user"],
+        getMailboxUsageDetail:["inbox","Mailbox usage"], getManagedDevicesWithAppFailures:["monitor","Devices with app failures"],
+        getAllMessages:["messages-square","Message retrieval"], getAllRetainedMessages:["folder-archive","Retained message retrieval"],
+        getAllTranscripts:["file-text","Transcript retrieval"], getAllRecordings:["video","Recording retrieval"],
+        checkMemberGroups:["user-round-check","Group membership check"], checkMemberObjects:["list-collapse","Directory membership check"],
+        validateProperties:["file-check-2","Property validation"], copy:["copy","Item copy"], move:["folder-input","Item move"],
+        reply:["reply","Reply"], replyAll:["reply-all","Reply to all"], forward:["forward","Message forwarding"],
+        createReply:["message-square-reply","Reply draft"], createReplyAll:["message-circle-reply","Reply-all draft"], createForward:["send-horizontal","Forward draft"],
+        send:["send","Send request"], sendMail:["mail-plus","Email send request"], accept:["calendar-check","Meeting acceptance"],
+        tentativelyAccept:["calendar-clock","Tentative meeting acceptance"], decline:["calendar-x","Meeting decline"], cancel:["calendar-minus","Meeting cancellation"],
+        dismissReminder:["bell-off","Reminder dismissal"], snoozeReminder:["alarm-clock","Reminder snooze"],
+        markAsRead:["mail-open","Marking as read"], markAsUnread:["mail","Marking as unread"],
+        archive:["archive","Archiving"], unarchive:["archive-restore","Removal from archive"],
+        add:["plus","Addition"], remove:["minus","Removal"], complete:["list-checks","Completion request"],
+        subscribeToContent:["bell-plus","Content subscription"], unsubscribeFromContent:["bell-minus","Content unsubscription"],
+        preview:["eye","Item preview"], invite:["user-plus","Sharing invitation"], createLink:["link","Sharing link creation"],
+        assignLicense:["badge","License assignment"], restore:["rotate-ccw","Item restoration"], permanentDelete:["trash-2","Permanent deletion request"],
+        checkout:["log-out","File checkout"], checkin:["log-in","File check-in"], refreshSession:["refresh-cw","Session refresh"],
+        createSession:["file-plus-2","Session creation"], closeSession:["square-x","Session closure"], calculate:["calculator","Workbook calculation"],
+        addPassword:["key-round","Password addition"], removePassword:["lock-keyhole-open","Password removal"],
+        addKey:["key-square","Key addition"], removeKey:["key","Key removal"], validatePermission:["shield","Permission check"],
+        publish:["upload","Publication"], unpublish:["download","Publication withdrawal"], applySensitivityLabel:["tag","Sensitivity label assignment"],
+        getSensitivityLabels:["tags","Sensitivity label lookup"], extractSensitivityLabels:["list-end","Sensitivity label extraction"],
     };
     const slug = name => name.replaceAll("_","-").replace(/([a-z0-9])([A-Z])/g,"$1-$2").toLowerCase();
     const toolRole = name => Object.hasOwn(tools,name) ? "operation-" + slug(name.replace(/^workiq-/,"")) : null;
     const graphRole = name => "operation-graph-" + slug(name);
     const sources = Object.freeze({
         ...Object.fromEntries(Object.entries(tools).map(([k,v]) => [toolRole(k),v])),
-        ...Object.fromEntries(Object.entries(graph).map(([k,v]) => [graphRole(k),v])),
+        ...Object.fromEntries(Object.entries(graph).map(([k,[glyph]]) => [graphRole(k),glyph])),
         "operation-exchange-id-conversion":"arrow-right-left",
     });
     function pathOperations(row, layer) {
@@ -52,8 +64,7 @@ export function createOperationIcons(entityCollections = graphEntityCollections)
             // A bare token at an entity-key position can be the literal ID, not an operation.
             if (tail === name && collections.has(path.split("/").at(-2))) continue;
             if (name && Object.hasOwn(graph,name)) {
-                const words = name.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
-                operations.set(name, {label:words[0].toUpperCase() + words.slice(1).toLowerCase(), operationRole:graphRole(name)});
+                operations.set(name, {label:graph[name][1], operationRole:graphRole(name)});
             }
         }
         return [...operations.values()];

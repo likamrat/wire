@@ -708,6 +708,11 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .read-in-place {container-type:inline-size}
 .read-in-place[data-detail-active] .card-reading-body,.read-in-place[data-detail-active] .card-reading-actions {background:var(--accent-soft)}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
+.card-reading-body:has(>.card-reading-details) {grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:clamp(16px,2vw,32px);padding-block-end:12px}
+.card-reading-details {display:grid;align-content:start;gap:8px;min-width:0;padding-inline-start:16px;border-inline-start:1px solid var(--surface-divider)}
+.card-reading-details>.card-identities {padding:0;border:0}
+.card-reading-details>.card-reading-actions {padding:0;justify-content:flex-start}
+.card-reading-details .card-reading-actions>.card-panel-link {margin-inline-start:0}
 .card-request-context {min-width:0;max-width:78ch;display:grid;align-content:start;gap:8px}
 .card-request-context .request-card-summary {margin:0;gap:4px 12px}
 :is(.card-request-context .request-card-summary,.card-orientation):empty {display:none}
@@ -766,13 +771,18 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-identity-field+.card-identity-field {margin-top:4px}.card-identity-field dt {margin:0;color:var(--muted)}
 .card-identity-values {display:flex;align-items:baseline;flex-wrap:wrap;gap:.22em 1em;margin:0;min-width:0;overflow-wrap:anywhere}
 .card-identity-values>* {min-width:0;max-width:100%}
-.card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;margin:0;padding:0;list-style:none;max-width:100%}
-.card-tool-item {flex:none;max-width:100%;min-width:0;padding:2px 7px;border-radius:2px;background:color-mix(in srgb,var(--accent) 7%,var(--paper));color:var(--ink);box-shadow:inset 0 0 0 1px var(--surface-edge)}
-@media(forced-colors:active) {.card-tool-item {border-block-end:1px solid GrayText}}
+.card-tool-list {display:flex;flex-wrap:wrap;align-items:baseline;gap:.15em 1em;margin:0;padding:0;list-style:none;max-width:100%}
+.card-tool-item {max-width:100%;min-width:0;color:var(--ink);overflow-wrap:anywhere}
 .card-tool-item .card-tool-name {min-width:0;overflow-wrap:anywhere}
 .card-tool-item .card-tool-count {white-space:nowrap;font:inherit;color:var(--muted);font-variant-numeric:tabular-nums}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
+.card-reading-details .card-identity-field {grid-template-columns:5.25em minmax(0,1fr);gap:8px}
+.card-reading-details .card-identity-field+.card-identity-field {margin-top:8px}
+.card-reading-details .card-identities :is(dt,dd,.semantic-cue,.card-gap-link) {font:inherit}
+.card-reading-details .card-identities .service-cue>.wire-icon {margin-block-start:calc((1lh - var(--cue-icon-size)) / 2)}
+.card-reading-details .card-gap-link {min-height:2em}
+@media(pointer:coarse) {.card-reading-details .card-gap-link {min-height:44px}}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
 .card-evidence-link {display:inline-flex;align-items:center;gap:.3em;min-height:44px;max-width:100%;overflow-wrap:anywhere;color:var(--ink)}
 .request-row .card-evidence-link:any-link {background:transparent;text-decoration:none}
@@ -815,7 +825,12 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .returned-call-parent {display:none;color:var(--muted);font-size:var(--type-small)}
 .api-result-entry:focus .returned-call-parent,.api-result-entry[aria-current=true] .returned-call-parent {display:block}
 @container(max-width:57rem) {.card-reading-body {grid-template-columns:minmax(0,1fr);gap:8px}.card-reading-body>.card-identities {padding:6px 0 0;border-inline-start:0;border-top:1px solid var(--rule)}}
+@container(max-width:57rem) {
+ .card-reading-body:has(>.card-reading-details) {grid-template-columns:minmax(0,1fr);gap:12px}
+ .card-reading-details {border-inline-start:0;border-block-start:1px solid var(--surface-divider);padding:12px 0 0}
+}
 @container(max-width:26rem) {.card-reading-body,.card-reading-actions {padding-inline:12px}.card-identity-field {grid-template-columns:minmax(0,1fr);gap:0}}
+@container(max-width:18rem) {.card-reading-details .card-identity-field {grid-template-columns:minmax(0,1fr);gap:2px}}
 @container(max-width:32rem) {.request-card-open {--request-card-inset:16px}}
 .interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .interaction-identity {display:grid;gap:var(--space-xs);flex-basis:100%;min-width:0;color:var(--ink)}

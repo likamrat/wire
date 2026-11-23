@@ -6064,7 +6064,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             link.append(cue, ux.icon("forward"));
             return link;
         }
-        body.append(context, activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null }));
+        const identities = activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null });
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
@@ -6128,7 +6128,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const named = !reportPicker && namedRequest(scenario.scenarioId);
         if (named) foot.append(namedDrafts.make(named.scenarioId));
         foot.append(panel);
-        row.append(body, foot);
+        if (reportPicker) {
+            body.append(context, identities); row.append(body, foot);
+        } else {
+            const details = el("div", "card-reading-details");
+            details.append(identities, foot); body.append(context, details); row.append(body);
+        }
         cardOwners.set(row, events);
         return row;
     }

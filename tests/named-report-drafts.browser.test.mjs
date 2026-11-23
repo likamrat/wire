@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { privateFixture, fixture, navigateMain } from "./helpers.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
@@ -10,6 +10,62 @@ import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { palettes } from "../web/theme.mjs";
+
+test("Analyze keeps adjacent cards' call actions with their identities even when the prompt has a long problem", async t => {
+    const records = [fixture("layout-problem"), fixture("layout-operations"), fixture("layout-sparse")];
+    const prompts = ["Check the workshop timetable against my mail and calendar. Find the invitation with the updated room and tell me which decisions still need a reply.",
+        "Find the people on the release thread and prepare a reply to everyone. Leave it as a draft.", "Find the agenda for Monday."];
+    const calls = [
+        [["ask", {question:"Check the workshop"}, 3], ["fetch", {entityUrls:["/me/messages","/me/calendar/events"]}, 5]],
+        [["fetch", {entityUrls:["/me/messages","/me/people"]}, 4], ["do_action", {actionUrl:"/me/messages/{id}/createReplyAll"}, 1],
+            ["do_action", {actionUrl:"/me/translateExchangeIds"}, 1]],
+        [["fetch", {entityUrls:["/me/calendar/events"]}, 1]],
+    ];
+    records.forEach((record,i) => {
+        record.capturedAt = `2026-11-16T1${8-i}:00:00Z`;
+        record.userPrompt = {text:prompts[i],status:"full",sourceTimestamp:record.capturedAt,authorship:{actor:"user",basis:"source-user"}};
+        record.toolCalls = calls[i].flatMap(([tool,requestArgs,n],group) => Array.from({length:n},(_,j) => ({
+            tool:`workiq-${tool}`,requestArgs,toolCallId:`layout-${i}-${group}-${j}`,startEventId:`start-${i}-${group}-${j}`,
+            startedAt:record.capturedAt,reportedOutcome:!i && !group ? "failed" : "succeeded",toolSucceeded:!!(i || group),apiResults:[],
+            ...(!i && !group ? {failureEvidence:{version:1,reason:"error-code-recorded",code:"ToolUnavailable",
+                messageStatus:"text-excluded"}} : {}),
+        })));
+    });
+    const cleanup = [], {context} = await privateFixture({after:f => cleanup.push(f)},records);
+    const access = await createCopilotRuntimeAccess(context);
+    const server = await startServer(context,createExportController(context),{port:0,frontend:"react",access,collector:{timers:false}});
+    const browser=await chromium.launch(), page=await browser.newPage({reducedMotion:"reduce",timezoneId:"UTC"});
+    t.after(async()=>{await browser.close();await server.close();await access.close();for(const f of cleanup.reverse())await f();});
+    await page.clock.setFixedTime(new Date("2026-11-18T12:00:00Z"));
+    await page.goto(server.url+"#analyze?range=custom&from=2026-11-10&to=2026-11-16");
+    const cards=page.locator("#activityList .activity-card"), proof=process.env.WIRE_CARD_LAYOUT_PROOFS, gaps=[];
+    await expect(cards).toHaveCount(3);
+    await expect(cards.first().locator(".card-problem-area")).toBeVisible();
+    await expect(cards.first().locator(".report-draft-trigger")).toBeVisible();
+    if(proof) await mkdir(proof,{recursive:true});
+    for(const [width,scale] of [[1440,1],[768,1],[390,1.5]]) for(const theme of ["light","dark"]) {
+        await page.setViewportSize({width,height:1000}); await page.evaluate(([scale,theme])=>{
+            document.documentElement.style.fontSize=`${scale*100}%`;
+            document.documentElement.dataset.evidencePalette="blue";document.documentElement.dataset.evidenceTheme=theme;
+        },[scale,theme]);
+        await page.evaluate(()=>document.fonts.ready);
+        await cards.first().evaluate(n=>scrollBy(0,n.getBoundingClientRect().top-document.querySelector(".app-header").getBoundingClientRect().bottom-12));
+        if(proof) await page.screenshot({path:path.join(proof,`${theme}-${width}.png`)});
+        for(const card of await cards.all()){
+            const bounds=await card.evaluate(n=>{
+                const key=n.querySelector(".card-identities").getBoundingClientRect(),foot=n.querySelector(".card-reading-actions").getBoundingClientRect();
+                return {gap:foot.top-key.bottom,clipped:n.scrollWidth>n.clientWidth+1};
+            });
+            assert.equal(bounds.clipped,false); gaps.push({width,theme,...bounds});
+        }
+    }
+    const op=cards.nth(1).getByRole("link",{name:/Reply-all draft: open call/});
+    if(proof) await writeFile(path.join(proof,"gaps.json"),JSON.stringify(gaps));
+    assert.ok(gaps.every(r=>r.gap>=-1 && r.gap<=16), JSON.stringify(gaps));
+    await expect(cards.locator(".card-tool-list svg")).toHaveCount(0);
+    await op.press("Enter"); await expect(page.locator('[data-tool-call-id="layout-1-1-0"]')).toBeFocused();
+    await page.goBack(); await expect(op).toBeFocused();
+});
 
 test("report actions and call counts keep their columns while palettes distinguish add and remove", { timeout: 90000 }, async t => {
     const counts = [1, 3, 4, 12];
