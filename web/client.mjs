@@ -1336,8 +1336,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (preserveAnchor && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
             if (restoreFocus && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent) {
-                const origin = underlyingRoute().view === "trends" ? trendsUI.evidenceOrigin()
-                    : anchor?.querySelector("[data-card-origin]") ?? anchor?.querySelector(".request-card-open,.request-link");
+                const route = underlyingRoute(), saved = workspaceState.positions.get(readingKey(route));
+                // A nested visit can rebuild the article and lose its originating-link marker.
+                const focus = saved && api.isCurrent(saved.publication) ? saved.focus : null;
+                const restored = anchor && focus?.tag === "A" && focus.key === anchor.dataset.viewKey
+                    ? [...anchor.querySelectorAll("a[aria-controls=contextSidebar]")].filter(link =>
+                        link.getAttribute("aria-label") === focus.label && link.textContent === focus.text) : [];
+                const origin = route.view === "trends" ? trendsUI.evidenceOrigin()
+                    : anchor?.querySelector("[data-card-origin]") ?? (restored.length === 1 ? restored[0] : null)
+                        ?? anchor?.querySelector(".request-card-open,.request-link");
                 if (origin?.isConnected && origin.checkVisibility()) ux.restoreFocus(origin);
                 else if ($("activityView").checkVisibility()) revealResults();
             }

@@ -171,6 +171,28 @@ test("keyboard selection distinguishes duplicate chat names at narrow and enlarg
     await expect(page.locator("#chatFilter")).toHaveValue("source-two");
 });
 
+test("Close restores the call-count link directly and after visiting the chat from Source", async t => {
+    const { page, url } = await setup(t);
+    await page.goto(url);
+    const panel = page.getByRole("link", { name: "Open activity panel: 2 tool calls", exact: true });
+    const reader = page.locator("#contextSidebar");
+    for (const visitChat of [false, true]) {
+        await panel.press("Enter");
+        await expect(reader).toBeVisible();
+        if (visitChat) {
+            await reader.getByRole("button", { name: "Source details", exact: true }).press("Enter");
+            const chat = reader.getByRole("link", { name: `Filter to chat: ${title}`, exact: true });
+            await chat.press("Enter");
+            await expect(page.locator("#chatFilter")).toHaveValue("source-one");
+            await page.goBack();
+            await expect(chat).toBeFocused();
+        }
+        await reader.getByRole("button", { name: "Close interaction", exact: true }).press("Enter");
+        await expect(reader).toBeHidden();
+        await expect(panel).toBeFocused();
+    }
+});
+
 test("an unnamed chat can be selected; an interaction without a chat cannot supply a source link", async t => {
     const { page, url } = await setup(t, { includeUnlinked: true });
     await page.goto(url);
