@@ -108,11 +108,11 @@ function Reader({ request, close }: { request: HTMLElement; close: () => void })
             <h2 id="contextSidebarTitle" tabIndex={-1} />
             <div className="context-sidebar-controls">
                 <div id="readerWidthControls" hidden>
-                    <button id="narrowInteraction" type="button" className="quiet" aria-label="Narrow interaction" />
-                    <button id="widenInteraction" type="button" className="quiet" aria-label="Widen interaction" />
+                    <button id="narrowInteraction" type="button" className="quiet icon-only" aria-label="Narrow interaction" />
+                    <button id="widenInteraction" type="button" className="quiet icon-only" aria-label="Widen interaction" />
                 </div>
-                <button id="expandInteraction" type="button" className="quiet" hidden />
-                <button id="closeContextSidebar" type="button" className="quiet" aria-label="Close interaction" onClick={close} />
+                <button id="expandInteraction" type="button" className="quiet icon-only" hidden />
+                <button id="closeContextSidebar" type="button" className="quiet icon-only" aria-label="Close interaction" onClick={close} />
             </div>
         </header>
         <div id="readerResize" role="separator" aria-label="Interaction width" aria-orientation="vertical"

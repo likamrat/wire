@@ -28,6 +28,31 @@ async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
 }
 
 for (const frontend of ["bundled", "react"]) {
+test(`reader controls stay compact with doubled text in both layouts (${frontend})`, async t => {
+    const { page, runtime } = await setup(t, { frontend });
+    await page.setViewportSize({ width: 2800, height: 1000 });
+    await page.goto(runtime.url);
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    const prompt = page.locator("#activityList .request-card-open").first();
+    await prompt.click();
+    const reader = page.locator("#contextSidebar");
+    for (const [mode, names] of [
+        ["docked", ["Narrow interaction", "Widen interaction", "Maximize interaction", "Close interaction"]],
+        ["overlay", ["Close interaction"]],
+    ]) {
+        if (mode === "overlay") await page.setViewportSize({ width: 375, height: 900 });
+        await expect(reader).toHaveAttribute("data-mode", mode);
+        for (const name of names) {
+            const control = reader.getByRole("button", { name, exact: true });
+            await expect(control).toBeVisible();
+            const { width, height } = await control.boundingBox();
+            assert.deepEqual([width, height], [44, 44], `${mode}: ${name}`);
+        }
+    }
+    await reader.getByRole("button", { name: "Close interaction" }).click();
+    await expect(prompt).toBeFocused();
+});
+
 test(`losing an open bookmark releases the old Analyze cards without exposing a fallback (${frontend})`, async t => {
     const { page, runtime, context } = await setup(t, { frontend });
     await page.goto(runtime.url);
