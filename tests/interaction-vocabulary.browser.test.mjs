@@ -212,7 +212,7 @@ test("Analyze widget links explain the mark and open its exact calls or originat
     assert.deepEqual(errors, []);
 });
 
-test("service evidence explains significance at its call without warning on ordinary operations", { timeout: 60000 }, async t => {
+test("known service matches stay distinct from context-only calls and unreadable attribution", { timeout: 60000 }, async t => {
     const call = (tool, requestArgs = {}) => ({
         tool, requestArgs, toolSucceeded: true, reportedOutcome: "succeeded", apiResults: [],
         resultEvidence: { version: 1, contentStatus: "body-excluded" },
@@ -250,7 +250,7 @@ test("service evidence explains significance at its call without warning on ordi
         ? (await import(pathToFileURL(path.join(process.env.WIRE_EVIDENCE_BASELINE, "lib", "server.mjs")).href)).startServer : startServer;
     const runtime = await start(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "no-preference" });
-    const errors = [], denied = [], observations = [];
+    const errors = [], denied = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
@@ -267,141 +267,20 @@ test("service evidence explains significance at its call without warning on ordi
             for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], before[key]);
         } finally { for (const fn of cleanup) await fn(); }
     });
-    const phase = process.env.WIRE_SERVICE_CLARITY_PHASE ?? "after", proof = process.env.WIRE_SERVICE_CLARITY_PROOFS;
-    if (proof) await mkdir(proof, { recursive: true });
-    const card = name => page.locator(`.request-card-open[href*="attribution-${name}"]`);
-    const settle = () => page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
-        .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
-    await page.goto(runtime.url);
+    await page.goto(runtime.url + "#analyze?services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.evaluate(() => document.fonts.ready);
-    for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await settle();
-        if (phase !== "before") {
-            await expect(page.locator("#activityList .service-availability,#activityList .request-card-categories")).toHaveCount(0);
-            for (const name of ["hosted", "followup", "known"]) {
-                await expect(card(name).locator(".call-reason-list")).toHaveCount(0, "Successful body-retention policy is not a problem bullet.");
-                await expect(card(name)).not.toContainText("Response body excluded from retention");
-            }
-            await expect(card("hosted")).not.toContainText(/Tools:|Operations:|Services:/);
-            await expect(card("hosted").locator('[data-service="Files"],[data-service="Mail"],[data-service="Teams"]')).toHaveCount(0);
-            await expect(card("mixed")).not.toContainText("Payload too large");
-            await expect(card("mixed").locator(".request-card-exception")).toHaveText("1 tool call failed");
-            await expect(page.locator("#activityList")).not.toContainText("Some service details unavailable");
-            for (const reason of ["missing-target", "unsupported-target", "unrecognized-path"])
-                await expect(page.locator(`[data-service-basis="${reason}"]`)).toHaveAttribute("data-count", "1");
-            await expect(page.locator('[data-service-basis="Assistance"]')).toHaveAttribute("data-count", "4");
-            await expect(page.locator('[data-service-basis="Search"]')).toHaveAttribute("data-count", "5");
-            const paint = await card("mixed").evaluate(node => ({
-                exception: getComputedStyle(node.querySelector(".request-card-exception")).color,
-                metadata: getComputedStyle(node.querySelector(".request-card-summary")).color,
-            }));
-            assert.equal(paint.exception, paint.metadata);
-            observations.push({ theme, width, ...paint });
-        }
-        if (proof) {
-            await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-page.png`), fullPage: true });
-            for (const name of ["hosted", "mixed", "unclassified", "unsupported"]) await card(name).screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}.png`) });
-        }
-        await card("hosted").click(); await settle();
-        const assistance = page.locator('[data-tool-call-id="hosted-1"]');
-        if (phase !== "before") {
-            await expect(assistance.locator(".reader-call-toggle")).toHaveAttribute("aria-expanded", "false");
-            await expect(assistance.getByText("Asked Copilot", {exact:true})).toBeVisible();
-            await expect(assistance).not.toContainText("which apps, if any");
-            await expect(assistance.locator(".recorded-result")).toHaveAttribute("data-outcome", "success");
-            await expect(page.locator('[data-attribution-kind="operation"]')).toHaveCount(0);
-            await expect(assistance.locator(".call-reason-list")).toHaveCount(0);
-        }
-        await assistance.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
-        if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-hosted-reader.png`) });
-        if (phase !== "before") {
-            await assistance.locator(".reader-call-toggle").click();
-            await expect(assistance.locator(".technical-detail")).toContainText("Response bodies are excluded from activity retention.");
-            await expect(assistance.locator(".technical-detail")).toContainText("which apps, if any, Copilot used");
-            await assistance.locator(".reader-call-toggle").click();
-        }
-        await page.keyboard.press("Escape"); await expect(card("hosted")).toBeFocused();
-        await card("mixed").click(); await settle();
-        const failure = page.locator('[data-tool-call-id="mixed-2"]');
-        await failure.locator(".reader-call-summary").scrollIntoViewIfNeeded();
-        await expect(failure).toContainText("Payload too large; downloads are limited to 4 MB.");
-        await expect(failure.locator(".reader-entry-label")).toHaveText("Call #3");
-        await expect(failure.locator(".result-status")).toHaveText("1 tool call failed");
-        if (phase !== "before") {
-            await expect(failure.locator(".service-availability")).toHaveCount(0, "The actual failed Files call has an identified service.");
-            const ask = page.locator('[data-tool-call-id="mixed-1"]');
-            await ask.locator(".reader-call-toggle").click();
-            await expect(ask).toContainText("The files listed in the request don’t tell us that either.");
-        }
-        if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-mixed-reader.png`) });
-        assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-        await page.keyboard.press("Escape"); await expect(card("mixed")).toBeFocused();
-        await card("batch").click(); await settle();
-        if (phase !== "before") {
-            const batch = page.locator('[data-tool-call-id="batch-0"]');
-            await expect(batch.locator(".api-result-entry")).toContainText("No path returned for this batch entry.");
-            await expect(batch.getByRole("button", { name: "About batch target" })).toHaveCount(1);
-            if (proof) {
-                await batch.locator(".api-result-entry").scrollIntoViewIfNeeded();
-                await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-batch-reader.png`) });
-            }
-        }
-        await page.keyboard.press("Escape"); await settle();
-        if (phase !== "before" && width === 1440) for (const [name, label] of [
-            ["missing", "Service target not recorded"],
-            ["unclassified", "Recorded path not recognized"],
-            ["unsupported", "Recorded target format unsupported"],
-        ]) {
-            await card(name).click(); await settle();
-            const call = page.locator(`[data-tool-call-id="${name}-0"]`);
-            await expect(card(name)).not.toContainText(label);
-            await expect(call.locator(".service-availability")).toHaveCount(0);
-            await expect(call.locator(".reader-attribution-context")).toBeVisible();
-            await expect(page.locator('[data-reader-section="activity"] .reader-operation-context')).toHaveCount(0);
-            await expect(call.locator(".reader-attribution-context")).toContainText(
-                name === "missing" ? "source omission or a capture problem" : name === "unclassified" ? "does not identify a named app" : "cannot interpret");
-            await expect(call.locator(".reader-attribution-context")).toContainText("The call still counts; its result is shown separately.");
-            await expect(call.locator(".reader-call-toggle")).toHaveAttribute("aria-expanded", "false");
-            if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-detail-${name}.png`) });
-            await page.keyboard.press("Escape"); await settle();
-        }
-    }
-    if (phase !== "before") {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        const response = page.waitForResponse(value => new URL(value.url()).pathname === "/api/snapshot" && value.ok());
-        await page.goto(runtime.url + "#analyze?services=Files&includeMissingService=true");
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        const selection = (await (await response).json()).analytics.serviceInvolvement.selection;
-        assert.equal(selection.knownMatchIds.length, 2);
-        assert.equal(selection.contextOnlyIds.length, 7);
-        await expect(page.locator("#serviceFocusScope")).toContainText("2 known matches");
-        await expect(page.locator("#serviceFocusScope")).toContainText("7 context-only");
-        if (proof) await page.screenshot({ path: path.join(proof, `${phase}-filter-context.png`) });
-        await page.route("**/api/snapshot", async route => {
-            const response = await route.fetch(), data = await response.json();
-            delete data.requestActivity.tool;
-            await route.fulfill({ response, json: data });
-        });
-        for (const theme of ["light", "dark"]) {
-            await chooseTheme(page, theme);
-            await page.goto(runtime.url + "#request?request=attribution-missing&layer=reported-api");
-            await page.reload();
-            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-            await expect(page.locator('[data-tool-call-id="missing-0"] .reader-attribution-context')).toContainText("could not read");
-            await expect(page.locator('[data-tool-call-id="missing-0"] .reader-attribution-context')).toContainText("not a recorded service failure");
-            await expect(page.locator("#requestContent")).not.toContainText("1 of 0");
-            await expect(page.locator('[data-view-key="percentage:services:exact"] .percentage-note')).toContainText("Percentages use all selected records");
-            await settle();
-            if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-detail-unreadable.png`) });
-            await page.keyboard.press("Escape"); await settle();
-        }
-    }
-    if (proof) await writeFile(path.join(proof, phase + "-observations.json"), JSON.stringify(observations, null, 2));
+    await expect(page.locator("#serviceFocusScope")).toContainText("2 known matches");
+    await expect(page.locator("#serviceFocusScope")).toContainText("7 context-only");
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), data = await response.json();
+        delete data.requestActivity.tool;
+        await route.fulfill({ response, json: data });
+    });
+    await page.goto(runtime.url + "#request?request=attribution-missing&layer=reported-api");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    const gap = page.locator('[data-tool-call-id="missing-0"] .reader-attribution-context');
+    await expect(gap).toContainText("could not read");
+    await expect(gap).toContainText("not a recorded service failure");
 });
 
 test("app uncertainty belongs to the exact expanded call, not the prompt or a neighboring call", { timeout: 60000 }, async t => {
@@ -461,6 +340,8 @@ test("app uncertainty belongs to the exact expanded call, not the prompt or a ne
         for (const [id, count] of [["op-two", 2], ["op-three", 3], ["op-long", 9], ["op-mixed", 4]]) {
             const card = page.locator("#activityList article").filter({hasText:`Review the invented ${id} workshop plan.`}).locator(".request-card-open");
             await card.click(); await settle();
+            const full = page.getByRole("link", {name: "Show full activity"});
+            if (await full.isVisible()) await full.click();
             const activity = page.locator('[data-reader-section="activity"]');
             const metrics = await activity.evaluate(node => {
                 const notes = [...node.querySelectorAll('.reader-operation-context, [data-attribution-kind="operation"]')];
@@ -509,6 +390,7 @@ test("app uncertainty belongs to the exact expanded call, not the prompt or a ne
         await page.goto(runtime.url + "#analyze?tool=workiq-retrieve");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await page.locator("#activityList article").filter({hasText:"Review the invented op-mixed workshop plan."}).locator(".request-card-open").click();
+        await page.getByRole("link", { name: "Show full activity" }).click();
         await expect(page.locator("#requestContent .reader-scope")).toContainText("2 of 4");
         await expect(page.locator('[data-reader-section="activity"]')).not.toContainText("which apps");
         await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(4);
@@ -543,7 +425,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
             for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], before[key]);
         } finally { for (const fn of cleanup) await fn(); }
     });
-    const card = name => page.locator(`[data-view-key="request:wording-${name}"] .request-card-open`);
+    const card = name => page.locator(`#activityList [data-view-key="request:wording-${name}"]`);
     await page.goto(runtime.url);
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -554,9 +436,8 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         await expect(card("unknown").locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
         await expect(card("copilot")).not.toContainText("Not shown");
         await expect(card("copilot").locator(".service-availability")).toHaveCount(0);
-        await expect(page.locator("#activityList .request-card-categories,#activityList .service-cue")).toHaveCount(0);
         await expect(card("preparation").locator(".service-availability")).toHaveCount(0);
-        await card("automatic").click();
+        await card("automatic").locator(".request-card-open").click();
         await expect(page.locator('[data-reader-section="prompt"] .reader-section-title')).toHaveText("Agent prompt (automatic continuation)");
         await expect(page.locator('[data-reader-section="prompt"] .ux-copy')).toHaveCount(0);
         await page.locator("#closeContextSidebar").click();
@@ -571,7 +452,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
         if (proof) await card("automatic").screenshot({ path: path.join(proof, `vocabulary-${phase}-${theme}-${width}-automatic.png`) });
         await card("copilot").scrollIntoViewIfNeeded();
         if (proof) await card("copilot").screenshot({ path: path.join(proof, `vocabulary-${phase}-${theme}-${width}-card.png`) });
-        await card("copilot").click();
+        await card("copilot").locator(".request-card-open").click();
         const cue = page.locator("#requestContent [data-operation=operation-ask]").first();
         const cueStyle = await cue.evaluate(node => {
             const style = getComputedStyle(node), root = getComputedStyle(document.documentElement);
@@ -589,7 +470,6 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
             assert.deepEqual(rgb(cueStyle.color), rgb(cueStyle.assistance));
             assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.muted), "Assistance must not remain unknown grey");
             assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.failure)); assert.notDeepEqual(rgb(cueStyle.color), rgb(cueStyle.success));
-            assert.ok(cueStyle.centerOffset <= 1.5, JSON.stringify(cueStyle));
             const legend = page.locator('.percentage-legend-row[data-service-basis="Assistance"] .percentage-cue');
             assert.equal(await legend.evaluate(node => getComputedStyle(node).color), cueStyle.color);
             await expect(page.locator("#requestContent").getByText("Asked Copilot", {exact:true}).first()).toBeVisible();

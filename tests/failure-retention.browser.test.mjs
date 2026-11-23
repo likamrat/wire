@@ -100,8 +100,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
-        await expect(card.locator(".request-card-count")).toHaveCount(0);
-        await expect(card.locator(".request-card-exception")).toHaveText("2 tool calls failed");
+        await expect(card).toHaveText("2 tool calls failed");
         await expect(card).not.toContainText("SourcePolicyUnavailable");
         await expect(card).not.toContainText(message);
         await expect(card).not.toContainText("could not extract");
@@ -129,8 +128,8 @@ test("paired ask failures survive incremental collection and reach cards, reader
     await expect(page.locator("#requestContent")).toContainText(message);
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#requestContent")).toContainText(message);
-    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#message")).toContainText("This tab no longer has the private view");
+    await expect(page.locator("#requestContent")).not.toContainText(message);
     await chooseTheme(page, "light");
     await navigateMain(page, "reports");
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -166,8 +165,10 @@ test("paired ask failures survive incremental collection and reach cards, reader
         assert.match(text, /invented source policy is unavailable/);
         assert.doesNotMatch(text, /EXCLUDED_|could not extract/);
     }
+    const verifiedRead = page.waitForResponse(response => response.url().endsWith("/api/report/open") && response.ok());
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.locator("#savedReportReader").frameLocator("iframe").locator("body")).toContainText(message);
+    await expect(page.locator("#savedReportReader .saved-brief")).toBeVisible();
+    assert.ok(JSON.stringify(await (await verifiedRead).json()).includes(message));
     assert.deepEqual((await loadBoardState(context)).evidence, records);
     assert.deepEqual(await readFile(file), original);
     assert.deepEqual(errors, []);
@@ -190,7 +191,7 @@ test("supported failure families keep their operation, recorded reason and hones
         ["privacy", { error: { code: "AccessDenied", message: "Bearer " + "a".repeat(40) } }, "privacy"],
         ["size", { error: { code: "AccessDenied", message: "x".repeat(8193) } }, "saving limit"],
         ["format", { error: { code: "AccessDenied", message: { text: "UNSUPPORTED_OBJECT_TEXT" } } }, "error format"],
-        ["legacy", {}, "Failure reason was not saved"],
+        ["legacy", {}, "No failure reason was saved."],
         ["retrieval", wrapped({ "application/vnd.ms-workiq.retrieval": {
             markdown: "", retrievalHits: [], resultCount: 0, stoppedReason: "error",
         } }), "source did not supply a reason"],
@@ -237,10 +238,10 @@ test("supported failure families keep their operation, recorded reason and hones
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-count")).toHaveCount(0);
-    await expect(card.locator(".request-card-exception")).toHaveText("16 tool calls failed");
+    await expect(card).toHaveText("16 tool calls failed");
     await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied/);
     await card.click();
+    await page.getByRole("link", { name: "Show full activity" }).click();
     for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {
         const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="${id}"]`);
         await expect(call).toContainText(expected);
