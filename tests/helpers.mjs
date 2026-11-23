@@ -194,6 +194,11 @@ export async function selectActivityOption(page, id, value) {
     if (!await trigger.isVisible() && await page.locator("#filters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await openAnalyzeFilters(page);
     if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
     if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "connection");
+    if (id === "dateFilter") {
+        if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+        await page.locator(`#analyzeDates [data-date-preset=${JSON.stringify(String(value))}]`).click();
+        return;
+    }
     await trigger.click();
     if (await page.locator(`#${id}`).evaluate(node => node.multiple)) {
         const values = await page.locator(`#${id} option`).evaluateAll(nodes => nodes.map(node => node.value));

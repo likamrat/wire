@@ -34,6 +34,9 @@ For example, open period presets at the date control and let Custom dates expand
 there, with the current chart still in view. Cancelling must leave the applied
 range and reading position intact. Reserve a separate workspace or blocking
 dialog for a distinct task or a decision that must be resolved before continuing.
+Reports, Trends, Compare and Analyze Filters use the same Dates control. Show the
+applied range on the closed button. Keep the presets visible when Custom dates
+expands. Inside Analyze Filters, expand in place rather than opening another panel.
 
 | Surface | Reading and navigation role |
 | --- | --- |

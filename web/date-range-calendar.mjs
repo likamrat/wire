@@ -107,7 +107,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
         body.replaceChildren(header, grid);
         const future = from > limit || !singleDay() && to > limit;
         const invalid = future || Boolean(from && (singleDay() || to) && !valid());
-        status.textContent = future ? `Choose today or an earlier date in ${context().timeZone}.`
+        status.textContent = future ? "Choose today or an earlier date."
             : invalid ? (to < from ? "End date must be on or after the start." : "Choose valid dates.")
             : !from ? (singleDay() ? "Choose a day." : "Choose a start date.") : !singleDay() && !to ? "Choose an end date."
             : "";

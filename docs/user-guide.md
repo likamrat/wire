@@ -103,7 +103,10 @@ error or another entry with the same status. Open the reader for the full retain
 wording, code and status. A completed tool can still return an error. A missing
 completion does not establish that anyone cancelled the call.
 
-Dates filter retained activity; they do not approve older source reads.
+In Analyze Filters, Trends, Reports and Compare, open **Dates** to choose a preset.
+Choose **Custom dates** to edit below the presets. **Apply dates** uses your range;
+**Cancel** keeps the previous one. In Compare, select a period's date label to
+edit just that period. Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
 **Settings > Regional > Time zone**. Select a start and end on the calendar,
 or type them. Today is the latest date you can use. **This week** and **This

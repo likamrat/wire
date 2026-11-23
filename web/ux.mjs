@@ -222,6 +222,77 @@ export function createEvidenceUX(icons, operations) {
             place,
         };
     }
+    // The workspace owns the accepted range. The picker only owns its open editor.
+    function datesPicker({ panel, trigger, editor, current, selected, onPreset, onCustom, onClose,
+        options = [["7", "Last 7 days"], ["14", "Last 14 days"], ["30", "Last 30 days"], ["custom", "Custom dates"]],
+        optionKey, embedded = false }) {
+        const choices = document.createElement("div"), anchor = embedded ? null : anchoredChoices(panel);
+        choices.className = "wire-date-presets";
+        choices.setAttribute("role", "group"); choices.setAttribute("aria-label", "Date ranges");
+        panel.classList.add("wire-dates-picker");
+        panel.setAttribute("role", embedded ? "group" : "dialog"); panel.setAttribute("aria-label", "Dates");
+        trigger.classList.add("wire-dates-trigger");
+        trigger.setAttribute("aria-controls", panel.id); trigger.setAttribute("aria-expanded", "false");
+        if (embedded) {
+            panel.hidden = true;
+            trigger.addEventListener("click", () => {
+                if (!current() || trigger.disabled) return;
+                if (isOpen()) close();
+                else { panel.hidden = false; trigger.setAttribute("aria-expanded", "true"); sync(); focusChoice(); }
+            });
+            panel.addEventListener("keydown", event => {
+                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+            });
+        } else {
+            trigger.setAttribute("aria-haspopup", "dialog"); trigger.setAttribute("popovertarget", panel.id);
+        }
+        panel.prepend(choices);
+        editor.hidden = true;
+        function isOpen() { return embedded ? !panel.hidden : panel.matches(":popover-open"); }
+        function focusChoice() { (choices.querySelector('[aria-pressed="true"]') || choices.firstElementChild)?.focus({ preventScroll: true }); }
+        function reset() { editor.hidden = true; choices.hidden = false; delete panel.dataset.editingDates; }
+        function close(restore = true) {
+            if (!embedded) { anchor.close(restore); return; }
+            if (!isOpen()) return;
+            panel.hidden = true; trigger.setAttribute("aria-expanded", "false"); reset(); onClose?.();
+            if (restore && trigger.checkVisibility()) trigger.focus({ preventScroll: true });
+        }
+        function sync() {
+            const value = editor.hidden ? selected() : "custom";
+            for (const control of choices.children) control.setAttribute("aria-pressed", String(control.dataset.datePreset === value));
+        }
+        function expand(origin = trigger) {
+            if (!current() || trigger.disabled) return;
+            if (!isOpen()) anchor?.open(origin);
+            choices.hidden = origin !== trigger;
+            editor.hidden = false; panel.dataset.editingDates = "true"; sync();
+            onCustom(origin); anchor?.place();
+            [...editor.querySelectorAll('input[type="date"]:enabled')].find(n => n.checkVisibility())?.focus({ preventScroll: true });
+        }
+        for (const [key, name] of options) {
+            const control = document.createElement("button");
+            control.type = "button"; control.className = "quiet"; control.textContent = name;
+            control.dataset.datePreset = key;
+            if (optionKey) control.dataset[optionKey] = key;
+            control.addEventListener("click", () => {
+                if (!current() || trigger.disabled || !isOpen()) return;
+                if (key === "custom") expand();
+                else { close(); onPreset(key); }
+            });
+            choices.append(control);
+        }
+        panel.addEventListener("beforetoggle", event => {
+            if (event.newState === "open" && (!current() || trigger.disabled)) { event.preventDefault(); return; }
+            reset();
+            if (event.newState === "closed") onClose?.();
+            else sync();
+        });
+        panel.addEventListener("toggle", () => {
+            if (panel.matches(":popover-open") && editor.hidden && (document.activeElement === trigger || document.activeElement === document.body))
+                focusChoice();
+        });
+        return { sync, expand, close };
+    }
     // Embedded documents do not bubble pointer/focus events into the shell.
     // Keep native auto-popover dismissal without inspecting or modifying the frame.
     dismissOnFrameFocus(frame => {
@@ -790,7 +861,7 @@ export function createEvidenceUX(icons, operations) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, operations, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, operations, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, datesPicker, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

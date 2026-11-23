@@ -241,7 +241,10 @@ export const analyzeLayoutStyles = `
 #analyzeFilterPanel #filters .secondary-filters.period-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:12px}
 #analyzeFilterPanel #filters :is(.primary-single-fields,.primary-multiple-fields) {display:contents}
 #analyzeFilterPanel .select-trigger-filter::before {inset:4px 0;box-shadow:none}
-#analyzeFilterPanel #dateFields {width:100%;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))}
+#dateFilter-control {margin:0;width:100%;text-align:start}
+#analyzeDates {grid-column:1/-1;box-sizing:border-box;width:min(100%,24rem);min-width:0;padding:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius-control)}
+.period-comparing #analyzeDates {display:none}
+#analyzeFilterPanel #dateFields {display:grid;grid-template-columns:minmax(0,1fr);width:100%}
 #analyzeFilterPanel #dateFields #dateError {grid-column:1/-1}
 #analyzeFilterPanel .filter-utilities {margin-top:8px}
 #analyzeFilterPanel .more-filters {margin:0}

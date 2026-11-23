@@ -1,6 +1,17 @@
 export const uxStyles = `
 .wire-local-choices[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;inline-size:min(24rem,calc(100vw - 24px));overflow:auto;overscroll-behavior:contain;background:var(--floating-paper,var(--paper));color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius-control);padding:.75rem;box-shadow:var(--surface-shadow)}
 .wire-local-choices[popover]::backdrop{background:transparent}
+.wire-dates-picker.wire-local-choices[popover]{inline-size:min(24rem,calc(100vw - 16px));padding:var(--space-lg)}
+.wire-date-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-xs) var(--space-sm)}
+.wire-date-presets>button{min-width:0;min-height:44px;text-align:start;justify-content:flex-start;white-space:normal;overflow-wrap:anywhere}
+@media(min-width:52rem){.comparison-calendar[data-single=false]>.wire-date-presets{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.wire-date-presets>button[aria-pressed=true]{--pill-border:var(--control);--pill-fill:var(--accent-soft);--pill-ink:var(--ink)}
+.wire-dates-picker [hidden]{display:none!important}
+.wire-dates-picker[data-editing-dates]>.wire-date-presets:not([hidden]){margin-bottom:var(--space-lg)}
+.wire-dates-picker[popover][data-editing-dates]{scroll-padding-bottom:3.5rem}
+.wire-dates-picker[popover] .report-popover-actions{position:sticky;bottom:0;z-index:1;background:var(--floating-paper,var(--paper))}
+button.wire-dates-trigger{display:inline-flex;align-items:center;gap:var(--pill-gap);min-height:44px;max-width:100%;white-space:normal}
+button.wire-dates-trigger>.wire-icon{width:1em;height:1em;flex:none}
 :where(details>summary).ux-disclosure {list-style:none}
 :where(details>summary).ux-disclosure::-webkit-details-marker {display:none}
 .ux-disclosure>.disclosure-icon {margin-inline-end:var(--pill-gap);vertical-align:calc((1cap - 16px)/2)}

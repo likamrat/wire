@@ -6,13 +6,13 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain, openAnalyzeFilters } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DATE_CLARITY_PROOF;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const now = "2026-10-13T19:00:00Z";
 
-async function setup(t) {
+async function setup(t, pickerJourney = false) {
     const records = Array.from({ length: 26 }, (_, index) => {
         const record = fixture(`date-clarity-${index}`);
         record.sourceSessionId = `invented-chat-${index % 15}`;
@@ -31,7 +31,7 @@ async function setup(t) {
         counts: { includedSessions: 15, includedProjects: 1 }, roster: [],
     } }));
     const before = await loadBoardState(context), errors = [], denied = [];
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, ...(pickerJourney ? { frontend: "react" } : {}), collector: { timers: false },
         evaluation: { evaluatorFactory: () => { throw Error("Provider use forbidden in date clarity proof."); } } });
     const browser = await chromium.launch();
     t.after(async () => {
@@ -47,15 +47,50 @@ async function setup(t) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
+        if (pickerJourney && url.origin === new URL(runtime.url).origin && url.pathname === "/api/app-update"
+            && request.method() === "POST" && request.postDataJSON()?.action === "status") return route.continue();
         if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || [
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary",
+            ...(pickerJourney ? ["/api/trends", "/api/period-comparison"] : []),
         ].includes(url.pathname))) return route.continue();
         denied.push(url.pathname); return route.abort();
     });
     await page.goto(runtime.url); await ready(page); await chooseTheme(page, "dark");
     return page;
 }
+
+test("Dates keeps Custom dates beside the same presets across all four workspaces", { timeout: 60000 }, async t => {
+    const page = await setup(t, true);
+    const proofDir = process.env.WIRE_PICKER_PROOF;
+    if (proofDir) await mkdir(proofDir, { recursive: true });
+    for (const [width, scale, theme] of [[1280, 100, "light"], [390, 150, "dark"]]) {
+        await page.setViewportSize({ width, height: 900 }); await chooseTheme(page, theme);
+        await page.evaluate(size => document.documentElement.style.fontSize = size + "%", scale);
+        for (const [view, triggerId] of [["reports","reportDeskDates"],["trends","trendsPeriod"],["compare","comparisonDates"],["analyze","dateFilter-control"]]) {
+            await navigateMain(page, view);
+            if (view === "analyze") await openAnalyzeFilters(page);
+            const trigger = page.locator("#" + triggerId);
+            await expect(trigger).toHaveAccessibleName(/^Dates: .+/);
+            const accepted = await trigger.innerText(), url = page.url();
+            await trigger.click();
+            const picker = page.locator("#" + await trigger.getAttribute("aria-controls"));
+            const presets = picker.getByRole("group", { name: "Date ranges" });
+            for (const days of [7,14,30]) await expect(presets.getByRole("button", { name: `Last ${days} days` })).toBeVisible();
+            await presets.getByRole("button", { name: "Custom dates" }).click();
+            await expect(presets).toBeVisible();
+            await expect(picker.locator('input[type=date]:visible')).toHaveCount(view === "compare" ? 4 : 2);
+            const start = picker.locator('input[type=date]:visible').first(); await expect(start).toBeFocused();
+            await start.fill("2026-10-01");
+            assert.equal(await trigger.innerText(), accepted); assert.equal(page.url(), url);
+            await expect(picker).not.toContainText(/inclusive dates|America\/Los_Angeles/);
+            assert(await picker.evaluate(p => p.scrollWidth <= p.clientWidth + 1), `${view} overflows at ${width}px`);
+            if (proofDir) await page.screenshot({ path: path.join(proofDir, `${view}-${width}.png`) });
+            await picker.getByRole("button", { name: "Cancel", exact: true }).click();
+            await expect(picker).toBeHidden(); await expect(trigger).toBeFocused(); assert.equal(await trigger.innerText(), accepted);
+        }
+    }
+});
 
 test("October headline names the applied month and the notice distinguishes unchecked history without competing dates", async t => {
     const page = await setup(t);
@@ -127,6 +162,7 @@ test("every Dates choice keeps its caption with accepted counts, including unapp
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
     await page.locator("#applyDates").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
+    await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-12-28");
     await page.locator("#toFilter").fill("2027-01-03");
     await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");

@@ -4043,7 +4043,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sidebar.close(false);
         if ($("overlay").open) $("overlay").close();
         const before = JSON.stringify(workspaceState.scope ?? query());
-        if (["range", "from", "to"].some(key => workspaceState.route[key] !== next[key])) workspaceState.dateDraft = null;
+        if (["range", "from", "to"].some(key => workspaceState.route[key] !== next[key])) {
+            workspaceState.dateDraft = null; analyzeDatesPicker.close(false);
+        }
         workspaceState.route = canonicalRoute(next);
         rememberRoute(workspaceState.route, true);
         if (workspaceState.route.view === "reports" && !workspaceState.route.bundle && !workspaceState.route.inspect && workspaceState.route.task !== "compare") {
@@ -4177,11 +4179,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function syncControls() {
         restoring = true;
         const values = {
-            layerFilter: workspaceState.route.layer || "tool", dateFilter: workspaceState.dateDraft ? "custom" : workspaceState.route.range || "capture", sourceFilter: workspaceState.route.source || "all",
+            layerFilter: workspaceState.route.layer || "tool", dateFilter: dateSelection().range, sourceFilter: workspaceState.route.source || "all",
             toolFilter: workspaceState.route.tool || "all", serviceAssociationFilter: workspaceState.route.services || "all", chatFilter: workspaceState.route.session || "all",
             serviceFilter: workspaceState.route.service || "all",
             projectFilter: workspaceState.route.project || "all", scopeFilter: workspaceState.route.scope || "history",
-            fromFilter: workspaceState.dateDraft?.from ?? dateInput(workspaceState.route.from), toFilter: workspaceState.dateDraft?.to ?? dateInput(workspaceState.route.to),
         };
         for (const [id, value] of Object.entries(values)) {
             const control = $(id);
@@ -4190,8 +4191,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             control.value = value;
         }
-        $("dateFields").hidden = $("dateFilter").value !== "custom";
-        if (!$("dateFields").hidden) analyzeCalendar.sync();
+        const dates = dateSelection(), from = dateInput(dates.from), to = dateInput(dates.to);
+        const rangeLabel = from && to && from <= to ? time.formatCivilRange(from, to, viewerTime)
+            : from && !to ? `From ${time.formatDate(from, viewerTime)}` : to && !from ? `Through ${time.formatDate(to, viewerTime)}`
+            : $("dateFilter").selectedOptions[0]?.textContent || "All dates";
+        setText(analyzeDatesValue, rangeLabel);
+        analyzeDatesTrigger.setAttribute("aria-label", "Dates: " + rangeLabel);
+        analyzeDatesPicker.sync();
         $("activitySearch").value = search;
         restoring = false;
         syncResultFilter();
@@ -10545,6 +10551,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     const analyzeCalendarHost = el("div","historical-calendar");
     $("dateFields").prepend(analyzeCalendarHost);
+    const dateSource = $("dateFilter"), dateField = dateSource.closest(".filter-field");
+    dateSource.hidden = true; dateSource.dataset.nativeSelect = "";
+    const analyzeDatesValue = el("span"), analyzeDatesTrigger = el("button", "report-toolbar-choice");
+    analyzeDatesTrigger.id = "dateFilter-control"; analyzeDatesTrigger.type = "button";
+    analyzeDatesTrigger.dataset.selectId = dateSource.id;
+    analyzeDatesTrigger.append(ux.icon("calendar"), analyzeDatesValue, ux.icon("chevron"));
+    dateField.querySelector("label").htmlFor = analyzeDatesTrigger.id;
+    const analyzeDatesPanel = el("section"); analyzeDatesPanel.id = "analyzeDates";
+    dateField.append(analyzeDatesTrigger); dateField.after(analyzeDatesPanel); analyzeDatesPanel.append($("dateFields"));
+    const dateActions = $("applyDates").parentElement;
+    dateActions.className = "report-popover-actions"; $("applyDates").classList.add("primary");
+    dateActions.prepend(button("Cancel", () => analyzeDatesPicker.close(), "quiet"));
     const analyzeCalendar = assessmentFactories.createDateRangeCalendar({
         root:analyzeCalendarHost, id:"analyzeCalendar", existingFields:{from:$("fromFilter"),to:$("toFilter")},
         inputIds:{from:"fromFilter",to:"toFilter"}, time, ux, context:()=>viewerTime,
@@ -10552,22 +10570,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onEdit:()=>{ workspaceState.dateDraft=analyzeCalendar.value(); },
         onChange:()=>{ $("applyDates").disabled=!analyzeCalendar.valid(); }
     });
-    $("dateFilter").addEventListener("change", () => {
-        workspaceState.dateDraft = null;
-        dateError("");
-        const range = $("dateFilter").value;
-        $("dateFields").hidden = range !== "custom";
-        if (range === "custom") {
-            workspaceState.dateDraft = {from:dateInput(workspaceState.route.from),to:dateInput(workspaceState.route.to)};
+    const analyzeDatesPicker = ux.datesPicker({ panel: analyzeDatesPanel, trigger: analyzeDatesTrigger, editor: $("dateFields"), embedded: true,
+        current: () => Boolean(api.publicationToken()) && !clearingAccess && !dateField.inert && $("analyzeFilterDialog").open,
+        options: Array.from(dateSource.options, o => [o.value, o.textContent]), selected: () => dateSelection().range,
+        onCustom() {
+            const { from, to } = dateSelection();
+            workspaceState.dateDraft ??= { from: dateInput(from), to: dateInput(to) };
             analyzeCalendar.reset(workspaceState.dateDraft);
-            return;
-        }
-        const dates = range === "capture" ? { range: undefined, from: undefined, to: undefined }
-            : { range, ...time.preset(range, viewerTime.timeZone) };
-        navigate(routeFor(workspaceState.route.view, { ...dates, page: undefined }), false, { keepFocus: true });
-    });
+        },
+        onClose() { workspaceState.dateDraft = null; analyzeCalendar.clear(); dateError(""); },
+        onPreset(range) {
+            const dates = range === "capture" ? { range: undefined, from: undefined, to: undefined }
+                : { range, ...time.preset(range, viewerTime.timeZone) };
+            navigate(routeFor(workspaceState.route.view, { ...dates, page: undefined }), false, { keepFocus: true });
+        } });
     $("filters").addEventListener("submit", (event) => {
         event.preventDefault();
+        if ($("dateFields").hidden || dateField.inert || !$("analyzeFilterDialog").open || !api.publicationToken() || clearingAccess) return;
         const from = $("fromFilter").value, to = $("toFilter").value;
         try {
             if (!from || !to) throw new RangeError("Choose both dates. For one day, use the same date twice.");
@@ -10576,6 +10595,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         } catch (error) { dateError(error.message); return; }
         dateError("");
         workspaceState.dateDraft = null;
+        analyzeDatesPicker.close();
         if (workspaceState.loading && workspaceState.route.from === from && workspaceState.route.to === to) return;
         navigate(routeFor(workspaceState.route.view, { range: "custom", from, to, page: undefined }), false, { keepFocus: true });
     });
@@ -10669,6 +10689,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
     $("clearDates").addEventListener("click", () => {
+        if (dateField.inert || !api.publicationToken() || clearingAccess) return;
+        analyzeDatesPicker.close();
         workspaceState.dateDraft = null;
         analyzeCalendar.clear();
         ux.restoreFocus($("dateFilter-control"));
@@ -11135,6 +11157,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        analyzeDatesPicker.close(false); ux.setOwnedText(analyzeDatesValue, ""); ux.removeOwnedAttribute(analyzeDatesTrigger, "aria-label");
         analyzeCalendar.clear();
         namedDrafts.withdrawAccess(); namedReport = null;
         trendPeriodVisit = null; periodBackToTrends.hidden = true;

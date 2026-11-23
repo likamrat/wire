@@ -90,17 +90,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         routeScopeKey = JSON.stringify(getContext().routeScope ?? null);
     }
     const cards = new Map();
-    const toolbar = el("div", "trends-toolbar"), periods = el("div", "trends-periods");
+    const toolbar = el("div", "trends-toolbar");
     const status = el("p", "notice"), qualification = el("p", "trends-qualification"), restrictions = el("div", "trends-restrictions");
     const pendingNotice = el("p", "trends-pending");
     pendingNotice.setAttribute("role", "status");
     status.setAttribute("role", "status"); status.hidden = true;
-    for (const days of ["7", "14", "30"]) {
-        const control = button(`Last ${days} days`, () => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" }));
-        control.dataset.trendPeriod = days; periods.append(control);
-    }
-    const custom = button("Custom dates", openDates, "quiet trends-date-range"); custom.dataset.trendPeriod = "custom";
-    custom.prepend(ux.icon("calendar")); periods.append(custom);
     const filtersButton = button("", openFilters, "quiet filter-entry");
     filtersButton.append(ux.icon("filter"), el("span", "filter-entry-label", "Filters"));
     filtersButton.setAttribute("aria-haspopup", "dialog");
@@ -156,7 +150,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         paint();
     });
     const filterActions = el("div", "trends-filter-actions");
-    filterActions.append(filtersButton); toolbar.append(periods, filterActions, collapseAll);
+    filterActions.append(filtersButton); toolbar.append(filterActions, collapseAll);
     const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset, remember: "filters" }));
     restrictions.append(restrictionText, clearFilters); restrictions.hidden = true;
     const retry = button("Read stored activity", () => {
@@ -177,8 +171,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const link = button(families[id].label, () => chooseMeasure(id), "trends-measure");
         link.dataset.measure = id; link.setAttribute("aria-controls", `trendsHeading-${id}`); index.append(link);
     }
-    const rangeText = el("span"), periodButton = button("", openPeriod, "quiet trends-date-range");
-    periodButton.id = "trendsPeriod"; periodButton.append(ux.icon("calendar"), el("span", "", "Period"), rangeText, ux.icon("chevron"));
+    const rangeText = el("span"), periodButton = el("button", "report-toolbar-choice");
+    periodButton.type = "button"; periodButton.id = "trendsPeriod"; periodButton.append(ux.icon("calendar"), rangeText, ux.icon("chevron"));
     periodButton.disabled = true; filtersButton.disabled = true;
     const comparePeriods = button("Compare periods", () => {
         if (!current() || !openDialog("Compare periods")) return;
@@ -192,7 +186,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const priorEnd=time.addDays(from,-1), priorStart=time.addDays(from,-days);
         const selectedFilters={...filters}, revision=data.revision;
         const clearMissing = selectedFilters.service === "missing";
-        dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)} · ${data.timeContext.timeZone}`),
+        dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)}`),
             el("p","muted",`Compare shows retained GitHub Copilot calls in these periods. The dates appear in its address.${clearMissing?" The Missing service detail filter is not available there.":""} Your chart stays here for Back.`));
         const actions=el("div","trends-dialog-actions");
         actions.append(button("Cancel",()=>dialog.close()),directionButton("Open comparison",()=>{
@@ -225,6 +219,19 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const localPanel = el("section","trends-local-choices"), local = el("div");
     localPanel.id = "trendsLocalChoices"; localPanel.setAttribute("role","dialog"); localPanel.append(local); root.append(localPanel);
     const localChoices = ux.anchoredChoices(localPanel);
+    const datePanel = el("section"), editor = el("div"), dateActions = el("div", "report-popover-actions");
+    datePanel.id = "trendsDates"; datePanel.append(editor); root.append(datePanel);
+    const calendar = createCalendar({ root: editor, id: "trendsCalendar", label: "Trends", time, ux,
+        context: () => getContext().timeContext, current, onChange: () => { applyDates.disabled = !calendar.valid(); } });
+    const datePicker = ux.datesPicker({ panel: datePanel, editor, trigger: periodButton, current, selected: () => period, optionKey: "trendPeriod",
+        onCustom: () => calendar.reset(range), onClose: () => calendar.clear(),
+        onPreset: days => void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" }) });
+    const applyDates = button("Apply dates", () => {
+        if (!current() || !calendar.valid()) return;
+        const selected = calendar.value(); datePicker.close();
+        void read({ range: selected, period: "custom", filters, remember: "period" });
+    }, "primary");
+    dateActions.append(button("Cancel", () => datePicker.close()), applyDates); editor.append(dateActions);
     localPanel.addEventListener("toggle", () => { if (!localPanel.matches(":popover-open")) scrub(local); });
     function beginChoices(title, trigger) {
         if (!current()) return false;
@@ -441,7 +448,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (current()) paint();
     });
     doc.addEventListener("keydown", event => {
-        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || localPanel.matches(":popover-open") || !enabled) return;
+        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || localPanel.matches(":popover-open") || datePanel.matches(":popover-open") || !enabled) return;
         if (!tooltip.hidden) { hideHover(); return; }
         if (family) { event.preventDefault(); restore(); }
     });
@@ -479,19 +486,6 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             localChoices.close(); paintStable(card);
         }, "primary"));
         local.append(choices, actions); localChoices.place(); choices.querySelector("input")?.focus({preventScroll:true});
-    }
-    function openPeriod() {
-        if (!beginChoices("Period",periodButton)) return;
-        const presets = el("div", "trends-periods");
-        for (const days of ["7", "14", "30"]) {
-            const control = button(`Last ${days} days`, () => {
-                localChoices.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
-            });
-            control.setAttribute("aria-pressed", String(period === days)); presets.append(control);
-        }
-        const customRange = button("Custom dates", () => openDates(periodButton));
-        presets.append(customRange); local.append(presets); localChoices.place();
-        (presets.querySelector('[aria-pressed=true]') || customRange).focus({preventScroll:true});
     }
     function openTable(card) {
         if (!openDialog("Data table")) return;
@@ -570,7 +564,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 return await read({ ...next, initial: false, range: { from: time.addDays(to, -6), to }, period: "latest" });
             }
             evidenceReturn = null;
-            localChoices.close(false);
+            localChoices.close(false); datePicker.close(false);
             if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
             const changedPopulation = changedRange || JSON.stringify(filters) !== JSON.stringify(next.filters) || lastRevision !== context.revision;
@@ -629,19 +623,6 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (!current()) return false;
         hideHover(); dialogOrigin = doc.activeElement; scrub(dialogTitle); dialogTitle.append(doc.createTextNode(name)); scrub(dialogBody);
         if (!dialog.open) dialog.showModal(); return true;
-    }
-    function openDates(origin) {
-        if (!beginChoices("Custom dates",origin === periodButton ? periodButton : custom)) return;
-        const host = el("div"), actions = el("div", "report-popover-actions");
-        const calendar = createCalendar({ root: host, id: "trendsCalendar", label: "Trends", time, ux,
-            context: () => getContext().timeContext, current, onChange: () => {apply.disabled=!calendar.valid();} });
-        const apply = button("Apply dates", () => {
-            if (!calendar.valid()) return;
-            const selected = calendar.value(); localChoices.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
-        }, "primary");
-        calendar.reset(range);
-        actions.append(button("Cancel", () => localChoices.close()), apply);
-        local.append(host, actions); localChoices.place(); host.querySelector("input").focus({preventScroll:true});
     }
     function openFilters() {
         if (!beginChoices("Filter activity",filtersButton)) return;
@@ -991,7 +972,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
         detailBar.hidden = !allCharts || !family; inspection.hidden = !allCharts || !family; collapseAll.hidden = !allCharts || Boolean(family);
         exactButton.hidden = !allCharts || !family;
-        periodButton.hidden = section === "charts" && allCharts; periods.hidden = !periodButton.hidden; homeBack.hidden = !getContext().entry;
+        periodButton.hidden = false; homeBack.hidden = !getContext().entry;
         if (section !== "charts") collapseAll.hidden = true;
         for (const control of index.children) {
             const active = !allCharts && activeMeasure === control.dataset.measure;
@@ -999,9 +980,10 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
         collapseAll.textContent = allCollapsed || [...cards.values()].every(card => card.collapsed) ? "Restore all" : "Collapse all";
         if (family) chooser.field.value = family;
-        for (const node of periods.children) node.setAttribute("aria-pressed", String(node.dataset.trendPeriod === period));
+        datePicker.sync();
         const dateRange = formatRange();
-        rangeText.textContent = `${period === "latest" ? "Latest activity · " : ""}${dateRange}`;
+        rangeText.textContent = `${period === "latest" ? "Latest activity · " : ""}${time.formatCivilRange(range.from,range.to,data.timeContext)}`;
+        periodButton.setAttribute("aria-label", "Dates: " + rangeText.textContent);
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
@@ -1049,7 +1031,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "charts") { paintInspection(); paintExact(); }
     }
     function withdrawAccess() {
-        localChoices.close(false); scrub(local);
+        localChoices.close(false); datePicker.close(false); scrub(local);
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         workspace.before(feedback);
@@ -1058,7 +1040,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         for (const node of [landingScope, landingDetail, landingRecover, landingWindow]) scrub(node);
         range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
-        scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("title"); periodButton.hidden = true;
+        scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("aria-label"); periodButton.hidden = true;
         ux.paintFilterEntry(filtersButton, 0);
         filtersButton.setAttribute("aria-expanded", "false");
         clearFilters.disabled = true;
@@ -1083,15 +1065,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             clearPending(); evidenceReturn = null; failedRead = null;
             if (entryKey !== acceptedEntry) entryKey = null;
             enabled = false; pending++; requestedKey = acceptedKey; root.setAttribute("aria-busy", "false");
-            hideHover(); localChoices.close(false); if (dialog.open) dialog.close(); return;
+            hideHover(); localChoices.close(false); datePicker.close(false); if (dialog.open) dialog.close(); return;
         }
         enabled = true;
-        if (!context.publication || context.stale) { hideHover(); localChoices.close(false); return; }
+        if (!context.publication || context.stale) { hideHover(); localChoices.close(false); datePicker.close(false); return; }
         if (data && !api.isCurrent(bound)) { withdrawAccess(); enabled = true; }
         const nextSection = context.section ?? "charts", changedSection = nextSection !== section;
         section = nextSection; guide.hidden = section !== "guide"; landing.hidden = section !== "overview"; chartSection.hidden = section !== "charts";
         landingGrid.hidden=section!=="overview";landingExtra.hidden=section!=="overview"||!data;
-        if (changedSection) { hideHover(); localChoices.close(false); }
+        if (changedSection) { hideHover(); localChoices.close(false); datePicker.close(false); }
         for (const node of sections.children) {
             if (node.dataset.section === section) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current");
         }
@@ -1131,12 +1113,10 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     return { update, withdrawAccess,
         evidenceOrigin: () => current() ? evidenceReturn?.origin ?? null : null,
-        leave: () => { hideHover(); clearPending(); localChoices.close(false); if (dialog.open) dialog.close(); } };
+        leave: () => { hideHover(); clearPending(); localChoices.close(false); datePicker.close(false); if (dialog.open) dialog.close(); } };
 }
 
 export const trendsStyles = `
-.trends-local-choices .trends-periods{display:grid;gap:0}.trends-local-choices .trends-periods button{text-align:start;justify-content:flex-start}
-.trends-local-choices:has(.trends-periods){inline-size:min(14rem,calc(100vw - 24px))}
 .trends-local-choices .trends-control{display:grid;gap:var(--space-xs);margin-block-end:var(--space-md)}
 .trends-local-choices .trends-control>label{padding:0}
 .trends-local-choices .trends-control>.select-control{width:100%}
@@ -1162,8 +1142,8 @@ export const trendsStyles = `
 .trends-landing-head{display:flex;align-items:center;justify-content:space-between;gap:1em}.trends-landing-head h2,.trends-guide h2{margin:0;font-size:var(--type-section)}
 .trends-landing .trends-index-scope{margin-block:.5em 1em}.trends-guide{max-width:65ch;padding:1rem 1.25rem;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .trends-guide details{border-bottom:1px solid var(--surface-divider)}.trends-guide details:last-child{border:0}.trends-guide summary{padding-block:.75em;cursor:pointer}.trends-guide p{margin:0 0 1em}
-.trends-toolbar,.trends-periods,.trends-detail-bar,.trends-heading,.trends-inspection-heading,.trends-dialog-heading,.trends-dialog-actions,.trends-restrictions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.trends-toolbar{margin-bottom:16px;gap:8px}.trends-periods{gap:4px;margin-right:auto}
+.trends-toolbar,.trends-detail-bar,.trends-heading,.trends-inspection-heading,.trends-dialog-heading,.trends-dialog-actions,.trends-restrictions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.trends-toolbar{margin-bottom:16px;gap:8px}
 .trends-pending{min-height:1.5em;margin:-8px 0 8px;color:var(--muted);font-size:var(--type-small);line-height:1.5}
 .trends-toolbar>button,.trends-detail-bar>button{display:inline-flex;align-items:center;gap:8px}
 .trends-filter-actions{display:inline-flex;align-items:center;gap:4px;max-inline-size:100%}
@@ -1173,8 +1153,7 @@ export const trendsStyles = `
 @container(max-width:22rem){
  .trends-filter-actions:has(>button:nth-child(2)) .filter-entry-label{display:grid;align-content:center;min-block-size:2lh;white-space:normal}
 }
-.trends-periods button[aria-pressed=true],.trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
-.trends-date-range{display:inline-flex;align-items:center;gap:8px;max-width:100%;white-space:normal}.trends-date-range>.wire-icon{width:16px;height:16px;flex:none}
+.trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
 .trends-restrictions{margin-bottom:12px}
 .trends-detail-bar{justify-content:space-between;margin-bottom:16px}
 .trends-control{display:flex;align-items:center;gap:8px;max-width:100%;min-width:0;flex-wrap:wrap}.trends-control select{min-width:0;max-width:100%;width:13rem}

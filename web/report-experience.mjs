@@ -58,14 +58,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         for (const panel of root.querySelectorAll(".report-options-popover:popover-open")) panel.hidePopover();
     }
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
-    const period = el("div", "report-period-choices"); period.setAttribute("role", "group"); period.setAttribute("aria-label", "Report period");
-    for (const range of ["7", "14", "30", "custom"]) {
-        const control = button(range === "custom" ? "Custom dates" : `Last ${range} days`, () => {
-            if (range === "custom") openCalendar();
-            else { closeOptions(); changeDates({ range, ...time.preset(range, read().timeContext.timeZone) }); }
-        });
-        control.dataset.reportRange = range; period.append(control);
-    }
     let deskFocus = "all";
     function selectField(id, caption) {
         const field = el("div", "report-form-field"), label = el("label", "", caption), select = el("select");
@@ -133,9 +125,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     nameRow.append(root.querySelector(".report-title-field"));
     const saveSlot = el("div", "report-save-slot"); saveSlot.id = "reportSaveSlot"; nameRow.append(saveSlot);
     const choices = el("div", "report-toolbar-choices");
-    const periodPanel = popover("reportPeriodChoices", "Report period"), periodHost = el("div");
-    periodPanel.append(periodHost);
-    const dateButton = opener("Last 7 days", periodPanel);
+    const periodPanel = popover("reportPeriodChoices", "Dates");
+    const dateButton = button("", () => {}, "report-toolbar-choice"), dateLabel = el("span");
+    dateButton.append(ux.icon("calendar"), dateLabel, ux.icon("chevron"));
     dateButton.id = "reportDeskDates";
     const privacy = popover("reportPrivacyOptions", "Report text");
     const promptOptions = byId("promptOptions"), legend = promptOptions.querySelector("legend");
@@ -188,7 +180,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     activityRow.append(draftMembership);
     outlineChoices.append(activityRow, fileRow);
     outlineAction.append(prepare);
-    periodHost.append(period);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
@@ -229,25 +220,24 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const calendar = el("div"); calendar.id = "reportCustomDates"; calendar.hidden = true;
     periodPanel.firstElementChild.classList.add("visually-hidden");
     periodPanel.append(calendar);
-    function closeDates() { periodPanel.hidePopover(); dateButton.focus({preventScroll:true}); }
-    periodPanel.addEventListener("beforetoggle", event => {
-        if (event.newState === "closed") { calendar.hidden = true; periodHost.hidden = false; calendarEditor.clear(); }
-    });
     const calendarEditor = createCalendar({ root: calendar, id: "reportDate", inputIds: { from: "reportDatefrom", to: "reportDateto" }, time, ux,
         context: () => read().timeContext, current, onChange: () => { applyDates.disabled = !calendarEditor.valid(); } });
     const calendarActions = el("div", "report-popover-actions");
-    const applyDates = button("Use dates", () => {
+    const applyDates = button("Apply dates", () => {
         if (!calendarEditor.valid()) return;
-        const dates = calendarEditor.value(); closeDates(); changeDates({ range: "custom", ...dates });
+        const dates = calendarEditor.value(); datePicker.close(); changeDates({ range: "custom", ...dates });
     }, "primary");
-    calendarActions.append(button("Cancel", closeDates), applyDates);
+    calendarActions.append(button("Cancel", () => datePicker.close()), applyDates);
     calendar.append(calendarActions);
-    function openCalendar() {
-        const value = read(), dates = value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates;
-        if (!periodPanel.matches(":popover-open")) periodPanel.showPopover({source:dateButton});
-        periodHost.hidden = true; calendar.hidden = false; calendarEditor.reset(dates);
-        calendar.querySelector("input").focus({preventScroll:true});
-    }
+    const datePicker = ux.datesPicker({ panel: periodPanel, trigger: dateButton, editor: calendar, optionKey: "reportRange",
+        current: () => current() && !read().locked && !read().nativeScope && !read().paired && !read().unavailable,
+        selected: () => read().dates.range, onClose: () => calendarEditor.clear(),
+        onPreset: range => changeDates({ range, ...time.preset(range, read().timeContext.timeZone) }),
+        onCustom() {
+            const value = read();
+            calendarEditor.reset(value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates);
+        } });
+    function openCalendar() { datePicker.expand(); }
     function showSelection() {
         if (read().locked) return;
         selection.showPopover();
@@ -309,10 +299,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         useActivity.hidden = value.prepared;
         byId("additionalMasking").hidden = !value.prepared;
         if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
-        for (const control of period.querySelectorAll("button")) {
-            control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
-            control.disabled = value.locked;
-        }
+        datePicker.sync();
         const focus = value.nativeScope ? "all" : deskFocus;
         compactFocus.disabled = value.locked || value.loading || value.nativeScope; compactFocus.value = focus;
         outlineDescription.textContent = value.nativeScope ? "Includes retained Microsoft conversations. Use Compare to report on two date ranges." : help[focus];
@@ -337,8 +324,8 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             : value.unavailable ? "Waiting for activity to load." : !value.options.formats.length ? "Choose at least one file format to preview the report." : scopeIssue || "";
         prepareHint.hidden = !prepareHint.textContent;
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
-        const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
-        setLabel(dateButton, labelDates(value.dates));
+        dateLabel.textContent = labelDates(value.dates);
+        dateButton.setAttribute("aria-label", "Dates: " + dateLabel.textContent);
         dateButton.hidden = value.paired;
         const mode = value.options.promptMode;
         backgroundScope.textContent = value.paired ? "Period comparison" : `${compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
@@ -404,6 +391,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             closeOptions();
             deskFocus = "all";
             calendarEditor.clear();
+            ux.setOwnedText(dateLabel); ux.removeOwnedAttribute(dateButton, "aria-label");
             scopeCaption.textContent = scopeName.textContent = "";
             backgroundScope.textContent = "";
             scopeChoice.removeAttribute("aria-label");

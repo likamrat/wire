@@ -312,12 +312,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     function stop() { navigate({ compare: undefined }); toggle.focus(); }
     const form = el("form", undefined, "period-comparison-controls");
     const calendar = el("section", undefined, "comparison-calendar report-options-popover");
-    calendar.id = "comparisonCustomDates"; calendar.setAttribute("aria-labelledby", "comparisonCalendarTitle");
-    calendar.setAttribute("role","dialog");
-    const calendarChoices = ux.anchoredChoices(calendar);
+    calendar.id = "comparisonCustomDates";
     let calendarSide = null;
-    const calendarTitle = el("h2", "Custom dates"); calendarTitle.id = "comparisonCalendarTitle";
-    calendar.append(calendarTitle, form);
+    calendar.append(form);
     const calendars = {};
     const periodRoles = { a: "Baseline", b: "Selected" };
     for (const [side, label] of [["a", "Period A"], ["b", "Period B"]]) {
@@ -327,29 +324,29 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             label, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
             onChange: () => { if (calendars.a && calendars.b) apply.disabled = !calendars.a.valid() || !calendars.b.valid(); } });
     }
-    const apply = el("button", "Use dates", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
+    const apply = el("button", "Apply dates", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
     const calendarActions = el("div", undefined, "report-popover-actions");
     const cancelCalendar = button("Cancel", () => calendarChoices.close());
     calendarActions.append(cancelCalendar, apply); form.append(calendarActions); setup.append(calendar);
-    const dateChoices = el("div", undefined, "report-period-choices"); dateChoices.setAttribute("role", "group");
-    dateChoices.setAttribute("aria-label", "Comparison period");
-    function openCalendar(side, trigger) {
-        const context = getContext(), ranges = periods(context.route);
-        calendarSide = side;
-        for (const [id,group] of [["a",form.firstElementChild],["b",form.children[1]]]) group.hidden = Boolean(side && side !== id);
-        calendar.dataset.single = String(Boolean(side));
-        calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
-        calendarChoices.open(trigger);
-        form.querySelector("fieldset:not([hidden]) input").focus({preventScroll:true});
+    const datesButton = el("button", undefined, "report-toolbar-choice"), datesValue = el("span");
+    datesButton.id = "comparisonDates"; datesButton.type = "button";
+    datesButton.append(ux.icon("calendar"), datesValue, ux.icon("chevron"));
+    function activePreset() {
+        const { route, options } = getContext();
+        return ["7", "14", "30"].find(days => Object.entries(presentation.completeDays(Number(days), options.timeContext))
+            .every(([key, value]) => route[key] === value)) ?? "custom";
     }
-    for (const days of ["7", "14", "30", "custom"]) {
-        const control = button(days === "custom" ? "Custom dates" : `Last ${days} days`, () => {
-            if (!publicationCurrent(publicationToken())) return;
-            if (days === "custom") openCalendar(null,control);
-            else navigate({ ...presentation.completeDays(Number(days), getContext().options.timeContext), compare: "periods" });
-        });
-        control.dataset.comparisonRange = days; dateChoices.append(control);
-    }
+    const calendarChoices = ux.datesPicker({ panel: calendar, editor: form, trigger: datesButton, optionKey: "comparisonRange",
+        current: () => shown && publicationCurrent(publicationToken()), selected: activePreset,
+        onPreset: days => navigate({ ...presentation.completeDays(Number(days), getContext().options.timeContext), compare: "periods" }),
+        onCustom(origin) {
+            const ranges = periods(getContext().route);
+            calendarSide = origin.dataset.editPeriod ?? null;
+            for (const [id,group] of [["a",form.firstElementChild],["b",form.children[1]]]) group.hidden = Boolean(calendarSide && calendarSide !== id);
+            calendar.dataset.single = String(Boolean(calendarSide));
+            calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
+        },
+        onClose() { delete calendar.dataset.single; for (const editor of Object.values(calendars)) editor.clear(); } });
     const dateHint = el("p", undefined, "visually-hidden"); dateHint.id = "comparisonDateHint";
     const scopeRow = el("div", undefined, "period-comparison-scope");
     const scope = el("p", undefined, "visually-hidden");
@@ -406,7 +403,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const control = button(name, () => { if (consumer()) navigate({ comparisonView: key }); });
         control.dataset.comparisonView = key; views.append(control);
     }
-    chartControls.append(dateChoices, quick, optionsSlot);
+    chartControls.append(datesButton, quick, optionsSlot);
     const additionalOptions = el("fieldset", undefined, "comparison-options");
     additionalOptions.append(el("legend", "Comparison"));
     function optionControl(id, label, entries, change, multiple = false) {
@@ -499,7 +496,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (!publicationCurrent(intent.publication)) { withdrawAccess(); return; }
         if (intent.navigation !== context.navigationGeneration || intent.readingIntent !== context.readingIntent
             || context.route.view !== "analyze" || context.route.compare !== "periods") { entryIntent = null; return; }
-        const target = dateChoices.querySelector("button");
+        const target = datesButton;
         if (!target.checkVisibility() || target.matches(":disabled") || target.closest("[inert]")) return;
         entryIntent = null;
         target.focus();
@@ -624,12 +621,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         quick.querySelector('[value="custom"]').textContent = combination.join(" + ") || "Custom activity";
         quick.dataset.preset = quick.value;
         for (const control of views.children) control.setAttribute("aria-pressed", String(control.dataset.comparisonView === chartView()));
-        for (const control of dateChoices.querySelectorAll("button")) {
-            const days = control.dataset.comparisonRange;
-            const pair = days === "custom" ? null : presentation.completeDays(Number(days), options.timeContext);
-            control.setAttribute("aria-pressed", String(pair ? Object.keys(pair).every(key => route[key] === pair[key])
-                : !["7", "14", "30"].some(days => Object.entries(presentation.completeDays(Number(days), options.timeContext)).every(([key, value]) => route[key] === value))));
-        }
         bucketControl.value = options.bucket; groupingControl.value = route.chart === "endpoint" ? "endpoint" : route.chart === "workload" ? "workload" : "tool";
         for (const [control, selected] of [[serviceControl, options.filters.services ?? []], [withinControl, route.withinServices?.split(",") ?? []]]) {
             for (const option of control.options) option.selected = selected.length ? selected.includes(option.value) : option.value === "";
@@ -1177,7 +1168,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             const line = el("p");
             const role = index ? "b" : "a";
             const edit = button(dateRange(side), () => {
-                if (readCurrent(started, publication) && edit.isConnected) openCalendar(role,edit);
+                if (readCurrent(started, publication) && edit.isConnected) calendarChoices.expand(edit);
             });
             edit.classList.add("icon-action");
             edit.dataset.editPeriod = role;
@@ -1300,6 +1291,15 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (routeKey !== lastRoute) {
             lastRoute = routeKey;
         }
+        const selectedRange = periods(context.route).later;
+        let rangeLabel = "Choose dates";
+        if (selectedRange.from && selectedRange.to) {
+            try { rangeLabel = time.formatCivilRange(selectedRange.from, selectedRange.to, context.options.timeContext); }
+            catch (error) { if (!(error instanceof RangeError)) throw error; }
+        }
+        datesValue.textContent = rangeLabel;
+        datesButton.setAttribute("aria-label", "Dates: " + rangeLabel);
+        calendarChoices.sync();
         if (searchInput.value !== context.search) searchInput.value = context.search;
         const refinedNative = Boolean(context.nativeView?.textSelection || context.nativeView?.groupId);
         dateHint.className = context.options.timeContext.timeZoneFallback || refinedNative ? "context-help-note" : "visually-hidden";
@@ -1476,6 +1476,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         scope.textContent = ""; scope.hidden = true;
         searchInput.value = ""; searchInput.defaultValue = "";
         calendarChoices.close(false);
+        ux.setOwnedText(datesValue, ""); ux.removeOwnedAttribute(datesButton, "aria-label");
         for (const editor of Object.values(calendars)) editor.clear();
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(outcomeLayer);
         if (control) {
