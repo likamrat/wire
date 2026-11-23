@@ -614,6 +614,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, requestInvalidated = false, contextOwner = null;
     let sidebarColumnAnimation = null, sidebarColumnAnchor = null, sidebarColumnFrame = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
+    const invalidatedCallFocus = new WeakMap();
     let readerWidth = null, readerExpanded = false, readerResize = null, sidebarTextAnchor = null, readerLayoutSize = null;
     let readerSections = null, timingHeadingObserver = null, cardEntry = null;
     const readerTextReleases = [];
@@ -1457,7 +1458,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const active = document.activeElement, owner = active?.closest("[data-view-key]");
         const readerPosition = contextOwner?.interaction && contextBody.contains(active)
             ? { identity: sidebarIdentity, top: contextBody.scrollTop } : null;
-        const focus = contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
+        const pending = invalidatedCallFocus.get(active);
+        const focus = pending && readerPosition?.identity === pending.identity
+            && api.isCurrent(pending.publication) ? pending.focus
+            : contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
             id: active.id, ...(readerPosition ? { text: active.textContent } : {}),
         } : owner === active && active?.closest("#savedReportsPanel") && owner?.dataset.viewKey ? { key: owner.dataset.viewKey, self: true } : owner ? {
             key: owner.dataset.viewKey, label: active.getAttribute("aria-label"), tag: active.tagName,
@@ -2420,9 +2424,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             sidebarPositions.clear();
             requestRenderKey = null;
             if (workspaceState.route.view === "request") {
+                const active = document.activeElement;
+                const focus = reason === "data" && !acceptingSnapshot && contextBody.contains(active) && active.matches(".reader-call-toggle")
+                    ? { key: active.closest("[data-view-key]")?.dataset.viewKey, callDetail: active.getAttribute("aria-controls") } : null;
                 requestInvalidated = true;
                 clearReaderSections();
-                $("requestContent").replaceChildren(el("p", "notice", message));
+                const notice = el("p", "notice", message);
+                $("requestContent").replaceChildren(notice);
+                // Status can retire the reader before its replacement snapshot arrives. Carry
+                // only the disclosure identity, and only while focus remains on this notice.
+                if (focus?.key && focus.callDetail) {
+                    invalidatedCallFocus.set(notice, { focus, identity: sidebarIdentity, publication: api.publicationToken() });
+                    notice.tabIndex = -1; notice.focus({ preventScroll: true });
+                }
                 renderReportInspectionReturn();
             }
         },
@@ -10638,7 +10652,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function recoverRead() {
-        if (api.accessState().mode !== "unbound") { api.startAccess(); return; }
+        if (api.accessState().mode !== "unbound") {
+            api.startAccess();
+            if (api.publicationToken() && workspaceState.evidence?.collection) {
+                clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 0);
+            }
+            return;
+        }
         draft.clearContext({ writing: exportWriting });
         scrubContextPreview();
         if (exportWriting) return;
