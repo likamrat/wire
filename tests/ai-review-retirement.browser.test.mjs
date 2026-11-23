@@ -1,28 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { retirementFixture, retirementClient } from "./ai-review-retirement-fixture.mjs";
 import { navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
-import { scanReport } from "./report-journey-helpers.mjs";
+import { prepareReportPreview } from "./report-journey-helpers.mjs";
 
 test("normal Analyze, reader, Settings and Search retain replies and reporting without any rating functionality", { timeout: 45000 }, async t => {
     const cleanups = [], f = await retirementFixture({ after: action => cleanups.push(action) });
     const unexpected = [], errors = [], requests = [];
     const forbidden = () => { unexpected.push("evaluation"); throw new Error("No evaluation work permitted."); };
+    const access = await createCopilotRuntimeAccess(f.context);
     const runtime = await startServer(f.context, createExportController(f.context), {
-        port: 0, collector: { timers: false },
+        port: 0, access, collector: { timers: false },
         evaluation: { evaluatorFactory: forbidden, readSource: forbidden, discover: forbidden },
     });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
     page.setDefaultTimeout(8000);
     t.after(async () => {
-        try { await browser.close(); await runtime.close(); }
+        try { await browser.close(); await runtime.close(); await access.close(); }
         finally { for (const cleanup of cleanups.reverse()) await cleanup(); }
     });
     page.on("pageerror", error => errors.push(error.message));
@@ -54,18 +56,26 @@ test("normal Analyze, reader, Settings and Search retain replies and reporting w
         sourceConfigRef: settings.data.source.sourceConfigRef, sourceConfigRevision: settings.data.source.sourceConfigRevision,
     });
     assert.equal(enabled.status, 200);
-    await runtime.collector.collectNow();
+    const checkSource = async () => {
+        const result = await api("/api/collection/now");
+        assert.equal(result.status, 200, JSON.stringify(result.body));
+    };
+    await checkSource();
     const answer = "Invented saved reply after review retirement.";
     await appendFile(path.join(f.config.sessionRoot, f.inputs[0].record.sourceSessionId, "events.jsonl"),
         JSON.stringify({ id: "retirement-answer", type: "assistant.message", timestamp: new Date().toISOString(), data: { content: answer } }) + "\n");
-    await runtime.collector.collectNow();
+    await checkSource();
     const historical = JSON.stringify((await loadBoardState(f.context)).personalEvaluation.modelEvaluation);
     const personal = JSON.stringify((await loadBoardState(f.context)).personalEvaluation.feedback);
     await page.goto(runtime.url);
     await expect(page.locator('#workspace[aria-busy="false"]')).toBeVisible();
     await expect(page.locator(".request-card-open").first()).toBeVisible();
     assert.equal(await page.locator("[data-automatic-scores],#automaticScoreSetup,[data-settings-section=ai]").count(), 0);
-    await page.locator(`.request-card-open[href*="${encodeURIComponent(f.inputs[0].record.scenarioId)}"]`).first().click();
+    const scenarioId = f.inputs[0].record.scenarioId;
+    const card = page.locator(`#activityList [data-view-key="request:${scenarioId}"]`);
+    const opener = card.locator(".request-card-open");
+    assert.ok(!(await opener.getAttribute("href")).includes(scenarioId), "Private selection stays out of the URL.");
+    await opener.click();
     const reader = page.locator("#contextSidebar");
     await expect(reader).toContainText(answer);
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
@@ -94,7 +104,8 @@ test("normal Analyze, reader, Settings and Search retain replies and reporting w
     }
     await reader.getByRole("button", { name: /^Copy response(?: \d+)?$/ }).last().click();
     assert.ok((await page.evaluate(() => window.fixtureCopies)).includes(answer));
-    await reader.getByRole("button", { name: "Add to report", exact: true }).click();
+    // This older approved source has no account-profile mapping for named drafts.
+    await expect(reader.locator(".report-draft-trigger")).toHaveCount(0);
     await page.locator("#closeContextSidebar").click();
     await navigateMain(page, "settings");
     await expect(page.locator("#settingsCategoryNav")).not.toContainText("AI reviews");
@@ -105,17 +116,29 @@ test("normal Analyze, reader, Settings and Search retain replies and reporting w
     await expect(page.locator("#assessmentSetup")).toContainText("Save Copilot replies locally");
     if (process.env.WIRE_AI_REMOVAL_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_AI_REMOVAL_PROOFS, "current-settings.png") });
     await navigateMain(page, "reports");
-    await page.locator("#reportCreateLink").click();
-    await expect(page.locator("input[data-report-request]:checked")).toHaveCount(1);
-    const preview = await scanReport(page);
+    await page.getByRole("button", { name: /^Activity source:/ }).click();
+    const picker = page.locator("#reportActivityOptions");
+    await picker.locator("[name=reportScope][value=selected]").check();
+    await picker.locator(`[data-report-request="${scenarioId}"]`).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await page.locator("#formatOptions input[value=json]").check();
+    await page.keyboard.press("Escape");
+    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await prepareReportPreview(page);
+    const preview = await (await preparing).json();
+    assert.equal(preview.records.length, 1);
     assert.equal(preview.snapshot.evaluationFacts.metricProjectionVersion, 4);
     assert.doesNotMatch(preview.previewHtml, /AI results|AI reviews|Quality results|synthetic-quality-fixture|Personal feedback|Your feedback/);
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     assert.equal((await savedResponse).status(), 200);
-    assert.equal((await loadBoardState(f.context)).exports.length, 1);
+    const [saved] = (await loadBoardState(f.context)).exports;
+    assert.equal(saved.bundleId, preview.bundleId);
+    assert.equal(saved.privacyReview.reviewerConfirmed, false);
+    const frozen = JSON.parse(await readFile(saved.files["product-report.json"], "utf8"));
+    assert.deepEqual(frozen.evaluationFacts, preview.snapshot.evaluationFacts);
+    assert.deepEqual(frozen.evaluationFacts.assessments, []);
     await navigateMain(page, "analyze");
     await page.locator("#wireSearch").fill("Invented saved reply after review retirement");
     await expect(page.locator("#wireSearchResults")).toContainText("saved reply");
