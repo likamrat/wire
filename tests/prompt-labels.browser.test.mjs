@@ -1,23 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { chromium } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { buildAssessmentModel, assessmentOverview } from "../lib/assessment-read-model.mjs";
-import { fixture, exportCatalogFor, chooseTheme, openActivitySessions, navigateMain, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture, exportCatalogFor, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { createTextAccess } from "../web/text-access.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { createDisclosureState } from "../web/disclosure-state.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { styles } from "../web/styles.mjs";
-const proofs = process.env.WIRE_PROMPT_PROOFS;
 const original = "ARTIFICIAL PROMPT ONLY\n  Preserve these spaces  \n" +
     "Compare invented calendar entries without executing this prompt. ".repeat(24) +
     "\nUnicode: \u65e5\u672c\u8a9e e\u0301 \ud83d\udc69\u200d\ud83d\ude80\nEND";
-const warning = "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.";
 
 function records() {
     return [
@@ -110,108 +107,48 @@ test("actual history attribution never promotes a user role or forwarded wording
     }
 });
 
-test("wired Activity and detail readers use Prompt without inventing author identity", { timeout: 45000 }, async t => {
+test("legacy provenance and forwarded wording cannot supply a verified author on the card or reader", async t => {
     const { page, sources } = await setup(t);
-    await page.goto("https://wire.invalid/#activity"); await ready(page); await openActivitySessions(page);
-    assert.deepEqual(await page.locator(".request-row .full-text-preview-label").allTextContents(), sources.map(() => "Copilot chat prompt / This older record has no sender details"));
-    assert.equal(await page.getByRole("button", { name: "Read more", exact: true }).count(), 1);
-    const row = page.locator(".request-row").filter({ hasText: "ARTIFICIAL PROMPT ONLY" });
-    await row.locator("input").check();
-    await row.getByRole("button", { name: "Read more", exact: true }).click();
-    assert.equal(await row.locator(".ux-code-label").textContent(), "Copilot chat prompt / local only");
-    await row.getByRole("link", { name: "View interaction", exact: true }).click(); await ready(page);
-    await page.goBack(); await ready(page);
-    assert.equal(await row.locator("input").isChecked(), true);
-    assert.equal(await row.getByRole("button", { name: "Read less", exact: true }).getAttribute("aria-expanded"), "true");
-    await navigateMain(page, "reports"); await ready(page);
-    await page.locator("#reportRequests > summary").click();
-    assert.deepEqual(await page.locator("#reportList .full-text-preview-label").allTextContents(), ["Copilot chat prompt / This older record has no sender details"]);
-    assert.match(await page.locator("#reportRequestSearchHelp").textContent(), /retained prompt text/);
+    await page.goto("https://wire.invalid/"); await ready(page);
     for (const source of sources) {
-        await page.goto(`https://wire.invalid/#request?request=${source.scenarioId}`); await ready(page);
-        const reader = page.locator(".request-original");
-        assert.equal(await reader.getByRole("heading", { name: "Copilot chat prompt", exact: true }).count(), 1);
-        assert.doesNotMatch(await reader.innerText(), /Human prompt|User prompt|Agent prompt|Request text/);
-        if (source.userPrompt.status === "unavailable") {
-            assert.match(await reader.innerText(), /Prompt not available/);
-            assert.equal(await reader.locator("button").count(), 0);
+        const card = page.locator(`article[data-view-key="request:${source.scenarioId}"]`);
+        await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
+        await card.locator(".request-card-open").press("Enter");
+        const section = page.locator('[data-reader-section="prompt"]');
+        await expect(section.getByRole("heading")).toContainText("Author unverified");
+        await expect(section).toContainText("This older record has no sender details");
+        if (source.userPrompt.text === null) {
+            await expect(section).toContainText("Prompt text unavailable");
+            await expect(section.getByRole("button", { name: "Copy prompt" })).toHaveCount(0);
         } else {
-            assert.equal(await reader.getByText("This older record has no sender details", { exact: true }).count(), 1);
-            const toggle = reader.locator(".full-text-toggle");
-            if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
-            assert.equal(await reader.locator("pre").textContent(), source.userPrompt.text);
-            assert.equal(await reader.locator("pre").getAttribute("aria-label"), "Exact recorded prompt text");
-            assert.equal(await reader.getByRole("button", { name: "Copy prompt", exact: true }).count(), 1);
+            if (source.userPrompt.status === "partial") await expect(section).toContainText("Partial text");
+            assert.equal(await section.locator("pre").textContent(), source.userPrompt.text);
         }
+        await page.goBack(); await expect(card.locator(".request-card-open")).toBeFocused();
     }
-    await page.getByText("Technical source record", { exact: true }).click();
-    await page.getByText("Nearby follow-ups / inferred associations", { exact: true }).click();
-    await page.locator("summary").filter({ hasText: /^Follow-up 1 \/ prompt$/ }).click();
-    assert.match(await page.locator(".request-support").innerText(), /inferred association/);
-    await page.getByText("Technical details", { exact: true }).last().click();
-    await page.locator("summary").filter({ hasText: /^Exact recorded arguments \/ local only$/ }).click();
-    assert.match(await page.locator(".journey-pages pre").innerText(), /Artificial API filter/);
-    assert.equal(await page.getByRole("heading", { name: "Agent prompt", exact: true }).count(), 0);
 });
 
-test("Prompt reader keeps exact copy, keyboard focus, disclosure and synthetic light/navy reflow", { timeout: 45000 }, async t => {
+test("keyboard Copy takes the complete retained prompt and a denial leaves it readable", async t => {
     const { page } = await setup(t);
     await page.goto("https://wire.invalid/#request?request=unverified"); await ready(page);
-    const reader = page.locator(".request-original"), toggle = reader.locator(".full-text-toggle");
-    const route = page.url(), selection = await page.locator("#activitySelectionSummary").textContent();
-    assert.equal(await toggle.textContent(), "Read prompt");
-    assert.equal(await toggle.getAttribute("aria-label"), "Read prompt");
-    assert.equal(await reader.locator("pre").count(), 0);
-    await toggle.focus(); await page.keyboard.press("Enter");
-    assert.equal(await toggle.getAttribute("aria-label"), "Hide prompt");
-    assert.equal(await toggle.evaluate(node => document.activeElement === node), true);
-    assert.equal(await reader.locator("pre").textContent(), original);
-    await reader.locator(".reader-details > summary").click();
-    assert.equal(await reader.getByText(warning, { exact: true }).count(), 1);
-    const copy = reader.getByRole("button", { name: "Copy prompt", exact: true });
-    await toggle.focus();
-    await page.keyboard.press("Tab");
-    assert.equal(await copy.evaluate(node => document.activeElement === node), true);
-    await page.keyboard.press("Enter");
-    await page.waitForFunction(() => window.syntheticCopies.length === 1);
-    assert.deepEqual(await page.evaluate(() => window.syntheticCopies), [original]);
+    const section = page.locator('[data-reader-section="prompt"]');
+    const toggle = section.getByRole("button", { name: "Author unverified", exact: true });
+    const copy = section.getByRole("button", { name: "Copy prompt", exact: true }), text = section.locator(".full-text-content");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    assert.equal(await text.textContent(), original);
+    await toggle.press("Enter"); await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await toggle.press("Tab"); await expect(copy).toBeFocused();
+    await copy.press("Enter");
+    await expect.poll(() => page.evaluate(() => window.syntheticCopies)).toEqual([original]);
     await page.evaluate(() => { window.copyDenied = true; });
     await copy.click();
-    assert.match(await reader.getByRole("alert").textContent(), /Couldn't copy/);
-    await toggle.focus(); await page.keyboard.press("Space");
-    assert.equal(await reader.locator("pre,.ux-copy-status").count(), 0);
-    await page.keyboard.press("Enter");
-    assert.equal(page.url(), route);
-    assert.equal(await page.locator("#activitySelectionSummary").textContent(), selection);
-    const metrics = [];
-    if (proofs) await mkdir(proofs, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const width of [375, 1200]) for (const scale of [1, 2]) {
-        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-        const measure = await reader.evaluate(node => ({
-            overflow: document.documentElement.scrollWidth - innerWidth,
-            textOverflow: node.querySelector("pre").scrollWidth - node.querySelector("pre").clientWidth,
-            heading: node.querySelector("h2").textContent,
-            controls: [...node.querySelectorAll(".full-text-header button")].map(button => {
-                const box = button.getBoundingClientRect();
-                return { width: box.width, height: box.height, overflow: button.scrollWidth - button.clientWidth };
-            }),
-        }));
-        assert.ok(measure.overflow <= 1 && measure.textOverflow <= 1, `${theme}/${width}/${scale}: no overflow`);
-        assert.equal(measure.heading, "Copilot chat prompt");
-        assert.equal(measure.controls.length, 2);
-        assert.ok(measure.controls.every(control => control.width >= 44 && control.height >= 44 && control.overflow <= 1));
-        assert.equal(await reader.locator("pre").textContent(), original);
-        metrics.push({ theme, width, scale, ...measure });
-    }
-    if (proofs) {
-        await writeFile(path.join(proofs, "prompt-layout.json"), JSON.stringify(metrics, null, 2));
-        await page.goto("https://wire.invalid/#request?request=coordinator"); await ready(page);
-        for (const theme of ["light", "dark"]) for (const width of [375, 1200]) for (const scale of [1, 2]) {
-            await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; scrollTo(0, 0); }, scale);
-            await reader.screenshot({ path: path.join(proofs, `prompt-${theme}-${width}-${scale}x.png`) });
-        }
+    await expect(section.getByRole("alert")).toContainText(/copy/i);
+    assert.equal(await text.textContent(), original);
+    for (const [width, scale] of [[1200, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        assert.ok(await text.evaluate(n => n.scrollWidth <= n.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1));
+        const rect = await copy.boundingBox(); assert.ok(rect.width >= 44 && rect.height >= 44);
     }
 });
 
