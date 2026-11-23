@@ -563,8 +563,7 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     await expect(card.locator(".card-issue-owner")).toHaveText(["Call #2 · workiq-retrieve", "Call #1 · workiq-fetch"]);
     await expect(card).not.toContainText(/Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
-    await expect(card.locator("button,input,details")).toHaveCount(1);
-    await expect(card.getByRole("button", { name: "Add to report", exact: true })).toHaveClass(/report-draft-trigger/);
+    await expect(card.locator(".request-card-prompt a,.card-panel-link")).toHaveCount(0);
     await promptLink.focus(); await page.keyboard.press("Enter");
     const reader = page.locator("#requestContent");
     await expect(reader.locator(".reader-call-row")).toHaveCount(4);
@@ -930,9 +929,9 @@ test("the prompt leads and a separate evidence link names the scoped failure", a
     await ready(page);
     const geometry = await page.locator("#activityList .activity-card").first().evaluate(node => {
         const box = selector => node.querySelector(selector).getBoundingClientRect();
-        return { gap: box(".request-card-summary").top - box(".request-card-prompt").bottom,
+        return { gap: box(".card-outcome").top - box(".request-card-prompt").bottom,
             promptSize: parseFloat(getComputedStyle(node.querySelector(".request-card-prompt")).fontSize),
-            contextSize: parseFloat(getComputedStyle(node.querySelector(".request-card-summary")).fontSize) };
+            contextSize: parseFloat(getComputedStyle(node.querySelector(".card-outcome")).fontSize) };
     });
     assert.ok(geometry.gap >= 0 && geometry.gap <= 8 && geometry.promptSize > geometry.contextSize, JSON.stringify(geometry));
     await expect(page.locator("#activityList .activity-card").first().locator(".request-card-exception").first()).toContainText(/failed/);
@@ -1089,12 +1088,12 @@ test("the selected evaluation layout retains complete membership, native reading
     await expect(page.locator("#pageIntro")).toBeHidden();
     await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
     await expect(page.locator("#activityListScope")).toBeHidden();
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("These counts use saved activity");
+    await expect(page.locator("#activityList .activity-card")).toHaveCount(8);
     await capture(page, "react-analyze-light");
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.locator("#activityPager")).toContainText("9-16 of 240");
     const link = page.locator("#activityList .request-card-open").first();
-    const origin = page.url(), name = await link.getAttribute("aria-label"), reads = requests.filter(url => url === "/api/snapshot").length;
+    const origin = page.url(), name = await link.innerText(), reads = requests.filter(url => url === "/api/snapshot").length;
     await link.evaluate(node => { window.retainedActivityLink = node; });
     await link.click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
@@ -1103,7 +1102,8 @@ test("the selected evaluation layout retains complete membership, native reading
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await expect(page).toHaveURL(origin);
     await expect(page.locator("#activityPager")).toContainText("9-16 of 240");
-    await expect(page.locator("#activityList .request-card-open").first()).toHaveAttribute("aria-label", name);
+    await expect(link).toHaveAccessibleName(name);
+    await expect(link).toBeFocused();
     if (requests.filter(url => url === "/api/snapshot").length === reads) {
         assert.equal(await page.evaluate(() => window.retainedActivityLink === document.querySelector("#activityList .request-card-open")), true);
     }
