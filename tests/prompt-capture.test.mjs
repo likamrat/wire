@@ -148,7 +148,19 @@ for (const envelope of ["canonical", "ignored-host-context", "multiple-chunks"])
             envelope === "canonical" ? {} : { transformedContent: "x".repeat(size) }, "oversized"), start()]);
         await app.collect();
         await app.restart();
-        const state = await app.collect(), record = state.evidence[0];
+        let state = await app.collect();
+        if (envelope === "multiple-chunks") {
+            // The first read included the preceding prompt. Only the next full
+            // chunk establishes that this entry cannot be projected.
+            const { cursor } = await app.checkpoint();
+            assert.equal(cursor.skipping, true);
+            assert.equal(cursor.skipReason, "oversized-line");
+            assert.ok(cursor.backlogBytes > 0);
+            assert.deepEqual(state.evidence, []);
+            await app.restart();
+            state = await app.collect();
+        }
+        const record = state.evidence[0];
         assert.equal(record.userPrompt.text, null);
         assert.equal(record.userPrompt.sourceEventId, undefined);
         assert.equal(record.userPrompt.capture.reason, "oversized-line");
