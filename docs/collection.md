@@ -410,6 +410,42 @@ creating a retained interaction. They are counted separately, preserve all tool
 and repaired error carriers, and bind honest before/after checkpoint hashes.
 Already-known origins remain outside the unknown-only repair population.
 
+### Review older unverified authors as a group
+
+Use the existing prompt-origin maintenance command. You do not need a
+screenshot, a prompt excerpt or a hand-built event pin. Keep its output private:
+it contains local source identifiers and hashes, not prompt or reply text.
+
+```text
+node scripts/maintain-prompt-origins.mjs --mode list --data-dir <absolute-store>
+node scripts/maintain-prompt-origins.mjs --mode review --data-dir <absolute-store> --batch <listed-batch>
+```
+
+`list` reads only the retained store. It groups older unverified origins and
+their retained copies by chat, lists batches of up to four, and counts excluded
+origins by reason. A candidate is **not** a finding that the author was human.
+The default is the current window and active sources. To review older dates or
+archived local chats, explicitly add `--include-older` or `--include-archived`
+to both commands. These options do not change collection settings.
+
+`review` checks the selected chat's approved local mapping and reads one bounded
+page of its fully consumed journal. If it returns `status: "continue"`, save
+that JSON as UTF-8 in a private file **outside** the checkout and store. Run
+the same `review` command with `--previous <absolute-page-file>`. Keep each
+new page separate from the one you're reading. Pages cannot be mixed across
+batches or changed sources. No proposal is made until the full journal has
+been checked for competing event identities. An unreadable, oversized or
+ambiguous source region prevents a complete review; it is not an empty batch.
+
+The final `targets` are the corrections the original records actually support.
+They may be human **or** agent prompts. `unresolved` explains why other
+candidates stay unverified. Listing, reviewing and installing a new reader
+do not write these changes. For an approved correction, use the returned
+targets, source and state guard in the existing offline Prepare/Apply plan.
+Preserve its stopped-runtime attestation, saved-file guards, review seal and
+separate confirmation. A changed source invalidates the proposal. A stale
+batch must be listed again; do not weaken the guards or replay calls.
+
 For a complete correction batch, `inspectPromptOriginRepair` also accepts
 `origins`: exact source/event identities, pinned original regions and the
 explicit `olderRetained` choice. It uses the same classifier as collection,
