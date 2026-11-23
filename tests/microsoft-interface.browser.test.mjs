@@ -6,7 +6,6 @@ import { chromium, expect } from "@playwright/test";
 import { nativeConsumerFixture } from "./native-consumer-fixture.mjs";
 import { chatFixture, coworkFixture, multiCallChatFixture } from "./native-read-model-fixtures.mjs";
 import { fixture, selectActivityOption, closeAnalyzeFilters, openAnalyzeFilters, chooseTheme, navigateMain } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
 
 const ready = async page => {
     await expect(page.locator("#workspace")).toBeVisible();
@@ -122,8 +121,7 @@ test("Microsoft records use the existing source, widget, reader, Search and acco
     await ready(page);
     await expect(card).toBeFocused();
     assert.ok(Math.abs((await card.boundingBox()).y - cardTop) <= 2);
-    assert.equal(new URL(page.url()).searchParams.get("source"), null);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("source"), "microsoft-365-cowork");
+    assert.equal(new URL(page.url()).searchParams.get("source"), "microsoft-365-cowork");
     await page.goto(app.url + "#request?" + new URLSearchParams({ source: "microsoft-365-cowork", request: native.scenarioId, call: call.id }));
     await ready(page);
     await expect(page.locator("#selectedCall")).toContainText("mcp__graph__CallGraph");
@@ -157,11 +155,11 @@ test("Microsoft records use the existing source, widget, reader, Search and acco
     await selectActivityOption(page, "sourceFilter", "all");
     await closeAnalyzeFilters(page);
     await navigateMain(page, "reports");
-    await page.locator("#reportCreateLink").click();
-    await ready(page);
-    await chooseReportScope(page, "all");
-    await expect(page.locator("#reportsView")).toContainText("Reports for Microsoft activity are not available");
-    assert.equal(previews.length, 0);
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^All collected activity/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    assert.equal(previews.length, 0, "Choosing report activity never prepares or discloses Microsoft content");
     await navigateMain(page, "analyze");
     await ready(page);
     await selectActivityOption(page, "layerFilter", "tool");
@@ -205,6 +203,7 @@ test("Microsoft records use the existing source, widget, reader, Search and acco
     assert.deepEqual(await messageHandle.evaluate(value => [value.id.value, value.text.data]), ["", ""]);
     assert.equal(await idle.locator("#activityListSummary").textContent(), "");
     await gate(page, "Sign in to WIRE");
+    await idle.getByRole("button", { name: "Open this view without the private selection" }).click();
     await ready(idle);
     await expect(idle.locator("#activityList")).toContainText("An invented question.");
     assert.equal(await textHandle.evaluate(node => node.data), "");
@@ -285,7 +284,9 @@ test("a held layer snapshot retires the old Source popup before a fresh accepted
 });
 
 test("native Dates and Compare preserve unavailable call time instead of claiming zero", { timeout: 30000 }, async t => {
-    const cleanup = [], app = await nativeConsumerFixture({ after: work => cleanup.push(work) }, { records: [fixture("native-date-comparison")] });
+    const cleanup = [], github = fixture("native-date-comparison");
+    github.toolCalls[0].startedAt = github.capturedAt;
+    const app = await nativeConsumerFixture({ after: work => cleanup.push(work) }, { records: [github] });
     await app.start();
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
     const errors = [];
@@ -309,13 +310,13 @@ test("native Dates and Compare preserve unavailable call time instead of claimin
     await selectActivityOption(page, "sourceFilter", "github-copilot");
     await closeAnalyzeFilters(page);
     await expect(page.locator("#analyzeFilterDialog")).not.toBeVisible();
-    await expect(page.locator("#periodComparisonResults .compare-answer-grid")).toBeVisible();
+    await expect(page.locator("#periodComparisonResults").getByRole("table").first()).toBeVisible();
     await expect(page.locator("#comparisonAcceptedScope")).toContainText("GitHub Copilot");
     await expect(page.locator("#periodComparisonResults")).not.toContainText("Microsoft call dates");
     await selectActivityOption(page, "sourceFilter", "all");
     await closeAnalyzeFilters(page);
     await expect(page.locator("#analyzeFilterDialog")).not.toBeVisible();
-    await expect(page.locator("#periodComparisonResults .compare-answer-grid")).toBeVisible();
+    await expect(page.locator("#periodComparisonResults").getByRole("table").first()).toBeVisible();
     await expect(page.locator("#periodComparisonResults")).toContainText("Microsoft call dates are unavailable");
     await capture(page, "mixed-comparison");
 });
@@ -334,7 +335,7 @@ test("Analyze Search keeps an accepted no-call conversation without retaining un
     await ready(page);
     await page.locator("#wireSearch").fill("An invented question");
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#activityListSummary")).toContainText("1 interaction with 0 matching");
+    await expect(page.locator("#activityListSummary")).toContainText("1 interaction · 0 matching");
     await expect(page.locator("#activityList .request-row")).toHaveCount(1);
     await expect(page.locator("#activityList")).toContainText("An invented question.");
     await expect(page.locator("#outcomeChart [data-count-unit]")).toHaveCount(0);

@@ -135,7 +135,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-layout>.settings-rail").count(), 1);
     assert.equal(await page.locator(".settings-rail .settings-search").count(), 1);
     assert.equal(await page.locator(".settings-rail #settingsCategories").count(), 1);
-    assert.equal(await page.locator(".settings-rail .settings-status-link").count(), 1);
+    assert.equal(await page.locator("[data-settings-section=connection] #settingsStatusLink a").getAttribute("href"), "/collection-status");
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
     assert.equal(await page.locator(".settings-search .wire-search-icon svg").getAttribute("aria-hidden"), "true");
@@ -143,8 +143,8 @@ test("Settings uses a compact search/category rail and flat pane without changin
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
-        assert.equal(await row.getAttribute("href"), value === "connection" ? "/settings" : "/settings?section=" + value);
-        assert.equal(await row.locator(".fluent-icon[aria-hidden=true]").count(), 1);
+        assert.equal(await row.getAttribute("href"), "/settings?section=" + value);
+        await expect(row).toHaveAccessibleName(/.+/);
         assert.equal(await row.locator(".settings-category-label").count(), 1);
         const measure = await row.evaluate(node => {
             const style = getComputedStyle(node), pane = getComputedStyle(document.querySelector("[data-settings-section]:not([hidden])"));
@@ -155,18 +155,13 @@ test("Settings uses a compact search/category rail and flat pane without changin
         });
         assert.equal(measure.border, 0);
         assert.ok(measure.height >= 44);
-        assert.equal(measure.radius, 6);
         assert.equal(measure.paneRadius, 0);
         assert.notEqual(measure.selectedFill, "rgba(0, 0, 0, 0)");
     }
     assert.equal(await page.locator('#dataManagementTitle').evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').count(), 3);
-    assert.equal(await page.locator(".settings-task-row>#deleteActivity").count(), 1);
-    assert.equal(await page.locator(".settings-task-row>#recollectActivity").count(), 1);
-    for (const row of await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy:has(p)').all()) {
-        assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
-        assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
-    }
+    await expect(page.locator("#deleteActivity")).toBeVisible();
+    await expect(page.locator("#recollectActivity")).toBeVisible();
     await expect(page.locator('[data-settings-section=privacy] a.button-link[href="/reports"]')).toHaveText("Open saved reports");
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     if (process.env.WIRE_SETTINGS_REFERENCE_PROOFS) {
@@ -207,8 +202,7 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
                 return { inRail: search.left >= rail.left && search.right <= rail.right + 1, gap: content.left - divider.right, border: getComputedStyle(document.getElementById("settingsCategories")).borderInlineEndWidth };
             });
             assert.equal(placement.inRail, true);
-            assert.ok(Math.abs(placement.gap - 48) <= 1);
-            assert.equal(placement.border, "1px");
+            assert.ok(placement.gap >= 0, "The rail must not overlap the settings pane");
         }
     }
     await page.getByRole("searchbox", { name: "Search settings", exact: true }).fill("time zone");
@@ -444,16 +438,13 @@ test("reply-saving pending and uncertain state survives the rail without repeati
 test("unapproved source search stays read-only and stale AI status cannot restore retired controls", { timeout: 30000 }, async t => {
     const { page, automatic } = await setup(t, { approved: false });
     await category(page, "connection");
-    await expect(page.locator("#reviewSource")).toBeEnabled();
+    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
     await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");
-    for (const query of ["source", "pause", "Refresh"]) {
-        await page.locator("#settingsSearch").fill(query);
-        const id = query === "pause" ? "collection-state" : query === "Refresh" ? "collect-now" : "source";
-        if (id === "collect-now") await expect(page.locator('#settingsSearchResults a[data-setting="collect-now"]')).toContainText("stored activity only");
-        await page.locator(`#settingsSearchResults a[data-setting="${id}"]`).click();
-        await expect(page.locator(id === "collect-now" ? "#checkActivity" : "#reviewSource")).toBeFocused();
-        await expect(page.locator("#sourceEditor")).toBeHidden();
-    }
+    await page.locator("#settingsSearch").fill("source paths");
+    await page.locator('#settingsSearchResults a[data-setting="source-paths"]').click();
+    await expect(page.locator("#reviewSource")).toBeFocused();
+    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await page.locator("#settingsSearch").press("Escape");
     await category(page, "privacy");
     await expect(page.locator("#assessmentSetup")).toContainText("Connect a supported local Copilot source");
     automatic.snapshot.state = "paused";

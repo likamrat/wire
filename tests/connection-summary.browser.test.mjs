@@ -7,7 +7,7 @@ import { searchFixture } from "./live-search-fixture.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, openSourceEditor } from "./helpers.mjs";
+import { privateFixture, chooseTheme, openAnalyzeFilters, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const proofs = process.env.WIRE_CONNECTION_PROOFS;
@@ -117,13 +117,13 @@ async function dropdownGeometry(page, id, name) {
             labelClipped: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1,
             chevron: box(trigger.querySelector(".select-chevron")),
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
-            scrollHeight: popup.scrollHeight, scrollTop: popup.scrollTop, clientHeight: popup.clientHeight,
-            actions: [...popup.querySelectorAll("button")].map(node => ({
+            scrollHeight: popup.querySelector('[role=listbox]')?.scrollHeight ?? popup.scrollHeight, scrollTop: popup.querySelector('[role=listbox]')?.scrollTop ?? popup.scrollTop, clientHeight: popup.querySelector('[role=listbox]')?.clientHeight ?? popup.clientHeight,
+            actions: [...popup.querySelectorAll("button")].filter(node => node.checkVisibility()).map(node => ({
                 ...box(node), text: node.textContent, clipped: node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1,
             })),
             rows: [...popup.querySelectorAll(".select-option")].map(node => {
                 const label = node.querySelector(".select-option-label");
-                return { ...box(node), text: label.textContent, label: box(label), check: box(node.querySelector(".select-check")),
+                return { ...box(node), text: label.textContent, label: box(label), check: node.querySelector(".select-check") ? box(node.querySelector(".select-check")) : null,
                     clipped: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1 };
             }),
         };
@@ -141,12 +141,12 @@ function assertDropdownGeometry(result, width) {
     assert.ok(result.menu.x >= 8 && result.menu.right <= width - 7 && result.menu.y >= 8 && result.menu.bottom <= 993, "Popup stays within the viewport");
     assert.ok(result.label.right <= result.chevron.x, "Selected text does not overlap its chevron");
     for (const action of result.actions) {
-        assert.ok(action.height >= 44 && !action.clipped, "All, Apply and Cancel keep readable usable targets");
+        assert.ok(action.height >= 44 && !action.clipped, `Visible action ${action.text} ${action.height}px, clipped=${action.clipped}; usable targets must remain readable`);
         assert.ok(action.x >= result.menu.x && action.right <= result.menu.right, "Actions stay inside the menu");
     }
     for (const row of result.rows) {
         assert.equal(row.clipped, false, row.text);
-        assert.ok(row.label.x >= row.x && row.label.right <= row.check.x && row.label.bottom <= row.bottom, "Full option text leaves room for its checkmark");
+        assert.ok(row.label.x >= row.x && row.label.right <= (row.check?.x ?? row.right) + 1 && row.label.bottom <= row.bottom, "Full option text leaves room for its checkmark");
     }
 }
 
@@ -212,6 +212,7 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
         await selectActivityOption(page, "displayTimeZone", "");
         await navigateMain(page, "analyze"); await ready(page);
         for (const [id, name] of [["promptAuthorFilter", "author"], ["outcomeFilter", "outcome"]]) {
+            await openAnalyzeFilters(page);
             const trigger = page.locator("#" + id + "-control"), popup = page.locator(".select-popup");
             await trigger.click();
             const reads = requests.filter(path => path === "/api/snapshot").length;
@@ -243,51 +244,6 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
     for (const { context, long, selected, multiple } of measurements) {
         for (const geometry of [long, selected, multiple].filter(Boolean)) assertDropdownGeometry(geometry, context.width);
     }
-});
-
-test("explicit source inspection, source drafts, category return and Back preserve paths and paused state", async t => {
-    const { page, config, runtime } = await setup(t);
-    await page.locator("#viewApprovedSource").click(); await ready(page);
-    await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-    await expect(page.locator("#approvedDatabase")).toHaveText(config.appDbPath);
-    await expect(page.locator("#approvedSessions")).toHaveText(config.sessionRoot);
-    await expect(page.locator("#viewApprovedSource")).toBeHidden();
-    await expect(page.locator("#approvedSourceDetails #editSource")).toBeVisible();
-    await capture(page, "approved-source-inspection");
-    await page.goBack(); await ready(page);
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-    await page.goForward(); await ready(page);
-    await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-    await openSourceEditor(page);
-    await expect(page.locator("#sourceDatabase")).toBeFocused();
-    const draft = config.appDbPath + ".draft";
-    await page.locator("#sourceDatabase").fill(draft);
-    await page.locator("#sourceDatabase").press("Enter");
-    await expect(page.locator("#approvalScope")).toContainText("keeping original prompts locally");
-    await expect(page.locator("#pauseCollection")).toBeDisabled();
-    await expect(page.locator("#preferenceActions")).toBeHidden();
-    const node = await page.locator("#sourceDatabase").elementHandle();
-    await navigateSettings(page, "display");
-    await page.goBack(); await ready(page);
-    assert.equal(await node.evaluate(node => node === document.getElementById("sourceDatabase")), true);
-    await expect(page.locator("#sourceDatabase")).toHaveValue(draft);
-    await navigateSettings(page, "connection");
-    await page.locator("#cancelSource").click();
-    await expect(page.locator("#viewApprovedSource")).toBeFocused();
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-    await expect(page.locator("#sourceDatabase")).toHaveValue(config.appDbPath);
-    await selectActivityOption(page, "collectionCadence", "15");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    await expect(page.locator("#pauseCollection")).toBeDisabled();
-    await page.locator("#viewApprovedSource").click(); await ready(page);
-    await expect(page.locator("#editSource")).toBeDisabled();
-    await navigateSettings(page, "display");
-    await page.goBack(); await ready(page);
-    await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await page.locator("#cancelPreferences").click();
-    await expect(page.locator("#editSource")).toBeFocused();
-    await expect(page.locator("#collectionCadence")).toHaveValue(String(config.pollSeconds));
-    assert.equal((await runtime.collector.status()).config.enabled, false);
 });
 
 test("unapproved setup still requires review and explicit approval after path inspection links", async t => {

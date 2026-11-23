@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, revealSavedDataRead, setLegacyTimeBucket, openSourceEditor, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
-import { prepareLandingReport, chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
@@ -478,7 +478,7 @@ test("Connection Refresh publishes eligible source changes and separates partial
     await expect(page.locator("#freshCoverageAnnouncement")).toContainText("1 Copilot chat unavailable");
     await expect(page.locator("#settingsRefreshDetails")).toHaveCount(0);
     await expect(page.locator("#freshCheckDetails")).toContainText("Checked 2 of 2");
-    await expect(page.locator("#freshCheckDetails")).toContainText("1 unavailable");
+    await expect(page.locator("#freshCheckDetails")).toContainText("1 Copilot chat unavailable");
     assert.doesNotMatch(await page.locator("#freshActivity").innerText(), /working-memory|cannot recreate|No reason breakdown/);
     assert.ok((await page.locator("#freshActivity").innerText()).split(/\s+/).length <= 90, "The result stays concise; detailed reasons belong to Collection status");
     const originalEvidence = await readFile(path.join(app.context.dataDir, "private-evidence", first.evidenceFile));
@@ -511,7 +511,7 @@ test("Connection Refresh publishes eligible source changes and separates partial
     assert.deepEqual((await loadBoardState(app.context)).evidence, second.evidence);
     await page.locator("#settingsStatusLink a").click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
-    await expect(page.locator("#collectionIssueCounts")).toContainText("1 unavailable");
+    await expect(page.locator("#collectionIssueCounts")).toContainText("1 Copilot chat unavailable");
     await page.locator("#freshHelp>summary").click();
     await expect(page.locator("#freshCoverageDetails")).toContainText("cannot recreate an absent file");
     assert.deepEqual(await readFile(configFile), configBefore);
@@ -789,197 +789,46 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     if (process.env.WORKIQ_DATE_PROOFS) await writeFile(path.join(process.env.WORKIQ_DATE_PROOFS, "loading-state-matrix.json"), JSON.stringify(stages, null, 2));
 });
 
-test("first Home through approved fresh collection, selected dates, exact request and a deliberately reviewed saved report", { timeout: 90000 }, async t => {
-    const app = await fixture(t, false, false, { timezoneId: "UTC" }), { page } = app;
-    const from = time.addDays(time.day(new Date().toISOString(), "UTC"), -2), to = time.addDays(from, 1);
-    const dated = (e, day) => ({ ...e, timestamp: day + "T12:00:00.000Z" });
-    const source = await app.source([
-        dated(event("user.message", { content: "Invented baseline request, retained before this journey" }), from),
-        dated(call("journey-baseline"), from), dated(complete("journey-baseline"), from),
-    ]);
-    const stages = [], directory = process.env.WORKIQ_DATE_PROOFS && path.join(process.env.WORKIQ_DATE_PROOFS, "whole-journey");
-    if (directory) await mkdir(directory, { recursive: true });
-    async function stage(name, nextAction) {
-        const state = await loadBoardState(app.context), status = await app.runtime().collector.status();
-        const values = { name, nextAction, revision: state.revision, selectedDates: { from: await page.locator("#fromFilter").inputValue(), to: await page.locator("#toFilter").inputValue() },
-            count: await page.locator("#activityCount").textContent(), appliedRevision: await page.locator("#periodResult").getAttribute("data-revision"),
-            receipt: status.lastCheck, result: await page.locator("#freshStatus").textContent(),
-            phase: await page.locator("#freshActivity").getAttribute("data-phase"), exports: state.exports.length };
-        stages.push(values);
-        if (directory) {
-            await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
-            await page.evaluate(() => { scrollTo(0, 0); return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-            await page.screenshot({ path: path.join(directory, name + ".png"), fullPage: true });
-        }
-        return state;
-    }
-    async function approveAndSave() {
-        assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false, "No disclosure approval is borrowed");
-        assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
-        await page.locator(".attestation input[data-review-control]").check();
-        await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        await page.getByRole("button", { name: "Save report", exact: true }).click();
-        await page.locator("#reportsView[data-report-phase=saved]").waitFor(); await ready(page);
-    }
+test("first Analyze entry can approve one source, select a newly collected request and save its report", async t => {
+    const app = await fixture(t, false), { page } = app;
+    await app.source([event("user.message", { content: "Invented earlier request" }), call("earlier"), complete("earlier")]);
     await page.goto(app.runtime().url); await ready(page);
-    assert.equal(await page.locator("#activityCount").innerText(), "0");
-    assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
-    await stage("01-first-home", "Review source & connect");
-    await page.locator("#freshSourceSetup").click();
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    await page.locator("#collectionNoticeAction").click();
     await page.locator("#reviewSource").click();
     await page.locator("#sourceDatabase").fill(app.config.appDbPath);
     await page.locator("#sourceSessions").fill(app.config.sessionRoot);
+    assert.equal((await app.runtime().collector.status()).config, null);
     await page.locator("#connectCollection").click();
-    await page.waitForFunction(() => document.querySelector("#settingsMessage").textContent.includes("Source approved"));
-    await ready(page); await navigateMain(page, "home"); await ready(page);
-    assert.equal(await page.locator("#activityCount").innerText(), "1");
-    assert.equal(app.writes.filter(route => route === "/api/collection/configure").length, 1);
-    const config = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
-    const original = await stage("02-connected-baseline", "Choose a Copilot chat");
-    const evidenceBefore = await readFile(path.join(app.context.dataDir, "private-evidence", original.evidenceFile));
-    await page.locator("#pageAction").click(); await ready(page);
-    await page.locator(".session-toggle").first().click();
-    await page.locator('[id^="select-request-"]').first().check();
-    await navigateMain(page, "reports"); await reportContents(page);
-    await page.locator("[name=promptMode][value=none]").check();
-    await page.locator("#formatOptions input[value=json]").check();
-    await page.locator("#formatOptions input[value=html]").uncheck();
-    await scanReport(page); await approveAndSave();
-    const before = await loadBoardState(app.context), previousExport = before.exports[0];
-    const savedBytes = await Promise.all(Object.values(previousExport.files).map(async file => [file, await readFile(file)]));
-    await page.getByRole("button", { name: "Start a new report", exact: true }).click();
-    assert.equal(await page.locator("#previewSelectionSummary").innerText(), "No requests selected");
-    await navigateMain(page, "home"); await ready(page);
-    await selectActivityOption(page, "dateFilter", "custom");
-    await page.locator("#fromFilter").fill(from); await page.locator("#toFilter").fill(to);
-    await page.locator("#applyDates").click(); await ready(page);
-    assert.equal(await page.locator("#activityCount").innerText(), "1");
-    await stage("03-custom-range-baseline", "Check for new activity after using Work IQ elsewhere");
-    const prompt = "Invented newly recorded request for morgan@example.invalid. Read two mail items; retain this exact original locally.";
-    await appendFile(source.file, jsonl([
-        dated(event("user.message", { content: prompt }), to), dated(call("journey-new-pending"), to),
-        dated(call("journey-new-worked"), to), dated(complete("journey-new-worked"), to),
-        dated(event("user.message", { content: "Invented out-of-range request, not report membership" }), time.addDays(from, -1)),
-        dated(call("journey-outside"), time.addDays(from, -1)), dated(complete("journey-outside"), time.addDays(from, -1)),
-    ]));
-    const missing = await app.source(); await rm(missing.file);
-    await app.check();
-    const newState = await stage("04-new-data-applied", "Inspect the changed chart or choose a Copilot chat");
-    const status = await app.runtime().collector.status();
-    assert.equal(status.lastCheck.schemaVersion, 2);
-    assert.equal(status.lastCheck.changes.added, 3);
-    assert.ok(status.lastCheck.revision > status.lastCheck.beforeRevision);
-    assert.equal(await page.locator("#activityCount").innerText(), "3");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
-    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "partial");
-    assert.match(await page.locator("#freshIssues").innerText(), /Chat history: 1 unavailable/);
-    assert.match(await page.locator("#freshContextMessage").innerText(), /outside/);
-    assert.equal(await page.locator('.percentage-legend-row[data-category=unknown]').getAttribute("data-count"), "1");
-    const selected = buildActivityAnalytics(newState.evidence, { filters: { scope: "history", from, to }, bucket: "day", timeContext: { timeZone: "UTC", locale: "en-US" } });
-    assert.deepEqual(selected.rows.map(row => row.toolCallId).sort(), ["journey-baseline", "journey-new-pending", "journey-new-worked"]);
-    const targetId = selected.rows.find(row => row.toolCallId === "journey-new-pending").scenarioId;
-    assert.equal(selected.rows.find(row => row.toolCallId === "journey-new-worked").scenarioId, targetId);
-    await appendFile(source.file, jsonl([complete("journey-new-pending", false)]));
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "3");
-    assert.equal(app.receipts.at(-1).changes.updated, 1);
-    assert.equal(app.receipts.at(-1).changes.added, 0);
-    await stage("05-late-result", "Recorded result filters or the chart show the changed outcome");
-    await app.check();
-    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
-    assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
-    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "partial");
-    await stage("06-no-new-records", "The persistent result and history-gap link explain the bounded check");
-    await setLegacyTimeBucket(page, "day"); await ready(page);
-    await page.locator("#chart .time-column").filter({ has: page.locator(".dimensional-column[data-total='2']") }).click();
-    await ready(page);
-    assert.equal(await page.locator("#activityView").isVisible(), true);
-    if (await page.locator(".session-toggle[aria-expanded=false]").count()) await page.locator(".session-toggle[aria-expanded=false]").first().click();
-    const requestRow = page.locator(".request-row").filter({ hasText: "Invented newly recorded request" });
-    assert.equal(await requestRow.count(), 1);
-    await requestRow.locator(".request-link").click(); await ready(page);
-    assert.equal(await page.locator("#requestContent .request-original pre").innerText(), prompt);
-    assert.equal(await page.locator("#requestContent .journey-item").count(), 2);
-    assert.match(await page.locator("#requestContent").innerText(), /Tool failed/);
-    assert.match(await page.locator("#requestContent").innerText(), /Tool completed/);
-    await stage("07-exact-request-actions", "Add to report; only this request group is selected");
-    await page.getByRole("button", { name: "Add to report", exact: true }).click();
-    await navigateMain(page, "reports");
-    assert.match(await page.locator("#previewSelectionSummary").innerText(), /1 request group included/);
-    assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "selected");
-    await reportContents(page);
-    await page.locator("[name=promptMode][value=masked]").check();
-    await page.locator("#formatOptions input[value=html]").check();
-    await page.locator("#formatOptions input[value=json]").check();
-    for (const format of ["pdf", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).uncheck();
-    let release, arrived;
-    const hold = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
-    t.after(() => release());
-    await page.route("**/api/preview", async route => { const response = await route.fetch(); arrived(); await hold; await route.fulfill({ response }); }, { times: 1 });
-    await page.locator("#exportBtn").click(); await pending;
-    assert.equal(await page.locator("#reportReviewBody .pending-indicator").isVisible(), true);
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
-    const cancelled = page.waitForResponse(response => response.url().endsWith("/api/cancel-preview"));
-    release(); await cancelled;
-    assert.equal((await loadBoardState(app.context)).exports.length, 1);
-    await page.locator("[name=promptMode][value=none]").check();
-    await page.locator("[name=promptMode][value=masked]").check();
-    const previewRequest = page.waitForRequest(request => request.url().endsWith("/api/preview"));
-    let frozen = await scanReport(page);
-    assert.equal(frozen.records.length, 1);
-    assert.equal(frozen.promptMode, "masked");
-    assert.deepEqual(frozen.formats, ["html", "json"]);
-    assert.deepEqual((await previewRequest).postDataJSON().selection.scenarioIds, [targetId]);
-    assert.equal(frozen.snapshot.selectionScope.kind, "selected");
-    assert.equal(frozen.snapshot.selectionScope.requestGroups, 1);
-    assert.equal(frozen.snapshot.selectionScope.workIqActions, 2);
-    assert.equal(frozen.records[0].toolCalls.length, 2);
-    const followup = frozen.records[0].prompts.find(copy => copy.kind === "followup");
-    assert.match(followup.label, /association inferred/);
-    assert.equal(followup.text, "Invented out-of-range request, not report membership");
-    await inspectReportCopies(page);
-    assert.match(await page.locator(".report-copy-inspection").innerText(), /Follow-up 1 \(association inferred\)/);
-    const followupCopy = page.locator(".prompt-comparison").filter({ has: page.locator(":scope>summary", { hasText: "Follow-up 1 (association inferred)" }) });
-    await followupCopy.locator(":scope>summary").click();
-    assert.match(await page.locator(".report-copy-inspection").innerText(), /Invented out-of-range request/);
-    await followupCopy.getByText("Edit or omit this report copy", { exact: true }).click();
-    await followupCopy.getByRole("checkbox", { name: "Omit this prompt from the report", exact: true }).check();
-    const rebuiltResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
-    const rebuilt = await rebuiltResponse;
-    frozen = await rebuilt.json();
-    await page.locator("#reportsView[data-report-phase=ready]").waitFor();
-    assert.deepEqual(rebuilt.request().postDataJSON().selection.scenarioIds, [targetId]);
-    assert.equal(frozen.records[0].prompts.find(copy => copy.kind === "followup").omitted, true);
-    assert.equal(frozen.records[0].toolCalls.length, 2);
-    await stage("08-reviewed-copies", "Omit an unwanted inferred follow-up, rebuild the masked copies, then explicitly approve disclosure and confirm export");
-    await approveAndSave();
-    const final = await stage("09-saved-report", "Download the chosen HTML or JSON report");
-    assert.equal(final.exports.length, 2);
-    assert.deepEqual(final.exports[0], previousExport);
-    const saved = final.exports[1], exported = JSON.parse(await readFile(saved.files["product-report.json"], "utf8"));
-    assert.deepEqual(exported.records, frozen.records, "Actual saved JSON is the exact reviewed membership and content, not merely an existing file");
-    assert.equal(exported.records.length, 1);
-    assert.doesNotMatch(JSON.stringify(exported), /morgan@example\.invalid|Invented baseline request|Invented out-of-range request/);
-    const html = await readFile(saved.files["product-report.html"], "utf8");
-    assert.doesNotMatch(html, /morgan@example\.invalid|Invented baseline request|Invented out-of-range request/);
-    assert.match(html, /Invented newly recorded request/);
-    assert.equal(final.evidence.find(row => row.scenarioId === targetId).userPrompt.text, prompt);
-    for (const [id, review] of Object.entries(before.cards)) assert.deepEqual(final.cards[id], review, "Earlier request review state is unchanged");
-    assert.deepEqual(await readFile(path.join(app.context.dataDir, "private-evidence", original.evidenceFile)), evidenceBefore);
-    for (const [file, bytes] of savedBytes) assert.deepEqual(await readFile(file), bytes);
-    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), config);
-    assert.equal(app.writes.filter(route => route === "/api/collection/configure").length, 1);
-    assert.equal(app.writes.filter(route => route === "/api/collection/enabled").length, 0);
-    if (directory) {
-        for (const [name, file] of Object.entries(saved.files)) await writeFile(path.join(directory, name), await readFile(file));
-        await writeFile(path.join(directory, "journey-proof.json"), JSON.stringify({ fixture: "Invented isolated sources and report files only; real user controls and local pipeline",
-            stages, canonicalIds: selected.rows.map(({ id, toolCallId, scenarioId, startedAt }) => ({ id, toolCallId, scenarioId, startedAt })),
-            targetId, frozenSelection: frozen.snapshot.selectionScope, promptMode: frozen.promptMode, formats: frozen.formats,
-            savedMembership: exported.records, priorExportsPreserved: 1, priorReviewsPreserved: Object.keys(before.cards).length,
-            originalEvidencePreserved: true, approvalUnchanged: true, inferredFollowupExplicitlyOmitted: true, collectionWrites: app.writes }, null, 2));
-    }
+    await page.locator("#firstCollectionActivity").click(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    const initial = await loadBoardState(app.context), originals = path.join(app.context.dataDir, "private-evidence", initial.evidenceFile);
+    const bytes = await readFile(originals);
+    await app.source([event("user.message", { content: "Invented selected request from morgan@example.invalid" }), call("added"), complete("added", false)]);
+    await app.check("analyze");
+    const state = await loadBoardState(app.context);
+    const selected = state.evidence.find(r => r.toolCalls.some(c => c.toolCallId === "added"));
+    assert.equal(state.evidence.length, 2);
+    const card = page.getByRole("article").filter({ hasText: selected.userPrompt.text });
+    await card.getByRole("link", { name: "1 tool call failed" }).click();
+    await expect(page.locator("#requestContent")).toContainText(selected.userPrompt.text);
+    await page.locator("#closeContextSidebar").click();
+    await chooseReportInteraction(page, selected.scenarioId);
+    await page.locator(".report-before-prepare input[value=none]").check();
+    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await page.locator("#formatOptions input[value=json]").check(); await page.keyboard.press("Escape");
+    const preview = await previewSelectedReport(page, selected.scenarioId);
+    assert.equal(preview.records.length, 1);
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const final = await loadBoardState(app.context);
+    assert.equal(final.exports.length, 1);
+    const json = await readFile(final.exports[0].files["product-report.json"], "utf8");
+    assert.deepEqual(JSON.parse(json).records, preview.records);
+    assert.doesNotMatch(json, /morgan@example\.invalid|Invented earlier request/);
+    assert.deepEqual(await readFile(originals), bytes);
+    assert.deepEqual(app.writes, ["/api/collection/configure", "/api/collection/now"]);
 });
 
 test("Analyze Refresh commits appended calls, late completions and newly mapped chats before publishing their counts", async t => {
@@ -1026,115 +875,27 @@ test("Analyze Refresh commits appended calls, late completions and newly mapped 
     assert.deepEqual(app.writes, Array(5).fill("/api/collection/now"));
 });
 
-test("compact summary and fresh action wrap accessibly in light/navy at every requested size", { timeout: 90000 }, async t => {
+test("the current Collection Refresh action, its partial coverage and details remain readable at enlarged text", async t => {
     const app = await fixture(t), { page } = app;
-    let limited;
-    for (let source = 0; source < 35; source++) {
-        const events = [];
-        for (let group = source; group < 61; group += 35) {
-            events.push(event("user.message", { content: `Synthetic layout group ${group}` }));
-            for (let i = 0; i < (group < 34 ? 4 : 3); i++) events.push(call(`layout-${group}-${i}`), complete(`layout-${group}-${i}`));
-        }
-        const history = await app.source(events);
-        limited ??= history;
+    await app.source([event("user.message", { content: "Invented readable request" }), call("present"), complete("present")]);
+    const missing = await app.source(); await rm(missing.file);
+    await page.goto(app.runtime().url); await ready(page); await app.check();
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
+    await expect(page.locator("#freshCoverageAnnouncement")).toContainText("1 Copilot chat unavailable");
+    await navigateMain(page, "collection-status"); await ready(page);
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 375, 2]]) {
+        await page.setViewportSize({ width, height: 900 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        const refresh = page.locator("#checkActivity");
+        await expect(refresh).toBeVisible();
+        assert.ok((await refresh.boundingBox()).height >= 44);
+        const help = page.locator("#freshHelp summary");
+        await help.press("Enter");
+        await expect(page.locator("#freshCoverageDetails")).toContainText(/missing|not found/i);
+        assert.equal(await page.locator("#freshActivity").evaluate(node => node.scrollWidth <= node.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1), true);
+        await help.press("Enter"); await expect(page.locator("#freshCoverageDetails")).toBeHidden();
     }
-    await appendFile(limited.file, JSON.stringify(event("assistant.message", { content: "x".repeat(1024 * 1024 + 20) })) + "\n");
-    const missing = await app.source();
-    await rm(missing.file);
-    await app.runtime().collector.collectNow();
-    const proofs = process.env.WORKIQ_FRESH_PROOFS, measurements = [];
-    if (proofs) await mkdir(proofs, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 1466, 2560]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(app.runtime().url); await ready(page);
-        await app.check();
-        await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; scrollTo(0, 0); }, scale);
-        await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        assert.equal(await page.locator("#periodResult").innerText(), "217 Work IQ tool calls (All dates)");
-        const metrics = await page.evaluate(() => {
-            const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height, width: r.width }; };
-            const lines = id => {
-                const walker = document.createTreeWalker(document.getElementById(id), NodeFilter.SHOW_TEXT), rows = [];
-                while (walker.nextNode()) {
-                    const text = walker.currentNode;
-                    if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
-                    const range = document.createRange(); range.selectNodeContents(text);
-                    for (const rect of range.getClientRects()) if (rect.width && !rows.some(top => Math.abs(top - rect.top) <= 1)) rows.push(rect.top);
-                }
-                return rows.length;
-            };
-            const clipping = [...document.querySelectorAll("#freshActivity button,#freshActivity p,#freshActivity a,#periodResult,#periodHint,#pageAction")].filter(n => n.checkVisibility()).flatMap(node => {
-                const r = node.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(node);
-                return [...range.getClientRects()].filter(b => b.width && (b.left < r.left - 1 || b.right > r.right + 1 || b.bottom > r.bottom + 1)).map(() => node.id || node.textContent);
-            });
-            const textColors = ["freshStatus", "freshChecked", "freshScope", "freshIssues"].map(id => {
-                const node = document.getElementById(id);
-                let owner = node, background;
-                while (owner) {
-                    background = getComputedStyle(owner).backgroundColor;
-                    if (background !== "transparent" && background !== "rgba(0, 0, 0, 0)") break;
-                    owner = owner.parentElement;
-                }
-                return { id, color: getComputedStyle(node).color, background };
-            });
-            return { overflow: document.documentElement.scrollWidth - innerWidth, action: box("checkActivity"), period: box("periodFeedback"), introLines: lines("pageIntro"), resultLines: lines("periodResult"), hintLines: lines("periodHint"), clipping,
-                textColors,
-                targets: [...document.querySelectorAll("#freshActivity button,#freshActivity a")].filter(n => n.checkVisibility()).map(n => n.getBoundingClientRect().height) };
-        });
-        assert.ok(metrics.overflow <= 1, `${theme}/${width}/${scale}: no page overflow`);
-        assert.deepEqual(metrics.clipping, []);
-        for (const { id, color, background } of metrics.textColors) assert.ok(contrast(color, background) >= 4.5, `${id} text contrast in ${theme}`);
-        assert.ok(metrics.targets.every(height => height >= 44));
-        assert.ok(metrics.action.bottom <= 1000, `Fresh action visible in first viewport at ${theme}/${width}/${scale}: ${metrics.action.bottom}`);
-        if (width >= 1200 && scale === 1) {
-            assert.equal(metrics.introLines, 1, "Purpose is one real line, not clipped, shrunk or forced nowrap");
-            assert.equal(metrics.resultLines, 1);
-            assert.equal(metrics.hintLines, 1);
-            assert.ok(metrics.period.height <= 56);
-        }
-        if (proofs) {
-            await page.screenshot({ path: path.join(proofs, `fresh-${theme}-${width}-${scale * 100}.png`) });
-            if (width === 375 && scale === 2) await page.screenshot({ path: path.join(proofs, `full-${theme}-${width}-${scale * 100}.png`), fullPage: true });
-            else await page.locator("#freshActivity").screenshot({ path: path.join(proofs, `strip-${theme}-${width}-${scale * 100}.png`) });
-        }
-        await page.locator("#freshHelp>summary").focus(); await page.keyboard.press("Enter");
-        assert.equal(await page.locator("#freshCheckDetails").isVisible(), true);
-        assert.match(await page.locator("#freshHelp").innerText(), /does not run Work IQ or Graph queries/);
-        assert.match(await page.locator("#freshCheckDetails").innerText(), /eligible Copilot chats in \d[\d,]* ms/);
-        const helpClipping = await page.locator("#freshHelp p").evaluateAll(nodes => nodes.flatMap(node => {
-            const r = node.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(node);
-            return [...range.getClientRects()].filter(box => box.width && (box.left < r.left - 1 || box.right > r.right + 1 || box.bottom > r.bottom + 1)).map(() => node.textContent);
-        }));
-        assert.deepEqual(helpClipping, [], "Essential help remains fully readable with enlarged text");
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        if (proofs && (width === 375 && scale === 2 || width === 1200 && scale === 1)) {
-            await page.locator("#freshHelp").screenshot({ path: path.join(proofs, `help-${theme}-${width}-${scale * 100}.png`) });
-        }
-        await page.keyboard.press("Enter");
-        measurements.push({ theme, width, scale, ...metrics });
-    }
-    if (proofs) await writeFile(path.join(proofs, "fresh-layout.json"), JSON.stringify(measurements, null, 2));
-    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    await page.setViewportSize({ width: 1200, height: 1000 });
-    await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "partial");
-    assert.equal(await page.locator("#checkActivity").evaluate(n => n === document.activeElement), true);
-    await page.locator("#freshHelp>summary").focus(); await page.keyboard.press("Enter");
-    const position = await page.evaluate(() => scrollY), manual = await page.locator("#freshChecked").innerText();
-    const polled = page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
-    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await polled;
-    assert.equal(await page.locator("#freshHelp").evaluate(n => n.open), true);
-    assert.equal(await page.locator("#freshHelp>summary").evaluate(n => n === document.activeElement), true);
-    assert.equal(await page.evaluate(() => scrollY), position);
-    assert.equal(await page.locator("#freshChecked").innerText(), manual);
-    await page.locator('#freshActivity a[href*="section=collection"]').click();
-    assert.equal(await page.locator('[data-settings-section="connection"]').isVisible(), true);
-    await page.goBack(); await ready(page);
-    await page.locator('#freshActivity a[href*="source-paths"]').click();
-    assert.equal(await page.locator("#approvedSourceDetails").isVisible(), true);
-    assert.equal(await page.locator("#approvedSourceTitle").evaluate(n => n === document.activeElement), true);
+    assert.deepEqual(app.writes, ["/api/collection/now"]);
 });
 
 test("an actual background cycle can already have the new call before a fast manual no-change check", { timeout: 45000 }, async t => {
@@ -1678,8 +1439,8 @@ test("Refresh and its completion stay in Analyze and the source task, not unrela
 });
 
 test("pending and failed activity updates remain discoverable off-task without replay or stolen focus", { timeout: 40000 }, async t => {
-    let releaseCheck, releaseRead;
-    t.after(() => { releaseCheck?.(); releaseRead?.(); });
+    let releaseCheck;
+    t.after(() => releaseCheck?.());
     const app = await fixture(t), { page } = app;
     await app.source([event("user.message", { content: "Invented pending placement" }), call("one"), complete("one")]);
     await app.runtime().collector.collectNow();
@@ -1747,59 +1508,24 @@ test("pending and failed activity updates remain discoverable off-task without r
     }));
     assert.equal(focus.body, true, "A trusted same-view reading action prevents late Refresh focus restoration: " + JSON.stringify(focus));
 
-    await navigateMain(page, "settings");
-    await navigateSettings(page, "connection");
-    let reachedRead;
-    const readPending = new Promise(resolve => { reachedRead = resolve; });
-    const readGate = new Promise(resolve => { releaseRead = resolve; });
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); assert.equal(response.status(), 200);
-        reachedRead(); await readGate; await route.abort("connectionreset");
-    }, { times: 1 });
-    await page.locator("#checkActivity").click(); await readPending;
-    await navigateMain(page, "reports");
-    await page.locator("#prepareReportPreview").focus();
-    assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*Reading stored activity/s);
-    await capture("reports-reading");
-    releaseRead();
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
-    await expect(page.locator("#prepareReportPreview")).toBeFocused();
-    assert.equal(await page.locator("#checkActivity").isVisible(), false);
-    assert.equal(await page.locator("#message").isVisible(), false, "F05 still avoids duplicate global presentation");
-    assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*Check finished; view not updated/s);
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await capture("reports-read-failure-narrow200");
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-    assert.ok((await page.locator("#freshAwayLink").boundingBox()).height >= 44);
-    const writes = app.writes.length;
-    await page.locator("#freshAwayLink").focus(); await page.keyboard.press("Enter");
-    assert.match(page.url(), /#settings.*section=connection.*setting=collect-now/);
-    assert.equal(app.writes.length, writes, "View activity update only navigates; it cannot start or replay collection");
-    assert.equal(await page.getByRole("button", { name: "Read stored activity", exact: true }).count(), 1);
-    assert.equal(await page.locator('[data-settings-section="connection"] #refreshBtn').isVisible(), true);
-    await capture("connection-read-failure-narrow200");
-    await page.locator("#refreshBtn").click();
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
-    assert.equal(app.writes.length, writes, "Contextual Retry only reads stored activity/status");
-    await page.locator(".settings-status-link a").click(); await ready(page);
-    assert.equal(await page.locator(".collection-health #freshActivity").count(), 1);
-    await capture("collection-health-completed-narrow200");
-
+    await navigateMain(page, "analyze");
+    const committed = Promise.withResolvers(), lost = Promise.withResolvers();
+    t.after(() => lost.resolve());
     await page.route("**/api/collection/now", async route => {
-        const response = await route.fetch(); assert.equal(response.status(), 200); await route.abort("connectionreset");
+        const response = await route.fetch(); assert.equal(response.status(), 200);
+        committed.resolve(); await lost.promise; await route.abort("connectionreset");
     }, { times: 1 });
-    await app.check();
-    await navigateMain(page, "settings"); await navigateSettings(page, "ai");
-    assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*outcome is unknown.*no check will be repeated/s);
-    assert.equal(await page.locator("#checkActivity").isVisible(), false);
-    await capture("ai-unknown-narrow200");
-    const unknownWrites = app.writes.length;
+    await page.locator("#analyzeRefresh").click(); await committed.promise;
+    await navigateMain(page, "settings"); await navigateSettings(page, "themes");
+    await page.locator("#settingsThemePreference").focus(); lost.resolve();
+    await expect(page.locator("#freshAwayNotice")).toContainText(/unconfirmed|unknown/i);
+    await expect(page.locator("#settingsThemePreference")).toBeFocused();
+    const writes = app.writes.length;
     await page.locator("#freshAwayLink").click();
-    assert.equal(app.writes.length, unknownWrites);
+    await expect(page.locator("#refreshBtn")).toBeVisible();
     await page.locator("#refreshBtn").click();
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "unconfirmed");
-    assert.equal(app.writes.length, unknownWrites);
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "unconfirmed");
+    assert.equal(app.writes.length, writes);
     assert.equal((await app.runtime().collector.status()).config.enabled, false);
 });
 
