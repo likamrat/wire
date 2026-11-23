@@ -26,7 +26,7 @@ page title. Keep civil dates in their selected calendar; preserve the time and
 offset for instant boundaries. A saved report's period is not its preparation
 time, and an unknown period stays unknown.
 
-The WIRE logo remains a link to Analyze, with **WorkIQ Request Explorer** help
+The WIRE logo remains a link to Analyze, with **Work IQ Request Explorer** help
 on hover or keyboard focus, including the compact mark and narrow drawer.
 Escape, activation and leaving the target dismiss that help without taking
 focus. The separate panel control beside the desktop logo retains **Collapse
@@ -193,7 +193,7 @@ controls. Short author/service labels stay whole rather than being squeezed.
 Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
 Use the full workspace in both orientations without scaling text. Narrow
-layouts wrap the legend; the plot scrolls horizontally. **Period → Custom
+layouts wrap the legend; the plot scrolls horizontally. **Dates > Custom
 dates** expands the existing calendar at the same trigger. Filters and Arrange
 charts likewise open at their own controls. The period control (or the title in
 All charts) names the accepted range. Presets and Apply update the charts
@@ -480,8 +480,8 @@ Reports opens with New report on the left and up to three recent reports on the
 right. When more are saved, the heading shows how many are visible, for example
 “Recent reports (3 of 9).” At narrow widths the recent list follows creation. Saved library holds
 the full inventory. Preparing opens the working copy in a right-side drawer;
-opening a saved name reads the verified copy in the main workspace. Each has one
-Back to Reports action; context-qualified entries retain their own origin.
+opening a saved name reads the verified copy in the main workspace. Back names
+the origin, such as **Back to Reports** or **Back to saved reports**.
 
 The outline has five focus choices: All activity,
 Errors & failures, Completed calls, Human prompts and Agent prompts. Compare
@@ -522,6 +522,12 @@ meaning. Rows share column widths; narrow layouts stack identity/dates, text
 treatment and actions without shortening their contents.
 
 ### Returning to an unfinished report
+
+Distinguish named drafts from prepared previews. A named draft keeps a
+selection of interactions across restarts. Its picker belongs to **Add to
+report** on the card and reader. Deleting it requires a named confirmation;
+never imply that this deletes the activity or an already saved report. A
+lost response calls for reading the draft list, not sending Delete again.
 
 Back restores saved search, order, paging, scroll and activating control.
 It preserves the authorized unfinished copy. The preparation action becomes
@@ -654,8 +660,8 @@ the shared calendar beside the trigger, with independent inclusive ranges and
 cancellation that keeps the accepted pair. Opening a period's own date label
 edits only that side; the Custom dates action can edit both before applying once.
 
-Use the compact, report-colored five-choice menu. Keep Outcomes, Timeline,
-By tool and Timing visible inside the chart and More options in its corner.
+Use the compact five-choice activity menu. Keep Outcomes, Timeline, By tool
+and Timing together with the reading; keep the scope controls in the workspace.
 Optional refinement retains every supported selector and combination, with
 local option finding and immediate selection. Additional restrictions appear
 once beside the accepted dates; pending reads must not relabel old facts.
@@ -664,7 +670,7 @@ combination (for example, Completed calls + Human prompts), rather than hiding i
 under Custom activity. All activity clears the menu-owned author, outcome and
 focus choices without clearing independent refinements.
 
-One mounted action row near the chart controls owns View calls, View numbers and Create report. Chart
+One action row below the reading owns the call count, View numbers and Create report. Chart
 switching and mark inspection do not change the pair. Exact values qualify
 their unit, period, denominator and missing evidence. Timings keep call latency
 and full-interaction clocks separate. The comparison-origin report return is

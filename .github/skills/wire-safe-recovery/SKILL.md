@@ -19,6 +19,10 @@ enroll a source, widen history, resume Pause or enable optional reply retention.
 Preserve the existing bounded manual Refresh exception under Pause; it does
 not resume automatic collection.
 
+For a lost draft-deletion response, read the named draft list. For saved-file
+or collected-activity deletion, check the original operation's receipt in
+its own workflow. None of those checks sends another Delete.
+
 Recover the operation's real grant, target, owner, revision and receipt.
 Distinguish source failure, transport uncertainty, retained-read failure and
 an honestly successful no-change result. Historical failure details do not

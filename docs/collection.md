@@ -5,7 +5,9 @@ reference explains collection permissions, read limits and saved-data operations
 For setup, see [Connect local history](user-guide.md#connect-local-history).
 
 Collection does not rerun Work IQ requests or read remote-only chats through a
-provider. Microsoft 365 Chat and Cowork are not supported sources.
+provider. Normal startup supports the GitHub Copilot app only. The separate
+development-only Microsoft 365 Chat and Cowork adapters are not additional
+sources you can enable in a normal installation.
 
 ## Operations and permissions
 

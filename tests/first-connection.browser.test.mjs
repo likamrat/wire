@@ -209,7 +209,7 @@ test("enforced React activity caps the home preview while keeping the full reque
 });
 
 test("fresh enforced entry dismisses once and reaches real retained activity through the existing source approval", { timeout: 60000 }, async t => {
-    const { page, runtime, context, mutations } = await setup(t);
+    const { page, runtime, context, mutations } = await setup(t, { frontend: "react" });
     await page.goto(runtime.url); await ready(page);
     await expect(page.locator("#firstConnectionWelcome")).toBeVisible();
     await expect(page.locator("#welcomeReviewSource")).toBeFocused();
@@ -269,6 +269,7 @@ test("fresh enforced entry dismisses once and reaches real retained activity thr
     await expect(page.locator("#activityList")).toContainText("Find the Cedar planning notes.");
     await capture(page, "first-activity");
     await navigateMain(page, "settings");
+    await navigateSettings(page, "connection");
     await page.locator("#pauseCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("paused");
     await navigateMain(page, "analyze"); await ready(page);

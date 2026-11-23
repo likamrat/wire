@@ -70,8 +70,11 @@ Reuse existing modules, tests and tooling. Start with the smallest command that
 covers the changed behavior and its coupled regressions. Expand only for a
 specific dependency, observed failure or acceptance requirement. A focused check
 must prove the right outcome, not weaken an assertion to fit the implementation.
-For documentation or skill packaging, use relevant static checks rather than
-running application journeys without a behavior change.
+For documentation or skill links, check exact-case paths, GitHub heading
+anchors and embedded images. When replacing screenshots or explaining a
+changed control, operate that path with invented data in the [documentation
+fixture](../../../docs/development.md#capture-documentation-screenshots). Keep the rest
+of the app out of the test unless it supplies a necessary step.
 
 Use invented records and disposable stores for mutation tests. Real collection,
 private-data reads, authentication, disclosure and destructive operations retain

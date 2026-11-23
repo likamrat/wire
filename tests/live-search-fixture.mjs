@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import { privateFixture, fixture } from "./helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { createProfileSource } from "./source-profile-fixture.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { seedRetainedReply } from "./search-corpus-fixture.mjs";
@@ -27,7 +29,7 @@ export function searchRecords(count = 3) {
         return row;
     });
 }
-export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend } = {}) {
+export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs, frontend, copilotAccess = false } = {}) {
     const cleanups = [];
     const { context, root } = await privateFixture({ after: fn => cleanups.push(fn) }, records);
     const sessionRoot = path.join(root, "session-state");
@@ -35,20 +37,28 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
     await mkdir(path.join(context.dataDir, "collector"), { recursive: true });
     const config = { schemaVersion: 1, approved: true, approvedAt: "2026-10-01T12:00:00.000Z",
         appDbPath: path.join(root, "data.db"), sessionRoot, enabled: false, windowDays: 30, pollSeconds: 60 };
-    const db = new DatabaseSync(config.appDbPath);
-    db.exec("PRAGMA user_version=156; CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT); CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT); CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);");
-    db.close();
+    if (copilotAccess) {
+        const { db } = await createProfileSource(root);
+        db.exec("UPDATE accounts SET settings_json='{}'");
+        db.close();
+    } else {
+        const db = new DatabaseSync(config.appDbPath);
+        db.exec("PRAGMA user_version=156; CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT); CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT); CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);");
+        db.close();
+    }
     await writeFile(path.join(context.dataDir, "collector", "config.json"), JSON.stringify(config));
     const exports = createExportController(context);
     let providerCalls = 0;
-    const runtime = await startServer(context, exports, { port: 0, frontend, collector: { timers: false },
+    const access = copilotAccess ? await createCopilotRuntimeAccess(context) : undefined;
+    const runtime = await startServer(context, exports, { port: 0, frontend, access, collector: { timers: false },
+        ...(copilotAccess ? { githubProfile: { fetch() { providerCalls++; throw Error("No profile network in the documentation fixture."); } } } : {}),
         search: typeof search === "function" ? search(root) : search, sessionTtlMs,
         evaluation: {
             evaluatorFactory: async () => { providerCalls++; throw new Error("Provider work forbidden in search proof."); },
             readSource: async () => { providerCalls++; throw new Error("Assessment source reads forbidden in search proof."); },
         } });
     t.after(async () => {
-        await runtime.close(); for (const cleanup of cleanups) await cleanup();
+        await runtime.close(); await access?.close(); for (const cleanup of cleanups) await cleanup();
         assert.equal(providerCalls, 0);
     });
     if (reply) await seedRetainedReply(context, runtime.collector.assessmentSource(await loadBoardState(context)),

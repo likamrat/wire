@@ -253,6 +253,12 @@ The report controller owns the sequence:
 4. Confirm local Save, then verify saved readback. Keeping chat details requires
    the warning's explicit choice for that save.
 
+Before preparation, a [named draft](reporting.md#keep-interactions-in-a-draft)
+stores references to selected interactions for its owner and source. Adding
+an interaction does not copy its text. Preparing freezes the eligible
+membership at that point: later draft edits cannot add cases to an open
+preview or rewrite a saved file. Deleting a draft removes its selection only.
+
 Qualified GitHub previews pin the original content-addressed evidence file.
 Later collection can add follow-ups without changing prepared copies.
 

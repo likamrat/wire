@@ -12,10 +12,11 @@ Read [collection](../../../docs/collection.md) and
 [platform setup](../../../docs/development.md#windows-wsl-and-linux) on the
 actual candidate.
 
-The supported source is approved local GitHub Copilot app metadata and history.
-Microsoft 365 Chat, Cowork and remote-only provider history are not supported
-sources. An explicitly requested future adapter needs its own qualified contract;
-historical feasibility notes do not establish implementation or permission.
+Normal startup reads approved local GitHub Copilot app metadata and history.
+The development-only Microsoft 365 Chat and Cowork adapters have separate
+configuration and access requirements. Do not advertise them as normal
+sources or turn them on to test the Copilot-only experience. A fixture is not
+evidence of access to a real account.
 
 ## Establish the source contract first
 

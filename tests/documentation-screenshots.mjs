@@ -115,19 +115,19 @@ test("capture documentation through the normal renderer with isolated light-them
             await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
         }
     });
-    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false });
+    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false, frontend: "react", copilotAccess: true });
     receipt = {
         sourceCommit: git("rev-parse", "HEAD"), sourceTree: git("rev-parse", "HEAD^{tree}"),
         sourceChanges: git("diff", "HEAD", "--name-only", "--", "lib", "web", "assets", "package.json", "package-lock.json"),
         fixtureDay: day, fixtureSha256: sha256(JSON.stringify(records)), fixture: "tests/documentation-screenshots.mjs",
         fixtureFileSha256: sha256(await readFile(new URL(import.meta.url))),
         fixtureHelpers: {},
-        theme: "light", colorScheme: "light", timeZone: "UTC", collectionTimers: false,
-        profile: "Neutral fallback; the synthetic source contains no account identity.",
+        renderer: "react", access: "copilot-only", theme: "light", colorScheme: "light", timeZone: "UTC", collectionTimers: false,
+        profile: "Invented source-profile fixture; no remote avatar.",
         images: [], files: [], completed: false,
     };
     assert.equal(receipt.sourceChanges, "", "Capture only an immutable product source candidate.");
-    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs", "tests/report-journey-helpers.mjs"]) {
+    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs", "tests/source-profile-fixture.mjs", "tests/report-journey-helpers.mjs"]) {
         receipt.fixtureHelpers[file] = sha256(await readFile(file));
     }
     await writeFile(path.join(proof, "fixture.json"), JSON.stringify(records, null, 2));
@@ -207,10 +207,12 @@ test("capture documentation through the normal renderer with isolated light-them
     await ready();
     await chooseTheme(page, "light");
     if (!reportsOnly) {
-        await expect(page.locator("#activityListSummary")).toContainText("16 interactions with 20 matching Work IQ tool calls");
+        await expect(page.locator("#activityListSummary")).toContainText("16 interactions · 20 matching tool calls");
+        await expect(page.locator("#activityList .report-draft-trigger").first()).toBeVisible();
         await capture("analyze");
         await page.setViewportSize({ width: 2100, height: 1250 });
-        await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
+        const prompt = page.locator('#activityList .request-card-open').filter({ hasText: "jordan@example.invalid" });
+        await prompt.click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
         await capture("wire-overview", { top: true });
@@ -219,8 +221,18 @@ test("capture documentation through the normal renderer with isolated light-them
             return;
         }
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
+        await prompt.scrollIntoViewIfNeeded();
         await capture("interaction");
+        if (!widgetsOnly) {
+            await page.locator("#contextSidebar .report-draft-trigger").click();
+            const picker = page.getByRole("dialog", { name: "Report drafts" });
+            await picker.getByRole("button", { name: "New draft", exact: true }).click();
+            await picker.getByLabel("Draft name").fill("Launch follow-up");
+            await capture("report-draft");
+            await picker.getByRole("button", { name: "Create draft and add" }).click();
+            await expect(page.locator("#contextSidebar .report-draft-trigger")).toContainText("Launch follow-up");
+            await page.getByRole("button", { name: "Dismiss confirmation" }).click();
+        }
         await page.getByRole("button", { name: "Close interaction", exact: true }).click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
         await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
@@ -321,18 +333,17 @@ test("capture documentation through the normal renderer with isolated light-them
         originals.set(file, bytes);
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    const savedFrame = page.frameLocator("#savedReportReader iframe");
-    await expect(savedFrame.locator("h1")).toHaveText("Errors & failures");
-    await expect(savedFrame.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
-    await savedFrame.locator(".wire-reading-interaction>summary").first().click();
-    await savedFrame.locator('.report-nav a[href$="#examples"]').click();
+    const brief = page.getByRole("article", { name: "Report brief" });
+    await expect(brief).toContainText("4 of 12 interactions had recorded errors.");
+    await expect(brief.getByRole("button", { name: /^Report call / })).toBeVisible();
     await capture("saved-report");
     if (reportsOnly) { await finish(); return; }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Launch review");
     await page.getByRole("button", { name: "View report: Launch review", exact: true }).click();
-    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Launch review");
+    await expect(page.locator("#savedReportReader h1")).toHaveText("Launch review");
+    await expect(brief).toBeVisible();
     await capture("saved-json-only", { privateOnly: true });
 
     await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
@@ -349,6 +360,18 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("period-report", { privateOnly: true, top: true });
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+
+    await page.locator('nav [data-nav=trends]').click();
+    const sections = page.getByRole("navigation", { name: "Trends sections" });
+    await sections.getByRole("button", { name: "Overview" }).click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    await capture("trends-overview", { top: true });
+    await sections.getByRole("button", { name: "Charts" }).click();
+    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts" }).click();
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await capture("trends-collapsed", { top: true });
 
     await page.locator('nav [data-nav=settings]').click();
     await navigateSettings(page, "display");

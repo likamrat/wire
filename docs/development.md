@@ -139,9 +139,10 @@ An occupied explicit port is an error. The port does not isolate or move data;
 `WORKIQ_EVIDENCE_DATA_DIR` selects the store.
 
 Before restarting on a different port, finish drafts and resolve unconfirmed
-operations in the current tab. Browser preferences, drafts and recovery markers
-belong to that address and do not transfer. Never repeat an uncertain operation
-at a new address.
+operations in the current tab. Browser preferences and recovery markers belong
+to that address; unfinished previews belong to their panel. Named report
+drafts are stored with the instance. A new port does not create a new store.
+Never repeat an uncertain operation at a new address.
 
 ## Keep development data separate
 
@@ -204,6 +205,10 @@ node --test tests/search-text.test.mjs
 input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
+
+Use `npm run test:packaging` for the production-only installation check. It
+builds the browser assets, then checks the packaged browser and local Search
+against the same disposable install.
 
 ### Changing a Copilot journal format
 
@@ -358,8 +363,10 @@ with capture evidence, and add a visible caption only when it helps explain the 
 Application screenshots in Markdown use Light theme and the browser's light
 color scheme. Theme-aware diagrams and brand assets keep their light/dark variants.
 
+### Capture documentation screenshots
+
 [`tests/documentation-screenshots.mjs`](../tests/documentation-screenshots.mjs)
-captures Analyze, Search, reporting, comparisons and Settings with invented
+captures Analyze, Trends, Search, reporting, comparisons and Settings with invented
 activity and disposable saved reports. Set `WIRE_DOC_OUTPUT` to an owned image
 directory and `WIRE_DOC_PROOF` to a separate private evidence directory, then run:
 
@@ -376,7 +383,8 @@ file views and Save/Open without recapturing Analyze, comparisons or Settings.
 Set `WIRE_DOC_CAPTURE=analyze` for only Analyze and the README overview, without
 creating saved-report fixtures or visiting unrelated destinations.
 
-The capture requires committed product source, uses an available loopback port
+The capture uses the feature checkout's compiled React renderer and requires
+committed product source. It uses an available loopback port
 with collection timers disabled, and closes its browser/runtime and temporary
 store. It records source and fixture hashes, image hashes and inspected file
 formats in the private evidence directory. Inspect the captures before copying
@@ -389,61 +397,21 @@ the welcome, deliberate source approval and first retained activity using
 invented Copilot metadata and history. Only the welcome image is used in the
 guide; source-review captures include temporary local paths and stay private.
 
-Shared-control proofs use `tests/appwide-controls.browser.test.mjs` with
-`WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
-and saved reports also exercise keyboard paging and frozen-file preservation.
-Focused Settings-search proofs use `tests/settings-search.browser.test.mjs` with
-`WIRE_SETTINGS_SEARCH_PROOFS` set to an owned capture directory. It starts
-the normal runtime on an ephemeral port with invented Cedar activity and source
-paths, disables collection timers, rejects action requests and checks that
-retained data and collection configuration stay unchanged.
+For a change to an individual control, use its existing browser test rather
+than rebuilding every documentation image. These tests take a private output directory:
 
-For Trends, `tests/trends.browser.test.mjs` uses invented requests and the normal
-renderer, with collection timers and provider work disabled. Set
-`WIRE_TRENDS_PROOFS` to an owned private capture directory. The overview, daily
-axes, exact-evidence reading, filters, sizing and heading-icon journeys share
-that fixture; screenshots are not evidence of live collection or deployment.
-The widget-layout regression operates every chart in overview, maximized,
-collapsed and restored states at 3440px landscape, 1080px portrait and enlarged
-narrow text. It checks full-width rows, visible measure controls, whole labels
-and the absence of accidental vertical chart scrolling.
-The control matrix also exercises every measure and series toggle, sizing,
-exact evidence, numbers and guide controls for all seven widgets over
-7/14/30/custom periods. Separate hover captures verify centered, nonoverlapping
-targets and uniform collapsed rows in both themes and enlarged text.
-Date-context cases verify every widget header after presets and custom Apply,
-including month/year boundaries, one-day ranges, Cancel, held/failed reads and
-access withdrawal. Source-wide coverage metadata remains separate from the
-chart-specific limits shown in Trends.
-Point-selection cases compare all widget bounds and scroll positions before
-and after actual data clicks across the seven-widget/four-period matrix.
-Touch and keyboard also select in place; explicit sizing must retain the
-selected point and its exact evidence.
+| What changed | Browser test | Output variable |
+| --- | --- | --- |
+| Keyboard paging or file controls | `tests/appwide-controls.browser.test.mjs` | `WIRE_VISUAL_PROOFS` |
+| Settings search | `tests/settings-search.browser.test.mjs` | `WIRE_SETTINGS_SEARCH_PROOFS` |
+| Daily charts, sizing, dates or the return from a call | `tests/trends.browser.test.mjs` | `WIRE_TRENDS_PROOFS` |
+| Brand, navigation or avatar | `tests/branding.browser.test.mjs` | `WIRE_BRAND_PROOFS` |
 
-The sidebar performance case compares native collapse/expand motion on populated
-7- and 30-day Trends with Analyze and Reports in the same browser. It measures
-input-to-motion, completion, frame gaps, long tasks and full SVG rebuilds, with
-repeated reversal and a portrait layout. Width-only changes must reposition
-mounted chart nodes, not reformat dates or rebuild the evidence scene.
-Both latest-date and earlier-date anchors must survive reversal; deliberate
-horizontal scrolling during the glide must replace the old anchor.
-Run it with `node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
-For a physical divider-drag sweep, build first and run
-`node --test tests/sidebar-resize.qualification.mjs`. It exercises all primary
-destinations, report and comparison readers, Settings sections and the modal
-boundaries with a disposable store and native scrollbars.
-Set `WIRE_TRENDS_PERFORMANCE` to an owned JSON file for measurements; optional
-`WIRE_TRENDS_PROFILE` writes the 30-day Chromium CPU profile. Keep these private.
-Timing uses invented activity, disabled collection timers and the unchanged
-320ms sidebar animation; an empty chart or shorter animation is not a substitute.
-
-For the brand and navigation header, `tests/branding.browser.test.mjs` uses
-invented Cedar activity and a synthetic selected profile in the normal renderer.
-Set `WIRE_BRAND_PROOFS` to an owned private directory for theme/layout captures
-and unpaused frame traces. It checks full-name help, separate navigation help,
-header alignment, repeated reversal, the mounted avatar and the narrow drawer
-under native and explicitly reduced-motion preferences. Providers and action
-requests are blocked; its disposable runtime and store are closed afterward.
+For sidebar motion on populated charts, run
+`node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
+Set `WIRE_TRENDS_PERFORMANCE` to a private JSON file for timings, or
+`WIRE_TRENDS_PROFILE` for the Chromium CPU profile. For an actual divider
+drag, build first and run `node --test tests/sidebar-resize.qualification.mjs`.
 
 ## Troubleshoot a local run
 

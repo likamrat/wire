@@ -5,7 +5,7 @@ Use it to explain repeated errors, operations and working patterns. The recorded
 examples can also serve as a starting point for eval cases. WIRE does not
 generate evals or rate answer quality.
 
-Go to [report choices](#open-a-report), [text and privacy options](#read-and-adjust),
+Go to [report choices](#open-a-report), [named drafts](#keep-interactions-in-a-draft), [text and privacy options](#read-and-adjust),
 [saving and reopening](#save-and-reopen) or [comparisons](#compare).
 Contributors changing report behavior should also read the
 [membership and frozen-output contract](report-contract.md).
@@ -24,11 +24,6 @@ You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
 **Prepare preview** opens a right-side drawer without writing files. Check the
 report there, then choose **Save report** to write the selected files locally.
-When the activity includes retained Microsoft conversations, the ordinary
-report uses **All activity** and **All retained dates** for that scope. It
-does not apply GitHub interaction presets or pretend an undated conversation
-belongs to a report date range. For two dated Microsoft periods, start in
-**Compare**, choose the periods and select **Create report**.
 If recorded activity changes while you read, a note in the drawer tells you
 that the preview still contains the activity it was prepared with.
 If you kept chat details, the confirmation names those formats. Nothing is sent.
@@ -70,24 +65,31 @@ The activity picker keeps its actions visible while its
 contents scroll together, without a second scroll area inside the interaction list.
 Failure summaries keep the recorded tool name; open an interaction to read its
 exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
+
+### Keep interactions in a draft
+
 On Analyze, choose **Add to report** on the card or after **Source** in
 the reader. Pick an existing draft or use **Search drafts** to filter by name.
 To create one, choose **New draft**, enter its name, then **Create draft and add**.
 The card shows the draft name after the add. Choose **Open draft** in the
 confirmation to open that draft in Reports without preparing or saving it.
 If another report has unfinished choices, it stays intact in its original tab.
-For a previously saved report, choose **Saved library** instead. To remove the interaction from just one draft, reopen
+To remove the interaction from just one draft, reopen
 the picker and choose that draft's **Remove** row. Other drafts and the
 recorded interaction are unchanged.
+
+![Creating a named draft from the open interaction without leaving Analyze.](images/report-draft.png)
 
 In **Reports**, choose the name under **Report draft**, then **Prepare preview**.
 Quick additions keep their membership across reloads, not a copy of the chat.
 They never write an export or change an already prepared or saved report.
 
 To delete a draft, select it under **Report draft**, choose **Delete draft**,
-then confirm its name. **Cancel** leaves it unchanged. In Analyze, cards that
-belonged only to that draft show **Add to report** again. Cards in other
-drafts still show those names. Your activity and saved report files stay intact.
+check the name and confirm. In Analyze, a card that belonged only to that
+draft returns to **Add to report**. Other memberships, the activity itself
+and saved files stay intact. If the response is lost, WIRE checks the draft
+list. If it can't read the list either, reload Reports to see whether the
+draft is still there before taking another action.
 
 **Back to Reports** returns to the choices and saved list. It keeps an unfinished
 copy in memory. Use **Resume preview** with the same focus and unchanged dates to
@@ -188,7 +190,7 @@ It shows one **Report copy** at a time, with its interaction and recorded author
 **Local original** switches to the retained source; it is not an extra copy
 included in the report. **Edit or omit this report copy**, then **Update report
 copy**, changes only that report copy. The original stays unchanged.
-Return to **Report** or a file through **Viewing**.
+Return to **Report in WIRE** or a file through **Viewing**.
 
 ![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
 
@@ -213,7 +215,7 @@ interpretation can remain when you leave out error-message text; it does not
 restore the omitted wording or read prompts, replies or arguments.
 
 **Formats** lets you select HTML, PDF, Markdown and JSON in any combination.
-**Viewing** changes only what you are reading: **Report** is the readable page,
+**Viewing** changes only what you are reading: **Report in WIRE** is the readable page,
 while a file choice shows that actual format in its own reading pane. Text
 inspection stays out of the file view. PDF has page controls, JSON has
 a field tree, and HTML and Markdown offer Preview/Source. Switching views does
@@ -230,7 +232,7 @@ text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Your selected file and
 Preview/Source mode stay selected during these updates and after changing the
 report period or call filters. Removing that file
-from **Formats** returns to **Report**. Save is unavailable until the update finishes.
+from **Formats** returns to **Report in WIRE**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
 
@@ -272,7 +274,7 @@ reports also open as readable pages, using their verified saved facts. No downlo
 **Files** opens a specific saved format. **Report text** shows the saved text
 treatment beside its icon; missing older metadata stays unrecorded.
 **Inspect details** on the row shows its other
-metadata. In the reader, choose **Report** to return from a file preview, or
+metadata. In the reader, use **Viewing** to return from a file preview, or
 **Download** to retrieve that file's original bytes.
 
 **Prepared** is when the report was created. **Report period** is its saved date
@@ -280,7 +282,7 @@ selection; **All retained dates** means no date restriction. Older saved-list
 entries may not include a period, even when dates appear inside the report.
 WIRE does not replace a missing period with the preparation time or current filters.
 
-![A saved report opened at an interaction, with its prompt and recorded calls beneath the section navigation.](images/saved-report.png)
+![A saved Brief with its finding, matching interactions and a link to one recorded call.](images/saved-report.png)
 
 Older unverified reports keep their warning before **View report**. Missing,
 altered or unsupported saved content remains unavailable; WIRE does not rebuild
@@ -295,7 +297,7 @@ compatible WIRE reader; an older version may refuse to open them.
 In **Saved library**, search for a report name, its displayed period, a start or end
 date (such as `2026-11-07`), a file format or its text treatment. This searches
 saved metadata. Use global Search to find text inside supported files.
-**Back to Reports** restores the list's search, order, page
+**Back to saved reports** restores the library's search, order, page
 and reading position. Page controls are below the saved rows.
 Use Previous/Next, or enter a page and choose **Go to page**. Enter submits the
 same page choice; an out-of-range number does not change the page.
@@ -308,18 +310,18 @@ masking cannot recognize every confidential detail.
 
 ## Compare
 
-Open **Compare** in the left sidebar. It starts with all eligible
-retained activity, independently of Analyze filters. The
-first result compares the last seven complete days, ending yesterday, with
-the preceding seven days in the display time zone. Set another starting period
-under **Settings > Compare**.
+Open **Compare** in the sidebar. **Selected** is the period under review;
+**Baseline** is the period to compare it with. By default Selected covers the
+last seven complete days, ending yesterday; Baseline covers the seven days
+before that. A fresh comparison uses all eligible retained activity. Change
+its starting period in **Settings > Compare**.
 
 ![Compare with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
 
 **Last 14 days** and **Last 30 days** use the same complete-day rule.
-**Custom dates** opens both calendars; each range includes its start and end
-days. **Cancel** leaves the accepted comparison unchanged. Unequal or overlapping
-ranges are allowed and remain labeled.
+Choose **Custom dates** to change both ranges, or select the date in one
+column to change only that period. Both endpoints count. **Cancel** leaves
+the accepted comparison unchanged. The periods can overlap or have different lengths.
 
 For GitHub Copilot calls, Analyze, Compare and Trends use the recorded call
 start in the display time zone. If the start is missing or has no time zone,
@@ -327,20 +329,23 @@ the call remains in **All dates** but does not belong to either period. A zero
 in a period is not proof that history collection was complete.
 
 The compact activity choice offers All activity, Errors & failures, Completed
-calls, Human prompts and Agent prompts. **More options** retains source, tool,
-service, category, author, outcome, project, chat, evidence-layer and collection
-choices, plus path, service-intersection and timing-interval controls. Choices
-apply directly. **Use Analyze view** deliberately imports Analyze's non-date
+calls, Human prompts and Agent prompts. **Filters** narrows the comparison
+by tool, service, author, outcome, project, chat or other available evidence.
+WIRE omits the source picker when the Copilot app is the only source.
+**Use Analyze view** imports Analyze's non-date
 filters and authorized Search selection; it replaces only the dates.
 Choosing Human prompts or Agent prompts keeps an existing error/completion focus;
 the menu names the combined choice. All activity clears those menu choices.
 
 Switch **Outcomes**, **Timeline**, **By tool** or **Timing** inside the chart.
 These views keep the same accepted pair. Hover or focus a mark for its exact
-values; select it to inspect supporting records. **View calls** opens the
-paired activity, while **View numbers** shows the values for the current chart.
-Missing results and timing remain unavailable. Different period lengths,
-overlap and incomplete evidence can limit what a change means.
+values; select it to inspect supporting records. In **What changed**, select
+a measure name for both exact readings or a period's value for the calls on
+that side. The call-count action opens Selected first, or Baseline when only
+it has calls. **View numbers** shows the values for the current chart.
+A period with calls and no recorded failures can have a 0% failure share.
+A period with no eligible calls has no rate. Missing timing is unavailable,
+not zero milliseconds. Check the dated counts before interpreting a change.
 Outcomes and By tool use a shared **Call count** scale, not percentage-scaled
 bars. Percentage-first values use each period's own denominator. Selecting a
 mark narrows both the exact rows and their interaction/service captions.
@@ -351,8 +356,9 @@ experience with the same formats, masking, optional notes and local Save.
 access remains valid.
 
 To read an existing report, open **Reports > Saved library** and choose its
-name. Previously saved comparison files open there too. They retain their
-original contents even if a source report is later deleted.
+name. Older comparisons between saved reports remain readable there, even
+if a source report is later deleted. New comparisons use retained periods;
+there is no longer a command to compare two saved files.
 
 ## Remove a saved copy
 
@@ -363,6 +369,9 @@ activity or external downloads. **Saved-report options > Delete all saved
 reports** previews all report bundles across pages and search, not just visible
 rows; saved comparisons remain.
 
-Deleting collected activity is a separate Settings operation and does not
-remove independently saved reports. For an interrupted deletion, read its
-original result rather than confirming a new operation.
+For an interrupted file deletion, choose **Check deletion result**. The
+original receipt can show cleanup is still pending. Repeating Delete would
+start a different operation. **Settings > Privacy & saved data > Review
+deletion** targets [collected activity](collection.md#deletion), not report
+files, downloads or the original chat. An interrupted activity deletion has
+its own **Check deletion result** in that workflow.

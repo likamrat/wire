@@ -15,6 +15,7 @@ Evidence definitions and frozen-file requirements remain in the
 | --- | --- |
 | Navigation and return state | [Destinations, loading and Back](interaction-design.md#navigation-and-return) |
 | <a id="analyze-and-filters"></a>Analyze and filters | [Accepted scope and chart reading](interaction-design.md#analyze-and-filters) |
+| Trends | [Daily measures, comparisons and supporting calls](interaction-design.md#trends) |
 | <a id="interaction-cards-and-reading"></a>Interaction cards and reading | [Cards, results, disclosures and Copy](interaction-design.md#interaction-cards-and-reading) |
 | <a id="search"></a>Search | [Typed results and exact Open](interaction-design.md#search) |
 | <a id="reports"></a>Reports | [Preparation, saving and saved reading](interaction-design.md#reports) |
@@ -53,8 +54,8 @@ or mismatch, or reviewing exact operation bounds or saved report metadata.
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
 | Trends | Seven visible measure names beside one daily chart; optional aligned charts share the accepted period |
-| Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
-| Main workspace | Prepared and saved report reading |
+| Right contextual surface | Interaction reader and prepared report preview; Close or Back returns to the original task |
+| Main workspace | Report setup, saved library and verified saved reading |
 
 Opening the contextual surface reduces the main column's actual width.
 It does not scale content or mount a second reader; narrow/enlarged layouts
@@ -310,7 +311,7 @@ legends use the smaller 8px inset and keep their value tracks separate.
 Keep hover, pressed, selected and keyboard focus distinct; a smaller painted
 control is not permission to remove its focus ring or hit area.
 
-Compare a new control panel with the **Trends → Period → Custom dates** editor and
+Compare a new control panel with the **Trends > Dates > Custom dates** editor and
 the **Reports → Formats** menu. A field label belongs above its input, clear of
 the painted focus ring; a checkbox label belongs beside its box within one
 clickable row. Align peer field edges, give groups more room than a label and
@@ -352,8 +353,8 @@ Do not apply current branding globally to historical report snapshots.
 | Exclusive recorded outcomes | May use a ring |
 | Tiny mark | Exact counts and accessible table links remain usable |
 
-The [Chart guide behavior](interaction-design.md#chart-guide) connects each
-visualization to its definitions and exact values.
+[Analyze Guide](interaction-design.md#chart-guide) connects values to definitions
+and exact evidence. Trends has its own [Chart guide](interaction-design.md#trends).
 
 Trends places a visible measure index beside the working chart. At narrow widths
 the names wrap above the chart, not into a chooser. Errors & failures comes
@@ -374,7 +375,7 @@ repeat it just to fill the row. Filters uses the same outlined button. Keep
 Guide with navigation and display choices by the measure title. The plot shares
 the chart card's surface, not a second palette-colored rectangle. An empty
 period uses a compact dated explanation and optional jump to real activity.
-Period opens the 7/14/30/custom choices. Never substitute a pending date or
+Dates opens the 7/14/30/custom choices. Never substitute a pending date or
 filter for the last accepted facts. Compare measures uses one accepted scope
 for both series. Overlay only matching units and denominator bases; otherwise
 align dates on separate scales. **All charts**, available under **Arrange charts**,

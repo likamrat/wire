@@ -61,17 +61,22 @@ in this release. Saving Copilot reply text is a separate choice under
 available response-model names, plus prompt authors. The interaction list below
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
-Open a long project, chat, tool or service list to find a choice by part of
-its name. Trends' **Measure** and **Compare with** also match units: `ask reach`
-finds the ask tool's interaction reach. In **Settings → Regional**, try a city
-or part of a time-zone ID. Typing only narrows the open list. Choose a row or
-press Enter to accept the highlighted choice; Escape keeps the previous value.
+To read one conversation, open **Filters**, expand **More filters** if needed,
+and choose **Chat**. Type part of its title in a long list, then choose the
+row. Typing narrows the choices; Escape leaves the selection alone. A chat is
+a conversation recorded by the Copilot app. A WIRE sign-in session controls
+access to this local instance. Choosing a chat does not switch accounts,
+sign out or read new history.
+
+Open **Filters** to check how much history WIRE has checked. A routine partial
+check stays there while results are available. An empty result can explain
+what history was checked; an actual read error still appears with the results.
 Find the prompt in the list, then open its row to see the tools, services and
 results in the right-hand reader. A note such as **1 tool call failed** or
 **Reported result issue** helps identify exceptions. These are different:
 a completed tool call can return an error for an individual item.
 
-![Analyze with call outcomes, activity over time, recorded models, tools, services and prompt authors in compact panels.](images/analyze.png)
+![Analyze Results with daily tool calls, recorded outcomes and the interactions behind them.](images/analyze.png)
 
 An interaction groups a prompt with its recorded calls. One interaction can
 contain several calls, and one call can involve several services. Service
@@ -85,15 +90,13 @@ an interaction with several recorded models counts under each.
 
 **Prompt authors** counts each originating interaction once across all matching
 pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
-counts add up to the total in **Chart guide**. Calls and follow-ups do not add
+counts add up to the matching interaction total. Calls and follow-ups do not add
 prompts. Select **Author unverified** in the chart to inspect those interactions.
 Unverified authors stay
 in the denominator; missing prompt text alone does not make its author unknown.
 In the reader, **Source** distinguishes a direct link to the prompt from
 grouping by message order. Seeing a skill or system message before a call
-doesn't tell you who asked for the work. Microsoft 365
-conversations without comparable prompt provenance are shown as unavailable,
-not included in these shares.
+doesn't tell you who asked for the work.
 
 On an Analyze card, **2 tool calls failed** opens both failed calls. The
 **Problem** area names the affected calls and shows what went wrong. If no
@@ -166,20 +169,21 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 
 ## Trends
 
-Choose **Trends** in the sidebar. **Overview** shows the daily number of
-interactions with a recorded error or failure. A cross at zero means no matching
+Choose **Trends** in the sidebar. By default, **Overview** shows how many
+interactions had a recorded error or failure each day. A cross at zero means no matching
 dated calls; a circle at zero means there was activity but no recorded error.
-Select a day to inspect its
-supporting calls in **Charts**. Charts lists all seven measures; **Chart guide**
-explains what each counts. Use Back to return to the chart you were reading. On Analyze,
+**Charts** lists the seven measures. **Chart guide** explains their units.
+On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
 **Tool call results**, WIRE asks before showing **Errors & failures**: that
 chart counts affected interactions, not call outcomes. **Back to Analyze**
 restores the original widget.
 
+![Trends Overview showing daily interactions with errors and the choice to compare two measures.](images/trends-overview.png)
+
 ### Choose the period and activity
 
-Open **Period** for **Last 7 days**, **Last 14 days**, **Last 30 days** or
+Open **Dates** for **Last 7 days**, **Last 14 days**, **Last 30 days** or
 **Custom dates**. With no period selected, Trends starts with the last seven
 days. If that week is empty and older dated calls exist, **Latest activity**
 shows the seven days ending on the most recent matching call. An explicit
@@ -288,25 +292,9 @@ For a two-period comparison or a saved copy, use
 
 ## Compare
 
-Choose **Compare** in the sliding left sidebar. A fresh comparison
-shows all eligible retained activity for the last seven complete days versus the
-preceding seven unless you chose a different period in **Settings > Compare**.
-Analyze keeps its own filters and reading state.
-
-Choose 14 or 30 days, or open **Custom dates** for independent inclusive ranges.
-Use the compact activity choice for a starting point and **More options** for
-additional restrictions. **Use Analyze view** explicitly brings its current
-non-date filters and authorized Search into the comparison.
-
-**Outcomes**, **Timeline**, **By tool** and **Timing** show the same pair.
-Edit either date in the shared header. **Baseline** and **Selected** keep the
-same meaning as you switch views or open their exact numbers.
-**View calls** opens the records; when only the baseline has calls, the action
-opens those baseline calls. **View numbers** explains the exact values.
-An empty period has no rate to compare. If an outcome filter excluded all
-calls, the period's row gives the count before that filter.
-**Create report** preserves the pair for local saving. See
-[comparisons](reporting.md#compare) for scope and return behavior.
+Choose **Compare** in the sidebar to compare two periods. To compare two
+measures over *one* period, stay in Trends. See [Compare two periods](reporting.md#compare)
+for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
@@ -373,36 +361,18 @@ restore previously omitted replies.
 Use **Add to report** at the bottom left of a card, or the same action after
 **Source** in its reader. Choose a draft to add the entire interaction without
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
-one. To delete the whole draft, select it in **Reports**, choose **Delete draft**
-and confirm its name. This keeps your activity, other drafts and saved files.
-To save a report instead, choose the draft by name, prepare it and use **Save report**
-when you want to keep its files.
+one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
+to prepare, save or delete that selection.
 
 ## Make a report
 
-Open **Reports**. Select a recent report by name in **Overview**, or choose **Saved library**
-to search older copies. To make a report, select its focus under **New report**
-and check the activity, dates and text treatment in the outline.
-The default, **Mask detected details**, keeps the wording with local masking.
-Change it before opening the report or while reading it. Keeping chat details
-shows a red warning; masking can still miss names or sensitive wording.
-Choose **Leave out prompts and replies** to omit chat wording. Notes and selected
-error messages remain. The period starts at **Last 7 days**, independently of
-your Analyze filters.
+In **Reports**, select a named draft or start a **New report**. Check its
+activity, dates, text and formats, then choose **Prepare preview**. Nothing
+has been written. Read the finding and its examples before choosing **Save
+report**. Open an existing report by name in **Saved library**.
 
-Select **Prepare preview** to read the patterns and supporting interactions in
-the right-side drawer. Preparing does not write files or send the report.
-You can add a note or edit a report copy. **Formats** chooses the HTML,
-PDF, JSON or Markdown files to write; **Viewing** only changes what you read.
-**Save report** keeps the chosen files on this device.
-If you keep chat details, the warning lets you hide details and save, save
-with those details, or go back without writing anything.
-
-Select a saved name to read it, or use **Files** in the full library to open a
-specific format. **Back to Reports** returns to that workspace.
-Saved files preserve their original facts and text. The
-[report guide](reporting.md) explains each template's membership, how edits
-affect an unfinished copy, and how to save and reopen reports.
+[Create and read reports](reporting.md) covers scope, text masking, file
+inspection, and what happens when you delete a draft or a saved copy.
 
 ## Find saved text
 

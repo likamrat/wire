@@ -20,6 +20,12 @@ Preserve historical attested bundles, author/privacy choices, hidden selections
 and return navigation. Current, Selected and All scopes use their canonical
 populations, not pagination or whatever rows the browser has loaded.
 
+A named draft is a saved selection, a preview is a frozen working copy and a
+saved report is a set of files. Verify which one the action affects. Deleting
+a draft must leave activity, other drafts and saved files alone. New Compare
+reports start from two retained periods; historical saved comparisons remain
+readable without restoring the command to compare two saved files.
+
 Bind prepared membership to its authoritative source, selectors and account.
 Empty cohorts still need their source dependency and revocation checks.
 Period replacement changes Dates explicitly while preserving applicable Search,

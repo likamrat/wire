@@ -24,7 +24,7 @@ Those real interactions can become the basis for better synthetic eval cases.
 Product teams and customers building agents on Work IQ APIs and MCP can use
 that evidence to test the behaviors people rely on and improve their agents.
 
-[![WIRE showing activity and prompt-author breakdowns beside a compact prompt preview and recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![Analyze with matching interactions and an open reader showing the prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
@@ -86,10 +86,9 @@ installs, macOS and standalone Linux use the [same-clone update instructions](do
 
 ### Connect your history
 
-WIRE prompts you to connect on first use. Choose **Review and connect**, check
-the local paths and history window, then approve collection. **Not now** leaves
-the connection prompt in Analyze; settings remain in **Settings > Connection & updates**.
-Follow the [first-run guide](docs/user-guide.md#connect-local-history) for details.
+Choose **Review and connect**, check the local paths and history window, then
+approve collection. **Not now** leaves the prompt in Analyze.
+See [Connect local history](docs/user-guide.md#connect-local-history) to connect later.
 
 ### Your data
 
@@ -122,24 +121,17 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 ## Trends
 
-Pick one of seven visible measures to see daily Work IQ activity. Trends opens
-on tool calls; **Errors & failures** is first in the index. Switch between
-columns and lines, compare measures for the same dates, or select a mark to
-open its supporting calls. From Analyze, a widget's trend action opens the
-corresponding measure. The [Trends guide](docs/user-guide.md#trends) explains
-scope changes, percentages and evidence gaps.
+Follow changes in daily tool use, errors or timing. Select a day to inspect
+the calls behind it, or compare two measures over the same dates.
+See [Trends](docs/user-guide.md#trends) for the seven measures and what each counts.
 
 ## Reports
 
-Reports give you a shareable view of working patterns, backed by recorded
-prompts, Work IQ calls and results. Ready-made templates preserve those
-findings for review and for building eval cases.
-**Report text** starts at **Mask detected details**. Change it before opening
-a template or while reading the report.
-The [reporting guide](docs/reporting.md) explains which template fits your
-purpose and what the saved copy includes.
+Keep individual interactions in a named draft, or start a report from a
+focus such as **Errors & failures**. Preview its findings and examples before
+saving a local copy. See [Create and read reports](docs/reporting.md).
 
-[![Reports homepage with ready-made templates, period controls and saved reports.](docs/images/report-choices.png)](docs/reporting.md)
+[![Report setup beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
@@ -147,10 +139,8 @@ purpose and what the saved copy includes.
 
 ## Compare
 
-Compare shows how Work IQ activity, call outcomes and timing differ
-[between two periods](docs/reporting.md#compare).
-That evidence helps you assess changes
-to your agents and investigate possible regressions.
+Compare a selected period with a baseline. Open either period's count to see
+which calls changed. See [Compare two periods](docs/reporting.md#compare).
 
 [![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
