@@ -90,7 +90,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         routeScopeKey = JSON.stringify(getContext().routeScope ?? null);
     }
     const cards = new Map();
-    const toolbar = el("div", "trends-toolbar");
+    const toolbar = el("div", "trends-toolbar workspace-command-row"), toolbarContext = el("span","workspace-command-context"),
+        toolbarTools = el("div","workspace-command-tools");
     const status = el("p", "notice"), qualification = el("p", "trends-qualification"), restrictions = el("div", "trends-restrictions");
     const pendingNotice = el("p", "trends-pending");
     pendingNotice.setAttribute("role", "status");
@@ -150,7 +151,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         paint();
     });
     const filterActions = el("div", "trends-filter-actions");
-    filterActions.append(filtersButton); toolbar.append(filterActions, collapseAll);
+    filterActions.append(filtersButton); toolbarTools.append(collapseAll, filterActions); toolbar.append(toolbarContext,toolbarTools);
     const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset, remember: "filters" }));
     restrictions.append(restrictionText, clearFilters); restrictions.hidden = true;
     const retry = button("Read stored activity", () => {
@@ -196,7 +197,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             onComparePeriods({aFrom:priorStart,aTo:priorEnd,bFrom:from,bTo:to},selectedFilters);
         },"forward","primary"));dialogBody.append(actions);
     });
-    comparePeriods.id="trendsComparePeriods";toolbar.prepend(periodButton,comparePeriods);
+    comparePeriods.id="trendsComparePeriods";toolbarTools.prepend(periodButton,comparePeriods);
     const homeBack = button("Back to Analyze", () => { if (current() && getContext().entry) returnToAnalyze?.(); });
     homeBack.prepend(ux.icon("back")); homeBack.hidden = true; toolbar.prepend(homeBack);
     const primaryColumn = el("div", "trends-primary-column");
@@ -634,6 +635,9 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         author.field.value = filters.author ?? ""; tool.field.value = filters.tool ?? ""; service.field.value = filters.service ?? "";
         local.append(author.label, tool.label, service.label);
         const actions = el("div", "trends-dialog-actions");
+        if (Object.keys(filters).length) actions.append(button("Clear filters", () => {
+            localChoices.close(); void read({ range, period, filters: {}, offset, remember: "filters" });
+        }));
         actions.append(button("Cancel", () => localChoices.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
             localChoices.close(); void read({ range, period, filters: next, offset, remember: "filters" });
@@ -961,6 +965,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             if (toolbarHost === root) landingGrid.before(toolbar); else toolbarHost.prepend(toolbar);
         }
         toolbar.hidden = section === "guide";
+        toolbarContext.hidden = section === "guide" || (!inPair && !allCharts && section !== "overview");
+        toolbarContext.textContent = toolbarContext.hidden ? "" : `${number(data.totals.calls)} dated ${data.totals.calls === 1 ? "call" : "calls"}`;
         landingExtra.hidden = section !== "overview"; workspace.hidden=inPair;
         pair.update(data,inPair);
         const pairGuide = section === "guide" && pairActive ? pair.selection() : [];
@@ -992,9 +998,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         clearFilters.disabled = !Object.keys(filters).length;
         ux.paintFilterEntry(filtersButton, Object.keys(filters).length);
         filtersButton.title = restrictionText.textContent || "Filter activity";
-        const clearHost = allCharts && section === "charts" ? restrictions : filterActions;
-        clearFilters.hidden = clearHost === restrictions && clearFilters.disabled;
-        if (clearFilters.parentElement !== clearHost) clearHost.append(clearFilters);
+        clearFilters.hidden = restrictions.hidden;
         const limits = [];
         if (allCharts && data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} calls have no start date and are left out.`);
         qualification.textContent = limits.join(" "); qualification.hidden = !limits.length;
@@ -1031,6 +1035,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "charts") { paintInspection(); paintExact(); }
     }
     function withdrawAccess() {
+        toolbarContext.textContent = "";
         localChoices.close(false); datePicker.close(false); scrub(local);
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
@@ -1143,16 +1148,12 @@ export const trendsStyles = `
 .trends-landing .trends-index-scope{margin-block:.5em 1em}.trends-guide{max-width:65ch;padding:1rem 1.25rem;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .trends-guide details{border-bottom:1px solid var(--surface-divider)}.trends-guide details:last-child{border:0}.trends-guide summary{padding-block:.75em;cursor:pointer}.trends-guide p{margin:0 0 1em}
 .trends-toolbar,.trends-detail-bar,.trends-heading,.trends-inspection-heading,.trends-dialog-heading,.trends-dialog-actions,.trends-restrictions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.trends-toolbar{margin-bottom:16px;gap:8px}
+.trends-toolbar{margin-bottom:var(--space-sm)}
 .trends-pending{min-height:1.5em;margin:-8px 0 8px;color:var(--muted);font-size:var(--type-small);line-height:1.5}
 .trends-toolbar>button,.trends-detail-bar>button{display:inline-flex;align-items:center;gap:8px}
 .trends-filter-actions{display:inline-flex;align-items:center;gap:4px;max-inline-size:100%}
 .trends-filter-actions .filter-entry{display:inline-flex;align-items:center;gap:8px}
 .trends-filter-actions .filter-entry>.wire-icon{flex:none;width:1rem;height:1rem}
-.trends-filter-actions>button:disabled{visibility:hidden}
-@container(max-width:22rem){
- .trends-filter-actions:has(>button:nth-child(2)) .filter-entry-label{display:grid;align-content:center;min-block-size:2lh;white-space:normal}
-}
 .trends-modes button[aria-pressed=true]{--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-pressed:var(--accent-pressed)}
 .trends-restrictions{margin-bottom:12px}
 .trends-detail-bar{justify-content:space-between;margin-bottom:16px}
@@ -1270,7 +1271,7 @@ export const trendsStyles = `
 @container trend-card (max-width:22rem){
  .trends-panel[data-collapsed=true] .trends-title-group h2{min-height:calc(2 * var(--type-section) * var(--leading-section))}
 }
-@media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}.trends-toolbar{gap:4px}}
+@media(max-width:800px){.trends-panel,.trends-inspection{padding:16px}}
 @media(max-width:440px){.trends-dialog{width:calc(100dvw - 24px);max-width:calc(100dvw - 24px);padding:16px}.trends-dialog-heading{margin-bottom:12px}}
 @media(max-width:600px){.trends-value-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}.trends-value-row>.trends-value-track{grid-column:1/-1;grid-row:2;margin-bottom:8px}.trends-value{grid-row:1;grid-column:2}}
 @media(prefers-reduced-motion:reduce){.trends-tooltip{transition:none}}
@@ -1308,8 +1309,8 @@ export const trendsStyles = `
 #trendsView[data-layout=all] .trends-workspace{display:block}#trendsView[data-layout=all] .trends-measure-index{display:flex;flex-wrap:wrap;border:0;margin-bottom:12px}#trendsView[data-layout=all] .trends-measure{width:auto}
 #trendsView[data-layout=all] .trends-plot{contain:layout paint}
 #trendsView[data-layout=all] .trends-plot svg{content-visibility:auto}
-#trendsView[data-layout=index] .trends-toolbar{justify-content:flex-start;gap:4px 8px;margin-bottom:8px}
-@container(max-width:28rem){#trendsView[data-layout=index] .trends-toolbar #trendsPeriod{flex-basis:100%;justify-content:flex-start}}
+#trendsView .trends-toolbar{justify-content:flex-end;gap:var(--space-xs) var(--space-md)}
+#trendsView .wire-section-nav{margin-bottom:var(--space-sm)}
 #trendsView[data-layout=index] .trends-index-modes{justify-content:flex-end;gap:6px 12px}
 #trendsView[data-layout=index] .trends-no-activity{margin-block:16px 8px}
 .trends-no-activity h3{margin:0;font:var(--weight-medium) var(--type-body)/1.5 var(--font)}

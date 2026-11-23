@@ -617,8 +617,10 @@ Compare has one destination. The period presets, activity selection and filters
 are local controls below the page title. The chart-view switch belongs to the
 reading, with the accepted baseline and selected dates; presets are not tabs.
 
-For a retained Work IQ tool-call comparison, Outcomes puts **Call results**
-beside **What changed**, stacking them in that order on narrow screens.
+For a retained Work IQ tool-call comparison, **Call results** and **What changed**
+follow the same Baseline and Selected columns. The editable dates are in one header;
+use those role names rather than renaming a side “Previous week” or repeating its
+range in findings, bars and tables. Timeline buckets retain their own dates.
 Baseline and Selected show the calls and distinct originating
 interactions for each period. The affected share includes an interaction once
 when a matching call failed or had a recorded application/API error. An empty

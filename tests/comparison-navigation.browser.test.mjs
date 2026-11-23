@@ -47,6 +47,24 @@ async function dates(page, a, b) {
     await panel.getByRole("button", { name: "Apply dates", exact: true }).click();
     await ready(page);
 }
+test("workspace Filters uses the same right edge and face on Analyze, Trends and Compare", async t => {
+    const {page,server} = await setup(t,"",{frontend:"react"});
+    const rows = [["/","#analyzeResultCommands"],["/trends?section=overview",".trends-toolbar"],["/compare",".comparison-chart-controls"]];
+    const faces = [];
+    for (const [route,owner] of rows) {
+        await page.goto(new URL(route,server.url).href);
+        if (route === "/compare") await ready(page);
+        if (route.startsWith("/trends")) await expect(page.locator("#trendsOverviewPlot svg")).toBeVisible();
+        const control = page.locator(`${owner} .filter-entry:visible`);
+        await expect(control).toBeEnabled();
+        await page.evaluate(() => document.fonts.ready);
+        faces.push(await control.evaluate(n => {
+            const box=n.getBoundingClientRect(),face=getComputedStyle(n,"::before");
+            return [box.right,box.width,box.height,n.querySelector(".wire-icon").getBoundingClientRect().width,face.borderColor];
+        }));
+    }
+    assert.deepEqual(faces[1],faces[0]); assert.deepEqual(faces[2],faces[0]);
+});
 test("Compare reports returned errors once per call, separately from tool failures and missing results", async t => {
     const records = Array.from({length: 54}, (_, index) => {
         const r = fixture(`returns-${index}`), call = r.toolCalls[0];
@@ -90,10 +108,11 @@ test("Compare keeps period headings, readings and exact-call actions aligned thr
                     return { x: (Math.min(...boxes.map(b => b.left)) + Math.max(...boxes.map(b => b.right))) / 2,
                         y: Math.min(...boxes.map(b => b.top)) };
                 };
-                // The compact layout places Change on a separate, labeled line.
-                const headers = [...table.tHead.rows[0].cells].slice(1).filter(th => th.getBoundingClientRect().width > 1);
+                // Both tables must line up with the same visible editable pair.
+                const headers = [...document.querySelectorAll(".compare-period-key [data-edit-period], .compare-change-heading")]
+                    .filter(n => n.checkVisibility());
                 const columns = headers.map(th => th.getBoundingClientRect());
-                const offsets = headers.map((th, i) => ink(th).x - center(columns[i]));
+                const offsets = [];
                 const rowOffsets = [...table.tBodies[0].rows].flatMap(tr => {
                     const peers = columns.map((_, i) => {
                         const values = [...tr.cells[i + 1].querySelectorAll(".compare-change-value > *, .percentage-value")].map(ink);
@@ -102,7 +121,7 @@ test("Compare keeps period headings, readings and exact-call actions aligned thr
                     });
                     return peers.slice(1).flatMap(peer => peer.map((value, i) => value.y - peers[0][i].y));
                 });
-                return { widths: columns.map(box => box.width), offsets, rowOffsets };
+                return { widths: [...table.tBodies[0].rows[0].cells].slice(1,3).map(n=>n.getBoundingClientRect().width), offsets, rowOffsets };
             });
             const where = `${selector} at ${width}px/${scale}%: ${JSON.stringify(layout)}`;
             assert.ok(Math.abs(layout.widths[0] - layout.widths[1]) <= 1, where);
@@ -116,7 +135,7 @@ test("Compare keeps period headings, readings and exact-call actions aligned thr
             await page.screenshot({ path: path.join(output, `period-tables-${width}-${scale}.png`), fullPage: true });
         }
         const baseline = page.locator("#compareChange-0-baseline");
-        const selected = page.getByRole("button", { name: /Mar 8.*Tool completed: 50.00% \(2 of 4 calls\)/ });
+        const selected = page.getByRole("button", { name: /Selected, Tool completed: 50.00% \(2 of 4 calls\)/ });
         const { periods } = comparisons.at(-1);
         const completed = periods.later.analytics.rows.filter(row => row.outcome === "success").map(row => row.id);
         for (const [action, side, ids] of [[baseline, "A", periods.baseline.changeSummary.issueRowIds], [selected, "B", completed]]) {
@@ -251,7 +270,7 @@ test("comparison peers align at narrow enlarged text and menu combinations stay 
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.getByRole("button", { name: "By tool", exact: true }).click();
     await expect(page.locator(".comparison-breakdown")).toContainText("Call count scale:");
-    await expect(page.locator(".comparison-group").first()).toContainText("Later minus earlier:");
+    await expect(page.locator(".comparison-group").first()).toContainText("Change:");
     await expect(page.locator(".comparison-group").first()).toContainText("calls total");
     if (output) await writeFile(path.join(output, "peer-geometry.json"), JSON.stringify(measurements, null, 2));
 });
@@ -405,8 +424,10 @@ test("Use Analyze view preserves deliberate private narrowing without changing e
     await closeAnalyzeFilters(page); await ready(page);
     assert.deepEqual(comparisons.at(-1).selection.scenarioIds, ["period-request-0"]);
     assert.deepEqual(comparisons.at(-1).options.filters.services, ["Files"]);
+    await expect(page.locator(".workspace-command-row > #comparisonAcceptedScope")).toContainText("Files");
     assert.ok(!page.url().includes("request+0") && !page.url().includes("request%200"));
     await page.locator("nav [data-nav=analyze]").click();
+    await expect(page.locator("#comparisonAcceptedScope")).toHaveCount(0);
     await expect(page.locator("#activitySearch")).toHaveValue("request 0");
     await page.locator("#comparePeriods").click(); await ready(page);
     assert.deepEqual(comparisons.at(-1).selection.scenarioIds, ["period-request-0"]);
@@ -554,7 +575,7 @@ test("overlap, one empty side and two empty sides retain exact membership and re
     await dates(page, ["2026-03-07", "2026-03-07"], ["2025-03-08", "2025-03-09"]);
     const baselineCount = comparisons.at(-1).periods.baseline.rowIds.length;
     const emptyRow = page.locator(".compare-outcome-row").last();
-    await expect(emptyRow).toContainText("Selected");
+    await expect(emptyRow).toHaveAccessibleName("Selected");
     await expect(emptyRow).toContainText("No calls match these dates.");
     await expect(emptyRow.locator(".compare-outcome-bar")).toHaveCount(0);
     const baselineAction = page.getByRole("button", {name:`View ${baselineCount} baseline calls`});

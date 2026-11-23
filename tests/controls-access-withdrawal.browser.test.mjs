@@ -49,7 +49,8 @@ async function setup(t, { mount = true } = {}) {
         dates.textContent = "Fixture period choices"; results.append(dates);
         document.getElementById("periodComparison").append(results);
         const slot = document.createElement("div"); slot.id = "comparisonOptionsSlot";
-        results.before(slot);
+        const commands = document.createElement("div"); commands.className = "workspace-command-row";
+        results.before(commands); commands.append(slot);
         const comparisonDate = document.createElement("input");
         comparisonDate.type = "date";
         document.getElementById("periodComparisonSetup").append(comparisonDate);

@@ -299,6 +299,8 @@ additional restrictions. **Use Analyze view** explicitly brings its current
 non-date filters and authorized Search into the comparison.
 
 **Outcomes**, **Timeline**, **By tool** and **Timing** show the same pair.
+Edit either date in the shared header. **Baseline** and **Selected** keep the
+same meaning as you switch views or open their exact numbers.
 **View calls** opens the records; when only the baseline has calls, the action
 opens those baseline calls. **View numbers** explains the exact values.
 An empty period has no rate to compare. If an outcome filter excluded all

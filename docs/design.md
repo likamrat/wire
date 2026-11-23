@@ -368,8 +368,10 @@ services or models overlap. Straight lines use the same observations; a missing
 measurement breaks the line. Chart type, unit, population and selection are
 independent. Select a value to reach its exact calls without maximizing.
 
-Keep Period, Filters and the guide together at the chart column's leading
-edge. Place display choices together by the measure title. The plot shares
+Keep workspace commands at the right content edge on Analyze, Trends and
+Compare. Keep accepted scope on the left where it adds information; don't
+repeat it just to fill the row. Filters uses the same outlined button. Keep
+Guide with navigation and display choices by the measure title. The plot shares
 the chart card's surface, not a second palette-colored rectangle. An empty
 period uses a compact dated explanation and optional jump to real activity.
 Period opens the 7/14/30/custom choices. Never substitute a pending date or

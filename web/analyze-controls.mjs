@@ -12,7 +12,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     const scope = $("analyzeScopeSummary"), actionHosts = new Map();
     const pairScope = document.createElement("p");
     pairScope.id = "comparisonAcceptedScope";
-    pairScope.className = "compare-caption";
+    pairScope.className = "compare-caption workspace-command-context";
     const scopeDescription = document.createElement("span");
     scopeDescription.id = "analyzeFilterScopeDescription";
     scopeDescription.hidden = true;
@@ -234,7 +234,8 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (value.text) {
             const dates = $("periodComparisonResults").querySelector(":scope > .compare-period-key");
             if (!dates) throw new Error("Accepted comparison scope requires its current result caption area.");
-            if (pairScope.previousElementSibling !== dates) dates.after(pairScope);
+            const row = $("comparisonOptionsSlot").closest(".workspace-command-row");
+            if (pairScope.parentElement !== row) row.prepend(pairScope);
             scopeCaption(pairScope, value);
             pairScope.dataset.pairKey = value.key;
             pairScope.dataset.revision = String(value.revision);

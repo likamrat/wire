@@ -205,7 +205,10 @@ export const analyzeLayoutStyles = `
 #homeView[data-empty=true]>.analyze-dashboard,
 #homeView[data-empty=true]>.analyze-review {display:none}
 
-.analyze-toolbar {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-sm);min-width:0;max-width:100%}
+.analyze-toolbar,.workspace-command-tools {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-sm);min-width:0;max-width:100%}
+.workspace-command-row{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-xs) var(--space-md);min-width:0}
+.workspace-command-context{margin-inline-end:auto;min-width:0;color:var(--muted);font-size:var(--type-control)}
+.workspace-command-tools{margin-inline-start:auto}
 #workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-xs) var(--space-md);flex-wrap:wrap;max-width:none;margin-bottom:var(--space-md)}
 #workspace>#analyzeResultCommands[hidden] {display:none}
@@ -217,17 +220,16 @@ export const analyzeLayoutStyles = `
 .population-link {display:inline-block;padding:4px 0;color:inherit;text-decoration:none}
 .population-link:is(:hover,:focus-visible) {color:var(--accent);text-decoration:underline}
 .analyze-toolbar[hidden] {display:none}
-#openAnalyzeFilters {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control)}
-#openAnalyzeFilters {--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
-#openAnalyzeFilters>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
+:is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry) {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control);--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
+:is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry)>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
 #analyzeRefresh {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
 #analyzeRefresh>.wire-icon {width:1rem;height:1rem;flex:none}
 #analyzeRefreshLabel {min-inline-size:7ch;text-align:start}
 .analyze-toolbar>.ux-disabled-help {flex:none}
 #analyzeRefresh:focus-visible {outline:none}
 #analyzeRefresh:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
-#openAnalyzeFilters:focus-visible {outline:none}
-#openAnalyzeFilters:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
+:is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry):focus-visible {outline:none}
+:is(#openAnalyzeFilters,.trends-filter-actions>.filter-entry):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 /* One stable target for the longest (two-digit) accepted label, also at enlarged type. */
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}

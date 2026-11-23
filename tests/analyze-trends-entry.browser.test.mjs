@@ -434,6 +434,7 @@ test("compiled Trends keeps explicit filters tab-bound, never broadens on expire
     assert.deepEqual(reads.at(-1).filters, filters);
     const entry = page.locator("#trendsView .filter-entry");
     await expect(entry).toHaveAccessibleName("2 filters applied");
+    await entry.click();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(page).toHaveURL(publicRoute);
     await expect(entry).toHaveText("Filters");

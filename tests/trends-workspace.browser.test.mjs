@@ -375,7 +375,7 @@ test("compiled index applies every available filter, supports calendar navigatio
             await page.getByRole("button", { name: "Apply filters", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
             await expect(card.locator(".trends-index-scope")).toContainText(`${expected[value]} dated calls`);
         }
-        await region.getByRole("button", { name: "Clear filters", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
+        await filter.click(); await region.getByRole("button", { name: "Clear filters", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
     }
     for (const days of [14, 30, 7]) {
         await period.click(); await region.getByRole("button", { name: `Last ${days} days`, exact: true }).click();
@@ -604,7 +604,7 @@ test("compiled Trends keeps its mounted chart and scroll during accepted, cancel
         return { frames: s.frames.length, mounted: s.chart.isConnected && s.control.isConnected, worst: Math.max(...s.frames.flat().map(Math.abs)) }; });
     assert(motion.frames > 2); assert(motion.mounted); assert(motion.worst <= 1, JSON.stringify(motion)); await expect(filters).toBeFocused();
     await page.route("**/api/trends", route => route.fulfill({ status: 422, json: { error: "Invented range failure" } }), { times: 1 });
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click(); await expect(page.locator("#trendsView .notice")).toBeVisible();
+    await filters.click(); await page.getByRole("button", { name: "Clear filters", exact: true }).click(); await expect(page.locator("#trendsView .notice")).toBeVisible();
     await expect(filters).toHaveText("1 filter applied");
     await expect(panel.locator(".trends-index-scope")).toContainText("2 dated calls");
     await page.getByRole("button", { name: "Read stored activity", exact: true }).click(); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls");
@@ -632,7 +632,7 @@ test("Trends keeps its scope toolbar and hit targets in place through zero, one,
         await page.mouse.move(2, 2);
         await filters.scrollIntoViewIfNeeded();
         await screenshot(page, `applied-${width}`);
-        await view.getByRole("button", { name: "Clear filters", exact: true }).click();
+        await filters.click(); await view.getByRole("button", { name: "Clear filters", exact: true }).click();
         await expect(filters).toHaveText("Filters"); await expect(filters).toBeFocused();
         assert.deepEqual(await boxes(), before);
     }
@@ -695,7 +695,7 @@ test("compiled Trends keeps the reading anchor across refinements, compare, empt
         await expect(panel.locator(".trends-index-scope")).not.toContainText("Comparing");
     }, {scene:true});
     await watch("empty filter", async () => { await applyService("Discovery"); await expect(panel.locator(".trends-no-activity")).toContainText("No matching calls"); });
-    await watch("clear empty", async () => { await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });
+    await watch("clear empty", async () => { await filters.click(); await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });
     await watch("failed filter", async () => {
         await page.route("**/api/trends", route => route.fulfill({ status:503,json:{error:"Invented read failure"} }), {times:1});
         await applyService("Mail"); await expect(view.locator(".notice")).toContainText("Invented read failure");
