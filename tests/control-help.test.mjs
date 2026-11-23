@@ -11,6 +11,8 @@ const help = createControlHelp(serviceCategories);
 
 test("timing help distinguishes tool latency, final response and measured coverage", () => {
     const { speed, coverage } = help.glossary;
+    assert.equal(Object.hasOwn(help.glossary, "action-trust"), false);
+    assert.equal(Object.hasOwn(help.glossary, "permission"), false);
     assert.match(speed.detail, /Tool latency starts when the tool call starts and ends at its recorded completion/);
     assert.match(speed.detail, /Final-response timing starts at the recorded request and ends at the recorded final response/);
     assert.match(speed.detail, /Concurrent tool latencies are not added together/);
@@ -59,9 +61,9 @@ test("all six evidence layers disclose the unit and its critical limit", () => {
     assert.match(help.layers.tool, /tool attempts.*does not prove/);
     assert.match(help.layers["direct-request"], /request sites.*not measured.*proof/);
     assert.match(help.layers["recorded-http"], /subset.*not extra/);
-    assert.match(help.layers["reported-api"], /one call may return several.*some calls have none/);
+    assert.match(help.layers["reported-api"], /not directly observed.*one call may return several.*some calls have none/);
     assert.match(help.layers.http, /explicitly instrumented.*not all.*hidden/);
-    assert.match(help.layers["code-reference"], /do not establish.*ran/);
+    assert.match(help.layers["code-reference"], /references alone do not establish.*request ran/);
     assert.match(help.resultHelp("success", "reported-api"), /2xx.*does not establish/);
     assert.match(help.resultHelp("failure", "reported-api"), /error code/);
     assert.match(help.resultHelp("unknown", "tool"), /not success or failure/);
