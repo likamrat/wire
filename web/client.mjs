@@ -1461,6 +1461,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             id: active.id, ...(readerPosition ? { text: active.textContent } : {}),
         } : owner === active && active?.closest("#savedReportsPanel") && owner?.dataset.viewKey ? { key: owner.dataset.viewKey, self: true } : owner ? {
             key: owner.dataset.viewKey, label: active.getAttribute("aria-label"), tag: active.tagName,
+            callDetail: readerPosition && active.matches(".reader-call-toggle") ? active.getAttribute("aria-controls") : null,
             text: active.textContent, type: active.getAttribute("type"), self: active === owner,
         } : null;
         const scrollers = [...document.querySelectorAll("#workspace *")].filter(node => node.checkVisibility() && (node.scrollLeft || node.scrollTop)).map(node => ({
@@ -1495,10 +1496,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         const root = saved.focus?.key ? keyed(saved.focus.key) : null;
-        const focus = saved.focus?.id ? $(saved.focus.id) : root && saved.focus.self ? root : root ? [...root.querySelectorAll("button,a,input,summary,textarea,pre")].find(node =>
+        // Call identity survives a timing/outcome update; the button's accessible name does not.
+        const callToggle = saved.reader && saved.focus?.callDetail && root?.querySelector(".reader-call-toggle");
+        const sameCall = callToggle && callToggle.getAttribute("aria-controls") === saved.focus.callDetail;
+        const focus = sameCall ? callToggle : saved.focus?.id ? $(saved.focus.id) : root && saved.focus.self ? root : root ? [...root.querySelectorAll("button,a,input,summary,textarea,pre")].find(node =>
             node.tagName === saved.focus.tag && (saved.focus.tag === "SUMMARY" || (saved.focus.label ? node.getAttribute("aria-label") === saved.focus.label : node.textContent === saved.focus.text && node.getAttribute("type") === saved.focus.type))) : null;
         const readerCurrent = !saved.reader || saved.reader.identity === sidebarIdentity && contextOwner?.interaction
-            && contextBody.contains(focus) && focus.textContent === saved.focus.text;
+            && contextBody.contains(focus) && (sameCall || focus.textContent === saved.focus.text);
         if (readerCurrent && focus?.checkVisibility()) ux.restoreFocus(focus);
         if (saved.reader && readerCurrent) contextBody.scrollTop = saved.reader.top;
         for (const entry of saved.scrollers) {
