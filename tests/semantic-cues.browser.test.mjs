@@ -223,7 +223,7 @@ test("current guide result and service meanings retain readable cues at wide, na
             await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
             assertReadable(await measure(page));
         }
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await page.waitForFunction(() => !document.getElementById("meaning").open);
         assert.equal(await page.locator("#meaning").evaluate(n => n.open), false);
     }
@@ -254,7 +254,7 @@ test("forced colors, grayscale, grouped Other and request chips keep exact icons
         assertReadable(await measure(page));
         await screenshotSections(page, `grayscale-${theme}`);
         await page.evaluate(() => { document.body.style.filter = ""; });
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
     for (const [index, key] of ["success", "failure", "unknown", "partial"].entries()) {
         await page.goto(url + "/#request?request=semantic-cue-" + index); await ready(page);

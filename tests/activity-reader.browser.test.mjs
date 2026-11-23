@@ -294,7 +294,7 @@ test("forced colors retain keyboard focus and readable failure text without a se
     const outline = await target.evaluate(node => ({ style: getComputedStyle(node).outlineStyle, width: parseFloat(getComputedStyle(node).outlineWidth) }));
     assert.notEqual(outline.style, "none"); assert.ok(outline.width >= 2);
     await expect(target).toContainText("The tool did not respond in time");
-    await expect(target.locator(".reader-duration-label")).toHaveText("Tool latency:");
+    await expect(target.locator(".reader-duration-label")).toHaveText("Call duration:");
     await expect(target.locator(".reader-duration-label")).toBeVisible();
     await expect(page.locator(".reader-timing-column")).toHaveCount(0);
     await expect(page.locator("[data-analyze-mode]")).toHaveCount(0);
@@ -363,7 +363,7 @@ test("late entry retains labelled per-call timing, identity and exact target wit
         }));
         assert.ok(exact.targetTop >= exact.headingBottom + 4 && exact.readingBottom <= exact.viewportBottom);
         await expect(page.locator(".reader-timing-column")).toHaveCount(0);
-        await expect(page.locator("#selectedCall .reader-duration-label")).toHaveText("Tool latency:");
+        await expect(page.locator("#selectedCall .reader-duration-label")).toHaveText("Call duration:");
         evidence.push({ theme, width, scale, entry: "explicit", ...exact });
         await capture(page, `late-explicit-${theme}-${width}-${scale}`);
     }

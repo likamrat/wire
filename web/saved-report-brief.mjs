@@ -37,8 +37,11 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     };
     const action = (caption, glyph, fn, cls = "brief-action") => {
         const n = el("button", undefined, cls); n.type = "button";
-        const face = el("span"); if (glyph) face.append(icon(glyph));
-        face.append(el("span", caption)); n.append(face);
+        const face = cls ? el("span") : n;
+        if (glyph && glyph !== "forward") face.append(icon(glyph));
+        face.append(el("span", caption));
+        if (glyph === "forward") { face.append(icon(glyph)); n.classList.add("brief-destination"); }
+        if (face !== n) n.append(face);
         n.onclick = () => { if (live()) fn(n); };
         return n;
     };
@@ -52,7 +55,7 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     const live = () => !disposed && host.isConnected && isCurrent() && !disposed;
     const sections = [["findings", "Findings", "section-guide"], ["interactions", "Interactions", "search-interaction"],
         ["calls", "Tool results", "search-tool"], ["coverage", "Coverage", "report-all"]];
-    const jump = (caption, glyph, next) => action(caption, glyph, trigger => {
+    const jump = (caption, glyph, next) => action(caption, frozenFinding ? "forward" : glyph, trigger => {
         // Keep the actual origin nodes: open follow-ups, focus and reading position survive Back.
         stack.push({ nodes: [...panel.childNodes], showing, trigger, top: host.scrollTop, windowY: doc.defaultView.scrollY });
         render(next, true);
@@ -111,7 +114,8 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
     const findingTitle = g => g.returnedStatus ? `${count(g.calls.length, "call")} with a returned HTTP ${g.returnedStatus}`
         : g.signal || g.operation;
     function caseLink(id) { return jump(titleOf(interactions, id), "search-interaction", { type: "interaction", id }); }
-    function callLink(id) { return jump(titleOf(calls, id), "search-tool", { type: "call", id }); }
+    const frozenFinding = main.dataset.findingVersion === "1" ? main.querySelector(":scope>#finding") : null;
+    function callLink(id) { return jump(titleOf(calls, id), frozenFinding ? "forward" : "search-tool", { type: "call", id }); }
     function facts(parent, pairs) {
         const dl = el("dl", undefined, "brief-facts");
         for (const [key, str] of pairs) {
@@ -119,11 +123,59 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         }
         parent.append(dl);
     }
+    function findingFirst(node) {
+        const rows = elements(node, ".finding-bars li"), example = node.querySelector(".finding-example");
+        const intro = el("div", undefined, "brief-finding-intro");
+        heading(text(node, ":scope>h2")); intro.append(panel.lastChild, el("p", text(node, ".report-pattern-lead")),
+            el("p", text(node, ".finding-description"))); panel.append(intro);
+        if (!rows.length) return;
+        const spread = el("div", undefined, "brief-finding-spread"), chart = section("Patterns in these interactions");
+        chart.append(el("p", text(node, "figcaption"), "brief-meta"));
+        const denominator = interactions.size;
+        rows.forEach((row, index) => {
+            const group = model.groups[index];
+            if (!group) return;
+            const n = group.interactions.length, caption = text(row, ".finding-values>span");
+            const bar = jump(`${caption} · ${count(n,"interaction")}`, "forward", { type:"finding", id:index });
+            bar.classList.add("brief-bar-link");
+            if (rows.length > 1 && denominator) {
+                const track = el("span", undefined, "brief-bar-track"), mark = el("i");
+                mark.style.width = `${100*n/denominator}%`; track.setAttribute("aria-hidden","true"); track.append(mark); bar.append(track);
+            }
+            chart.append(bar);
+        });
+        if (model.groups.length > rows.length) {
+            const all = el("details"); all.append(el("summary", `More patterns (${model.groups.length-rows.length})`));
+            list(all, model.groups.slice(rows.length).map((g,i) => jump(`${g.operation} · ${findingTitle(g)} · ${count(g.interactions.length,"interaction")}`,
+                "forward", {type:"finding", id:i+rows.length}))); chart.append(all);
+        }
+        spread.append(chart); panel.append(spread);
+        if (!example || !calls.has(example.dataset.call) || !byInteraction.get(example.dataset.owner)?.includes(example.dataset.call)) return;
+        const detail = section("One recorded example");
+        detail.append(jump(text(example, ":scope>a"), "forward", {type:"call", id:example.dataset.call}));
+        const fields = elements(example, ".finding-fields>div");
+        facts(detail, fields.map(row => [text(row,"dt"),text(row,"dd")]));
+        for (const [i, dd] of elements(detail, "dd").entries()) {
+            const tone = fields[i].querySelector("dd")?.dataset.tone;
+            if (["error","completed"].includes(tone)) dd.dataset.tone = tone;
+        }
+        const quote = example.querySelector("blockquote");
+        if (quote) {
+            const fig = el("figure", undefined, "brief-reason");
+            fig.append(el("figcaption", text(example, ".finding-quote small")),el("blockquote",quote.textContent)); detail.append(fig);
+        }
+        const note = text(example, ".finding-interpretation");
+        if (note) detail.append(el("p",note,"brief-interpretation"));
+        detail.append(jump(`Open ${titleOf(interactions, example.dataset.owner)}`, "forward", {type:"interaction",id:example.dataset.owner}));
+        spread.append(detail);
+    }
     function render(route, focus = false) {
         showing = route; mark(); panel.replaceChildren(); host.scrollTop = 0;
         if (stack.length) panel.append(action("Back", "back", back));
         const { type, id } = route;
-        if (type === "findings") {
+        if (type === "findings" && frozenFinding) {
+            findingFirst(frozenFinding);
+        } else if (type === "findings") {
             const [group, ...more] = model.groups;
             heading(group ? findingTitle(group) : "Findings");
             const population = text(main, ":scope>.report-pattern-lead");

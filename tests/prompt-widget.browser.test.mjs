@@ -195,7 +195,7 @@ test("ordinary Analyze shows complete prompt origins through filters, paging, gu
     await expect(page.locator("#chartReferenceData tbody td")).toHaveText(["6", "33.3%", "6", "33.3%", "6", "33.3%"]);
     await page.locator("#chartReferenceData summary").click();
     await expect(page.locator("#chartReferenceData")).toContainText("missing text alone does not change authorship");
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
     await expect(page.locator("#meaning")).toBeHidden();
     await expect(page.locator("#openChartReference")).toBeFocused();
     let release;

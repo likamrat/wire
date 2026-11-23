@@ -29,6 +29,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const button = (label, action, cls = "quiet") => {
         const node = el("button", cls, label); node.type = "button"; node.addEventListener("click", action); return node;
     };
+    const directionButton = (label, action, direction = "forward", cls = "quiet") => {
+        const node = button("", action, `${cls} icon-action`), text = el("span", "", label);
+        node.append(text);
+        if (direction === "back") node.prepend(ux.icon(direction));
+        else node.append(ux.icon(direction));
+        return node;
+    };
     const select = (name, choices, change) => {
         const label = el("label", "trends-control"), field = el("select");
         field.id = "trends" + name.replace(/[^A-Za-z0-9]/g, "");
@@ -62,8 +69,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         return `var(--trends-series-${colors.get(key) + 1})`;
     }
     function authorIcon(id) {
-        const node = ux.icon(authorship.iconRole(id));
-        node.classList.add("trends-author-icon"); node.style.color = color(id, "authors");
+        const node = ux.icon("author-" + id);
+        node.classList.add("trends-author-icon");
         return node;
     }
     function sample(id, family) {
@@ -109,7 +116,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     guide.hidden = true;
     const guideIndex = el("nav"), guideArticle = el("article");
-    const guideContext = el("p","trends-guide-context"), guideBack = button("Back to charts",()=>{if(current())onSectionChange("charts");});
+    const guideContext = el("p","trends-guide-context"), guideBack = directionButton("Back to charts",()=>{if(current())onSectionChange("charts");},"back");
     guideIndex.setAttribute("aria-label","Chart guide topics"); guide.append(guideIndex,guideArticle);
     const guideTopics = [
         ["Compare measures", "Do two measures change on the same days?", "Choose any two readings. One graph is available when their units and counting groups match. For call volume and duration, read the same date on aligned charts with separate scales.", "In four interactions, two can have an error and three can use a tool. That is 50% and 75%; it does not tell you which interactions overlap."],
@@ -188,11 +195,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)} · ${data.timeContext.timeZone}`),
             el("p","muted",`Compare shows retained GitHub Copilot calls in these periods. The dates appear in its address.${clearMissing?" The Missing service detail filter is not available there.":""} Your chart stays here for Back.`));
         const actions=el("div","trends-dialog-actions");
-        actions.append(button("Cancel",()=>dialog.close()),button("Open comparison",()=>{
+        actions.append(button("Cancel",()=>dialog.close()),directionButton("Open comparison",()=>{
             if (!current() || data.revision!==revision || range.from!==from || range.to!==to || JSON.stringify(filters)!==JSON.stringify(selectedFilters)) return;
             dialog.close(); comparePeriods.focus({preventScroll:true});
             onComparePeriods({aFrom:priorStart,aTo:priorEnd,bFrom:from,bTo:to},selectedFilters);
-        },"primary"));dialogBody.append(actions);
+        },"forward","primary"));dialogBody.append(actions);
     });
     comparePeriods.id="trendsComparePeriods";toolbar.prepend(periodButton,comparePeriods);
     const homeBack = button("Back to Analyze", () => { if (current() && getContext().entry) returnToAnalyze?.(); });
@@ -215,6 +222,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     exact.tabIndex = 0; exact.setAttribute("role", "region"); exact.setAttribute("aria-label", "Daily exact values");
     inspection.append(inspectionCaption, inspectionBody, exact);
     const dialog = el("dialog", "trends-dialog"), dialogTitle = el("h2"), dialogBody = el("div", "trends-dialog-body"), dialogHeader = el("div", "trends-dialog-heading");
+    const localPanel = el("section","trends-local-choices"), local = el("div");
+    localPanel.id = "trendsLocalChoices"; localPanel.setAttribute("role","dialog"); localPanel.append(local); root.append(localPanel);
+    const localChoices = ux.anchoredChoices(localPanel);
+    localPanel.addEventListener("toggle", () => { if (!localPanel.matches(":popover-open")) scrub(local); });
+    function beginChoices(title, trigger) {
+        if (!current()) return false;
+        hideHover(); scrub(local); localPanel.setAttribute("aria-label",title);
+        localChoices.open(trigger); return true;
+    }
     dialogTitle.id = "trendsDialogTitle"; dialog.setAttribute("aria-labelledby", dialogTitle.id);
     dialogHeader.append(dialogTitle, button("Close", () => dialog.close())); dialog.append(dialogHeader, dialogBody);
     const feedback = el("div", "trends-read-feedback");
@@ -228,7 +244,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const landingEmpty = el("div", "trends-no-activity"), landingDetail = el("p", "muted");
     const landingRecover = button("", recoverWeek);
     landingEmpty.append(el("h3", "", "No matching calls in this period"), landingDetail, landingRecover);
-    const landingOpen = button("View chart", () => openErrorsChart());
+    const landingOpen = directionButton("View chart", () => openErrorsChart());
     landingOpen.id = "trends-open-errors";
     const landingHead = el("div", "trends-landing-head"); landingHead.append(landingTitle, landingOpen);
     landing.append(landingHead, landingScope, landingEmpty, landingPlot, landingWindow); landing.hidden = true;
@@ -252,11 +268,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
     let pairActive=false;
     pairHost.hidden=landingExtra.hidden=true;
-    const pair = mountTrendPair({root:pairHost,el,button,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,
+    const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,
         evidence:(choice,day,ids,origin)=>openMembers(day,choice.label,ids,origin,choice.key),
         close:()=>{pairActive=false;paint();index.querySelector(`[data-measure="${activeMeasure}"]`).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
-    examples.append(el("h2","","Compare two measures"),button("Compare measures",()=>startPair(),"primary"),el("h3","","Examples"));
+    examples.append(el("h2","","Compare two measures"),directionButton("Compare measures",()=>startPair(),"forward","primary"),el("h3","","Examples"));
     const presets=[["Errors and tool usage",["problems","share"],["tools","reach"]],["Call volume and duration",["rhythm","count"],["timing","median"]],["Response models and errors",["models","share"],["problems","share"]]];
     const exampleControls=presets.map(([label,first,second])=>{
         const node=button(label,()=>startPair(pair.choice(...first),pair.choice(...second)),"quiet trends-example");
@@ -330,7 +346,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (id !== "timing") {
             const units = el("div", "trends-switch");
             units.setAttribute("role", "group"); units.setAttribute("aria-label", `${spec.label} units`);
-            for (const [value, label] of [["count", "Count"], ["share", "Percentage"]]) {
+            for (const [value, label] of [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
                 const control = button(label, () => {
                     if (!current()) return;
                     card.mode = value === "share" && id === "tools" ? card.percentMode : value;
@@ -367,11 +383,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         empty.append(emptyTitle, emptyDetail, showWeek); empty.hidden = true;
         const visibleDays = el("p", "trends-visible-days"); visibleDays.hidden = true;
         const actions = el("div", "trends-secondary");
-        const comparison = button("Compare measures", () => {
+        const comparison = directionButton("Compare measures", () => {
             const mode = id === "timing" ? card.selection?.id === "p95" ? "p95" : "median" : card.mode;
             const subject = id === "timing" ? "timing" : card.selection?.id;
             startPair(pair.choice(id,mode,subject),null,card.selection?.date);
-        }), numbers = button("Data table", () => openTable(card));
+        }), numbers = directionButton("Data table", () => openTable(card));
         const arrange = button("Arrange charts", () => openComparison(card));
         const remove = button("Remove chart", () => {
             if (!current() || !compared.has(id)) return;
@@ -385,7 +401,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const point = el("div", "trends-point"), pointDate = el("h3"), pointScope = el("div", "trends-point-scope");
         const pointText = el("span"), pointSpace = el("span", "trends-point-space"), pointActions = el("div", "trends-point-actions");
         pointSpace.setAttribute("aria-hidden", "true");
-        const evidence = button("View evidence", () => showEvidence(card));
+        const evidence = directionButton("View evidence", () => showEvidence(card));
         evidence.id = `trendsEvidence-${id}`;
         pointScope.append(pointSpace, pointText); pointActions.append(evidence); point.append(pointDate, pointScope, pointActions);
         identity.append(totals, indexScope); indexModes.append(types); summary.append(legend); body.append(summary, plot, visibleDays);
@@ -425,7 +441,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (current()) paint();
     });
     doc.addEventListener("keydown", event => {
-        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || !enabled) return;
+        if (event.key !== "Escape" || event.defaultPrevented || dialog.open || localPanel.matches(":popover-open") || !enabled) return;
         if (!tooltip.hidden) { hideHover(); return; }
         if (family) { event.preventDefault(); restore(); }
     });
@@ -447,7 +463,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
     }
     function openComparison(card) {
-        if (!openDialog("Arrange charts")) return;
+        if (!beginChoices("Arrange charts",card.arrange)) return;
         const choices = el("div", "trends-compare-choices");
         for (const id of order.filter(id => id !== activeMeasure)) {
             const label = el("label"), check = el("input");
@@ -456,25 +472,26 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         }
         const actions = el("div", "trends-dialog-actions");
         actions.append(button("All charts", () => {
-            dialog.close(); family = null; allCharts = true; hideHover(); paint();
+            localChoices.close(); family = null; allCharts = true; hideHover(); paint();
             collapseAll.focus({ preventScroll: true });
-        }), button("Cancel", () => dialog.close()), button("Apply comparison", () => {
+        }), button("Cancel", () => localChoices.close()), button("Apply comparison", () => {
             compared = new Set([...choices.querySelectorAll("input:checked")].map(check => check.value));
-            dialog.close(); paintStable(card);
+            localChoices.close(); paintStable(card);
         }, "primary"));
-        dialogBody.append(choices, actions);
+        local.append(choices, actions); localChoices.place(); choices.querySelector("input")?.focus({preventScroll:true});
     }
     function openPeriod() {
-        if (!openDialog("Period")) return;
+        if (!beginChoices("Period",periodButton)) return;
         const presets = el("div", "trends-periods");
         for (const days of ["7", "14", "30"]) {
             const control = button(`Last ${days} days`, () => {
-                dialog.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
+                localChoices.close(); void read({ range: time.preset(days, getContext().timeContext.timeZone), period: days, filters, remember: "period" });
             });
             control.setAttribute("aria-pressed", String(period === days)); presets.append(control);
         }
-        const customRange = button("Custom dates", () => { const origin = dialogOrigin; openDates(); dialogOrigin = origin; });
-        dialogBody.append(el("p", "muted", `Inclusive dates · ${getContext().timeContext.timeZone}`), presets, customRange);
+        const customRange = button("Custom dates", () => openDates(periodButton));
+        presets.append(customRange); local.append(presets); localChoices.place();
+        (presets.querySelector('[aria-pressed=true]') || customRange).focus({preventScroll:true});
     }
     function openTable(card) {
         if (!openDialog("Data table")) return;
@@ -553,6 +570,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 return await read({ ...next, initial: false, range: { from: time.addDays(to, -6), to }, period: "latest" });
             }
             evidenceReturn = null;
+            localChoices.close(false);
             if (dialog.open) { dialogOrigin = null; dialog.close(); scrub(dialogBody); scrub(dialogTitle); }
             const changedRange = !range || range.from !== next.range.from || range.to !== next.range.to || offset !== request.offset;
             const changedPopulation = changedRange || JSON.stringify(filters) !== JSON.stringify(next.filters) || lastRevision !== context.revision;
@@ -612,31 +630,36 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         hideHover(); dialogOrigin = doc.activeElement; scrub(dialogTitle); dialogTitle.append(doc.createTextNode(name)); scrub(dialogBody);
         if (!dialog.open) dialog.showModal(); return true;
     }
-    function openDates() {
-        if (!openDialog("Custom dates")) return;
+    function openDates(origin) {
+        if (!beginChoices("Custom dates",origin === periodButton ? periodButton : custom)) return;
         const host = el("div"), actions = el("div", "trends-dialog-actions");
         const calendar = createCalendar({ root: host, id: "trendsCalendar", label: "Trends", time, ux,
-            context: () => getContext().timeContext, current, onChange: () => {} });
-        calendar.reset(range);
-        actions.append(button("Cancel", () => dialog.close()), button("Apply dates", () => {
+            context: () => getContext().timeContext, current, onChange: () => {apply.disabled=!calendar.valid();} });
+        const apply = button("Apply dates", () => {
             if (!calendar.valid()) return;
-            const selected = calendar.value(); dialog.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
-        }, "primary"));
-        dialogBody.append(host, actions);
+            const selected = calendar.value(); localChoices.close(); void read({ range: selected, period: "custom", filters, remember: "period" });
+        }, "primary");
+        calendar.reset(range);
+        actions.append(button("Cancel", () => localChoices.close()), apply);
+        local.append(host, actions); localChoices.place(); host.querySelector("input").focus({preventScroll:true});
     }
     function openFilters() {
-        if (!openDialog("Filter activity")) return;
+        if (!beginChoices("Filter activity",filtersButton)) return;
         filtersButton.setAttribute("aria-expanded", "true");
         const author = select("Prompt authors", [["", "All, including unverified"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
         const tool = select("Tool", [["", "All tools"], ...data.definitions.tools.map(row => [row.id, row.label])], () => {});
         const service = select("Service", [["", "All services"], ...data.definitions.services.map(row => [row.id, row.label]), ["Discovery", "Discovery / preparation"], ["missing", "Missing service detail"]], () => {});
         author.field.value = filters.author ?? ""; tool.field.value = filters.tool ?? ""; service.field.value = filters.service ?? "";
-        dialogBody.append(author.label, tool.label, service.label);
+        local.append(author.label, tool.label, service.label);
         const actions = el("div", "trends-dialog-actions");
-        actions.append(button("Cancel", () => dialog.close()), button("Apply filters", () => {
+        actions.append(button("Cancel", () => localChoices.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
-            dialog.close(); void read({ range, period, filters: next, offset, remember: "filters" });
-        }, "primary")); dialogBody.append(actions);
+            localChoices.close(); void read({ range, period, filters: next, offset, remember: "filters" });
+        }, "primary")); local.append(actions); localChoices.place();
+        requestAnimationFrame(() => {
+            if (current() && localPanel.matches(":popover-open") && doc.activeElement === filtersButton)
+                (local.querySelector(".select-trigger") || author.field).focus({preventScroll:true});
+        });
     }
     function valueText(value, card) {
         const amount = card.chart.metric(value, card.id, card.mode);
@@ -681,7 +704,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
                 : id === "timing" ? "No calls with recorded duration" : id === "models" ? "No recorded response models" : "No identified services";
             card.emptyDetail.textContent = noCalls ? latest ? `Most recent matching call: ${fullDate(latest)}.`
                 : source.coverage.undatedCalls ? "Matching calls without a start date cannot be placed on a daily chart."
-                : Object.keys(filters).length ? "No dated calls match these filters in retained activity." : "No dated Work IQ calls are available in retained activity."
+                : Object.keys(filters).length ? "Try a different filter or date range." : "WIRE has no saved calls with a start date to show here."
                 : id === "timing" ? "A duration needs a recorded start and completion." : "The calls are included in the period count.";
             card.showWeek.hidden = !(noCalls && latest);
             if (!card.showWeek.hidden) card.showWeek.textContent = `Show week ending ${axisDate(latest)}`;
@@ -759,7 +782,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         } else if (id === "timing" && allCharts) limits.push(totals.calls ? `${rate(totals.timingCoverage)} (${number(totals.timedCalls)}) calls measured` : "No calls with timing in this period");
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         else if (id === "rhythm" && mode === "share" && source.days.some(day => weekContext(day).partial))
-            limits.push("Shaded partial weeks use only the selected dates.");
+            limits.push("Underlined weeks include only the selected dates.");
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${number(totals.calls)} calls timed`
@@ -806,7 +829,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const dates = (from, to) => from === to ? time.formatDate(from, data.timeContext, true)
             : `${time.formatDate(from, data.timeContext)} – ${time.formatDate(to, data.timeContext, true)}`;
         return { from, to, partial, label: `Week ${dates(from, to)}`,
-            detail: `${number(day.values.rhythm[0].eligible)} calls on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
+            detail: `${number(day.values.rhythm[0].eligible)} ${day.values.rhythm[0].eligible === 1 ? "call" : "calls"} on selected dates ${dates(selectedFrom, selectedTo)}${partial ? " (partial week)" : ""}` };
     }
     function dayScope(day, card) {
         const scope = card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
@@ -842,11 +865,11 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.pointDate.textContent = axisDate(day.date);
             card.pointText.textContent = [selected?.label ?? "Shown series", measure,
                 selected && card.hidden.has(selected.id) ? "Hidden in chart" : ""].filter(Boolean).join(" · ");
-            card.evidence.textContent = `View ${number(ids.size)} ${ids.size === 1 ? "call" : "calls"}`;
+            card.evidence.firstChild.textContent = `View ${number(ids.size)} ${ids.size === 1 ? "call" : "calls"}`;
             card.evidence.disabled = ids.size === 0;
             return;
         }
-        card.point.hidden = !source.totals.calls; card.evidence.textContent = "View evidence";
+        card.point.hidden = !source.totals.calls; card.evidence.firstChild.textContent = "View evidence";
         card.point.classList.toggle("trends-inspection-heading", family === card.id);
         scrub(card.pointDate); card.pointDate.append(doc.createTextNode(axisDate(day.date)));
         scrub(card.pointText); card.pointText.append(doc.createTextNode(pointScope(day, card, selected?.label ?? "Shown series", selected && !shown(selected, card))));
@@ -1000,14 +1023,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "overview") {
             const card = cards.get("problems");
             landingOpen.disabled = false;
-            landingScope.textContent = ["Affected interactions per day", restrictionText.textContent, card.limits.textContent,
+            landingScope.textContent = ["Interactions with an error or failed call each day", data.totals.calls && data.days.some(day => !day.calls) ? "No matching dated calls on days marked with a cross" : "",
+                restrictionText.textContent, card.limits.textContent,
                 data.coverage.undatedCalls ? `${number(data.coverage.undatedCalls)} undated calls excluded` : ""].filter(Boolean).join(" · ");
             landingEmpty.hidden = Boolean(data.totals.calls); landingPlot.hidden = !landingEmpty.hidden;
             landingDetail.textContent = card.emptyDetail.textContent;
             landingRecover.hidden = card.showWeek.hidden; landingRecover.textContent = card.showWeek.textContent;
             if (landingSource !== data) {
                 landingSource = data;
-                if (data.totals.calls) landingChart.render(data, "problems", "count", new Set(), null, "lines", true);
+                if (data.totals.calls) landingChart.render(data, "problems", "count", new Set(), null, "lines", true, {distinguishEmpty:true});
                 else { landingChart.withdrawAccess(); landingWindow.hidden = true; }
             }
         }
@@ -1026,6 +1050,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (section === "charts") { paintInspection(); paintExact(); }
     }
     function withdrawAccess() {
+        localChoices.close(false); scrub(local);
         clearPending(); evidenceReturn = null;
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         workspace.before(feedback);
@@ -1043,7 +1068,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = card.indexCollapsed = false;
             card.mode = card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
-            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence,
+            for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence.firstChild,
                 card.emptyTitle, card.emptyDetail, card.showWeek, card.visibleDays]) scrub(node);
         }
         const selectedText = doc.getSelection();
@@ -1059,15 +1084,15 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
             clearPending(); evidenceReturn = null; failedRead = null;
             if (entryKey !== acceptedEntry) entryKey = null;
             enabled = false; pending++; requestedKey = acceptedKey; root.setAttribute("aria-busy", "false");
-            hideHover(); if (dialog.open) dialog.close(); return;
+            hideHover(); localChoices.close(false); if (dialog.open) dialog.close(); return;
         }
         enabled = true;
-        if (!context.publication || context.stale) { hideHover(); return; }
+        if (!context.publication || context.stale) { hideHover(); localChoices.close(false); return; }
         if (data && !api.isCurrent(bound)) { withdrawAccess(); enabled = true; }
         const nextSection = context.section ?? "charts", changedSection = nextSection !== section;
         section = nextSection; guide.hidden = section !== "guide"; landing.hidden = section !== "overview"; chartSection.hidden = section !== "charts";
         landingGrid.hidden=section!=="overview";landingExtra.hidden=section!=="overview"||!data;
-        if (changedSection) hideHover();
+        if (changedSection) { hideHover(); localChoices.close(false); }
         for (const node of sections.children) {
             if (node.dataset.section === section) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current");
         }
@@ -1107,10 +1132,13 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     return { update, withdrawAccess,
         evidenceOrigin: () => current() ? evidenceReturn?.origin ?? null : null,
-        leave: () => { hideHover(); clearPending(); if (dialog.open) dialog.close(); } };
+        leave: () => { hideHover(); clearPending(); localChoices.close(false); if (dialog.open) dialog.close(); } };
 }
 
 export const trendsStyles = `
+.trends-local-choices .trends-periods{display:grid;gap:0}.trends-local-choices .trends-periods button{text-align:start;justify-content:flex-start}
+.trends-local-choices:has(.trends-periods){inline-size:min(14rem,calc(100vw - 24px))}
+.trends-local-choices .trends-control{display:grid;gap:.25rem;margin-block-end:.5rem}
 :root{--trends-series-1:#315fad;--trends-series-2:#007a78;--trends-series-3:#7957a0;--trends-series-4:#967000;--trends-series-5:#b14767;--trends-series-6:#467435;--trends-series-7:#006b97;--trends-series-8:#4d56ab;--trends-series-9:#ab6029;--trends-series-10:#8e3f91;--trends-series-11:#b04435;--trends-series-12:#526c80}
 :root[data-evidence-theme=dark]{--trends-series-1:#8fb6f2;--trends-series-2:#65c8c0;--trends-series-3:#b99add;--trends-series-4:#d9b866;--trends-series-5:#ed8aa3;--trends-series-6:#9ac58c;--trends-series-7:#63bee4;--trends-series-8:#9da4ec;--trends-series-9:#e5a377;--trends-series-10:#d899d9;--trends-series-11:#e8998b;--trends-series-12:#9eb8ce}
 #trendsView{min-width:0;container-type:inline-size}
@@ -1173,9 +1201,9 @@ export const trendsStyles = `
 .trends-summary{min-width:0;container:trend-summary / inline-size;max-height:var(--trends-plot-height);overflow:auto;scrollbar-gutter:stable}
 .trends-totals{display:flex;flex-wrap:wrap;gap:16px;margin:0}.trends-totals:empty{display:none}.trends-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .trends-stat-value{font-size:1.25rem;line-height:var(--leading-heading);font-weight:var(--weight-regular);font-variant-numeric:tabular-nums}
-.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);background:var(--canvas);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
+.trends-plot{position:relative;min-width:0;width:100%;height:var(--trends-plot-height);background:var(--paper);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;overscroll-behavior-x:contain}
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
-.trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
+.trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-baseline{stroke:var(--muted)}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
 .trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}

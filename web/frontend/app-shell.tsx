@@ -13,7 +13,7 @@ type Refresh = (control: HTMLButtonElement) => void;
 type Ports = {
     brand: HTMLElement; navigation: HTMLElement; sidebar: HTMLElement; toolbar: HTMLElement;
     heading: HTMLElement; home: HTMLElement; activity: HTMLElement; filters: HTMLDialogElement;
-    reader: HTMLDialogElement; request: HTMLElement; scope: HTMLElement; emptyScope: HTMLElement;
+    reader: HTMLDialogElement; request: HTMLElement; emptyScope: HTMLElement;
     form: HTMLElement; appliedFilters: HTMLElement; serviceFocus: HTMLElement; pageProject: HTMLElement;
     periodCoverage: HTMLElement; sessionAnalysis: HTMLElement; actions: HTMLElement; selection: HTMLElement;
     viewSwitch: HTMLElement; brandMarkup: string;
@@ -183,7 +183,7 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
             <div className="navigation-bottom"><div id="navigationFooter" className="navigation-footer">
                 <div id="wireAccountEntry" hidden />
                 <nav className="footer-utilities" aria-label="Utility navigation">
-                    <a id="openEvidenceHelp" href="/settings?section=troubleshooting" aria-label="Help" data-settings-link />
+                    <a id="openEvidenceHelp" href="/help" aria-label="Help" />
                     <button type="button" id="wireFeedback" className="icon-only" aria-label="Feedback" aria-haspopup="dialog" popoverTarget="wireFeedbackPanel" />
                     <a href="/settings" data-nav="settings" aria-label="Settings" aria-current={state.active === "settings" ? "page" : undefined}
                         onClick={event => navigate(event.currentTarget, event.nativeEvent)} />
@@ -192,15 +192,9 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
         </>, ports.navigation)}
         {createPortal(<>
             <div className="frontend-heading-copy"><p id="pageIdentity" className="session-label" hidden /><h1 id="pageTitle" tabIndex={-1} /><p id="pageIntro" /></div>
-            <NativeHost id="frontendHeadingActions" node={ports.toolbar} />
             <NativeHost node={ports.actions} /><NativeHost node={ports.selection} />
         </>, ports.heading)}
         {createPortal(<>
-            <span id="analyzeReferenceEntry" hidden>
-                <button id="openChartReference" className="quiet" type="button" aria-label="Guide: How to read these charts" aria-controls="meaning">
-                    <span className="analyze-entry-label">Guide</span>
-                </button>
-            </span>
             <button id="analyzeRefresh" className="quiet" type="button" aria-label="Refresh" onClick={event => refresh(event.currentTarget)}><span id="analyzeRefreshLabel">Refresh</span></button>
             <button id="openAnalyzeFilters" className="quiet filter-entry" type="button" aria-label="Filters and view"
                 aria-haspopup="dialog" aria-expanded="false" aria-controls="analyzeFilterDialog">
@@ -210,7 +204,6 @@ function AppShell({ ports, workspace, navigate, refresh, closeReader, activity }
         </>, ports.toolbar)}
         {createPortal(<>
             <NativeHost node={ports.emptyScope} /><Analyze />
-            <NativeHost id="frontendAnalyzeQualification" node={ports.scope} />
             <div className="chart-actions"><a id="exploreLink" className="text-link" href="/" hidden>Explore the requests behind this chart</a></div>
         </>, ports.home)}
         {createPortal(<Activity />, ports.activity)}
@@ -239,13 +232,13 @@ export function mountReactShell() {
         brand, navigation: element("navigationContent"), sidebar: element("sidebar"),
         toolbar: element("analyzeToolbar"), heading, viewSwitch, home: element("homeView"), activity: element("activityView"),
         filters: dialog("analyzeFilterDialog"), reader: dialog("contextSidebar"), request: element("requestView"),
-        scope: element("analyzeScopeSummary"), emptyScope: element("analyzeEmptyScope"), form: element("filters"),
+        emptyScope: element("analyzeEmptyScope"), form: element("filters"),
         appliedFilters: element("appliedFilters"), serviceFocus: element("serviceFocus"), pageProject: element("pageProject"),
         periodCoverage: element("periodCoverage"), sessionAnalysis: element("sessionAnalysis"),
         actions: element("pagePrimaryActions"), selection: element("reportSelectionBar"),
         brandMarkup: brandHome.innerHTML,
     };
-    for (const node of [ports.brand, ports.navigation, ports.toolbar, ports.request, ports.scope, ports.emptyScope,
+    for (const node of [ports.brand, ports.navigation, ports.request, ports.emptyScope,
         ports.form, ports.appliedFilters, ports.serviceFocus, ports.pageProject, ports.periodCoverage,
         ports.sessionAnalysis, ports.actions, ports.selection, ports.viewSwitch]) node.remove();
     document.querySelector(".app-header")?.remove();

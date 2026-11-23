@@ -95,7 +95,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("dashboard-no-reviews", page.locator("main"), true);
     await page.locator("#openChartReference").click();
     await capture("chart-data-and-definitions", page.locator("#meaning"));
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
     await page.locator("#openAnalyzeFilters").click();
     const filterIds = await page.locator('#analyzeFilterDialog [data-select-id]').evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => node.dataset.selectId));
     assert.ok(filterIds.length > 0);
@@ -110,14 +110,14 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator(".request-card-open").first().click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toBeVisible();
-    await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Tool latency:");
+    await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Call duration:");
     await expect(page.locator("#contextSidebar .reader-local-timing")).toHaveCount(0);
     await capture("interaction-reader", page.locator("#contextSidebar"), true);
     await expect(page.locator('[data-reader-section="reviews"],[data-feedback-dimension],.assessment-feedback-dialog')).toHaveCount(0);
     await page.locator("#closeContextSidebar").click();
 
     await navigateMain(page, "settings");
-    for (const category of ["connection", "privacy", "display", "troubleshooting"]) {
+    for (const category of ["connection", "privacy", "display"]) {
         await navigateSettings(page, category);
         const root = page.locator(`[data-settings-section="${category}"]`);
         await expand(root); await capture("settings-" + category, root, category === "privacy");
@@ -139,8 +139,8 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await expect(page.locator("#recollectSources input").first()).toBeVisible();
     await capture("recollection-scope", page.locator("#recollectDialog"));
     await page.locator("#recollectClose").click();
-    await navigateSettings(page, "troubleshooting");
-    await page.getByRole("link", { name: "Open collection status", exact: true }).click();
+    await navigateSettings(page, "connection");
+    await page.getByRole("link", { name: "View collection status", exact: true }).click();
     await expand(page.locator("#collectionStatusView"));
     await capture("collection-status", page.locator("#collectionStatusView"));
     await page.locator("#wireSearch").fill("AI reviews"); await page.locator("#wireSearch").click();
@@ -210,9 +210,11 @@ test("every current interface excludes retired reviews, including menus, dialogs
 
     await navigateMain(page, "settings"); await navigateSettings(page, "display"); await chooseTheme(page, "dark");
     await page.setViewportSize({ width: 375, height: 850 });
-    for (const category of ["connection", "privacy", "display", "troubleshooting"]) {
+    for (const category of ["connection", "privacy", "display"]) {
         await navigateSettings(page, category); await capture("narrow-dark-" + category, page.locator("#settingsView"), category === "privacy");
     }
+    await navigateSettings(page, "troubleshooting");
+    await capture("narrow-dark-help", page.locator("#wireHelpView"), false);
     assert.deepEqual(errors, []);
     assert.deepEqual(forbidden, []);
     assert.deepEqual(evaluationRequests, []);

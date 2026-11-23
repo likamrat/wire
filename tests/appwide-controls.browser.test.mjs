@@ -8,10 +8,48 @@ import { fixture, chooseTheme, navigateSettings, closeAnalyzeFilters } from "./h
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { renderAccountSettingsFixture } from "./account-settings-presentation-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_VISUAL_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+test("report outline actions keep pointer paint inside one face and retain keyboard focus", async t => {
+    const { runtime } = await searchFixture(t, { records: records(), frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    for (const palette of ["petrol", "blue", "linen", "midnight", "field"]) for (const mode of ["light", "dark"]) {
+        await page.goto(new URL("/settings?section=themes", runtime.url).href);
+        await chooseTheme(page, mode);
+        await page.locator(`.palette-option:has(#palette-${palette})`).click();
+        await page.locator("nav [data-nav=reports]").click(); await ready(page);
+        await expect(page.locator("html")).toHaveAttribute("data-evidence-palette", palette);
+        for (const selector of ["#reportDeskDates", "#reportDeskActivity", "[popovertarget=reportFileOptions]"]) {
+            const control = page.locator(selector);
+            await control.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0);
+            const box = await control.boundingBox();
+            assert.ok(box.height >= 44);
+            // Sample the target above the border; this strip must not acquire a second face.
+            const strip = () => page.screenshot({ clip: { x: Math.floor(box.x + box.width / 2),
+                y: Math.ceil(box.y) + 1, width: 2, height: 2 } });
+            const clear = await strip(), idle = await control.evaluate(measureControlSurface);
+            await control.hover({ position: { x: Math.floor(box.width / 2), y: 2 } });
+            const hover = await control.evaluate(measureControlSurface);
+            assert.deepEqual(await strip(), clear, `${selector}: hover spills into its target`);
+            assert.notEqual(hover.face, idle.face);
+            await page.mouse.down();
+            const pressed = await control.evaluate(measureControlSurface);
+            assert.deepEqual(await strip(), clear, `${selector}: press spills into its target`);
+            assert.notEqual(pressed.face, hover.face);
+            assert.deepEqual(await control.boundingBox(), box);
+            for (const state of [idle, hover, pressed]) assert.ok(contrast(state.ink, state.face) >= 4.5);
+            await page.mouse.up(); await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
+            await control.press("Shift+Tab"); await page.keyboard.press("Tab");
+            await expect(control).toBeFocused();
+            const focus = await control.evaluate(measureControlSurface);
+            assert.ok(focus.focusWidth >= 2 && contrast(focus.focus, focus.backdrop) >= 3);
+        }
+    }
+});
+
 test("the report primary, Settings commands and directional shortcut share a face without sharing a meaning", async t => {
     const app = await searchFixture(t, { records: records(), frontend: "react", reply: false });
     const browser = await chromium.launch(); t.after(() => browser.close());

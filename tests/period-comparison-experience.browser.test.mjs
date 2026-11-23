@@ -191,7 +191,7 @@ test("accepted paired restrictions qualify filtered results before reading resto
     assert.ok(empty.pair);
     assert.equal(empty.datesPainted, true);
     assert.equal(empty.description.text, accepted.description.text);
-    await expect(page.locator("#periodComparison")).toContainText("No activity was found in either period");
+    await expect(page.locator("#periodComparison")).toContainText("No calls match either period");
 });
 
 test("paired scope publication follows accepted filters and fences pending, failed and invalidated results", { timeout: 30000 }, async t => {
@@ -319,7 +319,7 @@ test("comparison owner exposes only the current accepted pair and selected roste
         return { tab: target.tab.id, region: target.region.id };
     }), { tab: "comparisonRecordsA", region: "comparisonExactRecordsA" });
     await fillPeriods(page, ["2025-03-07", "2025-03-07"], ["2025-03-08", "2025-03-09"]); await compare(page);
-    await expect(page.locator("#periodComparisonResults")).toContainText("No activity was found in either period");
+    await expect(page.locator("#periodComparisonResults")).toContainText("No calls match either period");
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.recordsTarget(window.periodComparisonOwner.acceptedPair())), null);
 });
 
@@ -881,7 +881,7 @@ test("normal-root empty sides, pending reads and read errors never offer an inva
     await expect(page.locator("#createPeriodReport")).toBeVisible();
     await fillPeriods(page, ["2025-03-07", "2025-03-07"], ["2025-03-08", "2025-03-09"]);
     await compare(page);
-    await expect(page.locator("#periodComparison")).toContainText("No activity was found in either period");
+    await expect(page.locator("#periodComparison")).toContainText("No calls match either period");
     await expect(page.locator("#periodComparisonResults table")).toHaveCount(0);
     await expect(page.locator("#createPeriodReport")).toBeHidden();
     await capture(page, "empty");

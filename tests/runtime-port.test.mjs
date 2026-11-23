@@ -14,6 +14,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture } from "./helpers.mjs";
 import pkg from "../package.json" with { type: "json" };
 import { chromium, expect } from "@playwright/test";
+import { createProfileSource, profileProjectId } from "./source-profile-fixture.mjs";
 
 async function isolatedStore(t) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-port-test-"));
@@ -94,6 +95,40 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
     });
     return { url, stop, stdout, stderr };
 }
+
+test("the same approved account reopens A and B after a full launcher restart; a different selected account cannot", async t => {
+    const app = await isolatedStore(t), source = await createProfileSource(app.root);
+    try {
+        const config = JSON.parse(app.config);
+        await writeFile(app.configFile, JSON.stringify({ ...config, appDbPath: source.appDbPath, sessionRoot: source.sessionRoot }));
+        await replaceEvidence(app.context, () => ({ records: [fixture("x"), fixture("y")], importCoverage: null }));
+        async function run(work) {
+            const runtime = await launch(app, ["--port", "0"]);
+            try {
+                const origin = new URL(runtime.url).origin;
+                const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
+                const post = async (route, body = {}) => {
+                    const res = await fetch(origin + route, { method: "POST", headers, body: JSON.stringify(body) });
+                    assert.equal(res.status, 200); return res.json();
+                };
+                headers["X-Board-Capability"] = (await post("/api/session")).capability;
+                return await work(post);
+            } finally { await runtime.stop(); }
+        }
+        const list = post => post("/api/report-drafts/list");
+        const before = await run(async post => {
+            let catalog = await list(post);
+            for (const [scenarioId, name] of [["x", "A"], ["y", "B"]]) {
+                ({ catalog } = await post("/api/report-drafts/edit", { expected: catalog.version, scenarioId, name, included: true }));
+            }
+            return catalog.drafts;
+        });
+        assert.deepEqual(before.map(d => [d.name, d.scenarioIds]), [["A", ["x"]], ["B", ["y"]]]);
+        assert.deepEqual((await run(list)).drafts, before);
+        source.db.prepare("UPDATE projects SET github_account_id=? WHERE id=?").run("default", profileProjectId);
+        assert.deepEqual((await run(list)).drafts, []);
+    } finally { source.db.close(); }
+});
 
 test("General identifies a directly launched manual copy by package version without claiming a verified build or offering Update", async t => {
     const app = await isolatedStore(t);

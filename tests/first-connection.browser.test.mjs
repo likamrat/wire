@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
-import { privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
+import { privateFixture, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_FIRST_CONNECTION_PROOFS;
@@ -120,7 +120,7 @@ test("enforced React activity caps the home preview while keeping the full reque
     await expect(page.locator("#activityList .request-row")).toHaveCount(2);
     const card = page.locator("#activityList .read-in-place").filter({ hasText: "Keep both original dates." });
     await expect(card.locator(".card-tool-name").first()).toContainText(/workiq-/);
-    await expect(card).toContainText("Asked Copilot (no app list in this record)");
+    await expect(card.locator(".card-identity-field").filter({hasText:"Operation"}).getByText("Asked Copilot", {exact:true})).toBeVisible();
     await expect(card.locator(".card-quotation")).toHaveCount(0);
     await expect(page.locator("#activityView").getByText("Scope details", { exact: true })).toHaveCount(0);
     await expect(page.locator("#activityListSummary")).toContainText("2 interactions");
@@ -198,8 +198,9 @@ test("enforced React activity caps the home preview while keeping the full reque
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
     await navigateMain(page, "analyze");
     await expect(page.locator("#activityView details#coverage")).toHaveCount(0);
-    await page.locator("#openEvidenceHelp").click();
-    await page.getByRole("link", { name: "Open collection status", exact: true }).click(); await ready(page);
+    await navigateMain(page, "settings");
+    await navigateSettings(page, "connection");
+    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Evidence scope");
     await expect(page.locator("#coverageBody")).toContainText("2 interactions");
     await page.locator("#wireAccountTrigger").click(); await page.locator("#wireAccountGate").click();
@@ -287,10 +288,12 @@ test("footer Help opens the one help destination without collecting and returns 
     await page.keyboard.press("Escape");
     await page.locator("#openEvidenceHelp").focus();
     await page.keyboard.press("Enter");
-    await expect(page.locator("#troubleshootingTitle")).toBeFocused();
-    await expect(page.locator('[data-category="troubleshooting"]')).toHaveAttribute("aria-current", "page");
-    await page.locator("#activityCountHelp summary").click();
-    await expect(page.locator("#activityCountHelp p")).toBeVisible();
+    await expect(page.locator("#pageTitle")).toBeFocused();
+    await expect(page.locator("#openEvidenceHelp")).toHaveAttribute("aria-current", "page");
+    await page.locator('[data-help-topic="counts"]').click();
+    await expect(page.locator("#help-counts")).toBeVisible();
+    await page.goBack();
+    await expect(page.locator("#help-reports")).toBeVisible();
     await page.goBack();
     await expect(page.locator("#firstConnection")).toBeVisible();
     await expect(page.locator("#openEvidenceHelp")).toBeFocused();
@@ -298,7 +301,7 @@ test("footer Help opens the one help destination without collecting and returns 
     await page.locator("#navigationToggle").click();
     await page.locator("#navigationDrawer #openEvidenceHelp").click();
     await expect(page.locator("#navigationDrawer")).toBeHidden();
-    await expect(page.locator("#troubleshootingTitle")).toBeFocused();
+    await expect(page.locator("#pageTitle")).toHaveText("WIRE Help");
     assert.equal(mutations.length, 0);
 });
 

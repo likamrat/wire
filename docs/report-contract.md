@@ -25,6 +25,17 @@ Zero and unavailable are different.
 
 ## Evidence and membership
 
+Named drafts are editable local selections, not prepared reports or saved
+artifacts. The Copilot picker binds them to the retained store and, for an
+approved source, its database identity, configured locations and selected
+GitHub account. Without a configured source, a draft belongs to the current
+local WIRE sign-in. Restarting retires access leases, not draft ownership.
+Unverified configured accounts and older generation-only partitions are not
+adopted by guessing. The picker stores membership references, not chat text.
+Prepare checks the exact draft identity, revision and Selected IDs
+against the same state used to build the preview. Later draft edits do not
+modify that preview, any saved files, or the interaction itself.
+
 Count canonical identities once before pagination. Work IQ calls, returned API
 entries, Graph request sites, sites with visible status, owned HTTP captures
 and code references are distinct populations. Visible statuses are a subset
@@ -309,7 +320,7 @@ inventory. The receipt records `explicit-local-save`, with both reviewer flags
 false. Its keep-chat-details flag is true exactly when original wording was
 chosen. Historical attested bundles keep their existing interpretation.
 
-Hide details and save regenerates masked bytes before binding the save intent.
+Mask detected details and save regenerates masked bytes before binding the save intent.
 Cancellation writes nothing. Later content or authority changes retire that
 intent. A dispatched or uncertain save keeps its original exact-content
 recovery identity rather than preparing or writing another bundle.
@@ -370,6 +381,19 @@ or corrupted payloads block preparation.
 | Revoked reply-copy override | Cannot remain reusable text |
 
 ## Frozen files and saved reading
+
+Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
+finding-first reading. Version 2 changes the explanation of the counts, not
+what is counted. Version 1 keeps its original wording when reopened from JSON.
+HTML/PDF/Markdown and the verified Brief refer to
+the same frozen `reportPopulation.reference` / `included`, `reportPatterns`
+member sets and `resultFacts` observations. The five leading pattern bars use
+distinct interaction counts against the included population; patterns overlap.
+The example follows `reportPatterns.calls[].ref → scenarioRef` and, for
+diagnostic text, the exact `memberRefs`, `observationRef` and `entryIndex` of
+the saved copy. A null entry index does not describe a returned item's reason.
+Neither an improvement hypothesis nor a future evaluation target is a fact
+in the report. Earlier presentations and original downloads are unchanged.
 
 | Format | Saved representation |
 | --- | --- |

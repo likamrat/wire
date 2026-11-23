@@ -178,7 +178,7 @@ test("filter naming exposes real category, context and evidence-layer distinctio
     assert.equal(await page.locator('label[for="serviceFilter-control"]').innerText(), "Activity category");
     assert.equal(await page.locator('label[for="promptAuthorFilter-control"]').innerText(), "Prompt author");
     assert.equal(await page.locator('label[for="projectFilter-control"]').innerText(), "Copilot project");
-    assert.match(await page.locator('#dateFilter option[value=week]').innerText(), /Mon-Sun/);
+    assert.equal(await page.locator('#dateFilter option[value=week]').innerText(), "This week");
     for (const category of ["Discovery", "Multiple workloads", "Unknown"]) {
         assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.display(category).label);
     }

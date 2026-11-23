@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, navigateSettings, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, navigateSettings, closeAnalyzeFilters, chooseTheme, fulfillFixtureUpdateStatus, selectActivityOption } from "./helpers.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
@@ -59,6 +59,119 @@ async function setup(t, touch = false, { records = callsFixture(), now = "2026-1
     await expect(index.getByRole("button", { name: "Tool calls", exact: true })).toHaveAttribute("aria-current", "page");
     return { page, index, reads };
 }
+test("long option finders keep the current measure, filters and time zone until a deliberate choice", { timeout: 75_000 }, async t => {
+    const tools = ["ask", "fetch", "fetch_blob", "retrieve", "get_schema", "call_function", "do_action", "search_paths", "create_entity", "update_entity", "delete_entity", "list_agents"];
+    const records = Array.from({ length: 84 }, (_, i) => {
+        const r = fixture(`picker-${i}`), day = 12 + i % 7, stamp = `2026-11-${day}T12:15:00Z`;
+        r.project = `Harbor workspace ${1 + i % 22}`; r.projectId = `harbor-${1 + i % 22}`;
+        r.sourceSessionId = `cedar-${1 + i % 64}`; r.sourceSessionName = `Cedar review ${1 + i % 64}`;
+        r.userPrompt = { text: `Review the Cedar release notes, batch ${i + 1}.`, status: "full", sourceTimestamp: stamp,
+            sourceEventId: `prompt-${i}`, authorship: { actor: "user", basis: "source-user" } };
+        const apiPath = ["/me/messages", "/me/drive/root", "/me/calendarView"][i % 3];
+        Object.assign(r.toolCalls[0], { tool: `workiq-${tools[i % tools.length]}`, startedAt: stamp, requestedApiPath: apiPath,
+            requestArgs: { entityUrls: [apiPath] }, completedAt: new Date(Date.parse(stamp) + 800).toISOString(),
+            durationMs: 800, completionEventId: `end-${i}`, toolSucceeded: i % 9 !== 0 });
+        return r;
+    });
+    const { page } = await setup(t, true, { records });
+    const proofDir = process.env.WIRE_PICKER_PROOFS;
+    if (proofDir) {
+        await mkdir(proofDir, { recursive: true });
+        await page.context().tracing.start({ screenshots: true, snapshots: true });
+    }
+    const requests = [];
+    page.on("request", req => { if (req.method() === "POST" && !req.url().endsWith("/api/access/watch")) requests.push(new URL(req.url()).pathname); });
+    const popup = page.locator(".select-popup:visible");
+    const option = label => popup.getByRole("option", { name: label, exact: true });
+    const input = name => popup.getByRole("combobox", { name, exact: true });
+    const trigger = id => page.locator(`#${id}-control`);
+    const pressText = async (name, text) => {
+        const edit = input(name); await edit.click(); await expect(edit).toBeFocused(); await page.keyboard.type(text);
+        await expect(edit).toHaveValue(text);
+    };
+    await page.getByRole("navigation", { name: "Trends sections" }).getByRole("button", { name: "Overview" }).click();
+    await page.locator(".trends-discover").getByRole("button", { name: "Compare measures", exact: true }).click();
+    await trigger("trendsPairMeasure1").click(); await pressText("Find a measure", "errors share");
+    await expect(popup.getByRole("option")).toHaveText(["Errors & failures · interaction share"]); await page.keyboard.press("Enter");
+    await selectActivityOption(page, "trendsPairMeasure2", JSON.stringify(["tools", "workiq-fetch", "reach"]));
+    const pair = page.locator(".trends-panel-pair"), title = await pair.locator("h2").innerText();
+    const second = trigger("trendsPairMeasure2"), edit = input("Find a measure");
+    await second.click(); await edit.click();
+    // Sample actual painted frames, including the short zero-result interval, not just the final bounds.
+    await page.evaluate(async () => {
+        await document.fonts.ready;
+        const popup = document.querySelector(".select-popup:popover-open"), trigger = document.querySelector("#trendsPairMeasure2-control");
+        const field = popup.querySelector("input"), chart = document.querySelector(".trends-panel-pair .trends-plot svg");
+        const bounds = node => { const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; };
+        const sample = () => {
+            const r = popup.getBoundingClientRect();
+            return [scrollX, scrollY, ...bounds(trigger), r.x, r.width, popup.dataset.side === "top" ? r.bottom : r.top, ...bounds(field), ...bounds(chart)];
+        };
+        const frames = [], sampleFrame = () => {
+            frames.push({ t: performance.now(), q: field.value, geometry: sample(), open: popup.matches(":popover-open"),
+                focused: field === document.activeElement, chart: chart.isConnected, opacity: getComputedStyle(popup).opacity });
+            frame = requestAnimationFrame(sampleFrame);
+        };
+        let frame = requestAnimationFrame(sampleFrame);
+        window.finishPickerFrames = () => { cancelAnimationFrame(frame); return frames; };
+    });
+    const before = requests.length;
+    await edit.pressSequentially("ask reach", { delay: 24 });
+    await expect(popup.getByRole("option")).toHaveText(["ask · interaction reach"]);
+    await edit.pressSequentially("zzz", { delay: 22 }); await expect(popup.getByRole("status")).toHaveText("No matching choices.");
+    await edit.press("ArrowDown"); await edit.press("Enter"); await expect(edit).not.toHaveAttribute("aria-activedescendant");
+    await edit.press("Control+a"); await edit.press("Backspace"); await edit.pressSequentially("reach", { delay: 18 });
+    await expect(popup.getByRole("option")).toHaveCount(12);
+    const frames = await page.evaluate(() => window.finishPickerFrames());
+    assert(frames.length > 5 && new Set(frames.map(f => f.q)).size > 3);
+    assert(frames.every(f => f.open && f.focused && f.chart && f.opacity !== "0"));
+    const drift = Math.max(...frames.flatMap(f => f.geometry.map((n, i) => Math.abs(n - frames[0].geometry[i]))));
+    assert(drift <= 1, `Finder or chart drifted ${drift}px`);
+    assert.equal(await pair.locator("h2").innerText(), title); assert.equal(requests.length, before);
+    if (proofDir) {
+        await writeFile(path.join(proofDir, "frames.json"), JSON.stringify({ drift, frames }));
+        await page.screenshot({ path: path.join(proofDir, "trends-desktop.png") });
+    }
+    await edit.press("Escape"); await expect(second).toBeFocused(); await second.click(); await expect(edit).toHaveValue("");
+    await pressText("Find a measure", "cordless"); await popup.getByRole("button", { name: "Clear option search" }).click();
+    await expect(edit).toBeFocused(); await page.keyboard.type("ask"); await edit.press("ArrowDown"); await edit.press("Enter");
+    await expect(page.locator("#trendsPairMeasure2")).toHaveValue(JSON.stringify(["tools","workiq-ask","reach"]));
+    await chooseTheme(page, "dark"); await page.setViewportSize({ width: 390, height: 760 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "135%"; });
+    await second.tap(); await expect(edit).not.toBeFocused(); await edit.tap(); await expect(edit).toBeFocused();
+    // A smaller visual area exercises keyboard-like constraints; this is not a native OS keyboard test.
+    await page.setViewportSize({ width: 390, height: 500 }); await page.keyboard.type("retrieve reach");
+    const rect = await popup.boundingBox(); assert(rect && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 390 && rect.y + rect.height <= 500);
+    assert(rect.x + rect.width <= await page.evaluate(() => document.body.getBoundingClientRect().right), "The popup must stay inside the reserved scrollbar gutter");
+    if (proofDir) await page.screenshot({ path: path.join(proofDir, "trends-narrow.png") });
+    await option("retrieve · interaction reach").tap(); await expect(page.locator("#trendsPairMeasure2")).toHaveValue(JSON.stringify(["tools","workiq-retrieve","reach"]));
+    await page.evaluate(() => document.documentElement.style.removeProperty("font-size")); await page.setViewportSize({ width: 1280, height: 800 });
+    await navigateMain(page, "analyze");
+    await page.locator("#analyzeResultCommands").getByRole("button", { name: /^Filters/ }).click();
+    const filters = page.locator("#analyzeFilterDialog[open]:not(:modal)");
+    await expect(filters.getByRole("combobox", { name: "Tool", exact: true })).toBeVisible();
+    if (!await trigger("projectFilter").isVisible()) await filters.getByText("More filters", { exact: true }).click();
+    for (const [id, name, query, expected] of [
+        ["toolFilter", "Find a tool", "blob", "workiq-fetch_blob"], ["projectFilter", "Find a project", "workspace 18", "Harbor workspace 18"],
+        ["chatFilter", "Find a chat", "42", "Cedar review 42"],
+    ]) {
+        await trigger(id).click(); await pressText(name, query); await expect(popup.getByRole("option")).toHaveText([expected]);
+        await expect(page.locator(`#${id}`)).toHaveValue("all"); await page.keyboard.press("Escape"); await expect(trigger(id)).toBeFocused();
+    }
+    await trigger("projectFilter").click(); await pressText("Find a project", "18"); await option("Harbor workspace 18").click();
+    await expect(page.locator("#projectFilter")).toHaveValue("harbor-18"); await closeAnalyzeFilters(page);
+    const members = records.filter(record => record.projectId === "harbor-18");
+    const cards = page.locator("#activityView .request-card-open");
+    await expect(cards).toHaveCount(members.length);
+    for (const record of members) await expect(cards.filter({ hasText: record.userPrompt.text })).toHaveCount(1);
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional"); await trigger("displayTimeZone").click();
+    await pressText("Find a city or time zone", "York"); await expect(popup.getByRole("option")).toHaveText(["New York time (America/New_York)"]);
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), null);
+    await page.keyboard.press("Escape"); await trigger("displayTimeZone").click(); await pressText("Find a city or time zone", "York");
+    await page.keyboard.press("Enter"); await expect(page.locator("#displayTimeZone")).toHaveValue("America/New_York");
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "America/New_York");
+    if (proofDir) await page.context().tracing.stop({ path: path.join(proofDir, "picker-journeys.zip") });
+});
 test("custom pairs keep units, members, collapse and day through the real period comparison and Back", async t => {
     const {page,reads}=await setup(t),nav=page.getByRole("navigation",{name:"Trends sections"});
     await nav.getByRole("button",{name:"Overview"}).click();
@@ -74,6 +187,7 @@ test("custom pairs keep units, members, collapse and day through the real period
     await mark.focus();await mark.press("Enter");
     const reading=pair.locator(".trend-pair-readings");
     await expect(reading).toContainText("50% · 1 of 2 interactions that day");
+    await expect(reading.getByRole("button",{name:"View 2 calls"}).locator('[data-icon-role="forward"]')).toBeVisible();
     await reading.getByRole("button",{name:"View 2 calls"}).click();
     await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
     const record=page.locator(".trends-evidence-row a").first();
@@ -85,13 +199,19 @@ test("custom pairs keep units, members, collapse and day through the real period
     await pair.getByRole("button",{name:"Expand",exact:true}).click();
     await select(second,["timing","timing","p95"]);await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
     await expect(reading).toContainText("180 ms");
+    await expect(pair.getByRole("button",{name:"Back to charts"}).locator('[data-icon-role="back"]')).toBeVisible();
     await nav.getByRole("button",{name:"Chart guide"}).click();await expect(page.locator(".trends-guide")).toContainText("95th percentile");
     await page.goBack();await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
     const periodTransfer=page.locator("#trendsComparePeriods");
     await periodTransfer.click();await page.getByRole("button",{name:"Open comparison",exact:true}).click();
     await expect(page).toHaveURL(/\/compare\?/);
     const u=new URL(page.url());assert.deepEqual(["aFrom","aTo","bFrom","bTo"].map(k=>u.searchParams.get(k)),["2026-11-05","2026-11-11","2026-11-12","2026-11-18"]);
-    await page.getByRole("button",{name:"Back to Trends",exact:true}).click();await expect(periodTransfer).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands")).toBeHidden();
+    await expect(page.locator("#analyzeRefresh")).toBeHidden();
+    await expect(page.locator("#comparisonOptionsSlot #openAnalyzeFilters")).toBeVisible();
+    await page.getByRole("button",{name:"Back to Trends",exact:true}).press("Enter");await expect(periodTransfer).toBeFocused();
+    await expect(first).toHaveValue(JSON.stringify(["problems","problems","share"]));
+    await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
     await expect(reading).toContainText("Nov 16");await expect(reading).toContainText("180 ms");
     await pair.getByRole("button",{name:"Remove comparison"}).click();await expect(second).toHaveValue("");
     await expect(graph).toHaveCount(1);assert.equal(reads.length,1);
@@ -184,6 +304,62 @@ async function screenshot(page, name) {
     await page.screenshot({ path: path.join(proof, `${name}.png`) });
 }
 
+test("service columns share their card surface and label sparse daily groups without losing any series", async t => {
+    const { page, index } = await setup(t,true);
+    await index.getByRole("button",{name:"Services",exact:true}).click();
+    const card = panelOf(page,"services"), plot = card.locator(".trends-plot");
+    for (const theme of ["light","dark"]) {
+        await chooseTheme(page,theme);
+        const surface = await card.evaluate(card => {
+            const plot=card.querySelector(".trends-plot");
+            return [getComputedStyle(card).backgroundColor,getComputedStyle(plot).backgroundColor,getComputedStyle(plot.querySelector(".trends-y-axis rect")).fill];
+        });
+        assert.equal(surface[1],surface[0]); assert.equal(surface[2],surface[0]);
+    }
+    for (const name of ["Mail","Files"]) await expect(plot.getByRole("button",{name:`Nov 16, 2026: ${name}, 2 calls`})).toHaveText(`${name} 2`);
+    await expect(plot.getByText("0",{exact:true})).toHaveCount(6); // Five all-zero days and the scale origin.
+    await expect(plot.locator("[data-trend-mark]")).toHaveCount(21);
+    await plot.getByRole("button",{name:"Nov 16, 2026: Mail, 2 calls"}).tap();
+    await expect(card.getByRole("button",{name:"Data table"}).locator('[data-icon-role="forward"]')).toBeVisible();
+    await expect(card.getByRole("button",{name:"View 2 calls"}).locator('[data-icon-role="forward"]')).toBeVisible();
+    await card.getByRole("button",{name:"View 2 calls"}).click();
+    await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
+});
+
+test("aligned call heights agree and changing weeks keep their own denominators", async t => {
+    const records=callsFixture(), sun=fixture("harbor-sunday");
+    Object.assign(sun.toolCalls[0],{startedAt:"2026-11-15T12:00:00Z"});
+    const {page}=await setup(t,false,{records:[...records,sun]});
+    await page.getByRole("navigation",{name:"Trends sections"}).getByRole("button",{name:"Overview"}).click();
+    const landing=page.locator(".trends-landing:visible");
+    await expect(landing).toContainText("No matching dated calls");
+    await expect(landing.getByRole("button",{name:/Nov 17.*no matching dated calls/i})).toHaveAccessibleName(/0 interactions/);
+    await expect(landing.getByRole("button",{name:"Nov 15, 2026: Errors & failures, 0 interactions",exact:true})).toBeVisible();
+    await page.getByRole("button",{name:"Call volume and duration",exact:true}).click();
+    const pair=page.locator(".trends-panel-pair"), plots=pair.locator(".trends-plot:visible");
+    const select=(i,v)=>selectActivityOption(page,`trendsPairMeasure${i}`,JSON.stringify(v));
+    await select(2,["tools","workiq-retrieve","count"]);
+    await pair.getByRole("button",{name:"Aligned charts",exact:true}).click();
+    const heights=await plots.evaluateAll(plots=>plots.map(plot=>{
+        const ys=plot.querySelectorAll(".trends-y-axis text"), baseline=+ys[0].getAttribute("y")-4;
+        const mark=plot.querySelector('[aria-label^="Nov 16, 2026:"] :is(circle[cx], rect[x])');
+        return {axis:[...ys].map(n=>n.textContent),height:baseline-(mark.tagName==="rect"?+mark.getAttribute("y")+mark.getBBox().height/2:+mark.getAttribute("cy"))};
+    }));
+    assert.deepEqual(heights[0].axis,heights[1].axis); assert.ok(Math.abs(heights[0].height-3*heights[1].height)<1);
+    await select(1,["rhythm","rhythm","share"]);
+    await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
+    await expect(plots.first().locator("[data-week-boundary]")).toHaveCount(1);
+    for (const [date,share,dates] of [[15,"100%","Nov 12 – Nov 15"],[16,"75%","Nov 16 – Nov 18"]]){
+        const mark=plots.first().getByRole("button",{name:new RegExp(`Nov ${date}.*${share}`)});
+        await mark.focus(); await mark.press("Enter");
+        await expect(pair.locator(".trend-pair-readings")).toContainText(dates);
+        await expect(page.locator("#trendsTooltip")).toContainText(dates);
+    }
+    await pair.getByText("Daily values",{exact:true}).click();
+    await expect(pair.getByRole("row",{name:/Nov 16, 2026/})).toContainText("3 of 4");
+    await expect(pair.getByRole("row",{name:/Nov 16, 2026/})).toContainText("Nov 16 – Nov 18");
+});
+
 test("compiled index applies every available filter, supports calendar navigation and pages without changing the full period", { timeout: 90000 }, async t => {
     const { page, reads } = await setup(t), region = page.locator("#trendsView"), card = panelOf(page, "rhythm");
     const period = page.locator("#trendsPeriod"), filter = region.locator(".filter-entry");
@@ -213,7 +389,7 @@ test("compiled index applies every available filter, supports calendar navigatio
     await expect(page.getByLabel("Trends from", { exact: true })).toHaveValue("2026-11-17");
     await expect(page.getByLabel("Trends to", { exact: true })).toHaveValue("2026-11-18");
     await page.getByLabel("Trends to", { exact: true }).fill("2026-11-10");
-    await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Apply dates", exact: true })).toBeDisabled(); await expect(region.getByRole("dialog")).toBeVisible();
     assert.equal(reads.length, before, "invalid calendar drafts never read or replace the accepted range");
     await page.getByLabel("Trends from", { exact: true }).fill("2026-07-01"); await page.getByLabel("Trends to", { exact: true }).fill("2026-11-18");
     await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
@@ -235,13 +411,46 @@ test("compiled index applies every available filter, supports calendar navigatio
     await period.click();
     const retainedFocus = await region.getByRole("dialog").evaluate(async dialog => {
         const mark = document.querySelector("#trendsPlot-rhythm [data-trend-mark]");
-        const closed = new Promise(resolve => dialog.addEventListener("close", resolve, { once: true }));
-        dialog.querySelector(".trends-dialog-heading button").click();
+        const closed = new Promise(resolve => dialog.addEventListener("toggle", resolve, { once: true }));
+        dialog.hidePopover();
         mark.focus({ preventScroll: true });
         await closed;
         return document.activeElement === mark;
     });
+
     assert(retainedFocus, "A delayed close event must not steal an intentional chart focus");
+});
+
+test("Period edits stay beside their trigger without shifting the chart or reading unapplied dates", async t => {
+        const {page,reads}=await setup(t,true), period=page.locator("#trendsPeriod"), panel=page.locator("#trendsLocalChoices");
+        const count=page.locator('[data-family=rhythm] .trends-index-scope');
+        const before=reads.length;
+        for(const [width,scale] of [[1280,1],[390,1.5]]){
+            await page.setViewportSize({width,height:850});
+            await page.evaluate(s=>document.documentElement.style.fontSize=`${s*100}%`,scale);
+            await period.scrollIntoViewIfNeeded();
+            const plot=page.locator("#trendsPlot-rhythm");
+            await plot.evaluate(n=>{window.periodProbe={svg:n.firstElementChild,top:n.getBoundingClientRect().top,scroll:scrollY}});
+            await period.tap(); await expect(panel).toBeVisible();
+            await screenshot(page,`local-period-${width}`);
+            await panel.getByRole("button",{name:"Custom dates"}).tap();
+            assert.equal(await page.locator(":modal:visible").count(),0);
+            await expect(panel).toContainText("Inclusive dates · UTC");
+            const geometry=await panel.evaluate(n=>{const r=n.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:document.documentElement.clientWidth,height:innerHeight}});
+            assert.ok(geometry.left>=0&&geometry.right<=geometry.width+1&&geometry.top>=0&&geometry.bottom<=geometry.height,JSON.stringify(geometry));
+            assert(await plot.evaluate(n=>window.periodProbe.svg===n.firstElementChild&&Math.abs(n.getBoundingClientRect().top-window.periodProbe.top)<1&&scrollY===window.periodProbe.scroll));
+            await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
+            await screenshot(page,`local-custom-${width}`);
+            await panel.getByRole("button",{name:"Cancel"}).tap();await expect(period).toBeFocused();
+            assert.equal(reads.length,before);
+            await expect(count).toContainText("4 dated calls");
+        }
+        await period.tap();await panel.getByRole("button",{name:"Custom dates"}).tap();
+        await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
+        await panel.getByLabel("Trends to",{exact:true}).fill("2026-11-16");
+        await panel.getByRole("button",{name:"Apply dates"}).tap();
+        await expect(count).toContainText("3 dated calls");
+        assert.equal(reads.length,before+1);assert.equal(reads.at(-1).from,reads.at(-1).to);
 });
 
 test("compiled Trends uses the exact daily populations on both chart types and keeps dates, data and comparisons independent", { timeout: 90000 }, async t => {
@@ -256,7 +465,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         const names = await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label")));
         await screenshot(page, `measure-${id}-columns`);
         if (id === "authors") {
-            for (const [actor, text, role] of [["user","Human prompts","account"],["agent","Agent prompts","report-agent"],["unknown","Author unverified","unobserved"]]) {
+            for (const [actor, text, role] of [["user","Human prompts","author-user"],["agent","Agent prompts","author-agent"],["unknown","Author unverified","author-unknown"]]) {
                 const legend = panel.locator(".trends-series").filter({has:page.getByRole("checkbox",{name:`Show ${text}`,exact:true})});
                 const glyph = legend.locator(".trends-author-icon");
                 await expect(glyph).toHaveAttribute("data-icon-role",role);
@@ -277,7 +486,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         assert.deepEqual(await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label"))), names);
         await panel.getByRole("button", { name: "Columns", exact: true }).click();
         if (id !== "timing") {
-            await panel.getByRole("button", { name: "Percentage", exact: true }).click();
+            await panel.getByRole("button", { name: id === "rhythm" ? "Share within week" : "Percentage", exact: true }).click();
             await panel.getByRole("button", { name: "Count", exact: true }).click();
         }
         for (const check of await panel.locator(".trends-series input").all()) { await check.uncheck(); await expect(check).not.toBeChecked(); }

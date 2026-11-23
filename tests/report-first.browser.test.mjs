@@ -26,14 +26,14 @@ function records() {
         return record;
     });
 }
-async function setup(t, { source = records(), route = "#reports", enforced = false, frontend = "bundled", now, hasTouch = false, contextFixture = false } = {}) {
+async function setup(t, { source = records(), route = "#reports", enforced = false, frontend = "bundled", now, hasTouch = false, contextFixture = false, timezoneId = "America/Los_Angeles" } = {}) {
     const cleanup = [], lifetime = { after: work => cleanup.push(work) };
     const { context } = contextFixture ? await reportContextFixture(lifetime) : await privateFixture(lifetime, source);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const runtime = await startServer(context, createExportController(context), { port: 0, frontend, collector: { timers: false }, ...(access ? { access } : {}) });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access?.close(); for (const work of cleanup) await work(); });
-    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId: "America/Los_Angeles", hasTouch });
+    const profile = await browser.newContext({ viewport: { width: 1280, height: 1000 }, timezoneId, hasTouch });
     const page = await profile.newPage();
     if (now) await page.clock.setFixedTime(new Date(now));
     page.setDefaultTimeout(10000);
@@ -50,8 +50,70 @@ async function prepare(page, preset = "errors") {
     return prepareSelectedFocus(page);
 }
 
+for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-03-01"],["Asia/Tokyo","2026-03-01","2026-03-02"]]) {
+    test(`historical calendars stop at ${today} in ${zone} for the same instant`, async t => {
+        const {page,requests}=await setup(t,{frontend:"react",route:"reports",timezoneId:zone,now:"2026-03-01T00:15:00Z"});
+        const desk = page.locator("#reportDeskDates"), accepted = await desk.innerText();
+        await desk.click(); await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        const calendar = page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
+        await expect(end).toHaveAttribute("max",today);
+        const previous = calendar.getByRole("button", { name:"Previous month" });
+        await previous.press("Enter"); await expect(previous).toBeFocused();
+        const next = calendar.getByRole("button", { name:"Next month" });
+        await next.press("Enter");
+        if (await next.isDisabled()) await expect(calendar.locator('[data-day][tabindex="0"]')).toBeFocused();
+        else await expect(next).toBeFocused();
+        if (zone === "Asia/Tokyo") await calendar.getByRole("button",{name:"Next month"}).click();
+        const last=calendar.locator(`[data-day="${today}"]`);
+        await expect(last).toBeEnabled(); await last.focus(); await last.press("ArrowRight"); await expect(last).toBeFocused();
+        await expect(calendar.getByRole("button",{name:"Next month"})).toBeDisabled();
+        if(zone === "Asia/Tokyo") await expect(calendar.locator(`[data-day="${tomorrow}"]`)).toBeDisabled();
+        const written = () => requests.filter(r=>/\/(?:preview|export|period-comparison)$/.test(r.path)).length;
+        const before = written();
+        await end.fill(tomorrow); await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
+        await expect(calendar).toContainText(`today or an earlier date in ${zone}`);
+        await calendar.getByRole("button",{name:"Cancel"}).click(); await expect(desk).toHaveText(accepted);
+        assert.equal(written(),before);
+        await navigateMain(page,"compare"); await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        const pair=page.locator("#comparisonCustomDates"), prior=written();
+        for (const side of ["A","B"]){
+            await expect(pair.locator(`#comparison${side}To`)).toHaveAttribute("max",today);
+            await pair.locator(`#comparison${side}From`).fill(today);
+            await pair.locator(`#comparison${side}To`).fill(tomorrow);await expect(pair.locator("#applyPeriodComparison")).toBeDisabled();
+            await pair.locator(`#comparison${side}To`).fill(today);
+        }
+        assert.equal(written(),prior);
+        await pair.locator("#applyPeriodComparison").click();
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        assert.equal(written(),prior+1);
+    });
+}
+
+test("an open calendar enables the next month at midnight in the display zone without applying a draft", async t => {
+    const {page,requests}=await setup(t,{frontend:"react",route:"reports",now:"2026-03-01T07:59:00Z"});
+    await page.clock.install({time:new Date("2026-03-01T07:59:00Z")});
+    const desk=page.locator("#reportDeskDates"), accepted=await desk.innerText();
+    await desk.click();await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+    const calendar=page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
+    await expect(end).toHaveAttribute("max","2026-02-28");
+    await calendar.locator("#reportDatefrom").fill("2026-02-27");
+    await end.fill("2026-03-01");
+    await expect(calendar.getByRole("button",{name:"Next month"})).toBeDisabled();
+    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
+    await page.clock.fastForward(61_000);
+    await expect(end).toHaveAttribute("max","2026-03-01");
+    await calendar.getByRole("button",{name:"Next month"}).click();
+    await expect(calendar.locator('[data-day="2026-03-01"]')).toBeEnabled();
+    await expect(calendar.locator('[data-day="2026-03-02"]')).toBeDisabled();
+    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeEnabled();
+    await calendar.getByRole("button",{name:"Cancel"}).click();
+    await expect(desk).toHaveText(accepted);
+    assert(!requests.some(r=>["/api/preview","/api/export"].includes(r.path)));
+});
+
 test("period choices keep exact dates, one zone and only the restrictions that matter", async t => {
-    const { page } = await setup(t, { frontend: "react", route: "trends", source: periodFixture().records, now: "2026-03-10T12:00:00Z" });
+    const { page, requests } = await setup(t, { frontend: "react", route: "trends", source: periodFixture().records, now: "2026-03-10T12:00:00Z" });
     await page.getByRole("button", { name: "Compare periods", exact: true }).click();
     await page.getByRole("button", { name: "Open comparison", exact: true }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
@@ -62,7 +124,8 @@ test("period choices keep exact dates, one zone and only the restrictions that m
     const edit = page.getByRole("button", { name: /^Change selected period:/ });
     await edit.click();
     const calendar = page.locator("#comparisonCustomDates");
-    await expect(calendar.locator("legend")).toHaveText(["Baseline", "Selected"]);
+    await expect(calendar.locator("legend:visible")).toHaveText(["Selected"]);
+    assert.equal(await page.locator(":modal:visible").count(),0);
     assert.equal((await calendar.innerText()).split("America/Los_Angeles").length - 1, 1);
     await calendar.locator("#comparisonBTo").fill("2026-03-01");
     await expect(calendar.locator("#comparisonBStatus")).toContainText(/end.*start/i);
@@ -70,6 +133,17 @@ test("period choices keep exact dates, one zone and only the restrictions that m
     await page.keyboard.press("Escape");
     await expect(edit).toBeFocused();
     await expect(edit).toContainText("Mar 4–10, 2026");
+    const compareReads = () => requests.filter(request=>request.path === "/api/period-comparison").length;
+    const before = compareReads(), baseline = page.getByRole("button",{name:/^Change baseline period:/});
+    await baseline.click();
+    await expect(calendar.locator("legend:visible")).toHaveText(["Baseline"]);
+    await calendar.locator("#comparisonAFrom").fill("2026-03-07");
+    await calendar.locator("#comparisonATo").fill("2026-03-07");
+    await calendar.getByRole("button",{name:"Use dates"}).click();
+    await expect(pair).toContainText("Mar 7, 2026");
+    await expect(baseline).toBeFocused();
+    await expect(edit).toContainText("Mar 4–10, 2026");
+    assert.equal(compareReads(),before+1);
     await navigateMain(page, "reports");
     await page.locator("#reportDeskDates").click();
     await expect(page.locator("#reportPeriodChoices")).not.toContainText("both endpoints");
@@ -77,6 +151,13 @@ test("period choices keep exact dates, one zone and only the restrictions that m
     await expect(page.locator("#reportDatefrom")).toHaveValue("2026-03-04");
     await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
     await expect(page.locator("#reportCustomDates")).toContainText("America/Los_Angeles");
+    await expect(page.locator("#reportPeriodChoices:popover-open #reportCustomDates")).toBeVisible();
+    await page.getByRole("button",{name:"Cancel",exact:true}).click();
+    await expect(page.locator("#reportDeskDates")).toBeFocused();
+    const files=page.locator('[popovertarget="reportFileOptions"]');
+    await files.click(); await expect(page.locator("#reportFileOptions:popover-open")).toBeVisible();
+    assert.equal(await page.locator(":modal:visible").count(),0);
+    assert(!requests.some(r=>["/api/preview","/api/export"].includes(r.path)));
 });
 async function prepareSelectedFocus(page) {
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -176,13 +257,13 @@ test("linked context changes preserve ordinary edited and omitted report copies"
     const copies = updated.records.flatMap(record => record.prompts);
     assert.ok(copies.some(copy => copy.representation === "edited-copy" && copy.text === "Deliberately revised release wording."));
     assert.ok(copies.some(copy => copy.kind === "tool" && copy.omitted && copy.text === null));
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
         updated = await (await pending).json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const saved = (await loadBoardState(context)).exports;
@@ -300,13 +381,13 @@ test("linked retained replies preserve edits and a shared origin-followup omissi
     await replyCopy.getByRole("button", { name: "Update report copy", exact: true }).click();
     updated = await (await editingReply).json();
     await captureReport(page, "shared-context-before-save");
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value=${format}]`).check();
         updated = await (await pending).json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const saved = (await loadBoardState(context)).exports;
@@ -568,6 +649,12 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "150%"; });
     await page.evaluate(() => document.fonts.ready);
+    const formats = page.locator('[popovertarget="reportFileOptions"]');
+    await formats.click();
+    const panel = page.locator("#reportFileOptions:popover-open");
+    await expect.poll(() => panel.evaluate(n => Math.round(document.documentElement.getBoundingClientRect().right - n.getBoundingClientRect().right))).toBeGreaterThanOrEqual(8);
+    await page.keyboard.press("Escape");
+    await expect(formats).toBeFocused();
     async function inspectRows(selector) {
         const rows = page.locator(selector);
         const boxes = await rows.evaluateAll(nodes => nodes.map(node => {
@@ -602,7 +689,7 @@ test("report menus keep the native choice inside its paint and aligned with the 
     await page.keyboard.press("Escape");
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 0);
     await prepare(page, "all");
-    await page.getByRole("button", { name: /^Files to save:/ }).click();
+    await page.getByRole("button", { name: /^Formats:/ }).click();
     await inspectRows("#reportFileOptions .format-choices label");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
@@ -709,7 +796,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
     const address = page.url();
     await selectReportFocus(page, "errors");
     await expect(page.locator("#reportDeskFocus")).toHaveValue("errors");
-    await expect(page.locator(".report-outline-description")).toContainText("Other calls");
+    await expect(page.locator(".report-outline-description")).toContainText("A completed call can contain an API error");
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Prepare preview");
     await expect(page.locator(".report-frame")).toBeHidden();
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeHidden();
@@ -731,7 +818,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
     const updated = await (await rebuilt).json();
     assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     let preparedFiles = updated.files;
     for (const format of ["pdf", "json", "markdown"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -741,7 +828,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
         assert.deepEqual(body.snapshot.reportPopulation, initial.snapshot.reportPopulation);
         preparedFiles = body.files;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     const save = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).dblclick();
     assert.equal((await save).status(), 200);
@@ -845,7 +932,7 @@ test("Reports starts with the configured period and files; changing defaults doe
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "Resume preview", exact: true }).click();
     await expect(range).toHaveText("Last 14 days");
-    await expect(page.getByRole("button", { name: /^Files to save: .*Markdown/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Formats: .*Markdown/ })).toBeVisible();
     assert.deepEqual(effects().map(request => request.path), ["/api/preview"]);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
@@ -854,33 +941,35 @@ test("Reports starts with the configured period and files; changing defaults doe
     for (const name of ["product-report.json", "product-report.md"]) assert.equal(await readFile(saved.files[name], "utf8"), preview.files[name]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(range).toHaveText("Last 30 days");
-    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     await page.reload();
     await expect(range).toHaveText("Last 30 days");
-    await expect(page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Formats: HTML", exact: true })).toBeVisible();
     assert.deepEqual(errors, []);
 });
 
-test("Files to save changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
+test("Formats changes only the draft on landing and resumes the frozen population", { timeout: 60000 }, async t => {
     const { page, context, source, requests, errors } = await setup(t);
-    const chooser = page.getByRole("dialog", { name: "Files to save", exact: true });
+    const chooser = page.getByRole("dialog", { name: "Formats", exact: true });
     const effects = () => requests.filter(({ path }) => ["/api/preview", "/api/export"].includes(path));
     await page.clock.install();
-    await page.getByRole("button", { name: "Files to save: Web page (HTML)", exact: true }).click();
-    const html = chooser.getByRole("checkbox", { name: "HTML Web page", exact: true });
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    await expect(chooser.locator("label")).toHaveText(["HTML", "PDF", "Markdown", "JSON"]);
+    await expect(chooser.getByRole("button")).toHaveCount(0);
+    const html = chooser.getByRole("checkbox", { name: "HTML", exact: true });
     await html.uncheck();
     await expect(chooser.getByRole("alert")).toBeVisible();
-    await expect(chooser.getByRole("checkbox", { name: "PDF Print document", exact: true })).not.toBeChecked();
-    await chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true }).check();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await expect(chooser.getByRole("checkbox", { name: "PDF", exact: true })).not.toBeChecked();
+    await chooser.getByRole("checkbox", { name: "JSON", exact: true }).check();
+    await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     assert.deepEqual(effects(), [], "Choosing files on landing must not start a debounced preview or write.");
     const initial = await prepare(page, "all");
     assert.deepEqual(initial.formats, ["json"]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
-    await page.getByRole("button", { name: "Files to save: Structured data (JSON)", exact: true }).click();
-    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).check();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Formats: JSON", exact: true }).click();
+    await chooser.getByRole("checkbox", { name: "Markdown", exact: true }).check();
+    await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     assert.equal(effects().length, 1, "A resumed draft stays unprepared until requested.");
     const state = await loadBoardState(context), added = fixture("after-file-choice");
@@ -895,14 +984,14 @@ test("Files to save changes only the draft on landing and resumes the frozen pop
     assert.deepEqual(resumed.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await selectActivityOption(page, "preparedReportView", "product-report.md");
     await expect(page.locator("#reportFileInspection .saved-markdown")).toBeVisible();
-    await page.getByRole("button", { name: "Files to save: JSON, Markdown", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: Markdown, JSON", exact: true }).click();
     await expect(html).not.toBeChecked();
-    await expect(chooser.getByRole("checkbox", { name: "JSON Structured data", exact: true })).toBeChecked();
+    await expect(chooser.getByRole("checkbox", { name: "JSON", exact: true })).toBeChecked();
     assert.equal(effects().length, 2, "Viewing a prepared file must neither change the output inventory nor prepare or save it.");
     const removing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await chooser.getByRole("checkbox", { name: "Markdown Editable text", exact: true }).uncheck();
+    await chooser.getByRole("checkbox", { name: "Markdown", exact: true }).uncheck();
     const remaining = await (await removing).json();
-    await chooser.getByRole("button", { name: "Done" }).click();
+    await page.keyboard.press("Escape");
     assert.deepEqual(remaining.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await expect(page.locator('#preparedReportView option[value="product-report.md"]')).toHaveCount(0);
@@ -915,17 +1004,17 @@ test("JSON-only saved reports open as readable reports independently of their fi
     const downloads = [];
     page.on("download", download => downloads.push(download));
     await prepare(page);
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const [format, selected] of [["json", true], ["html", false]]) {
         const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).setChecked(selected); await ready;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const before = await loadBoardState(context), saved = before.exports[0];
     assert.deepEqual(saved.formats, ["json"]);
-    await expect(page.getByRole("button", { name: /^Files to save:/ })).toBeHidden();
+    await expect(page.getByRole("button", { name: /^Formats:/ })).toBeHidden();
     const bytes = await readFile(saved.files["product-report.json"]);
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
@@ -1188,7 +1277,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.deepEqual(prepared.snapshot.periodComparison.comparison, acceptedComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -1205,7 +1294,7 @@ test("retained-period comparison opens its report directly and saves the accepte
         assert.deepEqual(stablePair(rebuilt.snapshot.periodComparison), stablePair(prepared.snapshot.periodComparison));
         preparedFiles = rebuilt.files;
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     assert.equal((await loadBoardState(context)).exports[0].reportType, "period-comparison");
@@ -1319,7 +1408,7 @@ test("keep-details warning can cancel or regenerate masked notes and copies befo
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     const saved = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Hide details and save", exact: true }).click();
+    await page.getByRole("button", { name: "Mask detected details and save", exact: true }).click();
     const result = await saved;
     assert.equal(result.status(), 200, JSON.stringify(await result.json()));
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
@@ -1549,13 +1638,13 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
         if (proofs) await page.screenshot({ path: path.join(proofs, name + ".png") });
     }
     const focuses = [
-        ["all", "All activity", /includes prompts with unknown authors/i],
-        ["errors", "Errors & failures", /other calls may have completed/i],
+        ["all", "All activity", null],
+        ["errors", "Errors & failures", /completed call can contain an API error/i],
         ["completed", "Completed calls", /answer can still be wrong/i],
         ["mine", "Human prompts", /including any calls made by an agent/i],
         ["agent", "Agent prompts", /unknown authors are excluded/i],
     ];
-    const compact = page.getByRole("combobox", { name: "Report focus", exact: true });
+    const compact = page.getByRole("combobox", { name: "Show", exact: true });
     const outline = page.locator(".report-desk");
     for (const [theme, width, size] of [["light", 1280, 100], ["dark", 375, 200]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
@@ -1563,23 +1652,29 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
         const narrow = width === 375;
         await expect(compact).toBeVisible();
         if (narrow) {
-            const arrow = compact.locator("..").locator('[data-icon-role="chevron"]');
+            const arrow = compact.locator('[data-icon-role="chevron"]');
             await expect(arrow).toHaveCount(1);
             await expect(arrow).toHaveCSS("pointer-events", "none");
-            await expect(compact).toHaveCSS("appearance", "none");
             const [field, ink] = await Promise.all([compact.boundingBox(), arrow.boundingBox()]);
             const inset = await compact.evaluate(node => parseFloat(getComputedStyle(node).paddingInlineStart));
             assert.equal(field.x + field.width - ink.x - ink.width, inset);
             assert.equal(field.y + field.height / 2, ink.y + ink.height / 2);
-            await compact.focus(); await compact.press("Home"); await compact.press("ArrowDown");
-            await expect(compact).toHaveValue("errors");
+            await compact.focus(); await compact.press("Enter"); await compact.press("Home"); await compact.press("ArrowDown"); await compact.press("Enter");
+            await expect(compact).toHaveText("Errors & failures");
         }
         for (const [preset, title, explanation] of focuses) {
-            await compact.selectOption({ label: title });
-            await expect(compact).toHaveValue(preset);
-            await expect(outline.locator(".report-outline-description")).toBeVisible();
-            await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
+            await selectReportFocus(page,preset);
+            await expect(compact).toHaveText(title);
+            if (explanation) await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
+            else await expect(outline.locator(".report-outline-description")).toBeHidden();
         }
+        const faces = await outline.locator("#reportDeskFocus-control,#reportDeskDates").evaluateAll(nodes => nodes.map(n => {
+            const b = n.getBoundingClientRect(), p = getComputedStyle(n, "::before");
+            return { face: b.height - parseFloat(p.top) - parseFloat(p.bottom), target: b.height, top: b.top };
+        }));
+        assert.ok(faces.every(f => f.target >= 44));
+        assert.equal(faces[0].face, faces[1].face);
+        if (!narrow) assert.equal(faces[0].top, faces[1].top);
         const selectorBox = await compact.boundingBox(), description = await outline.locator(".report-outline-description").boundingBox();
         assert.ok(description.y >= selectorBox.y + selectorBox.height - 1);
         await expect(outline.getByRole("button", { name: "Prepare preview", exact: true })).toBeEnabled();

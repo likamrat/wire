@@ -22,11 +22,11 @@ test("complete-day starts exclude today and preserve equal civil lengths across 
     assert.throws(() => view.completeDays(8, context), /7, 14 or 30/);
 });
 
-test("period presets resolve complete civil weeks and months without inventing custom dates", () => {
+test("current calendar periods stop at today and previous periods remain complete", () => {
     const view = comparison.createPeriodComparisonPresentation(time);
-    assert.deepEqual(view.preset("this-week", context, "2026-03-09T15:00:00Z"), { from: "2026-03-09", to: "2026-03-15" });
+    assert.deepEqual(view.preset("this-week", context, "2026-03-09T15:00:00Z"), { from: "2026-03-09", to: "2026-03-09" });
     assert.deepEqual(view.preset("previous-week", context, "2026-03-09T15:00:00Z"), { from: "2026-03-02", to: "2026-03-08" });
-    assert.deepEqual(view.preset("this-month", context, "2024-03-10T15:00:00Z"), { from: "2024-03-01", to: "2024-03-31" });
+    assert.deepEqual(view.preset("this-month", context, "2024-03-10T15:00:00Z"), { from: "2024-03-01", to: "2024-03-10" });
     assert.deepEqual(view.preset("previous-month", context, "2024-03-10T15:00:00Z"), { from: "2024-02-01", to: "2024-02-29" });
     assert.deepEqual(view.preset("previous-month", context, "2026-01-10T15:00:00Z"), { from: "2025-12-01", to: "2025-12-31" });
     assert.equal(view.preset("custom", context, "2026-03-09T15:00:00Z"), null);
@@ -44,7 +44,7 @@ test("before and after rates keep zero, no denominator and small differences dis
 
 test("period names describe accepted dates in the chosen timezone and distinguish years", () => {
     const view = comparison.createPeriodComparisonPresentation(time), now = "2026-03-09T15:00:00Z";
-    assert.deepEqual(view.names([{ from: "2026-03-02", to: "2026-03-08" }, { from: "2026-03-09", to: "2026-03-15" }], context, now),
+    assert.deepEqual(view.names([{ from: "2026-03-02", to: "2026-03-08" }, { from: "2026-03-09", to: "2026-03-09" }], context, now),
         [{ label: "Previous week", phrase: "the previous week", preset: "previous-week" },
             { label: "This week", phrase: "this week", preset: "this-week" }]);
     const names = view.names([{ from: "2025-03-07", to: "2025-03-07" }, { from: "2026-03-07", to: "2026-03-07" }], context, now);

@@ -69,19 +69,33 @@ On interaction cards, identify the prompt author with a high-contrast label
 and its Human, Agent or unverified icon. Align the date to the author's text
 baseline, not the icon. When it wraps, start it under the author text.
 Give the prompt and its eye separate columns inside one link. Below the prompt,
-keep the recorded outcome with the affected calls and their explanations. Green/check
+keep the recorded outcome with the affected calls and their explanations. When a
+reason covers the full badge count, place its call numbers and tool beside that
+count. Use one **Problem** area for the card, with different reasons under
+their own call numbers and entry details beside their exact links. Omit the
+area on clean cards. A code-only failure that repeats its entry's code need
+not repeat it on the card; the reader retains both records. Missing reasons are plain text. Green/check
 indicates recorded tool completion; red/cross marks failed calls. Neither
 is a verdict on the prompt or the task. Returned issues keep a separate link.
 Keep provenance in Source details; name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
 the glyph beside its label. Separate the identity key from the prompt with a
-rule. In the Tools summary, give each exact name a compact, neutral surface
-without bullets. These are list items, not filters or reader links. Keep a
+rule. In the Tools summary, show exact names as plain text without icons,
+badges or bullets. These are list items, not filters or reader links. Keep a
 repeat count inside its tool’s label, as in `workiq-retrieve (2 calls)`;
 a single call reads `workiq-fetch`. Wrap labels as units where they fit and
 allow long names to break rather than truncate. On a returned result layer
-the unit is results, not calls. The reader retains every record.
+the unit is results, not calls. Keep the card's two actions with these facts,
+not beneath the taller of the prompt and metadata columns. Use the same text
+scale for labels, targets and operations. Name the recorded operation for the
+reader (for example **Reply-all draft**); its exact API path remains in the
+call reader.
+
+Tool names and counts also use plain text in chart legends, filters, reader
+headings and comparison tables. Keep the glyph for an operation such as
+**Asked Copilot**, not for the tool identifier `workiq-ask`. Search keeps its
+result-category icon; a link or disclosure keeps its navigation cue.
 
 ### Surfaces and color
 
@@ -170,6 +184,23 @@ Set weight in `iconProps`, not in page styles. Do not thin a glyph by fading
 it, shrinking its target or changing its weight when selected. Keep compact
 author and outcome cues at least 16px beside their text.
 
+A circled check identifies a recorded success. A bare check at the trailing
+edge of an option marks the selected value, even if that value is a failure.
+Keep the leading glyph and its ink when hovering or selecting the row. Compare's
+mixed **Errors & failures** starting point uses an attention triangle, not a
+failed-call cross. Human and Agent prompt glyphs keep their author inks. A
+service glyph keeps its service ink even in Search, outside the chart legend.
+Navigation and ordinary actions inherit their control's ink; they are not
+additional data categories.
+
+Screen operation roles live in `web/operation-icons.mjs`. A recorded tool name
+identifies the tool, not a service, a result, or proof that a referenced API
+was called. API discovery, schema lookup, agent discovery, retrieval and
+Copilot assistance use different glyphs. A named Graph action or function
+uses its own glyph only on a matching recorded action/function call. A schema
+argument, code reference, returned status, or unknown name does not acquire
+an execution glyph. The role coverage test follows the analytics allowlists.
+
 This rule is for screen glyphs, not all SVGs. WIRE and provider marks, profile
 imagery, chart geometry and the versioned artwork embedded in reports retain
 their own paint. Native form controls keep their platform affordances.
@@ -228,6 +259,7 @@ Ordinary text actions share an 8px corner, 12px side padding and an 8px
 icon-to-label gap. At default text size a 32px face sits inside a 44px target;
 let the target grow with wrapped or enlarged text. Keep widths content-sized
 and preserve geometry when focus, hover, press or pending paint changes.
+Hover and press tint the existing face, not the transparent space around it.
 For a directional row, keep its arrow visible and tint its surface or ink on
 hover/press; don't underline or embolden the label. Keyboard focus keeps an
 outline. The underline below an active section marks location; an underline

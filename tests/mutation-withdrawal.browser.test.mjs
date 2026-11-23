@@ -16,6 +16,7 @@ import { uxIcons } from "../web/ux-icons.mjs";
 import { createSearchFields } from "../web/search-field.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { createTimeContext } from "../lib/time.mjs";
+import { createDateRangeCalendar } from "../web/date-range-calendar.mjs";
 
 const owners = {
     deletion: { dialog: "#deleteDialog", open: "#deleteActivity", preview: "#deletePreview", confirm: "#deleteConfirm",
@@ -86,7 +87,7 @@ async function setup(t, kind, grant = "current") {
         createDeletionFlow: ${createDeletionFlow}, mountDeletion: ${mountDeletion},
         mountRecollection: ${mountRecollection}, describeRecollection: ${describeRecollection},
         createSavedArtifactDeletion: ${createSavedArtifactDeletion}, createEvidenceUX: ${createEvidenceUX},
-        createTimeContext: ${createTimeContext}, createLocalSearch: ${createLocalSearch}, createSearchFields: ${createSearchFields}
+        createTimeContext: ${createTimeContext}, createDateRangeCalendar: ${createDateRangeCalendar}, createLocalSearch: ${createLocalSearch}, createSearchFields: ${createSearchFields}
     };` });
     await page.evaluate(({ kind, icons, artifact, grant }) => {
         const f = window.factories;
@@ -111,10 +112,10 @@ async function setup(t, kind, grant = "current") {
         window.committed = async () => { window.applied++; if (window.holdApplied) await new Promise(resolve => { window.finishApplied = resolve; }); return true; };
         if (kind === "deletion") {
             window.machine = f.createDeletionFlow();
-            window.owner = f.mountDeletion({ api, flow: window.machine, ux,
+            window.owner = f.mountDeletion({ api, flow: window.machine, ux, time:f.createTimeContext(), createCalendar:f.createDateRangeCalendar,
                 timeContext: () => ({ timeZone: "UTC", locale: "en-US" }), onCommitted: window.committed });
         } else if (kind === "recollection") {
-            window.owner = f.mountRecollection({ api, ux, time: f.createTimeContext(),
+            window.owner = f.mountRecollection({ api, ux, time: f.createTimeContext(), createCalendar:f.createDateRangeCalendar,
                 timeContext: () => ({ timeZone: "UTC", locale: "en-US" }), search: f.createLocalSearch(),
                 searchFields: f.createSearchFields(ux), describe: f.describeRecollection, canAct: () => "",
                 onChanged: value => window.notices.push(value), onNotice: value => window.notices.push(value),

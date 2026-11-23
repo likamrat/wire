@@ -142,7 +142,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
     assert.equal(preview.records.length, 1);
     assert.equal(preview.snapshot.reportPopulation.reference.length, 1);
     assert.match(JSON.stringify(preview.snapshot.resultText), /SourcePolicyUnavailable/);
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -150,7 +150,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
         assert.equal(response.status(), 200);
         preview = await response.json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     if (proofs) await page.screenshot({ path: path.join(proofs, "ask-errors-report.png") });
     const saving = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).click();

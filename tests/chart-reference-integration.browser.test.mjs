@@ -128,6 +128,9 @@ async function assertInPageReader(page) {
 test("the in-page Analyze Guide routes every topic from the article or exact data with Back and focus", { timeout: 60000 }, async t => {
     const { page } = await setup(t, pathRecords());
     await page.locator("#openChartReference").click();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeReferenceEntry [aria-current=page]")).toHaveAttribute("id", "openChartReference");
+    await expect(page.locator("#meaning .chart-reference-heading")).toBeHidden();
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
     await expect(page.locator('#chartReferenceTopics [aria-current="page"]')).toHaveAttribute("data-reference-topic", "outcomes");
     await expect(page.locator("#chartReferenceAllTopics")).toBeHidden();
@@ -165,7 +168,7 @@ test("the Analyze Guide opens and closes without a glide or a deferred dismissal
         await assertInPageReader(page);
         const closed = await page.evaluate(() => {
             const root = document.getElementById("meaning");
-            document.getElementById("closeChartReference").click();
+            document.getElementById("analyzeResultsSection").click();
             window.nativeGuide.refresh();
             return { open: root.open, animations: root.getAnimations().length, capture: window.nativeGuide.capture() };
         });
@@ -359,7 +362,7 @@ test("an accepted empty native view has qualified zero counts rather than stale 
         await expect(page.locator("#chartReferenceData")).toContainText("Not applicable");
         await expect(page.locator("#chartReferenceData a")).toHaveCount(0);
         await captureNative(page, `${theme}-empty-exact`);
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
     for (const layer of ["direct-request", "recorded-http"]) {
         await page.goto(new URL(page.url()).origin + "#analyze?layer=" + layer);
@@ -374,7 +377,7 @@ test("an accepted empty native view has qualified zero counts rather than stale 
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("0");
         await page.locator("#chartReferenceSource>summary").press("Enter");
         await expect(page.locator("#layerFilter")).toHaveValue(layer);
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
@@ -453,7 +456,7 @@ test("the native guide keeps all six accepted evidence layers and their executio
             await expect(page.locator("#chartReferenceData")).toContainText("Execution not observed");
             await expect(page.locator("#chartReferenceData")).not.toContainText("HTTP 2xx");
         }
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
@@ -475,7 +478,7 @@ async function inspectGuide(page, name) {
         await captureNative(page, name);
         await writeFile(path.join(proof, name + ".json"), JSON.stringify(layout));
     }
-    const controls = page.locator("#meaning button:visible,#meaning a:visible,#meaning input:visible,#meaning summary:visible");
+    const controls = page.locator("#analyzeReferenceEntry button:visible,#meaning button:visible,#meaning a:visible,#meaning input:visible,#meaning summary:visible");
     for (let index = 0; index < await controls.count(); index++) {
         const control = controls.nth(index);
         if (await control.isDisabled()) continue;
@@ -507,7 +510,7 @@ test("the whole native guide reflows in both themes, long tables, phone, tablet 
             await page.locator("#openChartReference").click();
             await topicChoice(page, "outcomes");
             await page.locator("#meaning").evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
-            await page.locator("#chartReferenceTitle").focus();
+            await page.locator("#openChartReference").focus();
             await inspectGuide(page, `${theme}-${name}-guide`);
             const toggle = page.locator("#chartReferenceTopicToggle");
             if (await toggle.isVisible()) {
@@ -519,7 +522,7 @@ test("the whole native guide reflows in both themes, long tables, phone, tablet 
             await page.locator("#chartReferenceShowData").click();
             await page.locator("#chartReferenceDataTitle").focus();
             await inspectGuide(page, `${theme}-${name}-paths`);
-            await page.locator("#closeChartReference").click();
+            await page.locator("#analyzeResultsSection").click();
             await expect(page.locator("#openChartReference")).toBeFocused();
         }
     }
@@ -582,13 +585,13 @@ test("the whole native guide works at actual 200% browser zoom", {
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").click();
         await topicChoice(page, "outcomes");
-        await page.locator("#chartReferenceTitle").focus();
+        await page.locator("#openChartReference").focus();
         await inspectGuide(page, `${theme}-zoom200-guide`);
         await topicChoice(page, "paths");
         await page.locator("#chartReferenceShowData").click();
         await page.locator("#chartReferenceDataTitle").focus();
         await inspectGuide(page, `${theme}-zoom200-paths`);
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 

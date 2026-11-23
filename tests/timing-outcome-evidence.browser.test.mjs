@@ -94,13 +94,13 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         }
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const rebuilt = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
         assert.equal((await rebuilt).status(), 200);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const savedState = await loadBoardState(context), newBundle = savedState.exports.at(-1);

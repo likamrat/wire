@@ -6,12 +6,13 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { assertProjectedBundle } from "../lib/privacy.mjs";
 import { normalizeReportOptions } from "../lib/prompt-projection.mjs";
 import { time } from "../lib/time.mjs";
-import { readSavedArtifactFile, loadSavedReportSource } from "../lib/report-artifacts.mjs";
+import { readSavedArtifactFile, loadSavedReportSource, readSavedReportView } from "../lib/report-artifacts.mjs";
 import { inspectSavedReportSnapshot } from "../lib/saved-report-snapshot.mjs";
 import { startServer } from "../lib/server.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
 import { resolveReportView } from "../lib/report-population.mjs";
+import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 function records() {
@@ -33,6 +34,43 @@ const options = () => ({
     dateSelection: { range: "7", from: "2026-11-02", to: "2026-11-08" },
     reportFocus: { version: 1, preset: "errors", outcome: "errors", services: [] },
     saveMode: "local",
+});
+
+test("finding-first selected reports freeze each final member and its own evidence, not a prior selection", async t => {
+    const [x, y] = records();
+    const { context } = await privateFixture(t, [x, y]), controller = createExportController(context);
+    const opts = { ...options(), reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } };
+    async function prepare(ids, owner) {
+        const { revision } = await loadBoardState(context);
+        return controller.preview(owner, undefined, opts, { kind: "selected", scenarioIds: ids, revision });
+    }
+    const both = await prepare([x.scenarioId,y.scenarioId], "both");
+    assert.equal(both.snapshot.reportPopulation.included.length, 2);
+    const readbacks = [];
+    for (const [source, owner] of [[x,"first"],[y,"second"]]) {
+        const preview = await prepare([source.scenarioId], owner);
+        const { bundle } = await controller.confirm(owner, preview.previewId, true, timeContext,
+            { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+        const state = await loadBoardState(context);
+        const saved = await readSavedArtifactFile(context, state, bundle.bundleId, "report", "json");
+        const j = JSON.parse(saved.bytes), expected = both.snapshot.records.find(rec => rec.prompts[0].text === j.records[0].prompts[0].text);
+        assert.ok(expected);
+        assert.equal(j.records[0].prompts[0].text.includes(source.scenarioId.toUpperCase()), true);
+        assert.deepEqual(j.reportPopulation.reference.map(item=>item.ref), [expected.scenarioId]);
+        assert.deepEqual(j.reportPopulation.included, [expected.scenarioId]);
+        assert.deepEqual([...new Set(j.reportPatterns.calls.map(c=>c.scenarioRef))], [expected.scenarioId]);
+        const reopened = await readSavedReportView(context, state, bundle.bundleId);
+        assert.ok(reopened.text.includes('id="finding"') && reopened.text.includes("This report includes 1 interaction."));
+        const prior = structuredClone(j);
+        prior.presentation.findingVersion = 1;
+        for (const render of [renderHtmlReport, renderMarkdownReport]) {
+            assert.match(render(prior.records, { snapshot: prior }), /1 interaction included from 1 eligible interaction\./);
+            assert.match(render(j.records, { snapshot: j }), /This report includes 1 interaction\./);
+        }
+        readbacks.push([bundle.bundleId, reopened.text]);
+    }
+    assert.equal((await readSavedReportView(context, await loadBoardState(context), readbacks[0][0])).text,readbacks[0][1]);
+    assert.equal(both.snapshot.reportPopulation.included.length,2);
 });
 
 test("fresh report membership stays independent of Analyze interval across a long daily range", async t => {
@@ -69,10 +107,10 @@ test("new focused reports lead with separate outcomes and timing before patterns
     const html = preview.files["product-report.html"], md = preview.files["product-report.md"];
     assert.ok(html.indexOf('id="overview"') < html.indexOf('id="patterns"'));
     assert.ok(html.indexOf('id="timing"') < html.indexOf('id="patterns"'));
-    assert.ok(md.indexOf("## Included evidence") < md.indexOf("## Patterns"));
-    assert.ok(md.indexOf("## Timing") < md.indexOf("## Patterns"));
+    assert.ok(md.indexOf("## Included evidence") < md.indexOf("\n## Patterns\n"));
+    assert.ok(md.indexOf("## Timing") < md.indexOf("\n## Patterns\n"));
     assert.doesNotMatch(md, /Not an error grouping/);
-    assert.deepEqual([...html.matchAll(/Report call (\d+):/g)].map(match => Number(match[1])), [1, 2, 3, 4, 5, 6]);
+    assert.deepEqual([...html.matchAll(/<h3>Report call (\d+):/g)].map(match => Number(match[1])), [1, 2, 3, 4, 5, 6]);
     assert.match(html, /2 completed \/ 2 failed \/ 1 outcome unknown \/ 1 partial/);
     assert.match(html, /3 2xx \/ 2 reported failure \/ 1 status unknown/);
     assert.match(html, /631 ms/);

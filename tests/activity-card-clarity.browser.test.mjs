@@ -85,7 +85,7 @@ test("service limits open their own calls, not a neighboring named target or the
     const { page } = await setup(t, [record]);
     const card = page.locator("#activityList .card-identities");
     for (const [label, index, via, words] of [
-        ["Asked Copilot", 2, "keyboard", /nothing to repair/i],
+        ["Asked Copilot", 2, "keyboard", /which apps, if any, Copilot used/],
         ["Exchange ID conversion", 3, "pointer", /Exchange item IDs/],
         ["Recorded path not recognized", 4, "pointer", /recorded path/],
     ]) {
@@ -94,9 +94,8 @@ test("service limits open their own calls, not a neighboring named target or the
         const link = card.getByRole("link", { name: new RegExp(label) });
         await expect(link).toHaveCount(1);
         if (via === "keyboard") {
-            await expect(link).toContainText("First of 2 calls");
-            await expect(link).toContainText("no app list in this record");
-            await expect(card).not.toContainText("Underlying services not recorded");
+            await expect(link.locator(".semantic-cue")).toHaveText("Asked Copilot (first of 2 calls)");
+            await expect(card).not.toContainText("Apps unknown");
             await link.focus(); await page.keyboard.press("Enter");
         } else await link.click();
         const call = page.locator(`[data-tool-call-id="service-exact-${index}"]`);
@@ -1001,7 +1000,7 @@ test("Reader call disclosure groups identity and result without a blank target r
     await expect(toggle.locator(".reader-call-summary")).toContainText("Work IQ required sign-in at the time");
     await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Target");
     await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Mail");
-    await expect(call.locator(".reader-call-secondary .reader-call-duration")).toContainText("Tool latency:");
+    await expect(call.locator(".reader-call-identity .reader-call-duration")).toContainText("Call duration:");
     await expect(toggle.locator("button,a,input")).toHaveCount(0);
     const geometry = await toggle.evaluate(toggle => {
         const identity = toggle.querySelector(".reader-call-identity-line").getBoundingClientRect();
@@ -1136,7 +1135,7 @@ test("service identity is stated once for an inherited target and keeps independ
         assert.match(byId.get("service-preparation").identity, /Operation\s*Schema lookup/);
         assert.equal(byId.get("service-preparation").returned[0].path, "Not recorded");
         assert.match(byId.get("service-search").identity, /Operation\s*Search requested/);
-        assert.match(byId.get("service-assistance").identity, /Operation\s*Asked Copilot \(no app list in this record\)/);
+        assert.match(byId.get("service-assistance").identity, /Operation\s*Asked Copilot$/);
     }
     const selectedId = observations[0].values.find(value => value.id === "service-returned").returned[1].id;
     const exact = new URL(page.url());

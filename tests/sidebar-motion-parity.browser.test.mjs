@@ -61,7 +61,7 @@ test(`Filters glide like the sidebars while the Analyze Guide stays in-page (${w
     await expect(page.locator("#contextSidebar")).toBeHidden(); await settle();
     for (const [trigger, panel, close] of [
         ["#openAnalyzeFilters", "#analyzeFilterDialog", "#closeAnalyzeFilters"],
-        ["#openChartReference", "#meaning", "#closeChartReference"],
+        ["#openChartReference", "#meaning", "#analyzeResultsSection"],
     ]) {
         await page.locator(trigger).click();
         await expect(page.locator(panel)).toBeVisible(); await settle();

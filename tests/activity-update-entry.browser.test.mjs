@@ -49,6 +49,7 @@ test("Settings recollection uses the authoritative preview and preserves the dis
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
     await selectActivityOption(page, "dateFilter", "day"); await page.locator("#workspace[aria-busy=false]").waitFor();
     await page.locator("#closeAnalyzeFilters").click();
+    await expect(page.locator("#analyzeFilterDialog")).toBeHidden();
     await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     assert.equal(await page.locator("#recollectActivity").count(), 1);
     const trigger = await page.locator("#recollectActivity").elementHandle();
@@ -62,6 +63,12 @@ test("Settings recollection uses the authoritative preview and preserves the dis
         await capture(page, `selection-${theme}-disabled`);
     }
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
+    const previewRequests=[];
+    page.on("request",r=>{if(r.url().endsWith("/api/recollection/preview"))previewRequests.push(r.url());});
+    await page.locator("#recollectFrom").fill("2098-01-02");await page.locator("#recollectTo").fill("2098-01-03");
+    await expect(page.locator("#recollectPreview")).toBeDisabled();
+    await expect(page.locator("#recollectCalendarStatus")).toContainText("today or an earlier date");
+    assert.deepEqual(previewRequests,[]);
     await page.locator("#recollectFrom").fill(f.firstDay); await page.locator("#recollectTo").fill(f.firstDay);
     const response = page.waitForResponse(response => response.url().endsWith("/api/recollection/preview"));
     await page.locator("#recollectPreview").click();

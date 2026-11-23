@@ -393,13 +393,12 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             changing: "Saved content changed. Search again.",
             unavailable: "Search is unavailable. Try again.",
             disconnected: failure || "Search disconnected. Reconnect to read current items.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
-            incomplete: coverage === "Saved GitHub replies are unavailable for Search."
-                ? coverage : "Search is incomplete. " + coverage,
+            incomplete: coverage,
             "no-match": nativeSearch?.active() ? "No GitHub, saved or navigation matches. Microsoft results are separate." : "No matches. Try different words." };
         replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
-                : partial ? labels.incomplete : labels["no-match"]
+                : partial ? "No matches in the items WIRE could search. " + coverage : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.");
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
         replaceSearchText($("wireSearchCoverage"), partial && current.matches.total ? coverage : "");
@@ -474,7 +473,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 origin = actor === "unknown" ? "Author unverified" : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
                 const cue = el("span", origin, "author-option-value");
                 cue.dataset.promptActor = actor;
-                cue.prepend(ux.icon(authorship.iconRole(actor)));
+                cue.prepend(ux.icon("author-" + actor));
                 meta.append(cue);
             }
             if (layer) meta.append(el("span", kindLabel, "wire-search-kind"));

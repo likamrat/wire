@@ -61,6 +61,11 @@ in this release. Saving Copilot reply text is a separate choice under
 available response-model names, plus prompt authors. The interaction list below
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
+Open a long project, chat, tool or service list to find a choice by part of
+its name. Trends' **Measure** and **Compare with** also match units: `ask reach`
+finds the ask tool's interaction reach. In **Settings → Regional**, try a city
+or part of a time-zone ID. Typing only narrows the open list. Choose a row or
+press Enter to accept the highlighted choice; Escape keeps the previous value.
 Find the prompt in the list, then open its row to see the tools, services and
 results in the right-hand reader. A note such as **1 tool call failed** or
 **Reported result issue** helps identify exceptions. These are different:
@@ -91,7 +96,8 @@ conversations without comparable prompt provenance are shown as unavailable,
 not included in these shares.
 
 On an Analyze card, **2 tool calls failed** opens both failed calls. The
-short reasons identify their calls; if no reason was saved, the card says so.
+**Problem** area names the affected calls and shows what went wrong. If no
+reason was saved, the card says so.
 **Returned entry 2 · HTTP 400** opens that particular result, not the first
 error or another entry with the same status. Open the reader for the full retained
 wording, code and status. A completed tool can still return an error. A missing
@@ -99,26 +105,33 @@ completion does not establish that anyone cancelled the call.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
-**Settings > Regional > Time zone**. Missing history and records without qualified
+**Settings > Regional > Time zone**. Select a start and end on the calendar,
+or type them. Today is the latest date you can use. **This week** and **This
+month** also end today. Missing history and records without qualified
 times remain explicit. No matches means
 no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
-Open **Guide** in the Analyze toolbar to start reading about recorded outcomes.
+Under **Analyze**, choose **Results** to inspect activity or **Guide** to read
+about recorded outcomes. The underline marks the current section. **Refresh**
+and **Filters** apply to Results and stay out of the Guide.
 Pick another topic beside the explanation, or use **Topics** on a narrow
 screen. Worked examples illustrate distinctions such as a completed call
 returning an error for one item; they are not records from your activity.
 Choose **See exact numbers** for values in your current scope and matching
-records where available. Closing Guide returns you to Analyze. In
+records where available. Choose **Results** or use browser Back to return to
+the same filtered results and reading position. In
 **Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
 or the last topic read in this tab. This preference does not change the charts.
 
 **Services and operations** distinguishes a hosted Copilot request that did
 not record its downstream services from a saved target path WIRE could not
 classify. Neither tells you who wrote the prompt or whether the call failed.
-On an interaction card, **View call**, when available beside a service or operation,
-opens the matching call. If several match, the link identifies the first.
+On an interaction card, an operation or service detail with a right arrow
+opens the matching call. **Exchange ID conversion** identifies a request to
+convert item IDs; it does not identify the mailbox item. If several calls match,
+the link says **first of N calls**.
 The **tool-call count** opens the whole interaction. Expand a numbered call
 to see which target and result belong to that call.
 To inspect a path, use **Guide > Paths and operations > See exact numbers**,
@@ -143,7 +156,9 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 ## Trends
 
 Choose **Trends** in the sidebar. **Overview** shows the daily number of
-interactions with a recorded error or failure. Select a day to inspect its
+interactions with a recorded error or failure. A cross at zero means no matching
+dated calls; a circle at zero means there was activity but no recorded error.
+Select a day to inspect its
 supporting calls in **Charts**. Charts lists all seven measures; **Chart guide**
 explains what each counts. Use Back to return to the chart you were reading. On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
@@ -191,6 +206,9 @@ from an example on Overview. For example, compare **Errors & failures ·
 interaction share** with a tool's **interaction reach**. Both count matching
 interactions that day, so they can share one graph. Call share uses a different
 denominator; call volume and duration use different units. These use aligned charts.
+Aligned charts share a vertical scale when their units and denominators match.
+**Share within week** marks each week boundary; its line stops there because the
+next point uses a different denominator. Select a date to see that week's selected dates.
 
 Select a point for its exact daily reading and matching calls. **Remove
 comparison** drops the second measure; **Collapse chart** keeps your choices.
@@ -199,14 +217,15 @@ correlation describes that page's paired daily values, not causation or
 individual calls. **Compare periods** instead compares this period with the
 preceding period of equal length. Review the dates and scope before opening
 Compare; **Back to Trends** returns to the pair and selected day.
-On an individual chart, **Data table** includes daily numbers and period
+On grouped columns, one zero under a date means all **shown** series are zero.
+Unavailable measurements use a dash instead. On an individual chart, **Data table** includes daily numbers and period
 totals, including series hidden in the chart.
 
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
 | Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
-| Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; shaded partial weeks include only selected dates. |
+| Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; a short rule along the date axis marks partial weeks. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
 | Response models | Matching interactions with each recorded model, as a share of all matching interactions. Multiple models can overlap, and interactions without a model name stay in the denominator. |
@@ -269,7 +288,10 @@ additional restrictions. **Use Analyze view** explicitly brings its current
 non-date filters and authorized Search into the comparison.
 
 **Outcomes**, **Timeline**, **By tool** and **Timing** show the same pair.
-**View calls** opens the records; **View numbers** explains the exact values.
+**View calls** opens the records; when only the baseline has calls, the action
+opens those baseline calls. **View numbers** explains the exact values.
+An empty period has no rate to compare. If an outcome filter excluded all
+calls, the period's row gives the count before that filter.
 **Create report** preserves the pair for local saving. See
 [comparisons](reporting.md#compare) for scope and return behavior.
 
@@ -296,8 +318,10 @@ prompt rather than hiding a match behind the preview.
 Use **Prompt**, **Activity** or **Source** at the top of the interaction to jump
 to that section. **Reply** appears when the selected interaction has a recorded reply.
 Each call shows its own outcome, such as **1 tool call completed**, even if
-one returned entry reported an error. Its timing and any recorded reason stay
-with the call. Open the call for its exact input; **Source details** holds provenance and
+one returned entry reported an error. **Call duration** measures the whole call.
+Returned entries stay in order and carry their own statuses and timing. If an
+error message is shortened, **Full diagnostic** opens its saved wording.
+Open the call for its exact input; **Source details** holds provenance and
 identifiers. Close or Back returns to the originating results.
 
 **WIRE interpretation** explains a recorded condition or evidence gap separately
@@ -333,8 +357,11 @@ Copy controls copy the exact retained original, unmasked. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 
-**Add to report** changes selection only. **Continue to report** opens a report
-of those selections. Use **Save report** to keep its files.
+Use **Add to report** at the bottom left of a card, or the same action after
+**Source** in its reader. Choose a draft to add the entire interaction without
+leaving Analyze. Reopen the picker to add it to another draft or remove it from
+one. In **Reports**, choose the draft by name, prepare it and use **Save report**
+when you want to keep its files.
 
 ## Make a report
 
@@ -350,7 +377,7 @@ your Analyze filters.
 
 Select **Prepare preview** to read the patterns and supporting interactions in
 the right-side drawer. Preparing does not write files or send the report.
-You can add a note or edit a report copy. **Files to save** chooses the HTML,
+You can add a note or edit a report copy. **Formats** chooses the HTML,
 PDF, JSON or Markdown files to write; **Viewing** only changes what you read.
 **Save report** keeps the chosen files on this device.
 If you keep chat details, the warning lets you hide details and save, save
@@ -464,8 +491,12 @@ Drag the sidebar's right edge to resize it. With the divider focused, use the
 left and right arrow keys. WIRE remembers your width in this browser;
 double-click the edge or press Enter on it to restore the default.
 
-Use **Help** at the bottom of the sidebar for the meaning of counts
-and tool results. **HTTP recorder** shows any saved diagnostic. Normal WIRE
+Open **? (Help)** at the bottom of the sidebar for **Prepare a report**,
+**Find missing activity**, **Understand activity counts**, or **Read tool results**.
+Select a topic to read its answer. Your browser’s Back and Forward buttons
+revisit topics and earlier pages. Chart definitions and examples stay in the Analyze and Trends guides.
+
+In Collection status, **HTTP recorder** shows any saved diagnostic. Normal WIRE
 launches cannot start a new network test. A saved diagnostic is separate from
 Copilot collection status.
 

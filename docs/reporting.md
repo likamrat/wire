@@ -14,13 +14,21 @@ Contributors changing report behavior should also read the
 
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
 to search the library. Under **New report**, choose which chat details to
-include, then check **Report focus**, **Activity period**, **Activity** and
-**Files to save**.
+include, then check **Show**, **Dates**, **Activity source** and
+**Formats**.
+**Show** filters what the report covers, such as errors or human prompts.
+**Activity source** selects the interactions to start from. A named draft
+supplies its own selected interactions; selecting it does not prepare or save.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
 **Prepare preview** opens a right-side drawer without writing files. Check the
 report there, then choose **Save report** to write the selected files locally.
+When the activity includes retained Microsoft conversations, the ordinary
+report uses **All activity** and **All retained dates** for that scope. It
+does not apply GitHub interaction presets or pretend an undated conversation
+belongs to a report date range. For two dated Microsoft periods, start in
+**Compare**, choose the periods and select **Create report**.
 If recorded activity changes while you read, a note in the drawer tells you
 that the preview still contains the activity it was prepared with.
 If you kept chat details, the confirmation names those formats. Nothing is sent.
@@ -62,8 +70,19 @@ The activity picker keeps its actions visible while its
 contents scroll together, without a second scroll area inside the interaction list.
 Failure summaries keep the recorded tool name; open an interaction to read its
 exact calls and returned results. **Close** leaves your selection intact; it does not save a report.
-You can also use **Add to report > Continue to report** in an interaction reader.
-Reading or selecting an interaction alone does not save a report.
+On Analyze, choose **Add to report** on the card or after **Source** in
+the reader. Pick an existing draft or use **Search drafts** to filter by name.
+To create one, choose **New draft**, enter its name, then **Create draft and add**.
+The card shows the draft name after the add. Choose **Open draft** in the
+confirmation to open that draft in Reports without preparing or saving it.
+If another report has unfinished choices, it stays intact in its original tab.
+For a previously saved report, choose **Saved library** instead. To remove the interaction from just one draft, reopen
+the picker and choose that draft's **Remove** row. Other drafts and the
+recorded interaction are unchanged.
+
+In **Reports**, choose the name under **Report draft**, then **Prepare preview**.
+Quick additions keep their membership across reloads, not a copy of the chat.
+They never write an export or change an already prepared or saved report.
 
 **Back to Reports** returns to the choices and saved list. It keeps an unfinished
 copy in memory. Use **Resume preview** with the same focus and unchanged dates to
@@ -80,6 +99,16 @@ If WIRE later corrects who sent a prompt, reports already prepared or saved
 stay unchanged. Prepare a new report to use the corrected author.
 
 ## Read the findings
+
+New focused reports put a finding, its population and one recorded example
+together in preview, Brief and the saved document. Compare the directly labeled
+pattern rows by **interactions**, not calls: an interaction can match several
+rows, so the bars do not add to a total. Choose a pattern for its members, or
+open the example call directly. A tool's completion, a tool-reported status
+and the status of a particular returned entry answer different questions.
+For example, a completed batch can have HTTP 200 on one entry and 403 on
+another. A quoted diagnostic belongs to its named observation and entry.
+Use the named section disclosures in Full report without leaving your place.
 
 In **Saved library**, open a report by name. Supported focused reports open in
 **Brief** with the leading recorded pattern, its population and a saved error
@@ -178,8 +207,7 @@ Masking, edits and omissions still control the diagnostic copies. A fixed WIRE
 interpretation can remain when you leave out error-message text; it does not
 restore the omitted wording or read prompts, replies or arguments.
 
-**Files to save** chooses a web page (HTML), print document (PDF), structured
-data (JSON) or editable text (Markdown); you can select more than one.
+**Formats** lets you select HTML, PDF, Markdown and JSON in any combination.
 **Viewing** changes only what you are reading: **Report** is the readable page,
 while a file choice shows that actual format in its own reading pane. Text
 inspection stays out of the file view. PDF has page controls, JSON has
@@ -197,7 +225,7 @@ text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Your selected file and
 Preview/Source mode stay selected during these updates and after changing the
 report period or call filters. Removing that file
-from **Files to save** returns to **Report**. Save is unavailable until the update finishes.
+from **Formats** returns to **Report**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
 
@@ -223,11 +251,11 @@ and sensitive information that may be included:
 
 | Choice | Effect |
 | --- | --- |
-| Hide details and save | Regenerates masked copies and saves that exact new bundle once. |
+| Mask detected details and save | Saves a new copy with masking. Masking can miss names and sensitive wording. |
 | Save with chat details | Confirms this particular local save with chat details kept. |
 | Go back | Writes nothing. |
 
-![The keep-chat-details warning offering Hide details and save, Save with chat details, and Go back.](images/report-save-warning.png)
+![The save warning lets you mask details, keep original chat wording, or go back.](images/report-save-warning.png)
 
 The save receipt records your choice to save locally, not a claim that you
 reviewed every copy. Older reports keep the review confirmation recorded
@@ -287,6 +315,11 @@ under **Settings > Compare**.
 **Custom dates** opens both calendars; each range includes its start and end
 days. **Cancel** leaves the accepted comparison unchanged. Unequal or overlapping
 ranges are allowed and remain labeled.
+
+For GitHub Copilot calls, Analyze, Compare and Trends use the recorded call
+start in the display time zone. If the start is missing or has no time zone,
+the call remains in **All dates** but does not belong to either period. A zero
+in a period is not proof that history collection was complete.
 
 The compact activity choice offers All activity, Errors & failures, Completed
 calls, Human prompts and Agent prompts. **More options** retains source, tool,

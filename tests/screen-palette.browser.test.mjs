@@ -10,6 +10,65 @@ import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast, rgb, measureChartPaint, measureControlSurface, visibleInk } from "./color-measurements.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
+test("purpose, identity and selection glyphs keep their meaning on each palette", { timeout: 180000 }, async t => {
+    const app = await searchFixture(t, { records: reviewRecords(), reply: false, frontend: "react" });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: {width:1360, height:960}, reducedMotion:"reduce" });
+    await page.clock.setFixedTime(new Date("2026-11-18T16:00:00Z"));
+    const rows = [], output = process.env.WIRE_GLYPH_PROOFS;
+    if (output) await mkdir(output, { recursive:true });
+    const url = app.runtime.url + "compare?aFrom=2026-11-10&aTo=2026-11-12&bFrom=2026-11-14&bTo=2026-11-16";
+    for (const palette of ["petrol","linen","blue","field","midnight"]) for (const mode of ["light","dark"]) {
+        await page.goto(app.runtime.url+"settings?section=themes"); await chooseTheme(page,mode);
+        await page.locator(`.palette-option:has(#palette-${palette})`).click();
+        await page.goto(url);
+        const trigger = page.locator("#comparisonQuickChoice-control"), menu = page.locator(".select-popup:visible");
+        await trigger.click();
+        const glyph = role => `[data-icon-role="${role}"]`;
+        async function paint(node, token, state, control = node) {
+            await expect(node).toBeVisible();
+            const { role, ink, expected, name } = await node.evaluate((n, key) => {
+                const probe = document.createElement("span"); probe.hidden = true;
+                probe.style.color = `var(${key})`; n.parentElement.append(probe);
+                const expected = getComputedStyle(probe).color; probe.remove();
+                return {role:n.dataset.iconRole, name:n.dataset.lucideIcon, ink:getComputedStyle(n).color, expected};
+            }, token);
+            assert.deepEqual(rgb(ink),rgb(expected),`${palette}/${mode} ${role} ${state}`);
+            const { face } = await control.evaluate(measureControlSurface);
+            const ratio = contrast(ink,face);
+            assert.ok(ratio >= 3,`${palette}/${mode} ${role} on ${face}: ${ratio}`);
+            rows.push({palette,mode,role,name,state,ink,face,ratio});
+        }
+        const option = value => menu.locator(`[role=option][data-value="${value}"]`);
+        for (const [value,role,token] of [["all","report-all","--ink"],["errors","scope-issues","--warning"],
+            ["completed","result-success","--tool-positive"],["mine","author-user","--screen-prompt-user"],
+            ["agent","author-agent","--screen-prompt-agent"]]) {
+            await paint(option(value).locator(glyph(role)),token,"menu",option(value));
+        }
+        await option("mine").hover();
+        await paint(option("mine").locator(glyph("author-user")),"--screen-prompt-user","hover",option("mine"));
+        await paint(option("all").locator(glyph("select-check")),"--accent","selected",option("all"));
+        if (output) {
+            await page.screenshot({path:path.join(output,`${palette}-${mode}.png`)});
+            await menu.screenshot({path:path.join(output,`${palette}-${mode}-menu.png`)});
+        }
+        await option("completed").click();
+        await expect(trigger).toContainText("Completed calls");
+        await trigger.press("Enter");
+        const chosen = option("completed");
+        await expect(chosen).toHaveAttribute("aria-selected","true");
+        await paint(chosen.locator(glyph("result-success")),"--tool-positive","selected",chosen);
+        await paint(chosen.locator(glyph("select-check")),"--accent","selected",chosen);
+        assert.notEqual(await chosen.locator(glyph("result-success")).getAttribute("data-lucide-icon"),
+            await chosen.locator(glyph("select-check")).getAttribute("data-lucide-icon"));
+        await trigger.press("Escape"); await expect(trigger).toBeFocused();
+        await page.locator("#wireSearch").fill("Mail");
+        const mail = page.locator('.wire-search-hit[data-search-type=service] [data-icon-role="service:mail"]').first();
+        await paint(mail,"--chart-service-mail-label","search");
+    }
+    if (output) await writeFile(path.join(output,"glyphs.json"),JSON.stringify(rows,null,2));
+});
+
 test("tool, returned issue and disclosure inks follow the evidence through each screen palette", {timeout:180000}, async t => {
     const app = await searchFixture(t, {records:reviewRecords(), reply:false, frontend:"react"});
     const browser = await chromium.launch(); t.after(() => browser.close());
@@ -236,7 +295,7 @@ test("the built workbench carries each palette through screens and nested readin
         assert.equal(await editorBody.innerText(),previous);
         await control.locator(`.palette-option:has(#palette-${palette})`).click(); await control.close();
         await navigateMain(page, "settings");
-        for (const category of ["connection", "privacy", "themes", "regional", "troubleshooting"]) {
+        for (const category of ["connection", "privacy", "themes", "regional"]) {
             await navigateSettings(page, category);
             await inspect(`settings-${category}`, theme);
         }

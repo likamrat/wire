@@ -83,8 +83,9 @@ test("Collection status holds distinct scope/check/scan meanings, canonical coun
     assert.match(await page.locator("#coverageBody").innerText(), new RegExp(`${c.scenarioCount} interaction.*${c.sessionCount} Copilot chat.*${c.projectCount} project`));
     assert.equal(c.sessionCount, 1, "Metadata-only and date-excluded chats are not evidence-bearing counts");
     assert.equal(await page.locator("#coverageNotice").isVisible(), false, "No missing chat identity or unscanned Graph layer in this view");
-    await page.locator("#openEvidenceHelp").click();
-    await page.getByRole("link", { name: "Open collection status", exact: true }).click(); await ready(page);
+    await page.locator('nav [data-nav="settings"]').click();
+    await page.locator('#settingsCategoryNav [data-category="connection"]').click();
+    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
     if (!await page.locator("#collectionSetup").evaluate(n => n.open)) await page.locator("#collectionSetup>summary").click();
     await expect(page.locator("#collectionSetup")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#collectionSetup>summary").evaluate(n => n === document.activeElement), true);

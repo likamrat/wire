@@ -195,13 +195,17 @@ export const analyzeLayoutStyles = `
 #homeView[data-empty=true]>.analyze-dashboard,
 #homeView[data-empty=true]>.analyze-review {display:none}
 
-.analyze-toolbar {display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:0 0 12px;min-width:0;container:analyze-entries / inline-size}
-.analyze-reading:not(.period-comparing) #workspace>#analyzeToolbar {max-width:none}
-#analyzeReferenceEntry:empty {display:none}
+.analyze-toolbar {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:var(--space-sm);min-width:0;max-width:100%}
+#workspace>#analyzeReferenceEntry {max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-xs) var(--space-md);flex-wrap:wrap;max-width:none;margin-bottom:var(--space-md)}
+#workspace>#analyzeResultCommands[hidden] {display:none}
+#analyzeResultScope {flex:1 1 15rem;min-width:0;align-self:center}
+#analyzeResultScope .analyze-scope-summary {margin:0;padding:0;border:0}
+#analyzeResultScope .analyze-scope-caption {margin:0}
+#analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
+#analyzeResultScope #periodResult :is(#activityCount,#activityUnit) {font:inherit;letter-spacing:normal;color:inherit}
 .analyze-toolbar[hidden] {display:none}
-.analyze-toolbar:has(>#analyzeReferenceEntry[hidden]):has(>#openAnalyzeFilters[hidden]) {display:none}
-#analyzeReferenceEntry {min-width:0}
-#openChartReference,#openAnalyzeFilters {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control)}
+#openAnalyzeFilters {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control)}
 #openAnalyzeFilters {--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
 #openAnalyzeFilters>.wire-icon {width:1rem;height:1rem;flex:none;color:inherit}
 #analyzeRefresh {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;font-size:var(--type-control);line-height:var(--leading-control)}
@@ -210,19 +214,18 @@ export const analyzeLayoutStyles = `
 .analyze-toolbar>.ux-disabled-help {flex:none}
 #analyzeRefresh:focus-visible {outline:none}
 #analyzeRefresh:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
-#openChartReference:focus-visible,#openAnalyzeFilters:focus-visible {outline:none}
-#openChartReference:focus-visible::before,#openAnalyzeFilters:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
+#openAnalyzeFilters:focus-visible {outline:none}
+#openAnalyzeFilters:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 /* One stable target for the longest (two-digit) accepted label, also at enlarged type. */
 .filter-entry {inline-size:11em;max-inline-size:100%;justify-content:center;font-variant-numeric:tabular-nums}
 .filter-entry.has-applied-filters:not(:disabled) {--pill-fill:var(--accent-soft);--pill-border:var(--control);--pill-hover:var(--accent-hover);--pill-hover-border:var(--control)}
-@container analyze-entries (max-width:24rem) {
- #openChartReference,#openAnalyzeFilters,#analyzeRefresh {gap:6px;padding-inline:6px}
-}
-@container analyze-entries (max-width:19rem) {
- #analyzeRefreshLabel {display:none}
+@media(max-width:550px) {
+ #analyzeResultScope {order:1;flex-basis:100%}
+ #analyzeResultCommands .analyze-toolbar {justify-content:flex-start}
 }
 .analyze-filter-dialog {margin:0;inset:var(--analyze-panel-top,120px) clamp(16px,var(--analyze-panel-right,24px),max(16px,calc(100vw - 48rem - 16px))) auto auto;width:min(48rem,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - var(--analyze-panel-top,120px) - 16px);padding:0;border:1px solid var(--surface-divider);border-radius:var(--radius-dialog);background:var(--floating-paper);color:var(--ink);box-shadow:var(--surface-shadow);scroll-padding-top:76px}
 .analyze-filter-dialog::backdrop {background:var(--scrim)}
+.analyze-filter-dialog[open]:not(:modal){position:fixed;z-index:30}
 @media(prefers-reduced-motion:no-preference) {
  .analyze-filter-dialog::backdrop {transition:background-color 320ms cubic-bezier(.2,0,0,1)}
  .analyze-filter-dialog[data-closing]::backdrop {background:transparent}
@@ -273,8 +276,7 @@ export const analyzeLayoutStyles = `
 .analyze-scope-error[hidden] {display:none}
 .analyze-scope-error>.wire-icon {width:20px;height:20px;flex:none;color:inherit}
 #analyzeEmptyScope .analyze-scope-summary {margin:0 0 16px;padding:12px 16px;border:1px solid var(--surface-edge);border-radius:var(--radius);background:var(--paper)}
-.analyze-reading:not(.period-comparing) .page-heading {margin:0;min-height:0}
-.analyze-reading:not(.period-comparing) .page-heading>div:first-child,
+.analyze-reading:not(.period-comparing) .page-heading {margin:0 0 var(--space-lg);min-height:0}
 .analyze-reading:not(.period-comparing) #activityView:has(#activityListContext) #activityTitle {position:absolute!important;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .analyze-reading:not(.period-comparing) #activityView {position:relative;margin-top:24px}
 .analyze-reading:not(.period-comparing) #activityView>.section-heading {margin:0;padding:0;border:0}

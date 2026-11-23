@@ -51,7 +51,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
     assert.equal(model.resolve({ setting: "advanced" }).setting, "collection-details");
     assert.equal(model.find("missing history").find(entry => entry.id === "issues").view, "collection-status");
     assert.equal(model.find("status").find(entry => entry.id === "collection-details").category, "Collection status");
-    assert.deepEqual(model.categories.map(row => row.title), ["General", "Collection", "Source access", "Themes", "Regional", "Privacy & saved data", "Analyze", "Trends", "Reports", "Compare", "Help"]);
+    assert.deepEqual(model.categories.map(row => row.title), ["General", "Collection", "Source access", "Themes", "Regional", "Privacy & saved data", "Analyze", "Trends", "Reports", "Compare"]);
     assert.deepEqual(model.find("automatic scores"), []);
     assert.equal(model.resolve({ section: "ai", setting: "automatic-scores" }).section, "connection");
     assert.match(model.resolve({ section: "ai", setting: "automatic-scores" }).warning, /Unknown/);
@@ -113,11 +113,15 @@ test("humanized Settings names retain previous search phrases and destination ID
         ["delete-activity", ["Delete collected activity", "Review deletion"]],
         ["recollect-activity", ["Recollect activity", "Recollect from approved sources", "Read history again", "Choose chats"]],
         ["history-window", ["Initial history window", "History to include"]],
-        ["service-provenance", ["Service details", "How services are identified"]],
-        ["author-provenance", ["Prompt authors", "How prompt authors are identified"]],
-        ["settings-search", ["Search troubleshooting", "Missing search results"]],
     ]) for (const query of queries) {
         assert.ok(model.find(query).some(entry => entry.id === id), `${query} finds ${id}`);
         assert.equal(model.resolve({ setting: id }).setting, id);
+    }
+});
+
+test("old Help addresses open the corresponding topic, not a setting", () => {
+    const model = createSettingsNavigation(createLocalSearch());
+    for (const [setting, section] of [["activity-counts", "counts"], ["service-provenance", "results"], ["settings-search", "history"]]) {
+        assert.deepEqual(model.resolve({ section: "troubleshooting", setting }), { view: "help", section, warning: "" });
     }
 });

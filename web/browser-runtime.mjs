@@ -4,6 +4,7 @@ import { createBoardTransport } from "../lib/client-transport.mjs";
 import { createReportDraft, createReportSaveIdentity } from "./report-draft.mjs";
 import { createEvidenceUX } from "./ux.mjs";
 import { uxIcons } from "./ux-icons.mjs";
+import { createOperationIcons } from "./operation-icons.mjs";
 import { mountThemeControl } from "./theme-control.mjs";
 import { createTimeContext } from "../lib/time.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
@@ -84,12 +85,14 @@ import { mountFirstConnection } from "./first-connection.mjs";
 import { mountAppUpdate } from "./app-update.mjs";
 import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
+import { createReportDraftPicker } from "./report-draft-picker.mjs";
+import { normalizeSearchText } from "../lib/search-normalize.mjs";
 
 function factories() {
     const timing = createTimingPresentation(createActivityProjection(null, null, ["unknown"]).summarize, { compact: true });
     const wording = createAssessmentWording(), searchContract = createSearchWireContract(__WIRE_TEXT_POLICY__);
     return {
-        timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
+        createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),
@@ -100,7 +103,7 @@ function factories() {
         createAccountProfile, createNativeActivityPresentation, activityPage, createNativeConfigurationState,
         createSourceCollectionState, createRefreshSources, mountSourceCollectionSettings, createBoundedNativeState,
         createNativeReportPublicationState, mountBoundedNative,
-        savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection,
+        savedFilePreview: createSavedFilePreview, preparedFileInspection: createPreparedFileInspection, createReportDraftPicker, normalizeSearchText,
         createReportSaveIdentity, reportWorkspacePresentation, reportFileChoices, createDateRangeCalendar,
         mountTrends: options => mountTrends({ ...options, createCalendar: createDateRangeCalendar, mountChart: mountTrendsChart, createTrendPairModel, mountTrendPair }),
         createReportExperience: options => createReportExperience({ ...options, createCalendar: createDateRangeCalendar }),

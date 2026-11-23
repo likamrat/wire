@@ -60,7 +60,12 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
         }
         return fromSummary(summary, metric.coverage.eligible, metric.boundary);
     }
-    return { duration: compact ? formatMilliseconds : duration, milliseconds: formatMilliseconds, fromSummary, fromMetric };
+    function readerDuration(milliseconds) {
+        const exact = formatMilliseconds(milliseconds);
+        if (milliseconds === null || milliseconds < 1000) return exact;
+        return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(milliseconds / 1000) + " s";
+    }
+    return { duration: compact ? formatMilliseconds : duration, milliseconds: formatMilliseconds, readerDuration, fromSummary, fromMetric };
 }
 
 // Human meaning requires the saved check, version and origin, not its dimension alone.

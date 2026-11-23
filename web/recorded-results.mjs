@@ -1,7 +1,7 @@
 // Self-contained for the nonce-authorized browser shell.
 export function createRecordedResults({ scope = () => null, screen = false } = {}) {
     const keys = ["success", "failure", "unknown", "partial", "other", "transport"];
-    const icons = { success: "check", failure: "result-failure", unknown: "unobserved", partial: "result-partial", other: "result-other", transport: "result-transport" };
+    const icons = { success: screen ? "result-success" : "check", failure: "result-failure", unknown: "unobserved", partial: "result-partial", other: "result-other", transport: "result-transport" };
     function icon(key) {
         if (!Object.hasOwn(icons, key)) throw new TypeError("Result icons require a recorded outcome.");
         return icons[key];
@@ -98,14 +98,17 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             || evidence.diagnostic.details?.length)) return "Recorded error details";
         return null;
     }
+    function recordedCallCause(call, contextual = false) {
+        // A legacy summary derived from returned entries is not an independent invocation cause.
+        const entrySummary = !call?.failureEvidence?.diagnostic && call?.failureEvidence?.messageSource === "workiq-error-json"
+            && call.failureEvidence.messageSignal === "response-processing-error" && returnedErrorSummary(call);
+        return entrySummary ? null : primaryFailureCause(call, contextual);
+    }
     function failureCause(call, contextual = false, includeReturned = true) {
         const diagnostic = call?.resultEvidence?.version === 1 ? call.resultEvidence.diagnostic : null;
         const result = diagnostic?.version === 1 && !genericMessage(diagnostic) ? diagnosticSummary(diagnostic) : "";
         const duplicate = diagnostic && JSON.stringify(diagnostic) === JSON.stringify(call?.failureEvidence?.diagnostic);
-        // A legacy summary derived from returned entries is not an independent invocation cause.
-        const entrySummary = !call?.failureEvidence?.diagnostic && call?.failureEvidence?.messageSource === "workiq-error-json"
-            && call.failureEvidence.messageSignal === "response-processing-error" && returnedErrorSummary(call);
-        return [entrySummary ? null : primaryFailureCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
+        return [recordedCallCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
             includeReturned ? returnedErrorSummary(call) : null].filter(Boolean).join("\n") || null;
     }
     function reportedStatus(status, subject = "The tool") {
@@ -356,9 +359,10 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         return validateInterpretation({ version: 2, items: items.filter(item =>
             item.channel !== "result" || !items.some(other => other.channel === "call" && other.kind === item.kind)) });
     }
-    function interpretationItems(value, { includeReturned = true } = {}) {
+    function interpretationItems(value, { includeReturned = true, omitCallKind } = {}) {
         const groups = new Map();
-        for (const item of validateInterpretation(value).items.filter(item => includeReturned || item.channel !== "returned-entry")) {
+        for (const item of validateInterpretation(value).items.filter(item => (includeReturned || item.channel !== "returned-entry")
+            && !(item.channel === "call" && item.kind === omitCallKind))) {
             const key = JSON.stringify([item.channel, item.kind]);
             const group = groups.get(key) ?? { ...item, indexes: [] };
             if (item.entryIndex !== null) group.indexes.push(item.entryIndex + 1);
@@ -368,10 +372,12 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             label: "WIRE interpretation" + (item.channel === "returned-entry"
                 ? ` (returned ${item.indexes.length === 1 ? "entry" : "entries"} ${item.indexes.join(", ")})`
                 : item.channel === "result" ? " (result)" : ""),
-            text: item.text, interpretation: true,
+            text: screen && item.kind === "missing-completion"
+                ? "The call may have finished. Without a saved result, there’s no way to tell."
+                : item.text, interpretation: true,
         }));
     }
-    function callReasonItems(call, outcome, { includeReturned = true } = {}) {
+    function callReasonItems(call, outcome, { includeReturned = true, omitCallKind } = {}) {
         const reason = outcome === "failure" ? failureReason(call, { contextual: true, includeReturned: false })
             : completionReason(call, outcome, true, false);
         const items = reason ? reason.split("\n").map(text => ({ label: null, text })) : [];
@@ -388,7 +394,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             }
         }
         if (includeReturned) items.push(...returnedErrorGroups(call));
-        if (screen) items.push(...interpretationItems(interpretation(call, outcome), { includeReturned }));
+        if (screen) items.push(...interpretationItems(interpretation(call, outcome), { includeReturned, omitCallKind }));
         return items;
     }
     function callOperation(row) {
@@ -411,6 +417,15 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         if (indexed && !call.apiResults.some(other => other !== entry && other?.index === entry.index)) return label;
         return `${label} (saved item ${call.apiResults.indexOf(entry) + 1})`;
     }
+    function entryCue(diagnostic, code, repeatedCode) {
+        if (diagnostic?.message && !genericMessage(diagnostic)) {
+            // The quoted filter is available in the exact reader; the position is enough for the card.
+            const syntax = code === "BadRequest" && /^Syntax error:\s*character\s+['‘’](\S)['‘’]\s+is not valid at position (\d+)(?:\s+in\s+.+|\.?)$/iu.exec(diagnostic.message);
+            if (syntax) return `Invalid ${syntax[1] === ":" ? "colon" : `character '${syntax[1]}'`} at position ${syntax[2]}.`;
+            if (code === repeatedCode) return shortCue(diagnostic.message);
+        }
+        return shortCue(diagnosticSummary({ ...diagnostic, code, statusCode: null }), code);
+    }
     // Keep parent calls and canonical entry rows; equal text/status is not an identity.
     function cardIssues(rows, apiRows, callFor) {
         const byParent = new Map(), groups = new Map();
@@ -420,7 +435,8 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         }
         const hasDiagnostic = d => d?.version === 1 && (d.message || d.code != null || d.statusCode >= 400 || d.details?.length);
         for (const row of new Map((rows ?? []).map(row => [row.id, row])).values()) {
-            const call = callFor(row), entries = [];
+            const call = callFor(row), entries = [], failed = row.outcome === "failure", r = call?.resultEvidence;
+            const parentCode = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
             for (const api of byParent.get(row.id) ?? []) {
                 const entry = returnedResult(call, api);
                 if (!entry) continue;
@@ -430,18 +446,22 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
                 const status = conflict ? `HTTP ${api.status}; diagnostic HTTP ${d.statusCode}`
                     : api.status != null ? `HTTP ${api.status}` : d?.statusCode != null ? `diagnostic HTTP ${d.statusCode}` : "Reported error";
                 const offset = call.apiResults.indexOf(entry);
+                const code = d?.code ?? entry.errorCode;
                 entries.push({ row: api, offset, label: `${returnedEntryLabel(call, entry)} · ${status}`,
-                    detail: shortCue(diagnosticSummary({ ...d, code: d?.code ?? entry.errorCode, statusCode: null }), d?.code ?? entry.errorCode) });
+                    code, detail: entryCue(d, code, parentCode) });
             }
             entries.sort((a,b) => a.offset - b.offset);
-            const failed = row.outcome === "failure", r = call?.resultEvidence;
             const resultIssue = !failed && r?.version === 1 && (r.applicationError === true || r.statusConflict || r.statusCode >= 400 || hasDiagnostic(r.diagnostic));
             if (!failed && !resultIssue && !entries.length) continue;
             const reason = failed ? failureReason(call, { contextual: true, includeReturned: false })
                 : resultIssue ? completionReason(call, row.outcome, true, false) : null;
-            const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, reason]) : JSON.stringify(["call", row.id]);
-            const code = failed ? call?.failureEvidence?.diagnostic?.code ?? call?.failureEvidence?.code : r?.diagnostic?.code;
-            const group = groups.get(key) ?? { rows: [], detail: shortCue(reason, code), entries, resultIssue };
+            const recordedCause = failed && Boolean(recordedCallCause(call, true));
+            const key = failed && !entries.length ? JSON.stringify(["reason", row.tool, recordedCause, reason]) : JSON.stringify(["call", row.id]);
+            // Omit a code-only parent preview echoed by its own entry. Distinct reasons stay with their calls.
+            const redundantCode = recordedCause && reason === parentCode && entries.some(entry => entry.code === parentCode);
+            const group = groups.get(key) ?? { rows: [], detail: redundantCode ? null : shortCue(reason, parentCode)
+                ?? (failed && entries.length ? "No separate failure reason was recorded." : null),
+                recordedCause, entries, resultIssue };
             group.rows.push(row); groups.set(key, group);
         }
         return [...groups.values()];
@@ -702,5 +722,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, countedExecution, toolCardOutcome, failureReason, recordedCallCause, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, cardIssues, entryCue, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedEntryLabel, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

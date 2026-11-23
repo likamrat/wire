@@ -301,7 +301,7 @@ test("screen service roles stay distinct from green completion and red failures 
     await expect(row("people-worked")).toContainText("1 Tool completed");
     await expect(row("people-failed")).toContainText("1 Tool failed");
     await expect(row("hosted")).toContainText("Service not shown");
-    assert.equal(await row("people-worked").locator('[data-outcome="success"] svg').getAttribute("data-lucide-icon"), "check");
+    assert.equal(await row("people-worked").locator('[data-outcome="success"] svg').getAttribute("data-lucide-icon"), "circle-check");
     assert.equal(await row("people-failed").locator('[data-outcome="failure"] svg').getAttribute("data-lucide-icon"), "circle-x");
     await row("people-worked").locator(".request-card-open").focus();
     await page.keyboard.press("Shift");

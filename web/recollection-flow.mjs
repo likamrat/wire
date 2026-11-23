@@ -101,7 +101,7 @@ export const recollectionStyles = `
 `;
 
 // Serialized into the page; dependencies stay inside the mount function.
-export function mountRecollection({ api, time, timeContext, search, pageSources, ux, searchFields, describe, canAct, onChanged, onNotice, onCommitted, offerVerifiedRecords }) {
+export function mountRecollection({ api, createCalendar, time, timeContext, search, pageSources, ux, searchFields, describe, canAct, onChanged, onNotice, onCommitted, offerVerifiedRecords }) {
     if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
         throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
     }
@@ -117,6 +117,10 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
     const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
         && api.isCurrent(access.token) === true;
+    const calendar = createCalendar({root:dialog.querySelector(".recollect-dates"),id:"recollectCalendar",time,ux,context:timeContext,
+        current:()=>current(publication()),singleDay:()=>exact,sharedDateNote:$("recollectZone"),
+        existingFields:{from:$("recollectFrom"),to:$("recollectTo")},inputIds:{from:"recollectFrom",to:"recollectTo"},
+        onEdit:()=>{edit();status("");}});
     const blockedMessage = "The saved recollection receipt could not be read or verified. An earlier operation may be unconfirmed. Recollection is blocked; the saved entry has not been changed. Stored activity is still available.";
     const selectedSources = new Set();
     const locked = () => ["pending", "uncertain", "blocked"].includes(phase);
@@ -157,6 +161,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             : "Choose up to 128 chats and a date range before previewing. Search stays in this panel.";
         $("recollectFromLabel").textContent = exact ? "Day" : "From";
         $("recollectToChoice").hidden = $("recollectTo").disabled = exact;
+        calendar.reset(calendar.value());
         $("recollectPromptsChoice").hidden = $("recollectPromptsHelp").hidden = $("recollectPrompts").disabled = newOnly || exact;
         $("recollectCorrectionsChoice").hidden = $("recollectCorrections").disabled = !correctionsAvailable || exact;
         if (exact || newOnly) $("recollectPrompts").checked = false;
@@ -228,7 +233,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         $("recollectLoadSources").disabled = busy || Boolean(reason);
         $("recollectPreview").hidden = phase !== "editing" || choosingOperation;
         $("recollectPreview").disabled = busy || !sourcesReady || !selectedSources.size
-            || !$("recollectFrom").value || (exact ? selectedSources.size !== 1 : !$("recollectTo").value) || locked() || Boolean(reason);
+            || !calendar.valid() || (exact && selectedSources.size !== 1) || locked() || Boolean(reason);
         $("recollectConfirm").hidden = phase !== "preview" && phase !== "pending";
         $("recollectConfirm").disabled = !view.canConfirm || Boolean(reason);
         $("recollectContinue").hidden = !continuing;
@@ -421,6 +426,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     async function readPreview(continuation) {
         const access = publication();
         if (busy || locked() || !allowed("preview")) return;
+        if (!continuation && !calendar.valid()) { status("Choose valid dates through today before previewing.",true); return; }
         if (!selectedSources.size) { status("Choose at least one chat.", true); $("recollectSearch").focus(); return; }
         if (exact && (!exactAvailable || selectedSources.size !== 1 || !$("recollectFrom").value)) {
             status("Choose exactly one chat and one day to review individually verified calls.", true); return;
@@ -611,7 +617,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     });
     const searchField = searchFields.mount($("recollectSearch"), { clearLabel: "Clear search", onInput: () => renderSources() });
     $("recollectShowSelected").addEventListener("click", () => { if (!current(publication())) return; selectedOnly = !selectedOnly; searchField.sync(""); renderSources(); });
-    for (const id of ["recollectFrom", "recollectTo", "recollectPrompts", "recollectCorrections"]) $(id).addEventListener("input", () => { edit(); status(""); });
+    for (const id of ["recollectPrompts", "recollectCorrections"]) $(id).addEventListener("input", () => { edit(); status(""); });
     $("recollectClose").addEventListener("click", () => dialog.close());
     dialog.addEventListener("cancel", event => { if (phase === "pending") event.preventDefault(); });
     dialog.addEventListener("close", () => {
@@ -662,7 +668,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             sources = []; sourceMatches = []; selectedSources.clear(); selectedOnly = false;
             eraseSourceRows($("recollectSources")); $("recollectSources").replaceChildren();
             chooseOperation(false);
-            $("recollectFrom").value = ""; $("recollectTo").value = "";
+            calendar.reset({});
             restoreReceipt();
         }
         update(); if (!dialog.open) dialog.showModal();
@@ -699,7 +705,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         $("recollectOperation").value = "strict"; $("recollectOperation").disabled = $("recollectOperationChoice").hidden = true;
         $("recollectCorrections").checked = false; $("recollectCorrectionsChoice").hidden = true;
         searchField.sync(""); $("recollectSearch").readOnly = true;
-        $("recollectFrom").value = ""; $("recollectTo").value = ""; $("recollectPrompts").checked = false;
+        calendar.clear(); $("recollectPrompts").checked = false;
         for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectScope",
             "recollectClipped", "recollectSummary", "recollectPromptSummary", "recollectPreserved", "recollectBounds", "recollectPolicy", "recollectStatus"]) $(id).textContent = "";
         $("recollectConfirm").textContent = "Read selected history again";

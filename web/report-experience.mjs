@@ -1,9 +1,9 @@
 // Screen copy only: file names, format values and saved report bytes are unchanged.
 export const reportFileChoices = {
-    html: { name: "HTML", purpose: "Web page", description: "Open the formatted report in a browser." },
-    pdf: { name: "PDF", purpose: "Print document", description: "Keep a fixed layout for reading or printing." },
-    json: { name: "JSON", purpose: "Structured data", description: "Use the recorded facts in a script or analysis tool." },
-    markdown: { name: "Markdown", purpose: "Editable text", description: "Edit or quote the file in a text editor." },
+    html: { name: "HTML", purpose: "Web page" },
+    pdf: { name: "PDF", purpose: "Print document" },
+    markdown: { name: "Markdown", purpose: "Editable text" },
+    json: { name: "JSON", purpose: "Structured data" },
 };
 
 export function reportWorkspacePresentation(route, journey = {}) {
@@ -13,19 +13,18 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, fileLabel }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
-        ["all", "All activity", "report-all"], ["errors", "Errors & failures", "warning"],
-        ["completed", "Completed calls", "check"], ["mine", "Human prompts", "account"], ["agent", "Agent prompts", "report-agent"],
+        ["all", "All activity"], ["errors", "Errors & failures"],
+        ["completed", "Completed calls"], ["mine", "Human prompts"], ["agent", "Agent prompts"],
     ];
     const help = {
-        all: "Includes prompts with unknown authors.",
-        errors: "At least one call failed or reported an error. Other calls may have completed.",
+        all: "",
+        errors: "Compare interactions with a failed call or a recorded error against all eligible interactions. A completed call can contain an API error.",
         completed: "All calls completed without a recorded error. The answer can still be wrong.",
         mine: "Started by you, including any calls made by an agent.",
         agent: "Started by an agent. Unknown authors are excluded.",
-        formats: "Choose the files that Save report will write on this device. Viewing a file does not change this choice.",
     };
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
@@ -47,6 +46,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     function opener(label, panel) {
         const control = button(label, () => {}, "report-toolbar-choice");
+        ux.anchoredChoices(panel);
         control.setAttribute("popovertarget", panel.id); control.append(ux.icon("chevron"));
         return control;
     }
@@ -68,17 +68,20 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         control.dataset.reportRange = range; period.append(control);
     }
     let deskFocus = "all";
-    const compactFocus = el("select"); compactFocus.id = "reportDeskFocus"; compactFocus.dataset.nativeSelect = "";
-    const compactLabel = el("label", "report-desk-compact", "Report focus"), nativeChoice = el("span", "native-choice");
-    const nativeChevron = ux.icon("chevron"); nativeChevron.classList.add("native-choice-chevron");
-    nativeChoice.append(compactFocus, nativeChevron); compactLabel.append(nativeChoice);
+    function selectField(id, caption) {
+        const field = el("div", "report-form-field"), label = el("label", "", caption), select = el("select");
+        label.htmlFor = select.id = id;
+        field.append(label, select);
+        return { field, select };
+    }
+    const { field: compactLabel, select: compactFocus } = selectField("reportDeskFocus", "Show");
     compactFocus.addEventListener("change", () => { if (current() && !read().locked) { deskFocus = compactFocus.value; sync(); } });
     for (const [id, title] of presets) {
         const option = el("option", "", title); option.value = id; compactFocus.append(option);
     }
     const desk = el("div", "report-desk"), outlineDescription = el("p", "report-outline-description");
     const outlineChoices = el("div", "report-outline-choices"), outlineAction = el("div", "report-outline-action");
-    const prepare = button("Prepare preview", event => choose(deskFocus, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
+    const prepare = button("Prepare preview", event => choose(compactFocus.value, event.currentTarget), "primary icon-action"); prepare.id = "prepareReportPreview";
     const prepareLabel = prepare.firstChild;
     prepare.prepend(ux.icon("read"));
     const prepareHint = el("p", "report-desk-hint"); prepareHint.id = "reportDeskHint"; prepareHint.setAttribute("role", "status");
@@ -91,7 +94,23 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     };
     const treatment = el("div", "report-before-prepare");
     const draftChoices = el("div", "report-draft-fields");
-    desk.append(treatment, draftChoices, outlineDescription, outlineChoices, outlineAction, prepareHint);
+    const { field: namedRow, select: namedSelect } = selectField("namedReportDraft", "Report draft");
+    let optionSignature;
+    let replacePrompt = null;
+    namedSelect.onchange = () => {
+        const value = read(), id = namedSelect.value;
+        if (!current() || namedSelect.disabled) return;
+        if (!value.resumePreset) { selectNamed(id); return; }
+        namedSelect.value = value.namedReport?.id ?? "";
+        replacePrompt?.remove();
+        replacePrompt = el("div", "context-help-note");
+        replacePrompt.append(el("p", "", "Switch draft and discard the unfinished preview? Saved reports will not change."),
+            button("Switch draft", () => { replacePrompt.remove(); replacePrompt = null; selectNamed(id); }),
+            button("Keep preview", () => { replacePrompt.remove(); replacePrompt = null; byId("namedReportDraft-control")?.focus(); }));
+        namedRow.after(replacePrompt);
+        queueMicrotask(() => { if (current() && replacePrompt?.isConnected) replacePrompt.querySelector("button").focus(); });
+    };
+    desk.append(namedRow, draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
     gallery.append(el("h2", "", "New report"), desk);
     const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
     selection.classList.add("report-explicit-selection");
@@ -124,7 +143,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     legend.after(promptOptions.querySelector('[value="masked"]').closest("label"));
     for (const input of promptOptions.querySelectorAll("input")) {
         const row = input.closest("label"); row.dataset.promptMode = input.value;
-        row.querySelector("strong").prepend(ux.icon(({masked:"hide",none:"report-no-text",original:"warning"})[input.value]));
+        row.querySelector("strong").prepend(ux.icon("report-" + input.value));
     }
     privacy.append(byId("additionalMasking")); done(privacy);
     const privacyButton = opener("Mask detected details", privacy);
@@ -135,8 +154,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const privacyHint = el("p", "report-privacy-hint"); privacyHint.id = "reportPrivacyHint";
     privacyRow.append(privacyLabel, privacyButton); privacyGroup.append(privacyRow, privacyHint);
     let privacyMode;
-    const formats = popover("reportFileOptions", "Files to save"); formats.append(byId("formatOptions")); done(formats);
-    const formatButton = opener("Files to save: HTML", formats);
+    const formats = popover("reportFileOptions", "Formats");
+    formats.firstElementChild.classList.add("visually-hidden");
+    const formatOptions = byId("formatOptions");
+    formats.append(formatOptions);
+    const formatButton = opener("HTML", formats);
     const formatLabel = formatButton.firstChild;
     formatButton.prepend(ux.icon("report-files"));
     const refine = popover("reportIncludeOptions", "Choose what to include");
@@ -161,10 +183,12 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const formatGroup = el("div", "report-toolbar-group");
     formatGroup.append(formatButton);
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
-    const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Files to save", formatGroup);
+    const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
-    outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
-    outlineAction.append(el("p","screen-explanation","Preparing does not save or send anything."), prepare);
+    const activityRow = optionsRow("Activity source", scopeChoice), draftMembership = el("span", "report-draft-membership");
+    activityRow.append(draftMembership);
+    outlineChoices.append(activityRow, fileRow);
+    outlineAction.append(prepare);
     periodHost.append(period, periodCaption);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
@@ -203,20 +227,27 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         focus.focus({ preventScroll: true });
     });
 
-    const calendar = popover("reportCustomDates", "Custom dates");
+    const calendar = el("div"); calendar.id = "reportCustomDates"; calendar.hidden = true;
+    periodPanel.firstElementChild.classList.add("visually-hidden");
+    periodPanel.append(calendar);
+    function closeDates() { periodPanel.hidePopover(); dateButton.focus({preventScroll:true}); }
+    periodPanel.addEventListener("beforetoggle", event => {
+        if (event.newState === "closed") { calendar.hidden = true; periodHost.hidden = false; calendarEditor.clear(); }
+    });
     const calendarEditor = createCalendar({ root: calendar, id: "reportDate", inputIds: { from: "reportDatefrom", to: "reportDateto" }, time, ux,
         context: () => read().timeContext, current, onChange: () => { applyDates.disabled = !calendarEditor.valid(); } });
     const calendarActions = el("div", "report-popover-actions");
     const applyDates = button("Use dates", () => {
         if (!calendarEditor.valid()) return;
-        calendar.hidePopover(); changeDates({ range: "custom", ...calendarEditor.value() });
+        const dates = calendarEditor.value(); closeDates(); changeDates({ range: "custom", ...dates });
     }, "primary");
-    calendarActions.append(button("Cancel", () => calendar.hidePopover()), applyDates);
+    calendarActions.append(button("Cancel", closeDates), applyDates);
     calendar.append(calendarActions);
     function openCalendar() {
         const value = read(), dates = value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates;
-        calendarEditor.reset(dates);
-        periodPanel.hidePopover(); calendar.showPopover(); calendarEditor.focus();
+        if (!periodPanel.matches(":popover-open")) periodPanel.showPopover({source:dateButton});
+        periodHost.hidden = true; calendar.hidden = false; calendarEditor.reset(dates);
+        calendar.querySelector("input").focus({preventScroll:true});
     }
     function showSelection() {
         if (read().locked) return;
@@ -248,6 +279,19 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     function sync() {
         if (!current()) return;
         const value = read();
+        const draftOptions = value.namedDrafts ?? [];
+        namedRow.hidden = !draftOptions.length || value.prepared;
+        namedSelect.disabled = value.locked || value.loading;
+        const signature = JSON.stringify([value.timeContext.locale, value.timeContext.timeZone, draftOptions.map(d => [d.id, d.name, d.revision, d.createdAt])]);
+        if (signature !== optionSignature) {
+            optionSignature = signature;
+            namedSelect.replaceChildren(new Option("New report", ""), ...draftOptions.map(d => {
+                const option = new Option(d.name, d.id);
+                if (d.createdAt) option.dataset.detail = "Created " + time.formatDate(d.createdAt, value.timeContext, true);
+                return option;
+            }));
+        }
+        namedSelect.value = value.namedReport?.id ?? "";
         toolbar.hidden = !value.prepared;
         gallery.hidden = value.paired && value.prepared;
         if (privacyGroup.parentElement !== choices) choices.append(privacyGroup);
@@ -271,18 +315,28 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
         }
-        compactFocus.disabled = value.locked || value.loading; compactFocus.value = deskFocus;
-        outlineDescription.textContent = help[deskFocus];
+        const focus = value.nativeScope ? "all" : deskFocus;
+        compactFocus.disabled = value.locked || value.loading || value.nativeScope; compactFocus.value = focus;
+        outlineDescription.textContent = value.nativeScope ? "Includes retained Microsoft conversations. Use Compare to report on two date ranges." : help[focus];
+        outlineDescription.hidden = !outlineDescription.textContent;
         scopeName.textContent = value.scopeLabel;
-        scopeChoice.setAttribute("aria-label", "Activity: " + value.scopeLabel);
+        scopeChoice.setAttribute("aria-label", "Activity source: " + value.scopeLabel);
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
+        scopeChoice.disabled ||= Boolean(value.namedReport);
+        scopeChoice.hidden = Boolean(value.namedReport);
+        draftMembership.hidden = !value.namedReport;
         prepare.disabled ||= !value.options.formats.length;
-        const resume = value.resumePreset === deskFocus;
-        prepareLabel.data = resume ? "Resume preview" : "Prepare preview";
-        const scopeIssue = !resume && value.explicitScope && value.scopeIssue;
+        const named = value.namedReport && draftOptions.find(d => d.id === value.namedReport.id);
+        draftMembership.textContent = !value.namedReport ? "" : !named || named.unavailable ? "Draft selection unavailable"
+            : `${named.scenarioIds.length} ${named.scenarioIds.length === 1 ? "interaction" : "interactions"} in this draft`;
+        const updated = value.namedReport && named?.revision !== value.namedReport.revision;
+        const resume = !updated && value.resumePreset === focus;
+        prepareLabel.data = resume ? "Resume preview" : updated ? "Prepare updated draft" : "Prepare preview";
+        const scopeIssue = !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
+            ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
         prepare.disabled ||= Boolean(scopeIssue);
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."
-            : value.unavailable ? "Waiting for a current activity snapshot." : !value.options.formats.length ? "Choose at least one file to prepare a preview." : scopeIssue || "";
+            : value.unavailable ? "Waiting for activity to load." : !value.options.formats.length ? "Choose at least one file format to preview the report." : scopeIssue || "";
         prepareHint.hidden = !prepareHint.textContent;
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
         const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
@@ -292,7 +346,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         backgroundScope.textContent = value.paired ? "Period comparison" : `${compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
         if (privacyMode !== mode) {
             privacyMode = mode;
-            privacyButton.replaceChildren(ux.icon(({ masked: "hide", original: "warning", none: "report-no-text" })[mode]),
+            privacyButton.replaceChildren(ux.icon("report-" + mode),
                 doc.createTextNode(({ masked: "Mask detected details", original: "Keep chat details", none: "Leave out prompts and replies" })[mode]),
                 ux.icon("chevron"));
         }
@@ -302,18 +356,20 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             : ({ masked: "Masking can miss names and sensitive wording.",
                 original: "Personal details may be included. Detected credentials are still removed.",
                 none: "Calls and counts stay. Notes and error messages may still contain personal details." })[mode];
-        const formatSummary = value.options.formats.map(format => value.prepared
-            ? format === "markdown" ? "Markdown" : format.toUpperCase() : fileLabel(format)).join(", ") || "Choose a file";
-        formatLabel.data = value.prepared ? "Files to save: " + formatSummary : formatSummary;
-        formatButton.setAttribute("aria-label", "Files to save: " + formatSummary);
+        const formatSummary = [...formatOptions.querySelectorAll("label")].filter(row =>
+            value.options.formats.includes(row.querySelector("input").value)).map(row => row.textContent.trim()).join(", ") || "None";
+        formatLabel.data = value.prepared ? "Formats: " + formatSummary : formatSummary;
+        formatButton.setAttribute("aria-label", "Formats: " + formatSummary);
         formatGroup.hidden = value.prepared && value.saved;
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
         scopeCaption.textContent = value.paired ? "" : value.scopeLabel;
+        scope.hidden = Boolean(value.namedReport);
         scopeCaption.hidden = !scopeCaption.textContent;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
-        dateButton.disabled = formatButton.disabled = value.locked || value.unavailable;
+        formatButton.disabled = value.locked || value.unavailable;
+        dateButton.disabled = formatButton.disabled || value.nativeScope;
         privacyButton.disabled = value.locked || value.unavailable;
         const save = byId("reportSaveActions");
         if (save && save.parentElement !== saveSlot) saveSlot.append(save);
@@ -327,22 +383,25 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             drawerTitle.textContent = title;
             if (!drawer.open) {
                 drawerHeader.after(errors, retry);
-                for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) drawer.append(panel);
+                for (const panel of [privacy, formats, refine, periodPanel, selection]) drawer.append(panel);
                 openDrawer();
                 drawerTitle.focus({ preventScroll: true });
             }
         } else if (drawer.open) {
             closeOptions(); drawer.close();
             messageAnchor.after(errors, retry);
-            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) root.append(panel);
+            for (const panel of [privacy, formats, refine, periodPanel, selection]) root.append(panel);
         }
     }
     return {
         sync, syncDrawer, backSlot, openCalendar, showSelection, selectionReturn,
-        hasDeskDraft: () => deskFocus !== "all" || calendar.matches(":popover-open"),
+        hasDeskDraft: () => deskFocus !== "all" || periodPanel.matches(":popover-open") && !calendar.hidden,
         resetDeskFocus() { deskFocus = "all"; },
         closeOptions,
         withdrawAccess() {
+            optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true;
+            draftMembership.textContent = "";
+            replacePrompt?.remove(); replacePrompt = null;
             syncDrawer(false);
             closeOptions();
             deskFocus = "all";
@@ -446,15 +505,15 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             dialog = doc.createElement("dialog"); dialog.className = "report-save-warning";
             dialog.setAttribute("aria-labelledby", "reportSaveWarningTitle"); dialog.setAttribute("aria-describedby", "reportSaveWarningCopy");
             const title = doc.createElement("h2"); title.id = "reportSaveWarningTitle";
-            const glyph = doc.createElement("span"); glyph.append(icon("warning"));
+            const glyph = doc.createElement("span"); glyph.append(icon("report-original"));
             title.append(glyph, doc.createTextNode("Save details from your chats?"));
             const copy = doc.createElement("p"); copy.id = "reportSaveWarningCopy";
             const files = formats.join(", ");
             copy.textContent = `${files || "Your saved files"} will include original chat wording. Anyone you share the files with could read names, email addresses, project details or other sensitive information.`;
             const detail = doc.createElement("p"); detail.className = "muted";
-            detail.textContent = "Saving creates local files. Nothing is sent. Detected passwords and other credentials are removed.";
+            detail.textContent = "WIRE saves the files on this device and sends nothing. It removes passwords and other credentials it detects. Masking can still miss names and sensitive wording.";
             const actions = doc.createElement("div"); actions.className = "report-warning-actions";
-            for (const [choice, label, cls] of [["masked", "Hide details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
+            for (const [choice, label, cls] of [["masked", "Mask detected details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
                 const button = doc.createElement("button"); button.type = "button"; button.className = cls;
                 if (!choice) { button.append(icon("back")); button.autofocus = true; }
                 button.append(doc.createTextNode(label)); button.addEventListener("click", () => close(current() ? choice : null)); actions.append(button);

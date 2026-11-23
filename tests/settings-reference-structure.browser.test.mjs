@@ -8,7 +8,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { enabledConsent } from "./assessment-contract-fixtures.mjs";
@@ -231,7 +231,7 @@ test("every registered setting and old route reaches its control or explains its
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     };
     for (const entry of navigation.entries) {
-        await route("#settings?section=troubleshooting");
+        await route("#settings?section=regional");
         await page.locator("#settingsSearch").fill(entry.title);
         const result = page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`);
         let target = entry.target;
@@ -290,7 +290,7 @@ test("category navigation preserves source and reply drafts, local search, cance
     await selectActivityOption(page, "collectionCadence", "15");
     const sourceNode = await page.locator("#sourceDatabase").elementHandle();
     await page.locator("#openEvidenceHelp").click();
-    await expect(page.locator('[data-settings-section="troubleshooting"]')).toBeVisible();
+    await expect(page.locator("#wireHelpView")).toBeVisible();
     assert.equal(new URL(page.url()).hash, "");
     await page.goBack();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
@@ -698,26 +698,27 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await captureSwitchState(page, `${theme}-reply-source-needed`);
 });
 
-test("Troubleshooting returns to unified Activity without losing scope, private query or selection", async t => {
+test("Help returns to unified Activity without losing scope, private query or selection", async t => {
     const { page } = await setup(t, { nonmatchingRecord: true });
     await page.evaluate(() => { location.hash = "#analyze?project=test-project&layer=tool"; });
     await expect(page.locator("#activityTitle")).toHaveText("Activity");
     await expect(page.locator("#activityList .request-card-open")).toHaveCount(2);
     const query = "SYNTHETIC_PRIVATE_PROMPT";
-    await restoreLegacySearch(page, query);
+    await page.locator("#activitySearch").evaluate((field, query) => {
+        field.value = query;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+    }, query);
     const selected = page.locator("#activityList .request-card-open");
     await expect(selected).toHaveCount(1);
     await selected.click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").open);
-    for (const help of ["serviceProvenanceHelp", "authorProvenanceHelp"]) {
-        await page.locator('nav [data-nav="settings"]').click();
-        await category(page, "troubleshooting");
-        await page.locator(`#${help}>summary`).click();
-        const link = page.locator("#" + help).getByRole("link", { name: "Open Activity in Analyze", exact: true });
-        await link.focus();
-        await page.keyboard.press("Enter");
+    for (const topic of ["counts", "results"]) {
+        await page.locator("#openEvidenceHelp").click();
+        await page.locator(`[data-help-topic="${topic}"]`).click();
+        await page.goBack(); await expect(page.locator("#help-reports")).toBeVisible();
+        await page.goBack();
         await expect(page.locator("#activityTitle")).toHaveText("Activity");
         const params = new URL(page.url()).searchParams;
         assert.equal(params.has("project"), false);

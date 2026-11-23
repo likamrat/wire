@@ -499,7 +499,7 @@ test("no-call conversation context remains in the single roster without a GitHub
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
         await expect(page.locator("#activityPager")).toContainText("1-1 of 1 activity entries");
         await expect(page.locator("#outcomeChart")).toContainText("No tool calls recorded.");
-        await expect(page.locator("#percentageCharts [data-breakdown=models]")).toContainText("Model names unavailable.");
+        await expect(page.locator("#percentageCharts [data-breakdown=models]")).toContainText("WIRE can’t tell which models these interactions used.");
         await expect(page.locator("#homeView")).not.toContainText("GitHub Copilot: 0");
         await expect(page.locator("#activityView")).not.toContainText("No collected activity yet");
         await selectActivityOption(page, "layerFilter", "reported-api");
@@ -629,7 +629,7 @@ test("native Analyze uses ordinary outcome rings, tool bars, exact columns and r
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
         await expect(page.locator("#chartReferenceData .native-reference")).not.toContainText("MoveMessage");
         await expect(page.locator("#chartReferenceData .native-reference")).toContainText("3 tool calls.");
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await page.locator("#percentageCharts .percentage-label").filter({ hasText: "mcp__graph__CallGraph" }).click();
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
         await expect(page.locator("#activityList .request-card-count")).toContainText("1 tool call");

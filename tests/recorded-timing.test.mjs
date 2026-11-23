@@ -9,6 +9,13 @@ import { createReportComparison } from "../web/report-comparison.mjs";
 import { nativeTimingHtml, nativeTimingMarkdown } from "../lib/native-report-output.mjs";
 
 const presentation = createAssessmentPresentation(contract), timing = createTimingPresentation();
+test("the reader uses one duration unit without reformatting report timing", () => {
+    const screen = createTimingPresentation(undefined, {compact: true});
+    assert.deepEqual([null, 0, 0.245, 999, 1000, 2422].map(screen.readerDuration),
+        ["Not measured", "0 ms", "0.245 ms", "999 ms", "1 s", "2.422 s"]);
+    assert.equal(screen.duration(2422), "2,422 ms (2.422 s)");
+    assert.equal(timing.duration(2422), "2.42 s");
+});
 function metric(values, eligible = values.length, definitionId = "tool-duration", offset = 0) {
     const value = makeDuration(values, offset), definition = contract.DEFINITIONS[definitionId];
     Object.assign(value, { definitionId, boundary: definition.boundary, measurementBasis: definition.basis });

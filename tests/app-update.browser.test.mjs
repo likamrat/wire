@@ -144,6 +144,31 @@ test("unsupported bundled runtime reads status only, even if a saved automatic p
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
+for (const supported of [false, true]) test(`General keeps one edge below the ${supported ? "build" : "package"} card`, async t => {
+    const { page, actions } = await workspace(t, { supported });
+    const card = page.locator(".app-version-card"), next = card.locator("+ .settings-task-row"), appearance = page.locator(".general-appearance");
+    const proof = process.env.WIRE_SETTINGS_GENERAL_PROOFS;
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await page.screenshot({ path: path.join(proof, `general-${supported ? "build" : "package"}-${theme}.png`) });
+        }
+        await expect(card).toHaveCSS("border-bottom-width", "1px");
+        await expect(next).toHaveCSS("border-top-width", "0px");
+        await expect(next).toHaveCSS("border-bottom-width", "1px");
+        await expect(appearance).toHaveCSS("border-top-width", "0px");
+    }
+    await next.evaluate(row => { row.hidden = true; });
+    await expect(next).toBeHidden();
+    assert.equal(await appearance.evaluate(node => node.getBoundingClientRect().top),
+        await card.evaluate(node => node.getBoundingClientRect().bottom));
+    await page.locator("#settingsCategoryNav [data-category=privacy]").click();
+    await expect(page.locator("[data-settings-section=privacy] .settings-task-row").last()).toHaveCSS("border-top-width", "1px");
+    if (proof) await page.screenshot({ path: path.join(proof, "privacy-dark.png") });
+    assert.deepEqual(actions, [{ action: "status" }]);
+});
+
 test("General preference rows open canonical pages and return to updated values", async t => {
     const { page, actions } = await workspace(t, { supported: false });
     const current = page.getByRole("link", { name: "Change theme" }), zone = page.getByRole("link", { name: /Time zone.*Regional/ });

@@ -324,7 +324,7 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await selectActivityOption(page, "promptAuthorFilter", "user");
     await expect(root.locator('[data-period-side="later"] tbody tr')).toHaveCount(2);
     await restoreLegacySearch(page, "no invented match");
-    await expect(root).toContainText("No activity was found in either period");
+    await expect(root).toContainText("No calls match either period");
     await expect(root.locator("table")).toHaveCount(0);
     await expect(page.locator("#createPeriodReport")).toBeHidden();
     app.fail(true);

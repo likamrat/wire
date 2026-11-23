@@ -20,7 +20,7 @@ async function setup(t, { mount = true } = {}) {
     await page.route("**/*", route => { requests.push(route.request().url()); return route.abort(); });
     t.after(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(requests, []); });
     await page.setContent(renderHtmlShell("a".repeat(64), "withdrawal-fixture").replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ""));
-    const anchor = "const observer = new MutationObserver(sync);";
+    const anchor = "const observer = new MutationObserver(";
     const source = createSelectControls.toString();
     assert.equal(source.split(anchor).length, 2);
     const observedSelect = source.replace(anchor, `window.inspectSelectOwner = () => ({
@@ -88,6 +88,8 @@ async function setup(t, { mount = true } = {}) {
         if (mount) {
             window.filters = window.mountFilters(window.ux, {
                 api: window.accessBoundary,
+                toolbarHost: document.getElementById("analyzeResultCommands"),
+                scopeHost: document.getElementById("analyzeResultScope"),
                 motionTiming: { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" },
                 closeSelect: () => window.selects?.close(),
                 closeNavigation: () => { if (document.getElementById("navigationDrawer").open) document.getElementById("navigationDrawer").close(); },

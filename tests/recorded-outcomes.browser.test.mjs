@@ -94,7 +94,6 @@ async function renderCount(page, total) {
             total: counts.count, drilldownIds: analytics.rows.map(row => row.id) }];
         const links = new Map([...document.querySelectorAll(".percentage-legend-row")].map(row =>
             [`${row.closest(".percentage-card").dataset.breakdown}:${row.dataset.category}`, row.querySelector("a")?.getAttribute("href")]));
-        const scope = document.getElementById("analyzeScopeSummary");
         document.getElementById("outcomeChart").replaceChildren();
         document.getElementById("percentageData").replaceChildren();
         const chart = make(factories.percentage)({ dimensional: make(factories.dimensional)(),
@@ -108,7 +107,6 @@ async function renderCount(page, total) {
             outcomesHost: document.getElementById("outcomeChart"), dataHost: document.getElementById("percentageData"), includeModels: true,
         });
         chart.update(analytics, { layer: "tool", filters: { scope: "history" } }, source);
-        document.querySelector("#outcomeChart .percentage-card").append(scope);
     }, { analytics, source, total, factories: { percentage: createPercentageCharts.toString(),
         dimensional: createDimensionalCharts.toString(), categories: createServiceCategories.toString(),
         results: createRecordedResults.toString(), ux: createEvidenceUX.toString() }, icons: uxIcons, serviceIcons: dimensionalIcons });
@@ -135,7 +133,7 @@ function measure() {
         unit: text(".percentage-total-unit"), widget: box(card), legend: box(legend),
         ring: box(root.querySelector(".percentage-visual")),
         bottomGap: box(card).bottom - Math.max(box(legend).bottom, box(root.querySelector(".percentage-visual")).bottom),
-        footerVisible: scope.checkVisibility(), footer: scope.innerText,
+        scopeInWidget: card.contains(scope), scopeInCommands: document.getElementById("analyzeResultCommands").contains(scope),
         rows: [...legend.children].map(row => ({ category: row.dataset.category, count: +row.dataset.count,
             percentage: row.dataset.percentage, label: box(row.querySelector(".percentage-label")),
             value: box(row.querySelector(".percentage-value")) })),
@@ -217,7 +215,8 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
             assert.ok(current.legend.x >= current.ring.right + 15, `${current.key}: labels and values sit on the wheel's right`);
             assert.ok(current.legend.y < current.ring.bottom && current.legend.bottom > current.ring.y, `${current.key}: one aligned horizontal group`);
         } else assert.ok(current.legend.y >= current.ring.bottom, `${current.key}: narrow widths stack without squeezing the legend`);
-        assert.equal(current.footerVisible, false, `${current.key}: default scope leaves no footer or divider`);
+        assert.equal(current.scopeInWidget, false, `${current.key}: default scope leaves no footer or divider`);
+        assert.equal(current.scopeInCommands, true, `${current.key}: result commands retain the scope`);
         assert.ok(current.bottomGap <= 32, `${current.key}: no empty footer band (${current.bottomGap})`);
         for (const label of [current.value, current.unit]) {
             assert.ok(label.clearance >= 2, `${current.key}: text rectangles conservatively clear the inner edge by ${label.clearance}px`);
@@ -262,7 +261,7 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("32");
     await expect(page.locator("#analyzeScopeCaption")).toHaveText("Outcome: Tool failed");
-    await expect(page.locator("#analyzeScopeSummary")).toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary")).toBeVisible();
     await selectActivityOption(page, "outcomeFilter", "all"); await closeAnalyzeFilters(page); await ready(page);
     await slice.scrollIntoViewIfNeeded();
     const point = await slice.evaluate(node => {

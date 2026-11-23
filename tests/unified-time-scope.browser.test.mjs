@@ -82,7 +82,7 @@ test("one visible calendar range changes every widget, headline, row and current
     const app = await setup(t), { page, inputs } = app;
     const choose = async value => {
         await selectActivityOption(page, "dateFilter", value); await ready(page);
-        const captions = { capture: "All dates", day: "Mar 8, 2026", week: "Mar 2 - Mar 8, 2026", month: "Mar 1 - Mar 31, 2026" };
+        const captions = { capture: "All dates", day: "Mar 8, 2026", week: "Mar 2 - Mar 8, 2026", month: "Mar 1 - Mar 8, 2026" };
         if (captions[value]) await expect(page.locator("#periodResult")).toContainText(`(${captions[value]})`);
     };
     async function scope(ids, interactions, chats, undated = 0) {
@@ -140,8 +140,8 @@ test("one visible calendar range changes every widget, headline, row and current
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
     const weekUrl = page.url();
     await choose("month");
-    await scope(["a-0", "a-1", "b-0", "c-0", "d-0", "e-0", "h-0", "i-0"], 7, 5);
-    assert.match(page.url(), /to=2026-03-31/);
+    await scope(["a-0", "a-1", "b-0", "c-0", "d-0", "i-0"], 5, 4);
+    assert.match(page.url(), /to=2026-03-08/);
     await page.goBack(); await ready(page);
     assert.equal(page.url(), weekUrl);
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
@@ -195,10 +195,8 @@ test("one visible calendar range changes every widget, headline, row and current
     await scope(["a-0", "a-1"], 1, 1);
     await choose("custom");
     await page.locator("#fromFilter").fill("2026-04-02"); await page.locator("#toFilter").fill("2026-04-02");
-    await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("0");
-    await expect(page.locator("#activityListSummary")).toContainText("0 interactions with 0 matching Work IQ tool calls");
-    await expect(page.locator("#scopeCount-current")).toHaveText("0 request groups");
+    await expect(page.locator("#applyDates")).toBeDisabled();
+    await scope(["a-0", "a-1"], 1, 1);
     await choose("capture"); await scope(all, 10, 8, 1);
     for (const [width, scale, theme] of [[1440, 1, "dark"], [375, 2, "light"]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);

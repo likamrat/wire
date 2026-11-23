@@ -1,5 +1,5 @@
 // Screen-only reading structure. Original files and their print layout are unchanged.
-export function enhanceReportReading(source, { expanded, brand, saved = false } = {}) {
+export function enhanceReportReading(source, { expanded, brand, icon, saved = false } = {}) {
     if (source.body.hasAttribute("data-wire-reader")) return;
     source.body.setAttribute("data-wire-reader", "");
     for (const mark of source.querySelectorAll('header.report-brand[aria-label="WIRE"]>.report-mark')) {
@@ -121,6 +121,30 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
         const title = section.querySelector(":scope>h2").textContent;
         link.href = "#" + section.id; link.textContent = labels[title] || title;
         navigation.append(link);
+    }
+    if (icon && main.dataset.findingVersion === "1") {
+        const roles = { overview:"section-overview", timing:"section-activity", patterns:"section-charts",
+            examples:"search-interaction", "recorded-result-facts":"search-tool", coverage:"report-all" };
+        for (const link of navigation?.querySelectorAll("a[href]") ?? []) {
+            const id = link.getAttribute("href").split("#")[1];
+            if (!Object.hasOwn(roles,id)) continue;
+            link.prepend(icon(roles[id]));
+            // The saved frame remains opaque and script-free. A native fragment, not hover, marks location.
+            style.textContent += `\n@media screen{main:has(#${id}:target) .report-nav a[href$="#${id}"]{border-bottom-color:var(--accent);color:var(--ink)}}`;
+        }
+        const links = main.querySelectorAll(".finding-example>a[href],.report-count-link[href],.report-pattern-table td[data-label=Calls] a[href]");
+        for (const link of links) {
+            link.classList.add("wire-reader-destination"); link.append(icon("forward"));
+        }
+        style.textContent += `\n@media screen{
+main[data-finding-version] .report-nav a{display:inline-flex;align-items:center;gap:.5em;padding-inline:.25em;border-bottom:3px solid transparent;text-decoration:none}
+main[data-finding-version] .report-nav .wire-icon{width:1.125em;height:1.125em;flex:none}
+main[data-finding-version] .wire-reader-destination{display:inline-flex;align-items:center;gap:.5em;min-height:44px;max-width:100%;text-decoration:none;font-weight:inherit}
+main[data-finding-version] .wire-reader-destination::after{content:none}
+main[data-finding-version] .wire-reader-destination .wire-icon{width:1em;height:1em;flex:none}
+main[data-finding-version] .wire-reader-destination:is(:hover,:active){background:var(--accent-soft);text-decoration:none}
+main[data-finding-version] :is(.wire-reader-destination,.report-nav a):focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+}`;
     }
     const meta = main.querySelector(":scope>.report-facts");
     if (meta) {

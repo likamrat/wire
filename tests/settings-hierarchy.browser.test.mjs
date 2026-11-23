@@ -106,7 +106,7 @@ test("Settings groups contain their own controls with consistent nearby columns 
             && geometry.actions.y >= geometry.cadence.bottom && geometry.actions.bottom <= geometry.root.bottom + 0.0001,
         "Save and Cancel are contained below the fields they govern");
         await capture(page, `connection-${width}-${theme}`);
-        for (const category of ["privacy", "display", "troubleshooting"]) {
+        for (const category of ["privacy", "themes", "regional"]) {
             await navigateSettings(page, category);
             const pane = page.locator(`[data-settings-section=${category}]`);
             assert.equal(await pane.locator("h2").count(), 1);
@@ -115,7 +115,7 @@ test("Settings groups contain their own controls with consistent nearby columns 
                     (node.getAttribute(attribute) || "").split(/\s+/).filter(id => id && !document.getElementById(id))))), [],
             "Removed explanations leave no dead accessible descriptions");
             assert.equal(await page.locator("#automaticScoreSetup,[data-category=ai]").count(), 0);
-            if (category === "display") await expect(pane.getByRole("heading", { name: "Time zone", level: 3 })).toBeVisible();
+            if (category === "regional") await expect(pane.getByRole("heading", { name: "Time zone", level: 3 })).toBeVisible();
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
             assert.deepEqual(await pane.locator("button,label,summary").evaluateAll(nodes => nodes.filter(node =>
                 node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);

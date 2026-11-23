@@ -68,7 +68,7 @@ test("native accepted scope presents complete peer facts without parsing retaine
     const { page } = await setup(t), states = [];
     const caption = page.locator("#analyzeScopeCaption");
     await expect(caption).toBeEmpty();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await capture(page, "ordinary-default");
     if (!baseline) await expect(caption.locator(".analyze-scope-part")).toHaveCount(0);
     for (const [id, value] of [["serviceAssociationFilter", "Files"], ["outcomeFilter", ["failure"]],

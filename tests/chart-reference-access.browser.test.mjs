@@ -84,6 +84,8 @@ test("publication withdrawal retires the in-page reader and its exact return syn
         const after = { texts: held.map(node => node.data), open: root.open, animations: root.getAnimations().length,
             rows: document.querySelectorAll("#chartReferenceData tr").length, focused };
         window.guidePublicationFixture.fresh();
+        // Withdrawing just the reader did not navigate away from the Guide section.
+        document.getElementById("analyzeResultsSection").click();
         document.getElementById("openChartReference").click();
         const restored = window.guideAccessFixture.restore(saved);
         return { before, after, restored, freshOpen: root.open, freshView: window.guideAccessFixture.capture()?.view };
@@ -124,7 +126,7 @@ for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/fi
         };
     });
     assert.equal(await page.evaluate(() => window.retiredGuideFixtureCapture.rowQuery), "PRIVATE_GUIDE_FIND");
-    if (!initiallyOpen) await page.locator("#closeChartReference").click();
+    if (!initiallyOpen) await page.locator("#analyzeResultsSection").click();
     const result = await page.evaluate(() => {
         const fetches = window.guideFixtureFetches, href = location.href, length = history.length, focused = [];
         const observe = event => focused.push(event.target.id);

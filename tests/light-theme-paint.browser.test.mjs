@@ -150,7 +150,7 @@ test("screen outcome fades retain full-widget geometry, semantics and navigation
             const cue = node.querySelector(".result-legend-icon");
             return { id: node.dataset.value, icon: cue.querySelector("svg").dataset.lucideIcon, color: getComputedStyle(cue).color };
         }));
-        assert.deepEqual(statuses.map(row => row.icon), ["check", "circle-x", "circle-question-mark", "circle-dashed", "info", "unplug"]);
+        assert.deepEqual(statuses.map(row => row.icon), ["circle-check", "circle-x", "circle-question-mark", "circle-dashed", "info", "unplug"]);
         assert.equal(statuses[1].color, statuses[5].color);
         assert.equal(new Set(statuses.slice(0, 5).map(row => row.color)).size, 5);
         assert.ok(hue(statuses[1].color) < 15);

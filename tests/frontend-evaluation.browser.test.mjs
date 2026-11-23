@@ -96,6 +96,79 @@ function compactCardRecords() {
     });
 }
 
+test("recognized Exchange ID conversions open their own call, including the earliest member of a group", async t => {
+    const records = compactCardRecords();
+    for (const [index, total] of [[0, 1], [1, 2]]) {
+        const record = records[index];
+        record.toolCalls = Array.from({ length: total + 1 }, (_, i) => ({
+            tool: "workiq-do_action", toolCallId: `exchange-${index}-${i}`, startEventId: `exchange-start-${index}-${i}`,
+            requestArgs: { actionUrl: i === total ? "/me/{id}" : i ? "/users/person/translateExchangeIds" : "/me/translateExchangeIds" },
+            startedAt: new Date(Date.parse(record.capturedAt) - i * 1000).toISOString(),
+            toolSucceeded: true, reportedOutcome: "succeeded", apiResults: [],
+        }));
+    }
+    const { page } = await setup(t, "react", records);
+    for (const [index, total] of [[0, 1], [1, 2]]) {
+        await chooseTheme(page, index ? "dark" : "light");
+        await page.setViewportSize({ width: index ? 390 : 1440, height: 1000 });
+        const card = page.locator(`[data-view-key="request:${records[index].scenarioId}"]`);
+        const text = "Exchange ID conversion", group = total > 1 ? "first of 2 calls" : "call";
+        const link = card.getByRole("link", { name: `${text}: open ${group}`, exact: true });
+        const role = '[data-icon-role="operation-exchange-id-conversion"]';
+        await expect(link.locator(role)).toHaveAttribute("data-lucide-icon", "arrow-right-left");
+        await expect(link).toHaveText(total > 1 ? `${text} (${group})` : text);
+        await expect(link.locator("[data-icon-role=forward]")).toBeVisible();
+        await expect(card.getByRole("link", { name: /Recorded path not recognized/ }).locator("svg").first())
+            .toHaveAttribute("data-icon-role", "service:unknown");
+        await link.focus(); await link.press("Enter");
+        const call = page.locator(`#requestContent [data-tool-call-id="exchange-${index}-${total - 1}"]`);
+        await expect(call).toBeFocused();
+        await call.locator(".reader-call-toggle").click();
+        await expect(call.locator(role)).toBeVisible();
+        await expect(call).toContainText("Exchange item IDs");
+        await page.goBack(); await expect(link).toBeFocused();
+        if (proofs) { await link.scrollIntoViewIfNeeded(); await capture(page, `exchange-${total}-card`); }
+    }
+});
+
+test("discovery, schema, agent, retrieval and named Graph actions retain distinct roles through reading", async t => {
+    const records = compactCardRecords();
+    const inputs = [
+        ["search_paths", {query:"Find paths"}, "API discovery"],
+        ["get_schema", {path:"/me/messages/{id}/send"}, "Schema lookup"],
+        ["list_agents", {}, "Agent discovery"],
+        ["retrieve", {query:"Find notes"}, "Search requested"],
+        ["ask", {question:"Ask for notes"}, "Asked Copilot"],
+        ["do_action", {actionUrl:"/me/messages/{id}/microsoft.graph.replyAll"}, "Reply to all"],
+        ["call_function", {functionUrl:"/me/calendar/getSchedule"}, "Calendar availability"],
+    ];
+    for (const [i,[tool, args]] of inputs.entries()) records[i].toolCalls = [{
+        tool:`workiq-${tool}`, requestArgs:args, startEventId:`op-start-${i}`, toolCallId:`op-call-${i}`,
+        startedAt:records[i].capturedAt, toolSucceeded:true, reportedOutcome:"succeeded", apiResults:[],
+    }];
+    const { page } = await setup(t, "react", records);
+    const toolChart = page.locator('[data-breakdown="tools"] .percentage-tool-list');
+    await expect(toolChart.getByText("workiq-ask", {exact:true})).toBeVisible();
+    await expect(toolChart.locator(".percentage-label svg")).toHaveCount(0);
+    for (const [i,[tool,,label]] of inputs.entries()) {
+        const card = page.locator(`[data-view-key="request:${records[i].scenarioId}"]`);
+        await expect(card.locator(".card-tool-name")).toHaveText(`workiq-${tool}`);
+        await expect(card.locator(".card-tool-name svg")).toHaveCount(0);
+        const operation = card.locator(".service-cue").filter({hasText:label});
+        await expect(operation).toHaveCount(1);
+        const subject = await operation.locator("svg").getAttribute("data-icon-role");
+        assert.ok(subject.startsWith("operation-"));
+        await card.locator(".card-panel-link").click();
+        const call = page.locator(`#requestContent [data-tool-call-id="op-call-${i}"]`);
+        await expect(call.locator(".reader-tool-name")).toHaveText(`workiq-${tool}`);
+        await expect(call.locator(".reader-tool-name svg")).toHaveCount(0);
+        await expect(call.locator(`.reader-call-services [data-icon-role="${subject}"]`)).toBeVisible();
+        if (tool === "get_schema") await expect(call.locator('[data-icon-role="operation-graph-send"]')).toHaveCount(0);
+        await page.goBack(); await expect(card.locator(".card-panel-link")).toBeFocused();
+    }
+    if (proofs) await capture(page, "named-operation-roles");
+});
+
 test("Analyze groups exact tool names and counts in static labels beside genuine reader links", async t => {
     const records = compactCardRecords();
     const [mixed, repeated, single, example] = records;
@@ -142,14 +215,15 @@ test("Analyze groups exact tool names and counts in static labels beside genuine
     await expect(cards.nth(1).locator(".card-tool-item")).toHaveCSS("list-style-type", "none");
     const label = labels.first(), name = label.locator(".card-tool-name"), url = page.url();
     const fill = await label.evaluate(n => getComputedStyle(n).backgroundColor);
-    assert.notEqual(fill, "rgba(0, 0, 0, 0)");
+    assert.equal(fill, "rgba(0, 0, 0, 0)");
     await name.hover();
     await expect(name).not.toHaveCSS("cursor", "pointer");
     await expect(label).toHaveCSS("background-color", fill);
     await name.click(); expect(page.url()).toBe(url);
     await expect(card.locator(".card-tool-list").getByRole("link")).toHaveCount(0);
     const panel = card.locator(".card-panel-link");
-    await card.locator(".request-card-open").focus(); await page.keyboard.press("Tab");
+    // This read-only fixture has no named-draft action; focus the actual call-count link.
+    await panel.focus(); await page.keyboard.press("Shift");
     await expect(panel).toBeFocused();
     await expect(panel).toHaveCSS("outline-style", "solid");
     await panel.press("Enter");
@@ -197,7 +271,8 @@ test("Analyze chart, controls and grouped interactions share the available works
             const prompt = rows[0].querySelector(".card-request-context");
             return {
                 frame: edges(el("#workspace")), chart: edges(chart), heading: edges(el("#workspace > .page-heading")),
-                toolbar: edges(el("#analyzeToolbar")), filters: edges(el("#openAnalyzeFilters")),
+                commands: edges(el("#analyzeResultCommands")), filters: edges(el("#openAnalyzeFilters")),
+                toolbar: edges(el("#analyzeToolbar")), stacked: el("#analyzeResultScope").getBoundingClientRect().bottom <= el("#analyzeToolbar").getBoundingClientRect().top + 1,
                 listHeading: edges(el("#activityListContext")), list: edges(list),
                 rows: rows.map(edges), chartSurface: surface(chart), listSurface: surface(list),
                 borders: rows.map(row => [getComputedStyle(row).borderTopWidth, getComputedStyle(row).borderBottomWidth].map(parseFloat)),
@@ -209,11 +284,11 @@ test("Analyze chart, controls and grouped interactions share the available works
         });
         measurements.push({ state, ...value });
         const check = (ok, label) => { if (!ok) failures.push(`${state}: ${label}`); };
-        for (const key of ["chart", "heading", "listHeading", "list"]) {
+        for (const key of ["chart", "heading", "commands", "listHeading", "list"]) {
             check(value[key].every((x, i) => Math.abs(x - value.frame[i]) <= 1), `${key} edges ${value[key]} vs ${value.frame}`);
         }
-        check(Math.abs(value.toolbar[1] - value.chart[1]) <= 1, `toolbar right ${value.toolbar[1]} vs ${value.chart[1]}`);
-        check(Math.abs(value.filters[1] - value.toolbar[1]) <= 1, "Filters ends the control row");
+        if (value.stacked) check(Math.abs(value.toolbar[0] - value.commands[0]) <= 1, "wrapped toolbar starts at the widget edge");
+        else check(Math.abs(value.filters[1] - value.chart[1]) <= 1, "Filters ends the inline command row at the widget edge");
         check(value.rows.every(row => row.every((x, i) => Math.abs(x - value.frame[i]) <= 1)), "row edges");
         check(value.listSurface.every((x, i) => x === value.chartSurface[i]), "group corner, edge and surface");
         check(value.borders[0][0] === 0 && value.borders.at(-1)[1] === 0
@@ -380,11 +455,17 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
         }
     }
     await expect(top.locator(".card-failure")).toHaveText("2 tool calls failed");
-    await expect(top).toContainText("Calls #2–3", { timeout: 1000 });
+    await expect(top.locator(".card-orientation .card-issue-owner")).toHaveText("Calls #2–3 · workiq-ask", { timeout: 1000 });
+    await expect(top.getByRole("heading", { name: "Problem", exact: true })).toHaveCount(1);
     await expect(top.locator(".card-issue-detail")).toHaveText(`${message} (PolicyUnavailable)`);
     await expect(cardFor(mixed)).toContainText("NotReady");
-    await expect(cardFor(mixed)).toContainText("Failure reason was not saved");
-    await expect(cardFor(mixed).locator("a").filter({hasText:"Failure reason was not saved"})).toHaveCount(0);
+    await expect(cardFor(mixed).locator(".card-orientation .card-issue-owner")).toHaveText("Calls #1–2 · workiq-retrieve");
+    await expect(cardFor(mixed)).toContainText("No failure reason was saved.");
+    await expect(cardFor(mixed).locator("a").filter({hasText:"No failure reason was saved."})).toHaveCount(0);
+    await expect(lower.getByRole("heading", { name: "Problem", exact: true })).toHaveCount(1);
+    await expect(lower).not.toContainText(/Recorded reason:|Entry error:|BadRequest/);
+    await expect(lower.locator(".card-entry-issue .card-issue-detail")).toHaveText(["The date field was rejected.", "The owner field was rejected."]);
+    await expect(cardFor(records[7]).getByRole("heading", { name: "Problem", exact: true })).toHaveCount(0);
     await expect(top.locator(".returned-issue-ink")).toHaveCount(0);
     await top.locator(".card-failure").focus(); await page.keyboard.press("Enter");
     await expect(reader.locator(".reader-section-heading")).toContainText("2 failed calls");
@@ -394,7 +475,7 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
         const box = s=>n.querySelector(s).getBoundingClientRect();
         return { metadataFirst: box(".card-metadata").bottom < box(".request-card-open").top,
             eyeSeparate: box(".card-excerpt").right < box("[data-icon-role=read]").left,
-            outcomeBeforeReason: box(".card-failure").bottom <= box(".card-issue-owner").top };
+            outcomeBeforeReason: box(".card-failure").bottom <= box(".card-problem-area").top };
     });
     assert.deepEqual(layout, {metadataFirst:true,eyeSeparate:true,outcomeBeforeReason:true});
     const links = lower.locator(".returned-issue-ink");
@@ -454,15 +535,16 @@ test("compact summaries name the scoped causes and open the full diagnostic in t
     await expect(card.locator(".card-tool-item").filter({hasText:"workiq-fetch"})).toHaveText("workiq-fetch (3 calls)");
     await expect(card.locator(".card-identities")).toContainText("Mail");
     await expect(card).not.toContainText(/Partial completion|No result recorded|Read more|More services/i);
-    await expect(card.locator(".request-card-cause").filter({ hasText: "workiq-retrieve" })).toContainText("ToolUnavailable");
+    await expect(card.getByRole("listitem", { name: "Call #2 · workiq-retrieve" })).toContainText("ToolUnavailable");
     await expect(card.locator(".request-card-cause").filter({ hasText: "returned entry 2" })).toContainText("AccessDenied");
     const timestampSize = await card.locator(".request-card-time").evaluate(el => parseFloat(getComputedStyle(el).fontSize));
     const reasons = await card.locator(".request-card-cause").evaluateAll(nodes => nodes.map(el => parseFloat(getComputedStyle(el).fontSize)));
     assert.ok(reasons.every(size => size > timestampSize), "Both failure explanations must read as body text, not timestamp captions.");
-    await expect(card.locator(".card-issue-owner")).toHaveText(["Call #1 · workiq-fetch", "Call #2 · workiq-retrieve"]);
+    await expect(card.locator(".card-issue-owner")).toHaveText(["Call #2 · workiq-retrieve", "Call #1 · workiq-fetch"]);
     await expect(card).not.toContainText(/Requested:|WIRE interpretation|flag alone|completion event|end time/);
     await expect(card.locator(".call-reason-list,[data-interpretation],.request-card-reasons")).toHaveCount(0);
-    await expect(card.locator("button,input,details")).toHaveCount(0);
+    await expect(card.locator("button,input,details")).toHaveCount(1);
+    await expect(card.getByRole("button", { name: "Add to report", exact: true })).toHaveClass(/report-draft-trigger/);
     await promptLink.focus(); await page.keyboard.press("Enter");
     const reader = page.locator("#requestContent");
     await expect(reader.locator(".reader-call-row")).toHaveCount(4);
@@ -508,7 +590,8 @@ test("heterogeneous summary cards stay readable in complete Light Dark narrow an
         await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
         await page.evaluate(() => document.fonts.ready);
         await expect(page.locator("#activityList .request-card-open")).toHaveCount(8);
-        await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|The call was saved as partial|Requested:|ToolUnavailable/);
+        await expect(page.locator("#activityList")).not.toContainText(/WIRE interpretation|The call was saved as partial|Requested:/);
+        await expect(page.locator("#activityList .card-problem-area").first()).toContainText("ToolUnavailable");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `compact-after-${theme}-${width}-text${scale}-full.png`), fullPage: true });
@@ -604,7 +687,8 @@ test("wrapped card identities keep their value edge, named counts and distinct o
             assert.ok(measured.aligned, `${palette}/${mode} ${width}: wrapped tool names start on the value edge`);
             wrapped ||= measured.lines > 1;
             assert.equal(measured.size,measured.nameSize);
-            assert.ok(contrast(measured.count,measured.label)>=4.5 && contrast(measured.author,measured.paper)>=4.5
+            assert.equal(measured.label, "rgba(0, 0, 0, 0)", "Static tool text has no separate painted face");
+            assert.ok(contrast(measured.count,measured.paper)>=4.5 && contrast(measured.author,measured.paper)>=4.5
                 && contrast(measured.failure,measured.failPaper)>=4.5, JSON.stringify(measured));
             const clipped = await partial.locator(".card-excerpt").evaluate(n => n.clientHeight < n.scrollHeight && n.clientHeight <= parseFloat(getComputedStyle(n).lineHeight)*4+1);
             assert.ok(clipped, "An incomplete URL and quotation cannot grow past the home preview.");
@@ -829,6 +913,33 @@ test("the prompt leads and a separate evidence link names the scoped failure", a
     await capture(page, "visual-failure-rows");
 });
 
+test("a failed call keeps its returned entries in order and gives the concrete diagnostic once", async t => {
+    const records = compactCardRecords(), [scenario] = records;
+    const call = scenario.toolCalls[0];
+    const message = "Syntax error: character ':' is not valid at position 16 in 'tag:cedar:review'.";
+    Object.assign(call, { durationMs: 2422, reportedOutcome: "failed", toolSucceeded: false,
+        failureEvidence: { version: 1, reason: "error-code-recorded", code: "BadRequest" },
+        apiResults: [{ index: 0, statusCode: 200 }, { index: 1, statusCode: 400, errorCode: "BadRequest",
+            errorDiagnostic: { version: 1, status: "recorded", source: "result-error", code: "BadRequest", message, details: [] } }] });
+    const { page } = await setup(t, "react", records);
+    const jump = page.locator('#activityList [data-view-key="request:review-plural-activity"] .returned-issue-ink');
+    await jump.click();
+    const parent = page.locator('#requestContent [data-tool-call-id="review-call-0"]');
+    await expect(parent.locator(".reader-call-duration")).toHaveText("Call duration: 2.422 s");
+    await expect(parent.locator(".api-result-entry .recorded-result-label")).toHaveText([
+        /Returned entry 1: Tool-reported HTTP 200/, /Returned entry 2: Tool-reported HTTP 400: BadRequest/,
+    ]);
+    await expect(parent.locator(".reader-batch-gap")).toHaveText("No per-entry paths or durations were recorded for this batch.");
+    await expect(parent).not.toContainText("This status alone does not identify");
+    const selected = parent.locator(".api-result-entry").nth(1);
+    await expect(selected).toBeFocused();
+    await expect(selected.locator(".reader-entry-problem")).toHaveText("Invalid colon at position 16.");
+    assert.ok(!(await parent.innerText()).includes(message));
+    await selected.getByText("Full diagnostic", { exact: true }).click();
+    await expect(selected.locator(".reader-error-message")).toHaveText(message);
+    await page.goBack(); await expect(jump).toBeFocused();
+});
+
 test("plural reading groups call identities and each call's returned evidence without singleton paging", async t => {
     const { page } = await setup(t, "react", reviewRecords());
     await page.locator('#activityList [data-view-key="request:review-plural-activity"] .request-card-open').click();
@@ -947,11 +1058,11 @@ test("the selected evaluation layout retains complete membership, native reading
         return { overview: box("homeView").top, rows: box("activityView").top, breakdowns: box("frontendBreakdowns").top };
     });
     assert.ok(order.overview < order.rows && order.rows < order.breakdowns);
-    await expect(page.locator("#frontendHeadingActions #openAnalyzeFilters")).toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeToolbar #openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#pageIntro")).toBeHidden();
-    await expect(page.locator("#analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #analyzeScopeCaption")).toContainText("Nov 10–16, 2026");
     await expect(page.locator("#activityListScope")).toBeHidden();
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("Checked history is unknown");
+    await expect(page.locator("#analyzeScopeStatus")).toContainText("These counts use saved activity");
     await capture(page, "react-analyze-light");
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.locator("#activityPager")).toContainText("9-16 of 240");

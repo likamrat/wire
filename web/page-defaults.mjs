@@ -2,13 +2,13 @@ const recentDays = ["7", "14", "30"];
 const rollingPeriods = recentDays.map(days => [days, `Last ${days} days`]);
 
 export const pageDefaultSpecs = {
-    analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity without changing collection.", initial: "capture",
+    analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "A direct link opens its own chart.", initial: "problems",
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
-    reportFormats: { id: "defaultReportFormats", label: "Default file formats", help: "Choose at least one.", initial: ["html"],
+    reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
     reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Includes today in your display time zone.", initial: "7",
         choices: rollingPeriods },

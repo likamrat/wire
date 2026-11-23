@@ -64,7 +64,7 @@ export const chartReferenceMarkup = `
 
 // The caller supplies accepted chart facts and the existing navigation/table owners.
 export function mountChartReference({ host, root, trigger, createState, ux, results, help, categories, dimensional, readContext, renderQualification,
-    renderExact, openComparisonRecords, onUnavailable, publicationToken, isCurrent, motionTiming }) {
+    renderExact, openComparisonRecords, onUnavailable, onAnalyzeExit, publicationToken, isCurrent, motionTiming }) {
     if (typeof publicationToken !== "function" || typeof isCurrent !== "function") {
         throw new TypeError("Chart help requires publicationToken and isCurrent.");
     }
@@ -156,7 +156,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function requestClose() {
         if (!root.open || closing || !currentView()) return;
         ux.hideTooltip();
-        if (root.dataset.mode === "analyze") navigate("closed");
+        if (root.dataset.mode === "analyze" && onAnalyzeExit) onAnalyzeExit();
+        else if (root.dataset.mode === "analyze") navigate("closed");
         else move(false);
     }
     function dismiss() {
@@ -659,10 +660,13 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             host.hidden = false;
             watchSize(token);
             if (context.mode === "comparison") root.showModal();
-            else { returnY = doc.defaultView.scrollY; root.show(); root.scrollIntoView({ block: "start" }); }
+            else {
+                returnY = doc.defaultView.scrollY; root.show();
+                if (onAnalyzeExit) doc.defaultView.scrollTo(0, 0); else root.scrollIntoView({ block: "start" });
+            }
             if (!currentView(token) || !root.open) return false;
             trigger.setAttribute("aria-expanded", "true");
-            $("chartReferenceTitle").focus({ preventScroll: true });
+            (context.mode === "analyze" && onAnalyzeExit ? trigger : $("chartReferenceTitle")).focus({ preventScroll: true });
             if (context.mode === "comparison") move(true);
         } else if (reopening) {
             move(true);
@@ -681,7 +685,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     $("closeChartReference").replaceChildren(ux.icon("close"));
     trigger.setAttribute("aria-controls", root.id);
-    trigger.setAttribute("aria-haspopup", "dialog");
+    if (!onAnalyzeExit) trigger.setAttribute("aria-haspopup", "dialog");
     trigger.setAttribute("aria-expanded", "false");
     $("closeChartReference").addEventListener("click", requestClose);
     $("chartReferenceBack").addEventListener("click", () => {

@@ -103,10 +103,11 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await page.setViewportSize({ width: 540, height: 900 });
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     const brief = page.getByRole("article", { name: "Report brief" });
-    await expect(brief.getByRole("heading", { name: "4 calls with a returned HTTP 403" })).toBeVisible();
+    await expect(brief.getByRole("heading", { name: /workiq-fetch · failed · returned HTTP 403/ })).toBeVisible();
     await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
-    await expect(brief.locator("figcaption")).toContainText("returned entry 2 · HTTP 403");
-    await brief.getByRole("button", { name: /1 call with a returned HTTP 404/ }).click();
+    await expect(brief.locator("figcaption")).toContainText("returned entry 2");
+    await expect(brief.locator(".brief-facts>div").filter({hasText:"Returned entry 2"})).toContainText("HTTP 403");
+    await brief.getByRole("button", { name: /returned HTTP 404 · 1 interaction/ }).click();
     await expect(brief.locator("blockquote")).toHaveText("The tool could not complete the batch.");
     await expect(brief.locator("figcaption")).toContainText("Call-level example · not an entry explanation");
     await brief.getByRole("button", { name: "Back", exact: true }).click();
@@ -124,8 +125,9 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await chooseTheme(page, "light");
     await capture(page, "brief-wide");
-    await brief.getByRole("button", { name: "View 4 matching interactions" }).click();
+    await brief.getByRole("button", { name: /returned HTTP 403 · 4 interactions/ }).click();
     const matching = brief.getByRole("button", { name: heading, exact: true });
+    await expect(matching.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
     await matching.click();
     const owner = prepared.snapshot.reportPatterns.calls.find(item => item.scenarioRef === expected);
     const ordinal = prepared.snapshot.resultFacts.calls.findIndex(item => item.ref === owner.ref) + 1;
@@ -151,6 +153,8 @@ test("pattern counts lead to one matching interaction and preserve the individua
     await saved.locator('.report-nav a[href$="#patterns"]').click();
     const singleRow = saved.locator(".report-pattern-table tbody tr").filter({ hasText: "404" });
     const one = singleRow.getByRole("link", { name: /^1 matching interaction:/ });
+    await expect(one.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
+    await expect(saved.locator('.report-nav a[href$="#patterns"] [data-icon-role="section-charts"]')).toBeVisible();
     await capture(page, "saved-narrow-dark");
     await one.click();
     await expect(saved.locator(":target")).toHaveAttribute("id", single.interactionRefs[0]);
@@ -378,7 +382,7 @@ test("late regeneration retains the selected file mode and never publishes super
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
     assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
     assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     prepared = await (await response).json();
@@ -387,7 +391,7 @@ test("late regeneration retains the selected file mode and never publishes super
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=html]").uncheck();
     await response;
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await selectActivityOption(page, "preparedReportView", "product-report.json");
     await page.locator("#reportPrivacyChoice").click();
@@ -663,7 +667,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1800, height: 1100 });
 
-    await page.getByRole("button", { name: "Files to save: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -673,7 +677,7 @@ test("long reports keep complete evidence behind working navigation and real for
         assert.ok(result.request().postDataJSON().options.formats.includes(format));
         assert.ok(prepared.files["product-report." + (format === "markdown" ? "md" : format)]);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     const previewCount = posts.filter(item => item.path === "/api/preview").length;
     await expect(report.locator(".wire-reading-section[open]")).toHaveCount(0, "Content-only regeneration retains deliberate collapse.");
     await report.locator('.report-nav a[href$="#examples"]').click();
@@ -751,10 +755,15 @@ test("long reports keep complete evidence behind working navigation and real for
     await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(savedFrame.locator(".wire-reading-interaction[open]")).toHaveCount(1);
     assert.equal(await originalFrame.evaluate(node => node.isConnected && node.checkVisibility()), true);
-    await page.getByRole("button", { name: "Expand sections", exact: true }).click();
-    await expect(savedFrame.locator(".wire-reading-interaction[open]")).toHaveCount(6);
-    await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await expect(savedFrame.locator(".wire-reading-section[open],.wire-reading-interaction[open]")).toHaveCount(0);
+    const localSummary = savedFrame.locator(".wire-reading-interaction[open] > summary").first();
+    const focused = await localSummary.elementHandle();
+    await focused.click();
+    for (const open of [true, false]) {
+        await focused.press("Enter");
+        assert.equal(await focused.evaluate(node => node.parentElement.open), open);
+        assert.equal(await focused.evaluate(node => node === node.ownerDocument.activeElement), true);
+        assert.equal(await originalFrame.evaluate(node => node.isConnected && node.checkVisibility()), true);
+    }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#reportGallery")).toBeVisible();
     await expect(page.locator(".saved-report-title")).toHaveCount(1);

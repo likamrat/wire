@@ -1,5 +1,8 @@
 export async function selectReportFocus(page, preset) {
-    return page.locator("#reportDeskFocus").selectOption(preset);
+    const control = page.locator("#reportDeskFocus-control");
+    if (await control.isDisabled() && await page.locator("#reportDeskFocus").inputValue() === preset) return;
+    await control.click();
+    await page.locator(`.select-popup [role=option][data-value="${preset}"]`).click();
 }
 
 export function prepareReportPreview(page) {
