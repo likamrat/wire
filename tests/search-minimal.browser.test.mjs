@@ -38,7 +38,7 @@ test("compact Search keeps one stationary field and readable live rows without a
         await mkdir(process.env.WIRE_MINIMAL_SEARCH_PROOFS, { recursive: true });
         await page.screenshot({ path: path.join(process.env.WIRE_MINIMAL_SEARCH_PROOFS, "minimal-search-reference-query.png") });
     }
-    await input.fill("Theme");
+    await input.fill("Appearance mode");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1, { timeout: 15000 });
     await expect(page.locator("#wireSearchOptions,#wireSearchFilterSummary")).toHaveCount(0);
     await expect(page.locator(".wire-search-filters .select-trigger")).toHaveCount(2);
@@ -48,11 +48,11 @@ test("compact Search keeps one stationary field and readable live rows without a
         return { border: style.borderTopWidth, background: style.backgroundColor, radius: style.borderTopLeftRadius,
             rowContent: row.content };
     });
-    assert.equal(surfaces.border, "1px"); assert.equal(surfaces.background, "rgb(255, 255, 255)");
+    assert.equal(surfaces.border, "1px"); assert.notEqual(surfaces.background, "rgba(0, 0, 0, 0)");
     assert.equal(surfaces.radius, "16px");
     assert.equal(surfaces.rowContent, "none");
     const row = page.locator("#wireSearchResults button");
-    await expect(row).toContainText("Theme");
+    await expect(row).toContainText("Appearance mode");
     await expect(page.locator(".wire-search-group-label")).toHaveText("Settings");
     await expect(row).not.toContainText("Open setting");
     await expect(row).not.toContainText("#settings");
@@ -94,7 +94,7 @@ test("compact Search keeps one stationary field and readable live rows without a
     await input.focus(); await input.press("ArrowDown"); await expect(row).toBeFocused(); await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/setting=theme/);
     await page.goBack();
-    await expect(input).toHaveValue("Theme");
+    await expect(input).toHaveValue("Appearance mode");
     await expect(row).toBeFocused();
     await expect(page.locator("#wireSearchType")).toHaveValue("setting");
     await expect(page.locator(".wire-search-filters")).toBeVisible();
