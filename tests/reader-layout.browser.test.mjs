@@ -163,6 +163,8 @@ async function readerSettled(page) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
+const sourceToggle = page => page.getByRole("button", { name: "Source details", exact: true });
+
 async function readerShot(page, name) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
@@ -317,7 +319,9 @@ test("combined reader preserves a visible text line, identity, disclosure and ch
     await page.locator(".request-card-open").first().click();
     await readerSettled(page);
     assert.ok(Math.abs(await width() - originalWidth) < 1, "Fresh opening retains the existing default");
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
+    const failed = page.locator('[data-tool-call-id="invented-second-call"]');
+    await expect(failed).toBeFocused();
+    await expect(failed).toBeInViewport();
 });
 
 test("combined reader bounds, touch alternatives and responsive single-pane preserve the current reading", { timeout: 30000 }, async t => {
@@ -671,11 +675,13 @@ test("missing prompt and action facts stay explicit, while contradictory complet
 });
 
 for (const [sidebarMotion, motion, enabled] of [
-    ["on", "reduce", false], ["off", "no-preference", true], ["system", "reduce", false], ["system", "no-preference", true],
-]) test(`section folding follows native ${motion}, ignoring retired ${sidebarMotion}, with one reversible owner`, { timeout: 20000 }, async t => {
+    ["on", "reduce", false], ["off", "no-preference", true],
+]) test(`Source folding follows native ${motion}, ignoring retired ${sidebarMotion}, with one reversible owner`, { timeout: 20000 }, async t => {
     const { page } = await setup(t, [readerRecord()], { sidebarMotion, motion });
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-    const prompt = page.locator('[data-reader-section="prompt"]'), toggle = prompt.locator(".reader-section-toggle");
+    const source = page.locator('[data-reader-section="source"]'), toggle = sourceToggle(page);
+    await toggle.click();
+    await page.waitForFunction(() => !document.querySelector('[data-reader-section=source] .reader-section-clip').getAnimations().length);
     const state = await toggle.evaluate(async button => {
         const clip = button.closest("section").querySelector(".reader-section-clip");
         button.click();
@@ -689,7 +695,7 @@ for (const [sidebarMotion, motion, enabled] of [
         return { animated: Boolean(animation), frames };
     });
     assert.equal(state.animated, enabled);
-    await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
     if (enabled) {
         assert.ok(new Set(state.frames).size > 1, "Folding has actual unpaused intermediate heights");
         const reversed = await toggle.evaluate(button => {
@@ -703,21 +709,18 @@ for (const [sidebarMotion, motion, enabled] of [
         assert.ok(Math.abs(reversed.start - reversed.height) < 1);
         assert.equal(reversed.old, "idle");
         await page.emulateMedia({ reducedMotion: "reduce" });
-        await expect(prompt.locator(".reader-section-clip")).not.toHaveAttribute("inert", "");
-        assert.equal(await prompt.locator(".reader-section-clip").evaluate(node => node.getAnimations().length), 0);
+        await expect(source.locator(".reader-section-clip")).not.toHaveAttribute("inert", "");
+        assert.equal(await source.locator(".reader-section-clip").evaluate(node => node.getAnimations().length), 0);
     } else await toggle.click();
-    await expect(prompt.locator("pre")).toHaveCount(1);
+    const identifiers = source.getByRole("button", { name: "Record identifiers" });
+    await expect(identifiers).toBeVisible();
     await toggle.focus(); await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(toggle).toBeFocused();
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toBeFocused();
-    await expect(prompt.locator("pre")).toHaveCount(1);
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toBeFocused();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
+    await expect(identifiers).toBeHidden();
+    await toggle.press("Space");
+    await expect(identifiers).toBeVisible();
+    await expect(toggle).toBeFocused();
 });
 
 test("reader folding, exact Copy and report peek leave every frozen format byte-identical", { timeout: 30000 }, async t => {
@@ -774,7 +777,7 @@ test("retirement: historical model judgments do not create current reader panels
 test("correction: same-evidence persisted pageshow restores live owners only after authorization and preserves Back", { timeout: 25000 }, async t => {
     const { page, records } = await setup(t);
     await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
-    const oldCollapse = await page.getByRole("button", { name: "Collapse all sections", exact: true }).elementHandle();
+    const oldToggle = await sourceToggle(page).elementHandle();
     const oldCopy = await page.getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
     let release, arrive;
     const held = new Promise(resolve => release = resolve), arrived = new Promise(resolve => arrive = resolve), deliveries = [];
@@ -793,53 +796,21 @@ test("correction: same-evidence persisted pageshow restores live owners only aft
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
     try {
         await arrived;
-        assert.equal(await page.getByRole("button", { name: "Collapse all sections", exact: true }).count(), 0);
+        await expect(sourceToggle(page)).toHaveCount(0);
         release(); await Promise.all(deliveries);
     } finally { release(); await Promise.all(deliveries); await page.unroute("**/api/snapshot", holdSnapshot); }
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await oldCollapse.evaluate(node => node.click());
+    await oldToggle.evaluate(node => node.click());
     await oldCopy.evaluate(node => node.click());
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "false");
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [], "Disposed controls cannot fold or copy the successor reader");
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator('[data-reader-section="prompt"] pre')).toHaveCount(0);
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    await sourceToggle(page).click();
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "true");
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [records[0].userPrompt.text]);
     await page.goBack();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await expect(page.locator(".request-card-open")).toBeFocused();
-});
-
-test("retirement: bulk folding during an authorized response read never acquires retired owners", { timeout: 25000 }, async t => {
-    const exact = "Invented bulk-fold response.\n";
-    const { page } = await setup(t, [readerRecord()], { responseText: exact });
-    const response = page.locator('[data-reader-section="response"]');
-    await expect(response.locator("pre")).toHaveText(exact);
-    await response.locator(".reader-section-toggle").click();
-    let release, arrive;
-    const held = new Promise(resolve => release = resolve), arrived = new Promise(resolve => arrive = resolve), deliveries = [];
-    const holdEvidence = route => {
-        const delivery = (async () => {
-            const response = await route.fetch(); arrive(); await held; await route.fulfill({ response });
-        })();
-        deliveries.push(delivery); return delivery;
-    };
-    await page.route("**/api/assessment/evidence", holdEvidence);
-    try {
-        await response.locator(".reader-section-toggle").click();
-        await arrived;
-        await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-        await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
-        release(); await Promise.all(deliveries);
-        await expect(response.locator("pre,.ux-copy")).toHaveCount(0);
-        await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-        await expect(page.locator("#requestContent [data-automatic-scores],.automatic-score-dialog,[data-personal-feedback]")).toHaveCount(0);
-    } finally { release(); await Promise.all(deliveries); await page.unroute("**/api/assessment/evidence", holdEvidence); }
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(response.locator("pre")).toHaveText(exact);
-    await response.getByRole("button", { name: "Copy response", exact: true }).click();
-    assert.deepEqual(await page.evaluate(() => window.readerCopies), [exact]);
 });
 
 test("retirement: a pending historical personal receipt is preserved without blocking reading or replaying writes", { timeout: 20000 }, async t => {
@@ -848,10 +819,10 @@ test("retirement: a pending historical personal receipt is preserved without blo
         initialStorage: { "wire.assessment.pending": receipt },
     });
     const before = (await loadBoardState(context)).personalEvaluation;
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
+    await sourceToggle(page).click();
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    await sourceToggle(page).click();
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [records[0].userPrompt.text]);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")), receipt);
@@ -869,7 +840,7 @@ test("correction: missing and unsupported prompt completeness remain qualified e
         await expect(prompt.getByText("Partial text", { exact: true })).toHaveCount(status === "partial" ? 1 : 0);
         if (status === "unavailable") {
             await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
-            await expect(prompt).toContainText("Prompt not available");
+            await expect(prompt).toContainText("Prompt text unavailable");
         } else {
             await prompt.getByRole("button", { name: "Copy prompt", exact: true }).click();
             assert.deepEqual(await page.evaluate(() => window.readerCopies), [record.userPrompt.text]);
@@ -879,8 +850,8 @@ test("correction: missing and unsupported prompt completeness remain qualified e
 });
 
 for (const [reason, label, captureOff] of [
-    ["credential-excluded", "Recorded response was excluded by credential screening.", false],
-    ["capture-limit", "Recorded response exceeded the capture limit.", true],
+    ["credential-excluded", "The reply was excluded by credential screening.", false],
+    ["capture-limit", "The reply exceeded the saving limit.", true],
 ]) for (const source of ["observation", "legacy-qualified-record"]) test(`correction: recorded response availability retains ${reason} from ${source} independently of current capture`, { timeout: 20000 }, async t => {
     const record = readerRecord(), view = retainedResponse("Never-readable invented response", record);
     if (source === "observation") {
@@ -922,7 +893,6 @@ test("requested sources stay with recorded input, without detached result caveat
     const partial = page.locator('[data-tool-call-id="invented-partial-capability"]');
     for (const call of [known, fallback, partial]) {
         await call.locator(".reader-call-toggle").click();
-        await expect(call.locator(".reader-call-evidence")).toHaveCount(0);
         await expect(call).not.toContainText("This does not show which sources returned results");
         await expect(call).not.toContainText("No results");
     }
@@ -936,7 +906,8 @@ test("requested sources stay with recorded input, without detached result caveat
     await expect(fallback.locator(".reader-call-duration")).toHaveText("Call duration: 252 ms");
     await expect(partial).toContainText('"name": "Email"');
     await expect(partial).toContainText('"name": "InventedUnrecognizedSource"');
-    await expect(partial.locator(".call-heading")).toContainText("Call 3 has no recorded result");
+    await expect(partial.locator(".reader-entry-label")).toHaveText("Call #3");
+    await expect(partial.locator(".call-heading")).toContainText("has no recorded result");
     assert.deepEqual(await loadBoardState(context), before);
 });
 
@@ -953,7 +924,7 @@ for (const outcome of ["read-failure", "revoked-source"]) test(`correction: pers
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.getByRole("button", { name: "Copy prompt", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toHaveCount(0);
+    await expect(sourceToggle(page)).toHaveCount(0);
     await oldCopy.evaluate(node => node.click());
     assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
     if (outcome === "read-failure") {
@@ -961,7 +932,7 @@ for (const outcome of ["read-failure", "revoked-source"]) test(`correction: pers
         await page.unroute("**/api/snapshot");
         await page.evaluate(() => dispatchEvent(new Event("online")));
         await expect(page.getByRole("button", { name: "Copy prompt", exact: true })).toBeVisible();
-    } else await expect(page.locator("#requestContent")).toContainText("This interaction is not available");
+    } else await expect(page.locator("#unavailableCall")).toContainText("These completed calls are unavailable");
 });
 
 test("correction: an older snapshot finishing after pagehide cannot revive the disposed reader", { timeout: 20000 }, async t => {
@@ -1023,19 +994,19 @@ test("retirement: stale A reader controls cannot fold or copy B or steal its foc
     b.userPrompt.text = "Invented B prompt; separate reading owner.\n  Preserve these bytes.";
     b.toolCalls[0].toolCallId = "invented-reader-b-call";
     const { page, context } = await setup(t, [a, b]);
-    await page.locator('.request-card-open[href*="request=reader-approved"]').click();
-    const foldA = await page.getByRole("button", { name: "Collapse all sections", exact: true }).elementHandle();
+    await page.locator('[data-view-key="request:reader-approved"] .request-card-open').click();
+    const foldA = await sourceToggle(page).elementHandle();
     const copyA = await page.getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
-    await page.locator('.request-card-open[href*="request=reader-guard-b"]').click();
-    await expect(page).toHaveURL(/request=reader-guard-b/);
+    await page.locator('[data-view-key="request:reader-guard-b"] .request-card-open').click();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:reader-guard-b");
     const promptB = page.locator('[data-reader-section="prompt"]');
-    const focusB = promptB.locator(".reader-section-toggle");
+    const focusB = sourceToggle(page);
     await focusB.focus();
     const stored = (await loadBoardState(context)).personalEvaluation;
     await foldA.evaluate(node => node.click());
     await copyA.evaluate(node => node.click());
     await expect(promptB.locator("pre")).toHaveText(b.userPrompt.text);
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(focusB).toHaveAttribute("aria-expanded", "false");
     await expect(focusB).toBeFocused();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
     await promptB.getByRole("button", { name: "Copy prompt", exact: true }).click();

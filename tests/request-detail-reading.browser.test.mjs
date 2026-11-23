@@ -692,8 +692,9 @@ test("unavailable and zero-action requests stay honest; partial/full prompt copi
 
 for (const newerInput of [false, true]) test(`unrelated accepted refresh preserves ${newerInput ? "newer disclosure focus" : "focused prompt"} and reading position`, async t => {
     const body = exact + "Long retained wording. ".repeat(100) + "\nEND OF PROMPT\n";
-    const { page, addUnrelatedRecord } = await setup(t, { text: body, entry: "card" });
-    await page.locator('.request-card-open[href*="request=detail-reading"]').click();
+    // The interaction itself survives a new revision. A card's completed-call
+    // subset, by contrast, is intentionally pinned to the revision it counted.
+    const { page, addUnrelatedRecord } = await setup(t, { text: body });
     await page.waitForFunction(() => !document.getElementById("contextSidebar").getAnimations().length);
     const text = page.locator(".request-original .full-text-content");
     await text.focus();
@@ -785,7 +786,7 @@ test("normal response reader opens retained text immediately with explicit Retry
     const readsBeforeNeighbor = evidenceReads();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
-    await page.locator('.request-card-open[href*="request=detail-neighbor"]').click();
+    await page.locator('[data-view-key="request:detail-neighbor"] .request-card-open').click();
     await expect(page.locator('.interaction-response[data-context-group="detail-neighbor"] .reader-empty')).toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText(responseText);
     assert.equal(evidenceReads(), readsBeforeNeighbor, "A neighboring interaction cannot read or inherit the selected interaction's reply");

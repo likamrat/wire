@@ -221,8 +221,10 @@ test("normal native reader shows retained error and successful description throu
 });
 
 test("ongoing collection does not replace the conversation being read", async t => {
-    const { page, collect, card } = await setup(t);
+    const { page, collect, card, calls } = await setup(t);
     const initialRoute = page.url(), reader = page.locator("#requestContent");
+    const latestDetail = () => calls.filter(call => call.method === "detail" && call.input.section === "calls").at(-1).input;
+    const original = latestDetail();
     await page.evaluate(() => {
         window.openMessage = document.querySelector("#requestContent .reader-message");
         window.openCopy = openMessage.querySelector(".ux-copy");
@@ -262,7 +264,11 @@ test("ongoing collection does not replace the conversation being read", async t 
     await expect(reader).toContainText("A newly collected message, outside the open snapshot.");
     await expect(reader).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#requestReportToggle")).toBeEnabled();
-    assert.notEqual(page.url(), initialRoute, "Reopening a current card deliberately selects the newly collected root.");
+    const reopened = latestDetail();
+    assert.equal(reopened.conversationId, original.conversationId);
+    assert.equal(reopened.revision, revision);
+    assert.notEqual(reopened.sourceRevision, original.sourceRevision);
+    assert.equal(page.url(), initialRoute, "The private source revision is not a public address.");
     if (directory) {
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length
             && !document.querySelector("#main").getAnimations().length);
@@ -289,7 +295,7 @@ test("a fresh accepted Search target opens while the surrounding snapshot stays 
     await expect(target).toContainText("A fresh exact Search passage.");
     await expect(target).toBeFocused();
     await expect(page.locator("#activityView")).toHaveAttribute("data-revision", previousRevision);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("nativeRevision"), String(newRevision));
+    assert.doesNotMatch(page.url(), /nativeRevision|fresh-search-message/);
     const seeks = calls.filter(call => call.method === "detail" && call.input.at !== undefined);
     assert.equal(seeks.length, 1);
     assert.equal(seeks[0].input.revision, newRevision);
@@ -355,7 +361,7 @@ test("exact source page labels its page count separately from the complete conve
     const last = calls.filter(call => call.method === "detail" && call.input.section === "observations").at(-1).input;
     assert.equal(last.revision, originalRevision);
     assert.equal(last.sourceRevision, originalRoot);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("nativeOrdinal"), "4");
+    assert.doesNotMatch(page.url(), /nativeRevision|nativeOrdinal/);
 });
 
 test("shared reader preserves authored order and makes coexisting context discoverable", async t => {
@@ -779,7 +785,7 @@ test("no-call cards state absence once without a duplicate zero footer", async t
 test("Chat shares the card and reader without borrowing call inputs or inventing outcomes", async t => {
     const { page, card } = await setup(t, [...chatFixture(), multiCallChatFixture()], 2);
     await expect(card).toContainText("An invented question.");
-    await expect(card).toContainText("2 unverified");
+    await expect(card.getByText("No result recorded", { exact: true })).toBeVisible();
     await expect(card.locator(".request-card-count")).toHaveText("2 tool calls");
     const messages = page.locator("#requestContent [data-reader-section=prompt] .reader-message");
     await expect(messages).toHaveCount(4);

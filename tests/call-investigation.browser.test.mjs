@@ -159,7 +159,7 @@ test("other evidence layers retain their own units and do not receive a tool fai
         const opener = page.locator(".request-card-open");
         await opener.press("Enter"); await settled(page);
         await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", `request:${records[0].scenarioId}`);
-        await expect(page.locator(".request-original .full-text-content")).toBeFocused();
+        await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
         await expect(page.locator("#selectedCall")).toHaveCount(0);
         await expect(page.locator(".reader-timing-column")).toHaveCount(0);
         await expect(page.locator('#requestContent [data-result-layer="code-reference"]')).toContainText("Execution not observed");
@@ -179,13 +179,13 @@ test("other evidence layers retain their own units and do not receive a tool fai
     await expect(page.locator("#selectedCall .reader-call-duration")).toHaveCount(0);
 });
 
-test("a modified native card link opens untargeted context rather than replaying the homepage gesture default", async t => {
+test("a modified failure link opens its exact failed call without exposing its identity in the address", async t => {
     const { page, browserContext } = await setup(t, [callInvestigationRecords()[1]]);
     const opened = browserContext.waitForEvent("page");
     await page.locator(".request-card-open").click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
     const other = await opened; await other.waitForLoadState(); await ready(other); await settled(other);
     assert.equal(new URL(other.url()).searchParams.has("call"), false);
-    await expect(other.locator("#selectedCall")).toHaveCount(0);
-    await expect(other.locator("#contextSidebarTitle")).toBeFocused();
+    await expect(other.locator("#selectedCall")).toHaveAttribute("data-tool-call-id", "investigate-08");
+    await expect(other.locator("#selectedCall")).toBeFocused();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
 });

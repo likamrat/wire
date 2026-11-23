@@ -62,10 +62,12 @@ async function setup(t) {
 for (const kind of ["off-page", "zero-matches"]) for (const [width, scale] of [[1440, 1], [390, 2]]) test(`reader without an originating card returns to visible list context (${kind}, ${width}/${scale})`, async t => {
     const { page, runtime } = await setup(t);
     const query = kind === "off-page" ? "page=1" : "range=custom&from=2027-01-01&to=2027-01-02";
+    await page.setViewportSize({ width, height: 1000 });
+    await page.addInitScript(scale => addEventListener("DOMContentLoaded", () => {
+        document.documentElement.style.fontSize = `${16 * scale}px`;
+    }, { once: true }), scale);
     await page.goto(runtime.url + "#analyze?" + query);
     await ready(page);
-    await page.setViewportSize({ width, height: 1000 });
-    await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
     await revealAnalyzeRecords(page);
     await settled(page);
     await expect(page.locator("#activityListContext")).toHaveCount(1);
@@ -78,11 +80,11 @@ for (const kind of ["off-page", "zero-matches"]) for (const [width, scale] of [[
     await expect(page.locator("#activityListScope")).not.toContainText("Saved collection");
     if (kind === "zero-matches") {
         await expect(page.locator("#activityListScope")).toBeVisible();
-        await expect(page.locator("#activityListScope")).toContainText("Jan 1 - Jan 2, 2027");
+        await expect(page.locator("#activityListScope")).toContainText("Jan 1–2, 2027");
     } else await expect(page.locator("#activityListScope")).toBeHidden();
     const scopeBefore = await page.locator("#activityListScope").textContent();
-    const count = kind === "off-page" ? "10 interactions with 10 matching Work IQ tool calls"
-        : "0 interactions with 0 matching Work IQ tool calls";
+    const count = kind === "off-page" ? "10 interactions · 10 matching tool calls"
+        : "0 interactions · 0 matching tool calls";
     await expect(page.locator("#activityListSummary")).toHaveText(count);
     await page.goto(runtime.url + "#request?" + query + "&request=reader-fallback-0&origin=analyze");
     await ready(page);
@@ -104,7 +106,7 @@ for (const kind of ["off-page", "zero-matches"]) for (const [width, scale] of [[
         headerBottom: document.querySelector(".app-header").getBoundingClientRect().bottom,
         viewport: innerHeight,
         summary: document.getElementById("activityListSummary").textContent,
-        url: location.hash,
+        url: location.href,
     }));
     if (process.env.WIRE_READER_FALLBACK_PROOFS) {
         await mkdir(process.env.WIRE_READER_FALLBACK_PROOFS, { recursive: true });
@@ -119,7 +121,7 @@ for (const kind of ["off-page", "zero-matches"]) for (const [width, scale] of [[
     assert.ok(result.top >= result.headerBottom && result.bottom <= result.viewport);
     assert.equal(result.summary, count);
     await expect(page.locator("#activityListScope")).toHaveText(scopeBefore);
-    const returned = new URLSearchParams(result.url.split("?")[1]);
+    const returned = new URL(result.url).searchParams;
     for (const [key, value] of new URLSearchParams(query)) assert.equal(returned.get(key), value);
 });
 
