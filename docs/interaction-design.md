@@ -616,6 +616,7 @@ Screen paint changes do not restyle saved documents.
 Compare has one destination. The period presets, activity selection and filters
 are local controls below the page title. The chart-view switch belongs to the
 reading, with the accepted baseline and selected dates; presets are not tabs.
+Highlight the active chart view without outlining the whole group.
 
 For a retained Work IQ tool-call comparison, **Call results** and **What changed**
 follow the same Baseline and Selected columns. The editable dates are in one header;
