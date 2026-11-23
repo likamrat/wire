@@ -10653,13 +10653,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function recoverRead() {
-        if (api.accessState().mode !== "unbound") {
-            api.startAccess();
-            if (api.publicationToken() && workspaceState.evidence?.collection) {
-                clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 0);
-            }
-            return;
-        }
+        if (api.accessState().mode !== "unbound") { api.startAccess(); return; }
         draft.clearContext({ writing: exportWriting });
         scrubContextPreview();
         if (exportWriting) return;
