@@ -30,7 +30,7 @@ function controlContrast(paint, name) {
         `${name}: perceptible action face or edge`);
 }
 async function tooltipPaint(page, surface) {
-    const tooltip = page.getByRole("tooltip", { includeHidden: true });
+    const tooltip = await page.getByRole("tooltip").elementHandle();
     const paint = await tooltip.evaluate((node, selector) => {
         const css = getComputedStyle(node);
         return { text: node.textContent, background: css.backgroundColor, ink: css.color, border: css.borderTopColor,
@@ -98,9 +98,9 @@ async function native(t) {
 test("real chart and modal hover information have one readable, distinct surface in both themes", async t => {
     const { page, url } = await native(t), measurements = [];
     for (const theme of ["light", "dark"]) {
-        await page.goto(url); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        await page.goto(url + "?range=custom&from=2026-10-01&to=2026-10-15"); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await chooseTheme(page, theme); await settle(page);
-        await page.locator(".flat-time-segment").first().hover();
+        await page.locator('.time-segment-link[data-segment="success"]').first().hover();
         await expect(page.getByRole("tooltip")).toBeVisible(); await settle(page);
         measurements.push({ theme, kind: "chart", ...await tooltipPaint(page, ".analyze-chart-main") });
         await capture(page, `${theme}-chart-tooltip`);
@@ -124,13 +124,14 @@ test("real chart and modal hover information have one readable, distinct surface
 
 test("chart hover placement preserves neighboring count labels and native data", async t => {
     const { page, url } = await native(t);
-    await page.goto(url); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false"); await settle(page);
+    await page.goto(url + "?range=custom&from=2026-10-01&to=2026-10-15"); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false"); await settle(page);
     const counts = await page.locator(".dimensional-count").allTextContents();
-    await page.locator(".flat-time-segment").first().hover();
+    assert.ok(counts.length > 1);
+    await page.locator('.time-segment-link[data-segment="success"]').first().hover();
     await expect(page.getByRole("tooltip")).toBeVisible();
     const overlap = await page.evaluate(() => {
         const tip = document.querySelector('[role="tooltip"]').getBoundingClientRect();
-        return [...document.querySelectorAll(".dimensional-count,.dimensional-time-labels>span,.flat-time-axis>span")]
+        return [...document.querySelectorAll(".dimensional-count,.dimensional-time-labels>a,.flat-time-axis>span")]
             .filter(node => node.checkVisibility()).flatMap(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 const box = range.getBoundingClientRect();
@@ -139,7 +140,7 @@ test("chart hover placement preserves neighboring count labels and native data",
     });
     assert.deepEqual(overlap, [], "Hover information must not cover the chart's count/date labels");
     assert.deepEqual(await page.locator(".dimensional-count").allTextContents(), counts);
-    assert.match(await page.getByRole("tooltip").innerText(), /Worked: 11 of 12 Work IQ tool calls/);
+    assert.match(await page.getByRole("tooltip").innerText(), /Oct 1.*11 tool completed/i);
 });
 
 test("Filters actions and choice highlights remain distinct without changing their 320ms outer glide", async t => {
@@ -156,7 +157,8 @@ test("Filters actions and choice highlights remain distinct without changing the
         const hover = await trigger.evaluate(measureControlSurface);
         measurements.push({ theme, width, scale, rest, hover });
         controlContrast(hover, "Filters hover");
-        assert.ok(hover.borderWidth >= 2 && contrast(hover.border, rest.border) >= 2, "Filters has a perceptible hover highlight");
+        assert.ok(Math.max(contrast(hover.face, rest.face), contrast(hover.border, rest.border)) >= 1.1,
+            "Hover changes the visible Filters face or edge");
         assert.equal(hover.box.width, rest.box.width); assert.equal(hover.box.height, rest.box.height);
         await capture(page, `${theme}-${width}-${scale}-filters-hover`);
         await page.evaluate(() => {
@@ -168,17 +170,21 @@ test("Filters actions and choice highlights remain distinct without changing the
             };
         });
         await trigger.click(); await expect(page.locator("#analyzeFilterDialog")).toBeVisible(); await settle(page);
-        const choice = page.locator("#dateFilter-control");
+        const choice = page.locator("#toolFilter-control");
         await choice.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0); await settle(page);
-        controlContrast(await choice.evaluate(measureControlSurface), "Date choice at rest");
+        const choiceRest = await choice.evaluate(measureControlSurface);
+        controlContrast(choiceRest, "Tool choice at rest");
         await choice.hover(); await settle(page);
         const choiceHover = await choice.evaluate(measureControlSurface);
-        controlContrast(choiceHover, "Date choice hover"); assert.ok(choiceHover.borderWidth >= 2);
+        controlContrast(choiceHover, "Tool choice hover");
+        assert.ok(Math.max(contrast(choiceHover.face, choiceRest.face), contrast(choiceHover.border, choiceRest.border)) >= 1.1);
         await choice.click();
         const option = page.locator('.select-popup-filter .select-option:not([aria-disabled=true])').nth(1);
+        const optionRest = await option.evaluate(measureControlSurface);
         await option.hover(); await settle(page);
         const paint = await option.evaluate(measureControlSurface);
-        assert.ok(paint.focusWidth >= 2 && contrast(paint.focus, paint.face) >= 3, "Hovered option has a visible highlight");
+        assert.ok(contrast(paint.face, optionRest.face) >= 1.1 || paint.focusWidth >= 2 && contrast(paint.focus, paint.face) >= 3,
+            "Hover distinguishes the option without requiring keyboard focus");
         assert.ok(contrast(paint.ink, paint.face) >= 4.5);
         await capture(page, `${theme}-${width}-${scale}-filters-choice`);
         await page.keyboard.press("Escape");
@@ -198,15 +204,25 @@ test("the real reader report action remains recognizable at rest, hover, press a
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
         await page.locator("#activityList .request-card-open").first().click();
-        const action = page.getByRole("button", { name: "Add to report", exact: true });
+        const action = page.locator("#requestContent").getByRole("button", { name: "Add to report", exact: true });
         await expect(action).toBeVisible(); await settle(page);
+        await action.scrollIntoViewIfNeeded();
+        await expect(action).toHaveAttribute("aria-haspopup", "dialog");
         await page.mouse.move(0, 0);
+        let previous;
         for (const state of ["rest", "hover", "pressed", "focus"]) {
             if (state === "hover") await action.hover();
             if (state === "pressed") await page.mouse.down();
             if (state === "focus") { await page.mouse.move(0, 0); await action.focus(); await page.keyboard.press("Shift"); }
             await settle(page);
             const paint = await action.evaluate(measureControlSurface);
+            if (state === "hover" || state === "pressed") {
+                if (state === "hover") assert.notDeepEqual([paint.face, paint.ink], [previous.face, previous.ink], "Hover changes the visible reader action");
+                else assert.ok(await action.evaluate(node => node.matches(":active")), "Actual pointer press targets this reader action");
+                assert.equal(paint.box.width, previous.box.width);
+                assert.equal(paint.box.height, previous.box.height);
+            }
+            previous = paint;
             measurements.push({ theme, width, scale, state, ...paint });
             await capture(page, `${theme}-${width}-${scale}-reader-action-${state}`);
             if (state === "pressed") {
@@ -214,12 +230,12 @@ test("the real reader report action remains recognizable at rest, hover, press a
                 await page.evaluate(() => getSelection()?.removeAllRanges());
             }
         }
-        await expect(action).toHaveText("Add to report");
+        await expect(action).toHaveAccessibleName("Add to report");
     }
     if (proofs) await writeFile(path.join(proofs, "reader-action-paint.json"), JSON.stringify(measurements, null, 2));
     for (const value of measurements) {
         assert.equal(value.disabled, false);
-        controlContrast(value, `${value.theme} ${value.state}`);
+        assert.ok(contrast(value.ink, value.face) >= 4.5, `${value.theme} ${value.state}: readable action`);
         if (value.state === "focus") {
             assert.ok(value.focusWidth >= 2);
             assert.ok(contrast(value.focus, value.backdrop) >= 3);

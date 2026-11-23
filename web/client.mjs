@@ -614,7 +614,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, requestInvalidated = false, contextOwner = null;
     let sidebarColumnAnimation = null, sidebarColumnAnchor = null, sidebarColumnFrame = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
-    const invalidatedCallFocus = new WeakMap();
+    const invalidatedReaderFocus = new WeakMap();
     let readerWidth = null, readerExpanded = false, readerResize = null, sidebarTextAnchor = null, readerLayoutSize = null;
     let readerSections = null, timingHeadingObserver = null, cardEntry = null;
     const readerTextReleases = [];
@@ -1454,22 +1454,48 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (scroller) scroller.scrollBy(0, delta);
         else window.scrollBy(0, delta);
     }
-    function captureReading() {
+    function promptFocus(active) {
+        const section = active?.closest('[data-reader-section="prompt"]');
+        if (!contextOwner?.interaction || !section || !contextBody.contains(section)) return null;
+        const pre = section.querySelector(".request-original .full-text-content");
+        if (!pre || active !== pre && !active.matches(".prompt-preview-toggle")) return null;
+        const selection = window.getSelection(), text = pre.firstChild;
+        return { id: active.id, prompt: true,
+            selection: active === pre && text && selection && !selection.isCollapsed && selection.anchorNode === text && selection.focusNode === text
+                ? [selection.anchorOffset, selection.focusOffset] : null };
+    }
+    function sameRetainedPrompt(next) {
+        const previous = workspaceState.evidence, id = workspaceState.route.request;
+        if (!next || !previous || !id || previous.deletionVersion !== next.deletionVersion
+            || previous.collection?.configVersion !== next.collection?.configVersion
+            || ["consentRevision", "overrideRevision", "deletionEpoch"].some(key =>
+                previous.assessment?.basis?.[key] !== next.assessment?.basis?.[key])) return false;
+        // Compare the two authorized snapshots in place. Reading state holds offsets, never a prompt copy.
+        const a = previous.scenarios.find(row => row.scenarioId === id), b = next.scenarios.find(row => row.scenarioId === id);
+        return a?.userPrompt && b?.userPrompt
+            && typeof a.sourceSessionId === "string" && a.sourceSessionId.trim() !== "" && a.sourceSessionId === b.sourceSessionId
+            && typeof a.userPrompt.sourceEventId === "string" && a.userPrompt.sourceEventId.trim() !== ""
+            && a.userPrompt.sourceEventId === b.userPrompt.sourceEventId && a.userPrompt.sourceTimestamp === b.userPrompt.sourceTimestamp
+            && a.userPrompt.status === b.userPrompt.status && a.userPrompt.text === b.userPrompt.text;
+    }
+    function captureReading(next) {
         if (clearingAccess || !api.publicationToken()) return null;
         for (const node of document.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
         const active = document.activeElement, owner = active?.closest("[data-view-key]");
         const readerPosition = contextOwner?.interaction && contextBody.contains(active)
             ? { identity: sidebarIdentity, top: contextBody.scrollTop } : null;
-        const pending = invalidatedCallFocus.get(active);
-        const focus = pending && readerPosition?.identity === pending.identity
-            && api.isCurrent(pending.publication) ? pending.focus
-            : contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
+        const pending = invalidatedReaderFocus.get(active);
+        const retiredFocus = pending && readerPosition?.identity === pending.identity
+            && api.isCurrent(pending.publication) && pending.intent === workspaceState.readingIntent ? pending.focus : null;
+        const prompt = retiredFocus?.prompt ? retiredFocus : promptFocus(active);
+        const focus = prompt ? (sameRetainedPrompt(next) ? prompt : null)
+            : retiredFocus || (contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
             id: active.id, ...(readerPosition ? { text: active.textContent } : {}),
         } : owner === active && active?.closest("#savedReportsPanel") && owner?.dataset.viewKey ? { key: owner.dataset.viewKey, self: true } : owner ? {
             key: owner.dataset.viewKey, label: active.getAttribute("aria-label"), tag: active.tagName,
             callDetail: readerPosition && active.matches(".reader-call-toggle") ? active.getAttribute("aria-controls") : null,
             text: active.textContent, type: active.getAttribute("type"), self: active === owner,
-        } : null;
+        } : null);
         const scrollers = [...document.querySelectorAll("#workspace *")].filter(node => node.checkVisibility() && (node.scrollLeft || node.scrollTop)).map(node => ({
             id: node.id, key: node.closest("[data-view-key]")?.dataset.viewKey,
             tag: node.tagName, label: node.getAttribute("aria-label"), cls: node.className,
@@ -1486,7 +1512,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             key: reader.closest("[data-view-key]")?.dataset.viewKey, text: reader.textContent,
             anchor: selection.anchorOffset, focus: selection.focusOffset,
         } : null;
-        return { publication: api.publicationToken(), x: scrollX, y: scrollY, focus, scrollers, anchor: anchor?.dataset.viewKey, top: anchor?.getBoundingClientRect().top, textSelection,
+        return { publication: api.publicationToken(), intent: workspaceState.readingIntent, x: scrollX, y: scrollY, focus, scrollers, anchor: anchor?.dataset.viewKey, top: anchor?.getBoundingClientRect().top, textSelection,
             chartReference: chartReferenceUI.capture(), reader: readerPosition };
     }
     function forgetReading(saved) {
@@ -1502,14 +1528,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         const root = saved.focus?.key ? keyed(saved.focus.key) : null;
+        const prompt = saved.focus?.prompt && saved.reader?.identity === sidebarIdentity && saved.intent === workspaceState.readingIntent
+            && contextOwner?.interaction && !requestInvalidated;
+        // Preview toggles are normally measured after mount; focus needs the current toggle now.
+        if (prompt) textAccess.measurePrompt($("selectedContext")?.querySelector(".full-text"));
         // Call identity survives a timing/outcome update; the button's accessible name does not.
         const callToggle = saved.reader && saved.focus?.callDetail && root?.querySelector(".reader-call-toggle");
         const sameCall = callToggle && callToggle.getAttribute("aria-controls") === saved.focus.callDetail;
         const focus = sameCall ? callToggle : saved.focus?.id ? $(saved.focus.id) : root && saved.focus.self ? root : root ? [...root.querySelectorAll("button,a,input,summary,textarea,pre")].find(node =>
             node.tagName === saved.focus.tag && (saved.focus.tag === "SUMMARY" || (saved.focus.label ? node.getAttribute("aria-label") === saved.focus.label : node.textContent === saved.focus.text && node.getAttribute("type") === saved.focus.type))) : null;
         const readerCurrent = !saved.reader || saved.reader.identity === sidebarIdentity && contextOwner?.interaction
-            && contextBody.contains(focus) && (sameCall || focus.textContent === saved.focus.text);
+            && focus && contextBody.contains(focus) && (saved.focus.prompt ? prompt : sameCall || focus.textContent === saved.focus.text);
         if (readerCurrent && focus?.checkVisibility()) ux.restoreFocus(focus);
+        if (readerCurrent && prompt && saved.focus.selection && document.activeElement === focus) {
+            const [anchor, end] = saved.focus.selection, text = focus.firstChild;
+            if (text?.nodeType === Node.TEXT_NODE && Math.max(anchor, end) <= text.length)
+                window.getSelection()?.setBaseAndExtent(text, anchor, text, end);
+        }
         if (saved.reader && readerCurrent) contextBody.scrollTop = saved.reader.top;
         for (const entry of saved.scrollers) {
             const owner = entry.key ? keyed(entry.key) : null;
@@ -2427,16 +2462,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             requestRenderKey = null;
             if (workspaceState.route.view === "request") {
                 const active = document.activeElement;
-                const focus = reason === "data" && !acceptingSnapshot && contextBody.contains(active) && active.matches(".reader-call-toggle")
-                    ? { key: active.closest("[data-view-key]")?.dataset.viewKey, callDetail: active.getAttribute("aria-controls") } : null;
+                const focus = reason === "data" && !acceptingSnapshot && contextBody.contains(active)
+                    ? promptFocus(active) ?? (active.matches(".reader-call-toggle")
+                        ? { key: active.closest("[data-view-key]")?.dataset.viewKey, callDetail: active.getAttribute("aria-controls") } : null) : null;
                 requestInvalidated = true;
                 clearReaderSections();
                 const notice = el("p", "notice", message);
                 $("requestContent").replaceChildren(notice);
                 // Status can retire the reader before its replacement snapshot arrives. Carry
                 // only the disclosure identity, and only while focus remains on this notice.
-                if (focus?.key && focus.callDetail) {
-                    invalidatedCallFocus.set(notice, { focus, identity: sidebarIdentity, publication: api.publicationToken() });
+                if (focus?.prompt || focus?.key && focus.callDetail) {
+                    invalidatedReaderFocus.set(notice, { focus, identity: sidebarIdentity, publication: api.publicationToken(), intent: workspaceState.readingIntent });
                     notice.tabIndex = -1; notice.focus({ preventScroll: true });
                 }
                 renderReportInspectionReturn();
@@ -3790,7 +3826,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (checking.phase === "applying" && checking.check && next.collection?.configVersion !== checking.check.configVersion) throw new Error("The approved source changed during this check. Review the current connection before checking again.");
             if (workspaceState.evidence && next.revision < workspaceState.evidence.revision) throw new Error("An older snapshot was rejected. The current view is kept.");
             if (next.sessionAnalysis && (next.sessionAnalysis.revision !== next.revision || !results.valid(next.sessionAnalysis.totals))) throw new Error("Source analysis does not match this snapshot. Retry the stored-data read before continuing.");
-            const reading = captureReading();
+            const reading = captureReading(next);
             if (!currentRead()) return false;
             if (workspaceState.evidence && (workspaceState.evidence.revision !== next.revision || workspaceState.evidence.nativeRead?.revision !== next.nativeRead?.revision || workspaceState.evidence.deletionVersion !== next.deletionVersion
                 || workspaceState.evidence.collection?.configVersion !== next.collection?.configVersion)) {
