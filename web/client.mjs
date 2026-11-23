@@ -8857,6 +8857,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (requestRoute?.bookmark && !requestRoute.request) {
             // Refusing a locator is not navigation to the full Analyze population.
             $("workspace").hidden = true;
+            boundedNative.clearCards();
+            nativeActivity.clearCards();
+            if (frontendActivity) frontendActivity.withdrawAccess();
+            else {
+                releaseCardPreviews($("activityList"));
+                $("activityList").replaceChildren();
+                $("activityPager").replaceChildren();
+            }
             showInteractionSidebar();
             renderRequest();
             return;

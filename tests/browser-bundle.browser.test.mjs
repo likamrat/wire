@@ -8,6 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { loadBrowserAssets } from "../lib/browser-assets.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
+import { replaceEvidence } from "../lib/store.mjs";
 
 async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
     const cleanup = [];
@@ -27,6 +28,25 @@ async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
 }
 
 for (const frontend of ["bundled", "react"]) {
+test(`losing an open bookmark releases the old Analyze cards without exposing a fallback (${frontend})`, async t => {
+    const { page, runtime, context } = await setup(t, { frontend });
+    await page.goto(runtime.url);
+    const link = page.locator("#activityList .request-card-open").first();
+    await expect(link).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    const priorText = await link.locator(".card-excerpt").evaluateHandle(node => node.firstChild);
+    await link.click();
+    await expect(page.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await replaceEvidence(context, () => ({ records: [fixture("unrelated")], importCoverage: { counts: {}, roster: [] } }));
+    await page.evaluate(() => dispatchEvent(new Event("online")));
+    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
+    await expect(page.locator("#workspace")).toBeHidden();
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(0);
+    assert.equal(await priorText.evaluate(node => node.textContent), "");
+    await page.locator("#closeContextSidebar").click();
+    await navigateMain(page, "analyze");
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
+});
+
 test(`the built module opens the real workspace with panel-local bootstrap and separately cacheable code (${frontend})`, async t => {
     const { page, runtime } = await setup(t, { frontend }), errors = [];
     page.on("pageerror", error => errors.push(error.message));
