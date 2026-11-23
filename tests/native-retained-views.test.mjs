@@ -197,6 +197,54 @@ for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} bounded pages
     assert.deepEqual(second.aggregates, first.aggregates);
     assert.notEqual(first.page.items[0].id, second.page.items[0].id);
     assert.equal(second.page.nextCursor, null);
+    const model = createBoundedNativeState(), query = input();
+    model.receive(model.begin(query, request), first, request);
+    const continuation = model.next();
+    model.receive(model.begin(continuation, request), second, request);
+    assert.equal(model.snapshot().value.page.items[0].id, second.page.items[0].id);
+    const qualification = await views.readback({ schemaVersion: 1, operationId: first.readback.committed.operationId }, request);
+    const receipt = (await app.persistence.status({ operationId: first.readback.committed.operationId }, { owner: app.owner })).receipt;
+    assert.equal(model.matchesReadback(qualification, first, receipt), true);
+    const inventoryInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        dimension: "tools", page: { limit: 1, after: null } };
+    const inventoryContext = { ...query, original: first };
+    const inventoryModel = createBoundedNativeState();
+    const inventory = await views.inventory(inventoryInput, request);
+    inventoryModel.receive(inventoryModel.begin(inventoryInput, request, inventoryContext), inventory, request);
+    assert.equal(inventory.aggregates.options, 3);
+    assert.equal(inventory.page.items.length, 1);
+    const nextInventoryInput = inventoryModel.next();
+    inventoryModel.receive(inventoryModel.begin(nextInventoryInput, request),
+        await views.inventory(nextInventoryInput, request), request);
+    assert.equal(inventoryModel.snapshot().value.page.items.length, 1);
+    assert.notEqual(inventoryModel.snapshot().value.page.items[0].value, inventory.page.items[0].value);
+    const unknownInput = { ...inventoryInput, dimension: "services" };
+    const unknown = inventoryModel.decode(await views.inventory(unknownInput, request), unknownInput, inventoryContext);
+    assert.equal(unknown.qualification, "unqualified");
+    assert.equal(unknown.aggregates, null);
+    const groupInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        groupId: first.grouping.groups[0].id, page: { limit: 1, after: null } };
+    const group = model.decode(await views.drilldown(groupInput, request), groupInput, inventoryContext);
+    assert.equal(group.aggregates.selectedRows, first.grouping.groups[0].count);
+    assert.notEqual(group.viewId, first.viewId);
+    assert.equal(group.groupId, groupInput.groupId);
+    const analyzeInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        query: "CallGraph", types: ["action"], page: { limit: 1, after: null } };
+    const analyzed = model.decode(await views.analyze(analyzeInput, request), analyzeInput, inventoryContext);
+    assert.equal(analyzed.aggregates.calls, 1);
+    assert.equal(analyzed.aggregates.conversations, 1);
+    assert.equal(analyzed.textSelection.reportScope, "complete-matched-conversations");
+    const refinedInventoryInput = { ...inventoryInput, viewId: analyzed.viewId };
+    const refined = model.decode(await views.inventory(refinedInventoryInput, request), refinedInventoryInput,
+        { ...query, original: analyzed });
+    assert.equal(refined.aggregates.options, 1);
+    const refinedGroupInput = { ...groupInput, viewId: analyzed.viewId, groupId: analyzed.grouping.groups[0].id };
+    const refinedGroup = model.decode(await views.drilldown(refinedGroupInput, request), refinedGroupInput,
+        { ...query, original: analyzed });
+    assert.equal(refinedGroup.aggregates.calls, 1);
+    assert.ok(refinedGroup.textSelection);
+    await assert.rejects(views.analyze({ ...analyzeInput, viewId: analyzed.viewId }, request),
+        { code: "NATIVE_VIEW_ANALYSIS_BASE_REQUIRED" });
     for (const layer of ["tool", "reported-api"]) {
         const analytics = { layer, groupBy: "tool", limit: 1, filters: { outcomes: ["success"] } };
         const expected = buildActivityAnalytics(app.services.nativeRecords, analytics);
@@ -219,6 +267,12 @@ for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} bounded pages
     assert.equal(search.aggregates.complete, true);
     assert.ok(search.aggregates.matched > 0);
     assert.equal(search.page.items.length, 1);
+    const finder = { schemaVersion: 1, revision: first.revision, sources: input().sources,
+        query: "Read", types: [], page: { limit: 1, after: null } };
+    const hit = model.decode(search, finder).page.items[0];
+    const at = { schemaVersion: 1, revision: first.revision, sources: [hit.source.sourceId], conversationId: hit.target.conversationId,
+        at: hit.target.ordinal, sourceRevision: first.sourceRevision, page: { limit: 1, after: null } };
+    assert.equal(model.decode(await views.detail(at, request), at).focusOrdinal, hit.target.ordinal);
     const hitIds = new Set(search.page.items.map(hit => hit.id));
     let cursor = search.page.nextCursor;
     while (cursor) {
