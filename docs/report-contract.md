@@ -43,6 +43,11 @@ of sites. A multi-target fetch is one call; response-array position does not
 identify the corresponding requested target. Code references do not establish
 execution.
 
+If two call IDs claim the same start event in one chat, operational activity can
+count that start once, but the report cannot attribute result details or
+operation patterns to either call. It keeps other identifiable calls and
+reports the gap rather than choosing a winner.
+
 | Report scope | Membership rule |
 | --- | --- |
 | Selected | Resolve explicit IDs and known aliases; keep picks hidden by filters/pages. |
