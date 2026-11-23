@@ -13,7 +13,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, openDeskActivity, closePreview, current, createCalendar, selectNamed, deleteNamed }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity"], ["errors", "Errors & failures"],
@@ -55,6 +55,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         row.append(button("Done", () => panel.hidePopover())); panel.append(row);
     }
     function closeOptions() {
+        closeDelete();
         for (const panel of root.querySelectorAll(".report-options-popover:popover-open")) panel.hidePopover();
     }
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
@@ -86,6 +87,43 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const treatment = el("div", "report-before-prepare");
     const draftChoices = el("div", "report-draft-fields");
     const { field: namedRow, select: namedSelect } = selectField("namedReportDraft", "Report draft");
+    const management = el("div", "report-draft-management");
+    const deleteButton = button("Delete draft", reviewDelete, "quiet danger");
+    management.append(namedSelect, deleteButton); namedRow.append(management);
+    let deleteDecision;
+    function closeDelete() {
+        if (!deleteDecision) return;
+        deleteDecision.querySelector("h2").firstChild.data = "";
+        deleteDecision.close(); deleteDecision.remove(); deleteDecision = null;
+    }
+    function reviewDelete() {
+        const { namedReport, draftCatalog } = read();
+        const target = draftCatalog?.drafts.find(d => d.id === namedReport?.id);
+        if (!target || deleteDecision) return;
+        const dialog = deleteDecision = el("dialog", "deletion-dialog decision-frame");
+        dialog.dataset.decisionKind = "destructive";
+        dialog.dataset.decisionPhase = "confirm";
+        const heading = el("div", "delete-heading"), title = el("h2", "", `Delete “${target.name}”?`);
+        title.id = "deleteNamedDraftTitle"; heading.append(title); dialog.setAttribute("aria-labelledby", title.id);
+        const body = el("div", "decision-body");
+        body.append(el("p", "", "You can't undo this. WIRE keeps your activity, other drafts and all saved report files."));
+        body.id = "deleteNamedDraftScope"; dialog.setAttribute("aria-describedby", body.id);
+        const footer = el("div", "delete-actions"), cancel = button("Cancel", closeDelete);
+        const confirm = button("Delete draft", async () => {
+            cancel.disabled = confirm.disabled = true;
+            try { await deleteNamed(target.id, draftCatalog); }
+            finally {
+                if (deleteDecision === dialog) {
+                    closeDelete();
+                    (deleteButton.checkVisibility() ? deleteButton : !namedRow.hidden ? byId("namedReportDraft-control") : scopeChoice)?.focus({ preventScroll: true });
+                }
+            }
+        }, "danger");
+        confirm.dataset.decisionAction = "commit";
+        dialog.oncancel = event => { event.preventDefault(); if (!confirm.disabled) closeDelete(); };
+        footer.append(cancel, confirm); dialog.append(heading, body, footer); root.append(dialog);
+        dialog.showModal(); cancel.focus();
+    }
     let optionSignature;
     let replacePrompt = null;
     namedSelect.onchange = () => {
@@ -267,9 +305,11 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     function sync() {
         if (!current()) return;
         const value = read();
-        const draftOptions = value.namedDrafts ?? [];
+        const draftOptions = value.draftCatalog?.drafts ?? [];
         namedRow.hidden = !draftOptions.length || value.prepared;
         namedSelect.disabled = value.locked || value.loading;
+        deleteButton.hidden = !draftOptions.some(d => d.id === value.namedReport?.id);
+        deleteButton.disabled = namedSelect.disabled;
         const signature = JSON.stringify([value.timeContext.locale, value.timeContext.timeZone, draftOptions.map(d => [d.id, d.name, d.revision, d.createdAt])]);
         if (signature !== optionSignature) {
             optionSignature = signature;

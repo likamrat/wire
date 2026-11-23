@@ -371,7 +371,9 @@ restore previously omitted replies.
 Use **Add to report** at the bottom left of a card, or the same action after
 **Source** in its reader. Choose a draft to add the entire interaction without
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
-one. In **Reports**, choose the draft by name, prepare it and use **Save report**
+one. To delete the whole draft, select it in **Reports**, choose **Delete draft**
+and confirm its name. This keeps your activity, other drafts and saved files.
+To save a report instead, choose the draft by name, prepare it and use **Save report**
 when you want to keep its files.
 
 ## Make a report

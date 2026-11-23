@@ -280,7 +280,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         openDraft: openAddedDraft,
         libraryLink: () => link("Saved library", "reports", { task: "library", request: undefined, inspect: undefined, bundle: undefined }, "text-link"),
         blocked: () => workspaceState.loading || workspaceState.stale || clearingAccess ? "Wait for current activity." : "",
-        changed: () => { if (workspaceState.route.view === "reports") reportExperience?.sync(); },
+        changed: syncNamedReport,
     });
     function namedRequest(id) {
         if (!namedDrafts.read()) return null;
@@ -3774,6 +3774,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 evidence: next, analytics: validated, scope: config, route: acceptedRoute,
             })) return false;
             namedDrafts.accept(next.namedDrafts);
+            syncNamedReport();
             if (acceptedRoute.view === "request") rememberRoute(acceptedRoute, true);
             nativePublication.snapshot(next.nativeReportPublication, nativePublicationContext(false));
             syncNativeSaveAvailability?.();
@@ -9861,7 +9862,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 announce("This draft has no complete available selection. Choose another draft or update its interactions.", "stale");
                 return;
             }
-            namedReport = latest;
+            namedReport = { ...latest, source: namedDrafts.read().source };
             selected.clear();
             for (const id of latest.scenarioIds) selected.add(id);
         }
@@ -11024,13 +11025,50 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         clearReportSelection();
         applyReportDefaults();
         if (item) {
-            namedReport = item; reportScope = "selected"; reportBaseExplicit = true;
+            namedReport = { ...item, source: namedDrafts.read().source }; reportScope = "selected"; reportBaseExplicit = true;
             reportDates = { range: "capture" };
             for (const id of item.scenarioIds) selected.add(id);
             draft.change({ title: item.name });
             draft.synchronizeTime(viewerTime, reportDates);
         }
         updateSelection(); reportExperience.sync();
+    }
+    function syncNamedReport() {
+        const catalog = namedDrafts.read();
+        if (namedReport && catalog?.source === namedReport.source && !catalog.drafts.some(d => d.id === namedReport.id)
+            && !reportPreparing && !exportWriting && !reportJourney.snapshot().saveUnconfirmed) {
+            // Keep a frozen preview even if its editable draft is gone.
+            if (activePreview || reportRebuildFrom) namedReport = null;
+            else selectNamedReport("");
+        }
+        if (workspaceState.route.view === "reports") reportExperience?.sync();
+    }
+    async function deleteNamedReport(id, offered) {
+        const publication = api.publicationToken();
+        if (!publication || namedReport?.id !== id || namedReport.source !== offered.source || reportPreparing || reportSelectionBlock()
+            || offered.version !== namedDrafts.read()?.version) {
+            announce("The draft changed. Review it again before deleting.", "stale"); return;
+        }
+        const current = () => api.isCurrent(publication) && namedDrafts.read()?.source === offered.source;
+        let latest, failure;
+        try {
+            ({ catalog: latest } = await api("/api/report-drafts/edit", { action: "delete", id, expected: offered.version }));
+        } catch (error) {
+            if (!current()) return;
+            failure = error;
+            try { latest = await api("/api/report-drafts/list", {}); }
+            catch (readError) {
+                if (current()) announce(`${error.message} Reload Reports to check the draft. ${readError.message}`, "stale");
+                return;
+            }
+        }
+        if (!current()) return;
+        if (latest.source !== offered.source) { announce("The source changed. Reload Reports to check your drafts.", "stale"); return; }
+        namedDrafts.accept(latest); syncNamedReport();
+        const present = namedDrafts.read().drafts.some(d => d.id === id);
+        if (!present) namedDrafts.notifyDeleted();
+        announce(present ? `The draft is still here. ${failure?.message ?? "Review it before deleting."}`
+            : failure ? "The draft is no longer in Reports." : "Draft deleted.", present ? "stale" : "info");
     }
     function revealAddedDraft(ref) {
         const catalog = namedDrafts.read();
@@ -11070,9 +11108,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     reportExperience = assessmentFactories.createReportExperience({
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
-        selectNamed: selectNamedReport,
+        selectNamed: selectNamedReport, deleteNamed: deleteNamedReport,
         read: () => ({
-            namedDrafts: namedDrafts.read()?.drafts, namedReport,
+            draftCatalog: namedDrafts.read(), namedReport,
             dates: effectiveReportDates(), nativeScope: usesBoundedReportView(reportBaseExplicit ? reportScope : "all"),
             timeContext: viewerTime, options: draft.options(),
             resumePreset: (activePreview && reportJourney.snapshot().hasPreview || reportRebuildFrom) ? reportPreset : null,

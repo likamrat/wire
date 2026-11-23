@@ -84,6 +84,11 @@ In **Reports**, choose the name under **Report draft**, then **Prepare preview**
 Quick additions keep their membership across reloads, not a copy of the chat.
 They never write an export or change an already prepared or saved report.
 
+To delete a draft, select it under **Report draft**, choose **Delete draft**,
+then confirm its name. **Cancel** leaves it unchanged. In Analyze, cards that
+belonged only to that draft show **Add to report** again. Cards in other
+drafts still show those names. Your activity and saved report files stay intact.
+
 **Back to Reports** returns to the choices and saved list. It keeps an unfinished
 copy in memory. Use **Resume preview** with the same focus and unchanged dates to
 return to that copy, including its name and notes. Preparing another focus replaces the

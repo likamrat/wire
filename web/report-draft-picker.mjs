@@ -1,6 +1,7 @@
 // Shared by the renderer bundle and the standalone shell.
 export function createReportDraftPicker({ api, ux, searchFields, normalize, blocked, changed, announce, erase, libraryLink, openDraft }) {
     let catalog = null, owner = null, lastId = null, writing = false, timer = null, notice = null, noticeEvents;
+    let changes;
     const keys = new WeakMap();
     const el = (tag, cls, text) => {
         const n = document.createElement(tag);
@@ -67,12 +68,32 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
             ux.tooltip(b, () => b.getAttribute("aria-expanded") !== "true" && value.scrollWidth > value.clientWidth ? value.textContent : "");
         } else b.title = name;
     }
+    function watchSource(source) {
+        changes?.close(); changes = null;
+        if (!source || typeof BroadcastChannel !== "function") return;
+        // A Reports tab can delete a draft while its Analyze tab stays open.
+        // Send only an invalidation; each panel reads with its own access.
+        changes = new BroadcastChannel(`wire.report-drafts.${source}`);
+        changes.onmessage = async ({ data }) => {
+            const publication = api.publicationToken();
+            if (data !== "deleted" || !publication || catalog?.source !== source || blocked()) return;
+            try {
+                const fresh = await api("/api/report-drafts/list", {});
+                if (api.isCurrent(publication) && catalog?.source === source && fresh.source === source) {
+                    accept(fresh); changed();
+                }
+            } catch (error) {
+                if (api.isCurrent(publication) && catalog?.source === source) announce(error.message, "stale");
+            }
+        };
+    }
     function accept(value) {
-        if (catalog && catalog.source !== value?.source) dismissNotice();
+        if (catalog?.source !== value?.source) { dismissNotice(); watchSource(value?.source); }
         if (value && catalog?.source === value.source
             && (value.boardRevision < catalog.boardRevision || value.revision < catalog.revision)) return;
         if (value?.version === catalog?.version) return;
         close(); catalog = value ?? null;
+        if (lastId && !catalog?.drafts.some(d => d.id === lastId)) { lastId = null; dismissNotice(); }
         for (const b of document.querySelectorAll("button.report-draft-trigger")) paint(b);
     }
     function make(id, { reader = false } = {}) {
@@ -216,7 +237,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         window.addEventListener("resize", place, opt);
         document.addEventListener("scroll", place, { ...opt, capture: true });
     }
-    return { make, accept, close, dismissNotice, read: () => catalog, withdrawAccess() {
-        close(); dismissNotice(); catalog = null; lastId = null;
+    return { make, accept, close, dismissNotice, notifyDeleted: () => changes?.postMessage("deleted"), read: () => catalog, withdrawAccess() {
+        close(); dismissNotice(); watchSource(null); catalog = null; lastId = null;
     } };
 }

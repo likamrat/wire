@@ -58,18 +58,35 @@ test("drafts survive restart for their approved source and account, not another 
         return catalog;
     });
     assert.deepEqual(first.drafts.map(d => [d.name, d.scenarioIds]), [["Notebook", ["x"]], ["Calendar", ["y"]]]);
-    await runWriter(context, async post => {
+    const deletion = { action: "delete", expected: first.version, id: first.drafts[0].id };
+    const otherAccount = await runWriter(context, async post => {
         assert.deepEqual((await list(post)).drafts, first.drafts);
         selectAccount("default");
         assert.deepEqual((await list(post)).drafts, []);
         await post("/api/report-drafts/edit", { expected: first.version, scenarioId: "x", id: first.drafts[0].id, included: false }, 409);
+        await post("/api/report-drafts/edit", deletion, 409);
+        await post("/api/report-drafts/edit", { ...deletion, expected: (await list(post)).version }, 409);
+        const { catalog } = await post("/api/report-drafts/edit", { expected: (await list(post)).version, scenarioId: "y", name: "Notebook", included: true });
         selectAccount("workspace");
         assert.deepEqual((await list(post)).drafts, first.drafts);
+        return catalog.drafts;
     });
     await use(b);
-    assert.deepEqual((await runWriter(context, list)).drafts, []);
+    await runWriter(context, async post => {
+        assert.deepEqual((await list(post)).drafts, []);
+        await post("/api/report-drafts/edit", deletion, 409);
+    });
     await use(a);
     assert.deepEqual((await runWriter(context, list)).drafts, first.drafts);
+    await runWriter(context, async post => {
+        const changed = await post("/api/report-drafts/edit", { expected: first.version, scenarioId: "y", id: deletion.id, included: true });
+        await post("/api/report-drafts/edit", deletion, 409);
+        const confirmed = await post("/api/report-drafts/edit", { ...deletion, expected: changed.catalog.version });
+        assert.deepEqual(confirmed.catalog.drafts, first.drafts.slice(1));
+    });
+    assert.deepEqual((await runWriter(context, list)).drafts, first.drafts.slice(1));
+    selectAccount("default");
+    assert.deepEqual((await runWriter(context, list)).drafts, otherAccount);
 });
 
 test("one interaction can belong to two drafts; removal is local to one draft after reload", async t => {

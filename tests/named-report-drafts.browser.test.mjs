@@ -130,7 +130,7 @@ test("report actions and call counts keep their columns while palettes distingui
     }
 });
 
-test("Analyze and its reader edit distinct named drafts through Prepare, Save and verified Open", { timeout: 90000 }, async t => {
+test("Analyze and its reader edit named drafts through Save and Open, then deleting a draft resets only its cards", { timeout: 90000 }, async t => {
     const records = ["x", "y"].map((id, i) => {
         const r = fixture(id);
         r.capturedAt = new Date().toISOString(); r.userPrompt.text = i ? "Find the handoff schedule." : "Find the release checklist.";
@@ -326,5 +326,70 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
         await capture(`reopened-${i}`);
         await page.goto(server.url + "#analyze");
     }
+    const beforeDelete = await loadBoardState(context);
+    const original = await profile.newPage();
+    await original.goto(server.url + "#analyze");
+    const originalCard = id => original.locator(`#activityList [data-view-key="request:${id}"] .report-draft-trigger`);
+    await expect(originalCard("x")).toHaveText("In draft: Release review");
+    await expect(originalCard("y")).toHaveText(`In drafts: Release review, ${handoff}`);
+    await page.bringToFront();
+    const filePaths = beforeDelete.exports.flatMap(bundle => Object.values(bundle.files));
+    const savedBytes = await Promise.all(filePaths.map(file => readFile(file)));
+    const deleteRequests = [];
+    page.on("request", request => {
+        if (request.url().endsWith("/api/report-drafts/edit")) deleteRequests.push(request.postDataJSON());
+    });
+    const remove = page.getByRole("button", { name: "Delete draft", exact: true });
+    async function reviewDeletion(name) {
+        await navigateMain(page, "reports");
+        await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
+        await page.getByRole("option", { name, exact: true }).click();
+        await remove.click();
+        return page.getByRole("dialog", { name: `Delete “${name}”?`, exact: true });
+    }
+    const decision = await reviewDeletion("Release review");
+    await expect(decision.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await capture("delete-confirm");
+    await decision.getByRole("button", { name: "Cancel" }).click();
+    await expect(remove).toBeFocused();
+    assert.deepEqual(deleteRequests, []);
+    await expect(page.locator("#namedReportDraft option:checked")).toHaveText("Release review");
+    await expect(page.locator(".report-draft-membership")).toHaveText("2 interactions in this draft");
+    await remove.click();
+    await decision.getByRole("button", { name: "Delete draft" }).click();
+    await expect(page.locator("#namedReportDraft option:checked")).toHaveText("New report");
+    await expect(originalCard("x")).toHaveText("Add to report");
+    await expect(originalCard("y")).toHaveText(`In draft: ${handoff}`);
+    await original.close();
+    await navigateMain(page, "analyze");
+    await expect(action("x")).toHaveText("Add to report");
+    await expect(action("y")).toHaveText(`In draft: ${handoff}`);
+    await page.reload();
+    await expect(action("x").locator("svg")).toHaveAttribute("data-icon-role", "report-add");
+    await expect(action("y")).toHaveText(`In draft: ${handoff}`);
+    await card("y").scrollIntoViewIfNeeded();
+    await capture("cards-after-deletion");
+    const lastDecision = await reviewDeletion(handoff);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "125%"; document.documentElement.dataset.evidenceTheme = "dark"; });
+    await expect(lastDecision.getByRole("button", { name: "Delete draft" })).toBeInViewport();
+    await capture("delete-confirm-narrow");
+    // The writer commits, but the response never reaches the panel.
+    await page.route("**/api/report-drafts/edit", async route => {
+        assert.ok((await route.fetch()).ok()); await route.abort();
+    }, { times: 1 });
+    await lastDecision.getByRole("button", { name: "Delete draft" }).click();
+    await expect(page.locator(".report-draft-membership")).toBeHidden();
+    await expect(page.getByRole("combobox", { name: "Report draft", exact: true })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Activity source: All retained activity" })).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 880 });
+    await navigateMain(page, "analyze"); await page.reload();
+    await expect(action("x")).toHaveText("Add to report"); await expect(action("y")).toHaveText("Add to report");
+    await action("x").click(); await expect(panel).toContainText("No drafts yet.");
+    assert.equal(deleteRequests.length, 2);
+    const afterDelete = await loadBoardState(context);
+    assert.deepEqual(afterDelete.evidence, beforeDelete.evidence);
+    assert.deepEqual(afterDelete.exports, beforeDelete.exports);
+    assert.deepEqual(await Promise.all(filePaths.map(file => readFile(file))), savedBytes);
     assert.deepEqual(errors, []);
 });

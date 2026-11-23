@@ -431,6 +431,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-home .report-form-field[hidden]{display:none}
 .report-home .report-form-field>label,.report-home .report-draft-fields .report-outline-key{padding:0;margin:0;line-height:var(--leading-control);font-size:var(--type-control)}
 .report-home .report-form-field .select-control{max-width:min(100%,20rem)}
+.report-draft-management{display:flex;align-items:center;flex-wrap:wrap;gap:.25rem .75rem;min-width:0;max-width:100%}
 .report-home .report-draft-fields :is(.report-form-field,.report-outline-row){grid-template-rows:auto 1fr}
 .report-home .report-draft-fields :is(.select-control,.report-toolbar-choice){align-self:stretch}
 .report-home .report-draft-fields .report-toolbar-choice{margin:0}
