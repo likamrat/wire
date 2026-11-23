@@ -796,7 +796,7 @@ test("focus selection leaves Reports unprepared; explicit preview and Save prese
     const address = page.url();
     await selectReportFocus(page, "errors");
     await expect(page.locator("#reportDeskFocus")).toHaveValue("errors");
-    await expect(page.locator(".report-outline-description")).toContainText("Other calls");
+    await expect(page.locator(".report-outline-description")).toContainText("A completed call can contain an API error");
     await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Prepare preview");
     await expect(page.locator(".report-frame")).toBeHidden();
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeHidden();
@@ -1638,13 +1638,13 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
         if (proofs) await page.screenshot({ path: path.join(proofs, name + ".png") });
     }
     const focuses = [
-        ["all", "All activity", /includes prompts with unknown authors/i],
-        ["errors", "Errors & failures", /other calls may have completed/i],
+        ["all", "All activity", null],
+        ["errors", "Errors & failures", /completed call can contain an API error/i],
         ["completed", "Completed calls", /answer can still be wrong/i],
         ["mine", "Human prompts", /including any calls made by an agent/i],
         ["agent", "Agent prompts", /unknown authors are excluded/i],
     ];
-    const compact = page.getByRole("combobox", { name: "Report focus", exact: true });
+    const compact = page.getByRole("combobox", { name: "Show", exact: true });
     const outline = page.locator(".report-desk");
     for (const [theme, width, size] of [["light", 1280, 100], ["dark", 375, 200]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
@@ -1652,23 +1652,29 @@ test("Reports keeps one focus selector with its explanation at compact and wide 
         const narrow = width === 375;
         await expect(compact).toBeVisible();
         if (narrow) {
-            const arrow = compact.locator("..").locator('[data-icon-role="chevron"]');
+            const arrow = compact.locator('[data-icon-role="chevron"]');
             await expect(arrow).toHaveCount(1);
             await expect(arrow).toHaveCSS("pointer-events", "none");
-            await expect(compact).toHaveCSS("appearance", "none");
             const [field, ink] = await Promise.all([compact.boundingBox(), arrow.boundingBox()]);
             const inset = await compact.evaluate(node => parseFloat(getComputedStyle(node).paddingInlineStart));
             assert.equal(field.x + field.width - ink.x - ink.width, inset);
             assert.equal(field.y + field.height / 2, ink.y + ink.height / 2);
-            await compact.focus(); await compact.press("Home"); await compact.press("ArrowDown");
-            await expect(compact).toHaveValue("errors");
+            await compact.focus(); await compact.press("Enter"); await compact.press("Home"); await compact.press("ArrowDown"); await compact.press("Enter");
+            await expect(compact).toHaveText("Errors & failures");
         }
         for (const [preset, title, explanation] of focuses) {
-            await compact.selectOption({ label: title });
-            await expect(compact).toHaveValue(preset);
-            await expect(outline.locator(".report-outline-description")).toBeVisible();
-            await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
+            await selectReportFocus(page,preset);
+            await expect(compact).toHaveText(title);
+            if (explanation) await expect(outline.locator(".report-outline-description")).toHaveText(explanation);
+            else await expect(outline.locator(".report-outline-description")).toBeHidden();
         }
+        const faces = await outline.locator("#reportDeskFocus-control,#reportDeskDates").evaluateAll(nodes => nodes.map(n => {
+            const b = n.getBoundingClientRect(), p = getComputedStyle(n, "::before");
+            return { face: b.height - parseFloat(p.top) - parseFloat(p.bottom), target: b.height, top: b.top };
+        }));
+        assert.ok(faces.every(f => f.target >= 44));
+        assert.equal(faces[0].face, faces[1].face);
+        if (!narrow) assert.equal(faces[0].top, faces[1].top);
         const selectorBox = await compact.boundingBox(), description = await outline.locator(".report-outline-description").boundingBox();
         assert.ok(description.y >= selectorBox.y + selectorBox.height - 1);
         await expect(outline.getByRole("button", { name: "Prepare preview", exact: true })).toBeEnabled();

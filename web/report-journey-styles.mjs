@@ -426,10 +426,15 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-home .saved-shelf-rows{display:flex;flex-direction:column;gap:0}
 .report-home .saved-shelf .saved-report-title{border:0;border-radius:0;border-bottom:1px solid var(--surface-divider);background:transparent;text-align:left}
 .report-home .report-gallery .report-desk{display:block;background:transparent;border:0;padding:0}
-.report-home .report-draft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:1rem;align-items:end;margin-top:.85rem}
-.report-home .report-draft-fields :is(.report-desk-compact,.report-outline-row){display:grid;gap:.25rem;align-items:start;margin:0;padding:0;border:0;font:inherit}
+.report-home .report-draft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),max-content));grid-auto-rows:1fr;gap:.5rem 1.25rem;margin:.85rem 0 .5rem}
+.report-home :is(.report-form-field,.report-draft-fields .report-outline-row){display:grid;justify-items:start;align-content:start;gap:.25rem;max-width:100%;min-width:0;margin:0;padding:0;border:0;font:inherit}
+.report-home .report-form-field[hidden]{display:none}
+.report-home .report-form-field>label,.report-home .report-draft-fields .report-outline-key{padding:0;margin:0;line-height:var(--leading-control);font-size:var(--type-control)}
+.report-home .report-form-field .select-control{max-width:min(100%,20rem)}
+.report-home .report-draft-fields :is(.report-form-field,.report-outline-row){grid-template-rows:auto 1fr}
+.report-home .report-draft-fields :is(.select-control,.report-toolbar-choice){align-self:stretch}
 .report-home .report-draft-fields .report-toolbar-choice{margin:0}
-.report-home .native-choice select{width:100%;min-width:0;max-width:100%;min-height:44px}
+.report-home .report-draft-fields #reportDeskDates{min-height:max(44px,calc(1lh + 16px));padding-block:8px}
 .report-before-prepare #promptOptions{display:grid;gap:.2rem;border:0;margin:0;padding:0}
 .report-before-prepare legend{font-weight:var(--weight-medium);margin:0 0 .5rem}
 .report-before-prepare #promptOptions .prompt-choice{--choice-ink:var(--muted);display:flex;align-items:flex-start;gap:.55rem;padding:.45rem .6rem;min-height:44px;border:1px solid transparent;border-radius:var(--radius-small);margin:0}

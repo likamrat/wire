@@ -20,7 +20,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         ["completed", "Completed calls"], ["mine", "Human prompts"], ["agent", "Agent prompts"],
     ];
     const help = {
-        all: "Includes prompts with unknown authors.",
+        all: "",
         errors: "Compare interactions with a failed call or a recorded error against all eligible interactions. A completed call can contain an API error.",
         completed: "All calls completed without a recorded error. The answer can still be wrong.",
         mine: "Started by you, including any calls made by an agent.",
@@ -68,10 +68,13 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         control.dataset.reportRange = range; period.append(control);
     }
     let deskFocus = "all";
-    const compactFocus = el("select"); compactFocus.id = "reportDeskFocus"; compactFocus.dataset.nativeSelect = "";
-    const compactLabel = el("label", "report-desk-compact", "Report focus"), nativeChoice = el("span", "native-choice");
-    const nativeChevron = ux.icon("chevron"); nativeChevron.classList.add("native-choice-chevron");
-    nativeChoice.append(compactFocus, nativeChevron); compactLabel.append(nativeChoice);
+    function selectField(id, caption) {
+        const field = el("div", "report-form-field"), label = el("label", "", caption), select = el("select");
+        label.htmlFor = select.id = id;
+        field.append(label, select);
+        return { field, select };
+    }
+    const { field: compactLabel, select: compactFocus } = selectField("reportDeskFocus", "Show");
     compactFocus.addEventListener("change", () => { if (current() && !read().locked) { deskFocus = compactFocus.value; sync(); } });
     for (const [id, title] of presets) {
         const option = el("option", "", title); option.value = id; compactFocus.append(option);
@@ -91,10 +94,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     };
     const treatment = el("div", "report-before-prepare");
     const draftChoices = el("div", "report-draft-fields");
-    const namedRow = el("label", "report-desk-compact", "Report draft"), namedSelect = el("select");
-    namedSelect.id = "namedReportDraft"; namedSelect.dataset.nativeSelect = "";
-    const namedChoice = el("span", "native-choice"), namedChevron = ux.icon("chevron");
-    namedChevron.classList.add("native-choice-chevron"); namedChoice.append(namedSelect, namedChevron); namedRow.append(namedChoice);
+    const { field: namedRow, select: namedSelect } = selectField("namedReportDraft", "Report draft");
     let optionSignature;
     let replacePrompt = null;
     namedSelect.onchange = () => {
@@ -106,8 +106,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         replacePrompt = el("div", "context-help-note");
         replacePrompt.append(el("p", "", "Switch draft and discard the unfinished preview? Saved reports will not change."),
             button("Switch draft", () => { replacePrompt.remove(); replacePrompt = null; selectNamed(id); }),
-            button("Keep preview", () => { replacePrompt.remove(); replacePrompt = null; namedSelect.focus(); }));
-        namedRow.after(replacePrompt); replacePrompt.querySelector("button").focus();
+            button("Keep preview", () => { replacePrompt.remove(); replacePrompt = null; byId("namedReportDraft-control")?.focus(); }));
+        namedRow.after(replacePrompt);
+        queueMicrotask(() => { if (current() && replacePrompt?.isConnected) replacePrompt.querySelector("button").focus(); });
     };
     desk.append(namedRow, draftChoices, outlineDescription, outlineChoices, treatment, outlineAction, prepareHint);
     gallery.append(el("h2", "", "New report"), desk);
@@ -184,7 +185,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     choices.append(dateButton, formatGroup, refineButton, privacyGroup);
     const datesRow = optionsRow("Dates", dateButton), fileRow = optionsRow("Formats", formatGroup);
     draftChoices.append(compactLabel, datesRow);
-    outlineChoices.append(optionsRow("Activity", scopeChoice), fileRow);
+    const activityRow = optionsRow("Activity source", scopeChoice), draftMembership = el("span", "report-draft-membership");
+    activityRow.append(draftMembership);
+    outlineChoices.append(activityRow, fileRow);
     outlineAction.append(prepare);
     periodHost.append(period, periodCaption);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
@@ -279,10 +282,14 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const draftOptions = value.namedDrafts ?? [];
         namedRow.hidden = !draftOptions.length || value.prepared;
         namedSelect.disabled = value.locked || value.loading;
-        const signature = JSON.stringify(draftOptions.map(d => [d.id, d.name, d.revision]));
+        const signature = JSON.stringify([value.timeContext.locale, value.timeContext.timeZone, draftOptions.map(d => [d.id, d.name, d.revision, d.createdAt])]);
         if (signature !== optionSignature) {
             optionSignature = signature;
-            namedSelect.replaceChildren(new Option("New report", ""), ...draftOptions.map(d => new Option(d.name, d.id)));
+            namedSelect.replaceChildren(new Option("New report", ""), ...draftOptions.map(d => {
+                const option = new Option(d.name, d.id);
+                if (d.createdAt) option.dataset.detail = "Created " + time.formatDate(d.createdAt, value.timeContext, true);
+                return option;
+            }));
         }
         namedSelect.value = value.namedReport?.id ?? "";
         toolbar.hidden = !value.prepared;
@@ -311,12 +318,17 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const focus = value.nativeScope ? "all" : deskFocus;
         compactFocus.disabled = value.locked || value.loading || value.nativeScope; compactFocus.value = focus;
         outlineDescription.textContent = value.nativeScope ? "Includes retained Microsoft conversations. Use Compare to report on two date ranges." : help[focus];
+        outlineDescription.hidden = !outlineDescription.textContent;
         scopeName.textContent = value.scopeLabel;
-        scopeChoice.setAttribute("aria-label", "Activity: " + value.scopeLabel);
+        scopeChoice.setAttribute("aria-label", "Activity source: " + value.scopeLabel);
         scopeChoice.disabled = prepare.disabled = value.locked || value.loading;
         scopeChoice.disabled ||= Boolean(value.namedReport);
+        scopeChoice.hidden = Boolean(value.namedReport);
+        draftMembership.hidden = !value.namedReport;
         prepare.disabled ||= !value.options.formats.length;
         const named = value.namedReport && draftOptions.find(d => d.id === value.namedReport.id);
+        draftMembership.textContent = !value.namedReport ? "" : !named || named.unavailable ? "Draft selection unavailable"
+            : `${named.scenarioIds.length} ${named.scenarioIds.length === 1 ? "interaction" : "interactions"} in this draft`;
         const updated = value.namedReport && named?.revision !== value.namedReport.revision;
         const resume = !updated && value.resumePreset === focus;
         prepareLabel.data = resume ? "Resume preview" : updated ? "Prepare updated draft" : "Prepare preview";
@@ -388,6 +400,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         closeOptions,
         withdrawAccess() {
             optionSignature = undefined; namedSelect.replaceChildren(); namedRow.hidden = true;
+            draftMembership.textContent = "";
             replacePrompt?.remove(); replacePrompt = null;
             syncDrawer(false);
             closeOptions();

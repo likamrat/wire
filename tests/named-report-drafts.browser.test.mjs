@@ -209,7 +209,8 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await page.setViewportSize({ width: 1280, height: 880 }); await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     for (const [i, draftName] of ["Release review", handoff].entries()) {
         await navigateMain(page, "reports");
-        await page.locator("#namedReportDraft").selectOption({ label: draftName });
+        await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
+        await page.getByRole("option", { name: draftName, exact: true }).click();
         await page.getByRole("button", { name: /^Formats:/ }).click();
         await page.locator("#formatOptions input[value=json]").check();
         await page.keyboard.press("Escape");

@@ -14,8 +14,11 @@ Contributors changing report behavior should also read the
 
 Open **Reports** and choose a recent name in **Overview**, or use **Saved library**
 to search the library. Under **New report**, choose which chat details to
-include, then check **Report focus**, **Activity period**, **Activity** and
+include, then check **Show**, **Dates**, **Activity source** and
 **Formats**.
+**Show** filters what the report covers, such as errors or human prompts.
+**Activity source** selects the interactions to start from. A named draft
+supplies its own selected interactions; selecting it does not prepare or save.
 The default, **Mask detected details**, keeps the wording with local masking.
 You can leave out prompts and replies or keep chat details instead.
 This choice applies to the readable report and its saved files.
