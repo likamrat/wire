@@ -352,6 +352,7 @@ mark narrows both the exact rows and their interaction/service captions.
 
 **Create report** freezes the accepted pair and opens the existing report
 experience with the same formats, masking, optional notes and local Save.
+Changing which chat text to include updates the preview, not the calls in either period.
 **Back to comparison** restores its dates, choices and reading position while
 access remains valid.
 

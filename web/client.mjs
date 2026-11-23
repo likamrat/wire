@@ -7493,7 +7493,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (node.childElementCount === facts.length && [...node.children].every((child, index) => child.textContent === facts[index])) return;
         node.replaceChildren(...facts.flatMap((fact, index) => [...(index ? [document.createTextNode(" ")] : []), el("span", "", fact)]));
     }
-    function updateSelection() {
+    function updateSelection({ refreshingPairedCopies = false } = {}) {
         if (clearingAccess || !api.publicationToken()) return;
         syncSaveLocks();
         if (!workspaceState.evidence) return;
@@ -7543,9 +7543,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId),
                 ...(reportScope === "selected" ? nativePickedIds : [])]);
             draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, effectiveReportDates());
+            const sameSelection = draft.current(token);
             if (draft.synchronizeBasis(workspaceState.evidence, value, { paired: Boolean(periodReport) }) && periodReport) periodReportInvalid = true;
             if (periodReport && JSON.stringify(periodReport.timeContext) !== JSON.stringify(viewerTime)) periodReportInvalid = true;
-            if (!draft.current(token)) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
+            // A copy edit already retired the old preview. Rebuild its new disclosure
+            // rather than cancelling that read when only the optional copy basis changed.
+            const copyOnly = refreshingPairedCopies && periodReport && sameSelection && !periodReportInvalid;
+            if (!draft.current(token) && !copyOnly) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
         }
         for (const kind of ["all", "current", "selected"]) {
             const scope = reportSelection(kind), size = scope.requests.length;
@@ -10913,12 +10917,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         draft.changePromptMode(control.value);
         const prepared = assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).prepared;
         if (prepared || activePreview || reportRebuildFrom) updateReportContent({ hide: true, prepare: prepared });
-        updateSelection();
+        updateSelection({ refreshingPairedCopies: prepared });
     }));
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
         draft.changeRecordedContext($("reportRecordedContext").checked);
-        updateReportContent({ hide: true }); updateSelection();
+        updateReportContent({ hide: true }); updateSelection({ refreshingPairedCopies: true });
     });
     $("reportResultText").addEventListener("change", () => {
         if (exportWriting) return;

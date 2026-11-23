@@ -6,6 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { privateFixture, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
+import { compareAnalyzePeriods } from "./analytics-date-picker.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs";
 import { assessmentSource, buildAssessmentModel, buildReportFacts, cachedAssessmentModel } from "../lib/assessment-read-model.mjs";
@@ -174,7 +175,7 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        const allowed = ["/api/session", "/api/report-artifacts/list", "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/privacy-review",
             "/api/export", "/api/cancel-preview", "/api/report/open"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
@@ -188,38 +189,45 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     await selectActivityOption(page, "scopeFilter", "all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.locator("#closeAnalyzeFilters").click();
-    await page.locator("#comparePeriods").click();
-    for (const [label, date] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
-        ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) await page.getByLabel(label, { exact: true }).fill(date);
-    const compared = page.waitForResponse(response => response.url().endsWith("/api/period-comparison"));
-    await page.locator("#applyPeriodComparison").click();
-    const live = await (await compared).json();
+    const live = await compareAnalyzePeriods(page, ["2026-03-07","2026-03-07"], ["2026-03-08","2026-03-09"]);
     assert.equal(live.options.filters.scope, "all");
     assert.deepEqual([live.periods.baseline.rowIds.length, live.periods.later.rowIds.length], [4, 4]);
     assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
-    await expect(page.locator('[data-period-side="baseline"] tbody tr')).toHaveCount(4);
-    await expect(page.locator('[data-period-side="later"] tbody tr')).toHaveCount(4);
+    await page.locator("#viewComparisonCalls").click();
+    await expect(page.locator("#comparisonExactRecordsA tbody tr")).toHaveCount(4);
+    await expect(page.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(4);
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
-    await page.locator("#createPeriodReport").click();
-    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
-    for (const format of ["json", "markdown", "pdf"]) await page.locator(`#formatOptions input[value=${format}]`).check();
-    const scanned = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
-    const preview = await (await scanned).json();
-    assert.equal(preview.error, undefined, preview.error);
-    assertFrozenPair(preview.snapshot.periodComparison, live, initial.pseudonymKey);
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
-    assert.equal((await loadBoardState(context)).exports.length, 0);
-    const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
+    const prepare = async action => {
+        const [response] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/preview")),action()]);
+        const preview = await response.json();
+        assert.ok(response.ok(), preview.error);
+        assertFrozenPair(preview.snapshot.periodComparison, live, initial.pseudonymKey);
+        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+        return preview;
+    };
+    await prepare(() => page.locator("#createPeriodReport").click());
+    await page.getByRole("button",{name:"Formats: HTML",exact:true}).click();
+    let preview;
+    for (const format of ["json", "markdown", "pdf"]) preview = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
+    await page.keyboard.press("Escape");
+    await page.locator("#reportPrivacyChoice").click();
+    preview = await prepare(() => page.locator("#reportPrivacyOptions input[value=original]").check());
+    await page.locator("#reportPrivacyOptions").getByRole("button",{name:"Done",exact:true}).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.getByRole("button",{name:"Save with chat details",exact:true})).toBeVisible();
+    assert.equal((await loadBoardState(context)).exports.length, 0, "Showing the disclosure warning does not save");
+    const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
+    await page.getByRole("button", { name: "Save with chat details", exact: true }).click();
     const saved = await (await savedResponse).json();
     assert.equal(saved.error, undefined, saved.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const state = await loadBoardState(context), bundle = state.exports[0];
     assert.equal(state.exports.length, 1);
+    for (const name of ["product-report.html","product-report.pdf","product-report.json","product-report.md"]) {
+        const content = preview.files[name];
+        assert.deepEqual(await readFile(bundle.files[name]), typeof content === "string" ? Buffer.from(content) : Buffer.from(content.data,"base64"));
+    }
     const extracted = {};
     for (const format of ["html", "pdf", "json", "markdown"]) {
         const document = await readSavedReportFile(context, state, bundle.bundleId, format);
