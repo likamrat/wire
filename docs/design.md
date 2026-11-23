@@ -91,7 +91,9 @@ area on clean cards. A code-only failure that repeats its entry's code need
 not repeat it on the card; the reader retains both records. Missing reasons are plain text. Green/check
 indicates recorded tool completion; red/cross marks failed calls. Neither
 is a verdict on the prompt or the task. Returned issues keep a separate link.
-Keep provenance in Source details; name a source on the card when
+When only the Copilot app supplies activity, omit the source picker and
+repeated source labels. Name the app when someone is choosing which history
+WIRE can read. Keep provenance in saved reports and name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
 the glyph beside its label. Separate the identity key from the prompt with a

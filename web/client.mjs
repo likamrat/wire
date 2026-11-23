@@ -351,7 +351,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const githubOnly = scope.filters.sources?.length === 1 && scope.filters.sources[0] === "github-copilot";
             return { scope, route, snapshot, revision: snapshot.revision, hasSearch: Boolean(route.search?.trim() || semanticQuery),
                 supportedTools: retainedTrendTools(snapshot), searchMembership: semanticMembership,
-                includesNative: !githubOnly && (boundedIncludesMicrosoft() || snapshot.scenarios.some(nativeActivity.isNative)),
+                includesNative: !githubOnly && (boundedIncludesMicrosoft() && hasMicrosoftSource() || snapshot.scenarios.some(nativeActivity.isNative)),
                 otherSources: !githubOnly && snapshot.scenarios.some(s => s.recordKind !== "native-conversation" && !["copilot-app", "copilot-app-chat"].includes(s.sourceHost)),
                 hasEarlier: snapshot.scenarios.some(s => s.isLegacy || s.collectionInactive) };
         },
@@ -603,7 +603,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let pendingReportReading = null;
     let periodReport = null, periodReportInvalid = false;
     let reportPickerEvents = null;
-    const sessionReportButton = button("Create report for this Copilot chat", createSessionReport, "primary");
+    const sessionReportButton = button("Create report for this chat", createSessionReport, "primary");
     sessionReportButton.id = "createSessionReport";
     sessionReportButton.hidden = true;
     $("pageAction").after(sessionReportButton);
@@ -2067,12 +2067,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     for (const [id, label] of [
         ["dateFilter", "Dates"], ["sourceFilter", "Source"], ["toolFilter", "Tool"], ["serviceAssociationFilter", "Service involved"],
-        ["serviceFilter", "Activity category"], ["projectFilter", "Copilot project"],
-        ["chatFilter", "Copilot chat"], ["layerFilter", "Evidence layer"], ["scopeFilter", "Collection"],
+        ["serviceFilter", "Activity category"], ["projectFilter", "Project"],
+        ["chatFilter", "Chat"], ["layerFilter", "Evidence layer"], ["scopeFilter", "Collection"],
     ]) filterField(id, label);
+    function hasMicrosoftSource() {
+        const evidence = workspaceState.evidence, read = evidence?.nativeRead;
+        return Boolean(read && !["microsoft-account-not-configured", "native-retention-not-configured"].includes(read.reason)
+            || nativeCollectionStatus(evidence?.collection)?.nativePersistence?.configured
+            || evidence?.scenarios.some(nativeActivity.isNative));
+    }
+    function showMicrosoftActivity() {
+        return hasMicrosoftSource() || Boolean(workspaceState.scope?.filters.sources?.some(id => boundedContract.sourceIds.includes(id)));
+    }
+    function showSourceChoice() {
+        return hasMicrosoftSource() || Boolean(workspaceState.route.source && workspaceState.route.source !== "github-copilot")
+            || Boolean(workspaceState.evidence?.scenarios.some(record => !["copilot-app", "copilot-app-chat"].includes(record.sourceHost)));
+    }
     function sourceOptions() {
-        replacePrivateChoices($("sourceFilter"), option("all", "All sources"), option("microsoft-365", "Microsoft 365"),
-            ...filterState.sources.map(source => option(source.id, source.label)));
+        const control = $("sourceFilter");
+        control.closest(".filter-field").hidden = !showSourceChoice();
+        const microsoft = hasMicrosoftSource(), selected = workspaceState.route.source;
+        replacePrivateChoices(control, option("all", "All sources"), ...(microsoft || selected === "microsoft-365" ? [option("microsoft-365", "Microsoft 365")] : []),
+            ...filterState.sources.filter(source => microsoft || source.id === "github-copilot" || source.id === selected)
+                .map(source => option(source.id, source.label)));
     }
     sourceOptions();
     $("filters").querySelector(".filter-scroll").addEventListener("focusin", event => {
@@ -2225,9 +2242,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     liveSearchUI = assessmentFactories.liveSearch.mount({
         api, ux, searchFields, results, authorship, createState: assessmentFactories.liveSearch.createState,
         nativeSearch: {
-            active: () => sourceCollection.active,
+            active: () => sourceCollection.active && showMicrosoftActivity(),
             changed: value => boundedNative.searchChanged({ ...value,
-                sources: sourceCollection.active ? workspaceState.scope?.filters.sources?.length
+                sources: sourceCollection.active && showMicrosoftActivity() ? workspaceState.scope?.filters.sources?.length
                     ? workspaceState.scope.filters.sources.filter(source => boundedContract.sourceIds.includes(source)) : boundedContract.sourceIds : [],
                 revision: workspaceState.evidence?.revision ?? null, pending: workspaceState.loading || !workspaceState.evidence, base: workspaceState.evidence?.nativeRead, analytics: workspaceState.scope }),
             withdraw: () => boundedNative.searchChanged({ query: "", scope: "navigation", types: [], sources: [], revision: null }),
@@ -2510,7 +2527,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const trendsUI = assessmentFactories.mountTrends({
         root: $("trendsView"), api, time, ux, authorship,
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
-            entry: trendOrigin(underlyingRoute())?.entry ?? null,
+            entry: trendOrigin(underlyingRoute())?.entry ?? null, get hasMicrosoftSource() { return hasMicrosoftSource(); },
             section: trendSection(underlyingRoute()),
             routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
@@ -2568,8 +2585,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         useAnalyze: () => navigateBrowse("compare", { useAnalyze: true }),
         onPairChange: pair => {
             let description = analyzeScope.describePair(pair, {
-                githubOnly: !sourceCollection.active && !workspaceState.evidence?.nativeRead
-                    && !workspaceState.evidence?.scenarios.some(nativeActivity.isNative),
+                githubOnly: !showSourceChoice(),
             });
             const filters = pair?.comparison.options.filters;
             if (description && !workspaceState.route.comparisonFocus && !filters.outcomes?.length
@@ -3278,7 +3294,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (actionable) {
                 viewKey(item, `session-result:${scope}:${sessionId}:${layer}:${entry.key}`);
                 const label = layer === "tool" ? `View ${count(entry.count)} Work IQ tool call${entry.count === 1 ? "" : "s"} ${entry.key === "success" ? "with recorded completion" : "needing attention"}` : `View ${count(entry.count)} ${results.unit(layer, entry.count)}: ${entry.label}`;
-                item.setAttribute("aria-label", `${label} in ${layer === "http" ? "recorder source" : "GitHub Copilot chat"} ${sessionSource(sessionId)?.name}. Current date, service and request scope.`);
+                item.setAttribute("aria-label", `${label} in ${layer === "http" ? "recorder source" : "chat"} ${sessionSource(sessionId)?.name}. Current date, service and request scope.`);
                 ux.tooltip(item, `${label} in this ${layer === "http" ? "recorder source" : "Copilot chat"} and scope. ${help.resultHelp(entry.key, layer)} Nothing is retried or executed.`);
             }
             values.append(item);
@@ -4535,7 +4551,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         chartReferenceAccepted = Object.freeze({
             key: chartReferenceKeys.get(signature), revision: workspaceState.evidence.revision, layer: workspaceState.scope.layer,
             ...assessmentFactories.chartReference.facts(workspaceState.analytics, model.github ?? model),
-            nativeView: boundedIncludesMicrosoft() && !search.trim() && !workspaceState.route.withinServices ? acceptedNativeView() : null,
+            nativeView: boundedIncludesMicrosoft() && showMicrosoftActivity() && !search.trim() && !workspaceState.route.withinServices ? acceptedNativeView() : null,
             nativeOnly: Boolean(sharedNativeView() && !workspaceState.analytics.totals.count && !slice.scenarios.length
                 || sourceCollection.active && workspaceState.scope.filters.sources?.length
                 && workspaceState.scope.filters.sources.every(source => boundedContract.sourceIds.includes(source))),
@@ -4898,7 +4914,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             { label: `${count(rows.length)} ${results.unit(workspaceState.scope.layer, rows.length)}` },
             { label: resultNames(resultSelection(workspaceState.route.result)) },
             { label: authorship.selectionLabel(workspaceState.scope.filters.promptAuthors) },
-            ...(workspaceState.scope.filters.sources?.length ? [{ label: workspaceState.scope.filters.sources.map(filterState.sourceLabel).join(", ") }] : []),
+            ...(workspaceState.scope.filters.sources?.length && showSourceChoice() ? [{ label: workspaceState.scope.filters.sources.map(filterState.sourceLabel).join(", ") }] : []),
             ...(workspaceState.route.tool ? [{ label: workspaceState.route.tool }] : []),
             ...(workspaceState.route.services ? [{ label: $("serviceFocusScope").textContent }] : []),
             { label: workspaceState.route.service ? serviceLabel(workspaceState.route.service) : allCategories() },
@@ -4952,11 +4968,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             chip.setAttribute("aria-label", "Remove Microsoft group restriction");
             chip.append(ux.icon("close")); host.append(chip);
         }
-        const labels = { source: "Source", tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
-            endpoint: "API path", session: "Copilot chat", layer: "Activity", scope: "Collection" };
+        const labels = { source: "Source", tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Project",
+            endpoint: "API path", session: workspaceState.scope.layer === "http" ? "Recorder source" : "Chat", layer: "Activity", scope: "Collection" };
         const selectedLabel = id => $(id).selectedOptions[0]?.textContent;
         for (const [key, label] of Object.entries(labels)) {
             const selectedValue = key === "authors" && workspaceState.scope ? authorship.filterValue(workspaceState.scope.filters.promptAuthors) : workspaceState.route[key];
+            if (key === "source" && !showSourceChoice()) continue;
             if (!selectedValue || key === "scope" && selectedValue === "history" || key === "layer" && selectedValue === "tool") continue;
             const value = key === "authors" ? authorship.selectionLabel(selectedValue) : key === "result" ? resultNames(resultSelection(selectedValue))
                 : key === "source" ? selectedLabel("sourceFilter") : key === "scope" ? scopeLabels[selectedValue] : key === "project" ? selectedLabel("projectFilter")
@@ -5042,7 +5059,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return analyzeScope.describe({ applied: workspaceState.scope, acceptedRoute: { withinServices: workspaceState.acceptedRoute.withinServices,
             nativeGroupLabel: workspaceState.acceptedRoute.nativeGroup ? workspaceState.evidence.nativeRead?.grouping?.groups.find(group => group.id === workspaceState.acceptedRoute.nativeGroup)?.label
                 ?? "Selected group unavailable" : undefined }, snapshot, analytics: workspaceState.analytics,
-            period: period.caption, hasSearch: Boolean(workspaceState.acceptedRoute.search?.trim()) || semanticQuery !== null && semanticBound });
+            period: period.caption, hasSearch: Boolean(workspaceState.acceptedRoute.search?.trim()) || semanticQuery !== null && semanticBound,
+            singleSource: !showSourceChoice() });
     }
     function renderAnalyzeScope(period = acceptedAnalyzePeriod()) {
         const description = acceptedAnalyzeScope(period);
@@ -5104,8 +5122,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         replacePrivateChoices($("serviceAssociationFilter"), option("all", "All services"), ...services.map(value => option(value, serviceLabel(value))));
         const chats = new Map((workspaceState.evidence.sessions || []).map(source => [source.sessionId, source.name || chatCopy.unnamed]));
         for (const scenario of workspaceState.evidence.scenarios) if (scenario.sourceSessionId && !chats.has(scenario.sourceSessionId)) chats.set(scenario.sourceSessionId, scenario.sourceSessionName || chatCopy.unnamed);
-        setText($("chatFilter").closest(".filter-field").querySelector("label"), workspaceState.scope.layer === "http" ? "Recorder source" : "Copilot chat");
-        replacePrivateChoices($("chatFilter"), option("all", workspaceState.scope.layer === "http" ? "All recorder sources" : "All Copilot chats"), ...[...chats].map(([id, name]) => {
+        setText($("chatFilter").closest(".filter-field").querySelector("label"), workspaceState.scope.layer === "http" ? "Recorder source" : "Chat");
+        replacePrivateChoices($("chatFilter"), option("all", workspaceState.scope.layer === "http" ? "All recorder sources" : "All chats"), ...[...chats].map(([id, name]) => {
             const reference = sourceReference({ sessionId: id, name }, references);
             return option(id, reference ? `${name} (${reference})` : name);
         }));
@@ -5284,15 +5302,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderBoundedAnalyze() {
         const nativeOnly = workspaceState.scope.filters.sources?.length && workspaceState.scope.filters.sources.every(source => boundedContract.sourceIds.includes(source));
-        const includesNative = boundedIncludesMicrosoft();
+        const includesNative = boundedIncludesMicrosoft() && (hasMicrosoftSource() || nativeOnly);
         const { nativeView, restriction } = seedBoundedNative();
         const githubReady = semanticQuery === null || semanticBound && semanticComplete;
         $("homeView").querySelector(".analyze-dashboard").hidden = (nativeOnly || !githubReady) && !sharedNativeView();
         $("activityListContext").hidden = $("activityList").hidden = false;
         const native = !restriction && nativeView?.status === "bounded" ? nativeView.aggregates : null;
         const descriptions = [
-            ...(!nativeOnly ? [githubReady ? `GitHub Copilot: ${count(workspaceState.analytics.totals.count)} ${results.unit(workspaceState.scope.layer, workspaceState.analytics.totals.count)}`
-                : "GitHub Copilot: Search membership unavailable"] : []),
+            ...(!nativeOnly ? [(hasMicrosoftSource() ? "GitHub Copilot: " : "") + (githubReady ? `${count(workspaceState.analytics.totals.count)} ${results.unit(workspaceState.scope.layer, workspaceState.analytics.totals.count)}`
+                : "Search membership unavailable")] : []),
             ...(includesNative ? [native ? `Microsoft: ${count(native.selectedRows)} ${native.layer === "tool" ? "native tool calls"
                 : native.layer === "reported-api" ? "returned-result observations" : "selected records"}`
                 : "Microsoft: current totals unavailable"] : []),
@@ -5318,7 +5336,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (native) setText($("periodHint"), savedMicrosoftSummary(nativeView));
         $("periodHint").hidden = !native && Boolean(nativeOnly);
         if (includesNative) $("analyzeEmptyScope").hidden = true;
-        $("comparePeriods").disabled = includesNative && !workspaceState.evidence.nativeRead?.allViewId;
+        $("comparePeriods").disabled = boundedIncludesMicrosoft() && !workspaceState.evidence.nativeRead?.allViewId;
         const optionNotice = $("boundedFilterNotice") || el("p", "settings-help");
         if (!optionNotice.id) { optionNotice.id = "boundedFilterNotice"; $("periodResult").after(optionNotice); }
         const setupCovered = !nativeOnly && !workspaceState.stale && !nativeAnalysisState && !search.trim() && !workspaceState.route.withinServices
@@ -5460,7 +5478,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             compact: Boolean(frontendActivity),
             points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
             unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
-            summary: point => `${point.chartSource}: ${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
+            summary: point => `${mixed ? point.chartSource + ": " : ""}${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
             createAction: point => periodLink(point),
             createSegment: periodLink,
             zeroDefinition: () => ux.tooltip(widgetDefinitionLink("time"), "No matching records were dated in this period."),
@@ -5636,9 +5654,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const context = el("p", "project-context");
         if (!scenario.projectId) {
             context.classList.add("unscoped");
-            context.textContent = scenario.sourceSessionId || scenario.sessionId ? workspaceState.scope.layer === "http" ? "Recorder source without a project" : "Copilot chat without a project" : "Project not recorded";
+            context.textContent = scenario.sourceSessionId || scenario.sessionId ? workspaceState.scope.layer === "http" ? "Recorder source without a project" : "Chat without a project" : "Project not recorded";
         } else {
-            context.append(el("span", "project-context-label", scenario.projectType === "folder" ? "Copilot folder project" : scenario.projectType === "repository" ? "Copilot repository project" : "Copilot project"), el("strong", "", scenario.project || scenario.projectId));
+            context.append(el("span", "project-context-label", projectTypeLabel(scenario)), el("strong", "", scenario.project || scenario.projectId));
         }
         return context;
     }
@@ -5775,7 +5793,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityView").dataset.revision = String(workspaceState.evidence.revision);
         const unlinked = orphaned.length;
         const groups = `${count(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
-        const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native;
+        const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native && showMicrosoftActivity();
         $("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." :
             `${group.label}: ${count(items.length)} matching ${group.interactionIds ? items.length === 1 ? "interaction" : "interactions"
                 : workspaceState.scope.layer === "tool" ? items.length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, items.length)}`
@@ -5975,6 +5993,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         summary.append(outcomes);
         return summary;
     }
+    function projectTypeLabel(project) {
+        return project.projectType === "folder" ? "Folder project" : project.projectType === "repository" ? "Repository project" : "Project";
+    }
     function appendCardSource(list, scenario, options = {}) {
         const source = sessionSource(scenario.sourceSessionId);
         const chat = el("span", "card-chat");
@@ -5985,10 +6006,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const reference = sourceReference(source, options.references);
             if (reference) chat.append(el("span", "source-reference", reference));
         } else chat.textContent = "Not recorded";
-        list.append(cardFact(workspaceState.scope.layer === "http" ? "Recorder source" : "Copilot Chat", chat));
+        list.append(cardFact(workspaceState.scope.layer === "http" ? "Recorder source" : "Chat", chat));
         const project = source || scenario;
-        const projectLabel = project.projectType === "folder" ? "Copilot folder project"
-            : project.projectType === "repository" ? "Copilot repository project" : "Copilot project";
+        const projectLabel = projectTypeLabel(project);
         if (options.includeProject !== false && (!options.compact || project.projectId)) list.append(cardFact(projectLabel, el("span", "project-context", project.projectId
             ? project.project || project.projectId : project.sessionId || project.sourceSessionId ? "No project associated" : "Not recorded")));
         if (options.includeTime !== false) {
@@ -6789,7 +6809,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const readerFacts = el("div", "reader-facts");
         const sourceFacts = el("dl", "reader-fields reader-source");
         const identity = filterState.sourceIdentity(rows);
-        if (identity || workspaceState.evidence.nativeRead) {
+        if (showSourceChoice() && (identity || workspaceState.evidence.nativeRead)) {
             sourceFacts.append(cardFact("Source", identity?.label ?? "Source unavailable"));
             if (identity) sourceFacts.dataset.sourceId = identity.id;
         }
@@ -8757,7 +8777,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         // separately paged Microsoft source. Never combine unlike denominators.
         const native = sharedNativeView(), sourceFilter = workspaceState.scope.filters.sources;
         const withGitHub = !sourceFilter?.length || sourceFilter.includes("github-copilot");
-        const scope = workspaceState.evidence.nativeRead && !http ? "GitHub activity" : scopeLabels[workspaceState.scope.filters.scope] || "Selected collection";
+        const scope = hasMicrosoftSource() && !http ? "GitHub activity" : scopeLabels[workspaceState.scope.filters.scope] || "Selected collection";
         const membership = [];
         if (withGitHub) membership.push(`${scope}: ${count(c.scenarioCount)} ${http ? "record group" : "interaction"}${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`);
         if (native) membership.push(`Microsoft: ${count(native.aggregates.conversations)} retained ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}.`);

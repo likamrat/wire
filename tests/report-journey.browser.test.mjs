@@ -98,7 +98,7 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
     for (const mode of ["masked", "none", "original"]) {
         await page.goto(runtime.url + "#activity?session=test-session"); await ready(page);
         const origin = page.url();
-        await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
+        await page.getByRole("button", { name: "Create report for this chat", exact: true }).click();
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 2 interactions");
         assert.match(await page.locator(".report-entry-context").textContent(), /Calendar follow-up.*all retained dates and services/);
         assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "selected");

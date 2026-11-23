@@ -107,7 +107,7 @@ test("chat wording across the real date, analysis, result, request, report and i
     if (await read.getAttribute("aria-expanded") === "false") await read.click();
     assert.equal(await page.locator(".request-original .full-text-body pre").textContent(), original);
     await page.getByRole("link", { name: "GitHub Copilot chat: Historical session title", exact: true }).click(); await ready(page);
-    await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
+    await page.getByRole("button", { name: "Create report for this chat", exact: true }).click();
     assert.match(await page.locator(".report-entry-context").innerText(), /Historical session title/);
     assert.equal(await page.getByRole("button", { name: "Back to Copilot chat", exact: true }).count(), 1);
     assert.equal(await page.locator("#promptOptions").isVisible(), false);

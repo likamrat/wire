@@ -547,7 +547,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         }
         await capture("analyze");
         await openAnalyzeFilters(page);
-        await expect(page.locator("#sourceFilter-control")).toBeVisible();
+        await expect(page.locator("#sourceFilter-control")).toBeHidden();
         await capture("filters");
         await closeAnalyzeFilters(page);
         await page.locator("#activityList .request-card-open").click();

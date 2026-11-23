@@ -242,7 +242,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         nodes.activityCount.hidden = !model.scopeReady;
         const activityVisible = step === 1 || Boolean(presentStep && step === 2);
         nodes.start.hidden = !activityVisible;
-        text(nodes.contextName, model.entry?.sessionName || "Copilot chat name not recorded");
+        text(nodes.contextName, model.entry?.sessionName || "Chat name not recorded");
         nodes.context.hidden = !model.entry || !activityVisible;
         text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose an interaction or another scope to continue."));
         nodes.gap.hidden = ready();

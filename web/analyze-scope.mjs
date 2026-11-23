@@ -1,7 +1,7 @@
 // Serialized with the shell. Read accepted state only; this module owns no filters.
 export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabel) {
     const collections = { history: "Saved collection", legacy: "Earlier snapshot", all: "Both collections" };
-    function format({ applied, acceptedRoute, period, analytics, snapshot, hasSearch = false }, pairedScope, caption) {
+    function format({ applied, acceptedRoute, period, analytics, snapshot, hasSearch = false, singleSource = false }, pairedScope, caption) {
         const paired = pairedScope !== undefined;
         const filters = applied.filters;
         if (!Object.hasOwn(collections, filters.scope)) throw new RangeError("Accepted collection scope is unavailable.");
@@ -30,7 +30,7 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
                 const text = `${sources.join(", ")} only`;
                 parts.push(text); restrictions.push(text);
             }
-        } else add("Source", sources);
+        } else if (!singleSource || filters.sources?.some(id => id !== "github-copilot")) add("Source", sources);
         if (acceptedRoute.nativeGroupLabel) add("Microsoft group", [acceptedRoute.nativeGroupLabel]);
         add("Tool", filters.tools);
         if (filters.services?.length) {
@@ -52,9 +52,9 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
             add("Previous outcome", filters.outcomes?.map(value => `${results.labels("tool")[value]} (execution not observed)`));
         } else add("Outcome", filters.outcomes?.map(value => results.labels(applied.layer)[value]));
         if (authorship.filterValue(filters.promptAuthors)) add("Author", [authorship.selectionLabel(filters.promptAuthors)]);
-        add("Copilot project", filters.projectIds?.map(id => id === null ? "Project not recorded"
+        add(singleSource || caption?.githubOnly ? "Project" : "Copilot project", filters.projectIds?.map(id => id === null ? "Project not recorded"
             : (paired ? pairedScope.projects.find(entry => entry.id === id)?.name : snapshot.scenarios.find(scenario => scenario.projectId === id)?.project) || "Project unavailable"));
-        add(applied.layer === "http" ? "Recorder source" : "Copilot chat", filters.sourceSessionIds?.map(id => (paired
+        add(applied.layer === "http" ? "Recorder source" : singleSource || caption?.githubOnly ? "Chat" : "Copilot chat", filters.sourceSessionIds?.map(id => (paired
             ? pairedScope.sessions.find(entry => entry.id === id)?.name : snapshot.sessions?.find(source => source.sessionId === id)?.name
                 || snapshot.scenarios.find(scenario => scenario.sourceSessionId === id)?.sourceSessionName) || (applied.layer === "http" ? "Source unavailable" : "Chat unavailable")));
         add("API path", filters.endpoints?.map(id => (paired ? pairedScope.endpoints.find(entry => entry.id === id)?.name

@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, navigateMain } from "./helpers.mjs";
 import { contrast, rgb } from "./color-measurements.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { modelRecords } from "./model-widget-fixture.mjs";
@@ -34,6 +34,47 @@ function records() {
         return record;
     });
 }
+
+test("one source needs no picker, card or reader badge, or source prefix on every chart point", async t => {
+    const [record] = records().slice(2);
+    const { runtime } = await searchFixture(t, { records: [record], frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1360, height: 940 } });
+    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    const capture = async name => {
+        if (!process.env.WIRE_EVIDENCE_PROOFS) return;
+        await mkdir(process.env.WIRE_EVIDENCE_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_EVIDENCE_PROOFS, `single-source-${name}.png`), animations: "disabled" });
+    };
+    const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.goto(runtime.url + "#analyze?source=github-copilot"); await ready();
+    await expect(page.locator("#sourceFilter")).toHaveValue("github-copilot");
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#sourceFilter-control")).toBeHidden();
+    await expect(page.locator("#toolFilter-control")).toBeVisible();
+    await capture("filters");
+    await closeAnalyzeFilters(page);
+    await expect(page.locator("#analyzeScopeCaption")).not.toContainText("GitHub Copilot");
+    await expect(page.locator("#chart .time-slot a").first()).toHaveAccessibleName(/Work IQ tool call/);
+    await expect(page.locator("#chart .time-slot a").first()).not.toHaveAccessibleName(/GitHub Copilot/);
+    const card = page.locator("#activityList .activity-card");
+    await expect(card).toContainText("Asked Copilot"); await expect(card).not.toContainText("GitHub Copilot");
+    await card.locator(".request-card-open").click();
+    await page.locator('[data-reader-section="source"] .reader-section-toggle').click();
+    await expect(page.locator(".reader-source")).toBeVisible();
+    await expect(page.locator(".reader-source")).not.toContainText("GitHub Copilot");
+    await capture("reader");
+    await page.keyboard.press("Escape");
+    await page.locator("#wireSearch").fill("nonexistent invented phrase");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Saved replies are unavailable for Search.");
+    await page.locator("#wireSearchClear").click(); await navigateMain(page, "trends");
+    await page.locator("#trendsComparePeriods").click();
+    await expect(page.getByRole("dialog", {name:"Compare periods"})).not.toContainText("GitHub Copilot");
+    await capture("periods");
+    await page.keyboard.press("Escape"); await navigateMain(page, "reports");
+    await expect(page.locator("#reportCreatePanel")).not.toContainText("GitHub Copilot");
+    assert.deepEqual(errors, []);
+});
 
 test("Services and operations ends with its request rows and opens their matching calls", async t => {
     const { runtime } = await searchFixture(t, { records: records().slice(0, 3), frontend: "react", reply: false });

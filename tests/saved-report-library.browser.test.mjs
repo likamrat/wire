@@ -156,7 +156,7 @@ test("report metadata groups preserve scope, authors, counts and saved identity 
     await sizes("saved-reader", "#savedReportReader");
     await page.goto(new URL(page.url()).origin + "/#activity?session=metadata-chat-0");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
+    await page.getByRole("button", { name: "Create report for this chat", exact: true }).click();
     assert.equal(await page.locator(".report-entry-name").textContent(), "Planning · decisions for the invented regional release with a long retained chat name");
     assert.match(await page.locator(".report-entry-context").textContent(), /name Saved activity across all retained dates and services\. New interactions are not added automatically\./);
     await sizes("chat-origin", "#reportCreatePanel");
@@ -840,7 +840,7 @@ test("Analyze chat create intent, request return and explicit creation deep link
     const origin = new URL(page.url()).origin;
     await page.goto(origin + "/#activity?session=test-session");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
+    await page.getByRole("button", { name: "Create report for this chat", exact: true }).click();
     assert.match(page.url(), /task=create/);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);

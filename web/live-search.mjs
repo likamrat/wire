@@ -305,7 +305,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             || issue.types.some(type => requestedTypes.includes(type))) ?? [];
         if (issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "reply"
             && ["not-authorized", "revoked", "not-retained", "source-unavailable"].includes(issue.code))) {
-            return "Saved GitHub replies are unavailable for Search.";
+            return nativeSearch?.active() ? "Saved GitHub replies are unavailable for Search." : "Saved replies are unavailable for Search.";
         }
         const reports = issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "report");
         if (reports && issues.every(issue => issue.code === "missing")) {

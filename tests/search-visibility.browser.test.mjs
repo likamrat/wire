@@ -169,7 +169,7 @@ test("consent revocation while hidden cannot revive a retained reply on return",
     assert.equal(revoked.status, 200);
     await expect.poll(async () => (await status()).body.indexId).toBe(null);
     await visibility(page, false);
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.", { timeout: 10000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Saved replies are unavailable for Search.", { timeout: 10000 });
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 

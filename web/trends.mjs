@@ -186,8 +186,9 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const priorEnd=time.addDays(from,-1), priorStart=time.addDays(from,-days);
         const selectedFilters={...filters}, revision=data.revision;
         const clearMissing = selectedFilters.service === "missing";
-        dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)}`),
-            el("p","muted",`Compare shows retained GitHub Copilot calls in these periods. The dates appear in its address.${clearMissing?" The Missing service detail filter is not available there.":""} Your chart stays here for Back.`));
+        dialogBody.append(el("p","",`${time.formatCivilRange(priorStart,priorEnd,data.timeContext)} compared with ${time.formatCivilRange(from,to,data.timeContext)}`));
+        if (getContext().hasMicrosoftSource) dialogBody.append(el("p","muted","This comparison includes GitHub Copilot calls only."));
+        if (clearMissing) dialogBody.append(el("p","muted","The Missing service detail filter does not carry over."));
         const actions=el("div","trends-dialog-actions");
         actions.append(button("Cancel",()=>dialog.close()),directionButton("Open comparison",()=>{
             if (!current() || data.revision!==revision || range.from!==from || range.to!==to || JSON.stringify(filters)!==JSON.stringify(selectedFilters)) return;

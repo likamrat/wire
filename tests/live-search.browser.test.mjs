@@ -44,7 +44,7 @@ async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved GitHub replies are unavailable for Search\.))$/, { timeout: 30000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved replies are unavailable for Search\.))$/, { timeout: 30000 });
     return page.locator("#wireSearchResults button");
 }
 async function jsonValues(page) {
@@ -387,7 +387,7 @@ test("two visible panels clear on revocation, artifact deletion and source repla
         await expect(current.locator("#wireSearchStatus")).toHaveText("Saved content changed. Search again.");
         await find(current, "lab results", "reply");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(0);
-        await expect(current.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.");
+        await expect(current.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Saved replies are unavailable for Search.");
         await find(current, "physician", "report");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(1);
     }

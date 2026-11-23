@@ -152,7 +152,7 @@ test("scope, history gaps, code-only and unavailable summaries never manufacture
     assert.match(await page.locator("#sessionAnalysis").innerText(), /Execution not observed/);
     assert.equal(await page.locator("#sessionAnalysis a.result-link").count(), 0);
     await page.goto(runtime.url + "#activity?session=session-a"); await ready(page);
-    assert.match(await page.locator("#pageProject").innerText(), /Copilot folder project/);
+    assert.match(await page.locator("#pageProject").innerText(), /Folder project/);
     assert.match(await page.locator("#sessionAnalysis").innerText(), /Partial history/);
     roster[0].eligible = false; roster[0].disposition = "archived";
     await replaceEvidence(context, () => ({ records: [...source, code], importCoverage: { dynamic: {}, counts: {}, roster } }));
