@@ -220,7 +220,7 @@ test("a held layer snapshot retires the old Source popup before a fresh accepted
     const browser = await chromium.launch(), page = await browser.newPage();
     page.setDefaultTimeout(7000);
     const errors = [], requests = [], external = [];
-    const held = Promise.withResolvers(), release = Promise.withResolvers();
+    const release = Promise.withResolvers();
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         if (new URL(route.request().url()).origin !== new URL(app.url).origin) {
@@ -235,10 +235,12 @@ test("a held layer snapshot retires the old Source popup before a fresh accepted
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
     });
-    await page.goto(app.url + "#reports?task=create&layer=reported-api");
+    await page.goto(new URL("/?layer=reported-api", app.url).href);
     await ready(page);
-    await navigateMain(page, "analyze");
-    await ready(page);
+    await expect(page.locator("#layerFilter")).toHaveValue("reported-api");
+    const toolHeading = page.locator('[data-percentage-card="tools"] h3');
+    await expect(toolHeading).toContainText(/returned/i);
+    const priorHeading = await toolHeading.textContent();
     let armed = true;
     await page.route("**/api/snapshot", async route => {
         const input = route.request().postDataJSON();
@@ -247,14 +249,13 @@ test("a held layer snapshot retires the old Source popup before a fresh accepted
         armed = false;
         const response = await route.fetch();
         assert.equal(response.status(), 200);
-        held.resolve();
         await release.promise;
         await route.fulfill({ response });
     });
     await selectActivityOption(page, "layerFilter", "tool");
-    await held.promise;
+    await expect.poll(() => requests.filter(r => r.layer === "tool").length).toBe(1);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
-    await expect(page.locator('[data-percentage-card="tools"] h3')).toHaveText("Tools behind tool-returned API results");
+    await expect(toolHeading).toHaveText(priorHeading);
     const oldSource = await page.locator('#sourceFilter option[value="microsoft-365-chat"]').elementHandle();
     await page.locator("#sourceFilter-control").click();
     const oldPopup = page.locator('.select-popup .select-option[data-value="microsoft-365-chat"]');
