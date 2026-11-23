@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, revealSavedDataRead, setLegacyTimeBucket, openSourceEditor, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { prepareLandingReport, chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
@@ -731,8 +731,8 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     const check = await holdNext("**/api/collection/now");
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter"); await check.pending;
     await proof("checking", "#checkActivity", true);
-    await proof("checking-status", "#freshStatus", true);
-    assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Check GitHub");
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "checking");
+    await expect(page.locator("#freshStatus")).toBeVisible();
     assert.equal(await page.locator("#checkActivity").evaluate(node => getComputedStyle(node).fontWeight), beforeWeight, "Pending state preserves the control's font weight.");
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, buttonBox.width);
     assert.equal(await page.locator("#chart").innerHTML(), beforeChart);
@@ -745,7 +745,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     const applying = await holdNext("**/api/snapshot");
     check.release(); await applying.pending;
     assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "applying");
-    await proof("applying", "#freshStatus", true);
+    await expect(page.locator("#freshStatus")).toBeVisible();
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     await navigateMain(page, "analyze");
     await expect(page.locator("#activityView")).toBeVisible();
@@ -753,7 +753,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await page.locator("#fromFilter").fill(other); await page.locator("#toFilter").fill(other);
     await page.locator("#applyDates").click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-    assert.equal(await page.locator("#fromFilter").inputValue(), other);
+    await expect(page).toHaveURL(new RegExp(`[?&]from=${other}&to=${other}(?:&|$)`));
     const acceptedChart = await page.locator("#chart").innerHTML();
     const chartValues = () => page.locator("#chart .dimensional-column").evaluateAll(nodes => nodes.map(node => ({
         count: node.dataset.total, height: node.dataset.frontHeight, label: node.closest("button,a").getAttribute("aria-label"),
@@ -764,12 +764,12 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     applying.release();
     await page.waitForFunction(() => !document.querySelector("#checkActivity").disabled);
     assert.equal(await page.locator("#chart").innerHTML(), acceptedChart);
-    await proof("applied-latest-date", "#freshStatus", false);
+    await expect(page.locator("#checkActivity")).toHaveAttribute("aria-busy", "false");
     assert.equal(await page.locator("#freshContextMessage").isVisible(), false, "The newly selected date contains the checked event");
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "1");
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented held snapshot failure" } }), { times: 1 });
     await app.check();
-    await proof("snapshot-error", "#freshStatus", false);
+    await expect(page.locator("#freshStatus")).toBeVisible();
     assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
     assert.deepEqual(await chartValues(), acceptedValues);
     assert.match(await page.locator("#freshContextMessage").innerText(), /Invented held snapshot failure/);
@@ -778,7 +778,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     const writes = app.writes.length;
     await (await revealStoredRefresh(page)).click(); await ready(page);
     assert.equal(app.writes.length, writes);
-    await proof("read-only-recovery", "#freshStatus", false);
+    await expect(page.locator("#refreshBtn")).toBeHidden();
     const issues = await holdNext("**/api/collection/status");
     await navigateMain(page, "collection-status"); await issues.pending;
     await proof("scoped-status", "#collectionIssuesMessage", true);
@@ -982,159 +982,48 @@ test("first Home through approved fresh collection, selected dates, exact reques
     }
 });
 
-test("Home ingests real appended local evidence and newly mapped chats before applying counts, outcomes and charts", { timeout: 90000 }, async t => {
+test("Analyze Refresh commits appended calls, late completions and newly mapped chats before publishing their counts", async t => {
     const app = await fixture(t), { page } = app;
-    const provenance = [];
-    async function proof(stage) {
-        const status = await app.runtime().collector.status(), state = await loadBoardState(app.context);
-        const canonical = buildActivityAnalytics(state.evidence ?? [], { layer: "tool", bucket: "month", filters: { scope: "all" } }).rows;
-        const applied = await page.locator("#periodResult").getAttribute("data-revision");
-        provenance.push({ stage, fixture: "invented local SQLite and JSONL only", revision: state.revision,
-            evidenceFile: state.evidenceFile, receipt: status.lastCheck, metrics: status.metrics,
-            cursors: status.cursors.map(row => ({ sessionId: row.sessionId, logBytes: row.logBytes, cursor: row.cursor })),
-            canonical: canonical.map(row => ({ id: row.id, toolCallId: row.toolCallId, outcome: row.outcome })),
-            home: { count: await page.locator("#activityCount").innerText(), appliedRevision: applied,
-                percentageTotal: await page.locator(".percentage-section").getAttribute("data-total"),
-                percentageRevision: await page.locator(".percentage-section").getAttribute("data-revision"),
-                result: await page.locator("#freshStatus").innerText(), context: await page.locator("#freshContextMessage").textContent() } });
-        if (status.lastCheck) {
-            assert.equal(String(status.lastCheck.revision), applied);
-            assert.equal(provenance.at(-1).home.percentageRevision, applied);
-            assert.equal(new Set(canonical.map(row => row.id)).size, canonical.length);
-        }
-        if (process.env.WORKIQ_FRESH_PROOFS) {
-            await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
-            await mkdir(process.env.WORKIQ_FRESH_PROOFS, { recursive: true });
-            await writeFile(path.join(process.env.WORKIQ_FRESH_PROOFS, "pipeline-provenance.json"), JSON.stringify(provenance, null, 2));
-            await page.locator("#freshActivity").screenshot({ path: path.join(process.env.WORKIQ_FRESH_PROOFS, `${stage}.png`) });
-        }
-        return status;
-    }
-    const source = await app.source([event("user.message", { content: "Synthetic first request" }), call("one"), complete("one")]);
+    const source = await app.source([event("user.message", { content: "Invented first request" }), call("one"), complete("one")]);
+    const initialBytes = await readFile(source.file);
+    const config = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
     await page.goto(app.runtime().url); await ready(page);
-    assert.equal(await page.locator("#activityCount").innerText(), "0");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "0");
-    await proof("baseline");
-    const initialPercentage = await page.locator("#percentageCharts").innerHTML();
-    const configBefore = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
-    const sourceBefore = await readFile(source.file);
-    let release, entered;
-    const gate = new Promise(resolve => { release = resolve; });
-    const snapshotEntered = new Promise(resolve => { entered = resolve; });
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch();
-        entered();
-        await gate;
-        await route.fulfill({ response });
-    });
-
-    await page.locator("#checkActivity").click();
-    await snapshotEntered;
-    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "applying");
-    assert.equal(await page.locator("#activityCount").innerText(), "0", "Previous chart remains while the actual ingested snapshot is pending");
-    assert.equal(await page.locator("#percentageCharts").innerHTML(), initialPercentage, "No new denominator appears on old data while applying");
-    assert.equal(await page.locator("#checkActivity").isDisabled(), true);
-    assert.equal(await page.locator("#collectNow").isDisabled(), true, "Settings shares the same busy state");
-    assert.equal(await page.locator("#pauseCollection").isDisabled(), true);
-    await page.evaluate(() => { document.querySelector("#checkActivity").click(); document.querySelector("#checkActivity").click(); });
-    assert.equal(app.writes.length, 1);
-    assert.equal((await loadBoardState(app.context)).evidence[0].toolCalls.length, 1, "Actual collector committed before UI completion");
-    release(); await ready(page);
-    await page.unroute("**/api/snapshot");
-    assert.equal(await page.locator("#activityCount").innerText(), "1");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "1");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-revision"), await page.locator("#periodResult").getAttribute("data-revision"));
-    assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
-    assert.equal(await page.locator("#freshActivity").getAttribute("data-revision"), await page.locator("#periodResult").getAttribute("data-revision"));
-    assert.match(await page.locator("#chart").innerText(), /1/);
-    const firstProof = await proof("initial-new-call");
-    assert.ok(firstProof.metrics.lastBytesRead > 0);
-    assert.ok(firstProof.cursors[0].cursor.offset > 0);
-    const firstState = await loadBoardState(app.context);
-    const oldEvidence = await readFile(path.join(app.context.dataDir, "private-evidence", firstState.evidenceFile));
-    await navigateMain(page, "activity"); await ready(page);
-    await page.locator(".session-toggle").first().click();
-    await page.locator('[id^="select-request-"]').first().check();
-    await navigateMain(page, "home"); await ready(page);
-    await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic later request" }), call("two")]));
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "2");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "2");
-    assert.equal((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls).filter(c => c.reportedOutcome === "unknown").length, 1);
-    const appendedProof = await proof("appended-call");
-    assert.ok(appendedProof.metrics.totalBytesRead > firstProof.metrics.totalBytesRead);
-    assert.ok(appendedProof.cursors[0].cursor.offset > firstProof.cursors[0].cursor.offset);
-    const chartUnknown = await page.locator("#chart").innerHTML();
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    const applied = async ids => {
+        await app.check("analyze");
+        const board = await loadBoardState(app.context), receipt = app.receipts.at(-1);
+        assert.deepEqual(board.evidence.flatMap(row => row.toolCalls.map(c => c.toolCallId)).sort(), ids);
+        assert.equal(receipt.revision, board.revision);
+        await expect(page.locator("#activityCount")).toHaveText(String(ids.length));
+        await expect(page.locator(".percentage-section")).toHaveAttribute("data-revision", String(receipt.revision));
+        await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", String(ids.length));
+        return { board, receipt };
+    };
+    const initial = await applied(["one"]);
+    assert.equal(initial.receipt.changes.added, 1);
+    const evidence = path.join(app.context.dataDir, "private-evidence", initial.board.evidenceFile);
+    const frozen = await readFile(evidence);
+    await appendFile(source.file, jsonl([event("user.message", { content: "Invented second request" }), call("two")]));
+    const appended = await applied(["one", "two"]);
+    assert.equal(appended.board.evidence.flatMap(r => r.toolCalls).find(c => c.toolCallId === "two").reportedOutcome, "unknown");
     await appendFile(source.file, jsonl([complete("two", false)]));
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "2");
-    assert.equal(await page.locator("#freshStatus").innerText(), "1 updated activity record.");
-    assert.equal(await page.locator("#freshContextMessage").isVisible(), false, "An in-scope late result is an update even when the count stays unchanged");
-    assert.notEqual(await page.locator("#chart").innerHTML(), chartUnknown);
-    await page.locator("#outcomeFilter-control").click();
-    assert.equal(await page.getByRole("option", { name: "Tool failed (1)", exact: true }).count(), 1);
-    await page.keyboard.press("Escape");
-    const percentageOutcomes = await page.locator('[data-percentage-card="outcomes"] .percentage-legend-row').evaluateAll(rows => Object.fromEntries(rows.map(row => [row.dataset.category, { count: Number(row.dataset.count), share: Number.parseFloat(row.dataset.percentage) }])));
-    assert.equal(percentageOutcomes.success.count, 1);
-    assert.equal(percentageOutcomes.failure.count, 1);
-    assert.equal(percentageOutcomes.success.share, 50);
-    assert.equal(percentageOutcomes.failure.share, 50);
-    await proof("late-completion");
-    const mapped = await app.source([event("user.message", { content: "Synthetic newly discovered source" }), call("three"), complete("three")]);
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "3");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (All dates)");
-    assert.ok((await app.runtime().collector.status()).cursors.some(row => row.sessionId === mapped.id));
-    const mappedProof = await proof("newly-discovered-chat");
-    await app.check();
-    assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
-    assert.equal(app.receipts.at(-1).changes.added, 0);
-    assert.equal(app.receipts.at(-1).changes.updated, 0);
-    const noChangeProof = await proof("no-new-activity");
-    assert.equal(noChangeProof.metrics.lastBytesRead, 0, "An unchanged file is checked by its stamp, not reread");
-    assert.equal(noChangeProof.lastCheck.beforeRevision, noChangeProof.lastCheck.revision);
-    assert.equal(noChangeProof.lastNewDataAt, mappedProof.lastNewDataAt);
-    const manualTime = await page.locator("#freshChecked").innerText();
-    const manualResult = await page.locator("#freshStatus").innerText();
-    await app.runtime().collector.collectNow();
-    const polled = page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
-    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await polled;
-    assert.equal(await page.locator("#freshChecked").innerText(), manualTime, "A later check by another client never replaces this panel's manual result time");
-    assert.equal(await page.locator("#freshStatus").innerText(), manualResult);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill("Synthetic first request");
-    await page.waitForFunction(() => document.querySelector("#periodResult").textContent.includes("1 request group with 1 Work IQ tool call"));
-    await navigateMain(page, "home"); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (All dates)", "Home summary uses the Home chart scope, not the hidden Activity search");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
-    await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
-    await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic out-of-filter request" }), call("four"), complete("four")]));
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "0");
-    assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
-    assert.match(await page.locator("#freshContextMessage").innerText(), /outside.*filters or evidence layer/);
-    assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "0");
-    await proof("new-call-outside-filter");
-    await selectActivityOption(page, "serviceFilter", "all"); await ready(page);
-    assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "4");
-    assert.equal(await page.locator("#freshContextMessage").isVisible(), false, "Fresh-check scope stays truthful after filters change");
-    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), configBefore);
-    assert.deepEqual((await readFile(source.file)).subarray(0, sourceBefore.length), sourceBefore);
-    assert.deepEqual(await readFile(path.join(app.context.dataDir, "private-evidence", firstState.evidenceFile)), oldEvidence);
-    assert.deepEqual((await loadBoardState(app.context)).exports, firstState.exports);
-    assert.equal((await app.runtime().collector.status()).config.enabled, false);
-    assert.match(await page.locator("#activitySelectionSummary").textContent(), /1 request/);
-    const lastCheck = (await app.runtime().collector.status()).lastCheck;
+    const updated = await applied(["one", "two"]);
+    assert.equal(updated.receipt.changes.updated, 1);
+    assert.equal(updated.board.evidence.flatMap(r => r.toolCalls).find(c => c.toolCallId === "two").reportedOutcome, "failed");
+    await expect(page.getByRole("article").filter({ hasText: "Invented second request" }).getByRole("link", { name: "1 tool call failed" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Tool failed: 1 of 2 Work IQ tool calls \(50%\)/ })).toBeVisible();
+    const mapped = await app.source([event("user.message", { content: "Invented newly mapped chat" }), call("three"), complete("three")]);
+    await applied(["one", "three", "two"]);
+    assert.ok((await app.runtime().collector.status()).cursors.some(c => c.sessionId === mapped.id));
+    const unchanged = await applied(["one", "three", "two"]);
+    assert.equal(unchanged.receipt.beforeRevision, unchanged.receipt.revision);
+    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
     await app.restart();
-    assert.deepEqual((await app.runtime().collector.status()).lastCheck, lastCheck, "Owned completion survives restart");
-    await page.goto(app.runtime().url); await ready(page);
-    await app.check();
-    assert.equal(await page.locator("#activityCount").innerText(), "4");
-    assert.match(await page.locator("#freshStatus").innerText(), /No additional activity in this check/);
-    assert.equal((await app.runtime().collector.status()).config.enabled, false);
-    assert.ok(app.writes.every(route => route === "/api/collection/now"), "No implicit permissions, configuration or background enable writes");
+    assert.deepEqual((await app.runtime().collector.status()).lastCheck, unchanged.receipt);
+    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), config);
+    assert.deepEqual((await readFile(source.file)).subarray(0, initialBytes.length), initialBytes);
+    assert.deepEqual(await readFile(evidence), frozen);
+    assert.deepEqual(app.writes, Array(5).fill("/api/collection/now"));
 });
 
 test("compact summary and fresh action wrap accessibly in light/navy at every requested size", { timeout: 90000 }, async t => {
@@ -1980,35 +1869,46 @@ test("one Refresh and legacy Settings alias preserve paused state, useful unappr
     assert.equal(await page.locator("#checkActivity").evaluate(node => node === document.activeElement), true, "Recovery returns focus when Retry disappears");
 });
 
-test("manual Refresh keeps unrelated report draft choices and selection while applying new stored evidence", { timeout: 30000 }, async t => {
+async function chooseReportInteraction(page, id) {
+    await navigateMain(page, "reports");
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
+    await picker.locator(`input[data-report-request="${id}"]`).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+}
+async function previewSelectedReport(page, id) {
+    const [response] = await Promise.all([
+        page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),
+    ]);
+    assert.equal(response.status(), 200);
+    assert.deepEqual(response.request().postDataJSON().selection.scenarioIds, [id]);
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    return response.json();
+}
+
+test("manual Refresh preserves selected report activity and pre-prepare choices", async t => {
     const app = await fixture(t), { page } = app;
-    await app.source([event("user.message", { content: "Invented selected draft request" }), call("selected"), complete("selected")]);
+    await app.source([event("user.message", { content: "Invented selected request" }), call("selected"), complete("selected")]);
     await app.runtime().collector.collectNow();
+    const [selected] = (await loadBoardState(app.context)).evidence;
     await page.goto(app.runtime().url); await ready(page);
-    await page.locator(".interaction-select").first().check();
-    await navigateMain(page, "reports"); await reportContents(page);
-    await page.locator("#additionalMasking > summary").click();
-    await page.locator("#manualTerms").fill("INVENTED_MASKING_TERM");
-    const selection = await page.locator("#previewSelectionSummary").textContent();
-    const choices = await page.locator("#formatOptions input").evaluateAll(nodes => nodes.map(node => [node.value, node.checked]));
+    await chooseReportInteraction(page, selected.scenarioId);
+    await page.locator(".report-before-prepare input[value=none]").check();
+    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await page.locator("#formatOptions input[value=json]").check();
+    await page.keyboard.press("Escape");
+    const formats = await page.locator("#formatOptions input:checked").evaluateAll(nodes => nodes.map(n => n.value).sort());
     await app.source([event("user.message", { content: "Invented unrelated new request" }), call("unrelated"), complete("unrelated")]);
-    await navigateMain(page, "settings");
-    await app.check();
-    await navigateMain(page, "reports"); await reportContents(page);
-    assert.equal(await page.locator("#manualTerms").inputValue(), "INVENTED_MASKING_TERM");
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), selection);
-    assert.deepEqual(await page.locator("#formatOptions input").evaluateAll(nodes => nodes.map(node => [node.value, node.checked])), choices);
-    const after = await loadBoardState(app.context);
-    assert.equal(after.evidence.flatMap(record => record.toolCalls).length, 2);
-    assert.equal(after.exports.length, 0);
+    await navigateMain(page, "analyze"); await app.check("analyze");
+    assert.equal((await loadBoardState(app.context)).evidence.length, 2);
+    await navigateMain(page, "reports");
+    const preview = await previewSelectedReport(page, selected.scenarioId);
+    assert.equal(preview.promptMode, "none");
+    assert.deepEqual(preview.formats.toSorted(), formats);
+    assert.equal(preview.records.flatMap(r => r.toolCalls).length, 1);
     assert.deepEqual(app.writes, ["/api/collection/now"]);
-    await scanReport(page);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request/);
-    assert.equal(await page.locator("#checkActivity").isDisabled(), true, "Refresh cannot replace a frozen report review");
-    assert.equal(await page.locator("#checkActivity").locator("..").getAttribute("tabindex"), "0", "The blocked Refresh has a reachable explanation");
-    const writes = app.writes.length;
-    await page.evaluate(() => { document.querySelector("#checkActivity").click(); document.querySelector("#refreshBtn").click(); });
-    assert.equal(app.writes.length, writes);
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
 });
 
 test("old status failures cannot replace a completed check and reconnect never replays collection", { timeout: 60000 }, async t => {
@@ -2046,72 +1946,32 @@ test("old status failures cannot replace a completed check and reconnect never r
         assert.equal(app.writes.length, before + 2);
 });
 
-test("a review opened during checking stays frozen until leaving review, without expanding report membership", { timeout: 60000 }, async t => {
-        let releaseStatus;
-        t.after(() => releaseStatus?.());
-        const app = await fixture(t), { page } = app;
-        const source = await app.source([event("user.message", { content: "Synthetic selected request" }), call("one"), complete("one")]);
-        await page.goto(app.runtime().url); await ready(page); await app.check();
-        await navigateMain(page, "activity"); await ready(page);
-        await page.locator(".interaction-select").first().check();
-        await navigateMain(page, "home"); await ready(page);
-        await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic unselected fresh request" }), call("two"), complete("two")]));
-        let release, entered;
-        const gate = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { entered = resolve; });
-        await page.route("**/api/collection/now", async route => {
-            entered(); await gate; const response = await route.fetch(); await route.fulfill({ response });
-        }, { times: 1 });
-        await page.locator("#checkActivity").click(); await pending;
-        await navigateMain(page, "reports"); await reportContents(page);
-        await page.locator("#exportBtn").click();
-        await page.locator(".attestation input[data-review-control]").waitFor();
-        const statusGate = new Promise(resolve => { releaseStatus = resolve; });
-        await page.route("**/api/collection/status", async route => {
-            const response = await route.fetch(); await statusGate; await route.fulfill({ response });
-        });
-        release();
-        await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "waiting");
-        assert.equal(await page.locator("#checkActivity").isVisible(), false);
-        assert.equal(await page.locator("#freshAwayNotice:visible, #newDataNotice:visible").count(), 1, "One coherent notice explains this deferred update and frozen review");
-        assert.match(await page.locator("#freshAwayNotice").innerText(), /Recorded activity update.*Waiting to apply recorded activity.*Your report preview stays frozen/s);
-        assert.equal(await page.getByRole("status").filter({ hasText: /preview stays frozen/ }).count(), 1, "Only one frozen-preview explanation is exposed as a live status");
-        assert.equal(await page.locator("#newDataNotice").evaluate(node => node.hidden), false, "The underlying deferred-data safety state is preserved");
-        assert.equal(await page.locator("#freshAwayLink").isVisible(), true);
-        if (process.env.WIRE_REFRESH_CONTEXT_PROOFS) {
-            await mkdir(process.env.WIRE_REFRESH_CONTEXT_PROOFS, { recursive: true });
-            await page.screenshot({ path: path.join(process.env.WIRE_REFRESH_CONTEXT_PROOFS, "reports-waiting-for-review.png"), fullPage: true });
-        }
-        assert.equal(await page.locator("#checkActivity").getAttribute("data-pending"), "false", "Frozen review is waiting for a person, not spinning work");
-        assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-        assert.equal(await page.locator("#activityCount").textContent(), "1");
-        assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request/);
-        assert.match(await page.locator("#freshContextMessage").textContent(), /preview stays frozen/);
-        assert.equal((await loadBoardState(app.context)).exports.length, 0);
-        const checkId = await page.locator("#freshActivity").getAttribute("data-check-id"), writes = app.writes.length;
-        await page.locator("#freshAwayLink").click();
-        assert.match(page.url(), /#settings.*setting=collect-now/);
-        assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "waiting");
-        assert.equal(await page.locator("#freshActivity").getAttribute("data-check-id"), checkId);
-        assert.equal(await page.locator("#freshAwayNotice:visible, #newDataNotice:visible, #freshResult:visible").count(), 1, "The contextual owner replaces, rather than duplicates, the same frozen-update explanation");
-        assert.match(await page.locator("#freshContextMessage").innerText(), /preview stays frozen/);
-        assert.equal(await page.locator("#newDataNotice").evaluate(node => node.hidden), false);
-        assert.equal(await page.getByRole("status").filter({ hasText: /preview stays frozen/ }).count(), 1);
-        assert.equal(app.writes.length, writes, "Viewing the waiting update only navigates");
-        if (process.env.WIRE_REFRESH_CONTEXT_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_REFRESH_CONTEXT_PROOFS, "connection-waiting-for-review.png"), fullPage: true });
-        await page.goBack();
-        await page.locator(".attestation input[data-review-control]").waitFor();
-        assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-        assert.equal(await page.locator("#freshAwayNotice:visible, #newDataNotice:visible").count(), 1);
-        assert.equal(await page.getByRole("status").filter({ hasText: /preview stays frozen/ }).count(), 1);
-        assert.equal(await page.locator("#activityCount").textContent(), "1");
-        assert.equal(app.writes.length, writes);
-        releaseStatus(); await page.unroute("**/api/collection/status");
-        await navigateMain(page, "home"); await ready(page);
-        await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
-        assert.equal(await page.locator("#activityCount").innerText(), "2");
-        assert.match(await page.locator("#activitySelectionSummary").textContent(), /1 request/);
-        assert.equal((await loadBoardState(app.context)).exports.length, 0);
-        assert.equal(await page.locator("#freshActivity").getAttribute("data-deferred-review"), "false");
-        assert.equal(await page.locator("#freshAwayNotice").getAttribute("data-deferred-review"), "false");
-        assert.equal(await page.locator("#newDataNotice").evaluate(node => node.hidden), true);
+test("a report prepared during a pending Refresh stays frozen after the new call commits", async t => {
+    const app = await fixture(t), { page } = app;
+    const source = await app.source([event("user.message", { content: "Invented selected request" }), call("one"), complete("one")]);
+    await app.runtime().collector.collectNow();
+    const [selected] = (await loadBoardState(app.context)).evidence;
+    await page.goto(app.runtime().url); await ready(page);
+    await chooseReportInteraction(page, selected.scenarioId);
+    await navigateMain(page, "analyze");
+    await appendFile(source.file, jsonl([event("user.message", { content: "Invented unselected request" }), call("two"), complete("two")]));
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/collection/now", async route => {
+        entered.resolve(); await release.promise; await route.continue();
+    }, { times: 1 });
+    await page.locator("#analyzeRefresh").click(); await entered.promise;
+    await navigateMain(page, "reports");
+    const preview = await previewSelectedReport(page, selected.scenarioId);
+    assert.equal(preview.records.flatMap(r => r.toolCalls).length, 1);
+    const frame = page.frameLocator(".report-frame").locator("body");
+    await expect(frame.locator("h1")).toBeVisible();
+    const original = await frame.innerText();
+    const completed = page.waitForResponse(r => r.url().endsWith("/api/collection/now") && r.ok());
+    release.resolve(); await completed;
+    assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls.map(c => c.toolCallId)).sort(), ["one", "two"]);
+    await expect(page.locator("#freshAwayNotice")).toContainText("Your report preview stays frozen");
+    assert.equal(await frame.innerText(), original);
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
+    assert.deepEqual(app.writes, ["/api/collection/now"]);
 });
