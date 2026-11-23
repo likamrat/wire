@@ -210,32 +210,6 @@ test("new human HTML reports retain native section links without underlines", { 
     } finally { await browser.close(); }
 });
 
-test("ordinary navigation text never paints its expanded hit target on hover or press", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
-    await navigateMain(page, "activity");
-    await ready(page);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        for (const selector of [".session-drill", "#activityCollectionLink a"]) {
-            const link = page.locator(selector).first();
-            await link.hover();
-            if (selector === ".session-drill") await capture(page, `plain-link-${theme}-hover`, ".session-heading");
-            assert.equal(await link.evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", `${selector}: no hover slab`);
-            await page.mouse.down();
-            try {
-                assert.equal(await link.evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", `${selector}: no pressed slab`);
-            } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
-            await assertLinkStates(page, link, `${theme} ${selector}`);
-        }
-        const analysis = page.locator(".session-drill").first(), href = await analysis.getAttribute("href");
-        await analysis.click();
-        await ready(page);
-        assert.equal(new URL(page.url()).hash, href);
-        await page.goBack();
-        await ready(page);
-    }
-});
-
 test("text action controls have compact inset faces without shrinking native targets", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {

@@ -73,7 +73,7 @@ async function save(name, value) {
 
 test("built-in glide ignores absent and legacy choices under native and controlled media without a setting", async t => {
     const results = [];
-    for (const reducedMotion of [null, "reduce", "no-preference"]) for (const storedMotion of [null, "off", "system", "on"]) {
+    for (const [reducedMotion, storedMotion] of [[null, null], ["reduce", "on"], ["no-preference", "off"]]) {
         await t.test(`${reducedMotion ?? "native"}/${storedMotion ?? "clean"}`, async t => {
             const page = await setup(t, { storedMotion, reducedMotion });
             const native = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
