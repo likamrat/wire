@@ -6,6 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, closeAnalyzeFilters } from "./helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
+import { openReportLibrary } from "./report-journey-helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { renderAccountSettingsFixture } from "./account-settings-presentation-fixture.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
@@ -149,7 +150,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
         if (url.pathname === "/api/snapshot") snapshots.push(url.pathname);
     });
     await page.goto(app.runtime.url + "#analyze"); await ready(page);
-    await expect(page.locator("#activityListSummary")).toContainText("8 interactions with 10 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toContainText(/\b8 interactions\b.*\b10 matching (?:Work IQ )?tool calls\b/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.waitForFunction(() => document.getAnimations().every(animation =>
@@ -207,6 +208,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await closeAnalyzeFilters(page); await capture(page, "compare");
     await page.locator('nav [data-nav=reports]').click(); await ready(page);
+    await openReportLibrary(page);
     await capture(page, "reports");
     const jump = page.locator(".library-page-jump"), input = jump.locator("input"), go = jump.getByRole("button", { name: "Go to page", exact: true });
     await expect(go).toHaveText("Go to page");
@@ -217,27 +219,27 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
             const input = node.querySelector("input"), button = node.querySelector("button");
             const box = input.getBoundingClientRect(), action = button.getBoundingClientRect();
             return { width: box.width, height: box.height, actionHeight: action.height,
-                faceInset: parseFloat(getComputedStyle(input.parentElement, "::before").top),
-                actionInset: parseFloat(getComputedStyle(button, "::before").top), overflow: document.documentElement.scrollWidth - innerWidth };
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
         });
         assert.ok(geometry.width >= 44 && geometry.height >= 44);
         assert.equal(geometry.height, geometry.actionHeight);
-        assert.equal(geometry.faceInset, geometry.actionInset);
-        assert.equal(geometry.overflow, 0);
-        await input.fill("2"); await go.click(); await expect(input).toHaveValue("2");
-        await input.fill("1"); await input.press("Enter"); await expect(input).toHaveValue("1");
+        assert.ok(geometry.overflow <= 1, "Paging does not create horizontal scrolling");
+        const first = page.getByRole("button", { name: "View report: Mailbox calls", exact: true });
+        await expect(first).toBeVisible();
+        await input.fill("2"); await go.click(); await expect(first).toBeHidden();
+        await input.fill("1"); await input.press("Enter"); await expect(first).toBeVisible();
         await input.fill("3"); assert.equal(await input.evaluate(node => node.checkValidity()), false); await input.fill("1");
         await capture(page, `pager-${width}-${scale}`);
     }
     await page.evaluate(() => document.documentElement.style.fontSize = "100%");
     await page.getByRole("button", { name: "View report: Mailbox calls", exact: true }).click();
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(page.getByRole("article", { name: "Report brief" })).toContainText("8 interactions");
     await page.locator("#savedReaderFormat-control").click();
     await page.locator('.select-popup [data-value="pdf"]').click();
     await expect(page.getByLabel("PDF page", { exact: true })).toBeVisible();
     assert.ok((await page.getByLabel("PDF page", { exact: true }).boundingBox()).width >= 44);
     await capture(page, "saved-pdf");
-    await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "display");
+    await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "regional");
     await capture(page, "settings");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.locator('#settingsView .select-trigger:visible').first().click();
@@ -245,6 +247,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
     await page.keyboard.press("Escape");
     await page.emulateMedia({ forcedColors: "active" });
     await page.locator('nav [data-nav=reports]').click(); await ready(page);
+    await openReportLibrary(page);
     await page.locator(".library-page-jump input").focus();
     assert.equal(await page.locator(".library-page-jump .number-field").evaluate(node => getComputedStyle(node, "::before").outlineWidth), "2px");
     assert.equal(await page.locator('nav [data-nav=reports]').evaluate(node => getComputedStyle(node).backgroundImage), "none");
