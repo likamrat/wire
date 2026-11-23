@@ -136,7 +136,6 @@ test("nine real single-format bundles retain reviewed mode/content and frozen co
     }
     for (const [file, hash] of hashes) assert.equal(reportHash(await readFile(file)), hash, "Reading never rewrites frozen bytes");
     await corpusParserCancellation(t, context);
-    t.diagnostic("9 single-format artifacts with accepted recordedContext; 3 real PDF renders. Production-only installation is qualified in search-packaging.qualification.mjs.");
 });
 
 test("format preference distinguishes genuine absence from corruption and keeps HTML legacy reader behavior", async t => {

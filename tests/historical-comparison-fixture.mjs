@@ -10,7 +10,7 @@ import { time } from "../lib/time.mjs";
 import { scanReportMetadata, assertProjectedBundle } from "../lib/privacy.mjs";
 import { compareFrozenReportFacts, nativeComparisonEvidence } from "../lib/frozen-report-comparison.mjs";
 import { verifiedReportIdentityRelation } from "../lib/wire-report-snapshot-adapter.mjs";
-import { loadSavedReportSource, savedArtifact, describeSavedArtifact, reportHash, readSavedComparison, SAVED_REPORT_MAX_BYTES } from "../lib/report-artifacts.mjs";
+import { loadSavedReportSource, savedArtifact, describeSavedArtifact, reportHash, SAVED_REPORT_MAX_BYTES } from "../lib/report-artifacts.mjs";
 import { evaluationGeneratedHashes, projectCurrentEvaluationFacts, validateReportEndpoint } from "../lib/report-facts.mjs";
 import { validateReportFacts } from "../lib/assessment-contract.mjs";
 import { renderComparisonHtml, renderComparisonMarkdown, currentComparisonPresentation as reportPresentation } from "../lib/report-presentation.mjs";
@@ -162,7 +162,6 @@ export async function buildComparisonBundle(pair, input, pdfRenderer) {
     if (options.saveMode === "local") bundle.localSaveRequest = reportLocalSaveRequest(manifest);
     return bundle;
 }
-export const openSavedComparison = readSavedComparison;
 
 // Install invented prior-version files directly in a disposable test store. No
 // application endpoint, preview authority, or production writer creates them.

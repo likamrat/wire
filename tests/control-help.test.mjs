@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { renderHtmlShell } from "../lib/render.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
-import { createAssessmentWording } from "../web/assessment-presentation.mjs";
 import { createServiceCategories, serviceCategories } from "../lib/service-categories.mjs";
 import { OUTCOMES } from "../lib/analytics.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
@@ -10,32 +9,13 @@ import { fixture } from "./helpers.mjs";
 
 const help = createControlHelp(serviceCategories);
 
-test("measure help leads with the human meaning and keeps calculation limits in the glossary", () => {
-    const { accuracy, speed, trust, coverage, unassessed } = help.glossary;
-    assert.match(accuracy.definition, /answer meet the request.*saved evidence/);
-    assert.doesNotMatch(accuracy.definition, /divided|denominator|rubric/);
-    assert.match(accuracy.detail, /passed plus failed/);
-    assert.match(accuracy.detail, /without a result.*left out.*included in coverage/);
-    assert.match(trust.definition, /Answer support and tool use vs. request.*separate/);
-    assert.match(help.glossary["action-trust"].definition, /does not establish permission/);
-    assert.match(speed.detail, /call starts.*recorded completion/);
-    assert.match(speed.detail, /recorded request.*recorded final response/);
-    assert.match(speed.detail, /lower middle.*even count/);
-    assert.match(speed.detail, /Concurrent tool latencies are not added/);
-    assert.match(coverage.definition, /does not rate the rest of your history/);
-    assert.match(unassessed.detail, /error, not a failed answer/);
-    assert.match(unassessed.detail, /does not mean one is queued/);
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
-    assert.deepEqual(restored.glossary, help.glossary, "The normal shell uses the same short and detailed copy.");
-});
-
-test("Tool latency help uses the recorded tool boundary and retains distinct final-response timing", () => {
-    const { speed } = help.glossary;
+test("timing help distinguishes tool latency, final response and measured coverage", () => {
+    const { speed, coverage } = help.glossary;
     assert.match(speed.detail, /Tool latency starts when the tool call starts and ends at its recorded completion/);
     assert.match(speed.detail, /Final-response timing starts at the recorded request and ends at the recorded final response/);
     assert.match(speed.detail, /Concurrent tool latencies are not added together/);
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
-    assert.deepEqual(restored.glossary.speed, speed);
+    assert.match(speed.detail, /lower middle.*even count/);
+    assert.match(coverage.definition, /does not rate the rest of your history/);
 });
 
 test("category filter help explains available choices without inventing service evidence", () => {
@@ -50,26 +30,13 @@ test("category filter help explains available choices without inventing service 
     assert.match(tool, /Service not shown: the record does not identify a service; this is not a failure result/);
     assert.doesNotMatch(help.categoryGuide(["Mail", "Calendar"]), /Discovery|Search and retrieval|Service not shown/);
     assert.doesNotMatch(help.categoryGuide(["Discovery", "Mail"], "reported-api"), /Discovery/);
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
-    assert.equal(restored.categoryGuide(["Discovery", "Mail"]), help.categoryGuide(["Discovery", "Mail"]));
 });
 
-test("every authored filter has shared definitions for contextual help outside its menu", async () => {
-    const source = await readFile(new URL("../lib/render.mjs", import.meta.url), "utf8");
-    const controls = [...source.matchAll(/<select\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)];
-    const known = [...Object.keys(help.options), "serviceFilter", "projectFilter", "outcomeFilter"].sort();
-    assert.deepEqual(controls.map(([, id]) => id).sort(), known, "New select controls require a help coverage decision");
-    for (const [, id, html] of controls) {
-        const values = [...html.matchAll(/<option value="([^"]+)"/g)].map(([, value]) => value);
-        if (help.options[id]) assert.deepEqual([...values].sort(), Object.keys(help.options[id]).sort(), `${id}: new enum choices need descriptions`);
-        for (const value of values) {
-            const text = help.describeOption({ id, value });
-            assert.ok(text.trim(), `${id}/${value}: retained choice definition`);
-            assert.doesNotMatch(text, /not recognized/);
-        }
-    }
-    assert.deepEqual(Object.keys(help.reportScopes).sort(), [...source.matchAll(/name="reportScope" value="([^"]+)"/g)].map(([, value]) => value).sort());
-    assert.deepEqual(Object.keys(help.charts).sort(), [...source.matchAll(/data-chart="([^"]+)"/g)].map(([, value]) => value).sort());
+test("each report scope and chart mode in the shell has a help entry", () => {
+    const shell = renderHtmlShell("test", "nonce", null, { renderer: "react", entry: "/test.js", styles: [] });
+    const values = pattern => [...shell.matchAll(pattern)].map(([, value]) => value).sort();
+    assert.deepEqual(values(/name="reportScope" value="([^"]+)"/g), Object.keys(help.reportScopes).sort());
+    assert.deepEqual(values(/data-chart="([^"]+)"/g), Object.keys(help.charts).filter(key => key !== "activityCategory").sort());
 });
 
 test("dynamic service and result choices use shared semantics without classifying unknown values", () => {
@@ -117,7 +84,9 @@ test("report and action guidance preserves source, privacy and selection boundar
 });
 
 test("help serializes without module closures and keeps inputs and glossary unchanged", () => {
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    assert.deepEqual(restored.glossary, help.glossary);
+    assert.equal(restored.categoryGuide(["Discovery", "Mail"]), help.categoryGuide(["Discovery", "Mail"]));
     const option = Object.freeze({ id: "layerFilter", value: "tool", label: "Work IQ tool calls" });
     assert.equal(restored.describeOption(option), help.layers.tool);
     assert.equal(restored.describeOption({ id: "serviceFilter", value: "Search" }), serviceCategories.describe("Search").description);

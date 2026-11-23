@@ -41,7 +41,7 @@
     "test": "node --test tests/*.test.mjs web/*.test.mjs web/frontend/*.test.ts",
     "test:history-compatibility": "node --test --test-name-pattern=\"history compatibility:|a managed mapping published during a read|new managed identity does not reset consumed cursors|the reviewed subset and original receipts\" tests/dynamic-collection.test.mjs tests/recollection-verified-records.browser.test.mjs",
     "test:frontend": "npm run typecheck && npm run build && node --test --test-concurrency=1 tests/browser-assets.test.mjs tests/browser-bundle.browser.test.mjs tests/frontend-evaluation.browser.test.mjs web/frontend/*.test.ts",
-    "test:packaging": "npm run build && node --test --test-concurrency=1 tests/search-packaging.qualification.mjs tests/browser-packaging.qualification.mjs",
+    "test:packaging": "npm run build && node --test tests/production-packaging.qualification.mjs",
     "test:update-runtime": "node --test tests/update-runtime.qualification.mjs",
     "migrate": "node scripts/migrate.mjs",
     "install:canvas": "node scripts/install-canvas.mjs"
