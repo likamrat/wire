@@ -338,6 +338,7 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .api-result-entry:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
 #requestContent .api-result-entry>.returned-call-parent {margin:0 0 6px}
 #requestContent .api-result-entry .action-service>.metadata-item {line-height:1.5}
+#requestContent .api-result-entry .action-service .metadata-tail {vertical-align:baseline}
 #requestContent .api-result-entry .recorded-result {padding:0;border:0;border-radius:0;background:none;box-shadow:none;font:var(--weight-regular) var(--type-body)/1.5 var(--font)}
 #requestContent .api-result-entry>.action-fields {margin:8px 0 0}
 #requestContent .api-result-entry>.action-fields .reader-api-duration {margin:0}

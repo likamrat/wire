@@ -70,11 +70,16 @@ async function inlineGeometry(help) {
     return help.evaluate(button => {
         const label = button.closest(".returned-target-help");
         const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
-        let last;
-        while (walker.nextNode()) if (!button.contains(walker.currentNode) && walker.currentNode.textContent.trim()) last = walker.currentNode;
-        const range = document.createRange(); range.selectNodeContents(last);
+        const words = [];
+        while (walker.nextNode()) if (!button.contains(walker.currentNode) && walker.currentNode.textContent.trim()) words.push(walker.currentNode);
+        const range = document.createRange(); range.selectNodeContents(words.at(-1));
         const text = [...range.getClientRects()].at(-1), glyph = button.querySelector("svg circle").getBoundingClientRect(), target = button.getBoundingClientRect();
+        range.selectNodeContents(words[0]);
+        const lead = [...range.getClientRects()].at(-1);
+        range.selectNodeContents(words[1]);
+        const tail = range.getBoundingClientRect();
         return { gap: glyph.left - text.right, center: (glyph.bottom + glyph.top - text.top - text.bottom) / 2,
+            sameLineOffset: tail.left >= lead.right - 1 ? tail.top - lead.top : 0,
             overlap: target.left < text.right, width: target.width, height: target.height };
     });
 }
@@ -83,6 +88,7 @@ function checkInline(values) {
     const detail = JSON.stringify(values);
     assert.ok(values.gap >= 4 && values.gap <= 8, detail);
     assert.ok(Math.abs(values.center) <= 2, detail);
+    assert.ok(Math.abs(values.sameLineOffset) <= 2, detail);
     assert.ok(values.width >= 44 && values.height >= 44 && !values.overlap, detail);
 }
 
