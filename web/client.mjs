@@ -4293,7 +4293,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function viewChanged() {
         const defaults = { view: "analyze", chart: "time", range: "capture", layer: "tool", scope: "history", page: "0" };
-        const presentation = ["localSearch", "settingsWarning", "bucket", "timelineFrom",
+        const presentation = ["localSearch", "settingsWarning", "bucket", "timelineFrom", "entryDefault",
             ...(workspaceState.route.compare === "periods" ? ["compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "chart"] : [])];
         return Object.entries(workspaceState.route).some(([key, value]) => !presentation.includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
     }

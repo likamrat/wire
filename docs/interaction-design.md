@@ -98,7 +98,7 @@ or compared measures from a change to the measured population.
 | Outcome/Author | Draft until Apply; Cancel/Escape/outside dismissal preserves accepted selection |
 | Applied chip | Settled removal action |
 | Inline cancellation | Only a first pending restriction without an applied chip |
-| Reset filters | Stays beside restrictions; preserves report selection, data and preferences |
+| Reset filters | Stays beside restrictions; preserves report selection, data and preferences. Opening Analyze at All dates does not by itself enable Reset. |
 
 The count, scope caption, charts, rows and current-view report membership use
 one accepted population. Pending or failed ordinary reads retain its prior
