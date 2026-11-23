@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
@@ -29,9 +30,11 @@ function source(count = 2) {
 async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 }
-async function setup(t, record = source(), otherRecords = []) {
-    const { context } = await privateFixture(t, [record, ...otherRecords]);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+async function setup(t, record = source(), otherRecords = [], { enforced = false } = {}) {
+    const cleanup = [];
+    const { context } = await privateFixture({ after: fn => cleanup.push(fn) }, [record, ...otherRecords]);
+    const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", access, collector: { timers: false } });
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
     page.setDefaultTimeout(7000);
@@ -39,10 +42,12 @@ async function setup(t, record = source(), otherRecords = []) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        if (url.origin !== new URL(runtime.url).origin || (request.method() !== "GET" && ![
+        const updateStatus = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
+        if (url.origin !== new URL(runtime.url).origin || (request.method() !== "GET" && !updateStatus && ![
             "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",
-            "/api/evaluation/automatic/summary",
-        ].includes(url.pathname))) { mutations.push(url.pathname); return route.abort(); }
+            "/api/evaluation/automatic/summary", ...(enforced ? ["/api/access/watch", "/api/profile/github",
+                "/api/access/status", "/api/collection/sources/status", "/api/report-drafts/list","/api/assessment/consent"] : []),
+        ].includes(url.pathname))) { mutations.push(url.pathname); t.diagnostic(`Blocked fixture request: ${url.pathname}`); return route.abort(); }
         return route.continue();
     });
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: {
@@ -50,7 +55,8 @@ async function setup(t, record = source(), otherRecords = []) {
         writeText() { throw Error("Grouping never writes the clipboard."); },
     } }));
     t.after(async () => {
-        await browser.close(); await runtime.close();
+        try { await browser.close(); await runtime.close(); await access?.close(); }
+        finally { for (const fn of cleanup) await fn(); }
         assert.deepEqual(errors, []); assert.deepEqual(mutations, []);
     });
     await page.goto(runtime.url); await ready(page);
@@ -129,7 +135,7 @@ test("repeated tools keep exact owning details, keyboard focus and expansion thr
         const r = fixture(`newer-${i}`); r.capturedAt = r.userPrompt.sourceTimestamp = `2026-10-01T12:00:0${i}Z`;
         return r;
     });
-    const { page, context, card, record } = await setup(t, source(8), others);
+    const { page, context, card, record } = await setup(t, source(8), others, { enforced: true });
     const before = await loadBoardState(context);
     const pager = page.getByRole("navigation", { name: "Analyze result pages" });
     await pager.getByRole("button", { name: "Next", exact: true }).press("Enter");
@@ -166,6 +172,7 @@ test("repeated tools keep exact owning details, keyboard focus and expansion thr
     await expect(toggle(first)).toHaveAttribute("aria-expanded", "true");
     await expect(toggle(second)).toHaveAttribute("aria-expanded", "true");
     await summary.focus();
+    await expect(summary).toBeFocused();
     assert.deepEqual(await loadBoardState(context), before);
     const updated = structuredClone(record);
     updated.toolCalls[0].durationMs = 9876;
