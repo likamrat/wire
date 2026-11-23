@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,10 +41,10 @@ async function ready(page) {
     await expect(page.locator("#comparisonActions button").first()).toBeEnabled();
 }
 async function dates(page, a, b) {
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    const panel = await openDatePicker(page, "compare", "Custom dates");
     for (const [label, value] of [["Period A from", a[0]], ["Period A to", a[1]], ["Period B from", b[0]], ["Period B to", b[1]]])
-        await page.getByLabel(label, { exact: true }).fill(value);
-    await page.getByRole("button", { name: "Use dates", exact: true }).click();
+        await panel.getByLabel(label, { exact: true }).fill(value);
+    await panel.getByRole("button", { name: "Apply dates", exact: true }).click();
     await ready(page);
 }
 test("Compare reports returned errors once per call, separately from tool failures and missing results", async t => {
@@ -156,7 +157,11 @@ test("Compare is a single period destination; retired entries return to the libr
     const selectedDates = page.getByRole("button", { name: /^Change selected period:/ });
     await selectedDates.click();
     await expect(page.locator("#comparisonCustomDates legend").nth(1)).toHaveText("Selected");
+    await expect(page.getByLabel("Period B from", { exact: true })).toBeFocused();
+    await expect(page.getByLabel("Period A from", { exact: true })).toBeHidden();
+    await expect(page.locator("#comparisonCustomDates").getByRole("group", { name: "Date ranges" })).toBeHidden();
     await page.keyboard.press("Escape");
+    await expect(page.locator("#comparisonCustomDates")).toBeHidden();
     await expect(selectedDates).toBeFocused();
     const measure = page.locator("#compareChangeMeasure0");
     await measure.click();
@@ -357,10 +362,13 @@ test("custom cancellation, immediate refinements, exact hover and both themes re
     await ready(page);
     await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
     const accepted = comparisons.at(-1), address = page.url();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    await page.getByLabel("Period A from", { exact: true }).fill("2026-04-01");
-    await expect(page.getByRole("button", { name: "Use dates", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const panel = await openDatePicker(page, "compare", "Custom dates");
+    await expect(panel.getByLabel("Period A from", { exact: true })).toBeFocused();
+    await expect(panel.getByRole("button", { name: "Last 7 days", exact: true })).toBeVisible();
+    await panel.getByLabel("Period A from", { exact: true }).fill("2026-04-01");
+    await expect(panel.getByRole("button", { name: "Apply dates", exact: true })).toBeDisabled();
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.locator("#comparisonDates")).toBeFocused();
     assert.equal(page.url(), address);
     await page.locator("#openAnalyzeFilters").click();
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
@@ -445,10 +453,10 @@ test("later period choices win over held replies without relabeling unsupported 
         await page.unroute("**/api/period-comparison");
         const response = await route.fetch(); entered(); await pending; await route.fulfill({ response });
     });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click(); await held;
+    await openDatePicker(page, "compare", "Last 14 days"); await held;
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
     await expect(page.locator("#periodComparisonResultsTitle")).toBeHidden();
-    await page.getByRole("button", { name: "Last 30 days", exact: true }).click(); await ready(page);
+    await openDatePicker(page, "compare", "Last 30 days"); await ready(page);
     const accepted = comparisons.at(-1).periods;
     release();
     await expect.poll(() => comparisons.length).toBeGreaterThan(3);
@@ -510,10 +518,11 @@ test("narrow keyboard entry and enlarged text keep the same navigation and chart
         && node.getBoundingClientRect().right > innerWidth + 1).map(node => ({ tag: node.tagName, id: node.id, cls: node.className,
         width: node.getBoundingClientRect().width, right: node.getBoundingClientRect().right })));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, JSON.stringify(overflow));
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    assert.equal(await page.locator("#comparisonCustomDates").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+    const panel = await openDatePicker(page, "compare", "Custom dates");
+    assert.equal(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: "Custom dates", exact: true })).toBeFocused();
+    await expect(panel).toBeHidden();
+    await expect(page.locator("#comparisonDates")).toBeFocused();
 });
 test("global Search is independent and an unavailable analytical Search never broadens the pair", { timeout: 60000 }, async t => {
     const { page, comparisons } = await setup(t, "#analyze?compare=periods");
@@ -645,9 +654,9 @@ test("incomplete public comparison dates require an explicit choice without disp
     const url = page.url();
     await expect(page.locator("#periodComparisonStatus")).toContainText("Choose a start and end date for both periods");
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Use dates", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const panel = await openDatePicker(page, "compare", "Custom dates");
+    await expect(panel.getByRole("button", { name: "Apply dates", exact: true })).toBeDisabled();
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(page.url(), url);
     assert.deepEqual(comparisons, []);
 });
@@ -670,7 +679,7 @@ test("withdrawal during a held comparison read retires every endpoint option and
         const response = await route.fetch(); entered(); await waiting;
         try { await route.fulfill({ response }); } finally { finished(); }
     }, { times: 1 });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click(); await held;
+    await openDatePicker(page, "compare", "Last 14 days"); await held;
     await expect(page.locator("#periodComparisonResults .comparison-chart")).toHaveCount(0);
     await expect(page.locator(".compare-inspection table")).toHaveCount(0);
     const controller = await page.context().newPage();

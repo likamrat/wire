@@ -31,9 +31,17 @@ test("the React review fixture prepares, edits and saves real formats through th
         return route.continue();
     });
     async function prepare(action) {
-        const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
+        // The multi-format response for 241 interactions exceeds Chromium's inspector body cache.
+        const url = new URL("api/preview", runtime.url).href;
+        let full;
+        await page.route(url, async route => {
+            full = await route.fetch();
+            await route.fulfill({ response: full });
+        }, { times: 1 });
+        const response = page.waitForResponse(url);
         await action();
-        const result = await response, body = await result.json();
+        const result = await response, body = await full.json();
+        await full.dispose();
         assert.equal(result.status(), 200, body.error);
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
         return body;
@@ -49,8 +57,9 @@ test("the React review fixture prepares, edits and saves real formats through th
     await chooseLandingReportDates(page, "Custom dates");
     await page.locator("#reportDatefrom").fill("2026-11-10");
     await page.locator("#reportDateto").fill("2026-11-16");
-    await page.getByRole("button", { name: "Use dates", exact: true }).click();
+    await page.locator("#reportCustomDates").getByRole("button", { name: "Apply dates", exact: true }).click();
     let prepared = await prepare(() => prepareLandingReport(page, "all"));
+    assert.deepEqual(prepared.snapshot.dateSelection, { range: "custom", from: "2026-11-10", to: "2026-11-16" });
     assert.equal(prepared.records.length, 241);
     prepared = await prepare(() => page.getByLabel("Report name", { exact: true }).fill("Cedar review fixture"));
     const picker = page.locator("#reportActivityOptions");

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -523,11 +524,11 @@ test("relocated launchers use native records, reference, comparison and update d
     await expect(page.locator("#analyzeToolbar")).toBeHidden();
     await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
     for (const side of ["A", "B"]) for (const bound of ["From", "To"]) {
-        await page.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
+        await calendar.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
     }
-    await page.locator("#applyPeriodComparison").click();
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonResults")).toBeVisible();
     await page.locator("#viewComparisonCalls").click();

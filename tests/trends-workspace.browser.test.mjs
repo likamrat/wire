@@ -422,7 +422,7 @@ test("compiled index applies every available filter, supports calendar navigatio
 });
 
 test("Period edits stay beside their trigger without shifting the chart or reading unapplied dates", async t => {
-        const {page,reads}=await setup(t,true), period=page.locator("#trendsPeriod"), panel=page.locator("#trendsLocalChoices");
+        const {page,reads}=await setup(t,true), period=page.locator("#trendsPeriod"), panel=page.locator("#trendsDates");
         const count=page.locator('[data-family=rhythm] .trends-index-scope');
         const before=reads.length;
         for(const [width,scale] of [[1280,1],[390,1.5]]){
@@ -434,6 +434,8 @@ test("Period edits stay beside their trigger without shifting the chart or readi
             await period.tap(); await expect(panel).toBeVisible();
             await screenshot(page,`local-period-${width}`);
             await panel.getByRole("button",{name:"Custom dates"}).tap();
+            await expect(panel.getByRole("button",{name:"Last 14 days",exact:true})).toBeVisible();
+            await expect(panel.getByLabel("Trends from",{exact:true})).toBeFocused();
             assert.equal(await page.locator(":modal:visible").count(),0);
             await expect(panel).not.toContainText(/inclusive dates|UTC/i);
             const geometry=await panel.evaluate(n=>{const r=n.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:document.documentElement.clientWidth,height:innerHeight}});
@@ -467,7 +469,7 @@ test("Period edits stay beside their trigger without shifting the chart or readi
         }
         await period.tap();await panel.getByRole("button",{name:"Custom dates"}).tap();
         await panel.getByLabel("Trends to",{exact:true}).fill("2026-11-19");
-        await expect(panel.getByRole("status")).toContainText("today or an earlier date in UTC");
+        await expect(panel.getByRole("status")).toHaveText("Choose today or an earlier date.");
         await expect(panel.getByRole("button",{name:"Apply dates"})).toBeDisabled();
         const day = panel.locator('[data-day="2026-11-16"]');
         await day.tap(); await day.tap();

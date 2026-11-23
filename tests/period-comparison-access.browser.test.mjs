@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -237,8 +238,8 @@ for (const completion of ["resolve", "reject"]) test(`old decoded ${completion} 
     const page = await setup(t);
     await compare(page);
     await page.evaluate(() => { window.compareAccess.holdNext = true; });
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    await page.locator("#applyPeriodComparison").click();
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Boolean(window.compareAccess.pending))).toBe(true);
     await page.evaluate(() => {
         window.oldRead = window.compareAccess.pending; window.oldLease = window.compareAccess.token();
@@ -284,13 +285,14 @@ for (const action of ["expiry", "withdrawal and newer focus"]) test(`late entry 
 test("uncommitted custom dates never replace the accepted pair during withdrawal and fresh reading", { timeout: 30000 }, async t => {
     const page = await setup(t);
     await compare(page);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await openDatePicker(page, "compare", "Custom dates");
     await page.locator("#comparisonAFrom").fill("2026-03-06");
+    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
     const calls = await page.evaluate(() => window.compareAccess.calls);
     await page.evaluate(async () => { window.compareAccess.withdraw(); window.compareAccess.resume(); await window.compareAccess.fresh(); });
-    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
     assert.equal(await page.evaluate(() => window.compareAccess.calls), calls + 1);
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()?.comparison.periods.baseline.range.from), "2026-03-07");
+    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
 });
 
 for (const invalidation of ["expire", "removeMethods"]) test(`Compare fails closed when publication checks ${invalidation}`, { timeout: 30000 }, async t => {

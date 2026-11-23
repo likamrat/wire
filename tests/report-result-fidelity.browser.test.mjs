@@ -7,6 +7,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { chooseReportScope, reportContents, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 
 function record(flag) {
     const value = fixture("result-browser");
@@ -79,7 +80,7 @@ test("normal live-period selection carries the independent result change into re
         return value;
     });
     const { context } = await privateFixture(t, records);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
     const browser = await chromium.launch({ headless: true });
     t.after(async () => { await browser.close(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1280, height: 980 }, timezoneId: "UTC", reducedMotion: "reduce" });
@@ -88,6 +89,7 @@ test("normal live-period selection carries the independent result change into re
     await page.goto(runtime.url + "#analyze?scope=all");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.locator("#comparePeriods").click();
+    await openDatePicker(page, "compare", "Custom dates");
     for (const [label, value] of [["Period A from", "2026-10-01"], ["Period A to", "2026-10-01"],
         ["Period B from", "2026-10-02"], ["Period B to", "2026-10-02"]]) await page.getByLabel(label, { exact: true }).fill(value);
     const pending = page.waitForResponse(response => response.url().endsWith("/api/period-comparison"));
@@ -95,17 +97,26 @@ test("normal live-period selection carries the independent result change into re
     const response = await pending, live = await response.json();
     assert.equal(response.status(), 200, JSON.stringify(live));
     assert.equal(live.resultComparison.groups[0].applicationErrorDelta, 100);
-    await expect(page.locator("#periodComparisonResults .comparison-result-evidence")).toContainText("+100.0 percentage points");
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    const groups = page.getByRole("table", { name: "Recorded application/API errors" });
+    for (const [index, count] of [[1, "0"], [2, "1"]]) {
+        const row = groups.getByRole("row").nth(index);
+        await expect(row.locator('[data-label="Calls with recorded errors"]')).toHaveText(count);
+        await expect(row.locator('[data-label="Selected calls"]')).toHaveText("1");
+    }
+    await page.keyboard.press("Escape");
     await page.locator("#createPeriodReport").click();
-    await reportContents(page);
+    await expect(page.locator("#reportDeskDates")).toBeHidden();
+    await page.locator("#reportPrivacyChoice").click();
     await page.locator('[name=promptMode][value=none]').check();
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    const responseWithErrors = page.waitForResponse(value => value.url().endsWith("/api/preview") && value.request().postDataJSON().options.resultText);
     await page.locator("#reportResultText").check();
-    const prepared = await scanReport(page);
+    const prepared = await (await responseWithErrors).json();
     assert.deepEqual(prepared.snapshot.periodComparison.resultComparison, live.resultComparison);
     assert.equal(prepared.snapshot.resultFacts, undefined);
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();

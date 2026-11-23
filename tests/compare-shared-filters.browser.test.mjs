@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -57,14 +58,15 @@ async function setup(t, { longNames = false } = {}) {
     return { page, runtime, requests, comparisons: () => requests.filter(value => value.path === "/api/period-comparison") };
 }
 
-async function fillPeriods(page) {
-    for (const [id, value] of Object.entries({ comparisonAFrom: "2026-03-07", comparisonATo: "2026-03-07",
-        comparisonBFrom: "2026-03-08", comparisonBTo: "2026-03-09" })) await page.locator("#" + id).fill(value);
+async function fillPeriods(page, year = "2026") {
+    const panel = await openDatePicker(page, "compare", "Custom dates");
+    for (const [id, value] of Object.entries({ comparisonAFrom: `${year}-03-07`, comparisonATo: `${year}-03-07`,
+        comparisonBFrom: `${year}-03-08`, comparisonBTo: `${year}-03-09` })) await panel.locator("#" + id).fill(value);
 }
 async function compare(page) {
     await closeAnalyzeFilters(page);
     const response = page.waitForResponse(value => value.url().endsWith("/api/period-comparison") && value.ok());
-    await page.locator("#applyPeriodComparison").click();
+    await page.locator("#comparisonCustomDates").getByRole("button", { name: "Apply dates", exact: true }).click();
     const value = await (await response).json();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     return value;
@@ -248,7 +250,8 @@ test("pending and failed paired reads keep the shared panel and newer filter inp
         await route.fulfill({ response });
     }, { times: 1 });
     const requested = page.waitForRequest(value => value.url().endsWith("/api/period-comparison"));
-    await page.locator("#applyPeriodComparison").click(); await requested;
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click(); await requested;
     await page.locator("#openAnalyzeFilters").click();
     await page.locator("#outcomeFilter-control").click();
     const popup = page.locator(".select-popup:visible");
@@ -465,11 +468,7 @@ test("accepted restrictions wrap as plain caption text with the same guide and e
 
 test("accepted empty pairs keep their identity without default recap or duplicate collection and unit captions", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    await page.locator("#comparisonAFrom").fill("2025-03-07");
-    await page.locator("#comparisonATo").fill("2025-03-07");
-    await page.locator("#comparisonBFrom").fill("2025-03-08");
-    await page.locator("#comparisonBTo").fill("2025-03-09");
+    await fillPeriods(page, "2025");
     const empty = await compare(page);
     assert.deepEqual(empty.periods.baseline.rowIds, []); assert.deepEqual(empty.periods.later.rowIds, []);
     await expect(page.locator("#openAnalyzeFilters")).toHaveAttribute("data-pair-key", /^period:\d+$/);

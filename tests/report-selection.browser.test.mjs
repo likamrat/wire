@@ -9,6 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions, restoreLegacySearch, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { reportContents, chooseReportScope, inspectReportCopies, cancelReportPreview, openReportCreation, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 
 const proofDir = process.env.WORKIQ_SELECTION_PROOFS;
@@ -405,7 +406,7 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     const { records } = periodFixture();
     const { context } = await privateFixture(t, records);
     const initial = await loadBoardState(context);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); });
     const page = await browser.newPage({ reducedMotion: "reduce" });
@@ -414,11 +415,14 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     page.on("request", request => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
     await page.goto(runtime.url); await ready(page);
     await page.locator("#comparePeriods").click();
+    await openDatePicker(page, "compare", "Custom dates");
     for (const [name, value] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) await page.getByLabel(name, { exact: true }).fill(value);
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click(); await ready(page);
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
     const scope = await page.locator("#periodReportScope").textContent();
     await page.locator("#reportList .request-card-open").first().click(); await ready(page);
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
@@ -430,7 +434,7 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     await expect(page.locator("#message")).toContainText("paired periods");
     await page.getByRole("button", { name: "Back to activity", exact: true }).click(); await ready(page);
     assert.equal(await page.locator("#periodReportScope").textContent(), scope);
-    assert.equal(requests.filter(value => ["/api/preview", "/api/privacy-review", "/api/export"].includes(value)).length, 0);
+    assert.deepEqual(requests.filter(value => ["/api/preview", "/api/privacy-review", "/api/export"].includes(value)), ["/api/preview"]);
     const after = await loadBoardState(context);
     assert.deepEqual(after.evidence, initial.evidence);
     assert.deepEqual(after.exports, initial.exports);

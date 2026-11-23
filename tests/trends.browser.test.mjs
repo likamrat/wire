@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -425,13 +426,13 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
         await new Promise(resolve => { held.push({ release: resolve }); });
         await route.fulfill({ response });
     });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 14 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "true");
     await expect(page.locator("#trendsView")).toContainText(/Loading.*14 days/);
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
     await expect.poll(() => held.length).toBe(1);
     await capture(page, "usability-pending-range");
-    await page.getByRole("button", { name: "Last 30 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 30 days");
     await expect.poll(() => held.length).toBe(2);
     await expect(page.locator(".trends-pending")).toContainText("30 days");
     held[0].release();
@@ -443,7 +444,7 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
     const applied = await page.locator(".trends-period-label").allTextContents();
     await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
         body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 14 days");
     await expect(page.locator("#trendsView .trends-read-feedback .notice")).toContainText("Synthetic stored-read failure");
     await expect(page.locator(".trends-pending")).toBeEmpty();
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
@@ -453,7 +454,7 @@ test("pending Trends ranges visibly name the request and leave accepted facts in
         await new Promise(resolve => { held.push({ release: resolve }); });
         await route.fulfill({ response });
     });
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 7 days");
     await expect.poll(() => held.length).toBe(3);
     await navigateMain(page, "analyze"); await navigateMain(page, "trends");
     await expect(page.locator(".trends-pending")).toBeEmpty();
@@ -473,7 +474,7 @@ test("withdrawal scrubs selected context and evidence return while a built Trend
         await new Promise(resolve => { release = resolve; });
         await route.fulfill({ response });
     });
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 14 days");
     await expect(page.locator(".trends-pending")).toContainText("14 days");
     await page.locator('[data-family="tools"]').getByRole("button", { name: "View evidence", exact: true }).click();
     await page.evaluate(() => {
@@ -509,12 +510,11 @@ test("withdrawal scrubs selected context and evidence return while a built Trend
     await send("/api/session/release", {}, session.capability);
 });
 async function dates(page, from = "2026-08-01", to = "2026-08-30") {
-    if (await page.locator("#trendsPeriod").isVisible()) await page.locator("#trendsPeriod").click();
-    await page.locator("#trendsView").getByRole("button", { name: "Custom dates", exact: true }).click();
-    await page.getByLabel("Trends from", { exact: true }).fill(from);
-    await page.getByLabel("Trends to", { exact: true }).fill(to);
+    const panel = await openDatePicker(page, "trends", "Custom dates");
+    await panel.getByLabel("Trends from", { exact: true }).fill(from);
+    await panel.getByLabel("Trends to", { exact: true }).fill(to);
     const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
-    await page.getByRole("button", { name: "Apply dates", exact: true }).click();
+    await panel.getByRole("button", { name: "Apply dates", exact: true }).click();
     const value = await (await response).json();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     return value;
@@ -707,7 +707,7 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
     await expect(page).toHaveURL(/\/trends\?measure=tools&period=custom&from=2026-08-01&to=2026-08-30$/);
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
     assert.ok(reads.every(read => !("scenarioIds" in read) && read.timeContext.timeZone === "UTC"));
 });
 
@@ -795,7 +795,7 @@ test("withdrawal clears held chart content and refuses late Trends publication",
         window.trendsBoundary.hold();
     });
 
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 14 days");
     await page.waitForFunction(() => typeof window.trendsBoundary.release === "function");
     await page.evaluate(() => { window.trendsBoundary.withdraw(); window.trendsBoundary.release(); });
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-plot")).toBeEmpty();
@@ -808,14 +808,14 @@ test("leaving a pending range read returns to the last accepted trend without a 
     await dates(page);
     await page.locator('.trends-panel[data-family="tools"] .trends-sizing button:first-child').click();
     await page.evaluate(() => window.trendsBoundary.hold());
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await openDatePicker(page, "trends", "Last 14 days");
     await page.waitForFunction(() => typeof window.trendsBoundary.release === "function");
     await navigateMain(page, "analyze");
     await navigateMain(page, "trends");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
     await page.evaluate(() => window.trendsBoundary.release());
-    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
+    await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
 });
 
@@ -927,15 +927,19 @@ test("the left sidebar opens every peer and preserves Trends through collapse, e
             if (destination === "compare") await expect(page.locator("#periodComparison")).toBeVisible();
             await navigateMain(page, "trends"); await settle(page);
             await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-            await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
-            await expect(page.locator('[data-trend-period="custom"]')).toHaveAttribute("aria-pressed", "true");
-            await expect(page.locator('[data-trend-period="7"]')).toHaveAttribute("aria-pressed", "false");
+            await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
+            const panel = await openDatePicker(page, "trends");
+            const custom = panel.getByRole("button", { name: "Custom dates", exact: true });
+            const seven = panel.getByRole("button", { name: "Last 7 days", exact: true });
+            await expect(custom).toHaveAttribute("aria-pressed", "true");
+            await expect(seven).toHaveAttribute("aria-pressed", "false");
             await page.mouse.move(8, 8);
             await settle(page);
-            const selectedPaint = await page.locator('[data-trend-period="custom"]').evaluate(measureControlSurface);
-            const ordinaryPaint = await page.locator('[data-trend-period="7"]').evaluate(measureControlSurface);
+            const selectedPaint = await custom.evaluate(measureControlSurface);
+            const ordinaryPaint = await seven.evaluate(measureControlSurface);
             assert.ok(contrast(selectedPaint.border, ordinaryPaint.border) > 1.1, "The accepted period has a visibly distinct control face");
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+            await page.keyboard.press("Escape");
         }
         await page.getByRole("button", { name: "View evidence", exact: true }).click();
         await page.locator(".trends-evidence-row a").first().click(); await settle(page);
@@ -949,7 +953,7 @@ test("the left sidebar opens every peer and preserves Trends through collapse, e
         await settle(page);
         await expect(page.locator("#contextSidebar")).not.toBeVisible();
         await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
-        await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1 – Aug 30, 2026)");
+        await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
         await capture(page, `qualified-sidebar-${mode}`);
     }
 });
@@ -1209,14 +1213,14 @@ test("chart-first entry retains period facts with empty Today and All charts pre
     await expect(page.locator("#trendsPlot-tools [data-date-tick]").last()).toHaveText("Today");
     await capture(page, "overview-empty-today");
     for (const days of [14, 30, 7]) {
-        await page.locator(`[data-trend-period="${days}"]`).click();
+        await openDatePicker(page, "trends", `Last ${days} days`);
         await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
         await assertDailyAxes(page, days);
         const ends = await page.locator(".trends-plot:visible").evaluateAll(nodes => nodes.map(node => node.scrollWidth - node.clientWidth - node.scrollLeft));
         assert.ok(ends.every(value => value < 2), "New periods open at their latest dates");
     }
     await capture(page, "overview-light");
-    await page.locator('[data-trend-period="30"]').click();
+    await openDatePicker(page, "trends", "Last 30 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     await page.locator("#trendsPlot-tools").evaluate(node => node.scrollLeft = 120);
     await settle(page);
@@ -1268,7 +1272,7 @@ test("chart-first entry retains period facts with empty Today and All charts pre
 
 test("series identities scale beyond four tools and stay fixed across visibility, filters, modes and themes", { timeout: 45000 }, async t => {
     const { page } = await setupAllCharts(t, false, { records: currentRecords({ many: true }), viewport: { width: 1600, height: 1100 } });
-    await page.locator('[data-trend-period="30"]').click();
+    await openDatePicker(page, "trends", "Last 30 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     const identities = () => page.locator('[data-family=tools] .trends-legend-row').evaluateAll(nodes => nodes.map(node => ({
         id: node.querySelector("input").dataset.series,
@@ -1400,16 +1404,16 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
             const view = document.getElementById("trendsView").getBoundingClientRect();
             const main = document.getElementById("main"), bounds = main.getBoundingClientRect(), style = getComputedStyle(main);
             const zoom = Number(getComputedStyle(document.documentElement).zoom);
-            const control = document.querySelector("[data-trend-period=custom]");
             return { width: innerWidth, dpr: devicePixelRatio, zoom, view: { left: view.left, right: view.right },
                 expected: { left: bounds.left + parseFloat(style.paddingLeft) * zoom, right: bounds.right - parseFloat(style.paddingRight) * zoom },
-                namedCustomControl: control.textContent.trim() === "Custom dates",
                 overflow: document.documentElement.scrollWidth > innerWidth };
         });
 
         assert.ok(Math.abs(layout.view.left - layout.expected.left) < 2 && Math.abs(layout.view.right - layout.expected.right) < 2,
             `Whole workspace at actual CSS viewport: ${JSON.stringify(layout)}`);
-        assert.equal(layout.namedCustomControl, true, "The calendar entry is visibly named, not just a date string");
+        const panel = await openDatePicker(page, "trends");
+        await expect(panel.getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
+        await page.keyboard.press("Escape");
         assert.equal(layout.overflow, false);
         const values = await page.locator('[data-family=tools] .trends-legend-value').allTextContents();
         assert.ok(values.every((value, index) => !index || parseFloat(values[index - 1]) >= parseFloat(value)),
@@ -1514,7 +1518,7 @@ test("author names stay whole in overview and maximized reading without a vertic
 test("all seven full-width widgets retain readable labels and measures across sizing and orientation", { timeout: 90000 }, async t => {
     const { page, reads } = await setupAllCharts(t, false, { records: currentRecords({ many: true, emptyToday: true }),
         viewport: { width: 3440, height: 1440 }, motion: "no-preference", direct: true });
-    await page.locator('[data-trend-period="30"]').click();
+    await openDatePicker(page, "trends", "Last 30 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     const readCount = reads.length;
     const measure = async (panel, state) => {
@@ -1677,14 +1681,14 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
             data = await dates(page, day(10), day(2));
         } else {
             const response = waitRead();
-            await page.locator(`[data-trend-period="${period}"]`).click();
+            await openDatePicker(page, "trends", `Last ${period} days`);
             data = await (await response).json();
         }
         await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
         evidence.periods++;
         const readCount = reads.length;
-        await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        const datesPanel = await openDatePicker(page, "trends", "Custom dates");
+        await datesPanel.getByRole("button", { name: "Cancel", exact: true }).click();
         assert.equal(reads.length, readCount, "Cancel dates preserves the accepted period");
         await page.getByRole("button", { name: "Collapse all", exact: true }).click();
         await expect(page.locator(".trends-content:visible")).toHaveCount(0);
@@ -1806,20 +1810,23 @@ test("mixed saved-chat read gaps do not become a Trends scope warning", { timeou
 
 test("Custom dates is visibly named and every widget names its applied range", { timeout: 30000 }, async t => {
     const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
-    await expect(page.getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
+    await expect(page.locator("#trendsPeriod")).toHaveAccessibleName(/^Dates: .+/);
+    const panel = await openDatePicker(page, "trends");
+    await expect(panel.getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
     const expectRange = async text => {
         await expect(page.locator(".trends-period-label")).toHaveCount(7);
         for (const label of await page.locator(".trends-period-label").all()) await expect(label).toHaveText(text);
     };
     for (const period of ["7", "14", "30"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
-        await page.locator(`[data-trend-period="${period}"]`).click();
+        await openDatePicker(page, "trends", `Last ${period} days`);
         const value = await (await response).json();
         const first = new Date(value.from + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
         await expectRange(`(${first} – Today)`);
     }
     const data = await dates(page, "2026-10-28", "2026-11-04");
-    await expectRange("(Oct 28 – Nov 4, 2026)");
+    await expectRange("(Oct 28–Nov 4, 2026)");
     assert.equal(data.from, "2026-10-28");
     assert.equal(data.to, "2026-11-04");
     await capture(page, "dates-overview");
@@ -1827,10 +1834,10 @@ test("Custom dates is visibly named and every widget names its applied range", {
     await expect(page.locator(".trends-period-label:visible")).toHaveCount(7);
     await capture(page, "dates-collapsed");
     await page.getByRole("button", { name: "Maximize Services", exact: true }).click();
-    await expect(page.locator('[data-family=services] .trends-period-label')).toHaveText("(Oct 28 – Nov 4, 2026)");
+    await expect(page.locator('[data-family=services] .trends-period-label')).toHaveText("(Oct 28–Nov 4, 2026)");
     await capture(page, "dates-maximized");
     for (const [from, to, text] of [
-        ["2025-12-29", "2026-01-03", "(Dec 29, 2025 – Jan 3, 2026)"],
+        ["2025-12-29", "2026-01-03", "(Dec 29, 2025–Jan 3, 2026)"],
         ["2026-11-04", "2026-11-04", "(Nov 4, 2026)"],
     ]) {
         await dates(page, from, to); await expectRange(text);
@@ -1841,13 +1848,15 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
     const { page } = await setupAllCharts(t, true, { records: currentRecords() });
     await dates(page, "2026-10-28", "2026-11-04");
     const accepted = await page.locator(".trends-period-label").allTextContents();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await openDatePicker(page, "trends", "Custom dates");
     await page.getByLabel("Trends from", { exact: true }).fill("2026-01-01");
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
     await page.evaluate(() => window.trendsBoundary.hold());
-    await page.locator('[data-trend-period="14"]').click();
+    const editor = await openDatePicker(page, "trends", "Custom dates");
+    await editor.getByLabel("Trends from", { exact: true }).fill("2026-01-01");
+    await editor.getByRole("button", { name: "Last 14 days", exact: true }).click();
     await page.waitForFunction(() => typeof window.trendsBoundary.release === "function");
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), accepted);
     await page.evaluate(() => window.trendsBoundary.release());
@@ -1857,7 +1866,7 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
     assert.equal(new Set(applied).size, 1);
     await page.route("**/api/trends", route => route.fulfill({ status: 503, contentType: "application/json",
         body: JSON.stringify({ error: "Synthetic stored-read failure" }) }));
-    await page.locator('[data-trend-period="30"]').click();
+    await openDatePicker(page, "trends", "Last 30 days");
     await expect(page.locator("#trendsView .trends-read-feedback .notice")).toBeVisible();
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
     assert.deepEqual(await page.locator(".trends-period-label").allTextContents(), applied);
@@ -2024,7 +2033,7 @@ test("populated Trends sidebar motion stays responsive without rebuilding seven 
     for (const route of ["analyze", "reports", "trends7", "trends30"]) {
         await navigateMain(page, route.startsWith("trends") ? "trends" : route);
         if (route.startsWith("trends")) {
-            await page.locator(`[data-trend-period="${route === "trends7" ? "7" : "30"}"]`).click();
+            await openDatePicker(page, "trends", route === "trends7" ? "Last 7 days" : "Last 30 days");
             await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
             await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
         }
@@ -2074,7 +2083,7 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     const { page, reads } = await setupAllCharts(t, false, { records, viewport: { width: 1440, height: 1080 },
         motion: "no-preference", direct: true });
     const response = page.waitForResponse(response => response.url().endsWith("/api/trends") && response.ok());
-    await page.locator('[data-trend-period="30"]').click();
+    await openDatePicker(page, "trends", "Last 30 days");
     const data = await (await response).json(); await settle(page);
     await page.getByRole("checkbox", { name: "Show retrieve", exact: true }).uncheck();
     const marks = page.locator("#trendsPlot-tools [data-trend-mark]");
@@ -2144,7 +2153,7 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     assert.deepEqual(actual.sort(), [...expected].sort());
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Back to overview", exact: true }).click();
-    await page.locator('[data-trend-period="7"]').click();
+    await openDatePicker(page, "trends", "Last 7 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
         const plot = page.locator(`#trendsPlot-${id}`);

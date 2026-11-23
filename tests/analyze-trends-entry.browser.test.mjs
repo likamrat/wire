@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -122,10 +123,14 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
 });
 test("page defaults: direct and sidebar Compare start on complete civil days; Back and explicit pairs win", async t => {
     const { page, url } = await pageEntryFixture(t);
-    const pair = days => page.locator(`[data-comparison-range="${days}"]`);
+    async function checkSelected(days) {
+        const panel = await openDatePicker(page, "compare");
+        await expect(panel.getByRole("button", { name: `Last ${days} days`, exact: true })).toHaveAttribute("aria-pressed", "true");
+        await page.keyboard.press("Escape");
+    }
     async function check14() {
         await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-        await expect(pair("14")).toHaveAttribute("aria-pressed", "true");
+        await checkSelected(14);
         const p = new URL(page.url()).searchParams;
         assert.deepEqual(["aFrom", "aTo", "bFrom", "bTo"].map(key => p.get(key)),
             ["2026-09-03", "2026-09-16", "2026-09-17", "2026-09-30"]);
@@ -133,9 +138,9 @@ test("page defaults: direct and sidebar Compare start on complete civil days; Ba
     await page.goto(url + "/trends?section=guide");
     await expect(page.locator(".trends-guide")).toBeVisible();
     await page.locator("#comparePeriods").click(); await check14();
-    await pair("7").click();
-    await expect(pair("7")).toHaveAttribute("aria-pressed", "true");
-    await page.reload(); await expect(pair("7")).toHaveAttribute("aria-pressed", "true");
+    await openDatePicker(page, "compare", "Last 7 days");
+    await checkSelected(7);
+    await page.reload(); await checkSelected(7);
     await page.goBack(); await check14();
     await page.goBack(); await expect(page.locator(".trends-guide")).toBeVisible();
     await page.goto(url + "/compare"); await check14();

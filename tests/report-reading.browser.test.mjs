@@ -415,7 +415,7 @@ test("report period closes when reading an embedded document and when leaving Re
     record.toolCalls[0].startedAt = record.capturedAt;
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, [record]);
     const access = await createCopilotRuntimeAccess(context);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, access });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false }, access });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access.close(); for (const work of cleanup) await work(); });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
@@ -433,7 +433,7 @@ test("report period closes when reading an embedded document and when leaving Re
         await page.locator("#reportDeskDates").click();
         if (target === "chrome") await page.getByLabel("Report name", { exact: true }).click();
         else if (target === "escape") await page.keyboard.press("Escape");
-        else await page.locator('[popovertarget="reportPeriodChoices"]').click();
+        else await page.locator("#reportDeskDates").click();
         await expect(period).toBeHidden();
     }
     await page.locator("#reportDeskDates").click();
@@ -452,7 +452,7 @@ test("report period closes when reading an embedded document and when leaving Re
     await period.locator("[data-report-range=custom]").click();
     await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await custom.getByRole("button", { name: "Use dates", exact: true }).click();
+    await custom.getByRole("button", { name: "Apply dates", exact: true }).click();
     const changed = await (await response).json();
     assert.notDeepEqual(changed.snapshot.dateSelection, accepted.snapshot.dateSelection);
     await expect(custom).toBeHidden();

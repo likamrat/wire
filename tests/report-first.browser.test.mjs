@@ -6,6 +6,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
 import { selectReportFocus, prepareReportPreview, prepareLandingReport, chooseLandingReportDates, viewAllSavedReports } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { reviewRecords } from "./frontend-fixture.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { time } from "../lib/time.mjs";
@@ -54,7 +55,7 @@ for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-0
     test(`historical calendars stop at ${today} in ${zone} for the same instant`, async t => {
         const {page,requests}=await setup(t,{frontend:"react",route:"reports",timezoneId:zone,now:"2026-03-01T00:15:00Z"});
         const desk = page.locator("#reportDeskDates"), accepted = await desk.innerText();
-        await desk.click(); await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        await chooseLandingReportDates(page, "Custom dates");
         const calendar = page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
         await expect(end).toHaveAttribute("max",today);
         const previous = calendar.getByRole("button", { name:"Previous month" });
@@ -70,12 +71,12 @@ for (const [zone,today,tomorrow] of [["America/Los_Angeles","2026-02-28","2026-0
         if(zone === "Asia/Tokyo") await expect(calendar.locator(`[data-day="${tomorrow}"]`)).toBeDisabled();
         const written = () => requests.filter(r=>/\/(?:preview|export|period-comparison)$/.test(r.path)).length;
         const before = written();
-        await end.fill(tomorrow); await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
-        await expect(calendar).toContainText(`today or an earlier date in ${zone}`);
+        await end.fill(tomorrow); await expect(calendar.getByRole("button",{name:"Apply dates",exact:true})).toBeDisabled();
+        await expect(calendar.locator("#reportDateStatus")).toHaveText("Choose today or an earlier date.");
         await calendar.getByRole("button",{name:"Cancel"}).click(); await expect(desk).toHaveText(accepted);
         assert.equal(written(),before);
         await navigateMain(page,"compare"); await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-        await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+        await openDatePicker(page, "compare", "Custom dates");
         const pair=page.locator("#comparisonCustomDates"), prior=written();
         for (const side of ["A","B"]){
             await expect(pair.locator(`#comparison${side}To`)).toHaveAttribute("max",today);
@@ -94,19 +95,19 @@ test("an open calendar enables the next month at midnight in the display zone wi
     const {page,requests}=await setup(t,{frontend:"react",route:"reports",now:"2026-03-01T07:59:00Z"});
     await page.clock.install({time:new Date("2026-03-01T07:59:00Z")});
     const desk=page.locator("#reportDeskDates"), accepted=await desk.innerText();
-    await desk.click();await page.getByRole("button",{name:"Custom dates",exact:true}).click();
+    await chooseLandingReportDates(page, "Custom dates");
     const calendar=page.locator("#reportCustomDates"), end=calendar.locator("#reportDateto");
     await expect(end).toHaveAttribute("max","2026-02-28");
     await calendar.locator("#reportDatefrom").fill("2026-02-27");
     await end.fill("2026-03-01");
     await expect(calendar.getByRole("button",{name:"Next month"})).toBeDisabled();
-    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeDisabled();
+    await expect(calendar.getByRole("button",{name:"Apply dates",exact:true})).toBeDisabled();
     await page.clock.fastForward(61_000);
     await expect(end).toHaveAttribute("max","2026-03-01");
     await calendar.getByRole("button",{name:"Next month"}).click();
     await expect(calendar.locator('[data-day="2026-03-01"]')).toBeEnabled();
     await expect(calendar.locator('[data-day="2026-03-02"]')).toBeDisabled();
-    await expect(calendar.getByRole("button",{name:"Use dates"})).toBeEnabled();
+    await expect(calendar.getByRole("button",{name:"Apply dates",exact:true})).toBeEnabled();
     await calendar.getByRole("button",{name:"Cancel"}).click();
     await expect(desk).toHaveText(accepted);
     assert(!requests.some(r=>["/api/preview","/api/export"].includes(r.path)));
@@ -129,7 +130,7 @@ test("period choices keep exact dates and reserve explanations for restrictions"
     await expect(calendar).not.toContainText(/inclusive dates|America\/Los_Angeles/i);
     await calendar.locator("#comparisonBTo").fill("2026-03-01");
     await expect(calendar.locator("#comparisonBStatus")).toContainText(/end.*start/i);
-    await expect(calendar.getByRole("button", { name: "Use dates" })).toBeDisabled();
+    await expect(calendar.getByRole("button", { name: "Apply dates", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
     await expect(edit).toBeFocused();
     await expect(edit).toContainText("Mar 4–10, 2026");
@@ -139,21 +140,31 @@ test("period choices keep exact dates and reserve explanations for restrictions"
     await expect(calendar.locator("legend:visible")).toHaveText(["Baseline"]);
     await calendar.locator("#comparisonAFrom").fill("2026-03-07");
     await calendar.locator("#comparisonATo").fill("2026-03-07");
-    await calendar.getByRole("button",{name:"Use dates"}).click();
+    await calendar.getByRole("button",{name:"Apply dates",exact:true}).click();
     await expect(pair).toContainText("Mar 7, 2026");
     await expect(baseline).toBeFocused();
     await expect(edit).toContainText("Mar 4–10, 2026");
     assert.equal(compareReads(),before+1);
-    await navigateMain(page, "reports");
-    await page.locator("#reportDeskDates").click();
-    await expect(page.locator("#reportPeriodChoices")).not.toContainText(/both endpoints|presets include today|America\/Los_Angeles/i);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+});
+
+test("narrow Reports keeps presets available while editing custom dates", async t => {
+    const { page, requests } = await setup(t, { frontend: "react", route: "reports", now: "2026-03-10T12:00:00Z" });
+    await page.setViewportSize({ width: 375, height: 812 });
+    const desk = page.locator("#reportDeskDates"), period = page.locator("#reportPeriodChoices");
+    await chooseLandingReportDates(page, "Custom dates");
+    await expect(period).not.toContainText(/both endpoints|presets include today|America\/Los_Angeles/i);
     await expect(page.locator("#reportDatefrom")).toHaveValue("2026-03-04");
     await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
     await expect(page.locator("#reportCustomDates")).not.toContainText(/inclusive dates|America\/Los_Angeles/i);
     await expect(page.locator("#reportPeriodChoices:popover-open #reportCustomDates")).toBeVisible();
-    await page.getByRole("button",{name:"Cancel",exact:true}).click();
-    await expect(page.locator("#reportDeskDates")).toBeFocused();
+    await page.locator("#reportDatefrom").fill("2026-03-01");
+    await period.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await expect(period).toBeHidden();
+    await chooseLandingReportDates(page, "Custom dates");
+    await expect(page.locator("#reportDatefrom")).toHaveValue("2026-02-25");
+    await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
+    await period.getByRole("button",{name:"Cancel",exact:true}).click();
+    await expect(desk).toBeFocused();
     const files=page.locator('[popovertarget="reportFileOptions"]');
     await files.click(); await expect(page.locator("#reportFileOptions:popover-open")).toBeVisible();
     assert.equal(await page.locator(":modal:visible").count(),0);
@@ -864,7 +875,7 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
         record.toolCalls[0].requestedApiPath = "/me/messages";
     }
     const route = `#reports?task=create&service=Mail&range=custom&from=${today}&to=${today}`;
-    const { page, errors } = await setup(t, { source, route });
+    const { page, errors, requests } = await setup(t, { source, route });
     const fresh = await prepare(page, "all");
     assert.equal(fresh.records.length, 7, "Fresh scope includes Calendar despite the old Mail filter");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
@@ -874,20 +885,25 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     await page.locator("#reportActivityOptions").getByRole("button", { name: "Show report", exact: true }).click();
     const current = await (await preparing).json();
     assert.equal(current.records.length, 2);
-    await page.locator("#reportDeskDates").click();
-    await page.locator("#reportPeriodChoices [data-report-range=custom]").click();
-    await expect(page.locator("#reportCustomDates")).toBeVisible();
-    assert.equal(await page.locator("#reportCustomDates [data-report-range]").count(), 0);
-    await page.locator("#reportCustomDates").getByLabel("From", { exact: true }).fill("2026-01-01");
-    await page.locator("#reportCustomDates").getByRole("button", { name: "Cancel", exact: true }).click();
+    const period = page.locator("#reportPeriodChoices"), custom = period.locator("#reportCustomDates");
+    const desk = page.locator("#reportDeskDates"), accepted = await desk.innerText();
+    const previews = () => requests.filter(request => request.path === "/api/preview").length;
+    const beforeDraft = previews();
+    await chooseLandingReportDates(page, "Custom dates");
+    for (const days of [7, 14, 30]) await expect(period.getByRole("button", { name: `Last ${days} days`, exact: true })).toBeVisible();
+    await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
+    await custom.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(desk).toHaveText(accepted);
+    assert.equal(previews(), beforeDraft);
     assert.equal(await page.frameLocator(".report-frame").locator("[data-report-scenario]").count(), 2);
-    await page.locator("#reportDeskDates").click();
-    await page.locator("#reportPeriodChoices [data-report-range=custom]").click();
-    await page.locator("#reportCustomDates").getByLabel("From", { exact: true }).fill("2026-01-01");
+    await chooseLandingReportDates(page, "Custom dates");
+    await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.getByRole("button", { name: "Use dates", exact: true }).click();
+    await custom.getByRole("button", { name: "Apply dates", exact: true }).click();
     const widened = await response, body = await widened.json();
     assert.equal(widened.status(), 200, body.error);
+    assert.deepEqual(body.snapshot.dateSelection, { range: "custom", from: "2026-01-01", to: today });
+    assert.equal(previews(), beforeDraft + 1);
     assert.equal(body.records.length, 3, "Mail is retained and the original older interaction is admitted");
     await expect(page.locator("#reportExperienceScope")).toContainText("Based on Analyze filters");
     assert.match(page.url(), new RegExp(`from=${today}&to=${today}`), "Analyze dates were not mutated");
@@ -1108,6 +1124,10 @@ for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direc
     await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
     const recovery = page.getByRole("button", { name: "Check save status", exact: true });
     await expect(recovery).toBeInViewport();
+    const dates = page.locator("#reportDeskDates");
+    if (paired) await expect(dates).toBeHidden();
+    else await expect(dates).toBeDisabled();
+    await expect(page.locator("#reportPeriodChoices")).toBeHidden();
     const gap = await recovery.evaluate(node => node.getBoundingClientRect().top
         - document.querySelector("#reportJourneyError").getBoundingClientRect().bottom);
     assert.ok(gap >= 0 && gap <= 32, `Recovery must accompany its warning, not follow the document: ${gap}px`);
@@ -1246,7 +1266,7 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
 test("retained-period comparison opens its report directly and saves the accepted pair", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t, { source: periodFixture().records, route: "#analyze" });
     await page.locator("#comparePeriods").click();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await openDatePicker(page, "compare", "Custom dates");
     for (const [label, value] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) {
         await page.getByLabel(label, { exact: true }).fill(value);
@@ -1263,6 +1283,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.ok(prepared.snapshot.periodComparison);
     assert.equal(prepared.localSaveRequest.version, 1);
     await expect(page.locator("#reportStage3")).toBeVisible();
+    await expect(page.locator("#reportDeskDates")).toBeHidden();
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     const acceptedComparison = prepared.snapshot.periodComparison.comparison;
     await page.locator("#reportLibraryLink").click();

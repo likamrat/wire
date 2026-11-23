@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -9,7 +10,7 @@ import { chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helper
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
-async function setup(t, { nativeZoom = false } = {}) {
+async function setup(t, { nativeZoom = false, timezoneId } = {}) {
     const app = await authorFilterFixture(t, { serviceCases: true });
     const errors = [], denied = [], reads = [];
     const profile = nativeZoom ? await mkdtemp(path.join(os.tmpdir(), "wire-entry-zoom-")) : null;
@@ -22,7 +23,7 @@ async function setup(t, { nativeZoom = false } = {}) {
         assert.deepEqual(errors, []); assert.deepEqual(denied, []);
     });
     const page = nativeZoom ? await browser.newPage()
-        : await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+        : await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce", timezoneId });
     let unzoomed;
     if (nativeZoom) {
         unzoomed = await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio }));
@@ -134,7 +135,8 @@ test("Analyze section strip and result commands align with the widgets at every 
 });
 
 test("entry hover, keyboard, active counts and Compare keep their separate native behavior", { timeout: 60000 }, async t => {
-    const { page, reads, olderDay, newerDay } = await setup(t);
+    // The fixture's bounds are UTC civil days, including when the host is still on yesterday.
+    const { page, reads, olderDay, newerDay } = await setup(t, { timezoneId: "UTC" });
     const proof = process.env.WIRE_ANALYZE_ENTRY_PROOFS;
     if (proof) await mkdir(proof, { recursive: true });
     const filter = page.locator("#openAnalyzeFilters"), guide = page.locator("#openChartReference");
@@ -200,11 +202,11 @@ test("entry hover, keyboard, active counts and Compare keep their separate nativ
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.locator("#comparePeriods").click();
     await expect(guide).toBeHidden();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
     for (const side of ["A", "B"]) for (const bound of ["From", "To"]) {
-        await page.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
+        await calendar.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
     }
-    await page.locator("#applyPeriodComparison").click();
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     for (const theme of ["dark", "light"]) for (const width of [1920, 768, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: width < 700 ? 844 : 1080 });

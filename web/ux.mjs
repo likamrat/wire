@@ -240,14 +240,16 @@ export function createEvidenceUX(icons, operations) {
                 if (isOpen()) close();
                 else { panel.hidden = false; trigger.setAttribute("aria-expanded", "true"); sync(); focusChoice(); }
             });
-            panel.addEventListener("keydown", event => {
-                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
-            });
         } else {
             trigger.setAttribute("aria-haspopup", "dialog"); trigger.setAttribute("popovertarget", panel.id);
         }
         panel.prepend(choices);
         editor.hidden = true;
+        panel.addEventListener("keydown", event => {
+            if (event.key === "Escape" && !event.defaultPrevented && isOpen()) {
+                event.preventDefault(); event.stopPropagation(); close();
+            }
+        });
         function isOpen() { return embedded ? !panel.hidden : panel.matches(":popover-open"); }
         function focusChoice() { (choices.querySelector('[aria-pressed="true"]') || choices.firstElementChild)?.focus({ preventScroll: true }); }
         function reset() { editor.hidden = true; choices.hidden = false; delete panel.dataset.editingDates; }
