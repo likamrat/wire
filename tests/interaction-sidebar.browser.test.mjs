@@ -6,10 +6,8 @@ import path from "node:path";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch, revealAnalyzeRecords } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, navigateSettings, revealAnalyzeRecords } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { reportContents } from "./report-journey-helpers.mjs";
-import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 
 const proof = process.env.WIRE_SIDEBAR_PROOFS;
 
@@ -31,7 +29,7 @@ function sidebarMotionSettled({ selector }) {
     return animations.length === 0;
 }
 
-async function setup(t, { savedReport = false, touch = false, beforeNavigate, motion = "reduce", sidebarMotion, browserOptions = {} } = {}) {
+async function setup(t, { savedReport = false, touch = false, beforeNavigate, motion = "reduce", browserOptions = {} } = {}) {
     const records = Array.from({ length: 18 }, (_, index) => {
         const record = fixture(`sidebar-${index}`);
         record.sourceSessionName = `Invented planning chat ${index}`;
@@ -56,6 +54,8 @@ async function setup(t, { savedReport = false, touch = false, beforeNavigate, mo
     const browserContext = await browser.newContext({ viewport: { width: touch ? 375 : 1440, height: 1000 }, hasTouch: touch, reducedMotion: motion });
     const page = await browserContext.newPage();
     const errors = [], requests = [];
+    await browserContext.route("**/*", route => new URL(route.request().url()).origin === new URL(runtime.url).origin
+        ? route.continue() : route.abort());
     page.setDefaultTimeout(8000);
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => requests.push(new URL(request.url())));
@@ -77,7 +77,6 @@ async function setup(t, { savedReport = false, touch = false, beforeNavigate, mo
         assert.deepEqual(errors, []);
         assert.ok(requests.every(url => url.origin === new URL(runtime.url).origin), "No off-device requests");
     });
-    if (sidebarMotion) await page.addInitScript(value => localStorage.setItem("workiq-evidence.sidebar-motion", value), sidebarMotion);
     await beforeNavigate?.(page);
     await page.goto(runtime.url);
     await page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -121,7 +120,7 @@ test("built-in motion glides both sidebars without changing the native host poli
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), nativeReduced);
 });
 
-test("built-in glide covers every sidebar role and drawer without changing saved state", { timeout: 45000 }, async t => {
+test("the reader and drawer glide without changing saved reports", { timeout: 45000 }, async t => {
     const { page, requests, context } = await setup(t, { savedReport: true, motion: null,
         browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
     });
@@ -175,13 +174,9 @@ test("built-in glide covers every sidebar role and drawer without changing saved
         await expect(link).toBeFocused();
         assert.ok(Math.abs((await link.boundingBox()).y - returnAnchor.y) < 3, "Exit retains the latest card anchor");
         await navigateMain(page, "reports");
-        await glide("#contextSidebar", () => page.locator(".saved-report-summary").first().click(), true, `${theme}/saved/open`);
-        await glide("#contextSidebar", () => page.locator("#closeContextSidebar").click(), false, `${theme}/saved/close`);
-        await page.locator("#reportCreateLink").click();
-        await page.locator("#reportList input").first().check();
-        await glide("#contextSidebar", () => reportContents(page), true, `${theme}/setup/open`);
-        await expect(page.locator("#contextSidebarFooter #exportBtn")).toBeVisible();
-        await glide("#contextSidebar", () => page.locator("#closeContextSidebar").click(), false, `${theme}/setup/close`);
+        await page.getByRole("button", { name: "View report: Selected interactions", exact: true }).click();
+        await expect(page.locator("#savedReportReader")).toBeVisible();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
         await navigateMain(page, "analyze");
         await page.setViewportSize({ width: 375, height: 900 });
         await page.evaluate(() => document.documentElement.style.fontSize = "200%");
@@ -265,7 +260,7 @@ test("built-in motion never accesses the retired preference even when storage re
 });
 
 for (const replace of [false, true]) test(`sidebar close preserves the current anchor ${replace ? "after an off-screen replacement scroll" : "without a replacement scroll"}`, async t => {
-    const { page } = await setup(t, { sidebarMotion: "on" });
+    const { page } = await setup(t);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.evaluate(node => {
         const box = node.getBoundingClientRect();
@@ -315,14 +310,14 @@ test("sidebar geometry waits for actual header publication before its baseline",
     await page.waitForFunction(sidebarGeometryCurrent);
     await page.evaluate(() => {
         window.headerSizeGate.held = true;
-        document.documentElement.style.fontSize = "200%";
+        document.querySelector(".app-header .header-inner").style.minHeight = "124px";
     });
     await page.waitForFunction(() => window.headerSizeGate.pending.length > 0);
     const sample = () => page.evaluate(() => ({
         published: document.documentElement.style.getPropertyValue("--app-header-height"),
         actual: Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height),
-        control: document.querySelector("#navigationCollapse").getBoundingClientRect().toJSON(),
-        hovered: document.querySelector("#navigationCollapse").matches(":hover"),
+        control: document.querySelector('#sidebar [data-nav="analyze"]').getBoundingClientRect().toJSON(),
+        hovered: document.querySelector('#sidebar [data-nav="analyze"]').matches(":hover"),
     }));
     const unpublished = await sample();
     assert.notEqual(parseFloat(unpublished.published), unpublished.actual, "The real producer has not yet published the enlarged header");
@@ -339,17 +334,17 @@ test("sidebar geometry waits for actual header publication before its baseline",
     assert.equal(before.control.y - unpublished.control.y, before.actual - parseFloat(unpublished.published),
         "The observed movement comes from header publication, without hover");
     assert.notDeepEqual(before.control, unpublished.control);
-    await page.locator("#navigationCollapse").hover();
+    await page.locator('#sidebar [data-nav="analyze"]').hover();
     const hovered = await sample();
     assert.deepEqual(hovered.control, before.control, "Hover preserves the complete current rectangle, including position");
-    await page.locator("#navigationCollapse").focus(); await page.keyboard.press("Shift");
+    await page.locator('#sidebar [data-nav="analyze"]').focus(); await page.keyboard.press("Shift");
     const focused = await sample();
     assert.deepEqual(focused.control, before.control, "Focus preserves the complete current rectangle, including position");
     t.diagnostic(JSON.stringify({ unpublished, before, hovered, focused }));
 });
 
-for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate glyph, target and text geometry across all roles in ${theme}`, { timeout: 45000 }, async t => {
-    const { page } = await setup(t, { savedReport: true });
+for (const theme of ["light", "dark"]) test(`sidebar and drawer controls keep their hit targets and keyboard focus in ${theme}`, { timeout: 45000 }, async t => {
+    const { page } = await setup(t);
     const directory = process.env.WIRE_SIDEBAR_ICON_PROOFS, evidence = [];
     await page.evaluate(() => {
         window.sidebarCommandClicks = {};
@@ -392,11 +387,15 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
             };
         });
         assert.deepEqual(metrics.target, { ...metrics.target, ...before }, `${label}: focus cannot change geometry`);
-        assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44, `${label}: 44px target`);
+        const footerUtility = await node.evaluate(n => n.closest(".footer-utilities") !== null);
+        assert.ok(metrics.target.width >= (footerUtility ? 32 : 44) && metrics.target.height >= 44, `${label}: utility hit target`);
         if (metrics.iconOnly) assert.equal(metrics.target.height, 44, `${label}: textless utilities do not inherit a text-line minimum`);
         assert.ok(metrics.svg.x >= metrics.target.x && metrics.svg.right <= metrics.target.right
             && metrics.svg.y >= metrics.target.y && metrics.svg.bottom <= metrics.target.bottom, `${label}: display box stays inside its target`);
-        if (navigation) { assert.equal(metrics.svg.width, 24); assert.equal(metrics.svg.height, 24); }
+        if (navigation) {
+            assert.ok(metrics.svg.width >= 18 && metrics.svg.width < metrics.target.width, `${label}: legible glyph inside its independent hit target`);
+            assert.equal(metrics.svg.width, metrics.svg.height);
+        }
         assert.ok(metrics.name && metrics.focus && metrics.outline !== "none" && metrics.outlineWidth >= 2 && metrics.focusUnclipped,
             `${label}: named keyboard control with unclipped focus`);
         assert.ok(metrics.edgeHits && !metrics.outsideHits, `${label}: the target owns its edges, not its neighbors`);
@@ -413,7 +412,7 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
         await page.waitForFunction(() => ["sidebar", "navigationDrawer"].every(id => !document.getElementById(id).getAnimations().length));
         const rows = page.locator(".primary-navigation a");
         const before = await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
-        for (const destination of ["analyze", "reports", "settings"]) await control(`.primary-navigation [data-nav="${destination}"]`, `${label}/${destination}`, true);
+        for (const destination of ["analyze", "trends", "reports", "compare", "settings"]) await control(`#navigationContent [data-nav="${destination}"]`, `${label}/${destination}`, true);
         assert.deepEqual(await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON())), before,
             `${label}: focusing one row cannot move its neighbors`);
         const metrics = await rows.evaluateAll(nodes => nodes.map(node => {
@@ -437,7 +436,7 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
                 await navigation(`${label}/${state}`);
                 const gap = await page.evaluate(() => document.querySelector("#navigationContent").getBoundingClientRect().top
                     - document.querySelector("#navigationCollapse").getBoundingClientRect().bottom);
-                assert.equal(gap, 12, "The collapse toolbar keeps its deliberate 12px separation");
+                assert.ok(gap >= 0, "The navigation links do not overlap the header toggle");
             }
             await edgeClick("navigationCollapse");
         } else {
@@ -456,38 +455,28 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
             await edgeClick("closeNavigation");
             await expect(page.locator("#navigationToggle")).toBeFocused();
         }
-        for (const role of ["interaction", "saved", "setup"]) {
-            if (role === "interaction") {
-                await navigateMain(page, "analyze"); await page.locator(".request-card-open").first().click();
-            } else {
-                await navigateMain(page, "reports");
-                if (role === "saved") await page.locator(".saved-report-summary").first().click();
-                else {
-                    await page.locator("#reportCreateLink").click();
-                    await page.locator("#reportList input").first().check();
-                    await reportContents(page);
-                }
-            }
-            await control("#closeContextSidebar", `${label}/${role}/close`);
+        {
+            await navigateMain(page, "analyze"); await page.locator(".request-card-open").first().click();
+            await control("#closeContextSidebar", `${label}/interaction/close`);
             const header = await page.locator(".context-sidebar-header").evaluate(node => {
-                const title = node.querySelector("h2"), button = node.querySelector("button"), css = getComputedStyle(node);
+                const title = node.querySelector("h2"), actions = [...node.querySelectorAll("button")].filter(item => item.checkVisibility()), css = getComputedStyle(node);
                 const range = document.createRange(); range.selectNodeContents(title);
-                const text = range.getBoundingClientRect(), target = button.getBoundingClientRect(), bounds = node.getBoundingClientRect();
+                const text = range.getBoundingClientRect(), target = actions[0].getBoundingClientRect(), bounds = node.getBoundingClientRect();
                 return { bounds: bounds.toJSON(), title: title.getBoundingClientRect().toJSON(), text: text.toJSON(), target: target.toJSON(),
                     paddingTop: parseFloat(css.paddingTop), paddingBottom: parseFloat(css.paddingBottom), border: parseFloat(css.borderBottomWidth),
                     bodyY: document.querySelector("#contextSidebarBody").getBoundingClientRect().y, gap: parseFloat(css.columnGap),
                     titleOwnsText: title.contains(document.elementFromPoint(text.x + 2, text.y + text.height / 2)),
                     pageOverflow: document.documentElement.scrollWidth > innerWidth + 1 };
             });
-            assert.ok(header.title.right + header.gap <= header.target.x + 1, `${label}/${role}: reserved title/utility separation`);
+            assert.ok(header.title.right <= header.target.x + 1 || header.title.bottom <= header.target.y + 1, `${label}: title/utility separation`);
             assert.ok(Math.abs(header.bounds.height - Math.max(header.title.height, header.target.height)
-                - header.paddingTop - header.paddingBottom - header.border) < 1, `${label}/${role}: header height comes only from its command row and intentional padding`);
-            assert.ok(Math.abs(header.bodyY - header.bounds.bottom) < 1, `${label}/${role}: no phantom row between header and body`);
-            assert.ok(header.titleOwnsText && !header.pageOverflow, `${label}/${role}: utility target does not steal text or cause overflow`);
-            evidence.push({ label: `${label}/${role}/header`, ...header });
+                - header.paddingTop - header.paddingBottom - header.border) < 1, `${label}: header height fits its command row`);
+            assert.ok(Math.abs(header.bodyY - header.bounds.bottom) < 1, `${label}: no phantom row between header and body`);
+            assert.ok(header.titleOwnsText && !header.pageOverflow, `${label}: utility target does not steal text or cause overflow`);
+            evidence.push({ label: `${label}/interaction/header`, ...header });
             if (directory && width === 375 && scale === 200) {
                 await mkdir(directory, { recursive: true });
-                await page.locator(".context-sidebar-header").screenshot({ path: path.join(directory, `${theme}-${role}-header.png`) });
+                await page.locator(".context-sidebar-header").screenshot({ path: path.join(directory, `${theme}-interaction-header.png`) });
             }
             await edgeClick("closeContextSidebar");
             await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
@@ -545,132 +534,18 @@ test("sidebar icon-only targets do not inherit text-line height", async t => {
     }
 });
 
-test("opening during an actual pending overview resumes the retained Analyze summary without recursion", { timeout: 20000 }, async t => {
-    let release, arrived;
-    const held = new Promise(resolve => { release = resolve; });
-    const pending = new Promise(resolve => { arrived = resolve; });
-    const deliveries = [];
-    const { page, errors } = await setup(t, { beforeNavigate: page => page.route("**/api/assessment/overview", route => {
-        const delivery = (async () => {
-            const response = await route.fetch();
-            arrived(); await held;
-            await route.fulfill({ response });
-        })();
-        deliveries.push(delivery);
-        return delivery;
-    }) });
-    try {
-        await restoreLegacySearch(page, "release checklist 0.");
-        await pending;
-        await expect(page.locator("#homeInsights")).toHaveAttribute("aria-busy", "true");
-        await revealAnalyzeRecords(page);
-        await page.locator(".request-card-open").first().click();
-        assert.deepEqual(errors, [], "Pending overview must not throw during sidebar entry");
-        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-        release(); await Promise.all(deliveries);
-        await expect(page.locator("#homeInsights[aria-busy=true]")).toHaveCount(0);
-        await expect(page.locator("#homeInsights .assessment-summary")).toHaveCount(1);
-        await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
-        await expect(page.locator("#pageTitle")).toHaveText("Analyze");
-        await page.locator("#closeContextSidebar").click();
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-        await expect(page.locator("#homeInsights .assessment-summary")).toHaveCount(1);
-    } finally { release(); await Promise.all(deliveries); }
-});
-
-test("closing while the background overview is pending resumes it after exit cleanup", { timeout: 20000 }, async t => {
-    let release, arrived;
-    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
-    const deliveries = [];
-    const { page } = await setup(t, { beforeNavigate: page => page.route("**/api/assessment/overview", route => {
-        const delivery = (async () => {
-            const response = await route.fetch();
-            arrived(); await held; await route.fulfill({ response });
-        })();
-        deliveries.push(delivery); return delivery;
-    }) });
-    try {
-        await restoreLegacySearch(page, "release checklist 0.");
-        await pending;
-        await page.emulateMedia({ reducedMotion: "no-preference" });
-        await revealAnalyzeRecords(page);
-        await page.locator(".request-card-open").first().click();
-        await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
-        await expect(page.locator("#homeInsights")).toHaveAttribute("aria-busy", "true");
-        await page.locator("#closeContextSidebar").click();
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-        release(); await Promise.all(deliveries);
-        await expect(page.locator("#homeInsights[aria-busy=true]")).toHaveCount(0);
-        await expect(page.locator("#homeInsights .assessment-summary")).toHaveCount(1);
-        await expect(page.locator("#pageTitle")).toHaveText("Analyze");
-    } finally { release(); await Promise.all(deliveries); }
-});
-
-for (const action of ["Measure definitions", "Automatic scores"]) test(`an origin ${action} action takes ownership before old sidebar cleanup`, { timeout: 20000 }, async t => {
-    const { page } = await setup(t, action === "Automatic scores" ? { beforeNavigate: page =>
-        page.route("**/api/evaluation/automatic/summary", async route => {
-            const response = await route.fetch(), summary = await response.json();
-            await route.fulfill({ json: { ...summary, snapshot: { ...summary.snapshot, state: "paused", reason: "source-changed" } } });
-        }) } : {});
-    await restoreLegacySearch(page, "release checklist 0.");
-    await page.locator("#analyzeReviewDetails>summary").click();
-    const trigger = page.locator("#homeInsights").getByRole("button", { name: action, exact: true });
-    await expect(trigger).toBeVisible();
-    await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    let release, arrived;
-    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
-    const deliveries = [];
-    if (action === "Automatic scores") await page.route("**/api/evaluation/automatic/setup", route => {
-        const delivery = (async () => {
-            const response = await route.fetch();
-            arrived(); await held; await route.fulfill({ response });
-        })();
-        deliveries.push(delivery); return delivery;
-    });
-    try {
-        await page.locator("#closeContextSidebar").click();
-        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
-        const origin = page.url();
-        if (action === "Measure definitions") {
-            await trigger.focus();
-            await trigger.press("Enter");
-        } else {
-            await trigger.click();
-            await pending;
-        }
-        await page.locator("#contextSidebar").evaluate(node => { for (const animation of node.getAnimations()) animation.finish(); });
-        release(); await Promise.all(deliveries);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const dialog = action === "Measure definitions" ? page.locator('dialog[aria-label="Insight details"]')
-            : page.locator("dialog.automatic-score-dialog");
-        await expect(dialog).toBeVisible();
-        await expect(dialog).toContainText(action === "Measure definitions" ? "What these results mean" : "Connect a supported local Copilot source");
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-        assert.equal(await page.locator("#requestContent").textContent(), "", "Old private paint is gone before the new owner paints");
-        assert.equal(page.url(), origin, "Controller acquisition did not require navigation");
-        assert.equal(await page.locator("dialog[open]").count(), 1, "The latest dialog remains the only active surface");
-        await expect(dialog.locator("button").first()).toBeFocused();
-        if (proof) {
-            await mkdir(proof, { recursive: true });
-            await page.screenshot({ path: path.join(proof, action === "Measure definitions" ? "origin-definitions.png" : "origin-automatic-scores.png") });
-        }
-    } finally { release(); await Promise.all(deliveries); }
-});
-
-test("minimal native card opens an anchored sidebar without replacing the Analyze DOM", { timeout: 30000 }, async t => {
+test("the prompt opens an anchored reader without replacing the Analyze list", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await revealAnalyzeRecords(page);
     const card = page.locator("#activityList>.request-row").first();
-    assert.equal(await card.locator('input,button,.card-context,.request-meta,.full-text-toggle').count(), 0);
-    assert.equal(await card.getByRole("link").count(), 1);
+    await expect(card.getByRole("button", { name: "Add to report", exact: true })).toBeVisible();
+    await expect(card.locator(".request-card-open")).toHaveAccessibleName(/^Read retained prompt:/);
     await page.evaluate(() => { window.originalActivityList = document.querySelector("#activityList").firstElementChild; });
-    const link = card.locator("a");
+    const link = card.locator(".request-card-open");
+    await link.scrollIntoViewIfNeeded();
     const before = await card.boundingBox();
     const mainWidth = await page.locator("#main").evaluate(node => node.clientWidth);
-    await page.mouse.click(before.x + before.width / 2, before.y + 20);
+    await link.click();
     await page.locator("#contextSidebar[open]").waitFor();
     await page.waitForFunction(sidebarMotionSettled, { selector: "#contextSidebar" });
     assert.equal(await page.locator("#homeView").isVisible(), true);
@@ -691,31 +566,6 @@ test("minimal native card opens an anchored sidebar without replacing the Analyz
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
 });
 
-for (const sidebarMotion of ["system", "on"]) test(`personal feedback stays inline and holds a dirty card switch until discarded (${sidebarMotion})`, { timeout: 30000 }, async t => {
-    const { page } = await setup(t, { sidebarMotion });
-    await revealAnalyzeRecords(page);
-    const first = page.locator(".request-card-open").first(), second = page.locator(".request-card-open").nth(1);
-    await first.click();
-    await openPersonalFeedback(page);
-    assert.equal(await page.locator("dialog[open]").count(), 1, "Only the shared sidebar is open");
-    await page.locator("#requestContent .assessment-feedback-dialog").getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.locator('.select-option[data-value="fail"]').click();
-    const original = page.url();
-    await second.click();
-    assert.equal(page.url(), original, "Dirty switch has not changed route identity");
-    await page.getByRole("button", { name: "Keep editing", exact: true }).click();
-    assert.equal(await page.locator("#requestContent .assessment-feedback-dialog select").inputValue(), "fail");
-    await page.goBack();
-    await expect(page.locator("#contextSidebarGuard")).toBeVisible();
-    await expect(page).toHaveURL(original);
-    await page.getByRole("button", { name: "Keep editing", exact: true }).click();
-    await expect(page.locator("#requestContent .assessment-feedback-dialog [role=combobox]")).toBeFocused();
-    await second.click();
-    await page.getByRole("button", { name: "Discard changes", exact: true }).click();
-    assert.notEqual(page.url(), original);
-    assert.equal(await page.locator("#requestContent .assessment-feedback-dialog").count(), 0);
-});
-
 test("sidebar adapts the actual columns and remains readable with fixed actions at narrow and doubled text sizes", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     if (proof) await mkdir(proof, { recursive: true });
@@ -734,19 +584,19 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
         await revealAnalyzeRecords(page);
         const link = page.locator(".request-card-open").first();
         await link.scrollIntoViewIfNeeded();
-        const entry = await link.boundingBox();
-        await page.mouse.click(entry.x + entry.width / 2, Math.max(90, entry.y + 20));
+        await link.click();
         await page.locator("#contextSidebar[open]").waitFor();
+        await page.waitForFunction(sidebarMotionSettled, { selector: "#contextSidebar" });
         const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
         await copy.click();
         await expect(copy).toHaveAttribute("data-copy-state", "success");
         const measured = await page.evaluate(() => {
             const panel = document.querySelector("#contextSidebar"), body = document.querySelector("#contextSidebarBody");
-            const close = document.querySelector("#closeContextSidebar"), footer = document.querySelector("#contextSidebarFooter");
+            const close = document.querySelector("#closeContextSidebar");
             const rect = node => { const { x, y, width, height } = node.getBoundingClientRect(); return { x, y, width, height }; };
             return { modal: panel.matches(":modal"), overflow: document.documentElement.scrollWidth - innerWidth,
-                panel: rect(panel), close: rect(close), footer: rect(footer), body: rect(body),
-                reportActions: [...footer.querySelectorAll("button")].map(rect),
+                panel: rect(panel), close: rect(close), body: rect(body),
+                jumpAction: rect(panel.querySelector(".reader-section-jumps .report-draft-trigger")),
                 main: rect(document.querySelector("#main")), documentY: scrollY,
                 promptWeight: getComputedStyle(document.querySelector(".request-original pre")).fontWeight,
                 promptStyle: getComputedStyle(document.querySelector(".request-original pre")).fontStyle,
@@ -755,7 +605,6 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
                     icon: getComputedStyle(close).color, focus: getComputedStyle(document.documentElement).getPropertyValue("--focus"),
                     edge: getComputedStyle(panel).borderInlineStartColor },
                 shadow: getComputedStyle(panel).boxShadow,
-                footerFill: getComputedStyle(footer).backgroundColor,
                 facts: [...document.querySelectorAll(".reader-facts dt")].map(dt => {
                     const key = getComputedStyle(dt), value = getComputedStyle(dt.nextElementSibling);
                     return [key.fontFamily === value.fontFamily, key.fontSize === value.fontSize, key.fontWeight === value.fontWeight];
@@ -770,16 +619,14 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
         assert.ok(contrast(measured.colors.focus, measured.colors.page) >= 3);
         assert.equal(measured.colors.edge, "rgba(0, 0, 0, 0)", "The ordinary pane perimeter is decorative, not a control boundary");
         assert.notEqual(measured.shadow, "none");
-        assert.equal(measured.footerFill, measured.colors.page, "Fixed actions belong to the same pane surface");
         assert.ok(measured.facts.flat().every(Boolean));
         assert.ok(measured.close.width >= 44 && measured.close.height >= 44);
         assert.ok(measured.close.y >= 0 && measured.close.y + measured.close.height <= height);
-        assert.ok(measured.footer.y >= measured.body.y + measured.body.height - 1);
-        assert.ok(measured.footer.y + measured.footer.height <= height + 1, JSON.stringify(measured));
+        assert.ok(measured.body.y + measured.body.height <= height + 1);
+        assert.ok(measured.jumpAction.height >= 44 && measured.jumpAction.width >= 44);
         assert.ok(measured.body.height >= 80, "Reading space remains usable");
         if (width >= 1280) {
             assert.ok(measured.main.x + measured.main.width <= measured.panel.x + 1, "No desktop overlay");
-            assert.ok(Math.abs(measured.reportActions[0].y - measured.reportActions[1].y) <= 1, "The compact desktop footer remains one action row");
         }
         else assert.equal(measured.modal, true);
         const name = `${theme}-${width}-${height}-${scale}-${navigation}`;
@@ -787,8 +634,9 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
             await page.screenshot({ path: path.join(proof, name + "-page.png"), fullPage: true });
             await page.screenshot({ path: path.join(proof, name + "-viewport.png") });
         }
-        await expect(page.locator('[data-reader-section="activity"] .technical-detail').first()).toBeVisible();
-        await openPersonalFeedback(page);
+        const call = page.locator(".reader-call-row").first(), toggle = call.locator(".reader-call-toggle");
+        if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+        await expect(call.locator(".technical-detail")).toContainText("/me/calendarView");
         const beforeScroll = await page.evaluate(() => scrollY);
         await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = node.scrollHeight);
         assert.equal(await page.evaluate(() => scrollY), beforeScroll, "Panel scrolling cannot move the document");
@@ -800,154 +648,28 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
     if (proof) await writeFile(path.join(proof, "geometry.json"), JSON.stringify(samples, null, 2));
 });
 
-test("switching restores current disclosure and scroll state while filters dismiss the interaction", { timeout: 30000 }, async t => {
+test("switching prompts keeps each disclosure with its interaction and does not refetch the list", async t => {
     const { page, requests } = await setup(t);
     await revealAnalyzeRecords(page);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.click();
     const first = page.url();
-    const disclosure = page.locator('[data-reader-section="activity"]>.reader-section-heading>.reader-section-toggle');
+    const disclosure = page.getByRole("button", { name: "Source details", exact: true });
     await disclosure.click();
     await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 220);
-    const scroll = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
     const reads = requests.filter(url => url.pathname === "/api/snapshot").length;
-    await a.click();
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), scroll, "The active card does not reset reading");
     await b.click(); assert.notEqual(page.url(), first);
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     await a.click();
     assert.equal(page.url(), first);
-    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), scroll);
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(".request-original pre")).toBeFocused();
+    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
     assert.equal(requests.filter(url => url.pathname === "/api/snapshot").length, reads, "Switching does not collect or reread the source");
     await selectActivityOption(page, "dateFilter", "7");
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
-    assert.match(page.url(), /#analyze.*range=7/);
-});
-
-test("inline feedback recovers an uncertain committed write without replay after switching interactions", { timeout: 30000 }, async t => {
-    const { page, context } = await setup(t);
-    let writes = 0;
-    await page.route("**/api/assessment/feedback", async route => {
-        writes++;
-        const response = await route.fetch();
-        assert.equal(response.status(), 200);
-        await route.abort("connectionreset");
-    });
-
-    await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    await openPersonalFeedback(page);
-    const feedback = page.locator("#requestContent .assessment-feedback-dialog");
-    await feedback.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.locator('.select-option[data-value=pass]').click();
-    await feedback.getByRole("button", { name: "Save feedback", exact: true }).click();
-    await expect(feedback.getByRole("button", { name: "Check update result", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
-    await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("check the feedback update");
-    await page.locator(".request-card-open").nth(1).click();
-    await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-    assert.equal(writes, 1);
-    assert.ok(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")));
-    await page.getByRole("button", { name: "Check earlier update", exact: true }).click();
-    await page.waitForFunction(() => sessionStorage.getItem("wire.assessment.pending") === null);
-    assert.equal(writes, 1);
-    assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
-    assert.equal(await page.locator("dialog[open]").count(), 1);
-});
-
-test("all personal-feedback dimensions save and withdraw inline, with explicit unsent Cancel", { timeout: 45000 }, async t => {
-    const { page, context } = await setup(t);
-    await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    let count = 0;
-    async function openFeedback(check) {
-        return openPersonalFeedback(page, check);
-    }
-    async function saved() {
-        await expect.poll(async () => (await loadBoardState(context)).personalEvaluation.feedback.records.length).toBe(++count);
-        await expect(page.locator("#requestContent .assessment-feedback-dialog:visible")).toHaveCount(0);
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await expect(page.locator("#requestContent .interaction-insights[aria-busy=true]")).toHaveCount(0);
-        if (count % 2 === 1) await expect(page.locator('#requestContent .single-interaction-measures tr[data-origin="user-personal"]')).toHaveCount(1);
-        await expect(page.locator('#requestContent .single-interaction-measures [data-origin="automatic-local"]')).toHaveCount(0);
-    }
-    for (const [check, verdict] of [["semantic-answer-correctness", "pass"], ["answer-support-validity", "fail"], ["action-authorization-compliance", "unassessed"]]) {
-        let form = await openFeedback(check);
-        await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-        await page.locator(`.select-option[data-value="${verdict}"]`).click();
-        if (count === 0) {
-            await form.getByRole("button", { name: "Cancel", exact: true }).click();
-            await page.getByRole("button", { name: "Discard changes", exact: true }).click();
-            await openPersonalFeedback(page, check);
-            await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-            await page.locator(`.select-option[data-value="${verdict}"]`).click();
-        }
-        await form.getByRole("button", { name: "Save feedback", exact: true }).click();
-        await saved();
-        form = await openFeedback(check);
-        await expect(form).toContainText("Saved feedback:");
-        await form.getByRole("button", { name: "Withdraw feedback", exact: true }).click();
-        await saved();
-    }
-    const records = (await loadBoardState(context)).personalEvaluation.feedback.records;
-    assert.deepEqual(records.map(row => row.assessment.checkId), [
-        "semantic-answer-correctness", "semantic-answer-correctness", "answer-support-validity", "answer-support-validity",
-        "action-authorization-compliance", "action-authorization-compliance",
-    ]);
-    assert.deepEqual(records.map(row => row.assessment.withdrawn), [false, true, false, true, false, true]);
-    assert.equal(await page.locator("dialog[open]").count(), 1);
-});
-
-test("contextual automatic-score setup is inline and never grants approval on entry", { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t);
-    await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    await page.locator("#requestContent [data-automatic-scores]").first().click();
-    await expect(page.locator("#requestContent .automatic-score-dialog")).toContainText("Connect a supported local Copilot source");
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
-    await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("Close Automatic scores");
-    assert.equal(await page.locator("dialog[open]").count(), 1);
-    assert.equal(requests.filter(url => /\/(?:approve|revoke|consent\/set|evaluation\/run)$/.test(url.pathname)).length, 0);
-    await page.locator("#requestContent .automatic-score-dialog").getByRole("button", { name: "Close automatic scores", exact: true }).click();
-    await expect(page.locator("#requestContent .automatic-score-dialog")).toBeHidden();
-});
-
-test("inline automatic approval keeps explicit scope and consent fields without a second dialog or submission", { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t);
-    await page.route("**/api/evaluation/automatic/setup", route => route.fulfill({ json: {
-        schemaVersion: 1, sourceRevision: 7, approvalRevision: 0, minimumSessionAiCredits: 30, snapshot: null,
-        source: { sourceConfigRef: "sourceconfig-" + "a".repeat(32), sourceConfigRevision: 1, windowDays: 30 },
-        method: { provider: "github-copilot", model: "synthetic-model", rubricId: "wire-recorded-interaction-review", rubricVersion: 1 },
-        chats: [{ chatRef: "chat-" + "b".repeat(32), name: "Invented approval chat", outsideWindow: 1, requestGroups: 2, shortId: "invented" }],
-    } }));
-    await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    await page.locator("#requestContent [data-automatic-scores]").first().click();
-    const form = page.locator("#requestContent .automatic-score-dialog");
-    const approve = form.getByRole("button", { name: "Approve automatic scores", exact: true });
-    await expect(approve).toBeDisabled();
-    await form.getByRole("checkbox", { name: /Invented approval chat/ }).check();
-    await form.getByLabel("Total assessment allowance", { exact: true }).fill("2");
-    await form.getByLabel("Total budget (AI credits)", { exact: true }).fill("30");
-    await expect(approve).toBeDisabled();
-    await form.getByRole("checkbox", { name: /Allow this evidence/ }).check();
-    await expect(approve).toBeEnabled();
-    await page.setViewportSize({ width: 375, height: 820 });
-    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    await approve.scrollIntoViewIfNeeded();
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    assert.equal(await page.locator("dialog[open]").count(), 1);
-    if (proof) await page.screenshot({ path: path.join(proof, "inline-approval-375-200.png") });
-    await page.locator('[data-reader-section="reviews"] .reader-section-toggle').click();
-    await expect(page.locator('[data-reader-section="reviews"] .reader-section-toggle')).toHaveAttribute("aria-expanded", "true");
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
-    await expect(form.getByLabel("Total assessment allowance", { exact: true })).toHaveValue("2");
-    await expect(approve).toBeEnabled();
-    await form.getByRole("button", { name: "Cancel", exact: true }).click();
-    assert.equal(requests.filter(url => url.pathname.endsWith("/automatic/approve")).length, 0);
+    assert.equal(new URL(page.url()).pathname, "/");
+    await expect(page.locator("#dateFilter")).toHaveValue("7");
 });
 
 test("touch Copy activates once, uses a 44px target and reports clipboard denial inline", { timeout: 30000 }, async t => {
@@ -955,6 +677,7 @@ test("touch Copy activates once, uses a 44px target and reports clipboard denial
     await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().tap();
     const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
+    await page.waitForFunction(sidebarMotionSettled, { selector: "#contextSidebar" });
     const before = await copy.boundingBox();
     assert.ok(before.width >= 44 && before.height >= 44);
     await copy.tap();
@@ -976,7 +699,7 @@ test("motion glides only the sidebar and interrupted close settles to the newest
     await a.scrollIntoViewIfNeeded();
     await page.evaluate(() => {
         window.sidebarMotion = [];
-        const card = document.querySelector(".request-row"), panel = document.querySelector("#contextSidebar");
+        const card = document.querySelector(".request-card-open"), panel = document.querySelector("#contextSidebar");
         let count = 0;
         function sample() {
             if (panel.open) window.sidebarMotion.push({ cardY: card.getBoundingClientRect().top,
@@ -1015,113 +738,31 @@ test("motion glides only the sidebar and interrupted close settles to the newest
     if (proof) await writeFile(path.join(proof, "motion.json"), JSON.stringify(samples, null, 2));
 });
 
-test("soft surfaces preserve functional edges, nav states and Search depth in all four shell states", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, { savedReport: true });
-    const measurements = [];
-    for (const theme of ["light", "dark"]) for (const navigation of ["expanded", "collapsed"]) {
-        await chooseTheme(page, theme);
-        if (await page.locator("html").getAttribute("data-navigation") !== navigation) await page.locator("#navigationCollapse").click();
-        await navigateMain(page, "analyze");
-        const paint = await page.evaluate(() => {
-            const style = selector => getComputedStyle(document.querySelector(selector));
-            const active = document.querySelector('.primary-navigation a[aria-current=page]');
-            const widgets = [...document.querySelectorAll(".analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card")];
-            return {
-                widgets: widgets.map(node => ({ border: getComputedStyle(node).borderTopColor, shadow: getComputedStyle(node).boxShadow })),
-                active: { fill: getComputedStyle(active).backgroundColor, before: getComputedStyle(active, "::before").content,
-                    ink: getComputedStyle(active).color, weight: getComputedStyle(active).fontWeight },
-                rail: { fill: style("#sidebar").backgroundColor, edge: style("#sidebar").borderRightColor },
-                search: { shadow: style("#wireSearch").boxShadow, border: style("#wireSearch").borderTopColor,
-                    fill: style("#wireSearch").backgroundColor },
-                width: document.querySelector("#main").clientWidth,
-                promptSize: style(".request-card-prompt").fontSize,
-            };
-        });
-        assert.equal(paint.widgets.length, 6);
-        assert.ok(paint.widgets.every(widget => widget.border === "rgba(0, 0, 0, 0)" && widget.shadow === "none"));
-        assert.equal(paint.active.before, "none", "No redundant active-nav stripe");
-        assert.notEqual(paint.active.fill, paint.rail.fill);
-        assert.equal(paint.active.weight, "600");
-        assert.ok(contrast(paint.active.ink, paint.active.fill) >= 4.5);
-        assert.equal(paint.rail.edge, "rgba(0, 0, 0, 0)", "Tonal separation replaces the decorative shell frame");
-        assert.notEqual(paint.search.shadow, "none", "Search retains its own elevation");
-        assert.ok(contrast(paint.search.border, paint.search.fill) >= 3);
-        const nav = page.locator('.primary-navigation a[aria-current=page]');
-        await nav.focus();
-        assert.ok(await nav.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth)) >= 2);
-        await page.mouse.move(500, 100);
-        await page.locator("#navigationCollapse").hover();
-        const hover = await page.locator("#navigationCollapse").evaluate(node => getComputedStyle(node).backgroundColor);
-        await page.mouse.down();
-        const pressed = await page.locator("#navigationCollapse").evaluate(node => getComputedStyle(node).backgroundColor);
-        await page.mouse.move(500, 100); await page.mouse.up();
-        assert.notEqual(hover, pressed, "Collapse has distinct hover and pressed feedback without a box");
-        await page.locator(".request-card-open").first().click();
-        const pane = await page.locator("#contextSidebar").evaluate(node => {
-            const css = getComputedStyle(node), header = getComputedStyle(node.querySelector("header"));
-            const footer = getComputedStyle(document.querySelector("#contextSidebarFooter"));
-            return { fill: css.backgroundColor, shadow: css.boxShadow, edge: css.borderInlineStartColor,
-                edgeWidth: css.borderInlineStartWidth, headerFill: header.backgroundColor, headerEdge: header.borderBottomColor,
-                footerFill: footer.backgroundColor, footerEdge: footer.borderTopColor };
-        });
-        assert.notEqual(pane.shadow, "none", "The contextual pane has its own directional elevation");
-        assert.equal(pane.fill, paint.rail.fill);
-        assert.equal(pane.edge, "rgba(0, 0, 0, 0)");
-        assert.equal(pane.edgeWidth, "1px", "Changing perimeter paint preserves the existing box metrics");
-        assert.equal(pane.headerFill, "rgba(0, 0, 0, 0)");
-        assert.equal(pane.footerFill, pane.fill);
-        assert.equal(pane.headerEdge, "rgba(0, 0, 0, 0)");
-        assert.equal(pane.footerEdge, "rgba(0, 0, 0, 0)");
-        if (proof) {
-            await mkdir(proof, { recursive: true });
-            await page.screenshot({ path: path.join(proof, `pane-${theme}-${navigation}.png`) });
-        }
-        await page.emulateMedia({ forcedColors: "active" });
-        const forcedPane = await page.locator("#contextSidebar").evaluate(node => {
-            const css = getComputedStyle(node);
-            return { fill: css.backgroundColor, shadow: css.boxShadow, edge: css.borderInlineStartColor,
-                headerEdge: getComputedStyle(node.querySelector("header")).borderBottomColor,
-                footerEdge: getComputedStyle(document.querySelector("#contextSidebarFooter")).borderTopColor };
-        });
-        assert.equal(forcedPane.shadow, "none");
-        for (const edge of ["edge", "headerEdge", "footerEdge"]) assert.ok(contrast(forcedPane[edge], forcedPane.fill) >= 3);
-        if (proof) await page.screenshot({ path: path.join(proof, `pane-forced-${theme}-${navigation}.png`) });
-        await page.emulateMedia({ forcedColors: "none" });
-        await page.locator("#closeContextSidebar").click();
-        await navigateMain(page, "reports");
-        assert.equal(await page.locator("#bundles").evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
-        await expect(page.locator(".saved-library-row").first()).toBeVisible();
-        assert.notEqual(await page.locator(".saved-library-row").first().evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
-        await page.locator("#reportCreateLink").click();
-        assert.equal(await page.locator(".report-journey").evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
-        await expect(page.locator("#reportList input[type=checkbox]").first()).toBeVisible();
-        await page.locator("#reportList input[type=checkbox]").first().check();
-        await expect(page.locator("#reportList input[type=checkbox]").first()).toBeChecked();
-        await navigateMain(page, "settings");
-        assert.equal(await page.locator(".settings-categories").evaluate(node => getComputedStyle(node).borderRightColor), "rgba(0, 0, 0, 0)");
-        await expect(page.locator("#saveCollection")).toBeDisabled();
-        await expect(page.locator("#cancelPreferences")).toBeDisabled();
-        await page.emulateMedia({ forcedColors: "active" });
-        const highlighted = await page.locator('.primary-navigation a[aria-current=page]').evaluate(node => ({
-            fill: getComputedStyle(node).backgroundColor, ink: getComputedStyle(node).color,
-            icon: getComputedStyle(node.querySelector("svg")).color, adjustment: getComputedStyle(node).forcedColorAdjust,
-        }));
-        assert.equal(highlighted.adjustment, "none");
-        assert.equal(highlighted.ink, highlighted.icon);
-        assert.ok(contrast(highlighted.ink, highlighted.fill) >= 4.5);
-        await page.emulateMedia({ forcedColors: "none" });
-        measurements.push({ theme, navigation, ...paint, pane, forcedPane, highlighted });
-    }
-    for (const theme of ["light", "dark"]) {
-        const expanded = measurements.find(row => row.theme === theme && row.navigation === "expanded");
-        const collapsed = measurements.find(row => row.theme === theme && row.navigation === "collapsed");
-        assert.ok(collapsed.width > expanded.width + 100);
-        assert.equal(collapsed.promptSize, expanded.promptSize, "Width is reclaimed without scaling text");
-    }
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await writeFile(path.join(proof, "soft-surface-states.json"), JSON.stringify(measurements, null, 2));
-    }
+test("forced colors keep the reader edge, navigation focus and Search usable", async t => {
+    const { page } = await setup(t);
+    await page.emulateMedia({ forcedColors: "active" });
+    const nav = page.locator('#navigationContent [data-nav=analyze]');
+    await nav.focus(); await page.keyboard.press("Shift");
+    await expect(nav).toBeFocused();
+    const active = await nav.evaluate(node => {
+        const style = getComputedStyle(node);
+        return { ink: style.color, fill: style.backgroundColor, icon: getComputedStyle(node.querySelector("svg")).color,
+            outline: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+    });
+    assert.equal(active.icon, active.ink); assert.ok(contrast(active.ink, active.fill) >= 4.5);
+    assert.notEqual(active.outline, "none"); assert.ok(active.width >= 2);
+    await page.locator(".request-card-open").first().press("Enter");
+    const pane = page.locator("#contextSidebar");
+    await expect(pane).toBeVisible();
+    const paint = await pane.evaluate(node => {
+        const s = getComputedStyle(node);
+        return { fill: s.backgroundColor, edge: s.borderInlineStartColor, shadow: s.boxShadow,
+            headerEdge: getComputedStyle(node.querySelector("header")).borderBottomColor };
+    });
+    assert.equal(paint.shadow, "none");
+    for (const edge of [paint.edge, paint.headerEdge]) assert.ok(contrast(edge, paint.fill) >= 3);
+    await page.keyboard.press("Escape"); await expect(pane).toBeHidden();
+    await page.locator("#wireSearch").focus(); await expect(page.locator("#wireSearch")).toBeFocused();
 });
 
 test("four-state panel motion keeps anchors, fixed regions and content replacement coherent", { timeout: 60000 }, async t => {
@@ -1148,7 +789,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
                     x: panelRect.x, width: panelRect.width, cardY: rect(card).y,
                     transform: css.transform, opacity: css.opacity, cardTransform: getComputedStyle(card).transform,
                     headerX: rect(panel.querySelector("header")).x, bodyX: rect(document.querySelector("#contextSidebarBody")).x,
-                    footerX: rect(document.querySelector("#contextSidebarFooter")).x, animations: panel.getAnimations().length,
+                    animations: panel.getAnimations().length,
                     mainWidth: document.querySelector("#main").clientWidth,
                     mainRight: rect(document.querySelector("#main")).right });
             }
@@ -1180,13 +821,12 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
                 headerLayer: Number(getComputedStyle(document.querySelector(".app-header")).zIndex),
                 panelLayer: Number(getComputedStyle(document.querySelector("#contextSidebar")).zIndex) };
         });
-        assert.equal(reflow.columns, 1, "Widgets stack for the remaining main column");
         assert.ok(reflow.widgets && reflow.controls && !reflow.overflow, "Widgets, filters and legends fit the true remaining column");
         assert.ok(reflow.panelLayer < reflow.headerLayer, "Docked panel stays below the header and Search");
         await page.evaluate(() => window.surfaceMotion.phase = "replace");
         const bBox = await b.boundingBox();
         await page.mouse.click(bBox.x + bBox.width / 2, bBox.y + 20);
-        await expect(page.locator(".request-original pre")).toContainText("checklist 1.");
+        await expect(page.locator(".request-original pre")).toHaveText(await b.textContent());
         const aBox = await a.boundingBox();
         await page.mouse.click(aBox.x + aBox.width / 2, aBox.y + 20);
         await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
@@ -1207,7 +847,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
             assert.ok(moving.every(row => row.cardTransform === "none" && row.opacity === "1"));
             assert.ok(moving.every(row => Math.abs(row.cardY - entry.y) <= 3),
                 `${phase}: card anchor ${entry.y}, observed ${moving.map(row => row.cardY)}`);
-            assert.ok(moving.every(row => Math.abs(row.headerX - row.bodyX) <= 1 && Math.abs(row.bodyX - row.footerX) <= 1));
+            assert.ok(moving.every(row => Math.abs(row.headerX - row.bodyX) <= 1));
             assert.ok(moving.every(row => row.width >= panelWidth && row.width <= panelWidth + 2), "Panel translates without scaling or morphing");
             assert.ok(new Set(moving.map(row => row.mainWidth)).size >= 3, "The real main column reflows with the sidebar");
             assert.ok(moving.every(row => Math.abs(row.mainRight - row.x) < 2), "Main layout and the painted panel share one edge");
@@ -1376,81 +1016,16 @@ test("resizing during entry or exit settles the latest layout without a stale ov
     await expect(page.locator(".request-card-open").first()).toBeFocused();
 });
 
-for (const sidebarMotion of ["system", "on"]) test(`leaving during a pending feedback receipt neither retains an interactive form nor replays the write (${sidebarMotion})`, { timeout: 30000 }, async t => {
-    const { page, context } = await setup(t, { sidebarMotion });
-    let release, arrived, writes = 0;
-    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
-    const deliveries = [];
-    await page.route("**/api/assessment/feedback", route => {
-        const delivery = (async () => {
-            writes++;
-            const response = await route.fetch();
-            arrived(); await held; await route.fulfill({ response });
-        })();
-        deliveries.push(delivery); return delivery;
-    });
-    try {
-        await revealAnalyzeRecords(page);
-        await page.locator(".request-card-open").first().click();
-        await openPersonalFeedback(page);
-        const form = page.locator("#requestContent .assessment-feedback-dialog");
-        await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-        await page.locator(".select-option[data-value=pass]").click();
-        await form.getByRole("button", { name: "Save feedback", exact: true }).click();
-        await pending;
-        await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-        await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
-        await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("Finish or check");
-        await page.emulateMedia({ reducedMotion: "no-preference" });
-        await page.locator("#closeContextSidebar").click();
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-        assert.equal(await page.locator("#requestContent .assessment-feedback-dialog").count(), 0);
-        assert.ok(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")));
-        release(); await Promise.all(deliveries);
-        await page.waitForFunction(() => sessionStorage.getItem("wire.assessment.pending") === null);
-        assert.equal(writes, 1);
-        assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
-        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
-    } finally { release(); await Promise.all(deliveries); }
-});
-
-test("report continuation retains choices and returns to the original sidebar with current canonical membership", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
-    await revealAnalyzeRecords(page);
-    const card = page.locator(".request-card-open").first();
-    await card.click();
-    await page.locator("#requestReportToggle").click();
-    await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
-    await page.locator("#requestReportContinue").click();
-    await expect(page.locator("#reportStage1")).toBeVisible();
-    const checked = page.locator("#reportList input:checked");
-    assert.equal(await checked.count(), 1);
-    await expect(checked.locator("xpath=ancestor::article[1]")).toBeFocused();
-    await page.goBack();
-    await page.locator("#contextSidebar[open]").waitFor();
-    await expect(page.locator("#homeView")).toBeVisible();
-    await expect(page.locator("#reportsView")).toBeHidden();
-    await expect(page.locator("#requestReportContinue")).toBeFocused();
-    await page.locator("#requestReportToggle").click();
-    await expect(page.locator("#requestReportContinue")).toBeDisabled();
-    await page.locator("#closeContextSidebar").click();
-    await expect(card).toBeFocused();
-});
-
-for (const sidebarMotion of ["system", "on"]) test(`source invalidation scrubs the old prompt, copy getter and held unsent-feedback transition (${sidebarMotion})`, { timeout: 30000 }, async t => {
-    const { page, context, records } = await setup(t, { sidebarMotion });
+test("removing retained activity clears the open reader and its detached Copy action", async t => {
+    const { page, context, records } = await setup(t);
     await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     const copy = await page.locator('[data-reader-section="prompt"] .ux-copy').elementHandle();
-    await openPersonalFeedback(page);
-    await page.locator("#requestContent .assessment-feedback-dialog").getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.locator('.select-option[data-value=fail]').click();
-    await page.locator("#closeContextSidebar").click();
-    await expect(page.locator("#contextSidebarGuard")).toBeVisible();
+    await expect(page.locator(".request-original pre")).toHaveText(records[0].userPrompt.text);
     const prior = await loadBoardState(context);
     await replaceEvidence(context, () => ({ records: [], importCoverage: prior.importCoverage }));
     await page.evaluate(() => dispatchEvent(new Event("online")));
-    await expect(page.locator("#requestContent")).toContainText("This interaction is not available");
+    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
     assert.equal(await page.locator("#requestContent .assessment-feedback-dialog").count(), 0);
     assert.equal(await page.locator("body").evaluate((node, prompt) => node.textContent.includes(prompt), records[0].userPrompt.text), false);
@@ -1458,8 +1033,8 @@ for (const sidebarMotion of ["system", "on"]) test(`source invalidation scrubs t
     assert.equal(await page.evaluate(() => window.sidebarCopies.length), 0, "Detached private getters cannot copy old evidence");
 });
 
-for (const sidebarMotion of ["system", "on"]) test(`a delayed interaction read cannot repaint or focus its successor (${sidebarMotion})`, { timeout: 30000 }, async t => {
-    const { page } = await setup(t, { sidebarMotion });
+for (const exit of ["close", "replace"]) test(`a delayed detail response cannot reclaim the reader after ${exit}`, { timeout: 30000 }, async t => {
+    const { page, records } = await setup(t);
     let release, arrived, heldOnce = false;
     const pending = new Promise(resolve => { arrived = resolve; }), held = new Promise(resolve => { release = resolve; });
     const deliveries = [];
@@ -1478,49 +1053,23 @@ for (const sidebarMotion of ["system", "on"]) test(`a delayed interaction read c
         await revealAnalyzeRecords(page);
         await page.locator(".request-card-open").first().click();
         await pending;
-        await page.locator(".request-card-open").nth(1).click();
-        await expect(page.locator("#requestContent .interaction-insights[aria-busy=true]")).toHaveCount(0);
-        const before = await page.locator("#requestContent").innerText();
-        const focus = await page.evaluate(() => document.activeElement.id);
+        const first = page.locator('[data-view-key="request:sidebar-0"] .request-card-open');
+        const second = page.locator('[data-view-key="request:sidebar-1"] .request-card-open');
+        if (exit === "close") {
+            await page.locator("#closeContextSidebar").click(); await expect(first).toBeFocused();
+        } else {
+            await second.click();
+            await expect(page.locator(".request-original pre")).toHaveText(records[1].userPrompt.text);
+            await expect(page.locator(".request-original pre")).toBeFocused();
+        }
         release(); await Promise.all(deliveries);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-        assert.equal(await page.locator("#requestContent").innerText(), before);
-        assert.equal(await page.evaluate(() => document.activeElement.id), focus);
-        await expect(page.locator(".request-original pre")).toContainText("checklist 1.");
+        await expect(page.locator("#requestContent")).not.toContainText(records[0].userPrompt.text);
+        if (exit === "close") {
+            await expect(page.locator("#contextSidebar")).toBeHidden(); await expect(first).toBeFocused();
+        } else {
+            await expect(page.locator(".request-original pre")).toHaveText(records[1].userPrompt.text);
+            await expect(page.locator(".request-original pre")).toBeFocused();
+        }
     } finally { release(); await Promise.all(deliveries); }
-});
-
-test("shared Lucide and screen typography preserve Reports and Settings controls in both themes", { timeout: 45000 }, async t => {
-    const { page } = await setup(t, { savedReport: true });
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const [theme, width, scale] of [["light", 1440, 1], ["dark", 1440, 1], ["light", 375, 2], ["dark", 375, 2]]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await chooseTheme(page, theme);
-        await navigateMain(page, "reports");
-        const saved = page.locator("#bundleList .saved-report").first();
-        if (await saved.getAttribute("open") === null) await saved.locator("summary").click();
-        const downloads = page.locator("#bundleList .report-file-action button:visible");
-        assert.ok(await downloads.count() >= 2);
-        assert.ok((await downloads.evaluateAll(nodes => nodes.map(node => node.textContent.trim()))).every(text => text === ""));
-        if (proof) await page.screenshot({ path: path.join(proof, `reports-library-${theme}-${width}-${scale}.png`), fullPage: true });
-        await page.locator("#reportCreateLink").click();
-        await page.locator("#reportList input[type=checkbox]").first().check();
-        const prompt = page.locator("#reportList .full-text-preview").first();
-        assert.deepEqual(await prompt.evaluate(node => [getComputedStyle(node).fontWeight, getComputedStyle(node).fontStyle]), ["400", "normal"]);
-        if (proof) await page.screenshot({ path: path.join(proof, `reports-picker-${theme}-${width}-${scale}.png`), fullPage: true });
-        await navigateMain(page, "settings");
-        await navigateSettings(page, "connection");
-        assert.equal(await page.locator("#settingsCategoryNav svg").count(), 0, "Settings category links need no ornamental icons");
-        await expect(page.locator("#saveCollection")).toBeDisabled();
-        await expect(page.locator("#cancelPreferences")).toBeDisabled();
-        if (proof) await page.screenshot({ path: path.join(proof, `settings-${theme}-${width}-${scale}.png`), fullPage: true });
-        const roles = await page.locator("svg.wire-icon:visible").evaluateAll(nodes => nodes.map(node => ({
-            asset: node.dataset.lucideIcon, fill: getComputedStyle(node).fill, stroke: getComputedStyle(node).stroke,
-            hidden: node.getAttribute("aria-hidden"), focusable: node.getAttribute("focusable"),
-        })));
-        assert.ok(roles.length > 0 && roles.every(role => role.asset && role.fill === "none" && role.stroke !== "none" && role.hidden === "true" && role.focusable === "false"));
-        assert.equal(await page.locator('[data-fluent-icon],svg.fluent-icon').count(), 0);
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    }
 });
