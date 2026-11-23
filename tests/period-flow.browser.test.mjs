@@ -130,17 +130,17 @@ test("custom date validation and pending layout remain usable in both themes at 
         await page.keyboard.press("c"); await page.keyboard.press("Enter");
         if (await page.locator("#dateFilter").inputValue() !== "custom") await selectActivityOption(page, "dateFilter", "custom");
         const count = posts.length;
-        await page.locator("#applyDates").click();
-        assert.match(await page.locator("#dateError").innerText(), /Choose both dates/);
-        assert.equal(await page.locator("#fromFilter").getAttribute("aria-invalid"), "true");
+        assert.equal(await page.locator("#applyDates").isDisabled(), true);
+        assert.match(await page.locator("#analyzeCalendarStatus").innerText(), /Choose a start date/);
         assert.equal(posts.length, count, "Empty dates never issue a read or collection");
         await page.locator("#fromFilter").fill("2026-10-01");
         await page.locator("#toFilter").fill("2026-09-01");
-        await page.locator("#applyDates").click();
-        assert.match(await page.locator("#dateError").innerText(), /Start date must not follow/);
+        assert.equal(await page.locator("#applyDates").isDisabled(), true);
+        assert.match(await page.locator("#analyzeCalendarStatus").innerText(), /End date must be on or after the start/);
+        assert.equal(await page.locator("#toFilter").getAttribute("aria-invalid"), "true");
         assert.equal(await page.locator("#activityCount").innerText(), "4");
         const metrics = await page.evaluate(() => {
-            const controls = [...document.querySelectorAll("#dateFields input,#dateFields button")].map(node => {
+            const controls = [...document.querySelectorAll("#dateFields input,#dateFields button")].filter(node => node.checkVisibility()).map(node => {
                 const rect = node.getBoundingClientRect();
                 return { id: node.id, width: rect.width, height: rect.height, left: rect.left, right: rect.right, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, fontSize: parseFloat(getComputedStyle(node).fontSize) };
             });
@@ -165,7 +165,7 @@ test("custom date validation and pending layout remain usable in both themes at 
         assert.equal(await page.locator("#dateError").isVisible(), false);
         assert.equal(await page.locator("#fromFilter").getAttribute("aria-invalid"), "false");
         assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
-        assert.match(await page.locator("#dateHint").innerText(), /Los Angeles time.*same date twice.*retained evidence/);
+        assert.doesNotMatch(await page.locator("#dateFields").innerText(), /both dates included|inclusive dates/i);
     }
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
     if (directory) await writeFile(path.join(directory, "date-layout-matrix.json"), JSON.stringify(measurements, null, 2));

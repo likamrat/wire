@@ -435,19 +435,42 @@ test("Period edits stay beside their trigger without shifting the chart or readi
             await screenshot(page,`local-period-${width}`);
             await panel.getByRole("button",{name:"Custom dates"}).tap();
             assert.equal(await page.locator(":modal:visible").count(),0);
-            await expect(panel).toContainText("Inclusive dates · UTC");
+            await expect(panel).not.toContainText(/inclusive dates|UTC/i);
             const geometry=await panel.evaluate(n=>{const r=n.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:document.documentElement.clientWidth,height:innerHeight}});
             assert.ok(geometry.left>=0&&geometry.right<=geometry.width+1&&geometry.top>=0&&geometry.bottom<=geometry.height,JSON.stringify(geometry));
             assert(await plot.evaluate(n=>window.periodProbe.svg===n.firstElementChild&&Math.abs(n.getBoundingClientRect().top-window.periodProbe.top)<1&&scrollY===window.periodProbe.scroll));
-            await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
+            for (const [bound, day] of [["from","07"],["to","08"]]) {
+                const input = panel.getByLabel(`Trends ${bound}`,{exact:true});
+                await input.focus();
+                await input.press("ArrowLeft"); await input.press("ArrowLeft");
+                await input.press("ArrowRight"); await input.pressSequentially(day);
+                await expect(input).toHaveValue(`2026-11-${day}`);
+                await expect(input).toBeFocused();
+                const field = await input.evaluate(n => {
+                    const r = n.getBoundingClientRect(), caption = n.labels[0].querySelector("span").getBoundingClientRect();
+                    const style = getComputedStyle(n), p = n.closest("[popover]");
+                    return { gap: r.top - caption.bottom, offset: r.left - caption.left,
+                        ring: parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset),
+                        overflow: p.scrollWidth - p.clientWidth };
+                });
+                assert(field.ring > 0 && field.gap >= field.ring && Math.abs(field.offset) < 1 && field.overflow <= 1,
+                    `${width}/${bound}: ${JSON.stringify(field)}`);
+            }
             await screenshot(page,`local-custom-${width}`);
+            // Shorter viewports may scroll inside the panel, never cut off its actions.
+            await page.setViewportSize({width,height:740});
+            await panel.getByRole("button",{name:"Cancel"}).scrollIntoViewIfNeeded();
+            await expect(panel.getByRole("button",{name:"Apply dates"})).toBeInViewport({ratio:.99}); // fractional CSS pixels at enlarged text
             await panel.getByRole("button",{name:"Cancel"}).tap();await expect(period).toBeFocused();
             assert.equal(reads.length,before);
             await expect(count).toContainText("4 dated calls");
         }
         await period.tap();await panel.getByRole("button",{name:"Custom dates"}).tap();
-        await panel.getByLabel("Trends from",{exact:true}).fill("2026-11-16");
-        await panel.getByLabel("Trends to",{exact:true}).fill("2026-11-16");
+        await panel.getByLabel("Trends to",{exact:true}).fill("2026-11-19");
+        await expect(panel.getByRole("status")).toContainText("today or an earlier date in UTC");
+        await expect(panel.getByRole("button",{name:"Apply dates"})).toBeDisabled();
+        const day = panel.locator('[data-day="2026-11-16"]');
+        await day.tap(); await day.tap();
         await panel.getByRole("button",{name:"Apply dates"}).tap();
         await expect(count).toContainText("3 dated calls");
         assert.equal(reads.length,before+1);assert.equal(reads.at(-1).from,reads.at(-1).to);

@@ -4192,7 +4192,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         $("dateFields").hidden = $("dateFilter").value !== "custom";
         if (!$("dateFields").hidden) analyzeCalendar.sync();
-        setText($("dateHint"), `Both dates included in ${time.displayLabel(viewerTime)}.`);
         $("activitySearch").value = search;
         restoring = false;
         syncResultFilter();
@@ -10548,7 +10547,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("dateFields").prepend(analyzeCalendarHost);
     const analyzeCalendar = assessmentFactories.createDateRangeCalendar({
         root:analyzeCalendarHost, id:"analyzeCalendar", existingFields:{from:$("fromFilter"),to:$("toFilter")},
-        inputIds:{from:"fromFilter",to:"toFilter"}, sharedDateNote:$("dateHint"), time, ux, context:()=>viewerTime,
+        inputIds:{from:"fromFilter",to:"toFilter"}, time, ux, context:()=>viewerTime,
         current:()=>Boolean(api.publicationToken()) && !clearingAccess,
         onEdit:()=>{ workspaceState.dateDraft=analyzeCalendar.value(); },
         onChange:()=>{ $("applyDates").disabled=!analyzeCalendar.valid(); }

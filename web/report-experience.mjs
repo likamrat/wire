@@ -59,7 +59,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
     const period = el("div", "report-period-choices"); period.setAttribute("role", "group"); period.setAttribute("aria-label", "Report period");
-    const periodCaption = el("p", "report-period-caption");
     for (const range of ["7", "14", "30", "custom"]) {
         const control = button(range === "custom" ? "Custom dates" : `Last ${range} days`, () => {
             if (range === "custom") openCalendar();
@@ -189,7 +188,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     activityRow.append(draftMembership);
     outlineChoices.append(activityRow, fileRow);
     outlineAction.append(prepare);
-    periodHost.append(period, periodCaption);
+    periodHost.append(period);
     const useActivity = button("Use activity", () => { selection.hidePopover(); scopeChoice.focus({ preventScroll: true }); }, "primary");
     byId("reportActivityActions").append(useActivity);
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
@@ -310,7 +309,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         useActivity.hidden = value.prepared;
         byId("additionalMasking").hidden = !value.prepared;
         if (doc.activeElement !== byId("manualTerms")) byId("manualTerms").value = value.options.manualTerms.join("\n");
-        periodCaption.textContent = `Presets include today · ${value.timeContext.timeZone}`;
         for (const control of period.querySelectorAll("button")) {
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
             control.disabled = value.locked;
@@ -406,7 +404,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             closeOptions();
             deskFocus = "all";
             calendarEditor.clear();
-            periodCaption.textContent = scopeCaption.textContent = scopeName.textContent = "";
+            scopeCaption.textContent = scopeName.textContent = "";
             backgroundScope.textContent = "";
             scopeChoice.removeAttribute("aria-label");
         },

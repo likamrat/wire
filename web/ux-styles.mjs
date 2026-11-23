@@ -1,9 +1,6 @@
 export const uxStyles = `
 .wire-local-choices[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;inline-size:min(24rem,calc(100vw - 24px));overflow:auto;overscroll-behavior:contain;background:var(--floating-paper,var(--paper));color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius-control);padding:.75rem;box-shadow:var(--surface-shadow)}
 .wire-local-choices[popover]::backdrop{background:transparent}
-.wire-local-choices .report-date-fields{gap:.5rem}
-.wire-local-choices input[type=date]{max-width:100%;min-width:0}
-@media(max-width:30rem){.wire-local-choices[popover] .report-date-fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,9em),1fr))}}
 :where(details>summary).ux-disclosure {list-style:none}
 :where(details>summary).ux-disclosure::-webkit-details-marker {display:none}
 .ux-disclosure>.disclosure-icon {margin-inline-end:var(--pill-gap);vertical-align:calc((1cap - 16px)/2)}

@@ -632,7 +632,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     }
     function openDates(origin) {
         if (!beginChoices("Custom dates",origin === periodButton ? periodButton : custom)) return;
-        const host = el("div"), actions = el("div", "trends-dialog-actions");
+        const host = el("div"), actions = el("div", "report-popover-actions");
         const calendar = createCalendar({ root: host, id: "trendsCalendar", label: "Trends", time, ux,
             context: () => getContext().timeContext, current, onChange: () => {apply.disabled=!calendar.valid();} });
         const apply = button("Apply dates", () => {
@@ -1002,7 +1002,6 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         for (const node of periods.children) node.setAttribute("aria-pressed", String(node.dataset.trendPeriod === period));
         const dateRange = formatRange();
         rangeText.textContent = `${period === "latest" ? "Latest activity · " : ""}${dateRange}`;
-        periodButton.title = `Inclusive dates · ${data.timeContext.timeZone}`;
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
@@ -1138,7 +1137,9 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
 export const trendsStyles = `
 .trends-local-choices .trends-periods{display:grid;gap:0}.trends-local-choices .trends-periods button{text-align:start;justify-content:flex-start}
 .trends-local-choices:has(.trends-periods){inline-size:min(14rem,calc(100vw - 24px))}
-.trends-local-choices .trends-control{display:grid;gap:.25rem;margin-block-end:.5rem}
+.trends-local-choices .trends-control{display:grid;gap:var(--space-xs);margin-block-end:var(--space-md)}
+.trends-local-choices .trends-control>label{padding:0}
+.trends-local-choices .trends-control>.select-control{width:100%}
 :root{--trends-series-1:#315fad;--trends-series-2:#007a78;--trends-series-3:#7957a0;--trends-series-4:#967000;--trends-series-5:#b14767;--trends-series-6:#467435;--trends-series-7:#006b97;--trends-series-8:#4d56ab;--trends-series-9:#ab6029;--trends-series-10:#8e3f91;--trends-series-11:#b04435;--trends-series-12:#526c80}
 :root[data-evidence-theme=dark]{--trends-series-1:#8fb6f2;--trends-series-2:#65c8c0;--trends-series-3:#b99add;--trends-series-4:#d9b866;--trends-series-5:#ed8aa3;--trends-series-6:#9ac58c;--trends-series-7:#63bee4;--trends-series-8:#9da4ec;--trends-series-9:#e5a377;--trends-series-10:#d899d9;--trends-series-11:#e8998b;--trends-series-12:#9eb8ce}
 #trendsView{min-width:0;container-type:inline-size}
@@ -1269,12 +1270,6 @@ export const trendsStyles = `
 .trends-tip-series{display:flex;align-items:center;gap:6px}
 .trends-tip-caption{color:var(--muted);margin-top:4px}.trends-tip-facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 20px;margin:10px 0 0}.trends-tip-facts dt{color:var(--muted);overflow-wrap:anywhere}.trends-tip-facts dd{margin:0;text-align:right}
 .trends-tip-table{border-collapse:collapse}.trends-tip-table th,.trends-tip-table td{font-weight:400;text-align:right;padding:5px 8px}.trends-tip-table th:first-child,.trends-tip-table td:first-child{text-align:left;padding-left:0}
-@container trend-dialog (max-width:21rem){
- .trends-dialog .report-date-fields{grid-template-columns:minmax(0,1fr)}
- .trends-dialog .report-date-fields .report-field{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
- .trends-dialog .report-calendar{overflow-x:auto}
- .trends-dialog .report-calendar-grid{grid-template-columns:repeat(7,minmax(max-content,1fr));column-gap:2px}
-}
 @container (max-width:22rem){
  .trends-dialog .trends-exact :is(th,td):first-child{min-width:36cqi;width:36cqi;max-width:36cqi;white-space:normal}
 }
