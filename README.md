@@ -127,9 +127,10 @@ See [Trends](docs/user-guide.md#trends) for the seven measures and what each cou
 
 ## Reports
 
-Keep individual interactions in a named draft, or start a report from a
-focus such as **Errors & failures**. Preview its findings and examples before
-saving a local copy. See [Create and read reports](docs/reporting.md).
+In Analyze, choose **Add to report** on an interaction card or in the reader to
+[add it to a named draft](docs/reporting.md#keep-interactions-in-a-draft).
+You can also start in Reports with a focus such as **Errors & failures**.
+[Preview the report](docs/reporting.md) before saving a local copy.
 
 [![Report setup beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
 
@@ -149,6 +150,8 @@ which calls changed. See [Compare two periods](docs/reporting.md#compare).
 - [Use WIRE](docs/user-guide.md)
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
 - [Create and read reports](docs/reporting.md)
+- Settings: [WIRE defaults](docs/user-guide.md#wire-defaults) for starting dates, charts and report formats;
+  [Themes](docs/user-guide.md#themes) for Light or Dark mode and five color palettes.
 - [Develop and troubleshoot](docs/development.md)
 - [Technical documentation](docs/README.md)
 

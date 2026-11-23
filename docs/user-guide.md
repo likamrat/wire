@@ -408,11 +408,13 @@ and a preview with its colors.
 Select **Change theme** to open **Themes**, or select **Time zone** to open
 **Regional**. **Back to General** returns to the shortcut with your current choice.
 
+<a id="wire-defaults"></a>
+
 Under **WIRE defaults**, choose how views open and new reports and comparisons start in this browser:
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today in your display time zone. This filters activity already collected. |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Guide can open to Recorded outcomes or the last topic you read in this tab. |
 | Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
@@ -438,7 +440,9 @@ This search runs on-device over fixed setting information. It is separate from
 the main Search field for saved activity and reports, and does not read private
 path values.
 
-In **Themes**, choose Light or Dark and a color palette for this browser.
+<a id="themes"></a>
+
+In **Themes**, choose Light or Dark and one of five color palettes for this browser.
 Change the time zone separately in **Regional**. The toolbar switch changes only Light/Dark. Select a palette card to
 change the screen immediately; **Compare Light and Dark** shows the selected
 palette in both modes. **Reset palette** restores Petrol & coral without
