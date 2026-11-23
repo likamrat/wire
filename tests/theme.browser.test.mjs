@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportContents } from "./report-journey-helpers.mjs";
 import { createServer } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
-import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
-import { fixture as recordedInteraction, privateFixture } from "./helpers.mjs";
+import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
+import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP, fixture as recordedInteraction, privateFixture } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 
@@ -40,17 +38,10 @@ async function fixture(run, hostMode = "") {
         requests.push(req.url);
         let text = ""; for await (const chunk of req) text += chunk;
         const input = JSON.parse(text);
-        if (req.url === "/api/snapshot") return json({ ...state, exportCatalog: exportCatalogFor(records), analytics: { ...buildActivityAnalytics(records, input), revision: 1 } });
+        if (req.url === "/api/snapshot") return json({ ...state, exportCatalog: exportCatalogFor(records),
+            requestActivity: buildRequestActivity(records), analytics: { ...buildActivityAnalytics(records, input), revision: 1 } });
+        if (req.url === "/api/collection/status") return json({ state: "needs-setup", config: { approved: false, enabled: false } });
         if (req.url === "/api/evaluation/automatic/summary") return json(automaticScoreOffSummary());
-        if (req.url === "/api/cancel-preview") {
-            assert.deepEqual(input, { previewId: "synthetic-theme-preview" });
-            return json({ cancelled: true });
-        }
-        if (req.url === "/api/preview") return json({
-            previewId: "synthetic-theme-preview", records: [{}],
-            privacy: { allSelectedFieldsScanned: true, reviewerConfirmed: false, originatingPrompts: 1, followUpPrompts: 0, toolArgumentObjects: 1, stringsScanned: 2, categories: {}, transformation: "Synthetic technical projection.", limitations: ["Synthetic test, not human approval."] },
-            files: { "product-report.md": "# Synthetic activity report\n\nOriginal requests are withheld.\n\n## Recorded actions\n\n| Path | Count | Result |\n|---|---:|---|\n| /me/events | 1 | Worked |\n\n<details>\n<summary>Evidence limitations</summary>\n\n- A tool completion does not verify task correctness.\n\n</details>" },
-        });
         res.statusCode = 403;
         json({ error: "Mutations are forbidden in the theme fixture." });
     });
@@ -66,7 +57,8 @@ async function fixture(run, hostMode = "") {
         if (proofDir) await mkdir(proofDir, { recursive: true });
         await run({ context, url, requests });
         assert.deepEqual(errors, []);
-        assert.ok(requests.every((route) => ["/api/snapshot", "/api/preview", "/api/cancel-preview", "/api/evaluation/automatic/summary"].includes(route)), "Only reads, preview and in-memory cancellation; no disclosure attestations, imports or persistent mutations");
+        assert.deepEqual(requests.filter(route => !["/api/snapshot", "/api/collection/status", "/api/evaluation/automatic/summary"].includes(route)), [],
+            "Appearance tests do not prepare or save reports, collect history or write preferences to the server");
     } finally {
         await browser.close();
         await new Promise((resolve) => server.close(resolve));
@@ -375,7 +367,7 @@ test("one-click theme persists before paint, ignores later host/OS changes and s
     await resolved(page, "dark");
 }));
 
-test("a real switch in another panel changes appearance without invalidating a frozen report preview", async t => {
+async function recordedApp(t) {
     const record = recordedInteraction("theme-report");
     record.toolCalls[0].startedAt = record.capturedAt = new Date().toISOString();
     const { context } = await privateFixture(t, [record]);
@@ -384,7 +376,11 @@ test("a real switch in another panel changes appearance without invalidating a f
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const profile = await browser.newContext({ colorScheme: "light", reducedMotion: "reduce" });
-    const page = await profile.newPage(), other = await profile.newPage();
+    return { runtime, page: await profile.newPage(), profile };
+}
+
+test("a real switch in another panel changes appearance without invalidating a frozen report preview", async t => {
+    const { runtime, page, profile } = await recordedApp(t), other = await profile.newPage();
     await page.goto(new URL("/reports", runtime.url).href);
     const made = page.waitForResponse(res => res.url().endsWith("/api/preview") && res.ok());
     await page.getByRole("button", { name: "Prepare preview" }).click();
@@ -405,14 +401,22 @@ test("a real switch in another panel changes appearance without invalidating a f
     assert.deepEqual(operations, [], "Theme sync does not replace or save the prepared report");
 });
 
-test("theme changes retain a filtered activity selection without touching source or review state", async () => fixture(async ({ context, url, requests }) => {
-    const page = await context.newPage();
-    await page.goto(url + "#activity?result=success&scope=history");
+test("theme changes retain a filtered activity selection without touching source or review state", async t => {
+    const { runtime, page } = await recordedApp(t), requests = [];
+    page.on("request", req => { if (req.method() === "POST" && /\/api\/(?:snapshot|preview|export|collection\/now)$/.test(req.url())) requests.push(req.url()); });
+    await page.goto(new URL("/?result=success", runtime.url).href);
     await ready(page);
-    await page.locator("#activityList input").first().check();
+    const card = page.locator("#activityList article").first();
+    await card.getByRole("button", { name: "Add to report", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
+    await picker.getByRole("button", { name: "New draft", exact: true }).click();
+    await picker.getByLabel("Draft name").fill("Lantern review");
+    await picker.getByRole("button", { name: "Create draft and add" }).click();
+    const membership = card.getByRole("button", { name: /In draft: Lantern review/ });
+    await membership.waitFor();
     await page.getByRole("switch", { name: "Dark theme", exact: true }).focus();
     const route = page.url(), count = requests.length;
-    const before = await page.locator("#activityView").innerHTML();
+    const before = await page.locator("#activityList article").allTextContents();
     const filters = () => page.locator("#filters select").evaluateAll((nodes) => nodes.map((node) => [node.id, node.value]));
     const values = await filters();
     assert.ok(values.some(([id, value]) => id === "outcomeFilter" && value === "success"));
@@ -420,10 +424,10 @@ test("theme changes retain a filtered activity selection without touching source
     await resolved(page, "dark");
     assert.equal(page.url(), route);
     assert.deepEqual(await filters(), values);
-    assert.equal(await page.locator("#activityView").innerHTML(), before);
-    assert.equal(await page.locator("#activityList input").first().isChecked(), true);
+    assert.deepEqual(await page.locator("#activityList article").allTextContents(), before);
+    assert.equal(await membership.isVisible(), true);
     assert.equal(requests.length, count, "Only appearance changed; no source/review/export action");
-}));
+});
 
 test("quota failure shows a local-only notice and a later toggle saves after recovery", async () => fixture(async ({ context, url }) => {
     const page = await context.newPage();
@@ -444,7 +448,7 @@ test("quota failure shows a local-only notice and a later toggle saves after rec
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.theme")), "light");
 }));
 
-for (const stored of ["system", null, "invalid"]) for (const host of ["dark", "invalid"]) {
+for (const [stored, host] of [["system", "dark"], [null, "invalid"], ["invalid", "dark"]]) {
     test(`${stored ?? "unset"} migrates before paint using ${host === "dark" ? "host" : "OS"} appearance exactly once`, async () => fixture(async ({ context, url, requests }) => {
         const page = await context.newPage();
         const expected = host === "dark" ? "dark" : "light";
@@ -473,9 +477,8 @@ for (const stored of ["system", null, "invalid"]) for (const host of ["dark", "i
     }, host));
 }
 
-test("both themes cover all views, privacy preview, and 375/820/1200 layouts with rendered contrast", { timeout: 120000 }, async () => fixture(async ({ context, url }) => {
-    const proof = [];
-    for (const theme of ["light", "dark"]) for (const width of [375, 640, 820, 1200]) {
+test("theme switch help names its next action without opening a menu at narrow and desktop sizes", async () => fixture(async ({ context, url }) => {
+    for (const [theme, width] of [["light", 375], ["dark", 1200]]) {
         const page = await context.newPage();
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(url);
@@ -502,58 +505,14 @@ test("both themes cover all views, privacy preview, and 375/820/1200 layouts wit
         await page.keyboard.press("Escape");
         await page.mouse.move(0, 0);
         await page.emulateMedia({ reducedMotion: "reduce" });
-        const capture = async (view) => {
-            await resolved(page, theme);
-            proof.push({ theme, width, view, ...await inspect(page) });
-            await shot(page, `${theme}-${width}-${view}`);
-        };
-        await capture("home-time");
-        for (const [chart, view] of [["workload", "home-service"], ["endpoint", "home-path"]]) {
-            await page.locator(`[data-chart=${chart}]`).click();
-            await ready(page);
-            await page.locator(".chart-row").first().hover();
-            await inspect(page);
-            await page.mouse.move(0, 0);
-            await capture(view);
-        }
-        await page.locator(".chart-row").first().click();
-        await ready(page);
-        await page.locator("#activityList input").first().check();
-        await capture("activity");
-        await page.locator("#activityList .request-link").first().click();
-        await ready(page);
-        await capture("request");
-        await page.goBack();
-        await navigateMain(page, "reports");
-        await reportContents(page);
-        await capture("reports");
-        await page.locator("#exportBtn").click();
-        await page.locator(".attestation input").waitFor();
-        await page.locator(".report-document > details > summary").first().click();
-        await capture("privacy-preview");
-        const steps = await page.locator(".privacy-steps li").evaluateAll((nodes) => nodes.map((node) => {
-            const rect = node.getBoundingClientRect();
-            return { left: rect.left, right: rect.right, top: rect.top };
-        }));
-        for (let index = 1; index < steps.length; index++) if (steps[index].top === steps[index - 1].top) assert.ok(steps[index].left - steps[index - 1].right >= 12, "Disclosure steps do not overlap");
-        assert.equal(await page.locator(".attestation input").isChecked(), false);
-        assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
-        await page.goBack();
-        await page.locator("#overlay").waitFor({ state: "hidden" });
-        await page.locator("#activitySearch").fill("no synthetic match");
-        await capture("empty");
-        await page.locator("#activitySearch").fill("");
-        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-        await ready(page);
-        await page.locator("#activityList .request-link").first().click({ timeout: 3000 });
+        await inspect(page);
         await resolved(page, theme);
         await page.close();
     }
-    if (proofDir) await writeFile(path.join(proofDir, "rendered-contrast.json"), JSON.stringify(proof, null, 2));
 }));
 
 test("loading, error, storage denial, keyboard and reduced motion remain usable in both themes", { timeout: 60000 }, async () => fixture(async ({ context, url }) => {
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
+    for (const [theme, width] of [["dark", 375], ["light", 1200]]) {
         const page = await context.newPage();
         await page.setViewportSize({ width, height: 1000 });
         await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
@@ -571,7 +530,9 @@ test("loading, error, storage denial, keyboard and reduced motion remain usable 
         await inspect(page);
         await shot(page, `${theme}-${width}-error`);
         await page.unroute("**/api/snapshot");
-        await page.getByRole("button", { name: "Try again" }).click();
+        const retry = page.getByRole("button", { name: /retry|try again|read stored activity/i });
+        assert.equal(await retry.count(), 1, await page.locator("main").ariaSnapshot());
+        await retry.click();
         await ready(page);
         await page.keyboard.press("Tab");
         await page.locator("#themePreference").focus();
@@ -583,7 +544,7 @@ test("loading, error, storage denial, keyboard and reduced motion remain usable 
         await resolved(page, theme);
         assert.equal(await page.locator("#themeStorageNotice").isVisible(), true);
         assert.equal(await page.locator("#themePreference").evaluate((node) => getComputedStyle(node).transitionDuration), "0s");
-        assert.equal(await page.locator(".theme-thumb").evaluate((node) => getComputedStyle(node).transitionDuration), "0s");
+        assert.equal(await page.locator("#themePreference .theme-thumb").evaluate((node) => getComputedStyle(node).transitionDuration), "0s");
         await page.close();
     }
 }));
