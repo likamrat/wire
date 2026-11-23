@@ -386,6 +386,10 @@ establish a sender. New unverified records distinguish an unsupported source
 value (`source-value-v1`) from workspace details without verified origin
 (`workspace-origin-v1`). WIRE saves neither the source value nor the host text.
 Already-qualified prompts are not reopened or updated on startup.
+For example, a prompt already marked unverified by version 10 keeps that
+label after an upgrade, even when every call links directly to it. The links
+identify the request, not its author. To correct its retained author, review
+that original through the procedure below rather than refreshing the chat.
 
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up

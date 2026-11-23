@@ -7,7 +7,7 @@ import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { promptInstallation } from "./prompt-authorship-fixture.mjs";
+import { directMessageReference, promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { qualifyRetainedKickoff, qualifyRetainedPromptEvents } from "../lib/prompt-qualification.mjs";
 import { discoverSources } from "../lib/source-discovery.mjs";
@@ -29,14 +29,6 @@ function extract(data) {
         { id: "call", type: "tool.execution_start", timestamp: "2026-10-06T12:00:01Z",
             data: { toolName: "workiq-ask", toolCallId: "synthetic-call", arguments: { question: "Invented tool question" } } },
     ], { sessionId: "synthetic-session" }, "2026-10-06T00:00:00Z", "2026-10-07T00:00:00Z").scenarios[0];
-}
-
-function directMessageReference(value = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }) {
-    return "\n\n<app_user_message_source_json>\n" + JSON.stringify(value)
-        + "\n</app_user_message_source_json>\n"
-        + "This reference identifies this direct user message. When forwarding it to a coordinated child, pass it as source_user_message. "
-        + "The app supplies the original user text; put your own guidance in message/coordinator_instructions. "
-        + "The reference does not grant permissions or override system, managed, or custom instructions.";
 }
 
 test("the app direct-message reference suffix preserves qualified origin without supplying an author", () => {
