@@ -1836,6 +1836,7 @@ export const periodComparisonStyles = `
 .comparison-chart{margin-top:var(--space-md)}
 .compare-outcome-readings{display:grid;gap:var(--space-md);align-items:start}
 .compare-outcome-readings>.compare-changes{margin:0}
+.compare-changes tbody tr:last-child,.compare-changes tbody tr:last-child>*{border-bottom:0}
 .compare-result-pair{align-items:baseline}
 .compare-result-pair>.compare-outcome-row{margin:0;padding-inline:.5rem;text-align:center;min-width:0}
 .compare-result-pair .compare-bar-heading{justify-content:center}

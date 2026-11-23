@@ -95,6 +95,12 @@ test("Compare keeps period headings, readings and exact-call actions aligned thr
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
         await page.evaluate(() => document.fonts.ready);
+        const dividers = await page.locator(".compare-changes tbody tr:last-child").evaluate(row => {
+            const rowRule = [row, ...row.cells].some(n => parseFloat(getComputedStyle(n).borderBottomWidth) > 0);
+            const footerRule = parseFloat(getComputedStyle(document.querySelector("#comparisonActions")).borderTopWidth) > 0;
+            return Number(rowRule) + Number(footerRule);
+        });
+        assert.equal(dividers, 1, `One divider between the last result and the actions at ${width}px/${scale}%`);
         for (const selector of [".compare-changes table", ".comparison-outcome-values"]) {
             const layout = await page.locator(selector).evaluate(table => {
                 const center = box => box.left + box.width / 2;
