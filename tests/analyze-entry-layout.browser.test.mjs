@@ -81,8 +81,8 @@ function checkAnalyzeGeometry(value, check) {
         "Results and Guide have separate targets at the start of the strip");
     check(Math.abs(results.top - guide.top) <= 1 && Math.abs(results.height - guide.height) <= 1, "section buttons align");
     check(Math.abs(commands.left - anchor.left) <= 1 && Math.abs(commands.right - anchor.right) <= 1, "command group spans the widget frame");
-    if (scope.bottom <= row.top + 1 || row.bottom <= scope.top + 1) check(Math.abs(row.left - anchor.left) <= 1, "wrapped toolbar starts at the widget edge");
-    else check(scope.right <= row.left && Math.abs(filters.right - anchor.right) <= 1, "inline commands follow scope and end at the widget edge");
+    check(Math.abs(filters.right - anchor.right) <= 1, "commands end at the widget edge");
+    if (scope.bottom > row.top + 1 && row.bottom > scope.top + 1) check(scope.right <= row.left, "inline commands do not cover scope");
     check(anchor.top - commands.bottom >= 8 && anchor.top - commands.bottom <= 16, "command row stays attached to the widgets");
     for (const target of [results, guide, refresh, filters]) {
         check(target.height >= 44 && target.left >= anchor.left - 1 && target.right <= anchor.right + 1, "full targets inside widget edges");
@@ -294,11 +294,8 @@ test("Filters consume nested outside clicks and Escape backs out of Guide exact 
     await page.locator("#toolFilter-control").click();
     await clickOutside(page, dialog);
     await expect(page.locator(".select-popup")).not.toBeVisible();
-    await expect(dialog).toBeVisible();
-    await expect(page.locator("#toolFilter-control")).toBeFocused();
-    await clickOutside(page, dialog);
     await expect(dialog).not.toBeVisible();
-    await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
+    await expect(page.locator("#main")).toBeFocused();
     assert.equal(reads.length, count);
     assert.equal(page.url(), url, "Dismissal cannot click a chart or navigation control through the backdrop");
     await page.locator("#openChartReference").click();
@@ -326,7 +323,7 @@ test("Filters consume nested outside clicks and Escape backs out of Guide exact 
     await reader.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
     const narrowReader = await reader.boundingBox();
     assert.equal(narrowReader.x, 0);
-    assert.equal(narrowReader.width, 390, "The settled narrow reader has no outside space to click");
+    assert.equal(narrowReader.width, await page.locator(".app-header").evaluate(n => n.getBoundingClientRect().width), "The reader spans the same painted width as the header");
     await page.keyboard.press("Escape");
     await expect(reader).not.toBeVisible();
     await ready(page);
@@ -381,10 +378,14 @@ test("Filters glide reversibly and preserve drafts and sidebar policy across mot
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill(olderDay);
     await page.keyboard.press("Escape");
+    await expect(page.locator("#dateFilter-control")).toBeFocused();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     await trigger.click();
     await expect(dialog).toBeVisible();
-    await expect(page.locator("#fromFilter")).toHaveValue(olderDay);
+    await expect(page.locator("#dateFilter")).toHaveValue("capture");
+    await expect(page.locator("#analyzeDates")).toBeHidden();
     await dialog.evaluate(node => {
         window.heldFilterMotion = node.getAnimations().find(item => item.effect.target === node);
         window.heldFilterMotion.pause(); window.heldFilterMotion.currentTime = 80;
@@ -409,11 +410,13 @@ test("Filter fields use a shared column measure and compact paint without shrink
         await chooseTheme(page, theme);
         await page.locator("#openAnalyzeFilters").click();
         await page.locator("#moreFiltersToggle").click();
-        const fields = await page.locator("#analyzeFilterPanel .select-trigger-filter").evaluateAll(nodes => nodes.map(node => {
+        await expect(page.locator("#sourceFilter-control")).toBeHidden();
+        const fields = await page.locator("#analyzeFilterPanel .select-trigger-filter:visible").evaluateAll(nodes => nodes.map(node => {
             const rect = node.getBoundingClientRect(), face = getComputedStyle(node, "::before");
             return { id: node.id, width: rect.width, height: rect.height, top: face.top, bottom: face.bottom };
         }));
-        assert.equal(fields.length, await page.locator("#filters select").count());
+        assert.deepEqual(fields.map(field => field.id), ["toolFilter-control", "serviceAssociationFilter-control", "outcomeFilter-control", "promptAuthorFilter-control",
+            "serviceFilter-control", "projectFilter-control", "chatFilter-control", "layerFilter-control", "scopeFilter-control"]);
         assert.ok(fields.every(field => Math.abs(field.width - fields[0].width) <= 1), JSON.stringify(fields));
         assert.ok(fields.every(field => field.height >= 44 && field.top === "4px" && field.bottom === "4px"), JSON.stringify(fields));
         const proof = process.env.WIRE_ANALYZE_ENTRY_PROOFS;
@@ -422,6 +425,6 @@ test("Filter fields use a shared column measure and compact paint without shrink
             await page.screenshot({ path: path.join(proof, `filter-proportions-${theme}.png`) });
         }
         await page.locator("#moreFiltersToggle").click();
-        await page.keyboard.press("Escape");
+        await closeAnalyzeFilters(page);
     }
 });

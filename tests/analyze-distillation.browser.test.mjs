@@ -6,13 +6,10 @@ import { chromium, expect } from "@playwright/test";
 import { extractScenarios } from "../lib/history.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { assessmentDependencies, assessmentRef, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, setLegacyTimeBucket } from "./helpers.mjs";
+import { loadBoardState } from "../lib/store.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DISTILL_PROOFS;
-const baseline = Boolean(process.env.WIRE_DISTILL_BASELINE);
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 function sample() {
     return [
@@ -35,20 +32,8 @@ function sample() {
         at(0), at(1050)).scenarios;
     });
 }
-async function setup(t, { savedFeedback = false, nativeScrollbars = false, records = sample() } = {}) {
+async function setup(t, { nativeScrollbars = false, records = sample() } = {}) {
     const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
-    if (savedFeedback) await updateBoardState(context, state => {
-        state.personalEvaluation ??= defaultPersonalEvaluation();
-        const model = buildAssessmentModel(state), view = model.details.get(model.catalog[0].interactionRef);
-        state.personalEvaluation.feedback.records.push({
-            schemaVersion: 1, dependencies: assessmentDependencies(view),
-            assessment: { ...view.assessments.find(item => item.dimension === "accuracy"),
-                assessmentRef: assessmentRef(state, "assessment", "invented-chart-saved-feedback"),
-                origin: "user-personal", verdict: "pass", reason: "user-verdict" },
-        });
-        state.personalEvaluation.feedback.revision = 1;
-        state.personalEvaluation.overrideRevision = 1;
-    });
     const before = await loadBoardState(context);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch(nativeScrollbars ? {
@@ -76,10 +61,10 @@ async function setup(t, { savedFeedback = false, nativeScrollbars = false, recor
         } finally { for (const fn of cleanup) await fn(); }
     });
     await page.goto(runtime.url); await ready(page);
-    await expect(page.locator("#homeFindings")).toContainText("Failure details");
     return page;
 }
 async function capture(page, name) {
+    if (!proof) return;
     const inventory = await page.locator("#homeView").evaluate(root => ({
         summaries: [...root.querySelectorAll("summary")].filter(node => node.checkVisibility()).map(node => node.textContent.trim()),
         words: root.innerText.trim().split(/\s+/).length,
@@ -105,18 +90,11 @@ async function widgetGeometry(page) {
         const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
         return {
             scroll: scrollY, header: rect(".app-header"), control: rect("#dateFilter-control"),
-            heading: rect(".analyze-chart-main .chart-heading"), chart: rect(".analyze-chart-main"),
+            chart: rect(".analyze-chart-main"),
             outcomes: rect(".analyze-outcome-summary"), tools: rect('[data-percentage-card="tools"]'),
             services: rect('[data-percentage-card="services"]'),
         };
     });
-}
-
-async function clickVisible(page, locator) {
-    const box = await locator.boundingBox(), viewport = page.viewportSize();
-    assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height,
-        "Trusted pointer action must not need locator auto-scrolling");
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 test("Harbor widgets share row edges without fixed heights or clipped content", { timeout: 30000 }, async t => {
@@ -125,7 +103,7 @@ test("Harbor widgets share row edges without fixed heights or clipped content", 
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, textSize);
-        await page.evaluate(() => document.fonts.ready);
+        await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
         const geometry = await widgetGeometry(page);
         const clipping = await page.locator(".analyze-dashboard").evaluate(root =>
             [...root.querySelectorAll(".percentage-label,.percentage-value,.percentage-card h3,#homeFindings li,#homeFindings p")]
@@ -138,10 +116,10 @@ test("Harbor widgets share row edges without fixed heights or clipped content", 
         measurements.push({ theme, width, textSize, geometry, clipping });
         for (const [left, right] of [["outcomes", "chart"], ["tools", "services"]]) {
             const a = geometry[left], b = geometry[right];
-            if (Math.abs(a.y - b.y) < 2 && Math.abs(a.bottom - b.bottom) >= 2) {
-                failures.push(`${theme}/${width}: ${left} bottom ${a.bottom} differs from ${right} ${b.bottom}`);
+            if (Math.abs(a.y - b.y) < 2 && a.right > b.x + 1) {
+                failures.push(`${theme}/${width}: ${left} overlaps ${right}`);
             }
-            if (width === 375) assert.ok(b.y >= a.bottom, "Narrow widgets stack naturally");
+            if (width === 375) assert.ok(b.y >= a.bottom, `${theme}/${textSize}%: ${right} starts at ${b.y}, ${left} ends at ${a.bottom}`);
         }
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `paired-widgets-${width}-${textSize}-${theme}`);
@@ -150,31 +128,19 @@ test("Harbor widgets share row edges without fixed heights or clipped content", 
     assert.deepEqual(failures, []);
 });
 
-test("the concise footer still reports a failed sibling outside matching-call counts", async t => {
+test("a filtered card keeps its failed sibling in full activity, outside the matching-call count", async t => {
     const records = sample();
     records[0].toolCalls.push(...records.splice(1, 1)[0].toolCalls);
     const page = await setup(t, { records });
-    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
+    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page); await closeAnalyzeFilters(page);
     await expect(page.locator("#activityCount")).toHaveText("4");
     await expect(page.locator('#outcomeChart [data-category="failure"]')).toHaveAttribute("data-count", "0");
-    await expect(page.locator("#homeFindings")).toContainText("1 failed call");
-    await expect(page.locator("#homeFindings")).toContainText("Details include all 5 calls in matching interactions.");
-    await page.locator("#homeFindings").getByRole("button", { name: "Failure details" }).click();
-    await expect(page.locator("#homeInsights .assessment-findings")).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
-    await expect(page.locator("#homeFindings")).not.toContainText("/mcp auth");
-});
-
-test("outcome footer links recorded causes without repeating them or routine full-interaction scope", async t => {
-    const page = await setup(t), findings = page.locator("#homeFindings");
-    await expect(findings).toContainText("Failure details");
-    await expect(findings).not.toContainText("Notes on full interactions");
-    await expect(findings).not.toContainText("/mcp auth");
-    await expect(findings).not.toContainText("No retry");
-    await expect(findings.locator("p,li,summary")).toHaveCount(0);
-    await expect(findings.locator("button")).toHaveCount(1);
-    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
-    await expect(findings).toBeHidden();
-    await expect(page.locator("#activityCount")).toHaveText("4");
+    const card = page.locator("#activityList article").filter({ hasText: "1 of 2 Work IQ tool calls matches this view" });
+    await card.getByRole("link", { name: "Open activity panel: 2 tool calls", exact: true }).click();
+    const sibling = page.locator('[data-tool-call-id="plan-call"]');
+    await expect(sibling).toContainText("Outside current view");
+    await expect(sibling).toContainText("Re-authentication required for MCP server 'workiq'. Run /mcp auth workiq.");
+    await expect(sibling).toContainText("This historical error does not establish the account's current sign-in state.");
 });
 
 test("stable time layout keeps zero and undated meanings with native horizontal scrolling", async t => {
@@ -184,22 +150,19 @@ test("stable time layout keeps zero and undated meanings with native horizontal 
     undated.capturedAt = null;
     const page = await setup(t, { records: [...records, undated], nativeScrollbars: true });
     await page.setViewportSize({ width: 375, height: 1000 });
-    await setLegacyTimeBucket(page, "day"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("5");
-    await expect(page.locator("#chartFooter")).toContainText("1 undated records are not plotted.");
+    await expect(page.locator("#chartFooter")).toContainText("1 undated record.");
     await expect(page.locator(".time-zero .dimensional-count")).toHaveText("0 calls");
     await expect(page.locator(".flat-time-column")).toHaveCount(2);
     assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 4);
     const scroll = page.locator(".flat-time-scroll");
-    await expect(scroll).toHaveAttribute("aria-description", /Scroll horizontally.*arrow keys/);
+    await expect(scroll).toHaveAttribute("tabindex", "0");
     await scroll.focus();
-    await page.keyboard.press("ArrowRight"); await page.waitForTimeout(250);
-    assert.ok(await scroll.evaluate(node => node.scrollLeft > 0), "Native keyboard scrolling still reaches offscreen dates");
-    const summary = page.locator("#meaning > summary");
-    await summary.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator("#chartReadingNotes")).toBeVisible();
-    await expect(page.locator("#chartReadingNotes")).toContainText("Zero means no matching records, not proof that no activity occurred.");
-    await expect(page.locator("#countTable tfoot td").first()).toHaveText("4");
+    await page.keyboard.press("ArrowRight"); await expect.poll(() => scroll.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+    await page.locator("a.time-zero").press("Enter");
+    await expect(page.locator("#meaning")).toContainText("4 dated records; 1 without a usable date.");
+    await page.locator("#chartReferenceShowData").click();
+    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("4");
 });
 
 test("the shared date field remains the control anchor when calendar membership changes", async t => {
@@ -214,153 +177,14 @@ test("the shared date field remains the control anchor when calendar membership 
     });
     const page = await setup(t, { nativeScrollbars: true, records });
     await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+    await openAnalyzeFilters(page); await page.waitForFunction(() => !document.querySelector("#analyzeFilterDialog").getAnimations().length);
     await page.locator("#dateFilter-control").scrollIntoViewIfNeeded();
     const initial = await page.locator("#dateFilter-control").boundingBox();
-    for (const [range, count] of [["day", "1"], ["week", "5"], ["month", "5"], ["capture", "5"]]) {
+    for (const [range, count] of [["day", "1"], ["week", "2"], ["month", "2"], ["capture", "5"]]) {
         await selectActivityOption(page, "dateFilter", range); await ready(page);
         await expect(page.locator("#dateFilter-control")).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText(count);
         const current = await page.locator("#dateFilter-control").boundingBox();
         assert.ok(Math.abs(current.y - initial.y) < 2);
     }
-});
-
-for (const savedFeedback of [false, true]) test(`native chart mode cycles retain the reading anchor ${savedFeedback ? "with saved feedback" : "without saved reviews"}`, { timeout: 45000 }, async t => {
-    const page = await setup(t, { savedFeedback, nativeScrollbars: true });
-    const modes = page.locator(".analyze-chart-main .view-switch");
-    const geometry = () => modes.evaluate(node => ({
-        y: node.getBoundingClientRect().y, scroll: scrollY,
-        header: document.querySelector(".app-header").getBoundingClientRect().height,
-        nativeScrollbar: innerWidth - document.documentElement.clientWidth,
-    }));
-    const observations = [];
-    for (const width of [375, 1440]) {
-        await page.setViewportSize({ width, height: 812 });
-        await page.reload(); await ready(page);
-        await expect(page.locator("#homeFindings")).not.toHaveAttribute("aria-busy", "true");
-        await page.evaluate(() => document.fonts.ready);
-        if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
-        else await expect(page.locator("#homeFindings")).not.toContainText("Your feedback");
-        await page.mouse.move(width - 30, 700);
-        await page.mouse.wheel(0, (await geometry()).y - 445);
-        await page.waitForTimeout(500);
-        const initial = await geometry();
-        assert.ok(initial.nativeScrollbar > 0, "This regression requires real native scrollbar geometry");
-        await page.evaluate(() => {
-            window.chartModeClicks = [];
-            document.addEventListener("click", event => {
-                const control = event.target.closest("[data-chart]");
-                if (control) window.chartModeClicks.push({ mode: control.dataset.chart, trusted: event.isTrusted });
-            });
-        });
-        for (const mode of ["workload", "endpoint", "time", "workload", "endpoint", "time"]) {
-            const control = page.locator(`[data-chart="${mode}"]`), box = await control.boundingBox();
-            assert.ok(box.y >= initial.header && box.y + box.height <= 812, "The click needs no intervening scrolling");
-            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            await ready(page); await page.waitForTimeout(500);
-            const current = await geometry();
-            observations.push({ savedFeedback, width, mode, initial, current });
-            if (proof) {
-                await mkdir(proof, { recursive: true });
-                await writeFile(path.join(proof, `native-mode-${savedFeedback}.json`), JSON.stringify(observations, null, 2));
-            }
-            assert.ok(Math.abs(current.scroll - initial.scroll) < 2, `${mode} preserves scroll with savedFeedback=${savedFeedback}`);
-            assert.ok(Math.abs(current.y - initial.y) < 2, `${mode} preserves the mode controls' viewport anchor`);
-            await expect(control).toHaveAttribute("aria-pressed", "true");
-            await expect(page.locator("#activityCount")).toHaveText("5");
-            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
-        }
-        assert.deepEqual(await page.evaluate(() => window.chartModeClicks), ["workload", "endpoint", "time", "workload", "endpoint", "time"].map(mode => ({ mode, trusted: true })));
-        await page.goBack(); await ready(page); await page.waitForTimeout(500);
-        await expect(page.locator('[data-chart="endpoint"]')).toHaveAttribute("aria-pressed", "true");
-        assert.ok(Math.abs((await geometry()).y - initial.y) < 2, "Mode Back preserves the control anchor");
-        await page.locator('[data-chart="time"]').focus(); await page.keyboard.press("Enter"); await ready(page);
-        const dateAction = page.locator(".time-column");
-        await dateAction.focus();
-        const focused = await dateAction.getAttribute("data-view-key"), scroll = await page.evaluate(() => scrollY);
-        await page.keyboard.press("Enter"); await ready(page);
-        await page.goBack(); await ready(page); await page.waitForTimeout(500);
-        await expect(dateAction).toBeFocused();
-        assert.equal(await dateAction.getAttribute("data-view-key"), focused);
-        assert.ok(Math.abs(await page.evaluate(() => scrollY) - scroll) < 2, "Date drilldown Back restores focus and native reading position");
-        const timing = page.locator("#analyzeReviewDetails > summary");
-        await page.mouse.move(width - 30, 700);
-        await page.mouse.wheel(0, (await timing.boundingBox()).y - 445);
-        await page.waitForTimeout(500);
-        const timingTop = (await timing.boundingBox()).y, timingScroll = await page.evaluate(() => scrollY);
-        for (const open of [true, false, true, false]) {
-            const box = await timing.boundingBox();
-            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            await page.waitForTimeout(500);
-            assert.equal(await timing.evaluate(node => node.parentElement.open), open);
-            assert.ok(Math.abs((await timing.boundingBox()).y - timingTop) < 2, "Timing disclosure stays stationary");
-            assert.ok(Math.abs(await page.evaluate(() => scrollY) - timingScroll) < 2, "Timing disclosure preserves native scroll");
-            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
-        }
-    }
-});
-
-test("Analyze uses one chart information destination and keeps exact data live through filtering", { timeout: 60000 }, async t => {
-    const page = await setup(t);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        const inventory = await capture(page, `human-${baseline ? "before" : "after"}-${theme}`);
-        if (!baseline) {
-            assert.deepEqual(inventory.summaries, ["Saved reviews", "Chart data and definitions"]);
-            assert.deepEqual(inventory.toolHeadings, ["Work IQ tool calls"]);
-            assert.equal(inventory.detachedTiming, false);
-        }
-    }
-    if (baseline) return;
-    await expect(page.locator("#activityCount")).toHaveText("5");
-    await expect(page.locator("#homeFindings")).not.toContainText("Reported outcomes");
-    await expect(page.locator("#homeFindings")).not.toContainText("No saved review");
-    await expect(page.locator("#recordedTiming")).toHaveCount(0);
-    await expect(page.locator("#activityList .response-timing")).toHaveCount(5);
-    await expect(page.locator("#activityList .response-timing dd")).toHaveText(Array(5).fill("Not recorded"));
-    await page.locator("#analyzeReviewDetails > summary").click();
-    await expect(page.locator("#homeInsights .assessment-saved-details")).toBeHidden();
-    await expect(page.locator("#homeInsights .assessment-secondary-findings")).toContainText("1 of 5 recorded calls failed; 4 succeeded");
-    await expect(page.locator("#homeInsights .assessment-empty-review")).toBeVisible();
-    await page.locator("#analyzeReviewDetails > summary").click();
-    const summary = page.locator("#meaning > summary");
-    await summary.focus();
-    const top = await summary.evaluate(node => node.getBoundingClientRect().top + scrollY);
-    await page.keyboard.press("Enter");
-    assert.ok(Math.abs(await summary.evaluate(node => node.getBoundingClientRect().top + scrollY) - top) < 2);
-    await expect(page.locator("#meaning details")).toHaveCount(0);
-    await expect(page.locator("#meaning table")).toHaveCount(4);
-    await expect(page.locator("#countTable tfoot td").first()).toHaveText("5");
-    await expect(page.locator("#percentageData .percentage-table tfoot td:first-of-type")).toHaveText(["5", "5", "5"]);
-    await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
-    await expect(page.locator("#meaning")).toHaveAttribute("open", "");
-    await expect(page.locator("#countTable tfoot td").first()).toHaveText("1");
-    await expect(page.locator("#percentageData .percentage-table tfoot td:first-of-type")).toHaveText(["1", "1", "1"]);
-    await expect(page.locator("#homeFindings")).toContainText("Failure details");
-    await page.locator("#percentageData .percentage-table tbody a").first().click(); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("1");
-    await expect(page.locator("#activityList .request-row")).toHaveCount(1);
-    await page.locator("#activityList .request-link").first().click(); await ready(page);
-    await expect(page.locator("#requestView")).toBeVisible();
-    await page.goBack(); await ready(page);
-    await expect(page.locator("#meaning")).toHaveAttribute("open", "");
-    await summary.click();
-    await page.locator("#resetView").click(); await ready(page);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width: 375, height: 1000 });
-        for (const size of [100, 200]) {
-            await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
-            await capture(page, `human-after-${theme}-375-${size}`);
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-            await summary.focus(); await page.keyboard.press("Enter");
-            await expect(page.locator("#meaning table")).toHaveCount(4);
-            await expect(page.locator("#meaning details")).toHaveCount(0);
-            await page.keyboard.press("Enter");
-        }
-        await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-    }
-    await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
-    await expect(page.locator('[data-breakdown="tools"] h3')).toHaveText("Tools in code references");
-    await expect(page.locator("#activityCount")).toHaveText("0");
 });

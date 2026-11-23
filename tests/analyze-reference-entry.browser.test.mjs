@@ -262,7 +262,7 @@ test("a new tab rebinds private Search with its existing owner and never display
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await page.locator("#wireSearch").focus();
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expectSearchMembership(page);
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     await page.locator("#wireSearch").press("Escape");
     await openOutcomeGuide(page);
@@ -293,7 +293,7 @@ test("a new tab rebinds private Search with its existing owner and never display
             url: location.href, history: history.state, local: { ...localStorage }, session: { ...sessionStorage },
         }))).includes("physician"), "Search words stay out of copied URLs, storage and transferred history");
     } finally { release(); }
-    await expect(other.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expectSearchMembership(other);
     await expect(other.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     assert.ok(!(await other.evaluate(() => JSON.stringify(history.state))).includes("physician"));
     assert.deepEqual(await other.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
@@ -311,7 +311,7 @@ test("private handoff preparation cannot overwrite newer Search input in the rec
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await page.locator("#wireSearch").focus();
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expectSearchMembership(page);
     await page.locator("#wireSearch").press("Escape");
     let release, requested;
     const gate = new Promise(resolve => { release = resolve; });
@@ -338,7 +338,7 @@ for (const returning of [false, true]) test(`a private Search guide ${returning 
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await page.locator("#wireSearch").focus();
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expectSearchMembership(page);
     await page.locator("#wireSearch").press("Escape");
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();

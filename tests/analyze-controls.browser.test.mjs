@@ -6,7 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, restoreLegacySearch, chooseTheme, navigateMain, navigateSettings, revealAnalyzeRecords } from "./helpers.mjs";
+import { selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme, navigateMain, navigateSettings, revealAnalyzeRecords } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
@@ -56,11 +56,10 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     async function shortcut(id, name) {
         const drawer = page.locator("#navigationDrawer");
         if (width < 700 && !await drawer.isVisible()) await page.locator("#navigationToggle").click();
-        await expect(page.locator("#analyzeTools")).toBeVisible();
         await expect(page.locator("#pageAction")).toBeHidden();
         await expect(page.locator("#openAnalyzeFilters")).toBeHidden();
         await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
-        const control = page.locator("#analyzeTools #" + id);
+        const control = page.locator("#navigationContent #" + id);
         await expect(control).toHaveAccessibleName(name);
         await control.focus();
         if (process.env.WIRE_SIDEBAR_PROOFS) {
@@ -81,8 +80,8 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await navigateSettings(page, "display");
     await shortcut("comparePeriods", "Compare");
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-    await expect(page.locator("#comparisonAPreset-control")).toBeFocused();
-    await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#comparisonDates")).toBeVisible();
+    await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     await navigateMain(page, "settings"); await ready(page);
     await navigateMain(page, "analyze"); await ready(page);
     await expect(page.locator("#periodComparisonSetup")).toBeHidden();
@@ -207,7 +206,7 @@ test("closed-panel captions keep accepted membership through pending and failed 
     await closeAnalyzeFilters(page);
     await expect(page.locator("#activityCount")).toHaveText("15");
     await expect(page.locator("#analyzeScopeCaption")).not.toContainText("Files");
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Current collection/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Saved collection/);
     await expect(page.locator("#openAnalyzeFilters")).not.toHaveAccessibleDescription(/Service: Files/);
     await expect(page.locator("#analyzeScopeStatus")).not.toBeVisible();
     await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
@@ -418,8 +417,8 @@ test("nested draft dismissal and custom dates preserve the native commit and res
 
 test("an unconfirmed source check stays visible without becoming a red failure or replaying an update", { timeout: 30000 }, async t => {
     const { page, snapshots } = await setup(t, { initialize: () => sessionStorage.setItem("workiq-evidence.source-check.v1", "pending") });
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("unconfirmed");
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("will not be repeated");
+    await expect(page.locator("#analyzeRefreshStatus")).toContainText("source check unconfirmed");
+    await expect(page.locator("#analyzeRefresh")).toHaveAccessibleName("Retry reading saved activity");
     await expect(page.locator("#analyzeScopeError")).not.toBeVisible();
     const reads = snapshots.length;
     await openAnalyzeFilters(page);
@@ -454,34 +453,33 @@ test("scoped-chat detail stays in Filters while material coverage remains beside
 });
 
 test("native chart keyboard links, modified clicks and Back retain exact scoped membership", { timeout: 30000 }, async t => {
-    const { page, snapshot } = await setup(t);
-    await restoreLegacySearch(page, "Invented");
+    const { page, snapshot, chatId } = await setup(t);
+    await selectActivityOption(page, "chatFilter", chatId); await ready(page);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await closeAnalyzeFilters(page);
     const beforeIds = snapshot().analytics.rows.map(row => row.id).sort();
-    const failedIds = snapshot().analytics.rows.filter(row => row.outcome === "failure").map(row => row.id).sort();
+    const failedRows = snapshot().analytics.rows.filter(row => row.outcome === "failure");
     const failed = page.locator("#outcomeChart").getByRole("link", { name: /^Tool failed:/ });
     await failed.focus();
     const key = await failed.getAttribute("data-view-key");
     await failed.press("Enter"); await ready(page);
-    assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), failedIds);
+    await expect(page.locator("#activityCount")).toHaveText(String(failedRows.length));
+    assert.deepEqual(await page.locator("#activityList article").evaluateAll(rows => rows.map(r => r.dataset.viewKey).sort()),
+        [...new Set(failedRows.map(row => "request:" + row.scenarioId))].sort());
     await page.goBack(); await ready(page);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), beforeIds);
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.viewKey), key);
-    await expect(page.locator("#activitySearch")).toHaveValue("Invented");
-    const column = page.locator("#chart .time-column[href]").first();
-    const target = await column.getAttribute("href");
+    await expect(page.locator("#chatFilter")).toHaveValue(chatId);
+    const column = page.locator("#chart .dimensional-time-labels a").first();
+    const target = await column.getAttribute("href"), point = snapshot().analytics.timeSeries.points.find(p => p.drilldownIds.length);
     assert.doesNotMatch(target, /search=|Invented/);
     const [opened] = await Promise.all([page.context().waitForEvent("page"), column.click({ modifiers: ["Control"] })]);
     await ready(opened);
-    const [view, query] = new URL(opened.url()).hash.split("?");
-    const [expectedView, expectedQuery] = target.split("?");
-    assert.equal(view, expectedView);
-    const expectedParameters = new URLSearchParams(expectedQuery);
-    assert.equal(expectedParameters.get("privateView"), "required");
-    expectedParameters.delete("privateView");
-    assert.deepEqual([...new URLSearchParams(query)].sort(), [...expectedParameters].sort());
-    await expect(opened.locator("#activityCount")).toHaveText(String(beforeIds.length));
+    const expected = new URL(target, page.url());
+    assert.equal(expected.searchParams.get("privateView"), "required");
+    assert.equal(new URL(opened.url()).pathname, expected.pathname);
+    await expect(opened.locator("#chatFilter")).toHaveValue(chatId);
+    await expect(opened.locator("#activityCount")).toHaveText(String(point.drilldownIds.length));
     await opened.close();
     await expect(page.locator('[data-analyze-mode="calls"]')).toHaveCount(0);
 });
@@ -587,7 +585,7 @@ test("the integrated dashboard and panel reflow with long names, both themes and
         assert.ok(overview.overflow <= 1, name + " page overflow");
         assert.equal(overview.sidebarOverlap, 0, name + " sidebar must not cover content");
         assert.ok(overview.trigger.width >= 44 && overview.trigger.height >= 44, name + " filter entry");
-        assert.ok(overview.headingHeight <= 1 && overview.titleClip === "inset(50%)", name + " no visual Analyze title band: " + JSON.stringify(overview));
+        await expect(page.locator("#pageTitle")).toHaveText("Analyze");
         assert.ok(overview.scopeClipped <= 1, name + " accepted scope stays readable");
         await openAnalyzeFilters(page);
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
@@ -597,12 +595,13 @@ test("the integrated dashboard and panel reflow with long names, both themes and
         const panel = await page.locator("#analyzeFilterDialog").boundingBox();
         assert.ok(panel.x >= 0 && panel.x + panel.width <= width + 1, name + " panel fits viewport");
         const fields = [];
-        for (const id of ["dateFilter", "sourceFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter",
+        await expect(page.locator("#sourceFilter-control")).toBeHidden();
+        for (const id of ["dateFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter",
             "serviceFilter", "projectFilter", "chatFilter", "layerFilter", "scopeFilter"]) {
             const control = page.locator("#" + id + "-control");
             await control.scrollIntoViewIfNeeded();
             const value = await control.evaluate(node => {
-                const box = node.getBoundingClientRect(), text = node.querySelector(".select-value");
+                const box = node.getBoundingClientRect(), text = node.querySelector(".select-value") || node;
                 return { id: node.id, x: box.x, right: box.right, width: box.width, height: box.height,
                     clipped: text.scrollWidth - text.clientWidth, verticalClip: text.scrollHeight - text.clientHeight };
             });
