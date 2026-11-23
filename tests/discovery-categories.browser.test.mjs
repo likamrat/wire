@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { replaceEvidence } from "../lib/store.mjs";
 import { createExportController, buildSanitizedBundle } from "../lib/export.mjs";
 import { discoveryFixture } from "./discovery-fixtures.mjs";
-import { privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_DISCOVERY_PROOFS;
 async function ready(page) {
@@ -20,21 +20,26 @@ async function screenshot(page, name) {
     await mkdir(proofs, { recursive: true });
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
 }
-test("Discovery reads consistently across whole charts, filters and action detail in light/navy and narrow layouts", { timeout: 90000 }, async t => {
+test("Discovery reads consistently across charts, filters and call details in both themes and narrow layouts", { timeout: 90000 }, async t => {
     const record = discoveryFixture();
     record.toolCalls[5].requestArgs = { entityUrls: ["/me/events"] };
     record.toolCalls[5].apiResults = [{ index: 0, statusCode: 200 }];
     const { context } = await privateFixture(t, [record]);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce" });
     page.setDefaultTimeout(7000);
     const errors = [], external = [], mutations = [];
     page.on("pageerror", error => errors.push(error.message));
-    page.on("request", request => {
+    await page.route("**/*", route => {
+        const request = route.request();
         const url = new URL(request.url());
-        if (url.origin !== new URL(runtime.url).origin) external.push(url.origin);
-        if (request.method() !== "GET" && !["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(url.pathname)) mutations.push(url.pathname);
+        if (url.origin !== new URL(runtime.url).origin) { external.push(url.origin); return route.abort(); }
+        const statusOnly = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
+        if (request.method() !== "GET" && !statusOnly && !["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(url.pathname)) {
+            mutations.push(url.pathname); return route.abort();
+        }
+        return route.continue();
     });
 
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: {
@@ -45,59 +50,60 @@ test("Discovery reads consistently across whole charts, filters and action detai
         await browser.close(); await runtime.close();
         assert.deepEqual(errors, []); assert.deepEqual(external, []); assert.deepEqual(mutations, []);
     });
+    const analyze = new URL("/?range=capture&chart=workload", runtime.url).href;
+    const services = page.locator('[data-percentage-card="services"]');
+    const calls = page.locator("#activityList .card-panel-link");
     for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
         await page.setViewportSize({ width, height: 1000 });
-        await page.goto(runtime.url + "#analyze"); await ready(page);
+        await page.goto(analyze); await ready(page);
         await chooseTheme(page, theme);
-        await page.goto(runtime.url + "#request?request=discovery-categories&range=capture"); await ready(page);
-        const targets = await page.locator('[data-reader-section="activity"] .reader-call-toggle').evaluateAll(nodes =>
-            nodes.map(node => ({ id: node.closest("[data-tool-call-id]").dataset.toolCallId, height: node.getBoundingClientRect().height })));
-        assert.deepEqual(targets.map(target => target.id).sort(), record.toolCalls.map(call => call.toolCallId).sort());
-        assert.equal(targets.length, 8, "All recorded discovery and execution calls have a real disclosure target");
-        assert.ok(targets.every(target => target.height >= 44), `${theme}/${width}: native reader disclosure targets`);
-    }
-    t.diagnostic("Current discovery disclosure target guard passed for eight distinct calls in all four theme/width states.");
-    for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-        await page.goto(runtime.url + "#home?range=capture&chart=workload"); await ready(page);
-        await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent === "8 Work IQ tool calls");
-        await chooseTheme(page, theme);
-        assert.equal(await page.locator("#chartTitle").textContent(), "Activity categories");
-        assert.match(await page.locator("#meaningMatched").textContent(), /^8 Work IQ tool calls$/);
-        assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
-        assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /3 discovery \/ preparation; not service execution/);
-        assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 1);
-        assert.equal(await page.locator('#serviceFilter option[value="Unknown"]').count(), 1);
+        await expect(page.locator("#chartTitle")).toHaveText("Activity categories");
+        await expect(page.locator("#meaningMatched")).toHaveText("8 Work IQ tool calls");
+        await expect(services.getByRole("link", { name: /Discovery \/ preparation: 3 of 8 Work IQ tool calls \(37\.5%\)/ })).toBeVisible();
         await screenshot(page, `${theme}-${width}-whole-chart`);
         if (width === 375) {
             await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "narrow chart supports 200% text");
             await screenshot(page, `${theme}-${width}-200-chart`);
         }
-        await page.goto(runtime.url + "#request?request=discovery-categories&range=capture"); await ready(page);
+        await calls.click();
+        const toggles = page.locator('[data-reader-section="activity"] .reader-call-toggle');
+        await expect(toggles).toHaveCount(8);
+        const targets = await toggles.evaluateAll(nodes => nodes.map(node => ({
+            id: node.closest("[data-tool-call-id]").dataset.toolCallId, height: node.getBoundingClientRect().height,
+        })));
+        assert.deepEqual(targets.map(target => target.id).sort(), record.toolCalls.map(call => call.toolCallId).sort());
+        assert.ok(targets.every(target => target.height >= 44), `${theme}/${width}: reader disclosure targets`);
         const discovery = page.locator('[data-tool-call-id="invented-call-0"]');
+        await discovery.locator(".reader-call-toggle").click();
         assert.match(await discovery.innerText(), /API discovery/);
         assert.match(await discovery.innerText(), /Find available API paths/);
-        assert.match(await discovery.innerText(), /Data service\s+Not applicable/);
-        assert.doesNotMatch(await discovery.innerText(), /Service not identified|API path\s+Not recorded|API metadata: None/);
+        assert.doesNotMatch(await discovery.innerText(), /Unidentified service|Target\s+Mail|API path\s+Not recorded/);
         const schema = page.locator('[data-tool-call-id="invented-call-1"]');
+        await schema.locator(".reader-call-toggle").click();
         assert.match(await schema.innerText(), /Schema lookup/);
         assert.match(await schema.innerText(), /Schema path\s+\/me\/messages/);
-        assert.match(await schema.textContent(), /Tool failed/);
-        assert.match(await page.locator('[data-tool-call-id="invented-call-2"]').textContent(), /Agent discovery[\s\S]*No result recorded/);
-        assert.match(await page.locator('[data-tool-call-id="invented-call-3"]').textContent(), /Copilot assistance[\s\S]*Not in this record/);
+        await expect(schema).toContainText("1 tool call failed");
+        await expect(schema).toContainText("it does not run it");
+        const agents = page.locator('[data-tool-call-id="invented-call-2"]');
+        await expect(agents).toContainText("Agent discovery");
+        await expect(agents).toContainText("has no recorded result");
+        const asked = page.locator('[data-tool-call-id="invented-call-3"]');
+        await asked.locator(".reader-call-toggle").click();
+        await expect(asked).toContainText("Asked Copilot");
+        await expect(asked).toContainText("which apps, if any, Copilot used");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await screenshot(page, `${theme}-${width}-whole-detail`);
-        if (width === 375) {
-            await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "narrow detail supports 200% text");
-            await screenshot(page, `${theme}-${width}-200-detail`);
-        }
+        await screenshot(page, `${theme}-${width}-${width === 375 ? "200" : "whole"}-detail`);
+        await page.locator("#closeContextSidebar").click();
+        await expect(calls).toBeFocused();
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-    await page.goto(runtime.url + "#home?range=capture&chart=workload"); await ready(page);
+    await page.goto(analyze); await ready(page);
+    await openAnalyzeFilters(page);
+    if (!await page.locator("#serviceFilter-control").isVisible()) await page.locator("#moreFiltersToggle").click();
+    await expect(page.locator("#serviceFilter-control")).toHaveAccessibleName("Activity category");
+    await expect(page.locator('#serviceFilter option[value="Unknown"]')).toHaveCount(1);
     await selectActivityOption(page, "serviceFilter", "Discovery"); await ready(page);
     await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent.startsWith("3 "));
     assert.match(await page.locator("#meaningMatched").textContent(), /^3 Work IQ tool calls$/);
@@ -113,21 +119,25 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await selectActivityOption(page, "serviceFilter", "Discovery"); await ready(page);
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
     assert.doesNotMatch(page.url(), /service=Discovery/);
-    assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
+    await expect(page.locator("#serviceFilter-control")).toHaveAccessibleName("Activity category");
     assert.equal(await page.locator("#chartTitle").textContent(), "Service categories");
     assert.match(await page.locator("#meaningMatched").textContent(), /^1 tool-returned API result$/);
     assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 0);
+    await closeAnalyzeFilters(page);
     const single = discoveryFixture();
     single.scenarioId = "single-discovery";
     single.toolCalls = single.toolCalls.slice(0, 1);
     await replaceEvidence(context, () => ({ records: [single], importCoverage: { counts: { includedSessions: 1 }, roster: [] } }));
-    await page.goto(runtime.url + "#request?request=single-discovery&range=capture"); await ready(page);
+    await page.goto(analyze); await ready(page);
+    await expect(calls).toHaveCount(1);
+    await calls.click();
     const singleAction = page.locator('.journey-item[data-tool-call-id="invented-call-0"]');
-    assert.match(await singleAction.innerText(), /API discovery/);
-    assert.match(await singleAction.innerText(), /Data service\s+Not applicable/);
-    assert.equal(await page.locator("#requestView dt").filter({ hasText: /^Purpose$/ }).count(), 1);
-    assert.doesNotMatch(await page.locator("#requestView").innerText(), /Service not identified|API metadata: None recorded|API path\s+Not recorded/);
-    assert.match(await page.locator(".full-request-results").textContent(), /1 Work IQ tool call[\s\S]*1 Tool completed/);
+    await expect(singleAction.getByText("API discovery", { exact: true })).toHaveCount(1);
+    await expect(singleAction).toContainText("1 tool call completed");
+    await expect(page.locator('[data-reader-section="activity"] [data-tool-call-id]')).toHaveCount(1);
+    await singleAction.locator(".reader-call-toggle").click();
+    await expect(singleAction).toContainText("Find available API paths");
+    assert.doesNotMatch(await singleAction.innerText(), /Unidentified service|API metadata: None recorded|API path\s+Not recorded/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await screenshot(page, `${theme}-single-discovery`);
@@ -142,8 +152,9 @@ test("new readable report exposes the same Discovery meaning without promoting a
     const requests = [];
     page.on("request", request => { if (!request.url().startsWith("data:")) requests.push(request.url()); });
     await page.setContent(bundle.files["product-report.html"]);
-    assert.equal(await page.getByRole("heading", { name: "Activity categories in this report", exact: true }).count(), 1);
-    assert.match(await page.locator(".service-glossary").innerText(), /Discovery[\s\S]*not applicable[\s\S]*regrouping, not a change in recorded outcomes/);
+    const services = page.locator("#breakdowns section").filter({ has: page.getByRole("heading", { name: "Services", exact: true }) });
+    await expect(services).toContainText("3 preparation calls with no applicable data service");
+    await expect(services).toContainText("2 calls with missing or partial service details");
     assert.match(await page.locator("#operations").innerText(), /API discovery/);
     assert.match(await page.locator("#operations").innerText(), /Schema lookup - Schema path/);
     for (const width of [1280, 375]) {
