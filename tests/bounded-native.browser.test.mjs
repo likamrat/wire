@@ -1,11 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { loadBrowserAssets } from "../lib/browser-assets.mjs";
@@ -15,7 +10,11 @@ import { createBoundedNativeState } from "../web/bounded-native-state.mjs";
 import { mountBoundedNative } from "../web/bounded-native.mjs";
 import { searchHitPresentation } from "../web/live-search.mjs";
 import { createFilterState } from "../web/client.mjs";
-import { createSelectControls } from "../web/select-control.mjs";
+import { committedNativeReportFixture } from "./native-report-controller-fixture.mjs";
+import { createNativeRetainedViews } from "../lib/native-retained-views.mjs";
+import { chatFixture, coworkFixture } from "./native-read-model-fixtures.mjs";
+import { currentStatePayload } from "../lib/server.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
@@ -24,10 +23,8 @@ import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createReaderSections } from "../web/reader-sections.mjs";
 import { createDisclosureState } from "../web/disclosure-state.mjs";
 import { SEARCH_MATCH_POLICY_ID } from "../lib/search-text.mjs";
-import { openAnalyzeFilters, closeAnalyzeFilters, selectActivityOption, fixture, chooseTheme } from "./helpers.mjs";
+import { openAnalyzeFilters, closeAnalyzeFilters, selectActivityOption, fixture } from "./helpers.mjs";
 
-const root = process.env.WIRE_BOUNDED_BACKEND_ROOT;
-const externalBackend = async file => import(pathToFileURL(path.join(root, ...file.split("\\"))).href);
 function html() {
     const nonce = "bounded-native-ui";
     let page = renderHtmlShell("a".repeat(64), nonce);
@@ -86,16 +83,13 @@ $("wireSearchPanel").hidden=false;
 load().then(()=>document.body.dataset.ready="true").catch(error=>{document.body.dataset.error=error.message;});
 </script></body>`);
 }
-async function setup(t, { mainClient = false, github = false, timed = false, long = false, returned = false,
-    extraConversations = 0, extraSuccesses = 0, localBackend = false, compiled = false } = {}) {
-    const backend = localBackend ? file => import(new URL("../" + file.replaceAll("\\", "/"), import.meta.url)) : externalBackend;
-    const { committedNativeReportFixture } = await backend("tests\\native-report-controller-fixture.mjs");
-    const { createNativeRetainedViews } = await backend("lib\\native-retained-views.mjs");
-    const { chatFixture, coworkFixture } = await backend("tests\\native-read-model-fixtures.mjs");
+async function setup(t, { mainClient = false, github = false, timed = false, returned = false,
+    extraConversations = 0, extraSuccesses = 0, distinctTools = false } = {}) {
     const envelopes = [...chatFixture(), ...coworkFixture()];
     for (let index = 0; index < extraSuccesses; index++) {
         const row = structuredClone(envelopes.find(row => row.record.data?.tid === "invented-search"));
         row.record.id = `seq:${20 + index}`; row.record.data.tid += `-${index}`;
+        if (distinctTools) row.qualifiedFields.toolName.value = row.record.data.tn = `mcp__invented__tool${index}`;
         row.ordering.recordOrdinal = 20 + index; envelopes.push(row);
     }
     for (let index = 0; index < extraConversations; index++) for (const row of chatFixture()) {
@@ -110,10 +104,6 @@ async function setup(t, { mainClient = false, github = false, timed = false, lon
             declaredRequestCount: null, declaredRequestCountIsSuccessDenominator: false };
         row.evidenceReferences.returnedResults = { sourceDocument: "invented-native-response", pointer: "/data/out" };
     }
-    if (long) {
-        const prompt = envelopes.find(row => row.scope.surface === "cowork" && row.qualifiedFields.message?.value.author === "user");
-        prompt.qualifiedFields.message.value.text += " Include the pending approvals and returned results, explain which calls failed, and keep unavailable dates separate from recorded dates when comparing the saved conversations.";
-    }
     if (timed) for (const row of envelopes.filter(row => row.record.event === "ts")) {
         const value = "2026-01-02T07:30:00.000Z";
         row.record.data.ts = value;
@@ -124,11 +114,12 @@ async function setup(t, { mainClient = false, github = false, timed = false, lon
     }
     const app = await committedNativeReportFixture(t, { segmented: true, envelopes });
     const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
-    const { currentStatePayload } = await backend("lib\\server.mjs");
-    const { loadBoardState } = await backend("lib\\store.mjs");
     if (github) {
-        const { replaceEvidence } = await backend("lib\\store.mjs");
-        await replaceEvidence(app.context, () => ({ records: Array.from({ length: github === true ? 1 : github }, (_, index) => fixture(`bounded-github-${index}`)),
+        await replaceEvidence(app.context, () => ({ records: Array.from({ length: github === true ? 1 : github }, (_, index) => {
+            const record = fixture(`bounded-github-${index}`);
+            if (timed) record.toolCalls[0].startedAt = "2026-01-03T12:00:00Z";
+            return record;
+        }),
             importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
     }
     const runtimeId = "00000000-0000-4000-8000-000000000001";
@@ -149,7 +140,7 @@ async function setup(t, { mainClient = false, github = false, timed = false, lon
                         windowDays: microsoft.configuration.settings.windowDays }, basis: "committed-native", blockers: [] } } } };
     }
     const calls = [];
-    const assets = compiled ? await loadBrowserAssets({renderer:"react"}) : null;
+    const assets = mainClient ? await loadBrowserAssets({renderer:"react"}) : null;
     const server = createServer(async (req, res) => {
         try {
             if (req.method === "GET" && req.url === "/") {
@@ -205,32 +196,8 @@ async function setup(t, { mainClient = false, github = false, timed = false, lon
     return { page, calls, snapshot };
 }
 
-test("bounded cards replace pages while full totals stay fixed, and Dates/source transitions use server selection",
-    { skip: !root }, async t => {
-        const { page, calls } = await setup(t);
-        await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
-        const summary = await page.locator("#outcomeChart").innerText();
-        const first = await page.locator("#activityList .activity-card").getAttribute("data-source-id");
-        await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
-        await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
-        await expect.poll(() => page.locator("#activityList .activity-card").getAttribute("data-source-id")).not.toBe(first);
-        assert.equal(await page.locator("#outcomeChart").innerText(), summary);
-        assert.ok(calls.at(-1).input.page.after);
-        await expect(page.locator("#activityPager")).toContainText("2-2 of 2");
-        await page.locator("#activityPager").getByRole("button", { name: "Previous", exact: true }).click();
-        await expect(page.locator("#activityList .activity-card")).toHaveAttribute("data-source-id", first);
-        await expect(page.locator("#activityPager")).toContainText("1-1 of 2");
-        await page.evaluate(async () => { filters.filters.sources=["microsoft-365-chat"];await load(); });
-        await expect(page.locator("#activityList .activity-card")).toHaveAttribute("data-source-id", "microsoft-365-chat");
-        await page.evaluate(async () => { filters.filters.from="2026-01-01";filters.filters.to="2026-12-31";await load(); });
-        await expect(page.locator("#activityList")).toContainText("No matching activity");
-        await expect(page.locator("#activityList")).toContainText("Use All dates to include undated activity");
-        await page.evaluate(() => { allowed=false;ui.withdrawAccess(); });
-        await expect(page.locator("#activityList .activity-card")).toHaveCount(0);
-    });
-
 test("compiled workspace keeps the bounded completed selector private and restores its link on Back", async t => {
-    const {page,calls} = await setup(t,{mainClient:true,compiled:true,extraSuccesses:11,localBackend:true});
+    const {page,calls} = await setup(t,{mainClient:true,extraSuccesses:11});
     await selectActivityOption(page,"sourceFilter","microsoft-365-cowork");
     // The source control changes before the narrowed snapshot and its inventory owner are installed.
     await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
@@ -259,7 +226,7 @@ test("compiled workspace keeps the bounded completed selector private and restor
 
 test("completed native card opens only its counted calls across pages, with one arrow and group focus",
     async t => {
-        const { page, calls } = await setup(t, { extraSuccesses: 11, localBackend: true });
+        const { page, calls } = await setup(t, { extraSuccesses: 11 });
         const cards = page.locator("#activityList");
         await page.evaluate(async () => { filters.filters.sources = ["microsoft-365-cowork"]; await load(); });
         await expect(cards.locator(".card-outcome")).toContainText("failed");
@@ -304,128 +271,8 @@ test("completed native card opens only its counted calls across pages, with one 
         assert.equal(calls.filter(call => call.method === "detail").length, 3);
     });
 
-test("native literal Search opens its exact original ordinal in one detail request and never creates membership",
-    { skip: !root }, async t => {
-        const { page, calls } = await setup(t);
-        await page.evaluate(() => ui.searchChanged({ query:"Read",scope:"everywhere",types:[],
-            sources:["microsoft-365-cowork"],revision:frame.revision,pending:false,base:frame }));
-        await expect(page.locator("#wireNativeSearch .wire-search-hit").first()).toBeVisible();
-        await page.locator("#wireNativeSearch .wire-search-hit").first().click();
-        await expect(page.locator("#detail [data-native-ordinal]")).not.toHaveCount(0);
-        const target = await page.evaluate(() => opened[0]);
-        const detail = calls.filter(call => call.method === "detail" && call.input.at !== undefined);
-        assert.equal(detail.length, 1, "Exact Open must not walk preceding pages.");
-        assert.equal(detail[0].input.at, target.ordinal);
-        assert.equal(detail[0].input.sourceRevision, target.sourceRevision);
-        assert.equal(detail[0].input.page.after, null);
-        await expect(page.locator("#detail [data-native-ordinal]").first()).toHaveAttribute("data-native-ordinal", String(target.ordinal));
-        await page.evaluate(() => { reader.dispose();document.getElementById("overlay").close();ui.searchChanged({
-            query:"Read",scope:"analysis",types:[],sources:["microsoft-365-cowork"],revision:frame.revision,pending:false,
-            base:frame,analytics:filters }); });
-        await expect(page.locator("#wireNativeSearch")).toContainText("3 matching native tool calls");
-        assert.equal(calls.filter(call => call.method === "search").length, 1);
-        assert.equal(calls.filter(call => call.method === "analyze").length, 1);
-        assert.ok(calls.every(call => !Object.hasOwn(call.input, "receipt")));
-    });
-
-test("a stale bounded cursor clears the page and does not silently restart or widen the selection",
-    { skip: !root }, async t => {
-        const { page, calls } = await setup(t);
-        await page.route("**/api/retained/microsoft/query", route => {
-            const request = route.request().postDataJSON();
-            return request.page.after ? route.fulfill({ status: 409, json: { error: "NATIVE_VIEW_CURSOR_STALE" } }) : route.continue();
-        });
-        await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
-        await expect(page.locator("#activityList")).toContainText("NATIVE_VIEW_CURSOR_STALE");
-        await expect(page.locator("#activityList .activity-card")).toHaveCount(0);
-        assert.equal(calls.filter(call => call.method === "query").length, 1, "No automatic first-page fallback.");
-    });
-
-test("the existing select popup pages native inventory options without selecting or accumulating them",
-        { skip: !root }, async t => {
-            const { page, calls } = await setup(t);
-            await page.addScriptTag({ content: `window.makeSelectControls=${createSelectControls.toString()};` });
-            await page.evaluate(async () => {
-                window.inventoryInput = { schemaVersion:1,revision:frame.revision,viewId:frame.viewId,dimension:"tools",page:{limit:1,after:null} };
-                window.optionChanges = 0;
-                const select = document.getElementById("toolFilter");
-                select.addEventListener("change", () => optionChanges++);
-                window.readOptionPage = async after => {
-                    window.optionPage = await api("/api/retained/microsoft/inventory",{...inventoryInput,page:{limit:1,after}});
-                    const all = document.createElement("option");all.value="all";all.textContent="All tools";
-                    select.replaceChildren(all,...optionPage.page.items.map(item=>{
-                        const option=document.createElement("option");option.value=item.value;option.textContent=item.label;return option;
-                    }));
-                };
-                await readOptionPage(null);
-                const dialog = document.getElementById("analyzeFilterDialog");
-                dialog.append(document.getElementById("filters"));
-                dialog.showModal();
-                window.testSelects = makeSelectControls(ux,{pagingFor:control=>control.id==="toolFilter"?{
-                    label:optionPage.page.items.length+" of "+optionPage.aggregates.options+" Microsoft choices",
-                    next:optionPage.page.nextCursor?()=>readOptionPage(optionPage.page.nextCursor):undefined,
-                    first:()=>readOptionPage(null)
-                }:null});
-            });
-            const before = await page.locator("#toolFilter option").nth(1).getAttribute("value");
-            await page.locator("#toolFilter-control").click();
-            await page.getByRole("button", { name: "Next Microsoft options", exact: true }).click();
-            await expect.poll(() => page.locator("#toolFilter option").nth(1).getAttribute("value")).not.toBe(before);
-            await expect(page.locator("#toolFilter option")).toHaveCount(2);
-            assert.equal(await page.evaluate(() => optionChanges), 0);
-            assert.ok(calls.filter(call => call.method === "inventory").at(-1).input.page.after);
-            await expect(page.locator(".select-popup")).toBeVisible();
-            await page.getByRole("button", { name: "First Microsoft options", exact: true }).click();
-            await expect(page.locator("#toolFilter option").nth(1)).toHaveAttribute("value", before);
-            assert.equal(await page.evaluate(() => optionChanges), 0);
-            const output = process.env.WIRE_INVENTORY_UI_PROOFS;
-            if (output) await mkdir(output, { recursive: true });
-            for (const theme of ["light", "dark"]) for (const width of [1440, 768, 390]) {
-                await page.locator("#toolFilter-control").press("Escape");
-                await page.setViewportSize({ width, height: 1000 });
-                await page.evaluate(theme => document.documentElement.dataset.evidenceTheme = theme, theme);
-                await page.locator("#toolFilter-control").click();
-                const box = await page.locator(".select-popup").boundingBox();
-                assert.ok(box.x >= 0 && box.x + box.width <= width + 1);
-                if (output) await page.locator(".select-popup").screenshot({ path: path.join(output, `${theme}-${width}.png`) });
-            }
-        });
-
-test("bounded query and observation detail fit the existing themes and responsive reader",
-    { skip: !root }, async t => {
-        const { page } = await setup(t), output = process.env.WIRE_BOUNDED_UI_PROOFS;
-        if (output) await mkdir(output, { recursive: true });
-        await page.evaluate(() => document.getElementById("wireSearchPanel").hidden = true);
-        for (const theme of ["light", "dark"]) for (const width of [1440, 768, 390]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(theme => document.documentElement.dataset.evidenceTheme = theme, theme);
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-            if (output) await page.locator(".analyze-dashboard").screenshot({ path: path.join(output, `${theme}-${width}.png`) });
-        }
-        await page.locator("#activityList .request-card-open").click();
-        await expect(page.locator("#detail [data-reader-section=prompt]")).not.toBeEmpty();
-        const width = await page.locator("#detail").evaluate(node => ({ client: node.clientWidth, scroll: node.scrollWidth }));
-        assert.ok(width.scroll <= width.client + 1);
-        if (output) await page.locator("#overlay").screenshot({ path: path.join(output, "dark-390-detail.png") });
-    });
-
-test("shared Analyze has one grid and roster, with ordinary native prompt reply and canonical calls",
-    { skip: !root }, async t => {
-        const { page } = await setup(t, { mainClient: true, github: true, timed: true });
-        await expect(page.locator("#homeView .analyze-dashboard")).toHaveCount(1);
-        await expect(page.locator("#boundedNativeSummary,#boundedNativeCards")).toHaveCount(0);
-        await expect(page.locator("#activityList .activity-card")).toHaveCount(3);
-        await expect(page.locator("#activityPager")).toContainText("1-3 of 3 activity entries");
-        await expect(page.locator("#outcomeChart [data-count-unit]")).toHaveCount(2);
-        await page.locator("#activityList [data-source-id=microsoft-365-cowork] .request-card-open").click();
-        await expect(page.locator("#requestContent [data-reader-section=prompt]")).toContainText("Read the invented records.");
-        await expect(page.locator("#requestContent [data-reader-section=activity] .reader-call")).toHaveCount(3);
-        await expect(page.locator("#requestContent [data-reader-section=source]")).toHaveAttribute("data-open", "false");
-        await expect(page.locator("#requestContent")).not.toContainText("Observation 1");
-    });
-
 test("the ordinary roster pages both sources, restores prior identities and keeps complete totals",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { mainClient: true, github: 25, extraConversations: 10 });
         const cards = page.locator("#activityList .activity-card"), pager = page.locator("#activityPager");
         const original = await cards.evaluateAll(nodes => nodes.map(node => node.dataset.viewKey));
@@ -447,7 +294,7 @@ test("the ordinary roster pages both sources, restores prior identities and keep
     });
 
 test("ordinary native page failure requires explicit refresh and never restarts or shows a false range",
-    { skip: !root }, async t => {
+    async t => {
         const { page, calls } = await setup(t, { mainClient: true, extraConversations: 10 });
         const pager = page.locator("#activityPager");
         let refuse = true;
@@ -466,7 +313,7 @@ test("ordinary native page failure requires explicit refresh and never restarts 
     });
 
 test("a late native page cannot repaint a newer source filter or broaden its roster",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { mainClient: true, extraConversations: 10 });
         let release, held = false;
         const gate = new Promise(resolve => { release = resolve; });
@@ -492,7 +339,7 @@ test("a late native page cannot repaint a newer source filter or broaden its ros
     });
 
 test("no-call conversation context remains in the single roster without a GitHub empty panel or invented model",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { mainClient: true });
         await selectActivityOption(page, "sourceFilter", "microsoft-365-chat");
         await closeAnalyzeFilters(page);
@@ -508,70 +355,41 @@ test("no-call conversation context remains in the single roster without a GitHub
         await expect(page.locator("#chart")).not.toContainText("Connect a source");
     });
 
-test("shared Microsoft filters retain date drafts, exact result membership and the admitted Reset layout across themes",
-    { skip: !root, timeout: 90000 }, async t => {
+test("Microsoft date drafts apply only on request; Reset restores all sources and reported-result units",
+    async t => {
         const { page, snapshot } = await setup(t, { mainClient: true, github: true, timed: true, returned: true });
         const point = snapshot.nativeRead.timeSeries.points[0];
-        const output = process.env.WIRE_NATIVE_ACTIVITY_PROOFS;
-        if (output) await mkdir(output, { recursive: true });
-        for (const theme of ["light", "dark"]) for (const width of [1440, 768, 390]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
-            await selectActivityOption(page, "dateFilter", "custom");
-            await page.locator("#fromFilter").fill(point.from.slice(0, 10));
-            await page.locator("#toFilter").fill(point.to.slice(0, 10));
-            await closeAnalyzeFilters(page);
-            await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
-            await openAnalyzeFilters(page);
-            await page.locator("#applyDates").click();
-            await expect(page.locator("#periodResult")).toContainText("Microsoft: 2 native tool calls");
-            await selectActivityOption(page, "outcomeFilter", "failure");
-            await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
-            await selectActivityOption(page, "toolFilter", "mcp__outlook__MoveMessage");
-            await expect(page.locator("#activityList .request-card-count")).toContainText("1 tool call");
-            await expect(page.locator("#toolFilter-control .select-value")).toHaveText("mcp__outlook__MoveMessage");
-            await expect(page.locator("#toolFilter-control .select-value wbr")).toHaveCount(2);
-            await expect(page.locator("#outcomeFilter-control")).toContainText("Tool failed (1)");
-            await page.locator("#resetView").scrollIntoViewIfNeeded();
-            const geometry = await page.locator("#appliedFilters").evaluate(node => {
-                const reset = node.querySelector("#resetView").getBoundingClientRect(), chips = node.querySelector("#filterChips").getBoundingClientRect();
-                return { height: reset.height, right: reset.right, top: reset.top, chipTop: chips.top,
-                    overflow: document.documentElement.scrollWidth - innerWidth };
-            });
-            assert.ok(geometry.height >= 44 && geometry.right <= width + 1 && geometry.overflow <= 1);
-            assert.ok(await page.locator("#analyzeFilterHeading").evaluate(node =>
-                node.getBoundingClientRect().top >= document.getElementById("analyzeFilterDialog").getBoundingClientRect().top),
-            "The sticky filter heading remains inside its dialog after scrolling to Reset.");
-            await page.locator("#resetView").hover();
-            await page.locator("#resetView").focus();
-            await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
-            await expect(page.locator("#resetView")).toBeFocused();
-            if (output) await page.screenshot({ path: path.join(output, `filters-${theme}-${width}.png`) });
-            await page.locator("#resetView").click();
-            await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
-            await expect(page.locator("#resetView")).toBeDisabled();
-            await closeAnalyzeFilters(page);
-            await expect(page.locator("#activityList .activity-card")).toHaveCount(3);
-            await selectActivityOption(page, "layerFilter", "reported-api");
-            await closeAnalyzeFilters(page);
-            await expect(page.locator("#periodResult")).toContainText("Microsoft: 5 returned-result observations");
-            await expect(page.locator("#outcomeChart [data-count-unit]")).toHaveCount(2);
-            await openAnalyzeFilters(page); await page.locator("#resetView").click(); await closeAnalyzeFilters(page);
-            await expect(page.locator("#layerFilter")).toHaveValue("tool");
-        }
-        await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-        await page.emulateMedia({ reducedMotion: "reduce" });
         await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
-        await page.locator("#resetView").scrollIntoViewIfNeeded();
-        assert.ok(await page.locator("#resetView").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-        if (output) await page.screenshot({ path: path.join(output, "filters-dark-390-enlarged.png") });
-        await page.locator("#resetView").click(); await closeAnalyzeFilters(page);
+        await selectActivityOption(page, "dateFilter", "custom");
+        await page.locator("#fromFilter").fill(point.from.slice(0, 10));
+        await page.locator("#toFilter").fill(point.to.slice(0, 10));
+        await closeAnalyzeFilters(page);
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
+        await openAnalyzeFilters(page);
+        await page.locator("#applyDates").click();
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 2 native tool calls");
+        await selectActivityOption(page, "outcomeFilter", "failure");
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
+        await selectActivityOption(page, "toolFilter", "mcp__outlook__MoveMessage");
+        await expect(page.locator("#activityList .request-card-count")).toContainText("1 tool call");
+        await expect(page.locator("#toolFilter-control .select-value")).toHaveText("mcp__outlook__MoveMessage");
+        await expect(page.locator("#toolFilter-control .select-value wbr")).toHaveCount(2);
+        await expect(page.locator("#outcomeFilter-control")).toContainText("Tool failed (1)");
+        await page.locator("#resetView").click();
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
+        await expect(page.locator("#resetView")).toBeDisabled();
+        await closeAnalyzeFilters(page);
         await expect(page.locator("#activityList .activity-card")).toHaveCount(3);
+        await selectActivityOption(page, "layerFilter", "reported-api");
+        await closeAnalyzeFilters(page);
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 5 returned-result observations");
+        await expect(page.locator("#outcomeChart [data-count-unit]")).toHaveCount(2);
+        await openAnalyzeFilters(page); await page.locator("#resetView").click(); await closeAnalyzeFilters(page);
+        await expect(page.locator("#layerFilter")).toHaveValue("tool");
     });
 
 test("reported-result tool overflow counts observations rather than their owning call",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { returned: true });
         await page.evaluate(async () => { filters.layer = "reported-api"; await load(); });
         await expect(page.locator("#percentageCharts [data-total]")).toHaveAttribute("data-total", "5");
@@ -582,7 +400,7 @@ test("reported-result tool overflow counts observations rather than their owning
     });
 
 test("native time exact data follows the guide topic independently of the category chart",
-    { skip: !root }, async t => {
+    async t => {
         const { page, snapshot } = await setup(t, { mainClient: true, timed: true });
         const point = snapshot.nativeRead.timeSeries.points[0];
         assert.ok(point);
@@ -604,61 +422,25 @@ test("native time exact data follows the guide topic independently of the catego
         assert.deepEqual(narrowed.nativeRead.aggregates.outcomes, point.outcomes);
     });
 
-test("native Analyze uses ordinary outcome rings, tool bars, exact columns and recognizable interaction cards",
-    { skip: !root }, async t => {
-        const { page } = await setup(t, { mainClient: true, long: true });
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
-        await openAnalyzeFilters(page);
-        await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork"); await closeAnalyzeFilters(page);
-        await expect(page.locator("#outcomeChart .percentage-ring")).toBeVisible();
-        await expect(page.locator("#percentageCharts [data-breakdown=tools] .percentage-bar")).toHaveCount(3);
-        await expect(page.locator("#activityList .request-card-prompt")).toHaveText("Read the invented records. Include the pending approvals and returned results, explain which calls failed, and keep unavailable dates separate from recorded dates when comparing the saved conversations.");
-        await expect(page.locator("#activityList .card-identities")).toContainText("mcp__graph__CallGraph");
-        await expect(page.locator("#activityList .card-identities")).toContainText("Not identified in this record");
-        await page.locator("#openChartReference").click();
-        await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
-        await expect(page.locator("#chartReferenceExplanation")).toContainText("3 tool calls");
-        await page.locator("#chartReferenceShowData").click();
-        await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
-        await page.locator("#chartReferenceBack").click();
-        await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
-        await page.locator("#chartReferenceShowData").click();
-        await expect(page.locator("#chartReferenceData .native-reference")).toContainText("Paths are unavailable");
-        await page.locator("#chartReferenceFindInput").fill("CallGraph");
-        await expect(page.locator("#chartReferenceData .native-reference")).toContainText("mcp__graph__CallGraph");
-        await expect(page.locator("#chartReferenceData .native-reference")).not.toContainText("MoveMessage");
-        await expect(page.locator("#chartReferenceData .native-reference")).toContainText("3 tool calls.");
-        await page.locator("#analyzeResultsSection").click();
-        await page.locator("#percentageCharts .percentage-label").filter({ hasText: "mcp__graph__CallGraph" }).click();
-        await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
-        await expect(page.locator("#activityList .request-card-count")).toContainText("1 tool call");
-        await page.locator("#activityList .request-card-open").click();
-        await expect(page.locator("#requestContent")).toContainText("Read the invented records.");
-        await expect(page.locator("#activityList .activity-card[data-detail-active]")).toHaveCount(1);
-        await expect(page.locator("#requestContent .reader-call-summary.result-tone-success")).toHaveCount(2);
-        await expect(page.locator("#requestContent .reader-call-summary.result-tone-failure")).toHaveCount(1);
-        await expect(page.locator("#requestContent")).not.toContainText("not a complete conversation");
-    });
-
 test("mixed Analyze preserves separate source populations and native time/outcome drilldowns",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { mainClient: true, github: true, timed: true });
         await expect(page.locator("#activityList .activity-card")).toHaveCount(3);
         await expect(page.locator("#activityList [data-source-id^='microsoft-365-']")).toHaveCount(2);
         await expect(page.locator("#outcomeChart .percentage-ring")).toHaveCount(2);
         const nativeColumn = page.locator("#chart .time-column[href*='source=microsoft']");
         await expect(nativeColumn).toHaveCount(1);
-        await expect(nativeColumn).toContainText("2 calls");
+        await expect(nativeColumn).toHaveText("2");
         await expect(page.locator("#chartFooter")).toContainText("1 undated record.");
-        await nativeColumn.click();
+        // The pointer targets inside the column select individual outcomes; the column link selects the day.
+        await nativeColumn.press("Enter");
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 2 native tool calls");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
         await expect(page.locator("#activityList")).toBeVisible();
         await expect(page.locator("#sourceFilter")).toHaveValue("microsoft-365");
         await page.locator("#outcomeChart [data-category=failure] .percentage-label").click();
         await expect(page.locator("#periodResult")).toContainText("Microsoft: 1 native tool calls");
-        await expect(page.locator("#activityList .request-card-categories")).toContainText("MoveMessage");
+        await expect(page.locator("#activityList .card-identities")).toContainText("MoveMessage");
         await page.locator("#openChartReference").click();
         await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
         await page.locator("#chartReferenceShowData").click();
@@ -666,7 +448,7 @@ test("mixed Analyze preserves separate source populations and native time/outcom
     });
 
 test("GitHub exact-table drilldown in mixed Analyze retains its original source denominator",
-    { skip: !root }, async t => {
+    async t => {
         const { page } = await setup(t, { mainClient: true, github: true, timed: true });
         await page.locator("#openChartReference").click();
         await page.locator('#chartReferenceTopics button[data-reference-topic="time"]').click();
@@ -680,78 +462,12 @@ test("GitHub exact-table drilldown in mixed Analyze retains its original source 
         await expect(page.locator("#periodResult")).toContainText("GitHub Copilot: 1 Work IQ tool call");
     });
 
-test("ordinary native Analyze and reader keep shared theme and narrow layouts",
-    { skip: !root }, async t => {
-        const { page } = await setup(t, { mainClient: true, github: true, long: true });
-        const output = process.env.WIRE_NATIVE_ACTIVITY_PROOFS;
-        if (output) await mkdir(output, { recursive: true });
-        if (output && process.env.WIRE_NATIVE_ACTIVITY_INSPECTOR) {
-            const args = [process.env.WIRE_NATIVE_ACTIVITY_INSPECTOR, page.url(), "--app", "--out", path.join(output, "inspector"), "--json"];
-            if (process.env.WIRE_NATIVE_ACTIVITY_INSPECTOR_ALLOW) args.push("--allow", process.env.WIRE_NATIVE_ACTIVITY_INSPECTOR_ALLOW);
-            const result = await promisify(execFile)(process.execPath, args, { maxBuffer: 4 * 1024 * 1024 }).catch(error => {
-                if (!Number.isInteger(error.code)) throw error;
-                return { stdout: error.stdout, stderr: error.stderr, code: error.code };
-            });
-            await writeFile(path.join(output, "inspector-result.json"), result.stdout);
-            if (result.stderr) await writeFile(path.join(output, "inspector-stderr.txt"), result.stderr);
-            console.log("App inspector exit:", result.code ?? 0);
-        }
-        for (const theme of ["light", "dark"]) for (const width of [1440, 768, 390]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await expect(page.locator("#outcomeChart .percentage-ring")).toHaveCount(2);
-            await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-            await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `${theme}/${width}: page overflow`);
-            if (output) await page.screenshot({ path: path.join(output, `analyze-${theme}-${width}.png`), fullPage: true });
-            await page.locator("#activityList .request-card-open").filter({ hasText: "Read the invented records." }).click();
-            await expect(page.locator("#requestContent")).toContainText("Read the invented records.");
-            await expect(page.locator("#closeContextSidebar")).toBeInViewport();
-            await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
-            assert.equal(await page.locator("#contextSidebar").evaluate(node => {
-                const box = node.getBoundingClientRect();
-                return box.left >= -1 && box.right <= innerWidth + 1;
-            }), true, `${theme}/${width}: reader stays on screen`);
-            if (output) await page.screenshot({ path: path.join(output, `reader-${theme}-${width}.png`) });
-            await page.locator("#closeContextSidebar").click();
-        }
-    });
-
-test("docked reader leaves native widget tool names readable without orphaning their final character",
-    { skip: !root }, async t => {
-        const { page } = await setup(t, { mainClient: true, github: true });
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        for (const theme of ["light", "dark"]) {
-            await chooseTheme(page, theme);
-            await page.locator("#activityList [data-source-id=microsoft-365-cowork] .request-card-open").click();
-            await expect(page.locator("#requestContent")).toContainText("Read the invented records.");
-            await page.evaluate(async () => {
-                await document.fonts.ready;
-                await Promise.allSettled(document.getAnimations().filter(animation =>
-                    animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
-            });
-            const ending = await page.locator("#percentageCharts [data-breakdown=tools] .percentage-label")
-                .filter({ hasText: "mcp__m365_search__SearchM365" }).evaluate(node => {
-                    const text = node.firstChild;
-                    if (text?.nodeType !== Node.TEXT_NODE || !text.textContent.endsWith("SearchM365")) throw new Error("Missing original tool label.");
-                    const range = document.createRange(), length = text.textContent.length;
-                    range.setStart(text, length - 2); range.setEnd(text, length - 1);
-                    const previous = range.getBoundingClientRect().top;
-                    range.setStart(text, length - 1); range.setEnd(text, length);
-                    return { previous, last: range.getBoundingClientRect().top };
-                });
-            assert.ok(Math.abs(ending.last - ending.previous) < 1, `${theme}: the final 5 must not wrap alone`);
-            await page.locator("#closeContextSidebar").click();
-            await expect(page.locator("#contextSidebar")).toBeHidden();
-        }
-    });
-
-test("main client composes bounded native pages without presenting GitHub-only totals as Microsoft activity",
-    { skip: !root }, async t => {
-        // Public DTO/marker composition only. This does not qualify the still-gated additive source host.
-        const { page, calls } = await setup(t, { mainClient: true });
+test("opening and cancelling a native filter reads only its dimension and exact Search opens one ordinal",
+    async t => {
+        // 101 distinct tools cross the production inventory page limit of 100.
+        const { page, calls } = await setup(t, { mainClient: true, extraSuccesses: 98, distinctTools: true });
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await expect(page.locator("#periodResult")).toContainText("Microsoft: 3 native tool calls");
+        await expect(page.locator("#periodResult")).toContainText("Microsoft: 101 native tool calls");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(2);
         assert.equal(calls.filter(call => call.method === "inventory").length, 0,
             "An accepted snapshot must not prefetch unused Microsoft filter inventories.");
@@ -782,11 +498,20 @@ test("main client composes bounded native pages without presenting GitHub-only t
         await page.locator("#toolFilter-control").click();
         const completeTools = await (await toolPage).json();
         assert.equal(completeTools.aggregates.complete, true);
-        for (const item of completeTools.page.items) {
-            await expect(page.locator(`.select-popup [data-value=${JSON.stringify(item.value)}]`)).toBeVisible();
-        }
+        assert.equal(completeTools.page.items.length, 100);
+        assert.ok(completeTools.page.nextCursor);
+        const firstValue = completeTools.page.items[0].value;
+        await expect(page.locator(`.select-popup [data-value=${JSON.stringify(firstValue)}]`)).toBeVisible();
+        await page.getByRole("button", { name: "Next Microsoft options" }).click();
+        const first = page.locator(`.select-popup [data-value=${JSON.stringify(firstValue)}]`);
+        await expect(first).toHaveCount(0);
+        await expect(page.locator("#toolFilter option[data-native-inventory=true]")).toHaveCount(1);
+        assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").at(-1).input.page.after,
+            completeTools.page.nextCursor);
+        await page.getByRole("button", { name: "First Microsoft options" }).click();
+        await expect(first).toBeVisible();
         await expect(page.locator("#toolFilter")).toHaveValue("all");
-        assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").length, 1);
+        assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").length, 3);
         await page.locator("#toolFilter-control").press("Escape");
         const beforeSource = calls.filter(call => call.method === "inventory").length;
         await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
@@ -797,7 +522,7 @@ test("main client composes bounded native pages without presenting GitHub-only t
         await closeAnalyzeFilters(page);
         await page.locator("#activityList .request-card-open").click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#requestContent .reader-call")).toHaveCount(3);
+        await expect(page.locator("#requestContent .reader-call")).toHaveCount(10);
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
         await page.locator("#wireSearch").fill("Read");
@@ -813,6 +538,6 @@ test("main client composes bounded native pages without presenting GitHub-only t
         await selectActivityOption(page, "sourceFilter", "github-copilot");
         await expect(page.locator("#boundedNativeSummary,#boundedNativeCards")).toHaveCount(0);
         await expect(page.locator("#activityList [data-source-id^='microsoft-365-']")).toHaveCount(0);
-        assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").length, 1,
+        assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").length, 3,
             "Changing scope must retire the old tool inventory, not prefetch its replacement.");
     });

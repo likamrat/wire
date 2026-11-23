@@ -23,8 +23,9 @@ const control = () => createHistoryEngineering({ expectedAccount: "example@inval
 const later = () => Object.assign(new Error("PRIVATE_LATER_ERROR"), { code: "NATIVE_SOURCE_REQUEST_FAILED" });
 const privateData = /PRIVATE_|https?:|[?&]secret=|"(?:headers|authorization|payload|cursor)"\s*:|token-value/i;
 
-test("Windows operator closes the actual CLI preparation without a process signal or native launch",
-    { timeout: 60000, skip: process.platform !== "win32" || !process.env.WIRE_HISTORY_TEST_COMMIT }, async t => {
+if (process.platform === "win32" && process.env.WIRE_HISTORY_TEST_COMMIT)
+    test("offline clean candidate: Windows operator closes the actual CLI preparation without a process signal or native launch",
+    { timeout: 60000 }, async t => {
         const directory = await mkdtemp(path.join(os.tmpdir(), "wire-preparation-operator-"));
         const output = path.join(directory, "result.json");
         const script = fileURLToPath(new URL("../scripts/investigate-native-history.mjs", import.meta.url));
