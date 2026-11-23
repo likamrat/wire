@@ -44,7 +44,7 @@ async function metrics(button) {
     });
 }
 
-test("destructive confirmation keeps a readable filled face and separate native hit target in every theme/size/state", { timeout: 60000 }, async t => {
+test("destructive confirmation remains legible and keyboard-contained at narrow and wide sizes", { timeout: 60000 }, async t => {
     const record = fixture("pill");
     record.toolCalls = Array.from({ length: 320 }, (_, index) => ({
         ...record.toolCalls[0], toolCallId: `pill-${index}`, startEventId: `pill-start-${index}`,
@@ -67,9 +67,16 @@ test("destructive confirmation keeps a readable filled face and separate native 
         await page.locator("#deletePreview").click();
         const button = page.locator("#deleteConfirm");
         await page.waitForFunction(() => document.querySelector("#deleteConfirm").textContent === "Delete 320 records");
-        for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
+        // The dialog's action row switches layout at 480px. Check both sides, including enlarged text.
+        for (const [width, scale] of [[375, 2], [1200, 1]]) {
             await page.setViewportSize({ width, height: 1000 });
             await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+            assert.ok(await page.locator("#deleteDialog").evaluate(node => node.scrollWidth <= node.clientWidth));
+            assert.ok((await page.locator("#deleteCancel").boundingBox()).height >= 44);
+            assert.match(await page.locator("#deleteDialog .delete-irreversible").innerText(), /cannot be undone/);
+            await button.focus();
+            await page.keyboard.press("Tab");
+            assert.ok(await page.locator("#deleteDialog").evaluate(node => node.contains(document.activeElement)));
             await page.locator("#deleteCancel").focus();
             await page.mouse.move(1, 1);
             for (const state of ["rest", "hover", "focus", "pressed"]) {
