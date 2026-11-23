@@ -81,7 +81,7 @@ async function setup(t, records, { frozen = false } = {}) {
 const prompt = page => page.locator('[data-reader-section="prompt"]');
 const content = page => prompt(page).locator(".full-text-content");
 const promptToggle = page => prompt(page).locator(".reader-section-heading .prompt-preview-toggle");
-const card = (page, id) => page.locator(`#activityList [data-view-key="request:${id}"] .card-panel-link`);
+const card = (page, id) => page.locator(`#activityList [data-view-key="request:${id}"] .request-card-open`);
 const cardTime = (page, id) => page.locator(`#activityList [data-view-key="request:${id}"] .request-card-time`);
 
 async function open(page, id) {

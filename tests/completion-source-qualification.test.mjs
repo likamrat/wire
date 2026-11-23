@@ -486,8 +486,8 @@ test("qualified completion reaches normal cards, reader, report facts, analytics
             await chooseTheme(page, theme);
             const card = page.locator("#activityList article").filter({ hasText: "Read the invented file." });
             await expect(card.locator(".card-outcome")).toHaveText("1 tool call completed");
-            const calls = card.locator(".card-panel-link");
-            await expect(calls).toHaveText("1 tool call");
+            const calls = card.locator(".request-card-open");
+            await expect(calls).toHaveAccessibleName("1 tool call completed");
             await calls.click();
             const call = page.locator('[data-reader-section=activity] [data-tool-call-id="call"]');
             await expect(call).toBeVisible();

@@ -276,7 +276,7 @@ test("deep retained-reply reading returns after authorized payloads settle witho
     await page.goto(runtime.url + "#analyze"); await ready(page);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
-    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    const b = page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first();
     await a.click();
     const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "LONG_RETAINED_LINE_0:" });
     await expect(reply).toHaveText(longText);
@@ -349,7 +349,7 @@ for (const ending of ["complete", "replacement", "revocation", "visibility"]) te
         samples.push({ time, ...sample });
     }
     if (ending === "replacement") {
-        await page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first().click();
+        await page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first().click();
         await expect(page.locator(".request-original pre")).toContainText("UNRELATED_RECORD");
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
         await frames(page);
@@ -416,7 +416,7 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
     await page.goto(runtime.url + "#analyze"); await ready(page);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
-    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    const b = page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first();
     await a.click();
     const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "DEFERRED_READING_REPLY" });
     await expect(reply).toHaveText(text);

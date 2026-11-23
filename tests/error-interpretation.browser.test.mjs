@@ -80,7 +80,7 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     for (const [id, message, code, status, , meaning] of cases) {
-        const card = page.locator(".request-card-open").filter({ hasText: `invented ${id} request` });
+        const card = page.locator("#activityList article").filter({ hasText: `invented ${id} request` }).locator(".request-card-open");
         if (!await card.count()) {
             await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
             await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");

@@ -122,7 +122,7 @@ for (const multiple of [false,true]) test(`${multiple ? "unequal columns and a g
         await expect(rows.nth(2).getByRole("link")).toHaveCount(0);
         const short = rows.nth(1).locator("td").first().getByRole("link");
         await short.focus(); await short.press("Enter"); await ready(page);
-        await expect(page.locator("#activityList .request-card-open")).toHaveText("Synthetic chart request 15 0");
+        await expect(page.locator("#activityList .request-card-prompt")).toHaveText("Synthetic chart request 15 0");
         await page.goBack(); await expect(short).toBeFocused();
     }
 });

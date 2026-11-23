@@ -534,12 +534,12 @@ test("sidebar icon-only targets do not inherit text-line height", async t => {
     }
 });
 
-test("the prompt opens an anchored reader without replacing the Analyze list", { timeout: 30000 }, async t => {
+test("the outcome opens an anchored reader without replacing the Analyze list", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await revealAnalyzeRecords(page);
-    const card = page.locator("#activityList>.request-row").first();
+    const card = page.locator("#activityList .request-row").first();
     await expect(card.getByRole("button", { name: "Add to report", exact: true })).toBeVisible();
-    await expect(card.locator(".request-card-open")).toHaveAccessibleName(/^Read retained prompt:/);
+    await expect(card.locator(".card-orientation .request-card-open")).toHaveCount(1);
     await page.evaluate(() => { window.originalActivityList = document.querySelector("#activityList").firstElementChild; });
     const link = card.locator(".request-card-open");
     await link.scrollIntoViewIfNeeded();

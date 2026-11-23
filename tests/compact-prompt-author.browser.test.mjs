@@ -89,23 +89,24 @@ test("compact cards name the prompt author without inferring from text or replac
         await expect(row.locator(".request-card-author")).toHaveText(label);
         await expect(row.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
         await expect(row.locator(".request-card-open")).toHaveCount(1);
-        await expect(row.locator(".request-card-open")).toHaveAttribute("href", /\/request\?.*record=interaction-bookmark-/);
+        await expect(row.locator(".request-card-open")).toHaveAttribute("href", /\/request\?/);
     }
-    await expect(card(page, "missing").locator(".request-card-open")).toContainText("Prompt text unavailable");
+    await expect(card(page, "missing").locator(".request-card-prompt")).toContainText("Prompt text unavailable");
     const link = card(page, "mine").locator(".request-card-open");
-    await link.locator(".card-excerpt").evaluate(node => {
+    const passage = card(page, "mine").locator(".card-excerpt");
+    await passage.evaluate(node => {
         const range = document.createRange(); range.selectNodeContents(node);
         getSelection().removeAllRanges(); getSelection().addRange(range);
     });
     const selected = await page.evaluate(() => getSelection().toString());
-    await link.dispatchEvent("click", { button: 0 });
+    await passage.dispatchEvent("click", { button: 0 });
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     assert.equal(await page.evaluate(() => getSelection().toString()), selected);
     await page.evaluate(() => getSelection().removeAllRanges());
     const opened = browserContext.waitForEvent("page");
     await link.click({ modifiers: ["Control"] });
     const popup = await opened;
-    await expect(popup.locator(".request-original").getByRole("region", { name: "Human prompt", exact: true })).toBeVisible();
+    await expect(popup.getByRole("button", { name: "Open this view without the private selection" })).toBeVisible();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await popup.close();
     await link.focus(); await page.keyboard.press("Enter");

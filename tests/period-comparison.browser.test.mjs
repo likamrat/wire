@@ -210,7 +210,7 @@ const back = page => page.getByRole("button", { name: "Back to comparison", exac
 test("Compare starts independently; Use Analyze view qualifies both date windows before opening exact calls", async t => {
     const { page, pairs } = await setup(t);
     await restoreLegacySearch(page, periodQuery);
-    const origin = page.locator(".request-card-open").filter({ hasText: `${periodQuery} request 0` });
+    const origin = page.locator("#activityList article").filter({ hasText: `${periodQuery} request 0` }).locator(".request-card-open");
     await origin.click();
     const reader = page.locator("#contextSidebar");
     await expect(reader).toContainText("This historical error does not establish the account's current sign-in state");

@@ -136,7 +136,8 @@ test("a filtered card keeps its failed sibling in full activity, outside the mat
     await expect(page.locator("#activityCount")).toHaveText("4");
     await expect(page.locator('#outcomeChart [data-category="failure"]')).toHaveAttribute("data-count", "0");
     const card = page.locator("#activityList article").filter({ hasText: "1 of 2 Work IQ tool calls matches this view" });
-    await card.getByRole("link", { name: "Open activity panel: 2 tool calls", exact: true }).click();
+    await card.getByRole("link", { name: "1 tool call completed", exact: true }).click();
+    await page.getByRole("link", { name: "Show full activity" }).click();
     const sibling = page.locator('[data-tool-call-id="plan-call"]');
     await expect(sibling).toContainText("Outside current view");
     await expect(sibling).toContainText("Re-authentication required for MCP server 'workiq'. Run /mcp auth workiq.");

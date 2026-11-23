@@ -129,7 +129,7 @@ process.send({ url: runtime.url });
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#activityList .request-card-open")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await expect(page.locator("#activityList .request-card-prompt")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator("body")).toHaveClass(/wire-frontend-react/);
     await expect(page.locator(".frontend-record-slot").first()).toBeAttached();
     await expect(page.locator("#wireSearchHome svg[data-icon-role=search]")).toHaveCount(1);
