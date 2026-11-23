@@ -1080,6 +1080,23 @@ async function inventedNativeApp(makeRenderer, makeStore, account, entry, source
     };
 }
 
+async function reconnectAfterOwnerRelease(access, owner) {
+    // Closing a page does not release its profile. Use the same lifecycle offer
+    // as the UI, including its generation; never send or retry a busy Connect.
+    const offer = Promise.withResolvers();
+    const unsubscribe = access.subscribeControl(state => {
+        if (!state || state.wire !== "signed-in" || state.microsoft.state === "recovery-required") {
+            offer.reject(new Error(`Reconnect not authorized: ${state?.microsoft?.reason ?? state?.wire ?? "closed"}`));
+        } else if (state.microsoft.state === "reconnect-required" && state.microsoft.actions.includes("microsoft-connect")) {
+            offer.resolve(state);
+        }
+    });
+    const { generation } = await offer.promise.finally(unsubscribe);
+    const receipt = await access.command(owner, { schemaVersion: 1, action: "microsoft-connect",
+        operationId: randomUUID(), generation }, () => true);
+    assert.equal(receipt.outcome, "completed");
+}
+
 for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiProtocol = false, launcher = null } of [
     { surfaces: ["cowork"], cacheable: false }, { surfaces: ["cowork"], cacheable: true },
     { surfaces: ["chat"], cacheable: true }, { surfaces: ["chat", "cowork"], cacheable: true },
@@ -1318,8 +1335,8 @@ for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiPr
         });
         await page.goto(url + "#settings?section=connection");
         await expect(page.locator("#wireMicrosoftPrepare")).toBeEnabled();
-        await page.locator("#wireMicrosoftPrepare").click();
         if (launcher === "connect-early") {
+            await page.locator("#wireMicrosoftPrepare").click();
             await expect.poll(() => earlyAttempts.length).toBe(1);
             assert.equal(earlyAttempts[0].forwarded, false);
             assert.deepEqual(earlyAttempts[0].sent, []);
@@ -1335,6 +1352,16 @@ for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiPr
             await launcherStop(); launcherStop = null;
             return;
         }
+        // One Settings gesture owns the entire Connect, not just preparation.
+        const [connectResponse] = await Promise.all([
+            page.waitForResponse(response => response.url() === url + "api/access/command"
+                && response.request().postDataJSON()?.action === "microsoft-connect"),
+            page.locator("#wireMicrosoftPrepare").click(),
+        ]);
+        assert.equal(connectResponse.status(), 200);
+        const connectReceipt = await connectResponse.json();
+        assert.equal(connectReceipt.operationId, connectResponse.request().postDataJSON().operationId);
+        assert.equal(connectReceipt.outcome, "completed", connectReceipt.reason);
         await expect(page.locator("#sourceMicrosoftSurfaces")).toBeEnabled();
         if (launcher?.startsWith("connect-immediate-")) {
             await owned.pages()[0].evaluate(frame => {
@@ -1609,15 +1636,7 @@ for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiPr
     const retained = await host.access.nativePersistenceStatus({ operationId: interruptedId }, admission);
     assert.notEqual(retained.receipt?.status, "committed");
     assert.equal((await host.access.status()).wire, "signed-in");
-    let reconnectState;
-    for (let attempt = 0; attempt < 200; attempt++) {
-        reconnectState = await host.access.status();
-        if (reconnectState.microsoft.actions.includes("microsoft-connect")) break;
-        await new Promise(resolve => setTimeout(resolve, 10));
-    }
-    const reconnect = await host.access.command(admission.owner, { schemaVersion: 1, action: "microsoft-connect",
-        operationId: randomUUID(), generation: reconnectState.generation }, () => true);
-    assert.equal(reconnect.outcome, "completed");
+    await reconnectAfterOwnerRelease(host.access, admission.owner);
     const paused = await host.access.globalCollectionControl(admission);
     assert.equal(paused.globalCollection.paused, true, "Reconnect alone does not resume collection.");
     await host.access.setGlobalCollectionEnabled({ schemaVersion: 1, enabled: true,
@@ -1643,15 +1662,7 @@ for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiPr
     assert.notEqual(idleStatus.microsoft.state, "connected");
     assert.equal(idleStatus.wire, "signed-in");
     if (hasChat && hasCowork) {
-        let available = idleStatus;
-        for (let attempt = 0; attempt < 200 && !available.microsoft.actions.includes("microsoft-connect"); attempt++) {
-            await new Promise(resolve => setTimeout(resolve, 10));
-            available = await host.access.status();
-        }
-        assert.ok(available.microsoft.actions.includes("microsoft-connect"));
-        const connection = await host.access.command(admission.owner, { schemaVersion: 1, action: "microsoft-connect",
-            operationId: randomUUID(), generation: available.generation }, () => true);
-        assert.equal(connection.outcome, "completed");
+        await reconnectAfterOwnerRelease(host.access, admission.owner);
         assert.equal((await host.access.collectNativeNow({ operationId: randomUUID() }, admission)).status, "committed");
         const beforeChange = (await loadBoardState(context, { readOnly: true })).nativeRetention.partitions;
         const changed = await host.access.nativeConfigurationOffer(admission);
