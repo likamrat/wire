@@ -188,12 +188,16 @@ test("legacy aliases use the canonical call's exact paths, including start-event
     await page.goto(url + "#request?request=legacy-alias"); await ready(page);
     const response = await snapshot;
     assert.equal(response.status(), 200, await response.text());
-    assert.equal(await page.locator(".request-outcome-action .api-path").textContent(), "/me/messages?Source=Current");
-    assert.equal(await page.locator(".journey-item > .action-fields .api-path").textContent(), "/me/messages?Source=Current");
-    await page.locator(".request-outcome .returned-api-details > summary").click();
-    assert.equal(await page.locator(".request-outcome .api-result-entry .api-path").textContent(), "/me/messages?Source=Returned");
-    assert.equal(await page.locator(".full-request-results [data-result-layer=tool] .result-unit").textContent(), "1 Work IQ tool call");
-    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Source=Older/);
+    const { requestActivity } = await response.json();
+    assert.deepEqual(requestActivity.tool.map(row => row.scenarioId), ["canonical"]);
+    assert.deepEqual(requestActivity["reported-api"].map(row => row.parentCallId), [requestActivity.tool[0].id]);
+    const calls = page.locator("#requestContent .reader-call-row");
+    await expect(calls).toHaveCount(1);
+    const toggle = calls.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(calls.locator(".reader-input-value code.api-path")).toHaveText("/me/messages?Source=Current");
+    await expect(calls.locator(".api-result-entry code.api-path")).toHaveText("/me/messages?Source=Returned");
+    await expect(calls).not.toContainText("Source=Older");
 });
 
 test("returned-result pages retain every canonical entry without assigning the first target to the rest", { timeout: 30000 }, async t => {
