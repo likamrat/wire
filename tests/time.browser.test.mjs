@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, moveCard } from "../lib/store.mjs";
 import { time } from "../lib/time.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, openActivitySessions, setLegacyTimeBucket } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, openActivitySessions, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const instants = ["2026-03-08T07:59:59Z", "2026-03-08T08:00:00Z", "2026-03-08T09:59:59Z", "2026-03-08T10:00:00Z", "2026-03-09T06:59:59Z", "2026-03-09T07:00:00Z"];
 function records() {
@@ -97,47 +97,37 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
         assert.equal(input.timeContext.timeZone, time.zone(zone));
         assert.equal(input.timeContext.locale, "en-GB");
         assert.equal(await page.locator("#activityCount").innerText(), "6");
-        if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure > summary").click();
-        assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), zone === "America/Los_Angeles" ? ["1", "4", "1"] : ["4", "2"]);
-        const action = page.locator("#countTable .chart-data-action").nth(zone === "America/Los_Angeles" ? 1 : 0);
-        assert.equal(await action.innerText(), "8 Mar 2026");
+        await page.locator("#openChartReference").click();
+        await page.locator('[data-reference-topic="time"]').click();
+        await page.locator("#chartReferenceShowData").click();
+        const table = page.locator("#chartReferenceData .exact-data-table");
+        assert.deepEqual(await table.locator("tbody td:nth-child(2)").allTextContents(), zone === "America/Los_Angeles" ? ["1", "4", "1"] : ["4", "2"]);
+        const action = table.locator("tbody tr").nth(zone === "America/Los_Angeles" ? 1 : 0).getByRole("link").first();
+        await expect(action).toHaveText("8 Mar 2026");
         await action.click(); await ready(page);
-        assert.equal(await page.locator("#fromFilter").inputValue(), "2026-03-08");
-        assert.equal(await page.locator("#toFilter").inputValue(), "2026-03-08");
+        assert.equal(new URL(page.url()).searchParams.get("from"), "2026-03-08");
+        assert.equal(new URL(page.url()).searchParams.get("to"), "2026-03-08");
         assert.equal(await page.locator("#activityList .request-row").count(), 4);
         const drill = requests.filter(r => r.path === "/api/snapshot").at(-1).input;
         assert.equal(drill.filters.from, "2026-03-08");
         assert.equal(drill.filters.to, "2026-03-08");
         if (zone === "America/Los_Angeles") {
-            const meta = await page.locator("#activityList .request-meta").allTextContents();
-            assert.ok(meta.every(text => !text.includes("GMT")), "Request summaries inherit the central display context");
-            assert.ok(meta.every(text => text.includes("Message recorded:")));
-            await page.locator("#activityList .request-link").first().click();
+            const parent = page.locator('#activityList [data-view-key="request:timezone-4"]');
+            await expect(parent).toBeVisible();
+            await parent.locator(".request-card-open").click();
             await ready(page);
-            const requestText = await page.locator("#requestContent").innerText();
             assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
-            assert.doesNotMatch(requestText, /Started:|GMT-7/);
-            await page.locator(".journey-item").first().getByText("Technical details", { exact: true }).click();
-            assert.match(await page.locator(".journey-item").first().locator("dt").filter({ hasText: /^Started$/ }).locator("+ dd").textContent(), /GMT-7/);
-            const reader = page.locator(".request-original .full-text-toggle");
-            if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-            assert.equal(await page.locator(".request-original pre").textContent(), records()[0].userPrompt.text);
-            await page.getByRole("button", { name: "Add to report", exact: true }).click();
-            await page.locator("nav [data-nav=reports]").click();
-            await reportContents(page);
-            await page.locator("#scopeDetails > summary").click();
-            assert.equal(await page.locator("#reportTimeContext").innerText(), "Source event timestamps stay withheld.");
-            await page.locator("#scopeDetails > summary").click();
-            for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
-                await page.setViewportSize({ width, height: 950 });
-                await chooseTheme(page, theme);
-                assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-            }
+            const call = page.locator('[data-tool-call-id="test-call-timezone-4"]');
+            const toggle = call.locator(".reader-call-toggle");
+            if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+            await expect(call.getByText("Recorded start", { exact: true }).locator("+ dd")).toContainText(/23:59:59.*GMT-7/);
+            assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), records()[4].userPrompt.text);
+            await page.locator("#closeContextSidebar").click();
         }
-        await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
+        await openAnalyzeFilters(page); await page.locator("#resetView").click(); await ready(page);
         assert.equal(await page.locator("#activityCount").innerText(), "6");
         assert.equal(requests.filter(r => r.path === "/api/snapshot").at(-1).input.timeContext.timeZone, time.zone(zone));
-        await setLegacyTimeBucket(page, "day"); await ready(page);
+        await closeAnalyzeFilters(page);
         const column = page.locator(".time-column").nth(zone === "America/Los_Angeles" ? 1 : 0);
         await column.focus();
         assert.match(await column.getAttribute("aria-label"), /8 Mar 2026/);
@@ -145,7 +135,7 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
         assert.ok((await page.locator("#displayTimeZone option:checked").textContent()).includes(time.zone(zone)));
         await page.keyboard.press("Escape");
         assert.deepEqual(errors, []);
-        assert.ok(requests.every(r => ["/api/snapshot", "/api/assessment/detail", "/api/assessment/overview"].includes(r.path)));
+        assert.ok(requests.every(r => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(r.path)));
         await page.close();
     }
     assert.deepEqual(await readFile(path.join(context.dataDir, "private-evidence", baseline.evidenceFile)), evidence);
@@ -167,12 +157,11 @@ test("last 7/30 days include today in browser zone rather than historical covera
     assert.deepEqual(errors, []);
 });
 
-test("focus zone change invalidates in-flight preview and reviewed snapshot without evidence writes", { timeout: 120000 }, async t => {
-    let started, release;
-    const rendering = new Promise(resolve => { started = resolve; });
-    const { browser, runtime, context } = await setup(t, async () => { started(); return new Promise(resolve => { release = resolve; }); });
+test("a changed device zone retires both an in-flight report and an already prepared copy without saving", { timeout: 30000 }, async t => {
+    const { browser, runtime, context } = await setup(t);
     const initial = await loadBoardState(context);
     const page = await browser.newPage({ timezoneId: "America/Los_Angeles", locale: "en-US" });
+    await page.clock.setFixedTime(new Date("2026-03-10T18:00:00Z"));
     await page.addInitScript(() => {
         const native = Intl.DateTimeFormat;
         globalThis.testZone = "America/Los_Angeles";
@@ -188,33 +177,39 @@ test("focus zone change invalidates in-flight preview and reviewed snapshot with
         });
     });
     const { requests, errors } = observe(page);
-    await page.goto(runtime.url + "#activity"); await ready(page);
-    await page.locator("#activityList input[type=checkbox]").first().check();
-    await page.locator("nav [data-nav=reports]").click();
-    await reportContents(page);
-    await page.locator("#formatOptions input[value=pdf]").check();
-    await page.locator("#exportBtn").click();
-    await rendering;
+    await page.goto(runtime.url + "reports"); await ready(page);
+    const rendered = Promise.withResolvers(), release = Promise.withResolvers();
+    await page.route("**/api/preview", async route => {
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        rendered.resolve((await response.json()).previewId);
+        await release.promise;
+        await route.fulfill({ response });
+    }, { times: 1 });
+    t.after(() => release.resolve());
+    await prepareLandingReport(page, "all");
+    const old = await rendered.promise;
     const refreshed = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
     await page.evaluate(() => { globalThis.testZone = "UTC"; window.dispatchEvent(new Event("focus")); });
-    await refreshed; await ready(page);
-    assert.match(await page.locator("#reportJourneyError").innerText(), /timezone|current|updating/i);
-    const cancelled = page.waitForResponse(r => r.url().endsWith("/api/cancel-preview"));
-    release(Buffer.from("%PDF-synthetic cancelled rendering fixture"));
-    await cancelled;
-    assert.equal(await page.locator("#reportReviewBody .attestation").count(), 0);
-    assert.deepEqual(await readdir(path.join(context.dataDir, "exports")), []);
+    await refreshed;
+    const cancelled = page.waitForResponse(r => r.url().endsWith("/api/cancel-preview"), { timeout: 5000 });
+    release.resolve();
+    assert.equal((await cancelled).request().postDataJSON().previewId, old);
+    await ready(page);
+    await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeHidden();
     assert.equal((await loadBoardState(context)).revision, initial.revision);
-    await cancelReportPreview(page);
-    await page.locator("#formatOptions input[value=pdf]").uncheck();
-    await page.locator("#exportBtn").click();
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    const fresh = page.waitForResponse(r => r.url().endsWith("/api/preview"), { timeout: 5000 });
+    await page.getByRole("button", { name: "Read current activity", exact: true }).click();
+    const response = await fresh, current = await response.json();
+    assert.equal(response.status(), 200, current.error);
+    assert.notEqual(current.previewId, old); assert.equal(current.timeContext.timeZone, "UTC");
+    const save = page.getByRole("button", { name: "Save report", exact: true });
+    await expect(save).toBeEnabled();
     const changed = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
     await page.evaluate(() => { globalThis.testZone = "Asia/Kathmandu"; window.dispatchEvent(new Event("focus")); });
     await changed; await ready(page);
-    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
+    assert.equal(await save.isVisible() && await save.isEnabled(), false);
+    assert.deepEqual(await readdir(path.join(context.dataDir, "exports")), []);
     assert.ok(!requests.some(r => r.path === "/api/export"));
     assert.equal((await loadBoardState(context)).revision, initial.revision);
     assert.deepEqual(errors, []);
