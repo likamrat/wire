@@ -1,14 +1,14 @@
 ---
 name: wire-evidence-semantics
-description: Preserve WIRE's evidence meaning across metrics, filters, charts, cards and reports. Use for canonical population, denominators, outcomes, errors, service classification, author/model provenance or timestamp changes. Keep missing, partial and unknown evidence distinct from zero or failure.
+description: Checks what WIRE counts and attributes. Use for conflicting totals, denominators, tool versus returned-entry outcomes, author or service provenance, and timing across charts, filters, readers and reports.
 license: MIT
 ---
 
 # WIRE evidence semantics
 
-Start with the current definitions in the
-[report contract](../../../docs/report-contract.md) and the affected
-producer/consumer. Use [collection fidelity](../../../docs/collection.md#evidence-fidelity)
+Start with the [membership rules](../../../docs/report-contract.md#evidence-and-membership)
+or the [outcome and timing definitions](../../../docs/report-contract.md#service-outcome-and-time-meaning).
+Check the producer and consumers of the changed fact. Use [collection fidelity](../../../docs/collection.md#evidence-fidelity)
 when changing retained facts.
 
 ## Preserve the unit and population
@@ -24,6 +24,11 @@ when changing retained facts.
 - Distinguish known empty membership from unavailable identity or incomplete
   coverage. Missing is not zero; partial results do not prove complete coverage.
 
+For disputed totals, compare the unit, filters, dates and zone, store and
+revision on both sides. Equal counts alone do not establish equal membership.
+If the original readings cannot be matched, report what the new comparison
+shows and leave the historical difference unresolved.
+
 ## Preserve the meaning
 
 Successful tool execution does not prove answer correctness, authorization or
@@ -36,6 +41,10 @@ or conflicting facts explicit; infer none from color, names, adjacent messages
 or current account state. Capture/commit/completion time cannot silently become
 call-start time. Version changed definitions rather than reinterpreting frozen
 historical facts.
+
+For prompt authorship, check two links separately: who sent the recorded
+message, and which request initiated this call. A known sender on the nearest
+message does not establish the second link.
 
 For failures, separate an observed error from its retained cause. Distinguish
 not recorded, not retained and excluded for privacy when the evidence supports

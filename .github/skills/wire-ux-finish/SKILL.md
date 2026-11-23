@@ -1,6 +1,6 @@
 ---
 name: wire-ux-finish
-description: Finish WIRE interfaces against established human-reading and interaction principles. Use for UI changes, repeated design feedback, cross-surface inconsistencies or user-facing readiness review. Inspect affected real journeys and transitions without launching a redesign or broad test campaign.
+description: Reviews WIRE screens through the user's actual journey. Use for control layout, wording, repeated design feedback, hover, motion, focus or return-position changes.
 license: MIT
 ---
 
@@ -42,13 +42,13 @@ surfaces actually affected. Keep unrelated redesign opportunities out of scope.
   hierarchy through alignment, regular typography and purposeful spacing.
 - Use concise, concrete wording. Retain necessary uncertainty and exact evidence
   without exposing every stored field, repeated heading or engineering recital.
-- Use the `humanizer` skill when writing or reviewing user-facing copy. Read the
+- For user-facing copy, use `humanizer` when available. Read the
   label with its heading, neighboring rows and destination. Could someone explain
   what happened or what to do next without knowing how WIRE stores the data?
   Put the answer first. If a detail is unknown and it matters to the decision,
   say what WIRE cannot tell. Keep original diagnostic text available as evidence.
-- Preserve the current Asta Sans, Lucide, theme and sidebar conventions in the
-  design contract; derive current values there rather than copying old palettes.
+- Compare the control with a [shipped peer](../../../docs/design.md#one-coherent-workspace)
+  in its full screen. Use the design contract for type, icon and color roles.
 - Share author, service and outcome meaning across surfaces. Labels/icons support
   color; service identity is not success and missing evidence is not failure.
 - Inspect painted glyphs, baselines, line boxes, padding and hit areas together.
@@ -65,7 +65,10 @@ content, accessibility and existing product behavior.
 
 ## 3. Operate the affected journey
 
-Use the normal renderer on the exact candidate with realistic invented data:
+Use the renderer from the reported entry on the exact candidate. If React
+and standalone markup both implement the changed control, exercise that
+control in both; a shared controller does not prove identical layout or focus.
+Use realistic invented data:
 plural tools/services, long content, missing facts or failures where relevant.
 Follow the affected path into and back out of its contextual surfaces.
 Inspect the composed screen, not only crops or computed style values.

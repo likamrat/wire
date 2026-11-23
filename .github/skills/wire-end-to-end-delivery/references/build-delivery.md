@@ -45,7 +45,9 @@ Before replacement, establish the exact qualified artifact, supported stop/start
 route, current single-writer custody, applicable preservation checks and a
 compatible fallback. Preserve data, settings, frozen reports and the usable
 prior artifact. New artifact schemas may make older readers an invalid rollback;
-keep matched readers and never restore old data or strip bindings to downgrade.
+check the proposed fallback against a report from the candidate writer using
+the [saved-reader compatibility check](../../wire-report-integrity/SKILL.md#inspect-the-saved-artifact).
+Never restore old data or strip bindings to downgrade.
 Follow [store ownership](../../../../docs/collection.md#store-ownership):
 independent instances may share approved read-only input, not writable stores,
 cursors or consent.

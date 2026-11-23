@@ -1,6 +1,6 @@
 ---
 name: wire-local-search
-description: Implement and verify WIRE's literal on-device Search contract. Use for corpus admission, matching, Unicode highlights, result identity/Open, analytical Search membership, lifecycle or revocation changes. Preserve exact authorized text without AI, semantic inference, provider sessions or off-device query processing.
+description: Maintains WIRE's literal on-device Search over retained evidence. Use for corpus admission, Unicode highlights, exact Open/Back, Current Analyze scope or withdrawal of Search results.
 license: MIT
 ---
 
@@ -8,7 +8,8 @@ license: MIT
 
 Use [local text Search](../../../docs/live-search.md) and the
 [authorized corpus](../../../docs/search-corpus.md) for the maintained contract.
-Earlier semantic/Related experiments are superseded, not alternative backends.
+Search inside a settings list or draft picker narrows its own options. It
+does not query the evidence corpus or change the analytical population.
 
 ## Match authorized original text
 
@@ -18,8 +19,7 @@ Preserve the versioned normalization and literal substring policy implemented
 by the shared matcher; do not add another matcher in the browser.
 
 Representative expectations: `POWER` and `owerp` find `PowerPoint`;
-`repair the car` can match `did not repair the car`. Missing model assets have
-no bearing on this search. Titles, content and admitted source labels are
+`repair the car` can match `did not repair the car`. Titles, content and admitted source labels are
 separate fields; operational IDs, private paths and secrets do not become text.
 
 Keep match/highlight ranges in the original admitted text, including
@@ -48,6 +48,9 @@ search interface. Query text remains out of logs, URLs and persistent caches.
 Select relevant cases from title/body/source matching, Unicode ranges,
 all-page membership, exact Open/Back and delayed-result revocation. A result
 count or screenshot alone cannot establish the target/authorization contract.
+For a withdrawal bug, enter the query through the reported route, withdraw
+access and release a delayed result. Check the field, held text and Back target:
+none may restore the old query or match. A picker dismissal tests a different path.
 
 Completion means the changed matching, range or navigation behavior is proved
 on the exact candidate without widening authority or reviving superseded semantic
