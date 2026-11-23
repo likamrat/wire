@@ -360,9 +360,14 @@ test("completed status opens every counted call and no uncounted sibling", {time
     }
     const {page}=await setup(t,"react",records);
     const unknown=page.locator('#activityList [data-view-key="request:search-5"] .card-outcome');
-    await expect(unknown).toContainText("No result recorded");await expect(unknown.locator("[data-icon-role=forward]")).toHaveCount(0);
+    await expect(unknown).toContainText("No result recorded");
     const card=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const link=card.locator(".card-orientation a.card-outcome");
+    await expect(card.locator(".request-card-prompt a,.card-reading-actions a,[data-icon-role=read]")).toHaveCount(0);
+    await link.locator("[data-icon-role=forward]").hover();
+    await expect(page.getByRole("tooltip")).toHaveText("View call details");
+    await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
+    await link.focus(); await expect(page.getByRole("tooltip")).toHaveText("View call details");
     const activity=page.locator('#requestContent [data-reader-section=activity]');
     const list=activity.locator(".reader-call-row");
     if (proofs) {await mkdir(proofs,{recursive:true}); await card.screenshot({path:path.join(proofs,"completed-card.png")});}

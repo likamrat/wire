@@ -304,9 +304,10 @@ The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
 
-Analyze cards show a short preview. Open the prompt to read and copy the
-retained original, including text after the ellipsis. The panel icon beside the tool count opens the
-recorded activity in the right-hand reader. **Human prompt**, **Agent prompt** or
+On an Analyze card, select the outcome below the prompt preview to open
+the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
+In the reader, choose **Prompt** to read and copy the retained original.
+**Human prompt**, **Agent prompt** or
 **Author unverified** describes the prompt’s origin, not its app. A label such
 as **1 tool call failed** opens the failed call; it does not mean the whole
 request failed. **4 tool calls completed** opens those four calls. If filters
@@ -338,7 +339,7 @@ it. **Maximize interaction** fills the workspace below the toolbar;
 **Close interaction** leaves the reader instead. When space is limited, WIRE
 uses a single-pane reader and hides the sizing controls.
 
-![An interaction reader with a compact prompt preview, recorded calls and timing, and a returned HTTP 403 explanation.](images/interaction.png)
+![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
 
 **Human prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing Human and

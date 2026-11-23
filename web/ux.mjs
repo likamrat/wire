@@ -647,7 +647,9 @@ export function createEvidenceUX(icons, operations) {
         target.replaceChildren(face);
         if (target.matches("a[href]")) {
             target.classList.add("card-evidence-link");
-            target.append(icon("forward"));
+            const arrow = icon("forward");
+            target.append(arrow);
+            tooltip(target, "View call details", { anchor: arrow });
         }
         return target;
     }

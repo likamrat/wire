@@ -81,7 +81,7 @@ fact in a badge, paragraph, warning and disclosure.
 On interaction cards, identify the prompt author with a high-contrast label
 and its Human, Agent or unverified icon. Align the date to the author's text
 baseline, not the icon. When it wraps, start it under the author text.
-Give the prompt and its eye separate columns inside one link. Below the prompt,
+On local Analyze cards the prompt is selectable text. Below the prompt,
 keep the recorded outcome with the affected calls and their explanations. When a
 reason covers the full badge count, place its call numbers and tool beside that
 count. Use one **Problem** area for the card, with different reasons under
@@ -239,7 +239,7 @@ On activity cards, a trailing arrow opens supporting evidence. A completed
 count opens all the calls it counts, preserving any filter and original call
 numbers. A failure opens its recorded call; a returned issue opens its own
 entry. Hover and press tint only the arrow; keyboard focus outlines the link.
-Noninteractive outcome labels have no arrow.
+Use the shared tooltip on an outcome link, anchored to its arrow. Noninteractive outcome labels have no arrow.
 Prompt openers keep the passage itself unpainted and selectable. Their eye
 cue signals reading; hover and press change the cue, not the text. Do not put
 a tooltip over the passage. Call disclosures similarly emphasize the chevron.

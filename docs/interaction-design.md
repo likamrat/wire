@@ -321,7 +321,8 @@ cannot republish withdrawn data.
 ### Cards
 
 On Analyze, show the beginning of the request as a short wrapping excerpt.
-The prompt is a link to the full retained text, not an inline expander. Quotes,
+On a local interaction card the excerpt is selectable text. Choose **Prompt**
+in the reader for the full retained text and Copy. Quotes,
 URLs and paragraphs share the same visual bound. Do not truncate the source,
 Copy, Search or report text. In the report picker, ordinary prompt text remains
 whole; a single explicitly marked quotation between two ordinary passages may
@@ -332,9 +333,9 @@ conversation; opening it uses its own authorized reader.
 The origin and date identify the request. The identity key describes the
 matching records, not the current account: exact tools, recorded targets,
 operations and applicable gaps. The reader keeps complete-parent ordinals.
-The panel glyph beside the call count opens the right-hand activity reader;
-when that panel is open the same control closes it. A prompt link opens
-the original. The failed-call count opens the matching failure or set of failures,
+The outcome and its trailing arrow form one link to the right-hand reader.
+The arrow's tip also appears on keyboard focus. Close, Escape or Back returns
+to the link. The failed-call count opens the matching failure or set of failures,
 not the first member of a plural count. Under each call, a returned-entry link opens
 that entry in its parent call, even when siblings have the same status. Unavailable
 reasons are text, not actions. Report selection is separate.

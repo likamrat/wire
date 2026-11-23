@@ -6159,13 +6159,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const moment = requestTiming.entry(scenario, workspaceState.scope.timeContext);
         const openPrompt = text => open(text, "prompt", target, "request-card-open recognition-row");
         const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, { openPrompt, home: !reportPicker }) : el("p", "request-card-prompt");
-        if (!description.hasText) prompt.append(openPrompt((description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice));
-        const promptLink = prompt.querySelector(".request-card-open");
-        if (!promptLink.querySelector(".card-excerpt")) {
-            const passage = el("span", "card-excerpt");
-            passage.append(...promptLink.childNodes); promptLink.append(passage);
+        if (!description.hasText) {
+            const notice = (description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice;
+            prompt.append(reportPicker ? openPrompt(notice) : notice);
         }
-        promptLink.append(ux.icon("read"));
+        if (reportPicker) {
+            const promptLink = prompt.querySelector(".request-card-open"), passage = el("span", "card-excerpt");
+            passage.append(...promptLink.childNodes); promptLink.append(passage, ux.icon("read"));
+        }
         const sourceIdentity = filterState.sourceIdentity(rows);
         if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
         const author = el("span", "request-card-author", authorLabel);
@@ -6213,14 +6214,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
-        function evidenceLink(label, destination, status) {
+        function evidenceLink(label, destination) {
             const link = open(label, "record", destination);
-            if (status) return ux.cardOutcome(status, link);
             link.classList.add("request-card-exception", "returned-issue-ink");
             link.append(ux.icon("forward"));
             return link;
         }
-        if (outcome) orientation.append(statusTarget ? evidenceLink("", statusTarget, outcome) : ux.cardOutcome(outcome));
+        if (outcome) {
+            const link = statusTarget ? open("", "record", statusTarget)
+                : !reportPicker ? open("", "activity") : undefined;
+            if (link && !reportPicker) link.classList.add("request-card-open");
+            orientation.append(ux.cardOutcome(outcome, link));
+        }
         const issues = layer === "tool" ? results.cardIssues(rows, fullRowsFor(scenario.scenarioId, "reported-api"), sourceCallFor) : [];
         if (issues.length) {
             const ordinals = requestContext.actionOrdinals(scenario), ordinal = r => ordinals.get(sourceCallFor(r));
@@ -6268,22 +6273,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             problem.append(el("h3", "card-problem-title", "Problem"), list);
             orientation.replaceWith(feedback); feedback.append(orientation, problem);
         }
-        if (!outcome && exception !== "Reported result issue") {
+        if (!outcome) {
             const cue = exception ?? (summary?.count && summary.success === summary.count ? results.labels(layer).success : null);
-            if (cue) foot.append(el("span", "request-card-exception", cue));
+            if (!reportPicker) {
+                const link = open(cue ?? "View interaction", "activity", target, "request-card-open card-evidence-link request-card-exception");
+                const arrow = ux.icon("forward");
+                link.append(arrow);
+                ux.tooltip(link, "View interaction", { anchor: arrow });
+                orientation.append(link);
+            } else if (cue) foot.append(el("span", "request-card-exception", cue));
         }
-        const panel = open(full?.count ? `${count(full.count)} ${layer === "tool" ? full.count === 1 ? "tool call" : "tool calls" : results.unit(layer, full.count)}` : "Interaction",
-            "activity", target, "card-evidence-link request-card-open-label card-panel-link");
-        panel.prepend(ux.icon("activity-panel"), ux.icon("activity-panel-close"));
-        labelPanelLink(panel, panel.getAttribute("aria-expanded") === "true");
-        const named = !reportPicker && namedRequest(scenario.scenarioId);
-        if (named) foot.append(namedDrafts.make(named.scenarioId));
-        foot.append(panel);
         if (reportPicker) {
+            const panel = open(full?.count ? `${count(full.count)} ${full.count === 1 ? "tool call" : "tool calls"}` : "Interaction",
+                "activity", target, "card-evidence-link request-card-open-label card-panel-link");
+            panel.prepend(ux.icon("activity-panel"), ux.icon("activity-panel-close"));
+            labelPanelLink(panel, panel.getAttribute("aria-expanded") === "true");
+            foot.append(panel);
             body.append(context, identities); row.append(body, foot);
         } else {
             const details = el("div", "card-reading-details");
-            details.append(identities, foot); body.append(context, details); row.append(body);
+            details.append(identities);
+            const named = namedRequest(scenario.scenarioId);
+            if (named) { foot.append(namedDrafts.make(named.scenarioId)); details.append(foot); }
+            body.append(context, details); row.append(body);
         }
         cardOwners.set(row, events);
         return row;

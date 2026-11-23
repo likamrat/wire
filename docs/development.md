@@ -380,7 +380,7 @@ Search over Analyze and live period comparison without unrelated report journeys
 or screen captures. One synthetic saved report supplies the Search example.
 Set `WIRE_DOC_CAPTURE=reports` for report choices, reading, copy inspection,
 file views and Save/Open without recapturing Analyze, comparisons or Settings.
-Set `WIRE_DOC_CAPTURE=analyze` for only Analyze and the README overview, without
+Set `WIRE_DOC_CAPTURE=analyze` for Analyze, the outcome link and reader, and the README overview, without
 creating saved-report fixtures or visiting unrelated destinations.
 
 The capture uses the feature checkout's compiled React renderer and requires
