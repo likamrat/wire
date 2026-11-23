@@ -19,6 +19,15 @@ test("historical diagnostics reject unrecognized fields and cannot be forged by 
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, stage: secretMarker }), /Invalid safe/);
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, sendInvoked: false, responseObserved: true }), /Invalid safe/);
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, size: { kind: "reference-content", measured: 70000, limit: 65536, unit: "bytes", text: secretMarker } }), /Invalid safe/);
+    const sessionError = { origin: "sdk-session-error", statusBasis: "provider-reported", errorType: "unknown", errorCode: null,
+        statusCode: null, providerCallIdPresent: false, serviceRequestIdPresent: false };
+    assert.equal(Object.hasOwn(diagnostic, "sessionError"), false);
+    assert.equal(Object.hasOwn(diagnostic, "sendRpc"), false);
+    validateEvaluationDiagnostic({ ...diagnostic, sessionError });
+    for (const invalid of [{ sessionError: { ...sessionError, message: secretMarker } },
+        { sessionError: { ...sessionError, statusBasis: "observed-workiq-http" } }, { numericErrorCode: 2 ** 40 }]) {
+        assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, ...invalid }), /Invalid safe/);
+    }
 });
 
 test("result diagnostics keep unknown historical errors and never retain near-match exception prose", () => {
