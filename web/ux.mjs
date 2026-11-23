@@ -524,15 +524,6 @@ export function createEvidenceUX(icons, operations) {
         node.removeAttribute("id");
         return node;
     }
-    function showTool(node, name) {
-        const role = operations?.toolRole(name);
-        if (role) {
-            const glyph = icon(role);
-            glyph.classList.add("operation-inline");
-            node.prepend(glyph);
-        }
-        return node;
-    }
     function cardToolList(tools) {
         const list = document.createElement("ul");
         list.className = "card-tool-list";
@@ -799,7 +790,7 @@ export function createEvidenceUX(icons, operations) {
         else trigger.setAttribute("aria-label", neutralName);
     }
 
-    return { icon, operations, showTool, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
+    return { icon, operations, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

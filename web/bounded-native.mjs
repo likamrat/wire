@@ -585,7 +585,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                 const line = node("span", undefined, "reader-call-identity-line");
                 const chevron = ux.icon("disclosure"); chevron.classList.add("reader-call-disclosure");
                 const callNumber = item.callNumber ?? state.pageOffset + index + 1;
-                line.append(node("span", `Call ${number(callNumber)}`, "reader-entry-label"), ux.showTool(node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), call.tool), chevron);
+                line.append(node("span", `Call ${number(callNumber)}`, "reader-entry-label"), node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
                 const outcome = node("span", undefined, "reader-call-summary result-tone-" + call.outcome);
                 const execution = results.countedExecution(call.outcome, 1);
                 if (execution) outcome.append(ux.cardOutcome(execution));

@@ -147,17 +147,21 @@ test("discovery, schema, agent, retrieval and named Graph actions retain distinc
         startedAt:records[i].capturedAt, toolSucceeded:true, reportedOutcome:"succeeded", apiResults:[],
     }];
     const { page } = await setup(t, "react", records);
+    const toolChart = page.locator('[data-breakdown="tools"] .percentage-tool-list');
+    await expect(toolChart.getByText("workiq-ask", {exact:true})).toBeVisible();
+    await expect(toolChart.locator(".percentage-label svg")).toHaveCount(0);
     for (const [i,[tool,,label]] of inputs.entries()) {
         const card = page.locator(`[data-view-key="request:${records[i].scenarioId}"]`);
-        const role = `operation-${tool.replaceAll("_","-")}`;
         await expect(card.locator(".card-tool-name")).toHaveText(`workiq-${tool}`);
+        await expect(card.locator(".card-tool-name svg")).toHaveCount(0);
         const operation = card.locator(".service-cue").filter({hasText:label});
         await expect(operation).toHaveCount(1);
         const subject = await operation.locator("svg").getAttribute("data-icon-role");
         assert.ok(subject.startsWith("operation-"));
         await card.locator(".card-panel-link").click();
         const call = page.locator(`#requestContent [data-tool-call-id="op-call-${i}"]`);
-        await expect(call.locator(`.reader-tool-name [data-icon-role="${role}"]`)).toBeVisible();
+        await expect(call.locator(".reader-tool-name")).toHaveText(`workiq-${tool}`);
+        await expect(call.locator(".reader-tool-name svg")).toHaveCount(0);
         await expect(call.locator(`.reader-call-services [data-icon-role="${subject}"]`)).toBeVisible();
         if (tool === "get_schema") await expect(call.locator('[data-icon-role="operation-graph-send"]')).toHaveCount(0);
         await page.goBack(); await expect(card.locator(".card-panel-link")).toBeFocused();

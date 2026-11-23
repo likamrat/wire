@@ -92,6 +92,11 @@ scale for labels, targets and operations. Name the recorded operation for the
 reader (for example **Reply-all draft**); its exact API path remains in the
 call reader.
 
+Tool names and counts also use plain text in chart legends, filters, reader
+headings and comparison tables. Keep the glyph for an operation such as
+**Asked Copilot**, not for the tool identifier `workiq-ask`. Search keeps its
+result-category icon; a link or disclosure keeps its navigation cue.
+
 ### Surfaces and color
 
 Use one restrained screen hierarchy throughout the application. Routine Analyze

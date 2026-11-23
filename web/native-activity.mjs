@@ -453,7 +453,6 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             toggle.type = "button";
             const name = call.nativeToolNames.length ? call.nativeToolNames.join(", ") : "Tool name unavailable";
             const line = node("span", "reader-call-identity-line", `Call ${index + 1} \u00b7 Tool: ${name}`);
-            if (call.nativeToolNames.length === 1) ux.showTool(line, name);
             const chevron = ux.icon("disclosure");
             chevron.classList.add("reader-call-disclosure");
             line.append(chevron);

@@ -27,7 +27,6 @@ ${Object.entries(resultCueColors).map(([key, color]) => `.result-tone-${key} {--
 .semantic-cue .wire-icon[data-lucide-icon=info][data-icon-size="16"] {width:16px;height:16px;flex-basis:16px;margin-inline:2px;margin-top:calc((1lh - 16px) / 2)}
 .service-cue[data-operation] {--cue-color:var(--ink)}
 .service-cue[data-operation=operation-ask] {--cue-color:var(--screen-activity-assistance)}
-.operation-inline {width:max(1em,16px);height:max(1em,16px);vertical-align:-.15em;margin-inline-end:.35em;flex:none}
 .percentage-legend-row[data-service-basis=Assistance] {--column-label:var(--screen-activity-assistance);--column-mid:var(--screen-activity-assistance)}
 .result-legend-icon {display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px}
 .result-legend-icon .wire-icon {width:20px;height:20px}

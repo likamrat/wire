@@ -5782,7 +5782,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const recordedLabel = workspaceState.scope.layer === "code-reference" ? "Reference recorded" : workspaceState.scope.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(workspaceState.scope.layer) ? "Request site recorded" : "Action recorded";
         const identity = el("p", "", workspaceState.scope.layer === "tool" ? results.callOperation(row) : row.tool || results.unit(workspaceState.scope.layer, 1));
-        if (["tool","http"].includes(workspaceState.scope.layer)) ux.showTool(identity, row.tool);
         card.append(identity,
             el("p", "muted", "The owning interaction was not retained."),
             recordedCategory([row], workspaceState.scope.layer),
@@ -6460,7 +6459,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         function callHeading(name, result, { tool = false, duration, durationLabel = "Call duration" } = {}) {
             const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
-            if (tool) identity.append(ux.showTool(el("span", "reader-tool-name", name), name));
+            if (tool) identity.append(el("span", "reader-tool-name", name));
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
             summary.append(result);
@@ -6922,7 +6921,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const item = viewKey(el("li", "journey-item"), key);
             const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true, singleRecord: true, inline: true }),
                 { duration: callInvestigation.duration(record, "http"), durationLabel: "Recorded duration" });
-            ux.showTool(heading.querySelector(".reader-record-name"), "owned-graph-http");
             item.append(heading, fields([["Service", identityValues(httpRows, "http")]]),
                 el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
             actionContext(item, workspaceState.scope.layer === "http" ? httpRows : []);
@@ -11048,11 +11046,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     text.append(part);
                 });
                 replacePrivateChoices(node, text);
-                return;
-            }
-            if (id === "toolFilter") {
-                const role = ux.operations.toolRole(value);
-                if (role) node.prepend(ux.icon(role));
                 return;
             }
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {
