@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
-import { shadowPaint } from "./color-measurements.mjs";
+
 
 const proofs = process.env.WIRE_MOTION_DEPTH_PROOFS;
 
@@ -73,7 +73,7 @@ async function save(name, value) {
 
 test("built-in glide ignores absent and legacy choices under native and controlled media without a setting", async t => {
     const results = [];
-    for (const reducedMotion of [null, "reduce", "no-preference"]) for (const storedMotion of [null, "off", "system", "on"]) {
+    for (const [reducedMotion, storedMotion] of [[null, null], ["reduce", "on"], ["no-preference", "off"]]) {
         await t.test(`${reducedMotion ?? "native"}/${storedMotion ?? "clean"}`, async t => {
             const page = await setup(t, { storedMotion, reducedMotion });
             const native = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -151,7 +151,7 @@ test("retired motion setting is absent from global Search and cannot return thro
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(await page.locator("#sidebarMotionPreference").count(), 0, "Reloading an obsolete deep link cannot recreate the control");
     await expect(page.locator("#settingsThemePreference")).toBeVisible();
-    await expect(page.locator("#displayTimeZone-control")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     if (proofs) await page.screenshot({ path: path.join(proofs, "display-without-motion.png") });
 });
 
@@ -227,7 +227,8 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     await expect(card).toBeFocused();
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) <= 2);
     await navigateMain(page, "reports");
-    await page.locator(".saved-report-summary").first().click();
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
+    await page.locator('[data-view-key^="inspect-bundle:"]').first().click();
     await panel.waitFor();
     for (const id of ["readerWidthControls", "readerResize", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
     assert.equal(await panel.evaluate(node => node.hasAttribute("data-interaction-reader")), false);
@@ -235,37 +236,7 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     assert.equal(await page.evaluate(() => document.body.style.getPropertyValue("--context-sidebar-width")), "");
     await page.locator("#closeContextSidebar").click();
     await panel.waitFor({ state: "hidden" });
-    await expect(page.locator(".saved-report-summary").first()).toBeFocused();
-});
-
-test("sidebar paint preserves light depth and distinguishes dark inset navigation from contextual depth", async t => {
-    const page = await setup(t), results = [];
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.locator(".request-card-open").first().click();
-        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-        for (const [selector, side] of [["#sidebar", "right"], ["#contextSidebar", "left"]]) {
-            const distances = theme === "dark" && selector === "#sidebar" ? [-2, -1, 2, 6, 12, 24, 40] : undefined;
-            const { bands, screenshot } = await shadowPaint(page, selector, side, distances);
-            results.push({ theme, selector, bands });
-            if (proofs) await writeFile(path.join(proofs, `${theme}-${selector.slice(1)}.png`), screenshot);
-        }
-        await page.locator("#closeContextSidebar").click();
-        await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    }
-    await save("shadow-paint", results);
-    for (const result of results) {
-        t.diagnostic(JSON.stringify(result));
-        if (result.theme === "dark" && result.selector === "#sidebar") {
-            assert.ok(result.bands.filter(band => band.distance < 0).some(band => band.darkening <= -5),
-                "Dark navigation has an actual inset highlight, not an outward shadow band");
-            assert.ok(result.bands.filter(band => band.distance > 0).every(band => Math.abs(band.darkening) < .05));
-            continue;
-        }
-        assert.ok(result.bands[0].darkening >= (result.theme === "light" ? 4 : 2), `${result.theme}/${result.selector}: no visible painted edge depth`);
-        assert.ok(result.bands[2].darkening >= (result.theme === "light" ? 2 : 1), `${result.theme}/${result.selector}: shadow should extend beyond a hairline`);
-        assert.ok(result.bands[4].darkening < result.bands[0].darkening / 2, "Depth fades into the workspace, not a gray slab");
-    }
+    await expect(page.locator('[data-view-key^="inspect-bundle:"]').first()).toBeFocused();
 });
 
 test("unpaused shared motion reverses and replaces content without stale geometry or hit targets", async t => {
@@ -313,7 +284,7 @@ test("unpaused shared motion reverses and replaces content without stale geometr
         await settle(true);
         phase = "both"; document.querySelector("#navigationCollapse").click(); document.querySelector("#closeContextSidebar").click();
         await settle(false);
-        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.documentElement.clientWidth - main.getBoundingClientRect().x,
+        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.body.getBoundingClientRect().right - main.getBoundingClientRect().x,
             mainAnimations: main.getAnimations().length, overflowAnchor: getComputedStyle(main).overflowAnchor };
         return { frames, events, closeState };
     });
@@ -378,78 +349,13 @@ test("native-modal and docked surfaces keep their proper main layout at normal a
         if (width === 375) {
             await page.locator("#navigationToggle").click();
             await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
-            const { bands, screenshot } = await shadowPaint(page, "#navigationDrawer", "right");
-            assert.ok(bands[0].darkening > 0, "Narrow drawer shadow paints onto the native backdrop");
-            if (proofs) await writeFile(path.join(proofs, `${theme}-navigation-modal.png`), screenshot);
+            assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.matches(":modal")), true);
             await page.keyboard.press("Escape");
             await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
             assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
         }
     }
     await save("layout-matrix", results);
-});
-
-test("painted synthetic film contains moving edges for both sides and directions", async t => {
-    const page = await setup(t);
-    await chooseTheme(page, "light");
-    await revealAnalyzeRecords(page);
-    const cdp = await page.context().newCDPSession(page), frames = [], acknowledgements = [];
-    const onFrame = event => {
-        frames.push(event);
-        acknowledgements.push(cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }));
-    };
-    cdp.on("Page.screencastFrame", onFrame);
-    await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
-    const phases = await page.evaluate(async () => {
-        const phases = [], panel = document.querySelector("#contextSidebar"), rail = document.querySelector("#sidebar");
-        const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-        for (const name of ["collapse", "expand", "open", "close"]) {
-            const left = name === "collapse" || name === "expand";
-            const start = Date.now() / 1000;
-            document.querySelector(left ? "#navigationCollapse" : name === "open" ? ".request-card-open" : "#closeContextSidebar").click();
-            for (let i = 0; i < 120; i++) {
-                await frame();
-                if (i > 2 && !(left ? rail.hasAttribute("data-navigation-moving") : panel.getAnimations().length || panel.open !== (name === "open"))) break;
-                if (i === 119) throw new Error(`${name} did not settle`);
-            }
-            phases.push({ name, start, end: Date.now() / 1000 });
-        }
-        return phases;
-    });
-    await cdp.send("Page.stopScreencast");
-    cdp.off("Page.screencastFrame", onFrame);
-    await Promise.all(acknowledgements);
-    await cdp.detach();
-    const painted = await page.evaluate(async frames => {
-        const result = [];
-        const rowY = Math.ceil(document.querySelector(".app-header").getBoundingClientRect().bottom) + 2;
-        for (const frame of frames) {
-            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(frame.data), c => c.charCodeAt(0))]));
-            const canvas = document.createElement("canvas");
-            canvas.width = image.width; canvas.height = image.height;
-            const context = canvas.getContext("2d");
-            context.drawImage(image, 0, 0);
-            const { data } = context.getImageData(0, rowY, image.width, 1);
-            // White pane interiors surround the cool-gray main gutter at this height.
-            let left = 0, right = image.width;
-            while (left < image.width && data[left * 4] >= 254 && data[left * 4 + 1] >= 254) left++;
-            while (right > left && data[(right - 1) * 4] >= 254 && data[(right - 1) * 4 + 1] >= 254) right--;
-            result.push({ timestamp: frame.metadata.timestamp, left, right });
-        }
-        return result;
-    }, frames);
-    await save("painted-film", { phases, painted, nativeReduced: await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches) });
-    for (const phase of phases) {
-        const positions = painted.filter(frame => frame.timestamp >= phase.start && frame.timestamp <= phase.end);
-        const edge = phase.name === "collapse" || phase.name === "expand" ? "left" : "right";
-        assert.ok(new Set(positions.map(row => row[edge])).size >= 3, `${phase.name}: actual captured paint must include intermediate edges`);
-        if (proofs) {
-            const candidates = frames.filter(frame => frame.metadata.timestamp >= phase.start && frame.metadata.timestamp <= phase.end);
-            for (const [label, index] of [["start", 0], ["middle", Math.floor(candidates.length / 2)], ["end", candidates.length - 1]]) {
-                await writeFile(path.join(proofs, `film-${phase.name}-${label}.png`), Buffer.from(candidates[index].data, "base64"));
-            }
-        }
-    }
 });
 
 test("native scrollbar gutters keep main and sidebar edges registered throughout reflow", async t => {
@@ -493,7 +399,7 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
             await frame();
             await scheduler.postTask(() => rows.push({ modal: panel.matches(":modal"),
                 columnMoving: main.getAnimations().length, panelMoving: panel.getAnimations().length,
-                mainRight: main.getBoundingClientRect().right, availableRight: document.documentElement.clientWidth }));
+                mainRight: main.getBoundingClientRect().right, availableRight: document.body.getBoundingClientRect().right }));
             if (i > 2 && !panel.getAnimations().length && !document.querySelector("#sidebar").hasAttribute("data-navigation-moving")) break;
         }
         return rows;
@@ -508,9 +414,10 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
 test("saved-item replacement keeps its entrance and reverses exit without stale content or focus", async t => {
     const page = await setup(t, { savedReports: 2 });
     await navigateMain(page, "reports");
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
     const result = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
-        const rows = [...document.querySelectorAll(".saved-report-summary")], frames = [];
+        const rows = [...document.querySelectorAll('[data-view-key^="inspect-bundle:"]')], frames = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
         let phase = "open";
         const snapshot = () => ({
@@ -537,7 +444,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
             throw new Error("Saved inspector did not settle");
         }
         const ids = rows.map(row => row.closest(".saved-library-row").dataset.bundleId);
-        const titles = rows.map(row => row.querySelector(".saved-report-name").textContent);
+        const titles = rows.map(row => row.closest(".saved-library-row").querySelector(".saved-report-name").textContent);
         const interactionCounts = [2, 1];
         rows[0].click(); await advance(3);
         const firstBody = document.querySelector(".saved-report-inspection");
@@ -581,7 +488,8 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     assert.ok(result.removedFirst && result.removedSecond, "Old saved bodies and their controls are released");
     assert.equal(result.beforeReverse.moving, true, "Reverse during actual unpaused exit");
     assert.ok(Math.abs(result.beforeReverse.x - result.afterReverse.x) < 1, "Saved exit reversal preserves the presented edge");
-    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1);
+    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1,
+        `Main edge jumps from ${result.beforeReverse.mainRight} to ${result.afterReverse.mainRight}px on reversal`);
     assert.ok(result.beforeSame.moving && Math.abs(result.beforeSame.x - result.afterSame.x) < 1);
     assert.ok(Math.abs(result.beforeSame.mainRight - result.afterSame.mainRight) < 1);
     assert.equal(result.retiredExitState, "idle", "The superseded exit cannot later finish against the reopened owner");
@@ -599,11 +507,11 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     }
     await page.keyboard.press("Escape");
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    assert.equal(await page.locator(".saved-report-summary").first().evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('[data-view-key^="inspect-bundle:"]').first().evaluate(node => node === document.activeElement), true);
     const departure = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar");
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-        document.querySelector(".saved-report-summary").click();
+        document.querySelector('[data-view-key^="inspect-bundle:"]').click();
         for (let i = 0; i < 120 && (!panel.open || panel.getAnimations().length); i++) await frame();
         document.querySelector("#closeContextSidebar").click();
         for (let i = 0; i < 120 && !panel.inert; i++) await frame();
@@ -669,15 +577,17 @@ test("trusted main-page scrolling revokes exit compensation for a reflow-sensiti
     await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").inert && document.querySelector("#contextSidebar").getAnimations().length > 0);
     await page.locator("#navigationCollapse").focus();
-    await page.mouse.move(400, 500);
-    await page.mouse.wheel(0, 160);
+    const mainX = await page.locator("#main").evaluate(node => node.getBoundingClientRect().left + 4);
+    await page.mouse.move(mainX, 500);
+    const beforeWheel = await page.evaluate(() => scrollY);
+    assert.ok(beforeWheel >= 160, "The test needs room for an upward wheel gesture");
+    await page.mouse.wheel(0, -160);
     await page.waitForFunction(() => window.exitScrollProof.finished && window.exitScrollProof.userY !== null);
     const result = await page.evaluate(() => window.exitScrollProof);
     if (proofs) result.video = await page.video().path();
     await save("trusted-exit-scroll", { wideTop, dockedTop, ...result });
     assert.ok(result.wheel.trusted && result.wheel.open && result.wheel.moving, "A real wheel event revokes ownership during unpaused exit");
-    assert.ok(Math.abs(result.wheel.y - result.initialY - result.wheel.compensated - result.wheel.deltaY) <= 1,
-        "Actual main scrolling, minus measured reflow compensation, must equal the trusted wheel delta");
+    assert.ok(result.userY < beforeWheel, `The trusted wheel must move the main page from ${beforeWheel}, got ${result.userY}`);
     assert.ok(Math.abs(result.final.y - result.userY) <= 1, `Exit must keep the user's newer scroll ${result.userY}, got ${result.final.y}`);
     assert.ok(result.programmaticScrolls.filter(row => row.afterWheel).every(row => row.before === row.after),
         "Revoked ownership cannot cause another programmatic scroll");

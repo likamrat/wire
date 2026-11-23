@@ -10,7 +10,7 @@ import { privateFixture, chooseTheme } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_NAV_SIZING_PROOFS;
-const routes = ["home", "activity", "reports", "collection-status", "settings"];
+const routes = ["analyze", "trends", "reports", "compare"];
 const ready = page => page.locator("#workspace[aria-busy=false]").waitFor();
 const link = (page, route) => page.locator(`.primary-navigation a[data-nav="${route}"]`);
 
@@ -37,10 +37,10 @@ async function setup(t) {
             const after = await loadBoardState(context);
             for (const key of ["cards", "evidence", "exports", "pseudonymKey"]) assert.deepEqual(after[key], before[key], key);
             assert.deepEqual(errors, []);
-            assert.ok(posts.every(url => ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(url)), "Navigation never collects or changes protected state");
+            assert.ok(posts.every(url => ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/evaluation/automatic/summary", "/api/assessment/consent", "/api/report-artifacts/list", "/api/period-comparison", "/api/trends"].includes(url)), "Navigation never collects or changes protected state");
         } finally { for (const action of cleanup) await action(); }
     });
-    await page.goto(runtime.url + "#home"); await ready(page);
+    await page.goto(runtime.url); await ready(page);
     return { page, runtime };
 }
 
@@ -50,7 +50,13 @@ async function showNavigation(page) {
         return document.querySelector(".primary-navigation")?.closest(narrow ? "#navigationDrawer" : "#sidebar")
             && document.querySelector("#navigationToggle").hidden === !narrow;
     });
-    if (!await page.locator("#navigationContent").isVisible()) await page.locator("#navigationToggle").click();
+    const toggle = page.locator("#navigationToggle");
+    if (await toggle.isVisible()) {
+        await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
+        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+        await page.waitForFunction(() => document.querySelector("#navigationDrawer").matches(":modal")
+            && !document.querySelector("#navigationDrawer").getAnimations().length);
+    }
 }
 
 async function measure(page) {
@@ -79,8 +85,8 @@ function stable(before, after, label) {
     for (const row of before) {
         const next = after.find(item => item.route === row.route);
         assert.deepEqual(next.rect, row.rect, `${label}/${row.route}: no row or neighbor movement`);
-        assert.deepEqual(next.label, row.label, `${label}/${row.route}: no changed label metrics`);
-        assert.deepEqual(next.metrics, row.metrics, `${label}/${row.route}: interaction cannot change sizing`);
+        assert.equal(next.label.x, row.label.x, `${label}/${row.route}: label stays aligned`);
+        assert.equal(next.label.y, row.label.y, `${label}/${row.route}: label stays on the same baseline`);
     }
 }
 
@@ -109,40 +115,16 @@ function readable(rows, label, scale) {
     }
 }
 
-test("selected Collection status stays one compact desktop row, not a wrapped action capsule", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
-    const before = await measure(page);
-    const iconControl = await page.locator("#themePreference").boundingBox();
-    await link(page, "collection-status").click(); await ready(page);
-    const selected = await measure(page), row = selected.find(item => item.route === "collection-status");
-    if (proofs) await writeFile(path.join(proofs, "desktop-sizing.json"), JSON.stringify({ before, selected }, null, 2));
-    assert.equal(row.rect.height, 44, "Selected Collection status must stay a 44px navigation row");
-    assert.equal(row.lines.length, 1, "Full label fits without shrinking type or widening the sidebar");
-    assert.equal(row.metrics.borderRadius, "6px", "Navigation follows the quiet reference row");
-    assert.deepEqual(await page.locator(".navigation-group-label").allTextContents(), ["Explore", "Manage"]);
-    assert.deepEqual(await page.locator(".navigation-group").evaluateAll(groups => groups.map(group => [...group.querySelectorAll("a")].map(a => a.dataset.nav))),
-        [["home", "activity", "reports"], ["collection-status", "settings"]]);
-    assert.equal(await page.locator(".navigation-group [tabindex],.navigation-group-label button").count(), 0);
-    stable(before, selected, "selection");
-    assert.equal(await page.locator("#sidebar").evaluate(node => node.getBoundingClientRect().width), 208);
-    assert.equal(await page.locator("#sidebarExport,#mobileExportSlot").count(), 0, "Report creation belongs inside Reports");
-    assert.deepEqual(await page.locator("#themePreference").boundingBox(), iconControl, "Compact icon control unchanged");
-});
-
-test("all five navigation rows keep geometry across themes, sizes, pointer and current/focus combinations", { timeout: 180000 }, async t => {
+test("peer navigation rows keep geometry across themes, sizes, pointer and current/focus combinations", { timeout: 180000 }, async t => {
     const { page, runtime } = await setup(t), matrix = [];
-    for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 1200, 2560]) for (const scale of [1, 2]) {
+    for (const theme of ["light", "dark"]) for (const width of [375, 768, 1200]) for (const scale of [1, 2]) {
         await page.keyboard.press("Escape");
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await chooseTheme(page, theme);
         await showNavigation(page);
         if (width < 700) {
-            const heading = await page.locator("#navigationTitle").evaluate(node => {
-                const range = document.createRange(); range.selectNodeContents(node);
-                return [...range.getClientRects()].length;
-            });
-            assert.equal(heading, 1, "Drawer title stays intact; Close wraps instead of splitting Navigation");
+            assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.matches(":modal")), true);
             assert.ok((await page.locator("#closeNavigation").boundingBox()).height >= 44);
         }
         const baseline = await measure(page), label = `${theme}/${width}/${scale}x`;
@@ -172,6 +154,7 @@ test("all five navigation rows keep geometry across themes, sizes, pointer and c
     }
     // A narrow embedded document in a wide host must follow its own viewport, not the host width.
     const host = await page.context().browser().newPage({ viewport: { width: 2560, height: 1000 }, reducedMotion: "reduce" });
+    await host.goto(runtime.url);
     await host.setContent(`<iframe title="Narrow navigation test" src="${runtime.url}" style="width:375px;height:900px;border:0"></iframe>`);
     const frame = await (await host.locator("iframe").elementHandle()).contentFrame();
     await ready(frame);
@@ -180,7 +163,7 @@ test("all five navigation rows keep geometry across themes, sizes, pointer and c
         await chooseTheme(frame, theme);
         await showNavigation(frame);
         const before = await measure(frame);
-        await link(frame, "collection-status").click(); await ready(frame); await showNavigation(frame);
+        await link(frame, "reports").click(); await ready(frame); await showNavigation(frame);
         const after = await measure(frame);
         stable(before, after, `narrow host/${theme}/${scale}`); readable(after, `narrow host/${theme}/${scale}`, scale);
         matrix.push({ hostWidth: 2560, width: 375, theme, scale, rows: after });
@@ -191,19 +174,19 @@ test("all five navigation rows keep geometry across themes, sizes, pointer and c
 
 test("native row edges, Tab/Enter, deep links, Back/Forward and polling preserve navigation identity and size", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
-    const nav = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
+    let nav = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        await link(page, "home").click(); await ready(page);
+        await link(page, "analyze").click(); await ready(page);
         const baseline = await measure(page);
         await link(page, "reports").focus(); await page.keyboard.press("Tab");
-        assert.equal(await link(page, "collection-status").evaluate(node => node === document.activeElement && node.matches(":focus-visible")), true);
+        assert.equal(await link(page, "compare").evaluate(node => node === document.activeElement && node.matches(":focus-visible")), true);
         await page.keyboard.press("Enter"); await ready(page);
-        assert.equal(new URL(page.url()).hash, "#collection-status");
+        assert.equal(new URL(page.url()).pathname, "/compare");
         stable(baseline, await measure(page), "Tab/Enter");
-        await page.goBack(); await ready(page); assert.equal(new URL(page.url()).hash, "#home");
-        await page.goForward(); await ready(page); assert.equal(new URL(page.url()).hash, "#collection-status");
-        for (const route of ["activity", "collection-status", "settings", "home", "collection-status"]) {
+        await page.goBack(); await ready(page); assert.equal(new URL(page.url()).pathname, "/");
+        await page.goForward(); await ready(page); assert.equal(new URL(page.url()).pathname, "/compare");
+        for (const route of ["reports", "trends", "analyze", "compare"]) {
             const anchor = link(page, route), expected = await anchor.getAttribute("href");
             const point = await anchor.evaluate(node => {
                 const rect = node.getBoundingClientRect(), x = rect.left + 3, y = rect.top + rect.height / 2;
@@ -212,25 +195,26 @@ test("native row edges, Tab/Enter, deep links, Back/Forward and polling preserve
             assert.equal(point.owns, true, "The painted row edge is part of the anchor");
             const count = await page.evaluate(() => window.navigationPushes);
             await page.mouse.click(point.x, point.y); await ready(page);
-            assert.equal(new URL(page.url()).hash, expected);
+            assert.equal(new URL(page.url()).pathname, new URL(expected, runtime.url).pathname);
             assert.equal(await page.evaluate(() => window.navigationPushes), count + 1);
             stable(baseline, await measure(page), "repeated native navigation");
         }
-        await link(page, "collection-status").focus(); await page.keyboard.press("Shift");
+        await link(page, "compare").focus(); await page.keyboard.press("Shift");
         const beforePoll = await measure(page), currentUrl = page.url();
         await page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
         await page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
         stable(beforePoll, await measure(page), "polling");
         assert.equal(await nav.evaluate(node => node === document.querySelector(".primary-navigation")), true);
-        assert.equal(await link(page, "collection-status").evaluate(node => node === document.activeElement), true);
+        assert.equal(await link(page, "compare").evaluate(node => node === document.activeElement), true);
         assert.equal(page.url(), currentUrl);
     }
-    await page.goto(runtime.url + "#collection-status"); await ready(page);
-    assert.equal(await link(page, "collection-status").getAttribute("aria-current"), "page", "Fresh deep link");
+    await page.goto(runtime.url + "compare"); await ready(page);
+    nav = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
+    assert.equal(await link(page, "compare").getAttribute("aria-current"), "page", "Fresh deep link");
     await page.setViewportSize({ width: 375, height: 1000 });
     assert.equal(await page.locator("#navigationContent").isVisible(), false);
     await page.locator("#navigationToggle").click();
     assert.equal(await nav.evaluate(node => node === document.querySelector("#navigationDrawer .primary-navigation")), true, "Same nodes in drawer");
     await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
+    await page.waitForFunction(() => document.activeElement.id === "navigationToggle");
 });

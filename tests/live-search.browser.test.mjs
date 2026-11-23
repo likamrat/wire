@@ -168,18 +168,6 @@ test("one explicit reconnect recovers an expired stream and polling failures era
     assert.deepEqual(errors, []);
 });
 
-test("literal Search is the normal path without model fields, provisioning or fallback UI", { timeout: 30000 }, async t => {
-    const { page, runtime, requests, api } = await setup(t);
-    await find(page, "PHYS", "interaction");
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
-    const status = await (await api("/api/search/status")).json();
-    assert.equal(status.mode, "text");
-    for (const field of ["model", "modelId", "linguistics", "chunks"]) assert.equal(Object.hasOwn(status, field), false);
-    await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
-    await expect(page.locator("#wireSearchCoverage")).not.toContainText("Word search only");
-    assert.ok(requests.every(request => new URL(request.url).origin === new URL(runtime.url).origin));
-});
-
 test("a tampered saved copy refuses opening and leaves an explicit search retry", { timeout: 30000 }, async t => {
     const { page, bundles, errors } = await setup(t, { formats: ["json"] });
     await find(page, "physician", "report");

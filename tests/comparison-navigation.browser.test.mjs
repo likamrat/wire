@@ -225,22 +225,6 @@ test("Compare is a single period destination; retired entries return to the libr
     assert.deepEqual(operations, []);
     assert.deepEqual(periodReads, []);
 });
-test("exact-call captions follow narrowed membership", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
-    await page.locator("#comparePeriods").click(); await ready(page);
-    await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
-    const issueShare = page.getByRole("row", { name: /Share of interactions with an error or failure/ });
-    const selected = issueShare.getByRole("button", { name: /selected:.*View .* with errors or failures/i });
-    await selected.click();
-    await expect(page.locator("#comparisonExactRecordsB")).toBeVisible();
-    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("1 call across 1 interaction");
-    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
-    await expect(selected).toBeFocused();
-    await page.locator('.compare-outcome-bar').first().locator('[data-outcome="failure"]').click();
-    await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("1 call across 1 interaction");
-    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("0 calls across 0 interactions");
-    await expect(page.locator("#comparisonExactRecordsA")).not.toContainText("missing service details");
-});
 test("comparison peers align at narrow enlarged text and menu combinations stay explicit", { timeout: 60000 }, async t => {
     const { page, comparisons } = await setup(t);
     await page.locator("#comparePeriods").click(); await ready(page);
@@ -312,6 +296,13 @@ test("comparison paint is linear and exact-call captions follow narrowed members
             assert.ok(bars[index].marks.every(mark => side.analytics.totals[mark.outcome] > 0), "True zero has no paint");
         }
     }
+    const issueShare = page.getByRole("row", { name: /Share of interactions with an error or failure/ });
+    const selected = issueShare.getByRole("button", { name: /selected:.*View .* with errors or failures/i });
+    await selected.click();
+    await expect(page.locator("#comparisonExactRecordsB")).toBeVisible();
+    await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("1 call across 1 interaction");
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(selected).toBeFocused();
     await page.locator('.compare-outcome-bar').first().locator('[data-outcome="failure"]').click();
     await expect(page.locator("#comparisonExactRecordsA > .compare-caption").first()).toHaveText("1 call across 1 interaction");
     await expect(page.locator("#comparisonExactRecordsB > .compare-caption").first()).toHaveText("0 calls across 0 interactions");
