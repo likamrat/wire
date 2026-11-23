@@ -127,7 +127,8 @@ test("author-filtered collected preparation keeps its frozen origin through a la
     assert.equal(bytes, preview.files["product-report.json"]);
     assert.deepEqual(JSON.parse(bytes), preview.snapshot);
     const view = await readSavedReportView(app.context, after, saved.bundle.bundleId);
-    assert.match(view.text, /User prompt/);
+    assert.equal(view.sourceFormat, "json");
+    assert.match(view.text, /<h3\b[^>]*data-prompt-actor="user"[^>]*>(?:(?!<\/h3>)[\s\S])*Human prompt<\/h3>/);
     const next = await post("/api/preview", {
         options: { promptMode: "none", formats: ["json"], saveMode: "local" },
         selection: { kind: "all", revision: after.revision, promptAuthors: ["user"] },
