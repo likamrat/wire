@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { recollectionFixture } from "./recollection-fixture.mjs";
+import { seedHistoricalFeedback } from "./historical-feedback-fixture.mjs";
 import { createRecollectionController } from "../lib/recollection.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -225,10 +226,11 @@ test("recollection preserves deleted response/feedback guards even when optional
     state = await loadBoardState(f.context);
     assert.equal(state.personalEvaluation.captures.length, 1);
     const model = buildAssessmentModel(state);
-    await executeAssessmentAction(f.context, "panel", "set_personal_assessment", {
+    await seedHistoricalFeedback(f.context, {
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: model.overview.interactionRefs[0],
         expectedBasis: model.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
     });
+    assert.equal((await loadBoardState(f.context)).personalEvaluation.feedback.records.length, 1);
     await remove(f);
     const deleted = await loadBoardState(f.context);
     assert.equal(deleted.personalEvaluation.captures.length, 0);
@@ -294,8 +296,12 @@ test("pending sealed deletion is never bypassed by recollection", async t => {
     const deletion = createDeletionController(f.context, { afterSeal() { throw new Error("synthetic sealed interruption"); } });
     const preview = await deletion.preview("panel", { scope: "all", timeContext: { timeZone: "UTC", locale: "en-US" } });
     await assert.rejects(deletion.confirm("panel", { operationId: preview.operationId, confirmed: true }), /sealed interruption/);
-    await assert.rejects(createRecollectionController(f.context).preview("panel", scope(f)), /sealed deletion cleanup/);
+    const receipt = () => deletion.status(preview.operationId, "panel");
+    assert.equal((await receipt()).phase, "pending");
+    await assert.rejects(createRecollectionController(f.context).preview("panel", scope(f)), { status: 503 });
+    assert.equal((await receipt()).phase, "pending");
     await f.restart();
+    assert.equal((await receipt()).phase, "complete");
     assert.deepEqual(ids(await loadBoardState(f.context)), []);
 });
 
