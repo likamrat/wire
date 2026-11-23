@@ -294,6 +294,14 @@ legends use the smaller 8px inset and keep their value tracks separate.
 Keep hover, pressed, selected and keyboard focus distinct; a smaller painted
 control is not permission to remove its focus ring or hit area.
 
+Compare a new control panel with the **Trends → Period → Custom dates** editor and
+the **Reports → Formats** menu. A field label belongs above its input, clear of
+the painted focus ring; a checkbox label belongs beside its box within one
+clickable row. Align peer field edges, give groups more room than a label and
+its value, and align Apply/Cancel to the panel's trailing inset. Reflow fields
+when text grows rather than shrinking labels or widening every panel.
+Check keyboard focus on each field in the *open workspace*, not only in a crop.
+
 ### Brand assets
 
 The screen and README use the selected Magenta Human Path symbol and custom

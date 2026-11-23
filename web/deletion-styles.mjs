@@ -10,7 +10,6 @@ export const deletionStyles = `
 :is(#deleteDialog,.deletion-dialog) .delete-choice {display:flex;gap:12px;align-items:center;min-height:44px;padding:8px 0}
 :is(#deleteDialog,.deletion-dialog) input[type=radio] {appearance:auto;min-height:0;width:20px;height:20px;flex:none;accent-color:var(--toggle-on)}
 #deleteDateFields {display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
-#deleteDateFields label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
 :is(#deleteDialog,.deletion-dialog) input[type=date] {width:100%;min-height:44px}
 :is(#deleteDialog,.deletion-dialog) button {display:inline-flex;align-items:center;justify-content:center;text-align:center;min-height:44px;white-space:normal}
 #deletePreview {margin-top:16px}

@@ -53,7 +53,6 @@ export const recollectionMarkup = `
     </fieldset>
     <p id="recollectSourceHelp" class="muted">Choose up to 128 chats and a date range before previewing. Search stays in this panel.</p>
     <div class="recollect-dates"><label><span id="recollectFromLabel">From</span><input id="recollectFrom" type="date" required></label><label id="recollectToChoice">To<input id="recollectTo" type="date" required></label></div>
-    <p id="recollectZone" class="muted"></p>
     <label id="recollectPromptsChoice" class="delete-choice"><input id="recollectPrompts" type="checkbox"><span>Also restore original prompts for these requests</span></label>
     <p id="recollectPromptsHelp" class="muted">Off by default. Includes available prompts and associated follow-ups.</p>
     <label id="recollectCorrectionsChoice" class="delete-choice" hidden><input id="recollectCorrections" type="checkbox"><span>Also review source-verified corrections to saved calls</span></label>
@@ -85,7 +84,6 @@ export const recollectionStyles = `
 #recollectSources .delete-choice input {margin-top:2px}
 #recollectDialog input[type=date] {min-width:0;border-radius:10px}
 #recollectDialog .recollect-dates {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
-#recollectDialog .recollect-dates label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
 #recollectDialog .recollect-dates label[hidden] {display:none}
 #recollectExactMembers {padding-inline-start:20px;overflow-wrap:anywhere}
 #recollectExactMembers li + li {margin-top:8px}
@@ -118,7 +116,7 @@ export function mountRecollection({ api, createCalendar, time, timeContext, sear
     const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
         && api.isCurrent(access.token) === true;
     const calendar = createCalendar({root:dialog.querySelector(".recollect-dates"),id:"recollectCalendar",time,ux,context:timeContext,
-        current:()=>current(publication()),singleDay:()=>exact,sharedDateNote:$("recollectZone"),
+        current:()=>current(publication()),singleDay:()=>exact,
         existingFields:{from:$("recollectFrom"),to:$("recollectTo")},inputIds:{from:"recollectFrom",to:"recollectTo"},
         onEdit:()=>{edit();status("");}});
     const blockedMessage = "The saved recollection receipt could not be read or verified. An earlier operation may be unconfirmed. Recollection is blocked; the saved entry has not been changed. Stored activity is still available.";
@@ -299,7 +297,7 @@ export function mountRecollection({ api, createCalendar, time, timeContext, sear
         const access = publication();
         if (!current(access)) return;
         const version = ++token;
-        ux.setOwnedText($("recollectWindow")); ux.setOwnedText($("recollectZone"));
+        ux.setOwnedText($("recollectWindow"));
         eraseSourceRows($("recollectSources")); $("recollectSources").replaceChildren();
         sources = []; selectedSources.clear(); selectedOnly = false; searchField.sync("");
         exactAvailable = false; chooseOperation(false);
@@ -317,7 +315,6 @@ export function mountRecollection({ api, createCalendar, time, timeContext, sear
             renderSources();
             $("recollectWindow").textContent = `Approved history: ${period(result.since, result.until, timeContext())} (${result.windowDays} days).`
                 + (result.newOnly ? " Deleted activity stays excluded." : "");
-            $("recollectZone").textContent = `Dates are inclusive, in ${time.displayLabel(timeContext())}.`;
             sourcesReady = result.sources.length > 0;
             status(sourcesReady ? (result.skippedSources ? `${result.skippedSources} chats are outside the discovery limit and cannot be selected.` : "")
                 : "No eligible local chats are available from the approved source.");
@@ -691,7 +688,7 @@ export function mountRecollection({ api, createCalendar, time, timeContext, sear
         preview = part = undefined; result = undefined; trigger = null; busy = false; sourcesReady = false; viewNeedsRead = false;
         eraseSourceRows($("recollectSources"));
         erasePreviewValues();
-        for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectStatus", "recollectConfirm"]) {
+        for (const id of ["recollectTitle", "recollectWindow", "recollectSelected", "recollectStatus", "recollectConfirm"]) {
             ux.setOwnedText($(id));
         }
         ux.removeOwnedAttribute(dialog, "data-operation-id");
@@ -706,7 +703,7 @@ export function mountRecollection({ api, createCalendar, time, timeContext, sear
         $("recollectCorrections").checked = false; $("recollectCorrectionsChoice").hidden = true;
         searchField.sync(""); $("recollectSearch").readOnly = true;
         calendar.clear(); $("recollectPrompts").checked = false;
-        for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectScope",
+        for (const id of ["recollectTitle", "recollectWindow", "recollectSelected", "recollectScope",
             "recollectClipped", "recollectSummary", "recollectPromptSummary", "recollectPreserved", "recollectBounds", "recollectPolicy", "recollectStatus"]) $(id).textContent = "";
         $("recollectConfirm").textContent = "Read selected history again";
         $("recollectForm").hidden = true; $("recollectForm").inert = true; $("recollectConfirmation").hidden = true;

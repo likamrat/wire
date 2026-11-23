@@ -108,7 +108,9 @@ Historical date inputs share one calendar. Today is selectable in the display
 time zone; later dates cannot be selected or applied by typing. This week and
 This month stop at today. Recovery previews and confirmations remain separate
 from date selection. Calendar presets and custom dates use the selected IANA zone. Custom dates
-are inclusive civil days; buckets are clipped to that scope. Undated records
+are inclusive civil days; buckets are clipped to that scope. Don't repeat
+inclusivity or the configured zone under a valid date range. Show the zone
+when it explains a cutoff, fallback or consequential operation. Undated records
 stay explicit. Missing history cannot be assigned to the current filtered
 slice from source-wide diagnostics.
 Analyze's time chart defaults to individual calendar days, including All dates

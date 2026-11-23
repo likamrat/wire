@@ -317,15 +317,14 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const calendarChoices = ux.anchoredChoices(calendar);
     let calendarSide = null;
     const calendarTitle = el("h2", "Custom dates"); calendarTitle.id = "comparisonCalendarTitle";
-    const calendarNote = el("p", undefined, "report-period-caption"); calendarNote.id = "comparisonCalendarZone";
-    calendar.append(calendarTitle, calendarNote, form);
+    calendar.append(calendarTitle, form);
     const calendars = {};
     const periodRoles = { a: "Baseline", b: "Selected" };
     for (const [side, label] of [["a", "Period A"], ["b", "Period B"]]) {
         const group = el("fieldset"); group.append(el("legend", periodRoles[side]));
         form.append(group);
         calendars[side] = assessmentFactories.createDateRangeCalendar({ root: group, id: "comparison" + side.toUpperCase(),
-            label, sharedDateNote: calendarNote, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
+            label, time, ux, context: () => getContext().options.timeContext, current: () => publicationCurrent(publicationToken()),
             onChange: () => { if (calendars.a && calendars.b) apply.disabled = !calendars.a.valid() || !calendars.b.valid(); } });
     }
     const apply = el("button", "Use dates", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
@@ -339,7 +338,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         calendarSide = side;
         for (const [id,group] of [["a",form.firstElementChild],["b",form.children[1]]]) group.hidden = Boolean(side && side !== id);
         calendar.dataset.single = String(Boolean(side));
-        calendarNote.textContent = `Inclusive dates · ${context.options.timeContext.timeZone}`;
         calendars.a.reset(ranges.baseline); calendars.b.reset(ranges.later);
         calendarChoices.open(trigger);
         form.querySelector("fieldset:not([hidden]) input").focus({preventScroll:true});
@@ -1479,7 +1477,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         searchInput.value = ""; searchInput.defaultValue = "";
         calendarChoices.close(false);
         for (const editor of Object.values(calendars)) editor.clear();
-        calendarNote.textContent = "";
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(outcomeLayer);
         if (control) {
             for (const option of [...control.options]) {
@@ -1579,7 +1576,7 @@ export const periodComparisonStyles = `
 .comparison-preset-field button{min-height:var(--task-field-height)}
 .comparison-preset-field .select-trigger::before{inset:0;box-shadow:none}
 .comparison-preset-range{margin:0;font-size:var(--type-control);line-height:var(--leading-ui);color:var(--muted);overflow-wrap:anywhere}
-.period-comparison-controls label{display:grid;gap:4px;min-width:0;font-size:var(--type-control);line-height:var(--leading-ui);font-weight:var(--weight-regular)}
+.period-comparison-controls label{font-size:var(--type-control);font-weight:var(--weight-regular)}
 .period-comparison-controls input{display:block;box-sizing:border-box;min-width:0;width:100%;height:var(--task-field-height);font:var(--type-control)/var(--leading-control) var(--font);padding-block:8px}
 .period-comparison-controls>button{grid-column:1/-1;justify-self:end;min-height:44px;white-space:normal;max-width:100%;margin:0}
 #periodComparisonSetup .search-label{max-width:32rem}
@@ -1747,9 +1744,8 @@ export const periodComparisonStyles = `
 .comparison-calendar .period-comparison-controls fieldset[hidden]{display:none}
 .comparison-calendar[data-single=true] .period-comparison-controls fieldset+fieldset{margin:0;padding:0;border:0}
 .comparison-calendar[data-single=true] .period-comparison-controls fieldset+fieldset::before{content:none}
-.comparison-calendar .period-comparison-controls fieldset{display:block}
+.comparison-calendar .period-comparison-controls fieldset{display:block;margin-bottom:0}
 .comparison-calendar .period-comparison-controls legend{float:none;margin-bottom:12px}
-.comparison-calendar .report-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .comparison-calendar .report-popover-actions{grid-column:1/-1}
 .comparison-chart-mark{font:inherit;color:inherit;background:transparent;border:0;border-radius:2px;padding:0;min-height:44px;cursor:pointer;text-align:left}
 .comparison-chart-mark:hover{background:var(--report-note)}

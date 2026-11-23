@@ -112,7 +112,7 @@ test("an open calendar enables the next month at midnight in the display zone wi
     assert(!requests.some(r=>["/api/preview","/api/export"].includes(r.path)));
 });
 
-test("period choices keep exact dates, one zone and only the restrictions that matter", async t => {
+test("period choices keep exact dates and reserve explanations for restrictions", async t => {
     const { page, requests } = await setup(t, { frontend: "react", route: "trends", source: periodFixture().records, now: "2026-03-10T12:00:00Z" });
     await page.getByRole("button", { name: "Compare periods", exact: true }).click();
     await page.getByRole("button", { name: "Open comparison", exact: true }).click();
@@ -126,7 +126,7 @@ test("period choices keep exact dates, one zone and only the restrictions that m
     const calendar = page.locator("#comparisonCustomDates");
     await expect(calendar.locator("legend:visible")).toHaveText(["Selected"]);
     assert.equal(await page.locator(":modal:visible").count(),0);
-    assert.equal((await calendar.innerText()).split("America/Los_Angeles").length - 1, 1);
+    await expect(calendar).not.toContainText(/inclusive dates|America\/Los_Angeles/i);
     await calendar.locator("#comparisonBTo").fill("2026-03-01");
     await expect(calendar.locator("#comparisonBStatus")).toContainText(/end.*start/i);
     await expect(calendar.getByRole("button", { name: "Use dates" })).toBeDisabled();
@@ -146,11 +146,11 @@ test("period choices keep exact dates, one zone and only the restrictions that m
     assert.equal(compareReads(),before+1);
     await navigateMain(page, "reports");
     await page.locator("#reportDeskDates").click();
-    await expect(page.locator("#reportPeriodChoices")).not.toContainText("both endpoints");
+    await expect(page.locator("#reportPeriodChoices")).not.toContainText(/both endpoints|presets include today|America\/Los_Angeles/i);
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await expect(page.locator("#reportDatefrom")).toHaveValue("2026-03-04");
     await expect(page.locator("#reportDateto")).toHaveValue("2026-03-10");
-    await expect(page.locator("#reportCustomDates")).toContainText("America/Los_Angeles");
+    await expect(page.locator("#reportCustomDates")).not.toContainText(/inclusive dates|America\/Los_Angeles/i);
     await expect(page.locator("#reportPeriodChoices:popover-open #reportCustomDates")).toBeVisible();
     await page.getByRole("button",{name:"Cancel",exact:true}).click();
     await expect(page.locator("#reportDeskDates")).toBeFocused();
@@ -1204,8 +1204,8 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
     await expect(page.locator("#reportGallery")).toBeVisible();
     const dates = page.locator("#reportDeskDates"), period = await dates.innerText();
     await dates.click();
-    const periodCaption = page.locator("#reportPeriodChoices .report-period-caption");
-    const acceptedDates = await periodCaption.innerText();
+    const selectedPreset = page.locator("#reportPeriodChoices [data-report-range][aria-pressed=true]");
+    const acceptedPreset = await selectedPreset.innerText();
     await page.keyboard.press("Escape");
     const prepared = await prepare(page);
     assert.equal(prepared.snapshot.periodComparison, undefined);
@@ -1228,7 +1228,7 @@ for (const resumePrepared of [false, true]) test(`fresh Reports entry after comp
     await expect(dates).toHaveText(period);
     await expect(page.locator('nav [data-nav="reports"]')).toHaveAttribute("aria-current", "page");
     await dates.click();
-    await expect(periodCaption).toHaveText(acceptedDates);
+    await expect(selectedPreset).toHaveText(acceptedPreset);
     await page.keyboard.press("Escape");
     const address = new URL(page.url());
     assert.equal(address.pathname, "/reports");

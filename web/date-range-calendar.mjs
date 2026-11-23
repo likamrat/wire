@@ -1,5 +1,5 @@
 // Shared civil-day editor. Its caller owns acceptance, cancellation and authority.
-export function createDateRangeCalendar({ root, id, inputIds = {}, existingFields, label = "", sharedDateNote, time, ux, context, current,
+export function createDateRangeCalendar({ root, id, inputIds = {}, existingFields, label = "", time, ux, context, current,
     singleDay = () => false, onEdit = () => {}, onChange = () => {} }) {
     const doc = root.ownerDocument, fields = {};
     root.classList.add("wire-range-calendar");
@@ -19,10 +19,11 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
     const inputs = el("div", "report-date-fields"), body = el("div", "report-calendar");
     const status = el("p", "report-period-caption"); status.id = id + "Status"; status.setAttribute("role", "status");
     for (const [bound, caption] of [["from", "From"], ["to", "To"]]) {
-        const input = existingFields?.[bound] ?? el("input"), field = input.closest("label") ?? el("label", "report-field");
+        const input = existingFields?.[bound] ?? el("input"), field = input.closest("label") ?? el("label");
         input.type = "date"; input.id = inputIds[bound] || id + (bound === "from" ? "From" : "To");
-        if (!existingFields) input.setAttribute("aria-label", label ? `${label} ${bound}` : caption);
-        input.setAttribute("aria-describedby", [...new Set([...(input.getAttribute("aria-describedby") ?? "").split(" "),sharedDateNote?.id,status.id].filter(Boolean))].join(" "));
+        field.htmlFor = input.id;
+        if (label && !existingFields) input.setAttribute("aria-label", `${label} ${bound}`);
+        input.setAttribute("aria-describedby", [...new Set([...(input.getAttribute("aria-describedby") ?? "").split(" "),status.id].filter(Boolean))].join(" "));
         input.classList.add("wire-calendar-input");
         input.addEventListener("keydown", event => {
             if (event.altKey && event.key === "ArrowDown" && current()) {
@@ -39,7 +40,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
         });
         fields[bound] = input;
         if (!existingFields) field.append(el("span", "", caption), input);
-        field.classList.add("report-field"); inputs.append(field);
+        inputs.append(field);
     }
     root.append(inputs, body, status);
     function valid() {
@@ -47,11 +48,13 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
         try { time.calendar(from); time.calendar(to); time.range({ from, to }, context().timeZone); return to <= today(); }
         catch (error) { if (!(error instanceof RangeError)) throw error; return false; }
     }
-    function render(focusDay) {
+    function render(focusDay, syncFields = false) {
         if (!current() || !monthKey) return;
         const monthControl = body.contains(doc.activeElement) ? doc.activeElement.dataset.monthStep : null;
         const limit = today(); lastToday = limit;
-        for (const input of Object.values(fields)) input.max = limit;
+        // Updating native constraints or values mid-keystroke can discard a partial date.
+        for (const input of Object.values(fields)) if (input.max !== limit) input.max = limit;
+        if (syncFields) { fields.from.value = from; fields.to.value = to; }
         if (monthKey > limit.slice(0,7)) monthKey = limit.slice(0,7);
         const month = new Date(monthKey + "-01T12:00:00Z");
         const header = el("div", "report-calendar-header");
@@ -81,7 +84,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
                 if (singleDay()) { from = to = day; selectingEnd = false; }
                 else if (!selectingEnd) { from = day; to = ""; selectingEnd = true; }
                 else { [from, to] = [from, day].sort(); selectingEnd = false; }
-                render(day); onEdit();
+                render(day, true); onEdit();
             }, "report-calendar-day");
             cell.dataset.day = day; cell.tabIndex = day === focused ? 0 : -1;
             cell.disabled = day > limit;
@@ -102,13 +105,12 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
             grid.append(cell);
         }
         body.replaceChildren(header, grid);
-        fields.from.value = from; fields.to.value = to;
         const future = from > limit || !singleDay() && to > limit;
         const invalid = future || Boolean(from && (singleDay() || to) && !valid());
         status.textContent = future ? `Choose today or an earlier date in ${context().timeZone}.`
             : invalid ? (to < from ? "End date must be on or after the start." : "Choose valid dates.")
             : !from ? (singleDay() ? "Choose a day." : "Choose a start date.") : !singleDay() && !to ? "Choose an end date."
-            : sharedDateNote ? "" : `Inclusive dates · ${context().timeZone}`;
+            : "";
         status.hidden = !status.textContent;
         for (const input of Object.values(fields)) input.setAttribute("aria-invalid", String(invalid));
         onChange();
@@ -121,7 +123,7 @@ export function createDateRangeCalendar({ root, id, inputIds = {}, existingField
     function reset(range) {
         from = range.from ?? ""; to = range.to ?? "";
         monthKey = /^\d{4}-(0[1-9]|1[0-2])/.test(from) ? from.slice(0, 7) : today().slice(0, 7);
-        selectingEnd = false; render();
+        selectingEnd = false; render(undefined, true);
         if (!observer) {
             observer = new IntersectionObserver(([entry]) => {
                 clearTimeout(midnightTimer);

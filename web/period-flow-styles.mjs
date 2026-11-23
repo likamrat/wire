@@ -39,11 +39,7 @@ export const periodFlowStyles = `
 .service-context-label {font-size:var(--type-small);color:var(--muted)}
 #filters:has(#resultSummary[data-unavailable=true])>#resultFilterScope {position:static;width:auto;height:auto;padding:0;margin:8px 4px;overflow:visible;clip-path:none;white-space:normal}
 #dateFields {display:grid;margin-top:8px;grid-template-columns:repeat(2,minmax(10em,10.5rem)) auto;width:max-content;max-width:100%;gap:8px 12px;align-items:end}
-#dateFields label {display:grid;grid-template-rows:auto auto;gap:4px;min-width:0}
-#dateFields label>span {display:flex;align-items:center;padding-inline:12px}
-#dateFields input {min-height:44px;min-width:0;width:100%}
 #dateFields button {min-height:44px}
-#dateHint {grid-column:1/-1;margin:0;font-size:var(--type-caption);color:var(--muted)}
 .date-actions {display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 #dateError {grid-column:1/-1;margin:0;font-size:.875rem;overflow-wrap:anywhere}
 #dateError {color:var(--danger)}
