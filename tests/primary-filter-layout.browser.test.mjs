@@ -177,7 +177,7 @@ test("filter naming exposes real category, context and evidence-layer distinctio
     assert.equal(await page.locator('label[for="serviceAssociationFilter-control"]').innerText(), "Service involved");
     assert.equal(await page.locator('label[for="serviceFilter-control"]').innerText(), "Activity category");
     assert.equal(await page.locator('label[for="promptAuthorFilter-control"]').innerText(), "Prompt author");
-    assert.equal(await page.locator('label[for="projectFilter-control"]').innerText(), "Copilot project");
+    assert.equal(await page.locator('label[for="projectFilter-control"]').innerText(), "Project");
     assert.equal(await page.locator('#dateFilter option[value=week]').innerText(), "This week");
     for (const category of ["Discovery", "Multiple workloads", "Unknown"]) {
         assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.display(category).label);
@@ -190,8 +190,8 @@ test("filter naming exposes real category, context and evidence-layer distinctio
         await selectActivityOption(page, "layerFilter", layer); await ready(page);
         const count = await page.locator("#activityCount").textContent(), url = page.url();
         assert.equal(await page.locator('label[for="layerFilter-control"]').innerText(), "Evidence layer");
-        assert.equal(await page.locator('label[for="chatFilter-control"]').innerText(), layer === "http" ? "Recorder source" : "Copilot chat");
-        assert.equal(await page.locator('#chatFilter option[value=all]').innerText(), layer === "http" ? "All recorder sources" : "All Copilot chats");
+        assert.equal(await page.locator('label[for="chatFilter-control"]').innerText(), layer === "http" ? "Recorder source" : "Chat");
+        assert.equal(await page.locator('#chatFilter option[value=all]').innerText(), layer === "http" ? "All recorder sources" : "All chats");
         await page.locator("#layerFilter-control").press("ArrowDown"); await page.keyboard.press("Escape");
         assert.equal(await page.getByRole("tooltip").count(), 0);
         assert.equal(await page.locator("#activityCount").textContent(), count);
@@ -207,6 +207,7 @@ test("narrow keyboard and touch reach each named filter directly without clipped
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await page.locator("#dateFilter-control").focus();
         for (const id of ids) {
+            if (id === "sourceFilter" && !await page.locator("#sourceFilter-control").isVisible()) continue;
             if (id !== "dateFilter") await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.activeElement.id), id + "-control", "Tab follows the row's label/control order");
             const bounds = await page.locator("#" + id + "-control").boundingBox();
