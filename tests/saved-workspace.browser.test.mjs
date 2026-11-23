@@ -48,6 +48,7 @@ async function setup(t, { count = 8, motion = "reduce" } = {}) {
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await navigateMain(page, "reports");
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
     await page.evaluate(() => document.fonts.ready);
     return { page, bundles, context, runtime, requests };
 }
@@ -62,11 +63,11 @@ const settle = page => page.waitForFunction(() => !document.querySelector("#cont
 test("saved close interruption releases the old owner and respects newer focus and caller history mode", { timeout: 30000 }, async t => {
     const { page, bundles } = await setup(t, { count: 3, motion: "no-preference" });
     await page.evaluate(() => { history.scrollRestoration = "manual"; });
-    await row(page, bundles[1].bundleId).locator(".saved-report-summary").click();
+    await row(page, bundles[1].bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     await settle(page);
     await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length > 0);
-    await row(page, bundles[2].bundleId).locator(".saved-report-summary").click();
+    await row(page, bundles[2].bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     await settle(page);
     await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[2].bundleId}"]`)).toHaveCount(1);
     await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[1].bundleId}"]`)).toHaveCount(0);
@@ -78,7 +79,7 @@ test("saved close interruption releases the old owner and respects newer focus a
     await settle(page);
     await expect(page.locator("#savedReportSearch")).toBeFocused();
     assert.equal(await page.evaluate(() => history.scrollRestoration), "manual");
-    await row(page, bundles[1].bundleId).locator(".saved-report-summary").click();
+    await row(page, bundles[1].bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length > 0);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await settle(page);
@@ -95,8 +96,9 @@ test("Back through a closing saved inspector releases inert ownership before res
     await settle(page);
     const origin = page.url();
     await navigateMain(page, "reports");
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
     await expect(page.locator("#contextSidebar")).toBeHidden();
-    await row(page, bundles[0].bundleId).locator(".saved-report-summary").click();
+    await row(page, bundles[0].bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     await settle(page);
     const exiting = await page.evaluate(() => new Promise(resolve => {
         addEventListener("popstate", () => requestAnimationFrame(() => {
@@ -107,6 +109,9 @@ test("Back through a closing saved inspector releases inert ownership before res
         history.back();
     }));
     assert.deepEqual(exiting, { animated: true, inert: true }, "Exercise the actual outgoing saved inspector, not its settled endpoint");
+    // The library now has its own history entry under Reports.
+    await page.goBack();
+    await expect(page.locator("#reportCreatePanel")).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL(origin);
     await settle(page);
@@ -124,7 +129,7 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     await selectActivityOption(page, "savedReportOrder", "oldest");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     const a = row(page, bundles[6].bundleId), b = row(page, bundles[7].bundleId);
-    const trigger = a.locator(".saved-report-summary");
+    const trigger = a.getByRole("button", { name: "Inspect details", exact: true });
     await trigger.scrollIntoViewIfNeeded();
     const box = await trigger.boundingBox(), top = await a.evaluate(node => node.getBoundingClientRect().top);
     const originalBTop = await b.evaluate(node => node.getBoundingClientRect().top);
@@ -146,7 +151,7 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     assert.equal(await page.locator("#contextSidebar").getAttribute("data-mode"), "docked");
     assert.equal(requests.some(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)), false);
     await shot(page, "library-page-two-inspector-light");
-    await b.locator(".saved-report-summary").click();
+    await b.getByRole("button", { name: "Inspect details", exact: true }).click();
     assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0, "Switching metadata does not replay entrance");
     await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[7].bundleId}"]`)).toHaveCount(1);
     await page.locator("#closeContextSidebar").click();
@@ -158,7 +163,7 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     }
     await settle(page);
     await expect(page.locator("#contextSidebar")).toBeHidden();
-    await expect(b.locator(".saved-report-summary")).toBeFocused();
+    await expect(b.getByRole("button", { name: "Inspect details", exact: true })).toBeFocused();
     assert.ok(Math.abs(await b.evaluate(node => node.getBoundingClientRect().top) - originalBTop) < 3, "Back restores the original full-width library anchor");
     assert.equal(await page.evaluate(() => history.scrollRestoration), "auto");
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "No prompts");
@@ -180,7 +185,7 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
     await page.reload();
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await expect(page.locator("#savedReportReader")).toBeHidden();
     await expect(page.locator("#contextSidebar")).toBeHidden();
     assert.equal(new URL(page.url()).origin, new URL(runtime.url).origin);
@@ -194,7 +199,7 @@ test("saved inspectors and main documents reflow with accessible controls in bot
         await page.setViewportSize({ width, height });
         await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, size);
         await chooseTheme(page, theme);
-        await row(page, bundles[1].bundleId).locator(".saved-report-summary").tap();
+        await row(page, bundles[1].bundleId).getByRole("button", { name: "Inspect details", exact: true }).tap();
         const measurements = await page.locator("#contextSidebar").evaluate(panel => {
             const rect = node => { const box = node.getBoundingClientRect(); return { width: box.width, height: box.height, top: box.top, bottom: box.bottom }; };
             const text = panel.querySelector("dt");
@@ -223,7 +228,7 @@ test("saved inspectors and main documents reflow with accessible controls in bot
         assert.equal(await page.locator("#savedReportReader iframe").getAttribute("sandbox"), "");
         assert.equal(await page.locator("#savedReportReader iframe").getAttribute("referrerpolicy"), "no-referrer");
         await shot(page, `reader-${theme}-${width}-${height}-${size}`);
-        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
     }
@@ -234,7 +239,7 @@ test("pending downloads belong to their inspector, failed HTML offers verified a
     const a = bundles[1], b = bundles[2], downloads = [];
     const bytes = await readFile(a.files["product-report.html"]);
     page.on("download", item => downloads.push(item.suggestedFilename()));
-    await row(page, a.bundleId).locator(".saved-report-summary").click();
+    await row(page, a.bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/artifact-file", async route => {
@@ -243,7 +248,7 @@ test("pending downloads belong to their inspector, failed HTML offers verified a
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebar").getByRole("button", { name: "Download", exact: true }).click();
     await entered.promise;
-    await row(page, b.bundleId).locator(".saved-report-summary").click();
+    await row(page, b.bundleId).getByRole("button", { name: "Inspect details", exact: true }).click();
     const finished = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
     release.resolve(); await (await finished).finished();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -251,7 +256,7 @@ test("pending downloads belong to their inspector, failed HTML offers verified a
     await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${b.bundleId}"]`)).toHaveCount(1);
     await page.locator("#closeContextSidebar").click();
     await writeFile(a.files["product-report.html"], Buffer.concat([bytes, Buffer.from("\nUNREVIEWED CHANGE")]));
-    await row(page, a.bundleId).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await row(page, a.bundleId).locator(".saved-report-title").click();
     await expect(page.locator("#savedReportReader .error")).toContainText("changed");
     assert.equal(await page.locator("#savedReportReader iframe").count(), 0);
     await selectActivityOption(page, "savedReaderFormat", "json");
