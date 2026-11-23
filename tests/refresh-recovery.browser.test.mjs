@@ -232,14 +232,14 @@ test("a real rejected source path offers one source repair, not an uncertain che
         await capture(page, `paths-${theme}-${width}`, { responses, requests: app.requests });
     }
     assert.equal(responses[0].status, 422);
-    assert.match(responses[0].body.error, /absolute data.db path and CLI session-state directory/);
+    assert.match(responses[0].body.error, /Saved source references are invalid\. No history was read\./);
     assert.equal(responses[0].body.code, "source_paths_invalid");
     assert.equal(await page.locator("#freshStatus").innerText(), "Source paths need attention.");
     assert.match(await page.locator("#freshContextMessage").innerText(), /Previous view kept.*data.db.*session-state.*Collection is paused/s);
     assert.equal(await page.locator("#collectionNotice").isVisible(), false, "Paused fact belongs to this recovery, not a duplicate banner");
     assert.equal(await page.locator("#refreshBtn").isVisible(), false, "A successful stored read cannot repair source paths");
     assert.equal(await page.locator("#freshIssues").innerText(), "Review source");
-    assert.equal(await page.locator("#freshIssues").getAttribute("href"), "#settings?section=connection&setting=source-paths");
+    assert.equal(await page.locator("#freshIssues").getAttribute("href"), "/settings?section=source-access&setting=source-paths");
     assert.equal(await page.locator("#activityView").textContent(), activity);
     assert.deepEqual(await loadBoardState(app.context), app.before);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
@@ -249,6 +249,7 @@ test("a real rejected source path offers one source repair, not an uncertain che
     await page.keyboard.press("Enter"); await ready(page);
     assert.equal(await page.locator("#approvedSourceDetails").isVisible(), true);
     assert.equal(await page.locator("#editSource").isVisible(), true);
+    await navigateSettings(page, "connection");
     assert.equal(await page.locator("#freshStatus").innerText(), "Source paths need attention.");
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
