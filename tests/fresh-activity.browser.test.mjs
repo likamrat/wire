@@ -10,7 +10,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, revealSavedDataRead, setLegacyTimeBucket, openSourceEditor } from "./helpers.mjs";
+import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, revealSavedDataRead, setLegacyTimeBucket, openSourceEditor, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
@@ -553,11 +553,20 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
         if (response.url().endsWith("/api/snapshot") && response.ok()) accepted = { query: response.request().postDataJSON(), snapshot: await response.json() };
     });
     async function dates(from, to) {
-        if (await page.locator("#dateFilter").inputValue() !== "custom") await selectActivityOption(page, "dateFilter", "custom");
+        await selectActivityOption(page, "dateFilter", "custom");
         await page.locator("#fromFilter").fill(from);
         await page.locator("#toFilter").fill(to);
         await page.locator("#applyDates").focus(); await page.keyboard.press("Enter");
         await ready(page);
+        await expect(page.locator("#dateFilter-control")).toBeFocused();
+        await closeAnalyzeFilters(page);
+    }
+    async function exactTotal(topic, expected) {
+        await page.locator("#openChartReference").click();
+        await page.locator(`#chartReferenceTopics [data-reference-topic="${topic}"]`).click();
+        await page.locator("#chartReferenceShowData").click();
+        await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText(String(expected));
+        await page.locator("#analyzeResultsSection").click();
     }
     async function verify(stage, expectedIds) {
         const state = await loadBoardState(app.context), status = await app.runtime().collector.status();
@@ -570,13 +579,9 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
             assert.equal(await page.locator(selector).getAttribute("data-revision"), String(state.revision));
         }
         assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), String(expectedIds.length));
-        const columns = await page.locator("#chart .dimensional-column").evaluateAll(nodes => nodes.map(node => Number(node.dataset.total)));
+        const columns = await page.locator("#chart .flat-time-column").evaluateAll(nodes => nodes.map(node => Number(node.dataset.total)));
         assert.equal(columns.reduce((sum, count) => sum + count, 0), expectedIds.length);
-        if (expectedIds.length) {
-            if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
-            assert.equal(Number((await page.locator("#countTable tfoot td").first().innerText()).replaceAll(",", "")), expectedIds.length);
-        }
-        for (const card of ["outcomes", "composition"]) {
+        for (const card of ["outcomes", "tools", "services"]) {
             const rows = await page.locator(`[data-percentage-card=${card}] .percentage-legend-row`).evaluateAll(nodes =>
                 nodes.map(node => ({ category: node.dataset.category, count: Number(node.dataset.count), percentage: node.dataset.percentage })));
             assert.equal(rows.reduce((sum, row) => sum + row.count, 0), expectedIds.length);
@@ -593,8 +598,8 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     }
     assert.equal(await page.locator("#activityCount").innerText(), "5");
     await dates(date, date);
-    assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
     await verify("single-day", ["start", "end"]);
+    await exactTotal("time", 2);
     assert.deepEqual(accepted.snapshot.analytics.dateRange, day);
     await dates(date, next);
     await verify("custom-two-days", ["start", "end", "next-day"]);
@@ -602,7 +607,7 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     const before = (await app.runtime().collector.status()).cursors.find(row => row.sessionId === source.id).cursor.offset;
     const newCall = request("fresh-in-range", Date.parse(day.from) + 12 * 3600000, null);
     await appendFile(source.file, jsonl([...newCall, ...request("fresh-out-of-range", Date.parse(range.to) + 3600000)]));
-    await app.check();
+    await app.check("analyze");
     const added = await verify("appended-in-and-out-of-range", ["start", "end", "next-day", "fresh-in-range"]);
     assert.equal(added.lastCheck.schemaVersion, 2);
     assert.equal(added.lastCheck.changes.added, 2);
@@ -615,23 +620,20 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     assert.equal(accepted.query.filters.to, next);
     assert.ok(added.lastCheck.changes.items.every(item => item.rowId && item.id));
     await appendFile(source.file, jsonl([complete("fresh-in-range", false)]));
-    await app.check();
+    await app.check("analyze");
     const late = await verify("late-result-no-extra-call", ["start", "end", "next-day", "fresh-in-range"]);
     assert.equal(late.lastCheck.changes.added, 0);
     assert.equal(late.lastCheck.changes.updated, 1);
     assert.equal(accepted.snapshot.analytics.totals.failure, 1);
     assert.equal(accepted.snapshot.analytics.totals.success, 3);
     assert.equal(await page.locator('.percentage-legend-row[data-category=failure]').getAttribute("data-percentage"), "25%");
-    for (const chart of ["workload", "endpoint", "time"]) {
-        await page.locator(`[data-chart=${chart}]`).click(); await ready(page);
-        for (const mode of ["tools", "services"]) {
-            await page.locator(`[data-percentage-mode=${mode}]`).click();
-            await verify(`${chart}-${mode}`, ["start", "end", "next-day", "fresh-in-range"]);
-        }
-    }
+    for (const topic of ["categories", "paths", "time"]) await exactTotal(topic, 4);
     for (const bucket of ["day", "week", "month"]) {
-        await setLegacyTimeBucket(page, bucket); await ready(page);
+        const address = new URL(page.url());
+        address.searchParams.set("bucket", bucket);
+        await page.goto(address.href); await ready(page);
         await verify(`aggregation-${bucket}`, ["start", "end", "next-day", "fresh-in-range"]);
+        await exactTotal("time", 4);
         assert.equal(accepted.query.filters.from, date);
         assert.equal(accepted.query.filters.to, next);
     }
@@ -639,11 +641,12 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     await verify("shared-failure-filter", ["fresh-in-range"]);
     assert.equal(accepted.snapshot.analytics.resultFacet.totals.count, 4);
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
+    await closeAnalyzeFilters(page);
     await appendFile(source.file, jsonl([newCall[1]]));
-    await app.check();
+    await app.check("analyze");
     await verify("duplicate-start-no-new-call", ["start", "end", "next-day", "fresh-in-range"]);
     assert.deepEqual(app.receipts.at(-1).changes, { added: 0, updated: 0, items: [] });
-    await app.check();
+    await app.check("analyze");
     const noChange = await verify("fast-no-change", ["start", "end", "next-day", "fresh-in-range"]);
     assert.equal(noChange.metrics.lastBytesRead, 0);
     assert.equal(noChange.lastCheck.beforeRevision, noChange.lastCheck.revision);
@@ -653,18 +656,29 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     const url = new URL(page.url());
     await page.reload(); await ready(page);
     await verify("reload-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
-    await navigateMain(page, "activity"); await ready(page);
+    await navigateMain(page, "trends"); await ready(page);
     await page.goBack(); await ready(page);
     await verify("back-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await app.restart();
-    await page.goto(app.runtime().url + url.hash); await ready(page);
+    await page.goto(new URL(url.pathname + url.search, app.runtime().url).href); await ready(page);
     await verify("restart-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await dates(time.addDays(date, -60), next);
-    assert.equal(await page.locator("#periodCoverageText").innerText(), "The last history check covered only part of this period.");
-    assert.equal(await page.locator("#periodHistoryLink").isVisible(), true);
-    await dates(time.addDays(next, 7), time.addDays(next, 8));
-    await verify("future-empty-not-a-source-query", []);
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#periodCoverageText")).toBeVisible();
+    await expect(page.locator("#periodCoverageText")).toHaveText("The last history check covered only part of this period.");
+    await expect(page.getByRole("link", { name: "History settings", exact: true })).toHaveAttribute("href", "/settings?section=connection&setting=history-window");
+    const writesBeforeDates = [...app.writes], appliedAddress = page.url();
+    await selectActivityOption(page, "dateFilter", "custom");
+    await page.locator("#fromFilter").fill(time.addDays(next, 7));
+    await page.locator("#toFilter").fill(time.addDays(next, 8));
+    await expect(page.locator("#applyDates")).toBeDisabled();
+    await expect(page.locator("#analyzeCalendarStatus")).toContainText("today or an earlier date");
+    assert.equal(page.url(), appliedAddress);
+    await page.locator("#analyzeDates").getByRole("button", { name: "Cancel", exact: true }).click();
+    await dates(time.addDays(date, -14), time.addDays(date, -13));
+    await verify("empty-retained-period-not-a-source-query", []);
     assert.match(await page.locator("#periodHint").innerText(), /not proof/);
+    assert.deepEqual(app.writes, writesBeforeDates);
     assert.ok(app.writes.every(route => route === "/api/collection/now"));
     if (process.env.WORKIQ_DATE_PROOFS) {
         await mkdir(process.env.WORKIQ_DATE_PROOFS, { recursive: true });
