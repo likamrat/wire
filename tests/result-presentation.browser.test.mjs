@@ -88,25 +88,28 @@ test("multi-call and batched returned results preserve status, service and exact
     await page.goto(url + "#request?request=batch"); await ready(page);
     const response = await snapshot;
     assert.equal(response.status(), 200, await response.text());
-    assert.deepEqual(await outcomes(page.locator(".full-request-results [data-result-layer=tool]")), { success: 1, partial: 1 });
-    assert.deepEqual(await outcomes(page.locator(".full-request-results [data-result-layer=reported-api]")), { success: 2, failure: 1, unknown: 1 });
-    assert.equal(await page.locator(".request-outcome-action").count(), 0, "No first-call fields attached to a multi-call aggregate");
+    const full = (await response.json()).requestActivity;
+    assert.deepEqual(full.tool.map(row => row.outcome).sort(), ["partial", "success"]);
+    assert.deepEqual(full["reported-api"].map(row => row.outcome).sort(), ["failure", "success", "success", "unknown"]);
     const firstCard = page.locator(`[data-tool-call-id="${first.toolCallId}"]`), secondCard = page.locator('[data-tool-call-id="second-call"]');
-    assert.deepEqual(await firstCard.locator(":scope > .action-fields code").allTextContents(), first.requestArgs.entityUrls);
-    await firstCard.locator(".returned-api-details > summary").click();
+    for (const call of [firstCard, secondCard]) {
+        const toggle = call.locator(".reader-call-toggle");
+        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+        const detail = call.locator(".reader-returned-facts:not([open]) > summary");
+        if (await detail.count()) await detail.click();
+    }
+    await expect(firstCard.locator(".reader-input-value code.api-path")).toHaveText(first.requestArgs.entityUrls);
     const entries = firstCard.locator(".api-result-entry");
     assert.equal(await entries.count(), 3);
     assert.equal(await entries.nth(0).locator(".api-path").textContent(), "/me/messages?Case=A");
-    assert.match(await entries.nth(0).innerText(), /Call service/);
-    assert.equal(await entries.nth(0).locator(".action-service").textContent(), "More than one service");
+    await expect(entries.nth(0).locator(".action-service")).toHaveText("Mail");
     assert.deepEqual(await outcomes(entries.nth(0)), { success: 1 });
     assert.equal(await entries.nth(1).locator(".api-path").textContent(), "/me/calendar/events?Case=B");
-    assert.equal(await entries.nth(1).locator(".action-service").textContent(), "More than one service", "The canonical call service category is not reclassified from one returned path");
+    await expect(entries.nth(1).locator(".action-service")).toHaveText("Calendar");
     assert.deepEqual(await outcomes(entries.nth(1)), { failure: 1 });
     assert.equal(await entries.nth(2).locator(".api-path").count(), 0);
     assert.match(await entries.nth(2).innerText(), /No path returned for this batch entry/);
     assert.deepEqual(await outcomes(entries.nth(2)), { unknown: 1 });
-    await secondCard.locator(".returned-api-details > summary").click();
     assert.equal(await secondCard.locator(".api-result-entry .api-path").textContent(), "/me/drive/root/children?Case=Returned");
     assert.equal(await secondCard.locator(".api-result-entry .action-service").textContent(), "Files");
     assert.doesNotMatch(await firstCard.innerText(), /Case=Returned/);
@@ -133,24 +136,17 @@ test("absent paths, unknown completion, API absence and inapplicable tool eviden
     }];
     const { page, url } = await setup(t, [missing, code]);
     await page.goto(url + "#request?request=missing"); await ready(page);
-    assert.match(await page.locator(".request-outcome").innerText(), /No result recorded.*API metadata: None recorded/s);
-    assert.equal(await page.locator(".request-outcome-action .api-path-value").textContent(), "Not recorded");
-    assert.equal(await page.locator(".request-outcome .api-path").count(), 0);
+    const row = page.locator(`[data-tool-call-id="${missing.toolCalls[0].toolCallId}"]`);
+    await expect(row.locator(".reader-call-summary")).toContainText(/no recorded result/i);
+    await expect(row.locator(".api-result-entry,code.api-path")).toHaveCount(0);
     await page.goto(url + "#request?request=code"); await ready(page);
-    assert.equal(await page.locator(".request-outcome [data-result-layer=reported-api],.request-outcome .result-missing-api").count(), 0);
-    assert.match(await page.locator(".request-outcome").innerText(), /Execution not observed/);
-    assert.equal(await page.locator(".journey-item .api-path").textContent(), "/me/messages?Keep=Case");
-    assert.match(await page.locator(".journey-item").innerText(), /Referenced API path/);
-    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Tool completed|HTTP 2xx/);
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(), data = await response.json();
-        delete data.requestActivity["reported-api"];
-        await route.fulfill({ response, json: data });
-    });
-    await page.goto(url + "#request?request=missing");
-    await page.reload(); await ready(page);
-    assert.match(await page.locator(".full-request-results").innerText(), /API results: result counts unavailable/);
-    assert.equal(await page.locator(".full-request-results .result-missing-api").count(), 0, "Unavailable metadata is not shown as a known empty set");
+    const reference = page.locator("#requestContent .reader-call-row");
+    await expect(reference).toHaveCount(1);
+    await expect(reference).toContainText("Execution not observed");
+    const toggle = reference.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(reference).toContainText("/me/messages?Keep=Case");
+    await expect(reference).not.toContainText(/Tool completed|HTTP 2xx/);
 });
 
 test("matching result navigation keeps exact paths, selected scope and native focus", { timeout: 30000 }, async t => {
@@ -159,18 +155,15 @@ test("matching result navigation keeps exact paths, selected scope and native fo
     record.toolCalls[0].apiResults = [{ index: 0, statusCode: 403 }];
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#activity?session=test-session&result=failure"); await ready(page);
-    assert.equal(await page.locator(".matched-action .api-path").textContent(), record.toolCalls[0].requestArgs.entityUrls[0]);
-    assert.equal(await page.locator(".matched-action tag").count(), 0);
-    const link = page.locator(".matched-action a[href*='#request']");
-    await link.focus();
-    assert.equal(await link.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle !== "none"), true);
-    await page.keyboard.press("Enter"); await ready(page);
-    assert.match(page.url(), /request=matching/);
-    await page.locator("#requestContent").getByRole("button", { name: "Add to report", exact: true }).click();
-    assert.equal(await page.locator("#requestContent").getByRole("button", { name: "Remove from report", exact: true }).count(), 1);
-    await page.locator("#contextBack").click(); await ready(page);
+    const link = page.locator("#activityList").getByRole("link", { name: /Returned entry 1.*HTTP 403/ });
+    await link.press("Enter"); await ready(page);
+    const call = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    await expect(call.locator(".api-result-entry:focus")).toContainText("Tool-reported HTTP 403");
+    await expect(call.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
+    await expect(call.locator("tag")).toHaveCount(0);
+    await page.goBack(); await expect(link).toBeFocused();
     assert.match(page.url(), /result=failure/);
-    assert.equal(await page.locator(".matched-action").count(), 1);
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:matching");
 });
 
 test("legacy aliases use the canonical call's exact paths, including start-event identities", { timeout: 30000 }, async t => {

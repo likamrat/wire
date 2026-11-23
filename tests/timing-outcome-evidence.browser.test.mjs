@@ -9,7 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { readSavedArtifactFile, loadSavedReportSource, readSavedComparison } from "../lib/report-artifacts.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
-import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { privateFixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 
@@ -55,19 +55,21 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator("#activityList article").filter({ hasText: "invented timeout request" }).locator(".request-card-open");
-    await expect(card.locator(".request-card-exception")).toHaveText("1 tool call failed");
+    await expect(card).toHaveText("1 tool call failed");
     await expect(card).not.toContainText("The tool did not respond in time");
     await card.click();
     const call = page.locator('[data-tool-call-id="timeout-call"]');
     await expect(call).toContainText("workiq-retrieve");
-    await expect(call).toContainText("180,024 ms (180.024 s)");
+    await expect(call.locator(".call-duration")).toHaveAttribute("value", "180024");
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
     await expect(call).toContainText("The tool did not respond in time");
     await expect(call).toContainText("allowed waiting interval");
     await page.locator("#closeContextSidebar").click();
     for (const [name, outcome] of [["slow-completed", "success"], ["missing-completion", "unknown"]]) {
         const control = page.locator("#activityList article").filter({ hasText: `invented ${name} request` }).locator(".request-card-open");
-        if (outcome === "success") await expect(control.locator(".request-card-exception")).toHaveCount(0);
-        else await expect(control.locator(".request-card-exception")).toHaveText("No result recorded");
+        if (outcome === "success") await expect(control).toContainText("1 tool call completed");
+        else await expect(control.locator("xpath=ancestor::article[1]")).toContainText(/no result recorded/i);
         await expect(control).not.toContainText(/timed out|did not respond in time|MCP -32001/);
     }
     await navigateMain(page, "reports");
@@ -118,13 +120,14 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         }
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
+    await selectActivityOption(page, "savedReaderFormat", "html");
+    await expect(page.frameLocator("#savedReportReader .saved-file-preview:visible iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     const paired = await historicalComparison(context, oldBundle.bundleId, newBundle.bundleId,
         { formats: ["html", "markdown", "json", "pdf"] });
     assert.equal(paired.comparison.resultComparison.shared.changedTypedFacts, 1);
     for (const [name, content] of Object.entries(paired.files)) {
-        const text = name.endsWith(".pdf") ? (await pdfDocumentText(Buffer.from(content.data, "base64"))).content
+        const text = name.endsWith(".pdf") ? (await pdfDocumentText(Buffer.from(content.data, "base64"))).content.replace(/\s+/g, " ")
             : String(content).replaceAll("\\", "");
         assert.match(text, name.endsWith(".json") ? /timingFailure/ : /Request timed out \(MCP -32001\)/, name);
     }

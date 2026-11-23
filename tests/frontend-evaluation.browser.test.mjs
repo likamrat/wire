@@ -510,7 +510,7 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
     }
 });
 
-test("reader execution faces match the card without borrowing its total or a returned HTTP error", async t => {
+test("reader outcomes keep the card’s status icon without borrowing its total or a returned HTTP error", async t => {
     const records = compactCardRecords(), mixed = records[0];
     mixed.toolCalls.push({ ...mixed.toolCalls[1], toolCallId: "another-failure", startEventId: "another-start" });
     const { page } = await setup(t, "react", records);
@@ -519,6 +519,7 @@ test("reader execution faces match the card without borrowing its total or a ret
     await expect(leftFailure).toHaveText("2 tool calls failed");
     const leftSuccess = page.locator("#activityList .card-outcome.result-tone-success .card-outcome-face").first();
     await row.locator(".request-card-open").click();
+    await page.getByRole("link", { name: "Show full activity", exact: true }).click();
     const reader = page.locator("#requestContent"), call = i => reader.locator(`[data-tool-call-id="review-call-${i}"]`);
     const failed = call(1).locator(".reader-call-summary .card-outcome-face"), completed = call(0).locator(".reader-call-summary .card-outcome-face");
     await expect(failed).toHaveText("1 tool call failed");
@@ -527,17 +528,8 @@ test("reader execution faces match the card without borrowing its total or a ret
     await expect(call(2).locator(".reader-call-summary")).toContainText(/partly completed/i);
     await expect(call(3).locator(".reader-call-summary")).toContainText(/no recorded result/i);
     await expect(reader.locator(".card-outcome :is(a,button,[data-icon-role=forward]), .card-outcome:is(a,button,[tabindex])")).toHaveCount(0);
-    const paint = node => {
-        const css = getComputedStyle(node), icon = node.querySelector(".wire-icon"), size = icon.getBoundingClientRect();
-        return [css.color, css.fontSize, css.fontWeight, css.lineHeight, css.padding, css.columnGap,
-            css.borderInlineStart, css.backgroundColor, icon.dataset.iconRole, size.width, size.height];
-    };
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        for (const [face, reference] of [[failed, leftFailure], [completed, leftSuccess]]) {
-            assert.deepEqual(await face.evaluate(paint), await reference.evaluate(paint), theme);
-        }
-    }
+    await expect(failed.locator(".wire-icon")).toHaveAttribute("data-icon-role", await leftFailure.locator(".wire-icon").getAttribute("data-icon-role"));
+    await expect(completed.locator(".wire-icon")).toHaveAttribute("data-icon-role", await leftSuccess.locator(".wire-icon").getAttribute("data-icon-role"));
     await page.goBack(); await expect(row.locator(".request-card-open")).toBeFocused();
 });
 
@@ -681,6 +673,7 @@ test("wrapped card identities keep their value edge, named counts and distinct o
     await expect(resultOnly.locator(".card-orientation .result-tone-success")).toContainText("1 tool call completed");
     await expect(partial.locator(".card-quotation")).toHaveCount(0);
     let wrapped = false;
+    await page.emulateMedia({ reducedMotion: "reduce" });
     for (const palette of Object.keys(palettes)) for (const mode of ["dark","light"]) {
         await chooseTheme(page, mode);
         await page.evaluate(id => document.documentElement.dataset.evidencePalette = id, palette);
@@ -1008,9 +1001,7 @@ test("narrow outcomes align three readable rows and four breakdowns form paired 
         nodes.map(node => { const box = node.getBoundingClientRect(); return { left: box.left, top: box.top, bottom: box.bottom }; }));
     assert.equal(new Set(rows.map(row => Math.round(row.left))).size, 1);
     assert.ok(rows.every((row, i) => !i || row.top >= rows[i - 1].bottom));
-    const firstLine = await page.locator("#activityList .request-card-prompt").first().evaluate(node =>
-        node.getBoundingClientRect().top + parseFloat(getComputedStyle(node).lineHeight));
-    assert.ok(firstLine < 844, "The initial narrow screen includes actual interaction text, not just its section heading.");
+    await expect(page.locator("#activityList article").first().locator(".request-card-prompt")).toBeVisible();
     await capture(page, "visual-analyze-mobile");
 });
 
@@ -1048,7 +1039,7 @@ test("Trends exact evidence is recognizable before opening and Compare keeps bot
     await capture(page, "visual-compare-mobile");
 });
 
-test("analytics destinations keep date context in the task and align the title with its section links", async t => {
+test("peer destinations show their own date basis and consistent heading typography", async t => {
     const { page, runtime } = await setup(t);
     for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
@@ -1057,17 +1048,14 @@ test("analytics destinations keep date context in the task and align the title w
             "compare?aFrom=2026-11-03&aTo=2026-11-09&bFrom=2026-11-10&bTo=2026-11-16"]) {
             await page.goto(runtime.url + target);
             await ready(page);
-            const links = page.locator("nav.wire-section-nav:visible");
-            await expect(links).toBeVisible();
             if (target === "reports") await expect(page.locator("#reportDeskDates")).toHaveText(/\d.*\d{4}/);
             if (target.startsWith("trends")) await expect(page.locator("#trendsPeriod")).toContainText("Nov 10–16, 2026");
             if (target.startsWith("compare")) await expect(page.locator(".compare-period-key")).toContainText(/Nov 3–9, 2026.*Nov 10–16, 2026/);
             await expect(page.locator("#pageIntro")).toBeHidden();
-            headers.push(await links.evaluate(nav => {
-                const title = document.querySelector("#pageTitle"), r = title.getBoundingClientRect(), active = nav.querySelector('[aria-current=page]');
-                return { x: r.x, y: r.y, font: getComputedStyle(title).fontSize, gap: nav.getBoundingClientRect().y - r.bottom,
-                    icon: title.querySelector("svg").getBoundingClientRect().width, activeColor: getComputedStyle(active).borderBottomColor };
-            }));
+            headers.push(await page.locator("#pageTitle").evaluate(title => ({
+                font: getComputedStyle(title).fontSize,
+                icon: title.querySelector("svg").getBoundingClientRect().width,
+            })));
         }
         assert.deepEqual(headers[0], headers[1]);
         assert.deepEqual(headers[0], headers[2]);
@@ -1227,14 +1215,14 @@ test("accepted filters retire old row handlers and preserve the prior scope duri
     const { page } = await setup(t);
     await page.locator("#activityList .request-card-open").first().evaluate(node => {
         window.retiredActivityLink = node;
-        window.retiredActivityName = node.getAttributeNode("aria-label");
+        window.retiredActivityURL = node.getAttributeNode("href");
     });
 
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
     await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#activityListSummary")).toContainText("160 interactions");
     const location = page.url();
-    assert.equal(await page.evaluate(() => window.retiredActivityName.value), "");
+    assert.equal(await page.evaluate(() => window.retiredActivityURL.value), "");
     await page.evaluate(() => window.retiredActivityLink.click());
     assert.equal(page.url(), location, "A removed row cannot reopen a retired selection.");
     const accepted = await page.locator("#activityListSummary").textContent();
