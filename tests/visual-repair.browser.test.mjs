@@ -10,7 +10,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
 
-async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch = false } = {}) {
+async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch = false, entry = "#analyze" } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         Array.from({ length: 60 }, (_, index) => {
             const record = fixture("visual-repair-" + index);
@@ -59,7 +59,7 @@ async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch =
     page.on("pageerror", error => errors.push(error.message));
     await page.route(url => url.origin !== origin, route => route.abort());
     t.after(() => assert.deepEqual(errors, []));
-    await page.goto(runtime.url + "#analyze");
+    await page.goto(runtime.url + entry);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
@@ -323,22 +323,24 @@ test("chart grouping, category states and report identity remain readable at enl
     assert.ok(layout.periodY >= layout.nameBottom, "Period moves below the full-width identity before the name is squeezed");
 });
 
-test("destination feedback precedes its snapshot without presenting an unaccepted chart scope", async t => {
-    const { page } = await setup(t), started = Promise.withResolvers(), release = Promise.withResolvers();
-    t.after(() => release.resolve());
-    await page.route("**/api/snapshot", async route => { started.resolve(); await release.promise; await route.continue(); });
-    await page.locator("#comparePeriods").click(); await started.promise;
-    const pending = await page.evaluate(() => ({
-        selected: document.getElementById("comparePeriods").getAttribute("aria-current"),
-        busy: document.getElementById("workspace").getAttribute("aria-busy"),
-        home: document.getElementById("homeView").checkVisibility(),
-        notice: document.getElementById("navigationPending")?.textContent,
-    }));
-    assert.equal(pending.selected, "page");
-    assert.equal(pending.busy, "true");
-    assert.equal(pending.home, false);
-    assert.equal(pending.notice, "Opening Compare...");
-    release.resolve();
+test("Compare distinguishes a pending scope change from reading the two periods", async t => {
+    const { page } = await setup(t, { entry: "?result=failure" });
+    const scope = Promise.withResolvers(), pair = Promise.withResolvers();
+    await page.route("**/api/snapshot", async route => { await scope.promise; await route.continue(); }, { times: 1 });
+    await page.route("**/api/period-comparison", async route => { await pair.promise; await route.continue(); }, { times: 1 });
+    try {
+        await Promise.all([page.waitForRequest("**/api/snapshot"), page.locator("#comparePeriods").click()]);
+        await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+        await expect(page.locator("#homeView")).toBeHidden();
+        await expect(page.locator("#navigationPending")).toHaveText("Opening Compare...");
+        const reading = page.waitForRequest("**/api/period-comparison");
+        scope.resolve();
+        await reading;
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Reading both periods...");
+        await expect(page.locator("#periodComparisonResults")).toHaveAttribute("aria-busy", "true");
+        await expect(page.locator("#createPeriodReport")).toBeDisabled();
+    } finally { scope.resolve(); pair.resolve(); }
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#navigationPending")).toBeHidden();
     await page.locator('nav [data-nav=settings]').click();
@@ -346,23 +348,22 @@ test("destination feedback precedes its snapshot without presenting an unaccepte
 });
 
 for (const outcome of ["failure", "superseded"]) test(`pending destination ${outcome} preserves the accepted or newer route`, async t => {
-    const { page } = await setup(t), started = Promise.withResolvers(), release = Promise.withResolvers();
-    t.after(() => release.resolve());
-    let held = false;
+    const { page } = await setup(t, { entry: "?result=failure" }), release = Promise.withResolvers();
     await page.route("**/api/snapshot", async route => {
-        if (held) return route.continue();
-        held = true; started.resolve(); await release.promise;
+        await release.promise;
         if (outcome === "failure") return route.fulfill({ status: 503, contentType: "application/json", json: { error: "Invented stored read failure." } });
         return route.continue();
-    });
-    await page.locator("#comparePeriods").click(); await started.promise;
-    if (outcome === "superseded") {
-        await page.locator('nav [data-nav=reports]').click();
-        await expect(page.locator("#reportsView")).toBeVisible();
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    }
-    const response = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
-    release.resolve(); await response;
+    }, { times: 1 });
+    try {
+        const [pending] = await Promise.all([page.waitForRequest("**/api/snapshot"), page.locator("#comparePeriods").click()]);
+        if (outcome === "superseded") {
+            await page.locator('nav [data-nav=reports]').click();
+            await expect(page.locator("#reportsView")).toBeVisible();
+            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        }
+        const response = page.waitForResponse(r => r.request() === pending);
+        release.resolve(); await response;
+    } finally { release.resolve(); }
     if (outcome === "failure") {
         await expect(page.locator("#message")).toContainText("Invented stored read failure.");
         await expect(page.locator('nav [data-nav=analyze]')).toHaveAttribute("aria-current", "page");
