@@ -183,10 +183,11 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     assert.match(await page.locator("#bundleList").innerText(), /7-8 of 8/);
     await page.goForward();
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    const reads = requests.filter(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)).length;
     await page.reload();
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
-    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
-    await expect(page.locator("#savedReportReader")).toBeHidden();
+    await expect(page.locator("#message")).toContainText(/private (selection could not be restored|view)/);
+    await expect(page.locator("#savedReportReader iframe,#savedReportReader .report-file-action")).toHaveCount(0);
+    assert.equal(requests.filter(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)).length, reads);
     await expect(page.locator("#contextSidebar")).toBeHidden();
     assert.equal(new URL(page.url()).origin, new URL(runtime.url).origin);
     assert.doesNotMatch(page.url(), /No.prompts|savedEntry|receipt/);
