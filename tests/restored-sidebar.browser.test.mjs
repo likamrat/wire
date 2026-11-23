@@ -261,7 +261,7 @@ test("sidebar groups remain scroll-reachable without overlap at narrow and 200% 
                 await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
             }
             const parent = page.locator(width < 700 ? "#navigationDrawer" : "#sidebar");
-            for (const selector of ['nav [data-nav="analyze"]', 'nav [data-nav="reports"]', "#comparePeriods", "#pageAction", 'nav [data-nav="settings"]']) {
+            for (const selector of ['nav [data-nav="analyze"]', 'nav [data-nav="trends"]', 'nav [data-nav="reports"]', "#comparePeriods", 'nav [data-nav="settings"]']) {
                 const control = parent.locator(selector);
                 await control.focus();
                 const metrics = await control.evaluate(node => {

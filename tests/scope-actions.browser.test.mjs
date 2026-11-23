@@ -1,19 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
-import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
-const proofs = process.env.WIRE_SCOPE_ACTION_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { resolve, promise }; }
-async function setup(t, { route = "#home", width = 1200, scale = 1, theme = "light", approved = true, paused = false } = {}) {
+async function setup(t, { route = "", height = 1000, approved = true } = {}) {
     const records = Array.from({ length: 10 }, (_, index) => {
         const row = fixture(`scope-action-${index}`);
         row.sourceSessionId = `scope-chat-${index % 2}`;
@@ -31,29 +27,21 @@ async function setup(t, { route = "#home", width = 1200, scale = 1, theme = "lig
     const initial = await loadBoardState(context);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width, height: 1000 }, timezoneId: "UTC", reducedMotion: "reduce" });
+    const page = await browser.newPage({ viewport: { width: 1200, height }, timezoneId: "UTC", reducedMotion: "reduce" });
     page.setDefaultTimeout(6000);
-    const requests = [], errors = [], unexpected = [], snapshots = [];
+    const requests = [], errors = [], unexpected = [];
     const status = original => ({ ...original, configVersion: "invented-source-configuration",
-        config: approved ? { approved: true, enabled: !paused, windowDays: 30, pollSeconds: 30,
+        config: approved ? { approved: true, enabled: true, windowDays: 30, pollSeconds: 30,
             appDbPath: "C:\\Invented\\source.db", sessionRoot: "C:\\Invented\\history" } : null,
-        state: paused ? "paused" : approved ? "watching" : "unconfigured",
+        state: approved ? "watching" : "unconfigured",
         lastCheckedAt: "2026-10-08T12:00:00.000Z",
         discovery: { counts: { sessions: 2 } }, cadence: { pollSeconds: 30, browserPollSeconds: 5 },
         historyCoverage: { eligible: 2, readable: 2, unavailable: 0, limited: 0, pending: 0, affected: 0, excluded: {} },
     });
-    let lastStatus, checkCount = 0;
+    let lastStatus;
     await page.route("**/api/**", async route => {
         const request = route.request(), endpoint = new URL(request.url()).pathname;
         if (request.method() === "POST") requests.push({ endpoint, body: request.postDataJSON() });
-        if (endpoint === "/api/collection/now") {
-            checkCount++;
-            const check = { schemaVersion: 2, id: `invented-check-${checkCount}`, beforeRevision: initial.revision,
-                revision: initial.revision, configVersion: "invented-source-configuration",
-                startedAt: "2026-10-08T12:00:00.000Z", completedAt: "2026-10-08T12:00:00.010Z",
-                outcome: "complete", changes: { added: 0, updated: 0, items: [] }, sourcesChecked: 2, eligibleSources: 2 };
-            return route.fulfill({ json: { ...lastStatus, check } });
-        }
         const allowed = ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/overview",
             "/api/assessment/detail", "/api/evaluation/automatic/summary", "/api/report-artifacts/list",
             "/api/preview", "/api/cancel-preview"];
@@ -61,7 +49,6 @@ async function setup(t, { route = "#home", width = 1200, scale = 1, theme = "lig
         const response = await route.fetch();
         if (endpoint === "/api/snapshot") {
             const json = await response.json(); json.collection = lastStatus = status(json.collection);
-            snapshots.push({ request: request.postDataJSON(), revision: json.revision });
             return route.fulfill({ response, json });
         }
         if (endpoint === "/api/collection/status") {
@@ -82,133 +69,83 @@ async function setup(t, { route = "#home", width = 1200, scale = 1, theme = "lig
     });
     await page.goto(runtime.url + route); await ready(page);
     await page.evaluate(() => document.fonts.ready);
-    await chooseTheme(page, theme);
-    if (scale !== 1) await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
     await frames(page);
-    return { page, requests, snapshots, runtime, status };
+    return { page, requests, status };
 }
-async function proof(page, name, data) {
-    if (!proofs) return;
-    await mkdir(proofs, { recursive: true });
-    await page.screenshot({ path: path.join(proofs, name + ".png") });
-    await writeFile(path.join(proofs, name + ".json"), JSON.stringify(data, null, 2));
-}
-async function state(page) {
-    return page.evaluate(() => ({
-        hash: location.hash, search: document.querySelector("#activitySearch").value,
-        theme: document.documentElement.dataset.evidenceTheme,
-        values: Object.fromEntries(["dateFilter", "serviceFilter", "projectFilter", "layerFilter", "scopeFilter"].map(id => [id, document.getElementById(id).value])),
-        selected: document.querySelector("#previewSelectionSummary").textContent,
-        reportPhase: document.querySelector("#reportsView").dataset.reportPhase,
-        reportStep: document.querySelector("#reportsView").dataset.reportStep,
-        scrollY, focus: document.activeElement.id || document.activeElement.tagName,
-    }));
-}
-async function revealRefresh(page) {
-    const refresh = page.locator("#refreshBtn");
-    if (!await refresh.isVisible()) {
-        if (await page.locator("#freshHelp").isVisible()) await page.locator("#freshHelp > summary").click();
-        else if (await page.locator("#bundles").isVisible()) await page.locator("#savedLibraryTitle").click();
-    }
-    return refresh;
-}
-
-test("Reports history stored refresh retains its keyboard initiator and reading position after a successful read", async t => {
-    const { page, status } = await setup(t, { route: "#reports" });
-    await chooseReportScope(page, "all"); await reportContents(page);
-    const refresh = await revealRefresh(page);
-    await refresh.evaluate(node => node.scrollIntoView({ block: "center" }));
-    await refresh.focus(); await frames(page);
-    const sample = () => refresh.evaluate(node => ({ scrollY, top: node.getBoundingClientRect().top, height: document.documentElement.scrollHeight,
-        focused: node === document.activeElement, active: document.activeElement.id || document.activeElement.tagName, disabled: node.disabled }));
-    const before = await sample(), entered = deferred(), release = deferred();
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(), json = await response.json();
-        entered.resolve(); await release.promise; await route.fulfill({ response, json: { ...json, collection: status(json.collection) } });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await page.keyboard.press("Enter"); await entered.promise;
-    const pending = await sample();
-    release.resolve(); await ready(page); await frames(page);
-    const after = await sample();
-    t.diagnostic(JSON.stringify({ before, pending, after }));
-    await proof(page, "reports-refresh-keyboard-focus", { before, pending, after });
-    assert.equal(after.scrollY, before.scrollY);
-    assert.equal(after.top, before.top);
-    assert.equal(after.focused, true, "Disabling the initiating control must not discard its keyboard focus after a successful read.");
-});
-
-for (const superseding of ["user scroll", "meaningful focus", "navigation", "newer read", "failed read"]) {
-    test(`Reports refresh does not reclaim its initiator after ${superseding}`, async t => {
-        const { page, status } = await setup(t, { route: "#reports" });
-        const refresh = await revealRefresh(page);
-        await refresh.focus();
-        const entered = deferred(), release = deferred();
+for (const superseding of ["none", "user scroll", "meaningful focus", "navigation", "newer read", "failed read"]) {
+    test(`Reports stored-read recovery respects ${superseding === "none" ? "its keyboard return" : superseding}`, async t => {
+        const { page, status, requests } = await setup(t, { route: "reports", height: superseding === "user scroll" ? 500 : 1000 });
+        await expect(page.locator("#refreshBtn")).toBeHidden();
+        // Stored reads are a recovery action, not a permanent button in the history section.
+        await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented stored-read failure" } }), { times: 1 });
+        await page.evaluate(() => window.dispatchEvent(new Event("online")));
+        const retry = page.getByRole("button", { name: "Retry", exact: true });
+        await retry.focus(); await expect(retry).toBeFocused();
+        const release = deferred();
         await page.route("**/api/snapshot", async route => {
-            const response = await route.fetch(), json = await response.json();
-            entered.resolve(); await release.promise;
-            if (superseding === "failed read") await route.fulfill({ status: 503, json: { error: "Invented refresh failure" } });
+            const response = await route.fetch(), json = await response.json(); await release.promise;
+            if (superseding === "failed read") await route.fulfill({ status: 503, json: { error: "Invented repeat failure" } });
             else await route.fulfill({ response, json: { ...json, collection: status(json.collection) } });
         }, { times: 1 });
         t.after(() => release.resolve());
-        const returned = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
-        await page.keyboard.press("Enter"); await entered.promise;
+        const dispatched = page.waitForRequest(request => request.url().endsWith("/api/snapshot"));
+        await retry.press("Enter"); const request = await dispatched;
+        const library = page.getByRole("link", { name: "Saved library", exact: true });
         if (superseding === "user scroll") {
-            await page.mouse.move(1100, 650); await page.mouse.wheel(0, -100); await frames(page);
-        } else if (superseding === "meaningful focus") {
-            await page.locator("#savedReportSearch").focus();
-        } else if (superseding === "navigation") {
-            await navigateMain(page, "home");
-        } else if (superseding === "newer read") {
-            await page.evaluate(() => window.dispatchEvent(new Event("online")));
-            await ready(page);
+            const at = await page.evaluate(() => scrollY);
+            await page.mouse.move(1050, 400); await page.mouse.wheel(0, 500);
+            await expect.poll(() => page.evaluate(() => scrollY)).not.toBe(at);
+            await frames(page);
+        } else if (superseding === "meaningful focus") await library.focus();
+        else if (superseding === "navigation") await navigateMain(page, "analyze");
+        else if (superseding === "newer read") {
+            const next = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.request() !== request);
+            await page.evaluate(() => window.dispatchEvent(new Event("online"))); await next;
         }
-        const before = await state(page), top = (await refresh.boundingBox())?.y;
-        release.resolve(); await returned; await ready(page); await frames(page);
-        const after = await state(page);
-        assert.notEqual(after.focus, "refreshBtn", "Only an unsuperseded successful read may restore its initiating control.");
-        if (superseding === "meaningful focus") await expect(page.locator("#savedReportSearch")).toBeFocused();
-        if (superseding === "navigation") assert.match(after.hash, /^#home/);
+        const position = () => page.evaluate(() => ({ y: scrollY, max: document.documentElement.scrollHeight - innerHeight }));
+        const before = superseding === "user scroll" ? await position() : null;
+        release.resolve(); await request.response(); await ready(page); await frames(page);
+        const title = page.locator("#pageTitle");
+        if (superseding === "none") await expect(title).toBeFocused();
+        if (superseding === "meaningful focus") await expect(library).toBeFocused();
+        if (superseding === "navigation") await expect(page).toHaveURL(url => url.pathname === "/");
         if (superseding === "user scroll") {
-            if (before.scrollY === 0) assert.equal(after.scrollY, 0, "At the page start, removing pending feedback cannot preserve a lower element with negative scrolling.");
-            else assert.equal((await refresh.boundingBox()).y, top);
+            const after = await position();
+            // Successful recovery removes the error panel, shortening the scrollable page.
+            assert.ok(Math.abs(after.y - Math.min(before.y, after.max)) <= 1, JSON.stringify({ before, after }));
         }
-        if (superseding === "failed read") await expect(page.locator("#message")).toContainText("Invented refresh failure");
-        await proof(page, `refresh-focus-${superseding.replaceAll(" ", "-")}`, { before, after });
+        if (superseding === "failed read") await expect(retry).toBeEnabled();
+        else await expect(retry).toBeHidden();
+        if (superseding !== "none" && superseding !== "navigation") await expect(title).not.toBeFocused();
+        assert.ok(!requests.some(row => row.endpoint === "/api/collection/now"));
     });
 }
 
-test("manual stored refresh cannot silently cancel an unsaved report preview", async t => {
-    const { page, requests, status } = await setup(t, { route: "#reports" });
-    await chooseReportScope(page, "all"); await reportContents(page);
-    await page.locator('[name=promptMode][value=none]').check();
-    await page.locator("#exportBtn").click();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    const before = await state(page), start = requests.length;
-    const refresh = await revealRefresh(page);
-    await expect(refresh).toBeDisabled();
-    await expect(page.locator("#storedRefreshHelp")).toContainText("Contents");
-    await refresh.scrollIntoViewIfNeeded();
-    await proof(page, "prepared-report-refresh-guard", { state: await state(page), requestsSincePreparation: requests.slice(start) });
-    assert.equal((await state(page)).reportPhase, before.reportPhase);
-    assert.ok(!requests.slice(start).some(row => row.endpoint === "/api/cancel-preview"));
-    const gate = deferred();
+test("Reports preparation defers background activity changes without cancelling or replacing the frozen copy", async t => {
+    const { page, requests, status } = await setup(t, { route: "reports" });
+    await page.locator("#reportDeskActivity").click();
+    await page.locator('[name=reportScope][value=selected]').check();
+    await page.locator('[data-report-request="scope-action-0"]').check();
+    await page.getByRole("button", { name: "Use activity", exact: true }).click();
+    const reading = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.locator("#prepareReportPreview").click(); const response = await reading, preview = await response.json();
+    assert.equal(response.status(), 200, preview.error);
+    assert.deepEqual(response.request().postDataJSON().selection.scenarioIds, ["scope-action-0"]);
+    const frame = page.frameLocator(".report-contained-frame");
+    await expect(frame.locator("h1")).toHaveText(preview.title);
+    const start = requests.length, gate = deferred();
     await page.route("**/api/collection/status", async route => {
         const response = await route.fetch(), json = await response.json();
-        await route.fulfill({ response, json: { ...status(json), revision: 999 } }); gate.resolve();
+        await route.fulfill({ response, json: { ...status(json), revision: json.revision + 1 } }); gate.resolve();
     }, { times: 1 });
     await gate.promise; await frames(page);
-    assert.equal((await state(page)).reportPhase, "ready");
-    assert.ok(!requests.slice(start).some(row => row.endpoint === "/api/snapshot" || row.endpoint === "/api/cancel-preview"),
-        "A background revision read defers while the actual prepared report remains open.");
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
-    await expect(refresh).toBeDisabled();
-    assert.ok(!requests.slice(start).some(row => row.endpoint === "/api/cancel-preview"));
-    await page.locator('[name=promptMode][value=masked]').check();
-    await expect(refresh).toBeEnabled();
-    assert.equal(requests.slice(start).filter(row => row.endpoint === "/api/cancel-preview").length, 1);
-    await refresh.click(); await ready(page);
-    assert.equal((await state(page)).selected, before.selected);
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await expect(page.locator("#prepareReportPreview")).toHaveAccessibleName("Resume preview");
+    await page.locator("#prepareReportPreview").click();
+    await expect(frame.locator("h1")).toHaveText(preview.title);
+    assert.equal(preview.records.length, 1);
+    assert.ok(!requests.slice(start).some(r => ["/api/preview", "/api/export", "/api/cancel-preview"].includes(r.endpoint)));
 });
 
 test("reading saved activity and resetting filters preserve the chosen interaction and report text policy", async t => {
@@ -242,26 +179,4 @@ test("reading saved activity and resetting filters preserve the chosen interacti
     await expect(selected).toBeChecked();
     await expect(picker.locator("input[data-report-request]:checked")).toHaveCount(1);
     assert.ok(!requests.some(row => row.endpoint === "/api/collection/now"));
-});
-
-test("a failed or cancelled scan with no prepared report leaves manual read recovery available", async t => {
-    const { page } = await setup(t, { route: "#reports" });
-    await chooseReportScope(page, "all"); await reportContents(page);
-    await page.route("**/api/preview", route => route.fulfill({ status: 503, json: { error: "Invented preview read failed" } }), { times: 1 });
-    await page.locator("#exportBtn").click();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "blocked");
-    await expect(await revealRefresh(page)).toBeEnabled();
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/preview", async route => {
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await page.locator("#exportBtn").click(); await entered.promise;
-    await expect(page.locator("#refreshBtn")).toBeDisabled();
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
-    await expect(page.locator("#refreshBtn")).toBeEnabled();
-    const cancelled = page.waitForResponse(response => response.url().endsWith("/api/cancel-preview"));
-    release.resolve(); await cancelled;
-    await expect(page.locator("#refreshBtn")).toBeEnabled();
 });

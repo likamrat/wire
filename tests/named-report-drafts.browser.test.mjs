@@ -227,7 +227,6 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
         }
         frame();
     }));
-    const before = await anchor();
     await capture("reader");
     const source = reader.getByRole("button", { name: "Source", exact: true });
     const style = b => b.evaluate(n => {
@@ -246,7 +245,8 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     assert.equal((await style(readerAction))[3], "none");
     await page.mouse.down(); assert.equal((await style(readerAction))[3], "none"); await page.mouse.up();
     await page.keyboard.press("Escape"); await expect(readerAction).toBeFocused();
-    await readerAction.click(); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
+    const before = await anchor();
+    await readerAction.press("Enter"); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
     await capture("picker");
     await panel.getByRole("searchbox").fill("name that does not exist");
     await expect(panel).toContainText("No matching drafts."); await expect(panel).not.toContainText("No drafts yet.");
