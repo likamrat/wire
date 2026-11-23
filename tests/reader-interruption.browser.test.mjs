@@ -79,7 +79,7 @@ for (const motion of ["reduce", "no-preference"]) for (const view of ["activity"
 for (const action of view === "chart" ? ["history"] : ["history", "close", "newer-input"]) test(`${view} ${action} during an unobserved entrance reflow (${motion})`, async t => {
     const { page, runtime } = await setup(t, motion);
     await page.goto(runtime.url + (view === "activity" ? "#analyze?page=1&result=failure"
-        : view === "chart" ? "#analyze" : "#analyze?range=custom&from=2026-01-24&to=2026-01-28"));
+        : view === "chart" ? "#analyze" : "compare?aFrom=2026-01-19&aTo=2026-01-23&bFrom=2026-01-24&bTo=2026-01-28"));
     await ready(page);
     if (view === "chart") {
         const failure = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
@@ -96,11 +96,7 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
         await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     } else if (view === "activity") await revealAnalyzeRecords(page);
     else {
-        await page.locator("#comparePeriods").click();
-        for (const [id, value] of Object.entries({ comparisonAFrom: "2026-01-19", comparisonATo: "2026-01-23",
-            comparisonBFrom: "2026-01-24", comparisonBTo: "2026-01-28" })) await page.locator("#" + id).fill(value);
-        await page.locator("#applyPeriodComparison").click();
-        await page.locator("#createPeriodReport:visible").waitFor();
+        await page.locator("#viewComparisonCalls").click();
         await page.locator("#comparisonRecordsB").click();
     }
     const originLink = view === "comparison" ? page.locator("#comparisonExactRecordsB a.text-link").last()
@@ -113,6 +109,7 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
         selected: document.getElementById("comparisonRecordsB")?.getAttribute("aria-selected") ?? null,
     }));
     const origin = { url: page.url(), top: (await originLink.boundingBox()).y, ...await position() };
+    const maxScroll = await page.evaluate(() => document.scrollingElement.scrollHeight - innerHeight);
     await page.keyboard.press("Enter");
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(2);
     await settled(page);
@@ -123,7 +120,18 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebar")).toBeVisible();
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(2);
-    if (action === "newer-input") await page.evaluate(() => {
+    const comparisonReturn = action === "newer-input" && view === "comparison";
+    let waiting, resume;
+    if (comparisonReturn) {
+        waiting = page.waitForRequest(request => request.url().endsWith("/api/period-comparison"));
+        resume = Promise.withResolvers();
+        t.after(resume.resolve);
+        await page.route("**/api/period-comparison", async route => {
+            const response = await route.fetch();
+            await resume.promise;
+            await route.fulfill({ response });
+        }, { times: 1 });
+    } else if (action === "newer-input") await page.evaluate(() => {
         const pane = document.getElementById("contextSidebar");
         window.readerExitPaused = false;
         const observer = new MutationObserver(() => {
@@ -141,17 +149,26 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
     if (action !== "close") await page.goBack();
     else await page.keyboard.press("Enter");
     let newer;
-    if (action === "newer-input") {
+    if (comparisonReturn) {
+        await waiting;
+        try {
+            await page.keyboard.press("Tab");
+            await page.locator("#comparisonDates").focus();
+        } finally { resume.resolve(); }
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    } else if (action === "newer-input") {
         await page.waitForFunction(() => window.readerExitPaused);
         await page.keyboard.press("Tab");
         await page.locator("#wireSearch").evaluate(node => node.focus({ preventScroll: true }));
         const beforeWheel = await position();
+        const target = origin.y >= 120 ? origin.y - 120 : Math.min(maxScroll, origin.y + 120);
+        assert.notEqual(target, origin.y, "The origin has room for a distinct reading position.");
         await page.mouse.move(300, 150);
-        await page.mouse.wheel(0, -240);
-        await page.waitForFunction(before => Math.abs(scrollY - Math.max(0, before.y - 240)) < 2, beforeWheel);
+        await page.mouse.wheel(0, target - beforeWheel.y);
+        await page.waitForFunction(target => Math.abs(scrollY - target) < 2, target);
         newer = await position();
         assert.equal(newer.focus, "wireSearch");
-        assert.ok(newer.y < origin.y, "The newer position is reachable after the main column expands.");
+        assert.notEqual(newer.y, beforeWheel.y, "The wheel moved reading position while exit was interrupted.");
         await page.evaluate(() => {
             for (const node of [document.getElementById("contextSidebar"), document.getElementById("main")]) {
                 for (const animation of node.getAnimations()) animation.play();
@@ -169,7 +186,8 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
         await writeFile(path.join(directory, name + ".json"), JSON.stringify({ origin, newer, returned }, null, 2));
         await page.screenshot({ path: path.join(directory, name + ".png") });
     }
-    if (newer) assert.deepEqual(await position(), newer);
+    if (comparisonReturn) await expect(page.locator("#comparisonDates")).toBeFocused();
+    else if (newer) assert.deepEqual(await position(), newer);
     else {
         await expect(originLink).toBeFocused();
         assert.ok(Math.abs(returned.top - origin.top) < 2, `${action} moved the origin from ${origin.top}px to ${returned.top}px.`);
