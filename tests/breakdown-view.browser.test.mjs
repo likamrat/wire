@@ -1,26 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { renderHtmlShell } from "../lib/render.mjs";
-import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { fixture, chooseTheme, closeAnalyzeFilters, navigateMain, openAnalyzeFilters, selectActivityOption } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
-import { contrast, measureChartPaint } from "./color-measurements.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { modelNames, modelRecords } from "./model-widget-fixture.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_BREAKDOWN_PROOFS;
-const sorted = values => [...values].sort();
-const routeState = url => Object.fromEntries(new URLSearchParams(new URL(url).hash.split("?")[1]));
-const ready = async page => {
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.evaluate(async () => {
-        await document.fonts.ready;
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    });
-};
+const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+const card = (page, kind) => page.locator(`[data-percentage-card="${kind}"]`);
+const label = (page, kind, category) => card(page, kind).locator(`[data-category="${category}"] .percentage-label`);
+const exact = page => page.locator("#chartReferenceData");
+const sorted = items => [...items].sort();
+const secret = /INVENTED_PARITY_NEEDLE|parity-request-|parity-call-|test-call-overlap|deployment(?:%2F|\/)Exact/iu;
+
 function records() {
     const extra = fixture("breakdown-coverage");
     extra.userPrompt = { text: `${privateQuery} invented coverage`, status: "full", authorship: { actor: "user", basis: "source-user" } };
@@ -37,384 +34,386 @@ function records() {
     }));
     return [...scopeRecords(), extra];
 }
-async function setup(t, source = records()) {
-    const original = structuredClone(source), requests = [], errors = [], denied = [];
-    let last, fail = false, corrupt = false, activeSource = source, revision = 1, pending;
-    const server = createServer(async (req, res) => {
-        if (req.method === "GET" && req.url === "/") {
-            res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "breakdown-fixture", UNBOUND_FIXTURE_BOOTSTRAP)); return;
-        }
-        let body = ""; for await (const chunk of req) body += chunk;
-        const input = JSON.parse(body || "{}");
-        requests.push({ route: req.url, input });
-        res.setHeader("Content-Type", "application/json");
-        if (req.method === "POST" && req.url === "/api/snapshot") {
-            if (pending) await pending;
-            if (fail) { res.writeHead(503); res.end('{"error":"Invented read failure"}'); return; }
-            last = buildActivityAnalytics(activeSource, input);
-            if (corrupt) last.serviceInvolvement.definition = { ...last.serviceInvolvement.definition, version: 2 };
-            res.end(JSON.stringify({ revision, scenarios: activeSource, exports: [], exportCatalog: exportCatalogFor(activeSource),
-                collection: { state: "not-configured", revision, configVersion: 0, connected: false, config: null,
-                    cadence: { pollSeconds: 5 }, metrics: {}, historyIssues: [] },
-                requestActivity: buildRequestActivity(activeSource), coverage: { notes: [] }, analytics: { ...last, revision } }));
-        } else if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") {
-            res.end(JSON.stringify(automaticScoreOffSummary()));
-        } else if (req.method === "POST" && req.url === "/api/collection/status") {
-            res.end(JSON.stringify({ state: "not-configured", revision, configVersion: 0, connected: false, config: null,
-                cadence: { pollSeconds: 5 }, metrics: {}, historyIssues: [] }));
-        } else {
-            denied.push(req.url); res.writeHead(403); res.end('{"error":"Invented read-only fixture only."}');
-        }
-    });
-    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-    const url = `http://127.0.0.1:${server.address().port}`, browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, timezoneId: "UTC", locale: "en-US", reducedMotion: "reduce" });
+
+async function setup(t, source = records(), { search = false, preview = false } = {}) {
+    const cleanup = [], original = structuredClone(source), errors = [], denied = [], reads = [], urls = [], leakedTo = [];
+    const { runtime, context } = await searchFixture({ after: fn => cleanup.push(fn) }, { records: source, reply: search });
+    const before = await loadBoardState(context);
+    const browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", locale: "en-US", reducedMotion: "reduce" });
     page.setDefaultTimeout(5000);
-    await page.route("**/*", route => {
-        if (new URL(route.request().url()).origin !== url) { denied.push(route.request().url()); return route.abort(); }
+    const allowed = new Set(["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        "/api/evaluation/automatic/summary", ...(preview ? ["/api/report-artifacts/list", "/api/preview", "/api/cancel-preview"] : []),
+        ...(search ? ["/api/search/events", "/api/search/status", "/api/search/query", "/api/search/membership", "/api/search/cancel", "/api/search/close"] : [])]);
+    await page.context().route("**/*", route => {
+        const request = route.request(), url = new URL(request.url());
+        urls.push(url.href);
+        if (url.origin !== new URL(runtime.url).origin || !(request.method() === "GET" && !url.pathname.startsWith("/api/")
+            || request.method() === "POST" && allowed.has(url.pathname))) {
+            denied.push(`${request.method()} ${url.pathname}`); return route.abort();
+        }
+        if (request.method() === "POST") {
+            // The on-device matcher alone receives the private search words.
+            if (url.pathname !== "/api/search/query" && request.postData()?.includes(privateQuery)) leakedTo.push(url.pathname);
+            if (url.pathname === "/api/snapshot") reads.push(request.postDataJSON());
+        }
         return route.continue();
     });
     page.on("pageerror", error => errors.push(error.message));
+    page.on("framenavigated", frame => { if (frame === page.mainFrame()) urls.push(frame.url()); });
     t.after(async () => {
-        await browser.close(); await new Promise(resolve => server.close(resolve));
-        assert.deepEqual(source, original); assert.deepEqual(errors, []); assert.deepEqual(denied, []);
-        assert.doesNotMatch(JSON.stringify(requests), new RegExp(privateQuery));
+        try {
+            const storage = await page.evaluate(() => JSON.stringify([history.state, { ...localStorage }, { ...sessionStorage }]));
+            assert.doesNotMatch(storage, new RegExp(privateQuery));
+            assert.doesNotMatch(JSON.stringify(urls), secret);
+            const after = await loadBoardState(context);
+            assert.deepEqual(after.exports, before.exports);
+            assert.deepEqual(after.personalEvaluation, before.personalEvaluation);
+            assert.deepEqual(source, original); assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(leakedTo, []);
+        } finally { await browser.close(); for (const fn of cleanup) await fn(); }
     });
-    await page.goto(url + "/#analyze?mode=calls&bucket=day"); await ready(page);
-    return { page, url, source, requests, analytics: () => last, fail: value => { fail = value; }, corrupt: value => { corrupt = value; },
-        change: value => { activeSource = value; revision++; },
-        hold: () => {
-            let release;
-            pending = new Promise(resolve => { release = resolve; });
-            return () => { pending = null; release(); };
-        } };
+    await page.goto(runtime.url); await ready(page);
+    return { page, reads, context, revision: before.revision };
 }
-async function capture(page, name, selector = ".percentage-section") {
+
+async function choose(page, id, value) {
+    await selectActivityOption(page, id, value); await ready(page); await closeAnalyzeFilters(page);
+}
+async function openExact(page, topic) {
+    await page.locator("#openChartReference").click();
+    const topics = page.locator("#chartReferenceTopics");
+    if (!await topics.isVisible()) await page.locator("#chartReferenceTopicToggle").click();
+    await topics.locator(`[data-reference-topic="${topic}"]`).click();
+    await page.locator("#chartReferenceShowData").click();
+    await expect(exact(page).locator("table")).toBeVisible();
+    return exact(page);
+}
+async function tableRows(table) {
+    return table.locator("tbody tr").evaluateAll(rows => Object.fromEntries(rows.map(row =>
+        [row.cells[0].textContent, [...row.cells].slice(1).map(cell => cell.textContent)])));
+}
+async function parents(page, ids) {
+    await expect.poll(() => page.locator("#activityList article").evaluateAll(nodes => nodes.map(n => n.dataset.viewKey).sort()))
+        .toEqual(sorted(ids.map(id => `request:${id}`)));
+}
+async function backTo(page, control, address) {
+    await page.goBack(); await ready(page);
+    await expect(page).toHaveURL(address); await expect(control).toBeFocused();
+}
+async function capture(page, name, host) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: path.join(proofs, name + ".png"), clip: await page.locator(selector).boundingBox(), fullPage: true });
-    await writeFile(path.join(proofs, name + ".txt"), await page.locator(selector).ariaSnapshot());
+    await host.screenshot({ path: path.join(proofs, name + ".png"), animations: "disabled" });
+    await writeFile(path.join(proofs, name + ".txt"), await host.ariaSnapshot());
 }
-async function visibleIds(page) {
-    return sorted(await page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId)));
-}
-const card = (page, kind) => page.locator(`[data-percentage-card="${kind}"]`);
 
-test("normal renderer shows Tools and Services together with exact involvement, gaps, preparation and flat geometry", async t => {
-    const { page, analytics } = await setup(t);
-    const total = analytics().totals.count;
-    assert.equal(total, 16);
-    await expect(card(page, "tools")).toBeVisible(); await expect(card(page, "services")).toBeVisible();
-    assert.equal(await page.locator('[data-percentage-mode]').count(), 0, "Tools never replace Services");
-    assert.equal(await card(page, "services").locator("svg.percentage-ring").count(), 0);
-    await expect(card(page, "services")).toContainText("3 with missing service details (1 also have known services)");
-    await expect(card(page, "services")).toContainText("1 discovery / preparation; not service execution");
-    await expect(card(page, "services")).toContainText("1 Search by tool purpose");
-    for (const text of ["Not in this record", "Path not recognized", "Target format not supported"]) await expect(card(page, "services")).toContainText(text);
-    const serviceRows = await card(page, "services").locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
-        id: node.dataset.category, count: Number(node.dataset.count), fraction: Number(node.querySelector(".percentage-bar").dataset.fraction),
-    })));
-    for (const row of serviceRows) {
-        const group = analytics().serviceInvolvement.groups.find(group => group.label === row.id);
-        assert.equal(row.count, group.total); assert.equal(row.fraction, group.total / total);
+test("Tools and Services independently reconcile with Guide exact counts, overlapping targets and operation-only evidence", async t => {
+    const { page } = await setup(t);
+    await expect(page.locator("#activityCount")).toHaveText("16");
+    const tools = card(page, "tools"), services = card(page, "services");
+    await expect(tools).toBeVisible(); await expect(services).toBeVisible();
+    await expect(label(page, "tools", "tool:workiq-fetch")).toHaveAccessibleName(/12 of 16 Work IQ tool calls \(75%\)/);
+    await expect(label(page, "services", "Files")).toHaveAccessibleName(/11 of 16 Work IQ tool calls \(68.8%\)/);
+    await expect(services).toContainText("2 with missing service details");
+    const origin = page.url();
+    for (const [name, id] of [["Recorded path not recognized", "coverage-0"], ["Recorded target format unsupported", "coverage-1"],
+        ["Discovery / preparation", "coverage-2"], ["Search requested", "coverage-3"], ["Asked Copilot", "parity-call-0-1"]]) {
+        const action = services.getByRole("link", { name: `${name}: 1 of 16 Work IQ tool calls (6.3%). View matching records.`, exact: true });
+        await action.press("Enter");
+        await expect(page.locator("#activityList .widget-record")).toHaveCount(1);
+        const session = id.startsWith("coverage") ? "test-session" : "parity-chat-0";
+        await expect(page.locator("#activityList .widget-record")).toHaveAttribute("data-action-id", `call:${JSON.stringify([session, id])}`);
+        await backTo(page, action, origin);
     }
-    assert.equal(serviceRows.some(row => ["Unknown", "Multiple workloads", "Discovery"].includes(row.id)), false);
-    assert.equal(await page.locator("#percentageCharts .percentage-outer-wall,#percentageCharts .percentage-glint").count(), 0);
-    await expect(card(page, "outcomes").locator(".percentage-ring")).toHaveAttribute("data-visual-scale", "linear");
-    for (const kind of ["tools", "services", "outcomes"]) {
-        const summary = card(page, kind).locator("summary");
-        const before = await summary.evaluate(node => node.getBoundingClientRect().y + scrollY);
-        await summary.click();
-        await expect(card(page, kind).locator("table")).toBeVisible();
-        const after = await summary.evaluate(node => node.getBoundingClientRect().y + scrollY);
-        assert.ok(Math.abs(after - before) < 1, "Exact data expands below the stationary disclosure trigger");
-        const exact = await card(page, kind).locator("tbody tr").count();
-        assert.ok(exact > 0);
-        await expect(card(page, kind).locator("caption")).toContainText(`${total} Work IQ tool calls`);
-        const exactLink = card(page, kind).locator("tbody .percentage-label[href]").first();
-        await expect(exactLink).toHaveAttribute("href", /^#analyze/);
-        const target = await exactLink.boundingBox(); assert.ok(target.width >= 44 && target.height >= 44);
-        await card(page, kind).locator("summary").click();
-    }
-    const partial = card(page, "outcomes").locator('.percentage-slice[data-category="partial"]');
-    await partial.scrollIntoViewIfNeeded();
-    const point = await partial.evaluate(node => {
-        const box = node.closest("svg").getBoundingClientRect();
-        const angle = (Number(node.dataset.start) + Number(node.dataset.end)) / 2 * 2 * Math.PI + Math.PI / 2;
-        return { x: box.x + (120 + 85 * Math.cos(angle)) / 240 * box.width, y: box.y + (120 + 85 * Math.sin(angle)) / 240 * box.height };
-    });
-    const partialIds = analytics().rows.filter(row => row.outcome === "partial").map(row => row.id);
-    await page.mouse.click(point.x, point.y); await ready(page);
-    assert.deepEqual(await visibleIds(page), sorted(partialIds));
-    await page.goBack(); await ready(page);
-    for (const selector of ['[data-percentage-card="tools"] .percentage-bar-track', '.percentage-ring a']) {
-        const allowed = await page.locator(selector).first().evaluate(node => {
-            let prevented;
-            node.addEventListener("click", event => { prevented = event.defaultPrevented; event.preventDefault(); }, { once: true });
-            node.dispatchEvent(new MouseEvent("click", { ctrlKey: true, bubbles: true, cancelable: true }));
-            return !prevented && node.getAttribute("href").startsWith("#analyze");
-        });
-        assert.ok(allowed, "Native modified links retain their destination and do not invoke the unmodified filter action");
-    }
-    for (const chart of ["workload", "endpoint"]) {
-        await page.locator(`[data-chart="${chart}"]`).click(); await ready(page);
-        assert.ok(await page.locator(".flat-comparison-action").count() > 0);
-        assert.equal(await page.locator("#chart svg,#chart .dimensional-ground").count(), 0);
-        const measures = await page.locator(".flat-comparison-track").evaluateAll(nodes => nodes.map(track => ({
-            width: track.getBoundingClientRect().width, maximum: Number(track.closest(".flat-comparison").dataset.maximum),
-            parts: [...track.children].map(mark => ({ count: Number(mark.dataset.count), width: mark.getBoundingClientRect().width })),
-        })));
-        for (const row of measures) for (const part of row.parts) assert.ok(Math.abs(part.width - row.width * part.count / row.maximum) < .02);
-        if (chart === "endpoint") {
-            const segment = page.locator(".flat-comparison-segment").first();
-            const count = await segment.getAttribute("data-count"), total = analytics().groups[0].total;
-            await segment.hover();
-            await expect(page.getByRole("tooltip")).toContainText(`${count} of ${total} Work IQ tool calls`);
-            await page.keyboard.press("Escape");
-            await expect(page.getByRole("tooltip")).toBeHidden();
-        }
-        const index = analytics().groups.findIndex(group => group.total <= 8);
-        const expected = analytics().groups[index].drilldownIds, origin = page.url();
-        await page.locator(".flat-comparison-action").nth(index).click(); await ready(page);
-        assert.deepEqual(sorted(analytics().rows.map(row => row.id)), sorted(expected));
-        assert.deepEqual(await visibleIds(page), sorted(expected));
-        await page.goBack(); await ready(page); assert.deepEqual(routeState(page.url()), routeState(origin));
-        await expect(page.locator(".flat-comparison-action").nth(index)).toBeFocused();
-        await page.locator("#tableDisclosure > summary").click();
-        await expect(page.locator("#countTable table")).toBeVisible();
-        await page.locator("#tableDisclosure > summary").click();
-        await capture(page, `comparison-${chart}`, ".chart-panel");
+    const expected = {
+        tools: { "workiq-fetch": ["12", "75%"], ...Object.fromEntries(["workiq-ask", "workiq-call_function", "workiq-get_schema", "workiq-retrieve"].map(k => [k, ["1", "6.3%"]])) },
+        services: { Files: ["11", "68.8%"], Calendar: ["1", "6.3%"], Mail: ["1", "6.3%"], "Search and retrieval": ["1", "6.3%"] },
+    };
+    for (const topic of ["tools", "services"]) {
+        const table = await openExact(page, topic);
+        await expect(table.locator("caption")).toContainText("16 Work IQ tool calls");
+        assert.deepEqual(await tableRows(table), expected[topic]);
+        assert.deepEqual(await table.locator("tfoot td").allTextContents(), ["16", "100%"]);
+        if (topic === "services") await expect(table.locator("caption")).toContainText("Services can overlap");
+        const action = table.getByRole("link", { name: topic === "tools" ? /^workiq-ask:/ : /^Mail:/ });
+        const address = page.url();
+        await action.press("Enter"); await ready(page);
+        await parents(page, ["parity-request-0"]);
+        await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
+        await backTo(page, action, address);
+        await capture(page, `exact-${topic}`, table);
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
-test("tool/service/outcome links and context removal keep private search, dates, author union, outcome union and Back selection", async t => {
-    const { page, url, source, requests, analytics } = await setup(t);
-    await page.goto(url + "/#analyze?mode=calls&range=custom&from=2026-09-30&to=2026-09-30&authors=user&result=failure,success"); await ready(page);
-    await restoreLegacySearch(page, privateQuery); await ready(page);
-    await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
-    await expect(page.locator("#serviceFocusScope")).toContainText("context-only");
-    const matchingScenarios = new Set(source.filter(record => record.userPrompt.text.includes(privateQuery)).map(record => record.scenarioId));
-    const before = analytics().rows.filter(row => matchingScenarios.has(row.scenarioId));
-    const known = before.filter(row => row.serviceAssociation.services.includes("Files"));
-    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
-    const selected = page.locator('.request-row[data-view-key="request:parity-request-0"] input');
-    await selected.check();
-    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
-    const selectionSummary = await page.locator("#activitySelectionSummary").textContent();
-    for (const [kind, category, expected] of [
-        ["tools", "tool:workiq-ask", before.filter(row => row.tool === "workiq-ask")],
-        ["services", "Files", known],
-        ["outcomes", "failure", before.filter(row => row.outcome === "failure")],
-    ]) {
-        const action = card(page, kind).locator(`.percentage-legend-row[data-category="${category}"] .percentage-label`);
-        const origin = page.url(); await action.focus(); await page.keyboard.press("Enter"); await ready(page);
-        assert.deepEqual(await visibleIds(page), sorted(expected.map(row => row.id)));
-        await expect(page.locator("#activitySearch")).toHaveValue(privateQuery);
-        assert.doesNotMatch(page.url(), new RegExp(privateQuery));
-        const filters = requests.findLast(request => request.route === "/api/snapshot").input.filters;
-        assert.deepEqual(filters.promptAuthors, ["user"]);
+test("private Search, dates, authors and outcome union survive independent tool, service and outcome drilldowns and Back", async t => {
+    const source = scopeRecords();
+    source[9].userPrompt.authorship = { actor: "user", basis: "source-user" };
+    const { page, reads } = await setup(t, source, { search: true });
+    await selectActivityOption(page, "dateFilter", "custom");
+    await page.locator("#fromFilter").fill("2026-09-30"); await page.locator("#toFilter").fill("2026-09-30");
+    await page.locator("#applyDates").click(); await ready(page); await closeAnalyzeFilters(page);
+    await choose(page, "outcomeFilter", ["failure", "success"]);
+    await choose(page, "promptAuthorFilter", "user"); await choose(page, "serviceAssociationFilter", "Files");
+    await expect(page.locator('[data-view-key="request:parity-request-9"]')).toBeVisible();
+    const field = page.locator("#wireSearch");
+    await field.fill(privateQuery); await selectActivityOption(page, "wireSearchScope", "analysis"); await field.focus();
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
+    await field.press("Escape");
+    const ids = (...indexes) => indexes.map(i => `parity-request-${i}`);
+    await parents(page, ids(0, 2, 4, 6));
+    await expect(page.locator("#activityCount")).toHaveText("5");
+    const origin = page.url();
+    for (const [topic, key, count, indexes] of [["tools", "tool:workiq-ask", 1, [0]], ["services", "Files", 4, [0, 2, 4, 6]],
+        ["outcomes", "failure", 3, [0, 6]]]) {
+        const action = label(page, topic, key);
+        await action.press("Enter"); await ready(page);
+        await parents(page, ids(...indexes)); await expect(page.locator("#activityCount")).toHaveText(String(count));
+        await expect(field).toHaveValue(privateQuery);
+        const filters = reads.at(-1).filters;
+        assert.deepEqual(filters.promptAuthors, ["user"]); assert.deepEqual(filters.services, ["Files"]);
         assert.equal(filters.from, "2026-09-30"); assert.equal(filters.to, "2026-09-30");
-        assert.equal(analytics().serviceInvolvement.selection.includeMissingService, true, "Server scope is retained");
-        if (kind === "services") {
-            assert.equal(routeState(page.url()).withinServices, "Files");
-            await expect(page.locator("#serviceFocusScope")).toContainText("0 context-only");
-        }
-        await page.goBack(); await ready(page); assert.deepEqual(routeState(page.url()), routeState(origin));
-        await expect(action).toBeFocused();
-        await expect(page.locator("#activitySelectionSummary")).toHaveText(selectionSummary);
+        if (topic === "services") assert.equal(new URL(page.url()).searchParams.get("withinServices"), "Files");
+        assert.deepEqual(sorted(filters.outcomes), topic === "outcomes" ? ["failure"] : ["failure", "success"]);
+        await page.goBack(); await ready(page); await expect(page).toHaveURL(origin);
+        await parents(page, ids(0, 2, 4, 6)); await expect(page.locator("#activityCount")).toHaveText("5");
     }
-    await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
-    assert.deepEqual(await visibleIds(page), sorted(known.map(row => row.id)));
-    await expect(page.locator("#addServiceContext")).toBeVisible();
-    await page.goBack(); await ready(page);
-    assert.deepEqual(await visibleIds(page), sorted(before.map(row => row.id)));
-    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
-    await expect(selected).toBeChecked();
+    await openAnalyzeFilters(page);
+    await page.getByRole("button", { name: "Remove missing-service context" }).click(); await ready(page);
+    await closeAnalyzeFilters(page);
+    await expect(page.locator("#activityCount")).toHaveText("4"); await parents(page, ids(0, 2, 4, 6));
+    await page.goBack(); await ready(page); await expect(page.locator("#activityCount")).toHaveText("5");
 });
 
-test("Files-to-Mail chart action cannot admit Mail-only rows; removal, Back, revisions and report membership share the refinement", async t => {
-    const source = [fixture("overlap"), fixture("mail-only"), fixture("files-only")];
-    source[0].toolCalls[0].requestArgs = { entityUrls: ["/me/drive/root", "/me/messages"] };
-    source[1].toolCalls[0].requestArgs = { entityUrls: ["/me/messages"] };
-    source[2].toolCalls[0].requestArgs = { entityUrls: ["/me/drive/root"] };
-    for (const row of source) delete row.toolCalls[0].requestedApiPath;
+test("Back restores the activating breakdown link after private Search membership is read again", async t => {
+    const { page } = await setup(t, scopeRecords(), { search: true });
+    const field = page.locator("#wireSearch");
+    await field.fill(`${privateQuery} request 0`); await selectActivityOption(page, "wireSearchScope", "analysis"); await field.focus();
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 3 matching tool calls");
+    await field.press("Escape");
+    const action = label(page, "tools", "tool:workiq-ask"), origin = page.url();
+    await action.focus(); await expect(action).toBeFocused(); await page.keyboard.press("Enter");
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
+    await page.goBack(); await expect(page).toHaveURL(origin);
+    await parents(page, ["parity-request-0"]);
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 3 matching tool calls");
+    await expect(action).toBeFocused();
+    await action.press("Enter");
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    await page.route("**/api/search/query", async route => {
+        entered.resolve(); await release.promise; await route.continue();
+    }, { times: 1 });
+    try {
+        await page.goBack(); await entered.promise;
+        await field.click();
+        release.resolve();
+        await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 3 matching tool calls");
+        await expect(field).toBeFocused();
+    } finally { release.resolve(); }
+});
+
+function overlapRecords() {
+    const source = ["overlap", "mail-only", "files-only"].map(id => fixture(id));
+    for (const [i, paths] of [["/me/drive/root", "/me/messages"], ["/me/messages"], ["/me/drive/root"]].entries()) {
+        const call = source[i].toolCalls[0];
+        call.startedAt = source[i].capturedAt; call.requestArgs = { entityUrls: paths }; delete call.requestedApiPath;
+    }
     source[0].toolCalls.push({ ...source[0].toolCalls[0], toolCallId: "overlap-context", startEventId: "overlap-context",
-        requestArgs: { entityUrls: ["/teams"] } });
-    const { page, change, requests } = await setup(t, source);
-    await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("2");
-    const mail = card(page, "services").locator('[data-category="Mail"] .percentage-label');
-    await mail.focus(); await page.keyboard.press("Enter"); await ready(page);
-    assert.deepEqual(await visibleIds(page), ['call:["test-session","test-call-overlap"]']);
-    await expect(page.locator("#filterChips")).toContainText("Mail within current scope");
+        tool: "workiq-call_function", requestArgs: { functionUrl: "/teams" } });
+    return source;
+}
+async function verifyCurrentPreview(page, ids, calls) {
+    await navigateMain(page, "reports"); await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
+    await picker.getByRole("button", { name: "Use activity" }).click();
+    const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.getByRole("button", { name: "Prepare preview" }).click();
+    const response = await preparing, value = await response.json();
+    assert.equal(response.status(), 200, value.error);
+    assert.deepEqual(sorted(response.request().postDataJSON().selection.scenarioIds), sorted(ids));
+    assert.deepEqual(value.snapshot.records.map(r => r.toolCalls.map(c => c.tool)).sort((a, b) => a.length - b.length), calls);
+}
+test("Files then Mail intersects call membership; Current Analyze report takes the complete parent, not Mail-only or Files-only", async t => {
+    const source = overlapRecords(), { page, context, reads } = await setup(t, source, { preview: true });
+    await choose(page, "serviceAssociationFilter", "Files");
+    await parents(page, ["overlap", "files-only"]);
+    const mail = label(page, "services", "Mail"), origin = page.url();
+    await mail.press("Enter"); await ready(page); await parents(page, ["overlap"]);
     await expect(page.locator("#activityCount")).toHaveText("1");
-    assert.deepEqual(await card(page, "services").locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(row => row.dataset.percentage)), ["100%", "100%"]);
-    assert.deepEqual(requests.findLast(request => request.route === "/api/snapshot").input.filters.services, ["Files"]);
-    await page.getByRole("button", { name: "Remove service chart refinement: Mail", exact: true }).click(); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("2");
-    await page.goBack(); await ready(page); await expect(page.locator("#activityCount")).toHaveText("1");
-    await page.locator("#pageAction").click(); await ready(page);
-    await chooseReportScope(page, "current");
-    await expect(page.locator("#scopeSummary")).toContainText("1 request group: 2 Work IQ tool calls");
-    await page.goBack(); await ready(page);
+    for (const service of ["Files", "Mail"]) await expect(label(page, "services", service)).toHaveAccessibleName(/1 of 1 Work IQ tool call \(100%\)/);
+    const call = page.getByRole("link", { name: "workiq-fetch: open call", exact: true });
+    const refined = page.url();
+    await call.press("Enter"); await expect(page.locator('[data-tool-call-id="test-call-overlap"]')).toBeFocused();
+    await expect(page.locator('[data-tool-call-id="overlap-context"]')).toContainText("Outside current view");
+    await backTo(page, call, refined);
+    await backTo(page, mail, origin); await parents(page, ["overlap", "files-only"]);
+    await page.goForward(); await ready(page); await parents(page, ["overlap"]);
+    await verifyCurrentPreview(page, ["overlap"], [["workiq-fetch", "workiq-call_function"]]);
+
+    // Re-enter via the same public selectors after changing only the invented source.
     const next = structuredClone(source);
     next[2].toolCalls[0].requestArgs = { entityUrls: ["/me/drive/root", "/me/messages"] };
-    change(next); await (await revealStoredRefresh(page)).click(); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("2");
-    assert.deepEqual(await visibleIds(page), sorted(['call:["test-session","test-call-overlap"]', 'call:["test-session","test-call-files-only"]']));
-    assert.equal(routeState(page.url()).withinServices, "Mail", "Refinement is recomputed, not a frozen ID list");
-    await expect(page.locator("#percentageCharts .percentage-section")).toHaveAttribute("data-revision", "2");
-    await page.locator("#pageAction").click(); await ready(page);
-    await chooseReportScope(page, "current");
-    await expect(page.locator("#scopeSummary")).toContainText("2 request groups: 3 Work IQ tool calls");
-    await page.goBack(); await ready(page);
-    await selectActivityOption(page, "serviceAssociationFilter", "Mail"); await ready(page);
-    assert.equal(routeState(page.url()).withinServices, undefined, "An explicit menu choice replaces chart refinements, keeping menu OR semantics");
-    await expect(page.locator("#activityCount")).toHaveText("3");
-    assert.ok(requests.every(request => !Object.hasOwn(request.input.filters || {}, "withinServices")), "Chart refinement stays in the existing local slice");
+    await replaceEvidence(context, () => ({ records: next, importCoverage: { counts: {}, roster: [] } }));
+    await page.goto(refined); await ready(page);
+    await parents(page, ["overlap", "files-only"]); await expect(page.locator("#activityCount")).toHaveText("2");
+    assert.equal(new URL(page.url()).searchParams.get("withinServices"), "Mail");
+    assert.deepEqual(reads.at(-1).filters.services, ["Files"]);
+    assert.ok(reads.every(input => !Object.hasOwn(input.filters, "withinServices")));
+    await verifyCurrentPreview(page, ["overlap", "files-only"], [["workiq-fetch"], ["workiq-fetch", "workiq-call_function"]]);
+    await page.goto(refined); await ready(page);
+    await choose(page, "serviceAssociationFilter", "Mail");
+    assert.equal(new URL(page.url()).searchParams.has("withinServices"), false);
+    await parents(page, ["overlap", "files-only", "mail-only"]);
 });
 
-test("desktop and narrow 200% light/dark retain full labels, exact shares, contrast and 44px keyboard equivalents", async t => {
+test("model shares count distinct matching interactions, including missing names, rather than tool calls or responses", async t => {
+    const source = modelRecords();
+    const schema = source.find(r => r.toolCalls[0].tool === "workiq-get_schema").toolCalls[0];
+    delete schema.toolSucceeded; schema.reportedOutcome = "unknown";
+    const { page } = await setup(t, source);
+    const models = card(page, "models");
+    await expect(models.locator(".percentage-denominator")).toHaveText("9 matching interactions");
+    await expect(card(page, "tools").locator(".percentage-denominator")).toHaveText("11 Work IQ tool calls");
+    const action = label(page, "models", modelNames[0]), origin = page.url();
+    await expect(action).toHaveAccessibleName(/2 of 9 matching interactions \(22.2%\)/);
+    await action.press("Enter");
+    await expect(page.locator("#activityListSummary")).toContainText("2 matching interactions");
+    const keys = await page.locator("#activityList .request-row").evaluateAll(rows => rows.map(row => row.dataset.viewKey));
+    assert.deepEqual(sorted(keys.map(key => source.find(r => key === `request:${r.scenarioId}`)?.userPrompt.sourceEventId)),
+        ["model-prompt-0", "model-prompt-1"], "An alias is not a third interaction");
+    await backTo(page, action, origin);
+    const table = await openExact(page, "models");
+    await expect(table.locator("caption")).toHaveText("9 interactions; models can overlap.");
+    assert.deepEqual(await tableRows(table), Object.fromEntries(modelNames.map((name, i) => [name, [i < 2 ? "2" : "1"]])));
+    await table.getByText("Definitions and coverage", { exact: true }).click();
+    await expect(table.locator(".percentage-note")).toContainText("1 partial / 2 not recorded / 2 not verified / 1 conflicting");
+    await page.locator("#analyzeResultsSection").click();
+    await choose(page, "toolFilter", "workiq-get_schema");
+    await expect(models.locator(".percentage-denominator")).toHaveText("1 matching interaction");
+    await expect(models.locator(".percentage-empty")).toHaveText("WIRE can’t tell which models these interactions used.");
+    await expect(label(page, "outcomes", "unknown")).toHaveAccessibleName(/1 of 1 Work IQ tool call \(100%\). View matching records/);
+    await expect(label(page, "outcomes", "failure")).toHaveAccessibleName(/0 of 1 Work IQ tool call \(0%\). Read definition/);
+});
+
+test("returned API entries use their own denominator and exact Mail entry; a zero code-reference cohort has no share", async t => {
     const { page } = await setup(t);
-    const evidence = [];
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 1], [375, 2]]) {
-        await page.setViewportSize({ width, height: width < 600 ? 1800 : 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale); await ready(page);
-        const tools = await card(page, "tools").boundingBox(), services = await card(page, "services").boundingBox();
-        if (width === 1200) { assert.ok(Math.abs(tools.y - services.y) < 1); assert.ok(services.x >= tools.x + tools.width); }
-        else assert.ok(services.y >= tools.y + tools.height);
-        const rows = await page.locator(".percentage-label[href]").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
-            const box = node.getBoundingClientRect(), css = getComputedStyle(node);
-            return { text: node.textContent, width: box.width, height: box.height, scroll: node.scrollWidth, client: node.clientWidth,
-                color: css.color, background: getComputedStyle(node.closest(".percentage-card")).backgroundColor };
-        }));
-        for (const row of rows) {
-            assert.ok(row.width >= 44 && row.height >= 44, row.text);
-            assert.ok(row.scroll <= row.client + 1, row.text); assert.ok(contrast(row.color, row.background) >= 4.5, row.text);
-        }
-        const textColors = await page.locator(".percentage-section h2,.percentage-section h3,.percentage-scope,.percentage-denominator,.percentage-service-scope,.percentage-coverage p,.percentage-gap-list dt,.percentage-gap-list dd,.percentage-value").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
-            let parent = node;
-            while (parent && getComputedStyle(parent).backgroundColor === "rgba(0, 0, 0, 0)") parent = parent.parentElement;
-            return { text: node.textContent, color: getComputedStyle(node).color, background: getComputedStyle(parent).backgroundColor };
-        }));
-        for (const row of textColors) assert.ok(contrast(row.color, row.background) >= 4.5, row.text);
-        const marks = await page.evaluate(measureChartPaint, ".percentage-slice,.percentage-bar");
-        for (const mark of marks) {
-            assert.ok(mark.local && mark.gradient && mark.colors.length === 2, "Each mark uses a local two-stop fade");
-            for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3, `${theme}: visible entire data fade`);
-        }
-        await page.keyboard.press("Tab");
-        const target = card(page, "services").locator(".percentage-label[href]").first();
-        await target.focus(); await expect(target).toBeFocused();
-        assert.notEqual(await target.evaluate(node => getComputedStyle(node).outlineStyle), "none");
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        evidence.push({ theme, width, scale, rows, textColors, marks, tools, services });
-        await capture(page, `${theme}-${width}-text${scale}`);
-        if (width === 375) {
-            await card(page, "services").locator("summary").click(); await expect(card(page, "services").locator("table")).toBeVisible();
-            assert.equal(await card(page, "services").locator("table").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
-            await capture(page, `${theme}-${width}-text${scale}-exact`, '[data-percentage-card="services"]');
-            await card(page, "services").locator("summary").click();
-        }
-        await page.locator('[data-chart="endpoint"]').click(); await ready(page);
-        await page.keyboard.press("Tab");
-        await page.locator(".flat-comparison-action").first().focus();
-        const actions = await page.locator(".flat-comparison-action").evaluateAll(nodes => nodes.map(node => {
-            const box = node.getBoundingClientRect();
-            return { width: box.width, height: box.height, scroll: node.scrollWidth, client: node.clientWidth,
-                color: getComputedStyle(node).color, background: getComputedStyle(node.closest(".chart-panel")).backgroundColor };
-        }));
-        for (const action of actions) {
-            assert.ok(action.height >= 44 && action.width >= 44);
-            assert.ok(action.scroll <= action.client + 1); assert.ok(contrast(action.color, action.background) >= 4.5);
-        }
-        evidence.at(-1).operations = actions;
-        assert.notEqual(await page.locator(".flat-comparison-action").first().evaluate(node => getComputedStyle(node).outlineStyle), "none");
-        await capture(page, `${theme}-${width}-text${scale}-operations`, ".chart-panel");
-        await page.locator('[data-chart="time"]').click(); await ready(page);
-    }
-    await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
-    assert.equal(await page.locator(".percentage-bar").first().evaluate(node => getComputedStyle(node).backgroundColor), "rgb(0, 0, 0)");
-    if (proofs) await writeFile(path.join(proofs, "measurements.json"), JSON.stringify(evidence, null, 2));
+    await choose(page, "layerFilter", "reported-api");
+    const services = card(page, "services");
+    await expect(services.locator(".percentage-denominator")).toHaveText("13 tool-returned API results");
+    const mail = label(page, "services", "Mail"), origin = page.url();
+    await expect(mail).toHaveAccessibleName(/1 of 13 tool-returned API results \(7.7%\)/);
+    await mail.press("Enter"); await ready(page);
+    await parents(page, ["parity-request-0"]);
+    await expect(services.locator(".percentage-denominator")).toHaveText("1 tool-returned API result");
+    const all = page.getByRole("link", { name: "View all 1 tool-returned API result", exact: true });
+    const refined = page.url();
+    await all.click();
+    const entry = page.locator("#activityList .widget-record");
+    await expect(entry).toHaveCount(1); await expect(entry).toContainText("/me/messages");
+    await backTo(page, all, refined);
+    await backTo(page, mail, origin);
+    await choose(page, "layerFilter", "code-reference");
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    const data = await openExact(page, "outcomes");
+    await expect(data.locator("caption")).toContainText("code references");
+    assert.deepEqual(await data.locator("tfoot td").allTextContents(), ["0", "Not applicable"]);
+    await expect(data.locator("a")).toHaveCount(0);
 });
 
-test("zero, tiny, empty and incompatible snapshots never fabricate a share or replace accepted results", async t => {
-    const row = fixture("breakdown-extreme"), base = row.toolCalls[0];
+test("a one-in-1,001 slice stays proportional; zero links to a definition, not fabricated matching evidence", async t => {
+    const row = fixture("breakdown-extreme");
     row.toolCalls = Array.from({ length: 1001 }, (_, i) => ({
-        ...base, toolCallId: `extreme-${i}`, startEventId: `extreme-start-${i}`,
-        tool: i ? "workiq-fetch" : "workiq-call_function",
-        toolSucceeded: i !== 0, reportedOutcome: i ? "succeeded" : "failed",
+        toolCallId: `x${i}`, startEventId: `s${i}`, startedAt: row.capturedAt, apiResults: [],
+        tool: i ? "workiq-fetch" : "workiq-call_function", toolSucceeded: i !== 0, reportedOutcome: i ? "succeeded" : "failed",
     }));
-    const { page, fail, corrupt } = await setup(t, [row]);
-    const tiny = card(page, "outcomes").locator('[data-category="failure"].percentage-slice');
-    const bounds = await tiny.evaluate(node => [Number(node.dataset.start), Number(node.dataset.end), Number(node.dataset.exactFraction)]);
-    assert.ok(Math.abs(bounds[1] - bounds[0] - 1 / 1001) < 1e-15);
-    assert.equal(bounds[2], 1 / 1001);
-    await expect(card(page, "outcomes").locator('.percentage-legend-row[data-category="failure"]')).toContainText("<0.1%");
-    await expect(card(page, "outcomes").locator('.percentage-legend-row[data-category="unknown"]')).toContainText("0%");
-    await capture(page, "extreme-light");
-    await card(page, "tools").locator("summary").click();
-    await expect(card(page, "tools").locator("table")).toBeVisible();
-    const content = await card(page, "tools").innerText();
-    fail(true); await (await revealStoredRefresh(page)).click(); await ready(page);
-    assert.equal(await card(page, "tools").innerText(), content);
-    fail(false); corrupt(true); await (await revealStoredRefresh(page)).click(); await ready(page);
-    assert.equal(await card(page, "tools").innerText(), content);
-    await expect(page.locator("#collectionNotice")).toBeVisible();
-    corrupt(false); await (await revealStoredRefresh(page)).click(); await ready(page);
-    await restoreLegacySearch(page, "NO_BREAKDOWN_MATCH"); await ready(page);
-    await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
-    assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
-    await expect(card(page, "tools")).toContainText("No matching activity.");
-    await expect(card(page, "tools").locator("tfoot")).toContainText("Not applicable");
-    await capture(page, "empty-light");
+    const { page } = await setup(t, [row]);
+    const outcomes = card(page, "outcomes");
+    const [start, end, fraction] = await outcomes.locator('.percentage-slice[data-category="failure"]').evaluate(n =>
+        [Number(n.dataset.start), Number(n.dataset.end), Number(n.dataset.exactFraction)]);
+    assert.ok(Math.abs(end - start - 1 / 1001) < 1e-15); assert.equal(fraction, 1 / 1001);
+    await expect(label(page, "outcomes", "failure")).toHaveAccessibleName(/1 of 1,001 Work IQ tool calls \(<0.1%\)/);
+    const zero = label(page, "outcomes", "unknown");
+    await expect(zero).toHaveAccessibleName(/0 of 1,001 Work IQ tool calls \(0%\). Read definition/);
+    await zero.click(); await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", "outcomes");
+    await page.locator("#chartReferenceShowData").click();
+    assert.deepEqual((await tableRows(exact(page)))["No result recorded"], ["0", "0%"]);
 });
 
-test("returned entries keep their own unit and accepted target refinement while empty code references invent no calls", async t => {
-    const { page, analytics } = await setup(t);
-    await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
-    await expect(card(page, "services").locator(".percentage-denominator")).toHaveText("(tool-returned API results)");
-    await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", String(analytics().totals.count));
-    const group = analytics().serviceInvolvement.groups.find(group => group.label === "Mail");
-    await card(page, "services").locator('[data-category="Mail"] .percentage-bar').click(); await ready(page);
-    await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", String(group.total));
-    assert.deepEqual(await visibleIds(page), sorted(group.drilldownIds));
-    await expect(card(page, "services").locator(".percentage-denominator")).toHaveText("(tool-returned API result)");
-    await expect(page.locator("#takeaway")).toContainText("1 of 1 Work IQ tool calls");
-    await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
-    await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
-    await expect(card(page, "outcomes")).toContainText("No matching activity.");
-    assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
+test("pending, failed and incompatible reads keep the accepted breakdown; retry adopts the narrowed population", async t => {
+    const { page, revision } = await setup(t);
+    const tools = card(page, "tools"), original = await tools.innerText(), held = Promise.withResolvers();
+    await page.route("**/api/snapshot", async route => {
+        await held.promise;
+        await route.fulfill({ status: 503, json: { error: "Invented snapshot failure" } });
+    }, { times: 1 });
+    try {
+        await selectActivityOption(page, "toolFilter", "workiq-ask");
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+        await closeAnalyzeFilters(page);
+        assert.equal(await tools.innerText(), original);
+        await expect(page.locator("#periodResult")).toHaveAttribute("data-revision", String(revision));
+    } finally { held.resolve(); }
+    await ready(page);
+    await expect(page.locator("#periodResult")).toContainText("Previous results");
+    assert.equal(await tools.innerText(), original);
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), json = await response.json();
+        json.analytics.serviceInvolvement.definition.version++;
+        await route.fulfill({ response, json });
+    }, { times: 1 });
+    await choose(page, "toolFilter", "workiq-ask");
+    await expect(page.locator("#periodResult")).toContainText("Previous results");
+    assert.equal(await tools.innerText(), original);
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), json = await response.json();
+        json.revision = json.analytics.revision = revision - 1;
+        await route.fulfill({ response, json });
+    }, { times: 1 });
+    await choose(page, "toolFilter", "workiq-ask");
+    await expect(page.locator("#message")).toContainText("older snapshot was rejected");
+    await expect(page.locator("#periodResult")).toHaveAttribute("data-revision", String(revision));
+    assert.equal(await tools.innerText(), original);
+    await choose(page, "toolFilter", "workiq-ask");
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await expect(tools.locator(".percentage-label")).toHaveText("workiq-ask");
+    await parents(page, ["parity-request-0"]);
+    const data = await openExact(page, "tools");
+    assert.deepEqual(await tableRows(data), { "workiq-ask": ["1", "100%"] });
 });
 
-test("chart disclosures and label focus survive pending reads, unchanged revisions and view changes", async t => {
-    const { page, source, hold, change } = await setup(t);
-    const tools = card(page, "tools"), summary = tools.locator("summary");
-    await summary.click(); await expect(tools.locator("table")).toBeVisible();
-    await summary.focus();
-    const text = await tools.innerText(), release = hold();
-    t.after(release);
-    await page.evaluate(() => document.querySelector("#refreshBtn").click());
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
-    assert.equal(await tools.innerText(), text, "Pending data never masquerades as a zero or empties accepted evidence");
-    release(); await ready(page);
-    await expect(summary).toBeFocused();
-    await expect(tools.locator("details")).toHaveAttribute("open", "");
-    change(structuredClone(source));
-    await page.evaluate(() => document.querySelector("#refreshBtn").click()); await ready(page);
-    await expect(page.locator(".percentage-section")).toHaveAttribute("data-revision", "2");
-    await expect(summary).toBeFocused();
-    await page.locator("#tableDisclosure > summary").click();
-    for (const chart of ["workload", "endpoint", "time"]) {
-        await page.locator(`[data-chart="${chart}"]`).click(); await ready(page);
-        await expect(page.locator("#tableDisclosure")).toHaveAttribute("open", "");
-        await expect(tools.locator("details")).toHaveAttribute("open", "");
-        await expect(page.locator("#chartReadingNotes")).toContainText("linear count scale from zero");
+test("independent breakdowns retain readable rows, linear marks and keyboard access on desktop and narrow enlarged text", async t => {
+    const { page } = await setup(t);
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${100 * scale}%`; }, scale);
+        await page.evaluate(() => document.fonts.ready);
+        const widgets = ["tools", "services", "models"].map(kind => card(page, kind));
+        const boxes = await Promise.all(widgets.map(widget => widget.boundingBox()));
+        for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) {
+            assert.ok(Math.min(a.x + a.width, b.x + b.width) <= Math.max(a.x, b.x) + 1
+                || Math.min(a.y + a.height, b.y + b.height) <= Math.max(a.y, b.y) + 1, "No widgets cover each other");
+        }
+        for (const widget of widgets.slice(0, 2)) {
+            const rows = widget.locator(".percentage-legend-row");
+            assert.ok(await rows.count() > 0);
+            const measures = await rows.evaluateAll(nodes => nodes.map(row => {
+                const label = row.querySelector(".percentage-label"), track = row.querySelector(".percentage-bar-track");
+                return { clipped: label.scrollWidth > label.clientWidth + 1, width: track.getBoundingClientRect().width,
+                    fill: track.firstElementChild.getBoundingClientRect().width, count: Number(row.dataset.count) };
+            }));
+            for (const { clipped, width, fill, count } of measures) {
+                assert.equal(clipped, false); assert.ok(width > 0 && Math.abs(fill - width * count / 16) < .1);
+            }
+            const action = rows.first().getByRole("link").first();
+            await page.keyboard.press("Tab"); await action.focus(); await expect(action).toBeFocused();
+            const surface = await action.evaluate(measureControlSurface);
+            assert.ok(contrast(surface.ink, surface.face) >= 4.5);
+            const focus = await rows.first().evaluate(measureControlSurface);
+            assert.ok(focus.focus && focus.focusWidth >= 2, "Keyboard focus outlines the whole row");
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await capture(page, `${theme}-${width}-text${scale}`, card(page, "services"));
     }
-    await page.locator("#tableDisclosure > summary").click();
-    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
-    await page.goBack(); await ready(page);
-    assert.equal(await page.locator("#tableDisclosure").evaluate(node => node.open), false);
 });

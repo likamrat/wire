@@ -161,6 +161,8 @@ directly on recorded outcomes; a preference
 under Settings > Analyze can resume the last topic read in this tab. Show
 a compact topic rail beside the reading pane, or a Topics chooser when space
 is limited. Results and browser Back retain filters, focus and reading position.
+When Back restores a chart filtered by Search, focus returns to the original
+link only after its matching records are ready and only if the reader has not moved on.
 Keep the section strip above the reader. Use the existing navigation
 hover and focus treatment, without an underline. Label worked examples as
 illustrations and keep them distinct from the accepted view's values.

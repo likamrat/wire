@@ -1489,7 +1489,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function restoreReading(saved) {
         if (!saved || clearingAccess || !api.isCurrent(saved.publication)) return;
-        if ((saved.chartReference || saved.focus?.id?.startsWith("analyze-trend-")) && workspaceState.route.view === "analyze" && semanticQuery !== null && !semanticBound) {
+        const chartLink = saved.focus?.key?.startsWith("percentage:") || saved.focus?.key?.startsWith("chart:");
+        if ((saved.chartReference || chartLink || saved.focus?.id?.startsWith("analyze-trend-")) && workspaceState.route.view === "analyze" && semanticQuery !== null && !semanticBound) {
             pendingChartReferenceReading = { position: saved, navigation: workspaceState.navigationGeneration, intent: workspaceState.readingIntent };
             return;
         }
