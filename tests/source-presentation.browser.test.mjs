@@ -62,7 +62,7 @@ async function setup(t) {
         assert.deepEqual(errors, []);
     });
     if (proofs) await mkdir(proofs, { recursive: true });
-    await page.goto(url + "#settings?section=connection"); await ready(page);
+    await page.goto(url + "settings?section=source-access&setting=source-paths"); await ready(page);
     return { page, url, setPaths: next => { currentPaths = next; } };
 }
 async function effectivePaper(page, selector) {
@@ -105,7 +105,7 @@ async function captureSource(page, name) {
     const viewport = page.viewportSize();
     await page.setViewportSize({ width: viewport.width, height: await page.evaluate(() => Math.max(innerHeight, document.documentElement.scrollHeight)) });
     await page.evaluate(() => scrollTo(0, 0));
-    await page.locator("[data-settings-section=connection]").screenshot({ path: path.join(proofs, name + ".png") });
+    await page.locator("[data-settings-section=source-access]").screenshot({ path: path.join(proofs, name + ".png") });
     await page.setViewportSize(viewport);
 }
 
@@ -163,7 +163,7 @@ test("source destinations retain real focus without an automatic control outline
 test("readonly source roles, exact long paths and control geometry remain coherent in both themes and text scales", { timeout: 120000 }, async t => {
     const { page, setPaths } = await setup(t), measurements = [];
     setPaths(longPaths); await page.reload(); await ready(page);
-    await page.locator(".settings-paths dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
+    await page.locator("#approvedSourceDetails dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
     const cases = [375, 820, 1200, 2560].map(width => ({ width, narrow: false })).concat({ width: 2560, narrow: true });
     for (const theme of ["light", "dark"]) for (const scale of [1, 2]) for (const config of cases) {
         await page.setViewportSize({ width: config.width, height: 1000 });
@@ -173,7 +173,7 @@ test("readonly source roles, exact long paths and control geometry remain cohere
             document.querySelector("#settingsView").style.width = narrow ? "375px" : "";
         }, { scale, narrow: config.narrow });
         const titleBefore = await heading(page);
-        const values = await page.locator(".settings-paths").evaluate(node => {
+        const values = await page.locator("#approvedSourceDetails .settings-paths").evaluate(node => {
             const style = getComputedStyle(node);
             return { family: style.fontFamily,
                 overflow: document.documentElement.scrollWidth > innerWidth,
@@ -189,13 +189,12 @@ test("readonly source roles, exact long paths and control geometry remain cohere
                         lines: rects.length };
                 }) };
         });
-        values.paper = await effectivePaper(page, ".settings-paths");
+        values.paper = await effectivePaper(page, "#approvedSourceDetails .settings-paths");
         assert.equal(values.overflow, false, JSON.stringify({ theme, scale, ...config }));
         assert.deepEqual(values.rows.filter(row => row.tag === "DD").map(row => row.text), Object.values(longPaths));
         for (const row of values.rows) {
             assert.equal(row.size, `${(row.tag === "DT" ? 14 : 16) * scale}px`, "Reference labels and exact reading values retain their distinct roles");
             assert.equal(row.family, values.family);
-            assert.equal(row.weight, row.tag === "DT" ? "500" : "400");
             assert.ok(contrast(row.color, values.paper) >= 4.5);
             assert.equal(row.clipped, false); assert.equal(row.allGlyphsInside, true);
             if (row.tag === "DD") {

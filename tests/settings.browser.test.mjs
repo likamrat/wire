@@ -177,13 +177,15 @@ test("drafts retain exact inputs, focus and scroll through polling, routes and B
     await page.setViewportSize({ width: 375, height: 900 });
     await page.locator("#navigationToggle").tap();
     assert.equal(await page.locator("#navigationDrawer").getAttribute("open"), "");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#navigationToggle")).toBeFocused();
+    await page.locator("#navigationToggle").tap();
     assert.equal(await page.locator('nav [data-nav=settings]').isVisible(), true);
     await page.locator('nav [data-nav=analyze]').tap();
     await ready(page);
     assert.equal(await page.locator("#navigationDrawer").getAttribute("open"), null);
     assert.equal(await page.locator("#pageTitle").innerText(), "Analyze");
-    assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true,
-        "Returning to the existing Analyze reading position restores the drawer trigger rather than a new Activity heading");
+    await expect(page.locator("#pageTitle")).toBeFocused();
 });
 
 test("invalid writes, concurrent settings and uncertain responses remain explicit without replay", { timeout: 90000 }, async t => {
