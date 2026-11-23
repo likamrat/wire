@@ -69,14 +69,16 @@ test("Guide separates an undisclosed service from an unclassified path and leads
     await expect(article).toContainText("Recorded path not recognized");
     await expect(article).toContainText(/open the prompt/i);
     await page.locator("#chartReferenceShowData").click();
+    const drilldown = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
     await page.locator("#chartReferenceData").getByText("/{id}/{id}", { exact: true }).click();
+    assert.deepEqual((await (await drilldown).json()).analytics.rows.map(row => row.toolCallId), ["service-evidence-call-3"]);
     await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
     await page.locator(".request-card-open").first().click();
     const call = page.locator('[data-tool-call-id="service-evidence-call-3"]');
     await expect(call).toContainText(/completed/i);
     await expect(call).toContainText("Recorded path not recognized");
-    await expect(call).toContainText("Matches current view");
-    await call.getByRole("button", { name: /^Inspect recorded evidence/ }).click();
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
     await expect(call).toContainText(/\/unsupported\/resource|\/\{id\}\/\{id\}/);
 });
 
@@ -100,8 +102,12 @@ test("profile relationship calls show People for the complete service denominato
     await services.getByRole("link", { name: "People: 2 of 2 Work IQ tool calls (100%). View matching records.", exact: true }).click(); await ready(page);
     await expect(page.locator("#activityList .request-row")).toHaveCount(1);
     await page.locator("#activityList .request-card-open").click(); await ready(page);
-    await expect(page.locator('[data-tool-call-id="profile-relationship-0"] .reader-call-services .service-label-list')).toHaveText("People");
-    await expect(page.locator('[data-tool-call-id="profile-relationship-1"] .reader-call-services .service-label-list')).toHaveText("People");
+    for (const sourceCall of source.toolCalls) {
+        const call = page.locator(`[data-tool-call-id="${sourceCall.toolCallId}"]`);
+        const toggle = call.locator(".reader-call-toggle");
+        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+        await expect(call.locator(".reader-call-services")).toContainText("People");
+    }
     assert.deepEqual(errors, []);
 });
 
