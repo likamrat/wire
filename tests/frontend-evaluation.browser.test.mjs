@@ -442,6 +442,19 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
         await page.setViewportSize({ width, height: 980 });
         await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
         await top.locator(".request-card-open").hover();
+        const firstLine = card => card.locator(".card-problem-area").evaluate(problem => {
+            const textBox = selector => {
+                const text = document.createRange();
+                text.selectNodeContents(problem.querySelector(selector));
+                return text.getClientRects()[0];
+            };
+            const title = textBox(".card-problem-title"), detail = textBox(".card-issue-detail");
+            return { inset: detail.left - title.left, gap: detail.top - title.bottom };
+        });
+        const [directReason, entryReason] = await Promise.all([firstLine(top), firstLine(lower)]);
+        assert.ok(Math.abs(entryReason.inset - directReason.inset) <= 1 &&
+            Math.abs(entryReason.gap - directReason.gap) <= 1,
+        `Problem text should start in the same place at ${width}px: ${JSON.stringify({ directReason, entryReason })}`);
         if (proofs) {
             await mkdir(proofs, { recursive: true });
             const phase = process.env.WIRE_CARD_BASELINE ? "before" : "after";

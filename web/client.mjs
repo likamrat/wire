@@ -6082,6 +6082,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (issues.length) {
             const ordinals = requestContext.actionOrdinals(scenario), ordinal = r => ordinals.get(sourceCallFor(r));
             const list = el("ul", "card-issue-list");
+            function problemLine(detail, link) {
+                const line = el("div", "card-problem-line");
+                if (detail) line.append(el("span", "card-issue-detail", detail));
+                if (link) line.append(link);
+                return line;
+            }
             const ownsBadge = group => group.rows[0].outcome === outcome?.key && group.rows.length === summary[outcome.key];
             if (outcome?.key === "failure" && !issues.some(ownsBadge)) {
                 const affected = issues.flatMap(group => group.rows).filter(row => row.outcome === "failure");
@@ -6100,17 +6106,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (ownsBadge(group)) orientation.append(owner);
                 else item.append(owner);
                 item.setAttribute("aria-label", name);
-                if (group.resultIssue) item.append(evidenceLink("Tool result", exact(first, "tool")));
-                if (group.detail) item.append(el("span", "card-issue-detail", callIssueText(group.detail, group.recordedCause)));
+                if (group.detail || group.resultIssue) item.append(problemLine(
+                    group.detail && callIssueText(group.detail, group.recordedCause),
+                    group.resultIssue ? evidenceLink("Tool result", exact(first, "tool")) : null));
                 for (const entry of group.entries) {
                     const services = entry.row.serviceAssociation?.services;
                     const service = services?.length === 1 && services[0] !== "Unknown" ? serviceLabel(services[0]) : null;
                     const label = entry.label + (service ? ` · ${service}` : "");
                     const link = evidenceLink(label, exact(entry.row, "reported-api"));
                     link.setAttribute("aria-label", `${name}, ${label}`);
-                    const block = el("div", "card-entry-issue");
-                    block.append(link);
-                    if (entry.detail) block.append(el("span", "card-issue-detail", entry.detail));
+                    const block = problemLine(entry.detail, link);
+                    block.classList.add("card-entry-issue");
                     item.append(block);
                 }
                 list.append(item);
