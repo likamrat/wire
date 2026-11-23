@@ -31,16 +31,6 @@ async function setup(t) {
             "/api/assessment/overview", "/api/assessment/detail", "/api/evaluation/automatic/summary",
             "/api/report-artifacts/list", "/api/period-comparison",
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
-        if (url.pathname === "/" && request.method() === "GET") {
-            const response = await route.fetch(), html = await response.text();
-            const binding = "readContext: readChartReferenceContext, renderExact:";
-            assert.equal(html.split(binding).length, 2);
-            return route.fulfill({ response, body: html.replace(binding, `readContext: () => {
-                const value = readChartReferenceContext();
-                window.observedScopeContext = value;
-                return value;
-            }, renderExact:`) });
-        }
         return route.continue();
     });
     t.after(async () => {
@@ -85,7 +75,7 @@ test("native accepted scope presents complete peer facts without parsing retaine
         await page.evaluate(() => scrollTo(0, 0));
         await expect(caption).toHaveText(accepted);
         await expect(page.locator("#analyzeScopeSummary")).toHaveAttribute("data-revision", revision);
-        await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(new RegExp("Copilot project: Invented project"));
+        await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Project: Invented project/);
         const geometry = await caption.evaluate(node => {
             const rect = value => { const r = value.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom }; };
             const parts = [...node.querySelectorAll(".analyze-scope-part")];
@@ -101,7 +91,7 @@ test("native accepted scope presents complete peer facts without parsing retaine
         assert.ok(geometry.overflow <= 1);
         if (!baseline) {
             assert.equal(geometry.parts.length, 4);
-            assert.equal(geometry.parts.at(-1).text, `Copilot project: ${project}`);
+            assert.equal(geometry.parts.at(-1).text, `Project: ${project}`);
             for (const part of geometry.parts) assert.ok(part.lines.every(line => line.x >= geometry.box.x - 1
                 && line.right <= geometry.box.right + 1 && line.y >= geometry.box.y - 1 && line.bottom <= geometry.box.bottom + 1));
         }
@@ -111,14 +101,6 @@ test("native accepted scope presents complete peer facts without parsing retaine
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.locator("#openChartReference").click();
-    if (!baseline) {
-        const context = await page.evaluate(() => window.observedScopeContext);
-        assert.deepEqual(context.qualificationParts, [
-            "Service: Files", "Includes missing-service context: 2 known matches; 0 context-only",
-            "Outcome: Tool failed", `Copilot project: ${project}`,
-        ]);
-        assert.equal(context.qualification, context.qualificationParts.join("; "));
-    }
     await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await page.locator("#chartReferenceSource > summary").click();
@@ -130,14 +112,10 @@ test("native accepted scope presents complete peer facts without parsing retaine
     await page.locator("#meaning").press("Escape");
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
     await page.locator("#meaning").press("Escape");
+    const compared = page.waitForResponse(response => response.ok() && response.url().endsWith("/api/period-comparison"));
     await page.locator("#comparePeriods").click();
-    await page.locator("#openChartReference").click();
-    if (!baseline) {
-        const context = await page.evaluate(() => window.observedScopeContext);
-        assert.equal(context.available, false);
-        assert.equal(context.qualification, "");
-        assert.deepEqual(context.qualificationParts, []);
-    }
-    await page.locator("#meaning").press("Escape");
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await expect(page.locator("#openChartReference")).toBeHidden();
+    assert.equal((await (await compared).json()).options.filters.projectIds, undefined);
     if (proof) await writeFile(path.join(proof, "native-reachability.json"), JSON.stringify(states, null, 2));
 });

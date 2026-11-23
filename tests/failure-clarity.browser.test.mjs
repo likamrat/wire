@@ -241,12 +241,15 @@ test("current reader keeps succeeded, partial and unknown results with their cal
     await page.locator(".request-card-open").click();
     const calls = page.locator("#requestContent .reader-call-row");
     await expect(calls).toHaveCount(3);
-    await expect(calls.locator(".recorded-result-label")).toHaveText([
-        "Call 1 succeeded", "Call 2 partly succeeded", "Call 3 has no recorded result",
-    ]);
+    await expect(calls.nth(0).locator(".reader-call-summary")).toHaveText("1 tool call completed");
+    await expect(calls.nth(1).locator(".reader-call-summary")).toContainText("partly completed");
+    await expect(calls.nth(2).locator(".reader-call-summary")).toContainText("has no recorded result");
     for (const [index, outcome] of ["success", "partial", "unknown"].entries()) {
         await expect(calls.nth(index).locator("[data-outcome]")).toHaveAttribute("data-outcome", outcome);
-        await expect(calls.nth(index).locator(".reader-call-summary .reader-entry-label")).toHaveText(`Call ${index + 1}`);
+        await expect(calls.nth(index).locator(".reader-entry-label")).toHaveText(`Call #${index + 1}`);
     }
-    await expect(calls.locator(".result-cause,.reader-failure-guidance")).toHaveCount(0);
+    await expect(calls.nth(1).locator(".result-cause")).toContainText("That flag alone does not say which part completed.");
+    await expect(calls.nth(0).locator(".result-cause")).toHaveCount(0);
+    await expect(calls.nth(2).locator(".result-cause")).toHaveCount(0);
+    await expect(calls.locator(".reader-failure-guidance")).toHaveCount(0);
 });
