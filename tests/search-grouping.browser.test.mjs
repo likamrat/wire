@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel } from "./live-search-fixture.mjs";
@@ -110,19 +110,10 @@ test("grouping the full population precedes paging and preserves keyboard Open/B
     await expect(page.locator(".wire-search-group-label")).toHaveText(["Conversation context", "Interactions"]);
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
     const opened = second.at(-1).id;
-    await page.evaluate(() => {
-        window.groupedReturnEvents = [];
-        const panel = document.querySelector("#contextSidebar"), popup = document.querySelector(".select-popup");
-        const record = (kind, event) => window.groupedReturnEvents.push({
-            kind, trusted: event.isTrusted, at: performance.now(), route: location.hash,
-            panelOpen: panel.open, moving: panel.getAnimations().length > 0,
-            popupOpen: !popup.hidden, focus: document.activeElement?.id,
-        });
-        document.querySelector("#wireSearchType-control").addEventListener("click", event => record("type", event));
-        panel.addEventListener("close", event => record("sidebar-close", event));
-    });
     await hits.last().focus(); await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/request=search-1(?:&|$)/);
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-1");
+    assert.equal(new URL(page.url()).pathname, "/request");
+    assert.doesNotMatch(page.url(), /search-1|Lumen/);
     await page.goBack();
     await expect(page.locator(`[data-search-id="${opened}"]`)).toBeFocused();
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
@@ -135,12 +126,6 @@ test("grouping the full population precedes paging and preserves keyboard Open/B
     await expect(page.locator("#activityCount")).toHaveText("25");
     await expect(page.locator("#wireSearchType")).toBeDisabled();
     await expect(page.locator("#wireSearchCount")).toHaveText("26 matches");
-    const returnEvents = await page.evaluate(() => window.groupedReturnEvents);
-    t.diagnostic(JSON.stringify({ returnedSearch: returnEvents }));
-    if (process.env.WIRE_SEARCH_GROUP_PROOFS) {
-        await mkdir(process.env.WIRE_SEARCH_GROUP_PROOFS, { recursive: true });
-        await writeFile(path.join(process.env.WIRE_SEARCH_GROUP_PROOFS, "grouped-return-events.json"), JSON.stringify(returnEvents, null, 2));
-    }
     await page.locator("#wireSearchClear").click();
     await expect(hits).toHaveCount(0);
     await expect(page.locator("#activityCount")).toHaveText("26");

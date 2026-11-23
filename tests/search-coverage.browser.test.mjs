@@ -56,7 +56,8 @@ test("normal Analyze search remains usable when only an unrelated report is corr
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches across all pages.", { timeout: 15000 });
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
+    await expect(page.locator("#activityList article")).toHaveCount(2);
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
@@ -67,7 +68,8 @@ test("normal Analyze search remains usable when only an unrelated report is corr
     await page.locator("#wireSearch").fill("lab results");
     await expect(page.locator("#wireSearchResults")).toContainText("Only part of this text was saved.");
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches across all pages.");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:search-0");
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator("#wireSearchResults")).toContainText("Only part of this text was saved.");
     assert.deepEqual(errors, []);
