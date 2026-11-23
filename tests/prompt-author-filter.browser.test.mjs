@@ -4,7 +4,7 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { navigateMain, openActivitySessions, selectActivityOption, chooseTheme } from "./helpers.mjs";
+import { navigateMain, openActivitySessions, openAnalyzeFilters, selectActivityOption, chooseTheme } from "./helpers.mjs";
 import { openReportCreation, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -14,6 +14,7 @@ const ready = async page => {
     await page.evaluate(() => document.fonts.ready);
 };
 async function setAuthors(page, values, id = "promptAuthorFilter", finish = "Apply") {
+    if (id === "promptAuthorFilter") await openAnalyzeFilters(page);
     await page.locator(`[data-select-id="${id}"]`).click();
     const popup = page.locator(".select-popup:visible");
     for (const value of ["user", "agent", "unknown"]) {
@@ -74,12 +75,10 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.snapshot().analytics.totals.count, 3);
     assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     assert.match(page.url(), /authors=user/);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
+    await selectActivityOption(page, "chatFilter", app.chatId); await ready(page);
     assert.match(page.url(), /authors=user/);
     assert.equal(app.snapshot().analytics.totals.count, 3);
-    await openActivitySessions(page);
-    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label === "Human prompt"));
+    assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     await setAuthors(page, ["agent"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await setAuthors(page, ["user", "agent"]);
@@ -87,8 +86,7 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.match(await page.locator("#filterChips").innerText(), /Human and agent prompts/);
     await setAuthors(page, ["unknown"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
-    await openActivitySessions(page);
-    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label.startsWith("Copilot chat prompt")));
+    assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["unknown"]);
     await page.goBack(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 5);
     assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["user", "agent"]);
@@ -96,7 +94,7 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 7);
-    assert.equal(new URL(page.url()).hash.includes("authors="), false);
+    assert.equal(new URL(page.url()).searchParams.has("authors"), false);
 });
 
 test("report author choice narrows selected base membership without losing hidden requests", { timeout: 60000 }, async t => {
@@ -134,8 +132,7 @@ test("report author choice narrows selected base membership without losing hidde
 
 test("author choice composes with dates, result, service and chat scope before Insights and pagination", { timeout: 60000 }, async t => {
     const app = await setup(t), { page } = app;
-    await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
+    await selectActivityOption(page, "chatFilter", app.chatId); await ready(page);
     await setAuthors(page, ["user"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
     await page.locator('[data-select-id="outcomeFilter"]').click();

@@ -151,7 +151,7 @@ test("retired motion setting is absent from global Search and cannot return thro
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(await page.locator("#sidebarMotionPreference").count(), 0, "Reloading an obsolete deep link cannot recreate the control");
     await expect(page.locator("#settingsThemePreference")).toBeVisible();
-    await expect(page.locator("#displayTimeZone-control")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     if (proofs) await page.screenshot({ path: path.join(proofs, "display-without-motion.png") });
 });
 
@@ -227,7 +227,8 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     await expect(card).toBeFocused();
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) <= 2);
     await navigateMain(page, "reports");
-    await page.locator(".saved-report-summary").first().click();
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
+    await page.locator('[data-view-key^="inspect-bundle:"]').first().click();
     await panel.waitFor();
     for (const id of ["readerWidthControls", "readerResize", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
     assert.equal(await panel.evaluate(node => node.hasAttribute("data-interaction-reader")), false);
@@ -235,7 +236,7 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     assert.equal(await page.evaluate(() => document.body.style.getPropertyValue("--context-sidebar-width")), "");
     await page.locator("#closeContextSidebar").click();
     await panel.waitFor({ state: "hidden" });
-    await expect(page.locator(".saved-report-summary").first()).toBeFocused();
+    await expect(page.locator('[data-view-key^="inspect-bundle:"]').first()).toBeFocused();
 });
 
 test("sidebar paint preserves light depth and distinguishes dark inset navigation from contextual depth", async t => {
@@ -508,9 +509,10 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
 test("saved-item replacement keeps its entrance and reverses exit without stale content or focus", async t => {
     const page = await setup(t, { savedReports: 2 });
     await navigateMain(page, "reports");
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
     const result = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
-        const rows = [...document.querySelectorAll(".saved-report-summary")], frames = [];
+        const rows = [...document.querySelectorAll('[data-view-key^="inspect-bundle:"]')], frames = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
         let phase = "open";
         const snapshot = () => ({
@@ -537,7 +539,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
             throw new Error("Saved inspector did not settle");
         }
         const ids = rows.map(row => row.closest(".saved-library-row").dataset.bundleId);
-        const titles = rows.map(row => row.querySelector(".saved-report-name").textContent);
+        const titles = rows.map(row => row.closest(".saved-library-row").querySelector(".saved-report-name").textContent);
         const interactionCounts = [2, 1];
         rows[0].click(); await advance(3);
         const firstBody = document.querySelector(".saved-report-inspection");
@@ -581,7 +583,8 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     assert.ok(result.removedFirst && result.removedSecond, "Old saved bodies and their controls are released");
     assert.equal(result.beforeReverse.moving, true, "Reverse during actual unpaused exit");
     assert.ok(Math.abs(result.beforeReverse.x - result.afterReverse.x) < 1, "Saved exit reversal preserves the presented edge");
-    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1);
+    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1,
+        `Main edge jumps from ${result.beforeReverse.mainRight} to ${result.afterReverse.mainRight}px on reversal`);
     assert.ok(result.beforeSame.moving && Math.abs(result.beforeSame.x - result.afterSame.x) < 1);
     assert.ok(Math.abs(result.beforeSame.mainRight - result.afterSame.mainRight) < 1);
     assert.equal(result.retiredExitState, "idle", "The superseded exit cannot later finish against the reopened owner");
@@ -599,11 +602,11 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     }
     await page.keyboard.press("Escape");
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    assert.equal(await page.locator(".saved-report-summary").first().evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('[data-view-key^="inspect-bundle:"]').first().evaluate(node => node === document.activeElement), true);
     const departure = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar");
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-        document.querySelector(".saved-report-summary").click();
+        document.querySelector('[data-view-key^="inspect-bundle:"]').click();
         for (let i = 0; i < 120 && (!panel.open || panel.getAnimations().length); i++) await frame();
         document.querySelector("#closeContextSidebar").click();
         for (let i = 0; i < 120 && !panel.inert; i++) await frame();

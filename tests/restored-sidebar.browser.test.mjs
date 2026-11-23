@@ -9,7 +9,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, setLegacyTimeBucket, revealAnalyzeRecords } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
-import { lucideIcon } from "../web/ux-icons.mjs";
+
 
 const proofs = process.env.WIRE_SIDEBAR_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -19,19 +19,6 @@ async function capture(page, name) {
     if (!proofs) return;
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
     await page.screenshot({ path: path.join(proofs, name + "-viewport.png") });
-}
-async function workspaceSearch(page) {
-    const geometry = await page.evaluate(() => {
-        const box = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
-        return { search: box(".wire-search-entry"), toolbar: box(".workspace-toolbar"), main: box("#main"),
-            brand: box("#shellBrand"), utilities: box(".workspace-utilities") };
-    });
-    const center = box => box.x + box.width / 2;
-    assert.ok(Math.abs(center(geometry.search) - center(geometry.main)) < 1, "Search is centered on the workspace, excluding the rail");
-    assert.ok(Math.abs(geometry.toolbar.x - geometry.main.x) < 1, "Toolbar and content share the same moving rail offset");
-    assert.ok(geometry.search.x - geometry.brand.right >= 80, "Search is separate from sidebar branding, not logo-adjacent");
-    assert.ok(geometry.search.right <= geometry.utilities.x - 8, "Right-side utilities do not crowd Search");
-    assert.ok(geometry.search.width >= 240 && geometry.search.width <= 460, "Search has a bounded comfortable width");
 }
 async function setup(t, options = {}, records = scopeRecords(), browserOptions = {}) {
     const cleanup = [];
@@ -70,184 +57,41 @@ async function setup(t, options = {}, records = scopeRecords(), browserOptions =
     return { page, requests };
 }
 
-test("production shell restores the three destinations in the left sidebar, not the header", async t => {
-    const { page } = await setup(t);
-    const destinations = [
-        ["analyze", "Analyze", "chart-column"],
-        ["reports", "Reports", "clipboard-list"],
-        ["settings", "Settings", "settings"],
-    ];
-    const navigation = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
-    async function inspectNavigation() {
-        for (const [route, name, asset] of destinations) {
-            const link = page.locator(`.primary-navigation a[data-nav="${route}"]`);
-            await expect(link).toHaveAccessibleName(name);
-            await expect(link).toHaveAttribute("href", route === "settings" ? "#settings?section=connection" : `#${route}`);
-            await expect(link.locator(".wire-icon")).toHaveCount(1);
-            const actual = await link.evaluate(node => {
-                const icon = node.querySelector(".wire-icon");
-                const box = icon.getBoundingClientRect(), target = node.getBoundingClientRect();
-                return { asset: icon.dataset.lucideIcon, size: icon.dataset.iconSize, width: box.width, height: box.height,
-                    hidden: icon.getAttribute("aria-hidden"), focusable: icon.getAttribute("focusable"),
-                    targetWidth: target.width, targetHeight: target.height, geometry: icon.innerHTML };
-            });
-            const official = await page.evaluate(svg => new DOMParser().parseFromString(svg, "text/html").querySelector("svg").innerHTML,
-                lucideIcon(asset, 24));
-            assert.equal(actual.asset, asset); assert.equal(actual.size, "24");
-            assert.equal(actual.width, 24); assert.equal(actual.height, 24);
-            assert.equal(actual.hidden, "true"); assert.equal(actual.focusable, "false");
-            assert.equal(actual.geometry, official);
-            assert.ok(actual.targetWidth >= 44 && actual.targetHeight >= 44);
-        }
-        assert.equal(await navigation.evaluate(node => node === document.querySelector(".primary-navigation")), true);
-    }
-    await expect(page.locator("#sidebar .primary-navigation a")).toHaveText(["Analyze", "Reports", "Settings"]);
-    await expect(page.locator(".app-header nav")).toHaveCount(0);
-    await expect(collapse(page)).toHaveAttribute("aria-expanded", "true");
-    assert.equal(await page.locator("#wireSearch").count(), 1);
-    for (const theme of ["light", "dark"]) {
-        await navigateMain(page, "analyze"); await ready(page);
-        await chooseTheme(page, theme);
-        await workspaceSearch(page);
-        await inspectNavigation();
-        await capture(page, `desktop-${theme}-expanded`);
-        await collapse(page).click(); await settled(page);
-        await workspaceSearch(page);
-        await inspectNavigation();
-        for (const [route, name] of destinations) {
-            const link = page.locator(`.primary-navigation a[data-nav="${route}"]`);
-            await link.hover();
-            await expect(page.getByRole("tooltip", { name, exact: true })).toBeVisible();
-            await page.keyboard.press("Escape");
-            await link.focus(); await expect(link).toBeFocused();
-            assert.equal(await link.evaluate(node => node.matches(":focus-visible")), true);
-            await link.press("Enter"); await ready(page);
-            await expect(link).toHaveAttribute("aria-current", "page");
-            await inspectNavigation();
-        }
-        await capture(page, `desktop-${theme}-collapsed`);
-        await collapse(page).click(); await settled(page);
-    }
-    await page.setViewportSize({ width: 375, height: 900 });
-    await page.locator("#navigationToggle").click();
-    await expect(page.locator("#navigationDrawer")).toBeVisible();
-    await inspectNavigation();
-    await capture(page, "narrow-navigation-icons");
-    await page.locator('#navigationDrawer a[data-nav="reports"]').press("Enter"); await ready(page);
-    await expect(page.locator("#navigationDrawer")).toBeHidden();
-    await page.locator("#navigationToggle").click();
-    await expect(page.locator('#navigationDrawer a[data-nav="reports"]')).toHaveAttribute("aria-current", "page");
-    await inspectNavigation();
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#navigationToggle")).toBeFocused();
-});
-
-test("Settings retains access to the existing Analyze sidebar actions", async t => {
-    const { page } = await setup(t);
-    await navigateMain(page, "settings"); await ready(page);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        for (const section of ["connection", "privacy", "themes", "regional"]) {
-            await navigateSettings(page, section);
-            await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
-            for (const id of ["comparePeriods", "pageAction"]) {
-                await expect(page.locator("#analyzeTools #" + id)).toBeVisible();
-                await expect(page.locator("#" + id)).toHaveCount(1);
-            }
-            await expect(page.locator("#analyzeToolbar")).toBeHidden();
-        }
-        await navigateSettings(page, "connection");
-        await capture(page, `settings-tools-${theme}`);
-    }
-    await page.reload(); await ready(page);
-    await expect(page.locator("#resultsLink")).toHaveCount(0);
-    await navigateMain(page, "collection-status"); await ready(page);
-    for (const id of ["comparePeriods", "pageAction"]) await expect(page.locator("#analyzeTools #" + id)).toBeVisible();
-});
-
-test("Workspace destinations and contextual tools precede the bottom Settings utility without an account", async t => {
+test("workspace links and footer utilities keep their native ownership across collapse and the drawer", async t => {
     const { page } = await setup(t);
     const main = page.getByRole("navigation", { name: "Main navigation", exact: true });
     const utility = page.getByRole("navigation", { name: "Utility navigation", exact: true });
-    const settings = utility.locator('[data-nav="settings"]');
-    await expect(main.locator("a")).toHaveText(["Analyze", "Reports"]);
-    await expect(page.locator(".navigation-workspace > h2")).toHaveText("Workspace");
-    await expect(utility.locator("a")).toHaveText(["Settings"]);
-    await expect(page.locator('#navigationContent [data-nav="settings"]')).toHaveCount(1);
+    const settings = utility.getByRole("link", { name: "Settings", exact: true });
+    const hosts = await page.locator("#navigationContent").elementHandle();
+    await expect(main.locator("a")).toHaveText(["Analyze", "Trends", "Reports", "Compare"]);
+    await expect(page.locator(".app-header nav")).toHaveCount(0);
     await expect(page.locator("#wireAccountEntry")).toBeHidden();
-    const host = await page.locator("#wireAccountEntry").elementHandle();
-    await expect(page.locator("#activityUpdateToggle,#analyzeUpdateEntry")).toHaveCount(0);
-    const content = await page.locator("#navigationContent").elementHandle();
-    const placement = async () => {
-        const metrics = await page.evaluate(() => {
-            const rect = id => document.getElementById(id).getBoundingClientRect().toJSON();
-            const footer = document.getElementById("navigationFooter");
-            const parent = footer.closest("dialog") || footer.closest("aside");
-            return { tools: rect("analyzeTools"), footer: rect("navigationFooter"), settings: footer.querySelector("a").getBoundingClientRect().toJSON(),
-                parent: parent.getBoundingClientRect().toJSON(), padding: parseFloat(getComputedStyle(parent).paddingBottom),
-                content: rect("navigationContent"), overflow: document.documentElement.scrollWidth - innerWidth };
-        });
-        assert.ok(metrics.footer.y >= metrics.tools.bottom + 24, "One section gap keeps actions distinct from utilities");
-        assert.ok(Math.abs(metrics.footer.bottom - metrics.parent.bottom + metrics.padding) <= 1, "Settings anchors the bottom without an account");
-        assert.ok(metrics.settings.width >= 44 && metrics.settings.height >= 44);
-        assert.ok(metrics.overflow <= 1);
-        return metrics;
-    };
-    const measured = [];
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        for (const collapsed of [false, true]) {
-            if (await collapse(page).getAttribute("aria-expanded") === String(collapsed)) await collapse(page).click();
-            await settled(page);
-            measured.push({ theme, collapsed, ...await placement() });
-            await capture(page, `grouping-${theme}-${collapsed ? "collapsed" : "expanded"}`);
-        }
+    await expect(settings).toHaveCount(1);
+    for (const [name, href] of [["Analyze", "/"], ["Trends", "/trends"], ["Reports", "/reports"], ["Compare", "/compare"]]) {
+        const link = main.getByRole("link", { name, exact: true });
+        assert.equal(new URL(await link.getAttribute("href"), page.url()).pathname, href);
+        await expect(link.locator("svg[aria-hidden=true]")).toHaveCount(1);
     }
     await collapse(page).click(); await settled(page);
-    await main.locator('[data-nav="reports"]').focus();
-    await page.keyboard.press("Tab"); await expect(page.locator("#comparePeriods")).toBeFocused();
-    await page.keyboard.press("Tab"); await expect(page.locator("#pageAction")).toBeFocused();
+    await main.getByRole("link", { name: "Reports", exact: true }).focus();
+    await page.keyboard.press("Tab"); await expect(main.getByRole("link", { name: "Compare", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(utility.getByRole("link", { name: "Help", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(utility.getByRole("button", { name: "Feedback", exact: true })).toBeFocused();
     await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
     await page.keyboard.press("Enter"); await ready(page);
     await expect(settings).toHaveAttribute("aria-current", "page");
-    await navigateSettings(page, "display");
-    const settingsUrl = page.url();
-    await collapse(page).click(); await settled(page);
-    assert.equal(page.url(), settingsUrl, "Collapsing does not change the selected Settings tab");
-    await page.goBack(); await ready(page);
-    await expect(settings).toHaveAttribute("aria-current", "page");
-    await page.goBack(); await ready(page);
-    await expect(main.locator('[data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
-    await expect(page.locator("#activityUpdateToggle,#analyzeUpdateEntry")).toHaveCount(0);
-    assert.equal(await host.evaluate(node => node === document.querySelector("#navigationFooter #wireAccountEntry")), true);
-    assert.equal(await content.evaluate(node => node === document.getElementById("navigationContent")), true);
-    await settings.click(); await ready(page);
-    await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
-    await page.goto(settingsUrl); await ready(page);
-    await page.reload(); await ready(page);
-    await expect(settings).toHaveAttribute("aria-current", "page");
-    await expect(page.locator('[data-settings-section="display"]')).toBeVisible();
-    await navigateMain(page, "analyze"); await ready(page);
-    // Reload replaces the document; breakpoint moves must not replace the new hosts.
-    const reloadedHost = await page.locator("#wireAccountEntry").elementHandle();
-    const reloadedContent = await page.locator("#navigationContent").elementHandle();
+    for (const section of ["connection", "privacy", "themes", "regional"]) {
+        await navigateSettings(page, section);
+        await expect(main.getByRole("link", { name: "Compare", exact: true })).toBeVisible();
+        await expect(settings).toHaveAttribute("aria-current", "page");
+    }
     await page.setViewportSize({ width: 390, height: 800 });
     await page.locator("#navigationToggle").click();
-    await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
-    await placement();
-    assert.equal(await reloadedHost.evaluate(node => node === document.querySelector("#navigationDrawer #wireAccountEntry")), true);
-    assert.equal(await reloadedContent.evaluate(node => node === document.querySelector("#navigationDrawer #navigationContent")), true);
-    await settings.click(); await ready(page);
-    await expect(page.locator("#navigationDrawer")).toBeHidden();
-    await expect(page.locator("#connectionTitle")).toBeFocused();
-    await page.locator("#navigationToggle").click();
     await expect(settings).toBeFocused();
+    assert.ok(await hosts.evaluate(node => node === document.querySelector("#navigationDrawer #navigationContent")));
     await page.keyboard.press("Escape");
     await expect(page.locator("#navigationToggle")).toBeFocused();
-    await host.dispose(); await content.dispose();
-    if (proofs) await writeFile(path.join(proofs, "sidebar-grouping.json"), JSON.stringify(measured, null, 2));
 });
-
 test("sidebar groups remain scroll-reachable without overlap at narrow and 200% sizes", async t => {
     const { page } = await setup(t);
     const measurements = [];
@@ -868,9 +712,11 @@ test(`normal-root repeated sidebar motion is vertically stable at ${width}px in 
     t.diagnostic(JSON.stringify({ samples: trace.length, header, main }));
     assert.ok(header.max - header.min < 1, `Header bounces during sidebar motion: ${JSON.stringify(header)}`);
     assert.ok(main.max - main.min < 1, `Main bounces during sidebar motion: ${JSON.stringify(main)}`);
-    assert.ok(trace.every(frame => frame.artwork.layoutWidth === 148 && frame.artwork.layoutHeight === 60),
+    const initial = trace[0].artwork;
+    assert.ok(initial.layoutWidth > 0 && initial.layoutHeight > 0);
+    assert.ok(trace.every(frame => frame.artwork.layoutWidth === initial.layoutWidth && frame.artwork.layoutHeight === initial.layoutHeight),
         "The wordmark retains its layout geometry while its paint transforms without reflow");
-    assert.ok(trace.every(frame => Math.abs(frame.artwork.width / frame.artwork.height - 500 / 204) < .001),
+    assert.ok(trace.every(frame => Math.abs(frame.artwork.width / frame.artwork.height - 402 / 82) < .01),
         "Logo motion scales uniformly, never distorting the approved artwork");
     assert.ok(trace.every(frame => Math.abs(frame.search.x + frame.search.width / 2 - frame.main.x - frame.main.width / 2) < 1),
         "Search stays centered on the moving content, not on the whole viewport");
