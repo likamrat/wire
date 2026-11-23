@@ -42,7 +42,7 @@ async function sourceManifest() {
 }
 
 async function fixture(t) {
-    const f = await recollectionFixture(t);
+    const f = await recollectionFixture(t, { collectInitially: false });
     for (const file of f.files) {
         const original = (await readFile(file, "utf8")).trim().split("\n").map(JSON.parse);
         for (const event of original) {
