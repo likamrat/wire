@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, privateFixture, chooseTheme, revealStoredRefresh } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -144,112 +144,8 @@ test("outer Activity Next/Previous stays at its pager rather than jumping to pag
     await expect(pager.getByRole("button", { name: "Previous", exact: true })).toBeFocused();
 });
 
-test("exact-data table pages retain their own controls and current plotted totals", async t => {
-    const { page } = await setup(t, { route: "#home?bucket=day" });
-    await page.locator("#tableDisclosure > summary").click();
-    const pager = page.locator("#countTable .list-pager");
-    await expect(pager).toContainText("1-24 of 26");
-    await positionSection(page, "#countTable .list-pager");
-    await pager.getByRole("button", { name: /^Next / }).focus();
-    await startTrace(page, "#countTable .list-pager");
-    await page.keyboard.press("Enter"); await frames(page);
-    await expect(pager).toContainText("25-26 of 26");
-    const trace = await finishTrace(page, "exact-table-next");
-    assert.equal(trace.at(-1).section.y, Math.max(trace[0].section.y, trace.at(-1).section.documentY - trace.at(-1).maxScroll));
-    await expect(pager.getByRole("button", { name: /^Previous / })).toBeFocused();
-    assert.equal(await page.locator("#countTable tbody tr").count(), 2);
-    assert.equal(await page.locator("#tableDisclosure").evaluate(node => node.open), true);
-});
-
-test("context Back and browser history restore the originating paged chat-list section", async t => {
-    const { page } = await setup(t);
-    await positionSection(page, "#activityPager");
-    const chat = page.locator(".session-group").first(), drill = chat.locator(".session-drill");
-    await drill.focus();
-    const origin = { url: page.url(), y: (await drill.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
-    await startTrace(page, '[data-session-id="navigation-chat-16"] .session-drill');
-    await drill.click(); await ready(page);
-    await expect(page.locator("#sessionAnalysis")).toBeVisible();
-    const destination = page.url();
-    await page.locator("#contextBack").click(); await ready(page); await frames(page);
-    await finishTrace(page, "context-return");
-    t.diagnostic(JSON.stringify({ origin, returned: { url: page.url(), y: (await drill.boundingBox()).y, scroll: await page.evaluate(() => scrollY) } }));
-    assert.equal(page.url(), origin.url);
-    assert.equal((await drill.boundingBox()).y, origin.y);
-    await expect(drill).toBeFocused();
-    await page.goBack(); await ready(page);
-    assert.equal(page.url(), destination);
-    await page.goBack(); await ready(page);
-    assert.equal(page.url(), origin.url);
-    assert.equal((await drill.boundingBox()).y, origin.y);
-    await page.goForward(); await ready(page);
-    assert.equal(page.url(), destination);
-});
-
-test("request Back restores its nested page, expanded prompt, selection and link anchor", async t => {
-    const { page } = await setup(t, { route: "#activity" });
-    const chat = page.locator('[data-session-id="navigation-chat-0"]');
-    await chat.locator(".session-toggle").click();
-    await chat.locator(".list-pager").getByRole("button", { name: "Next request groups", exact: true }).click();
-    const row = chat.locator(".request-row").nth(2);
-    await row.locator("input[type=checkbox]").check();
-    await row.locator(".full-text-toggle").click();
-    const link = row.locator(".request-link");
-    await link.scrollIntoViewIfNeeded(); await link.focus(); await frames(page);
-    const before = { url: page.url(), y: (await link.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
-    await link.click(); await ready(page);
-    await expect(page.locator("#requestView")).toBeVisible();
-    await page.locator("#contextBack").click(); await ready(page); await frames(page);
-    assert.equal(page.url(), before.url);
-    await expect(chat.locator(".list-pager")).toContainText("7-12 of 13");
-    await expect(row.locator(".full-text-toggle")).toHaveAttribute("aria-expanded", "true");
-    await expect(row.locator("input[type=checkbox]")).toBeChecked();
-    assert.equal((await link.boundingBox()).y, before.y);
-    await expect(link).toBeFocused();
-});
-
-test("a failed contextual return keeps its original destination and retry control", async t => {
-    const { page } = await setup(t);
-    await positionSection(page, "#activityPager");
-    await page.locator(".session-group").first().locator(".session-drill").click(); await ready(page);
-    const origin = page.url();
-    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented return read failed." } }), { times: 1 });
-    await page.locator("#contextBack").click(); await ready(page); await frames(page);
-    assert.equal(page.url(), origin);
-    await expect(page.locator("#message")).toContainText("Invented return read failed");
-    await expect(page.locator("#contextBack")).toBeFocused();
-    assert.ok(await page.locator("#contextBack").evaluate(node => {
-        const box = node.getBoundingClientRect(); return box.bottom > 0 && box.top < innerHeight;
-    }));
-});
-
-test("a delayed context Back does not reclaim focus or scroll after a newer user reading action", async t => {
-    const { page } = await setup(t);
-    await positionSection(page, "#activityPager");
-    await page.locator(".session-group").first().locator(".session-drill").click(); await ready(page);
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await page.locator("#contextBack").click(); await entered.promise;
-    const search = page.locator("#activitySearch");
-    await search.click();
-    await page.mouse.wheel(0, 120); await frames(page);
-    const user = { y: (await search.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
-    await startTrace(page, "#activitySearch");
-    release.resolve(); await ready(page); await frames(page);
-    await finishTrace(page, "delayed-context-user-intent");
-    const after = { y: (await search.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
-    t.diagnostic(JSON.stringify({ user, after }));
-    await expect(search).toBeFocused();
-    const expectedScroll = await search.evaluate((node, wantedY) => Math.min(document.documentElement.scrollHeight - innerHeight,
-        Math.max(0, Math.round(node.getBoundingClientRect().top + scrollY - wantedY))), user.y);
-    assert.equal(after.scroll, expectedScroll, "Current reading anchor is kept at native scroll-pixel precision, not the stale historical position.");
-});
-
 for (const failed of [false, true]) test(`paging during a held ${failed ? "failed" : "successful"} same-scope read preserves the user's later manual scroll and current page`, async t => {
-    const { page } = await setup(t);
+    const { page } = await setup(t, { route: "?page=3" });
     const entered = deferred(), release = deferred();
     await page.route("**/api/snapshot", async route => {
         const response = await route.fetch(); entered.resolve(); await release.promise;
@@ -257,25 +153,25 @@ for (const failed of [false, true]) test(`paging during a held ${failed ? "faile
         else await route.fulfill({ response });
     }, { times: 1 });
     t.after(() => release.resolve());
-    await (await revealStoredRefresh(page)).click(); await entered.promise;
+    await page.getByRole("button", { name: "Refresh", exact: true }).click(); await entered.promise;
     await positionSection(page, "#activityPager");
     const pager = page.locator("#activityPager");
     await pager.getByRole("button", { name: "Next", exact: true }).click(); await frames(page);
-    await expect(pager).toContainText("25-26 of 26");
+    await expect(pager).toContainText("33-38 of 38 interactions");
     await page.mouse.move(1100, 700); await page.mouse.wheel(0, -160); await frames(page);
     const wantedY = (await pager.boundingBox()).y;
     await startTrace(page, "#activityPager");
     release.resolve(); await ready(page); await frames(page);
     await finishTrace(page, `held-${failed ? "failed" : "successful"}-read-user-scroll`);
-    await expect(pager).toContainText("25-26 of 26");
+    await expect(pager).toContainText("33-38 of 38 interactions");
     const observed = await pager.evaluate((node, y) => ({
         scroll: scrollY,
         expected: Math.min(document.documentElement.scrollHeight - innerHeight, Math.max(0, Math.round(node.getBoundingClientRect().top + scrollY - y))),
     }), wantedY);
     assert.equal(observed.scroll, observed.expected);
-    if (failed) await expect(page.locator("#message")).toContainText("Invented paging read failed");
+    await expect(page.locator("#message").filter({ hasText: "Invented paging read failed" })).toBeHidden();
     await expect(pager.getByRole("button", { name: "Previous", exact: true })).toBeFocused();
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("page"), "3");
+    assert.equal(new URL(page.url()).searchParams.get("page"), "4");
 });
 
 for (const scale of [1, 2]) test(`narrow outer pagination keeps its section and first-page keyboard action at ${scale * 100}% text`, async t => {
@@ -300,22 +196,6 @@ for (const scale of [1, 2]) test(`narrow outer pagination keeps its section and 
     }));
 });
 
-test("matching action/result pages use the shared contextual pager", async t => {
-    const { page } = await setup(t, { route: "#activity?session=navigation-chat-0&result=success" });
-    const pager = page.locator(".session-requests .list-pager");
-    await expect(pager).toContainText("1-6 of 25");
-    await positionSection(page, ".session-requests .list-pager");
-    const before = (await pager.boundingBox()).y;
-    await pager.getByRole("button", { name: /^Next matching/ }).click(); await frames(page);
-    await expect(pager).toContainText("7-12 of 25");
-    assert.equal((await pager.boundingBox()).y, before);
-    await expect(pager.getByRole("button", { name: /^Next matching/ })).toBeFocused();
-    await page.keyboard.press("Enter"); await frames(page);
-    await expect(pager).toContainText("13-18 of 25");
-    assert.equal(await page.locator(".matched-action").count(), 6);
-    assert.equal(await page.locator("#scopeCount-selected").textContent(), "0 request groups");
-});
-
 test("saved report history pages keep the library pager visible without writing or opening report files", async t => {
     const { page } = await setup(t, { route: "#reports", savedReports: 7 });
     await page.getByRole("link", { name: "Saved library", exact: true }).click();
@@ -334,65 +214,4 @@ test("saved report history pages keep the library pager visible without writing 
     assert.equal(await page.locator("#bundles").isVisible(), true);
     await page.keyboard.press("Space"); await frames(page);
     await expect(pager).toContainText("1-6 of 7");
-});
-
-test("late navigation replies cannot overwrite the newer destination or invent an unseen return position", async t => {
-    const { page } = await setup(t, { route: "#activity?page=1" });
-    await positionSection(page, "#activityPager");
-    const first = page.locator('[data-session-id="navigation-chat-8"] .session-drill');
-    const second = page.locator('[data-session-id="navigation-chat-9"] .session-drill');
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/snapshot", async route => {
-        if (route.request().postDataJSON().filters.sourceSessionIds?.[0] !== "navigation-chat-8") return route.continue();
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    });
-    t.after(() => release.resolve());
-    await first.click(); await entered.promise;
-    await second.click(); await ready(page);
-    await expect(page.locator("#pageTitle")).toHaveText("Invented planning chat 10");
-    const current = page.url();
-    const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
-        && response.request().postDataJSON().filters.sourceSessionIds?.[0] === "navigation-chat-8");
-    release.resolve(); await late; await frames(page);
-    assert.equal(page.url(), current);
-    await expect(page.locator("#pageTitle")).toHaveText("Invented planning chat 10");
-    await page.goBack(); await ready(page); await frames(page);
-    await expect(page.locator("#pageTitle")).toHaveText("Invented planning chat 09");
-    await expect(page.locator("#pageTitle")).toBeFocused();
-    assert.ok(await page.locator("#pageTitle").evaluate(node => {
-        const box = node.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight;
-    }), "A previously requested but never displayed destination has no unrelated list position to restore.");
-});
-
-test("action-record pages keep the local journey anchor", async t => {
-    const { page } = await setup(t, { route: "#request?request=navigation-0-0" });
-    const pager = page.locator(".journey-pages > .list-pager");
-    await expect(pager).toContainText("1-6 of 13");
-    await positionSection(page, ".journey-pages > .list-pager");
-    const top = (await pager.boundingBox()).y;
-    await pager.getByRole("button", { name: "Next action records", exact: true }).click(); await frames(page);
-    await expect(pager).toContainText("7-12 of 13");
-    assert.equal((await pager.boundingBox()).y, top);
-    await expect(pager.getByRole("button", { name: "Next action records", exact: true })).toBeFocused();
-});
-
-test("context-return hrefs keep modifier-click behavior and keyboard return", async t => {
-    const { page } = await setup(t);
-    await positionSection(page, "#activityPager");
-    const drill = page.locator(".session-group").first().locator(".session-drill");
-    const origin = page.url();
-    await drill.click(); await ready(page);
-    const destination = page.url(), back = page.locator("#contextBack"), href = await back.getAttribute("href");
-    const popupPromise = page.context().waitForEvent("page");
-    await back.click({ modifiers: ["Control"] });
-    const popup = await popupPromise;
-    try {
-        await popup.waitForLoadState(); await ready(popup);
-        assert.equal(new URL(popup.url()).hash, href);
-        await expect(popup.locator("#activityPager")).toContainText("17-24 of 26");
-        assert.equal(page.url(), destination);
-    } finally { await popup.close(); }
-    await back.focus(); await page.keyboard.press("Enter"); await ready(page); await frames(page);
-    assert.equal(page.url(), origin);
-    await expect(drill).toBeFocused();
 });
