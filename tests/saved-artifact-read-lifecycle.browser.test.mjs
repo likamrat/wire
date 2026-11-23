@@ -73,6 +73,29 @@ test("receipt READ closes on route leave and late completion/refresh never reope
     assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.saved-artifact-deletion")), null);
 });
 
+test("Escape dismisses an in-flight receipt read, preserves recovery and never dispatches Delete", async t => {
+    const read = deferred(), entered = deferred();
+    t.after(() => read.resolve());
+    const { page, calls } = await setup(t, async () => {
+        entered.resolve(); await read.promise;
+        return { operationId, phase: "pending" };
+    }, undefined, receipt);
+    await page.locator("#open").click();
+    await page.getByRole("button", { name: "Check deletion result", exact: true }).click();
+    await entered.promise;
+    await page.keyboard.press("Escape");
+    const assertClosed = async () => {
+        assert.equal(await page.locator(":modal").count(), 0);
+        assert.equal(await page.locator("#open").evaluate(node => node === document.activeElement), true);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem("wire.saved-artifact-deletion"))), receipt);
+    };
+    await assertClosed();
+    read.resolve();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await assertClosed();
+    assert.deepEqual(calls, [{ route: "/api/artifact-deletion/status", input: receipt }]);
+});
+
 test("preview READ is dismissible and cancelled once, while confirmed WRITE keeps its original dismissal guard", async t => {
     const read = deferred(), reading = deferred(), writing = deferred(), write = deferred();
     t.after(() => { read.resolve(); write.resolve(); });
