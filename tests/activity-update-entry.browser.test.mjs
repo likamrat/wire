@@ -8,7 +8,7 @@ import { recollectionFixture } from "./recollection-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { selectActivityOption, navigateMain, navigateSettings, openSourceEditor, chooseTheme, revealStoredRefresh, revealSavedDataRead } from "./helpers.mjs";
-import { chooseReportScope, scanReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 async function capture(page, name) {
@@ -16,6 +16,18 @@ async function capture(page, name) {
     await mkdir(process.env.WIRE_ACTIVITY_UPDATE_PROOF_DIR, { recursive: true });
     await page.evaluate(async () => { await document.fonts.ready; getSelection().removeAllRanges(); });
     await page.screenshot({ path: path.join(process.env.WIRE_ACTIVITY_UPDATE_PROOF_DIR, `${name}.png`) });
+}
+
+async function prepareFrozenReport(page, expectedRecords) {
+    await navigateMain(page, "reports");
+    const [response] = await Promise.all([
+        page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),
+    ]);
+    assert.equal(response.status(), 200);
+    assert.equal((await response.json()).records.length, expectedRecords);
+    const frame = page.locator("#reportReviewBody .report-contained-frame");
+    await expect(frame).toBeVisible();
+    return frame;
 }
 
 async function readableDisabled(page, selector) {
@@ -168,7 +180,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
     const retainedReceipt = await page.evaluate(() => JSON.parse(sessionStorage.getItem("workiq-evidence.recollection-operation")));
     await page.reload(); await page.locator("#workspace[aria-busy=false]").waitFor();
     await navigateMain(page, "analyze");
-    await expect(page.locator("#freshAwayLink")).toHaveAttribute("href", "#settings?section=privacy&setting=recollect-activity");
+    await expect(page.locator("#freshAwayLink")).toHaveAttribute("href", "/settings?section=privacy&setting=recollect-activity");
     await page.locator("#freshAwayLink").focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#recollectActivity")).toHaveText("Check recollection result");
     await page.locator("#recollectActivity").click();
@@ -187,8 +199,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
         await capture(page, "receipt-read-pending");
         await page.locator("#recollectClose").click();
         await page.waitForFunction(() => document.activeElement.id === "recollectActivity");
-        await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
-        frozen = page.locator("#reportReviewBody iframe"); frozenNode = await frozen.elementHandle();
+        frozen = await prepareFrozenReport(page, 1); frozenNode = await frozen.elementHandle();
         frozenHtml = await frozen.getAttribute("srcdoc");
     } finally { release(); }
     await page.waitForFunction(() => !sessionStorage.getItem("workiq-evidence.recollection-operation"));
@@ -221,14 +232,16 @@ test("B actions preserve dirty Settings and a frozen report without dispatch", {
     await navigateMain(page, "analyze"); await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
     await capture(page, "entry-dirty-settings");
-    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
     assert.equal(await page.locator("#sourceSessions").inputValue(), draft);
     await page.locator("#cancelSource").click();
-    await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
-    const frozen = await page.locator("#reportReviewBody iframe").getAttribute("srcdoc");
+    const frame = await prepareFrozenReport(page, 3);
+    const frozen = await frame.getAttribute("srcdoc");
+    assert.ok(frozen);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await navigateMain(page, "analyze");
     for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
-    assert.equal(await page.locator("#reportReviewBody iframe").getAttribute("srcdoc"), frozen);
+    assert.equal(await frame.getAttribute("srcdoc"), frozen);
     assert.deepEqual(effects, []);
 });
 
@@ -383,7 +396,7 @@ for (const [name, raw, unreadable] of [
         const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
         await (await revealSavedDataRead(page)).click(); await read; await page.locator("#workspace[aria-busy=false]").waitFor();
         if (name === "malformed JSON") await chooseTheme(page, "light");
-        await navigateSettings(page, "privacy");
+        await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
         await page.locator("#recollectActivity").click();
         await expect(page.locator("#recollectTitle")).toHaveText("Recollection recovery unavailable");
         if (name === "malformed JSON") await capture(page, "blocked-recollection-receipt-light");
