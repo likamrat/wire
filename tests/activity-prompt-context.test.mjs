@@ -44,8 +44,8 @@ test("empty automatic message survives retained-event, snapshot and reader proje
         assert.equal(source.status, "full", "The legacy status describes the retained string, not whether it has words.");
         assert.equal(source.sourceEventId, "automatic-prompt");
         assert.deepEqual(source.authorship, { actor: "agent", basis: "autopilot" });
-        assert.deepEqual(textAccess.describePrompt(source), { hasText: false, label: "Automatic continuation",
-            notice: "No new message was sent." });
+        assert.deepEqual(textAccess.describePrompt(source), { hasText: false, automatic: true,
+            label: "Agent prompt (automatic continuation)", notice: "Work continued without a new message." });
     }
     assert.deepEqual(await loadBoardState(context), state, "Presentation must not rewrite retention or provenance.");
 });
@@ -53,17 +53,18 @@ test("empty automatic message survives retained-event, snapshot and reader proje
 test("availability respects authorized text, partial retention and unavailable permission states", () => {
     const automatic = { status: "full", text: "", authorship: { actor: "agent", basis: "autopilot" } };
     assert.deepEqual(textAccess.describePrompt({ ...automatic, text: " \n " }),
-        { hasText: false, label: "Automatic continuation", notice: "No new message was sent." });
+        { hasText: false, automatic: true, label: "Agent prompt (automatic continuation)", notice: "Work continued without a new message." });
     for (const status of ["full", "partial", "truncated"]) {
         const source = { ...automatic, status, text: "Retained automatic instruction." };
-        assert.equal(textAccess.describePrompt(source).hasText, true);
-        assert.equal(textAccess.describePrompt(source).label, "Agent prompt");
+        assert.deepEqual(textAccess.describePrompt(source), { hasText: true, automatic: true,
+            label: "Agent prompt (automatic continuation)", notice: null });
         assert.equal(textAccess.excerpt(source), source.text);
     }
     for (const text of [null, "", "This text must not bypass unavailable status."]) {
         assert.deepEqual(textAccess.describePrompt({ ...automatic, text, status: "unavailable" }),
-            { hasText: false, label: "Agent activity", notice: "Prompt text unavailable" });
+            { hasText: false, automatic: false, label: "Agent activity", notice: "Prompt text unavailable" });
+        assert.equal(textAccess.excerpt({ ...automatic, text, status: "unavailable" }), "Prompt not available");
     }
     assert.deepEqual(textAccess.describePrompt({ text: "", status: "full", authorship: { actor: "unknown", basis: "conflicting-source" } }),
-        { hasText: false, label: "Author unverified", notice: "No prompt text retained" });
+        { hasText: false, automatic: false, label: "Author unverified", notice: "No prompt text retained" });
 });
