@@ -11,14 +11,22 @@ import { renderPdf } from "../lib/pdf.mjs";
 import { reportPrintPaginationStyles } from "../lib/report-presentation.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { executeAssessmentAction } from "../lib/assessment.mjs";
+import { seedHistoricalFeedback } from "./historical-feedback-fixture.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 const contentText = pages => pages.map(page => page.text
     .replaceAll("WIRE - local report", "").replace(/Page\s*\d+\s*of\s*\d+$/, "")).join("").replace(/\s+/g, "");
 const lastPage = (pages, text) => pages.filter(page => page.text.replace(/\s+/g, "").includes(text.replace(/\s+/g, ""))).at(-1)?.number;
-const promptSummary = (record, index) => `Interaction ${index + 1}1 included copy · ${record.scenarioId}`;
+const promptSummary = index => `Interaction ${index + 1}1 included copy`;
+const authorHeading = "Copilot chat promptAuthor not verified. This older record did not retain verifiable author metadata.";
+const shortOpening = index => `SYNTHETIC UX FIXTURE ONLY: inspect the recorded ${index % 2 ? "Calendar" : "Mail"} request ${index + 1}. SHORT_BODY_${index + 1}`;
+function assertShortRecord(pages, preview, record, index) {
+    const appendix = preview.previewHtml.includes(`class="prompt-record" id="${record.scenarioId}"`);
+    const opening = `${appendix ? promptSummary(index) : ""}${authorHeading}${shortOpening(index)}`;
+    assert.ok(lastPage(pages, opening), `Short record ${index + 1}: visible heading, author qualification and whole text stay together`);
+    assert.ok(preview.previewHtml.includes(`id="${record.scenarioId}"`), "HTML retains the exact record reference");
+}
 
 test("PDF text comparison preserves digits at the start of the following page", () => {
     assert.equal(contentText([{ text: "FirstWIRE - local reportPage 1 of 2" },
@@ -31,7 +39,7 @@ function printRecords(long = false) {
         const endpoint = index % 2 ? "/me/calendarView" : "/me/messages";
         record.sourceSessionId = `synthetic-print-session-${index + 1}`;
         record.projectId = null;
-        record.userPrompt.text = `SYNTHETIC UX FIXTURE ONLY: inspect the recorded ${index % 2 ? "Calendar" : "Mail"} request ${index + 1}. SHORT_BODY_${index + 1}`;
+        record.userPrompt.text = shortOpening(index);
         if (long && index === 2) record.userPrompt.text = Array.from({ length: 240 }, (_, line) =>
             `LONG_LINE_${String(line).padStart(3, "0")} All of this retained synthetic prompt must remain readable.`).join("\n");
         record.userPrompt.sourceEventId = `print-prompt-${index + 1}`;
@@ -53,7 +61,7 @@ async function reportFixture(t, long = false) {
     const records = printRecords(long), { context } = await privateFixture(t, records);
     let state = await loadBoardState(context);
     const model = buildAssessmentModel(state);
-    await executeAssessmentAction(context, "print-proof", "set_personal_assessment", {
+    await seedHistoricalFeedback(context, {
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: model.catalog[1].interactionRef,
         expectedBasis: model.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
     });
@@ -106,13 +114,9 @@ test("four short prompt records remain complete on a page and avoid a nearly bla
     // Flat charts reduce pagination pressure even with the former spacing.
     // Assert the complete current pages rather than requiring the old defect.
     for (const [index, record] of preview.records.entries()) {
-        assert.equal(lastPage(after, record.scenarioId), lastPage(after, `SHORT_BODY_${index + 1}`), `Short record ${index + 1} heading/metadata/body stay together`);
-        assert.ok(lastPage(after, `SHORT_BODY_${index + 1}`), "Every short copy remains in the PDF");
-        if (preview.previewHtml.includes(`class="prompt-record" id="${record.scenarioId}"`)) {
-            assert.equal(lastPage(after, promptSummary(record, index)), lastPage(after, `SHORT_BODY_${index + 1}`), "Additional-copy summary and reference stay with the opening text");
-        }
+        assertShortRecord(after, preview, record, index);
     }
-    assert.equal(lastPage(after, "Coverage and reading notes"), lastPage(after, "Evidence layers - separate units"), "Coverage heading stays with its first data");
+    assert.ok(lastPage(after, "Coverage and definitionsDetected credentials are removed."), "Coverage heading stays with its first qualification");
     assert.ok(after.length <= before.length, "Current chart and spacing do not add a wasteful extra page");
     assert.ok(after.length <= 5, "Four short prompts do not need six pages");
     assert.ok(after.at(-1).bodyBottom < after.at(-1).height * 0.65, "The final page is not just a few orphaned bullets and footer");
@@ -154,12 +158,14 @@ test("long prompt copies paginate completely while inline short copies stay grou
     for (let line = 0; line < 240; line++) assert.ok(text.includes(`LONG_LINE_${String(line).padStart(3, "0")}`), `Long prompt line ${line} is retained`);
     const start = lastPage(pages, "LONG_LINE_000"), end = lastPage(pages, "LONG_LINE_239");
     assert.ok(end >= start + 2, "A truly long prompt splits across multiple pages instead of clipping or shrinking");
-    assert.equal(lastPage(pages, preview.records[2].scenarioId), start, "Long prompt metadata stays with its opening text");
-    assert.equal(lastPage(pages, promptSummary(preview.records[2], 2)), start, "Long prompt request title stays with its identifier and opening text");
+    assert.equal(lastPage(pages, `${promptSummary(2)}${authorHeading}LONG_LINE_000`), start,
+        "The full long copy's numbered heading and attribution stay with its opening text");
+    assert.ok(preview.previewHtml.includes(`class="prompt-record" id="${preview.records[2].scenarioId}"`),
+        "The appendix retains the long record reference");
     for (const index of [0, 1, 3]) {
-        assert.equal(lastPage(pages, preview.records[index].scenarioId), lastPage(pages, `SHORT_BODY_${index + 1}`));
+        assertShortRecord(pages, preview, preview.records[index], index);
     }
-    assert.ok(text.includes("Coverageandreadingnotes"));
+    assert.ok(text.includes("Coverageanddefinitions"));
     let previousLine = text.lastIndexOf("LONG_LINE_000");
     for (let line = 1; line < 240; line++) {
         const nextLine = text.indexOf(`LONG_LINE_${String(line).padStart(3, "0")}`, previousLine + 1);

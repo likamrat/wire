@@ -10,7 +10,6 @@ import { routeShape, isSharedDriveItemPath } from "../lib/graph.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { serviceCategories, createServiceCategories } from "../lib/service-categories.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
-import { fluentIcon } from "../web/ux-icons.mjs";
 import { buildSanitizedBundle } from "../lib/export.mjs";
 import { adaptEvaluationReport, freezeEvaluationFacts } from "../lib/report-facts.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
@@ -61,8 +60,8 @@ test("neutral Unknown presentation explains hosted routing, unrecognized paths a
     const rows = buildActivityAnalytics([serviceEvidenceFixture()]).rows;
     assert.equal(serviceCategories.describe("Unknown").label, "Service not shown");
     assert.equal(serviceCategories.describe("Service not identified").id, "Unknown", "old display aliases remain recognized");
-    assert.equal(dimensionalIcons.Unknown, fluentIcon("info"));
-    assert.notEqual(dimensionalIcons.Unknown, fluentIcon("question_circle"));
+    assert.match(dimensionalIcons.Unknown, /data-icon-role="service:unknown"/);
+    assert.notEqual(dimensionalIcons.Unknown, dimensionalIcons.Files);
     assert.deepEqual([0, 3, 4].map(index => serviceCategories.serviceEvidence(rows[index]).reason),
         ["hosted-routing", "unrecognized-path", "missing-target"]);
     assert.equal(serviceCategories.serviceEvidence(rows[1]), null);
@@ -111,13 +110,15 @@ test("new reports freeze Files recognition and v3 patterns; v2 comparisons withh
     assert.equal(facts.patterns.filter(entry => entry.pattern.display.workload === "Files").reduce((sum, entry) => sum + entry.memberRefs.length, 0), 4);
     for (const content of [bundle.files["product-report.html"], bundle.files["product-report.md"], bundle.files["product-report.json"]]) {
         assert.doesNotMatch(content, /INVENTED-PRIVATE|ANOTHER-INVENTED|INVENTED-SCHEMA/);
-        assert.match(content, /Service not shown/);
         assert.match(content, /shares/);
     }
-    for (const content of [bundle.files["product-report.html"], bundle.files["product-report.md"]]) {
-        assert.match(content, /Its record does not identify a service or API path/);
-        assert.match(content, /regrouping, not a change in recorded outcomes/);
-    }
+    const json = JSON.parse(bundle.files["product-report.json"]);
+    assert.ok(json.serviceCategories.some(category => category.id === "Unknown" && category.label === "Unidentified service"));
+    const involvement = json.evaluationFacts.serviceInvolvement;
+    assert.equal(involvement.denominator, 5);
+    assert.deepEqual(involvement.groups.map(({ service, count }) => [service, count]), [["Files", 2]]);
+    assert.equal(involvement.missingDetailRefs.length, 2);
+    assert.equal(involvement.notApplicableRefs.length, 1);
     const pdf = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
     const document = await pdf.promise;
     let pdfText = "";
@@ -132,8 +133,14 @@ test("new reports freeze Files recognition and v3 patterns; v2 comparisons withh
         }
     } finally { await pdf.destroy(); }
     assert.match(pdfText, /\/shares\/\{id\}\/driveItem/);
-    assert.match(pdfText, /Service not shown/);
     assert.doesNotMatch(pdfText, /INVENTED-PRIVATE|ANOTHER-INVENTED|INVENTED-SCHEMA/);
+    for (const content of [bundle.files["product-report.html"].replace(/<[^>]+>/g, " "), bundle.files["product-report.md"], pdfText]) {
+        const words = content.replace(/[|\s]+/g, " ");
+        assert.match(words, /5 covered calls\. Each call counts once per service; services overlap/);
+        assert.match(words, /Files 2 \/ 5 \(?40%\)?/);
+        assert.match(words, /2 calls with missing or partial service details/);
+        assert.match(words, /1 preparation call with no applicable data service/);
+    }
     const olderFacts = structuredClone(facts);
     for (const entry of olderFacts.patterns) {
         const pattern = entry.pattern;
