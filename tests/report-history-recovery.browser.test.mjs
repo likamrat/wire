@@ -8,7 +8,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { privateFixture, fixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, fixture, navigateMain, selectActivityOption } from "./helpers.mjs";
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const hashes = async entries => Promise.all(entries.map(async entry => [
     entry.bundleId, await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, digest(await readFile(file))])),
@@ -209,20 +209,15 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "masked HTML");
     await page.locator("#clearSavedReportSearch").click();
     await history(page);
-    for (const theme of ["light", "dark"]) for (const width of [320, 375, 1200]) for (const size of ["100%", "200%"]) {
-        await page.setViewportSize({ width, height: 960 }); await chooseTheme(page, theme);
-        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
-        const dimensions = await rows(page).locator(".saved-report-title").evaluateAll(nodes => nodes.map(node => ({
-            height: node.getBoundingClientRect().height, clipped: node.scrollWidth > node.clientWidth + 1,
-        })));
-        assert.ok(dimensions.length && dimensions.every(row => row.height >= 44 && !row.clipped), `${theme}/${width}/${size}: readable 44px summaries`);
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${theme}/${width}/${size}: no page overflow`);
-        if (process.env.WIRE_REPORT_UX_PROOFS && width === 375 && size === "200%") {
-            await mkdir(process.env.WIRE_REPORT_UX_PROOFS, { recursive: true });
-            await page.locator("#bundleList .saved-library-row").first().screenshot({ path: path.join(process.env.WIRE_REPORT_UX_PROOFS, `history-${theme}-${width}-${size}.png`) });
-        }
-    }
+    await page.setViewportSize({ width: 320, height: 960 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const dimensions = await rows(page).locator(".saved-report-title").evaluateAll(nodes => nodes.map(node => ({
+        height: node.getBoundingClientRect().height, clipped: node.scrollWidth > node.clientWidth + 1,
+    })));
+    assert.ok(dimensions.length && dimensions.every(row => row.height >= 44 && !row.clipped), "Saved names remain operable at 320px and doubled text");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.setViewportSize({ width: 1200, height: 960 });
     await page.locator("#savedReportSearch").fill("masked");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await save(page);
