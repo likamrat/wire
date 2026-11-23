@@ -548,6 +548,7 @@ export function createReportSaveWarning({ doc = document, icon, current }) {
             actions.lastElementChild.focus();
             return result;
         },
+        cancel: () => close(),
         withdrawAccess: () => close(),
     };
 }

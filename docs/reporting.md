@@ -262,6 +262,8 @@ and sensitive information that may be included:
 | Save with chat details | Confirms this particular local save with chat details kept. |
 | Go back | Writes nothing. |
 
+If WIRE reconnects while the warning is open, it closes without saving. Prepare a fresh preview before confirming.
+
 ![The save warning lets you mask details, keep original chat wording, or go back.](images/report-save-warning.png)
 
 The save receipt records your choice to save locally, not a claim that you

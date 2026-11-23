@@ -2645,6 +2645,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function invalidatePreview(message, { preserveFileView = false } = {}) {
         if (clearingAccess || !api.publicationToken()) return;
+        reportSaveWarning.cancel();
         const view = $("preparedReportView");
         const reading = preserveFileView ? view
             ? { view: view.value, file: preparedFileInspection?.selection() ?? pendingReportReading?.file } : pendingReportReading : null;
