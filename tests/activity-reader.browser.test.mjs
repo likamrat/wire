@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
-import { reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -39,7 +38,7 @@ function activityRecord(size = 6) {
     return record;
 }
 
-async function setup(t, record = activityRecord()) {
+async function setup(t, record = activityRecord(), { namedDraft = false } = {}) {
     const cleanup = [];
     const { context } = await privateFixture({ after: fn => cleanup.push(fn) }, [record]);
     let before = await loadBoardState(context);
@@ -59,12 +58,13 @@ async function setup(t, record = activityRecord()) {
         if (response.ok() && response.url().endsWith("/api/snapshot")) snapshot = await response.json();
     });
     const denied = [];
-    await page.route("**/*", route => {
+    await page.context().route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(runtime.url).origin || request.method() !== "GET" && ![
             "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",
             "/api/preview", "/api/cancel-preview", "/api/evaluation/automatic/summary",
             "/api/search/query", "/api/search/status", "/api/search/events", "/api/search/cancel", "/api/search/open", "/api/search/membership",
+            ...(namedDraft ? ["/api/report-drafts/list", "/api/report-drafts/edit"] : []),
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
         return route.continue();
     });
@@ -148,39 +148,31 @@ test("filtered homepage failure entry is gesture-only and does not override expl
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
 });
 
-test("Close then reopen the same red card restores valid manual reading before a failure hint", async t => {
+test("Back returns to the panel link and Forward restores manual reading in the same interaction", async t => {
     const { page } = await setup(t, activityRecord(26));
-    const card = page.locator(".request-card-open"), body = page.locator("#contextSidebarBody");
+    const card = page.locator(".card-panel-link"), body = page.locator("#contextSidebarBody");
     await card.click(); await settled(page);
-    await expect(page.locator('[data-tool-call-id="activity-26"]')).toBeFocused();
-    const initial = await body.evaluate(node => node.scrollTop);
-    await body.hover(); await page.mouse.wheel(0, -320);
-    await expect.poll(() => body.evaluate(node => node.scrollTop)).toBeLessThan(initial);
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
     const reading = page.locator('[data-tool-call-id="activity-20"] .reader-call-toggle');
     await reading.click();
     await expect(reading).toBeFocused();
     const remembered = await body.evaluate(node => node.scrollTop);
     assert.ok(remembered > 0);
-    await page.locator("#closeContextSidebar").click(); await settled(page);
+    await page.goBack(); await settled(page);
     await expect(card).toBeFocused();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT_20");
-    await card.click(); await settled(page);
+    await page.goForward(); await expect(page.locator("#contextSidebar")).toBeVisible(); await settled(page);
     const restored = await body.evaluate(node => node.scrollTop);
-    const focus = await page.evaluate(() => ({
-        call: document.activeElement.closest("[data-tool-call-id]")?.dataset.toolCallId,
-        toggle: document.activeElement.classList.contains("reader-call-toggle"),
-    }));
-    t.diagnostic(JSON.stringify({ initial, remembered, restored, focus }));
-    assert.ok(Math.abs(restored - remembered) <= 1, "Same-card reopening must retain the user's reader position.");
+    assert.ok(Math.abs(restored - remembered) <= 1, "Forward must restore the user's reader position.");
     await expect(reading).toBeFocused();
     await expect(reading).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator('[data-tool-call-id="activity-20"]')).toContainText("PRIVATE_CALL_ARGUMENT_20");
     await capture(page, "same-red-card-reopen");
 });
 
-test("same-card reopen rejects stale reading memory and keeps the fresh matching failure entry", async t => {
-    const app = await setup(t, activityRecord(26)), { page, context } = app;
-    const card = page.locator(".request-card-open"), body = page.locator("#contextSidebarBody");
+test("the failure link opens the new failed call after the same interaction changes", async t => {
+    const record = activityRecord(26), app = await setup(t, record), { page, context } = app;
+    const card = page.getByRole("link", { name: "1 tool call failed", exact: true }), body = page.locator("#contextSidebarBody");
     await card.click(); await settled(page);
     await expect(page.locator('[data-tool-call-id="activity-26"]')).toBeFocused();
     const initial = await body.evaluate(node => node.scrollTop);
@@ -189,17 +181,19 @@ test("same-card reopen rejects stale reading memory and keeps the fresh matching
     await page.locator('[data-tool-call-id="activity-20"] .reader-call-toggle').click();
     const remembered = await body.evaluate(node => node.scrollTop), original = app.snapshot();
     await page.locator("#closeContextSidebar").click(); await settled(page);
-    await updateBoardState(context, () => {});
+    Object.assign(record.toolCalls.at(-1), { reportedOutcome: "succeeded", toolSucceeded: true, failureEvidence: undefined });
+    Object.assign(record.toolCalls[0], { reportedOutcome: "failed", toolSucceeded: false,
+        failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded", messageSignal: "access-denial" } });
+    await replaceEvidence(context, () => ({ records: [record] }));
     await app.acceptFixtureChange();
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await expect.poll(() => app.snapshot()?.revision).toBeGreaterThan(original.revision);
     await ready(page);
     await card.click(); await settled(page);
-    await expect(page.locator('[data-tool-call-id="activity-26"]')).toBeFocused();
-    await expect(page.locator('[data-tool-call-id="activity-26"]')).toBeInViewport();
-    const current = app.snapshot(), top = await body.evaluate(node => node.scrollTop);
-    t.diagnostic(JSON.stringify({ remembered, top, savedRevision: original.revision, currentRevision: current.revision,
-        sameBasis: JSON.stringify(original.assessment.basis) === JSON.stringify(current.assessment.basis) }));
+    const target = page.locator('[data-tool-call-id="activity-1"]');
+    await expect(target).toBeFocused(); await expect(target).toBeInViewport();
+    await expect(target).toContainText("Access was denied");
+    const top = await body.evaluate(node => node.scrollTop);
     assert.ok(Math.abs(top - remembered) > 1, "Stale reading must not displace the new entry target.");
 });
 
@@ -211,12 +205,13 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
     await expect(page.locator(".request-card-count")).toHaveText("4 of 6 Work IQ tool calls match this view");
-    await expect(page.locator(".request-card-exception")).toHaveCount(0);
-    await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "4 tool calls completed", exact: true })).toBeVisible();
+    await expect(page.locator(".activity-card [data-outcome=failure]")).toHaveCount(0);
     await closeAnalyzeFilters(page);
-    await page.locator(".request-card-open").click(); await settled(page);
+    await page.locator(".card-panel-link").click(); await settled(page);
     await expect(page.locator('[data-tool-call-id="activity-3"]')).not.toBeFocused();
-    await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toBeFocused();
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(".reader-scope")).toContainText("4 of 6");
     await expect(page.locator('[data-tool-call-id="activity-3"]>.action-context')).toHaveText("Outside current view");
     await capture(page, "filtered-success-full-context");
@@ -373,9 +368,9 @@ test("late entry retains labelled per-call timing, identity and exact target wit
 
 test("a success with missing service evidence, partial result and missing prompt stay truthful without failure entry", async t => {
     for (const [outcome, cardLabel, readerLabel] of [
-        ["succeeded", "completed", "Call 1 completed"],
-        ["partial", "Partial completion", "Call 1 partly completed"],
-        ["unknown", "No result recorded", "Call 1 has no recorded result"],
+        ["succeeded", "1 tool call completed", "1 tool call completed"],
+        ["partial", "Partial completion", "partly completed"],
+        ["unknown", "No result recorded", "has no recorded result"],
     ]) {
         await t.test(outcome, async t => {
             const record = activityRecord(1);
@@ -386,14 +381,13 @@ test("a success with missing service evidence, partial result and missing prompt
             if (outcome === "unknown") record.userPrompt = { text: null, status: "unavailable",
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
-            if (outcome === "succeeded") await expect(page.locator(".request-card-exception")).toHaveCount(0);
-            else await expect(page.locator(".request-card-exception")).toContainText(new RegExp(cardLabel, "i"));
+            await expect(page.locator(".activity-card .card-orientation")).toHaveText(cardLabel);
             if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
-            await page.locator(".request-card-open").click(); await settled(page);
-            await expect(page.locator("#contextSidebarTitle")).toBeFocused();
+            await page.locator(".card-panel-link").click(); await settled(page);
+            await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
             await expect(page.locator(".reader-call-services")).toContainText("Asked Copilot");
             await expect(page.locator(".call-heading [data-outcome=failure]")).toHaveCount(0);
-            await expect(page.locator(".call-heading .recorded-result-label")).toHaveText(readerLabel);
+            await expect(page.locator(".call-heading .reader-call-summary")).toContainText(readerLabel);
             assert.ok(!(await page.locator("#requestContent").innerHTML()).includes("PRIVATE_CALL_ARGUMENT_1"));
             await capture(page, "one-call-" + outcome);
         });
@@ -401,52 +395,58 @@ test("a success with missing service evidence, partial result and missing prompt
 });
 
 test("the whole interaction continues through report reading and returns with scope, selection and reader position", async t => {
-    const { page, runtime } = await setup(t);
+    const { page, runtime } = await setup(t, activityRecord(), { namedDraft: true });
     await chooseTheme(page, "dark");
     await page.goto(runtime.url + "#analyze?tool=workiq-fetch&result=failure"); await ready(page);
-    await expect(page.locator(".request-card-open [data-outcome=failure]")).toContainText("Access was denied");
-    await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveAttribute("data-count", "1");
+    await expect(page.locator(".activity-card .card-problem-area")).toContainText("Access was denied");
+    const origin = page.getByRole("link", { name: "1 tool call failed", exact: true });
     await expect(page.locator(".request-card-count")).toContainText("1 of 6");
     const originURL = page.url();
-    await page.locator(".request-card-open").focus();
-    const origin = (await page.locator(".request-card-open").boundingBox()).y;
+    await origin.focus();
+    const originY = (await origin.boundingBox()).y;
     await page.keyboard.press("Enter"); await settled(page);
     await page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle').click();
     await page.locator("#contextSidebarBody").hover();
     const beforeWheel = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
     await page.mouse.wheel(0, 180);
     await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBeGreaterThan(beforeWheel);
-    const beforeReading = await page.locator("#contextSidebarBody").evaluate(node => ({
-        top: node.scrollTop, height: node.scrollHeight, viewport: node.clientHeight,
-    }));
-    const top = beforeReading.top;
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#requestReportContinue").click(); await ready(page);
-    await expect(page.locator('input[data-report-request="activity-reader"]')).toBeChecked();
-    await reportContents(page);
-    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
-    const prepared = await preparing;
-    assert.equal(prepared.status(), 200, await prepared.text());
-    await capture(page, "report-reading", true);
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    const frame = page.frameLocator("iframe.report-frame:visible");
-    const countRow = frame.locator("tr").filter({ has: frame.getByText("Work IQ tool calls", { exact: true }) });
-    await expect(countRow.locator("th,td").nth(1)).toHaveText("6");
-    await cancelReportPreview(page);
-    await page.goBack(); await ready(page); await settled(page);
-    await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
-    await expect(page.locator("#requestReportContinue")).toBeFocused();
+    const reader = page.locator("#contextSidebar");
+    await reader.getByRole("button", { name: "Add to report", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
+    await picker.getByRole("button", { name: "New draft", exact: true }).click();
+    await picker.getByLabel("Draft name").fill("Workshop review");
+    await picker.getByRole("button", { name: "Create draft and add" }).click();
+    const open = page.getByRole("button", { name: "Added to Workshop review. Open draft", exact: true });
+    await expect(open).toBeVisible();
+    const body = page.locator("#contextSidebarBody");
+    await body.hover(); await page.mouse.wheel(0, 170);
+    await expect.poll(() => body.evaluate(n => n.scrollTop)).toBeGreaterThan(0);
+    const top = await body.evaluate(n => n.scrollTop);
+    await open.click();
+    const report = page;
+    await expect(report.locator("#namedReportDraft option:checked")).toHaveText("Workshop review");
+    const preparing = report.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await report.getByRole("button", { name: "Prepare preview", exact: true }).click();
+    const response = await preparing; assert.equal(response.status(), 200);
+    const preview = await response.json();
+    assert.equal(preview.snapshot.records.length, 1);
+    assert.equal(preview.snapshot.records[0].toolCalls.length, 6);
+    await expect(report.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    await expect(report.frameLocator("iframe.report-frame:visible").getByRole("row", { name: "Work IQ tool calls 6 4 completed / 2 failed" })).toBeVisible();
+    await capture(report, "report-reading", true);
+    await page.goBack(); await expect(report.locator("#namedReportDraft option:checked")).toHaveText("Workshop review");
+    await page.goBack(); await expect(reader).toBeVisible(); await settled(page);
+    await expect(reader.getByRole("button", { name: /In draft: Workshop review/ })).toBeVisible();
     await expect(page.locator("#toolFilter")).toHaveValue("workiq-fetch");
     await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
     const afterReading = await page.locator("#contextSidebarBody").evaluate(node => ({
         top: node.scrollTop, height: node.scrollHeight, viewport: node.clientHeight,
     }));
-    assert.ok(Math.abs(afterReading.top - top) <= 1, JSON.stringify({ beforeReading, afterReading }));
+    assert.ok(Math.abs(afterReading.top - top) <= 1, JSON.stringify({ top, afterReading }));
     await expect(page.locator('[data-tool-call-id="activity-3"]')).toContainText("PRIVATE_CALL_ARGUMENT_3");
     await page.locator("#closeContextSidebar").click(); await settled(page);
-    await expect(page.locator(".request-card-open")).toBeFocused();
+    await expect(origin).toBeFocused();
     assert.equal(page.url(), originURL);
-    assert.ok(Math.abs((await page.locator(".request-card-open").boundingBox()).y - origin) <= 1);
+    assert.ok(Math.abs((await origin.boundingBox()).y - originY) <= 1);
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
 });
