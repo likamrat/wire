@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { fixture, privateFixture, revealStoredRefresh, revealAnalyzeRecords } from "./helpers.mjs";
+import { fixture, privateFixture, revealStoredRefresh, revealAnalyzeRecords, navigateMain } from "./helpers.mjs";
 
 async function screenshot(page, name) {
     const proof = process.env.WIRE_RECOVERY_PROOF_DIR;
@@ -13,34 +13,30 @@ async function screenshot(page, name) {
     await mkdir(proof, { recursive: true });
     await page.screenshot({ path: path.join(proof, name + ".png") });
 }
-async function expectSavedMetrics(page) {
-    const details = page.locator("#homeInsights .assessment-saved-details");
-    await expect(details).toBeVisible();
-    if (!await details.evaluate(node => node.open)) await details.locator(":scope > summary").click();
-    await expect(details.locator(".assessment-grid")).toBeVisible();
-    await expect(details.locator('[data-quality-dimension="accuracy"]')).toContainText("0 of 1 request assessed");
-    await expect(page.locator("#homeFindings [data-finding-kind=execution]")).toContainText("Reported outcomes: 1 recorded call succeeded");
-    await expect(page.locator("#homeFindings [data-finding-kind=execution-gap]")).toContainText("completion event reference not retained");
-    await expect(details.locator(".assessment-execution")).toContainText("Completion-evidence checks");
-    const counts = details.locator('[data-observation="recorded-tool-success"] .assessment-count-strip');
-    await expect(counts.locator("div").filter({ hasText: "Succeeded" }).locator("dd")).toHaveText("0");
-    await expect(counts.locator("div").filter({ hasText: "No qualified outcome" }).locator("dd")).toHaveText("1");
-    const apiStatus = details.locator('[data-observation="returned-status-2xx"]');
-    await expect(apiStatus).toContainText("1 HTTP 2xx");
-    await expect(apiStatus).not.toContainText("completion event reference");
-    const proof = process.env.WIRE_RECOVERY_PROOF_DIR;
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await page.locator("#homeFindings").screenshot({ path: path.join(proof, "legacy-reported-outcomes.png") });
-        await details.locator(".assessment-execution").screenshot({ path: path.join(proof, "legacy-qualified-checks.png") });
-    }
+async function expectSavedMetrics(page, { completionRecorded = false } = {}) {
+    if (!await page.locator("#activityView").isVisible()) await navigateMain(page, "analyze");
+    const summary = page.locator("#activityListSummary");
+    await expect(summary).toHaveText("1 interaction · 1 matching tool call");
+    const outcome = page.locator("#activityList .request-card-open");
+    await expect(outcome).toHaveText("1 tool call completed");
+    await outcome.click();
+    const call = page.locator('#requestContent [data-tool-call-id="test-call-connection-recovery"]');
+    await expect(call).toContainText("Returned entry 1: Tool-reported HTTP 200");
+    await call.locator(".reader-call-toggle").click();
+    await expect(call.locator(".technical-detail")).toContainText(completionRecorded
+        ? "The source recorded a successful tool completion."
+        : "The tool reported success, but no completion event reference was saved.");
+    await screenshot(page, "recovered-call-evidence");
+    await page.locator("#closeContextSidebar").click();
+    await expect(outcome).toBeFocused();
 }
-async function setup(t) {
+async function setup(t, { completionRecorded = false } = {}) {
     const record = fixture("connection-recovery");
     record.userPrompt.sourceEventId = "invented-prompt";
     record.toolCalls[0].startedAt = "2026-09-30T12:00:00Z";
     record.toolCalls[0].completedAt = "2026-09-30T12:00:01Z";
     record.toolCalls[0].durationMs = 1000;
+    if (completionRecorded) record.toolCalls[0].completionEventId = "invented-completion";
     const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, [record]);
     let runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
@@ -56,7 +52,7 @@ async function setup(t) {
         for (const action of cleanup) await action();
         assert.deepEqual(errors, []);
         assert.ok(requests.every(request => [
-            "/api/snapshot", "/api/collection/status", "/api/session", "/api/assessment/overview", "/api/evaluation/automatic/summary",
+            "/api/snapshot", "/api/collection/status", "/api/session", "/api/assessment/detail", "/api/assessment/overview", "/api/evaluation/automatic/summary",
         ].includes(new URL(request.url()).pathname)), "Recovery never collects, configures, exports or mutates.");
     });
     return {
@@ -92,7 +88,8 @@ test("stopped runtime keeps only the accepted view and returns through read-only
     await (await revealStoredRefresh(page)).click();
     await expect(page.locator("#freshStatus")).toHaveText("Stored view not updated.");
     await expect(page.locator("#freshContextMessage")).toContainText("Previous view kept.");
-    await expect(page.locator("#periodResult")).toHaveText("Previous results: " + initial);
+    await expect(page.locator("#freshContextMessage")).toBeVisible();
+    await expect(page.locator("#periodResult")).toHaveText(initial);
     await expect(page.locator("#collectionNoticeText")).toContainText("Local runtime unavailable");
     await expect(page.locator("#collectionNotice")).toBeHidden();
     await expect(page.locator("#message")).toBeHidden();
@@ -108,7 +105,7 @@ test("stopped runtime keeps only the accepted view and returns through read-only
 });
 
 test("no accepted snapshot means no claim of retained evidence; retry loads the actual view", { timeout: 15000 }, async t => {
-    const { page, url } = await setup(t);
+    const { page, url } = await setup(t, { completionRecorded: true });
     await page.route("**/api/snapshot", route => route.abort("connectionrefused"));
     await page.goto(url);
     await expect(page.locator("#message")).toContainText("activity could not load");
@@ -118,7 +115,7 @@ test("no accepted snapshot means no claim of retained evidence; retry loads the 
     await page.unroute("**/api/snapshot");
     await page.locator("#message").getByRole("button", { name: "Retry" }).click();
     await expect(page.locator("#workspace")).toBeVisible();
-    await expectSavedMetrics(page);
+    await expectSavedMetrics(page, { completionRecorded: true });
 });
 
 test("snapshot loading stays pending and a collector read failure does not claim the runtime is stopped", { timeout: 20000 }, async t => {
