@@ -1472,7 +1472,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 previous.assessment?.basis?.[key] !== next.assessment?.basis?.[key])) return false;
         // Compare the two authorized snapshots in place. Reading state holds offsets, never a prompt copy.
         const a = previous.scenarios.find(row => row.scenarioId === id), b = next.scenarios.find(row => row.scenarioId === id);
-        return a?.userPrompt && b?.userPrompt && a.sourceSessionId === b.sourceSessionId
+        return a?.userPrompt && b?.userPrompt
+            && typeof a.sourceSessionId === "string" && a.sourceSessionId.trim() !== "" && a.sourceSessionId === b.sourceSessionId
+            && typeof a.userPrompt.sourceEventId === "string" && a.userPrompt.sourceEventId.trim() !== ""
             && a.userPrompt.sourceEventId === b.userPrompt.sourceEventId && a.userPrompt.sourceTimestamp === b.userPrompt.sourceTimestamp
             && a.userPrompt.status === b.userPrompt.status && a.userPrompt.text === b.userPrompt.text;
     }
