@@ -398,7 +398,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
-                : partial ? "No matches in the items WIRE could search. " + coverage : labels["no-match"]
+                : partial ? (nativeSearch?.active() ? coverage : "No matches in the items WIRE could search. " + coverage) : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.");
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
         replaceSearchText($("wireSearchCoverage"), partial && current.matches.total ? coverage : "");
