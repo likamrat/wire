@@ -70,6 +70,12 @@ test("Dates keeps Custom dates beside the same presets across all four workspace
         for (const [view, triggerId] of [["reports","reportDeskDates"],["trends","trendsPeriod"],["compare","comparisonDates"],["analyze","dateFilter-control"]]) {
             await navigateMain(page, view);
             if (view === "analyze") await openAnalyzeFilters(page);
+            if (view === "compare") {
+                await page.getByRole("button", { name: "Timeline", exact: true }).click();
+                const timeline = page.locator(".comparison-timeline");
+                await expect(timeline).toContainText("Zero means");
+                await expect(timeline).not.toContainText(/civil dates in|America\/Los_Angeles|time zone/i);
+            }
             const trigger = page.locator("#" + triggerId);
             await expect(trigger).toHaveAccessibleName(/^Dates: .+/);
             const accepted = await trigger.innerText(), url = page.url();

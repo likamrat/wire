@@ -43,6 +43,9 @@ itself. Choosing dates does not preview, delete or reread anything. Single-day
 recovery shows **Day** instead of a second, unused field. Settings defaults
 choose a rolling duration; saved report dates describe a frozen report. Neither
 is a date picker.
+Routine controls, tooltips and chart captions inherit the Regional time zone
+without repeating it. Show the zone when choosing it, explaining a fallback
+or mismatch, or reviewing exact operation bounds or saved report metadata.
 
 | Surface | Reading and navigation role |
 | --- | --- |

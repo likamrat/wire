@@ -114,7 +114,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     guideIndex.setAttribute("aria-label","Chart guide topics"); guide.append(guideIndex,guideArticle);
     const guideTopics = [
         ["Compare measures", "Do two measures change on the same days?", "Choose any two readings. One graph is available when their units and counting groups match. For call volume and duration, read the same date on aligned charts with separate scales.", "In four interactions, two can have an error and three can use a tool. That is 50% and 75%; it does not tell you which interactions overlap."],
-        ["Dates and evidence", "Which calls contributed to this point?", "Select a date, then open its matching calls. The reader shows the full interaction, which may contain other calls.", "Calls are dated by their recorded start in your display time zone. An undated call cannot be placed on the graph."],
+        ["Dates and evidence", "Which calls contributed to this point?", "Select a date, then open its matching calls. The reader shows the full interaction, which may contain other calls.", "Calls are dated by their recorded start. An undated call cannot be placed on the graph."],
         ["Filters and series", "Why did the total change?", "Filters change which calls are counted. Showing or hiding a line changes only the drawing.", "No matching calls gives a count of zero. With nothing to divide by, a percentage is unavailable."],
         ...order.map(id => [families[id].label, {
             problems:"How many interactions had a recorded error?",rhythm:"How many calls started each day?",tools:"How widely or often was a tool used?",

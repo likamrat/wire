@@ -5342,7 +5342,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? (workspaceState.scope.bucket === "week" ? "Weekly totals start Monday."
                     : workspaceState.scope.bucket === "month" ? "Monthly totals start on the first."
                     : "Each date shows one calendar day's records.")
-                    + " Dates use the display time zone. Undated records are excluded; zero means no qualifying retained records, not proof no activity occurred."
+                    + " Undated records are excluded; zero means no qualifying retained records, not proof no activity occurred."
                 : chartType === "workload" && layer === "tool" ? help.charts.activityCategory : help.charts[chartType]],
             ["Evidence limits", explanations[layer]],
         ]) reading.append(el("dt", "", label), el("dd", "", text));
@@ -7586,7 +7586,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }).join("; ");
                 setText(group.querySelector(".report-period-count"), `${count(period.rowIds.length)} matching ${results.unit(periodReport.value.definitions.layer, period.rowIds.length)}${microsoft ? `; ${microsoft}` : ""}`);
             }
-            setText(pairedSummary.querySelector(".report-period-authors"), `Authors: ${authorship.selectionLabel(activeAuthors)}. Dates use ${time.label(periodReport.timeContext)}.`);
+            setText(pairedSummary.querySelector(".report-period-authors"), `Authors: ${authorship.selectionLabel(activeAuthors)}.`);
             pairedSummary.querySelector("button").disabled = exportWriting || reportJourney.snapshot().saveUnconfirmed;
             $("reportPopulationNote").textContent = "Copy text does not combine the measured activity in the two periods.";
             $("scopeSummary").textContent = "Matching records remain separate for Period A and Period B. Recorded timing keeps its original interaction scope.";
@@ -7789,8 +7789,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (workspaceState.route.bundle) { renderSavedReader(); return; }
         initializeReportChoices();
         captureReading();
-        $("reportTimeContext").textContent = `Report dates use ${time.label(workspaceState.scope.timeContext)} (${workspaceState.scope.timeContext.locale}). `
-            + (periodReport?.value.nativePeriods ? "Qualified Microsoft activity dates are included; raw source identifiers stay withheld." : "Source event timestamps stay withheld.");
+        $("reportTimeContext").textContent = periodReport?.value.nativePeriods
+            ? "Qualified Microsoft activity dates are included; raw source identifiers stay withheld." : "Source event timestamps stay withheld.";
         renderReportPicker();
         retireSavedList();
         if (workspaceState.route.view !== "reports" || $("savedReportsPanel").hidden) {

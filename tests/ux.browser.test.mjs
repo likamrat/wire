@@ -427,7 +427,9 @@ test("integrated app has readable aligned type and exact-copy controls in both t
         await page.keyboard.press("Escape");
         await page.locator("#meaning > summary").focus();
         await page.keyboard.press("Enter");
-        assert.match(await page.locator("#chartReadingNotes").innerText(), /Weeks start Monday.*display time zone/);
+        const readingNotes = await page.locator("#chartReadingNotes").innerText();
+        assert.match(readingNotes, /weeks? (?:totals )?start Monday|weekly totals start Monday/i);
+        assert.doesNotMatch(readingNotes, /display time zone/i);
         assert.equal(await page.locator("#countTable th").nth(1).evaluate((node) => getComputedStyle(node).textAlign), "center");
         await page.locator("#meaning > summary").click();
         await navigateMain(page, "activity");

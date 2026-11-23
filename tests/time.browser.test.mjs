@@ -123,7 +123,7 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
             await page.locator("nav [data-nav=reports]").click();
             await reportContents(page);
             await page.locator("#scopeDetails > summary").click();
-            assert.match(await page.locator("#reportTimeContext").innerText(), /America\/Los_Angeles.*en-GB/);
+            assert.equal(await page.locator("#reportTimeContext").innerText(), "Source event timestamps stay withheld.");
             await page.locator("#scopeDetails > summary").click();
             for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
                 await page.setViewportSize({ width, height: 950 });

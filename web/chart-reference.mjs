@@ -230,7 +230,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (topic === "outcomes") return context.layer === "tool"
             ? "Each call counts once. A completed call means the tool finished, not that the answer was correct or that every returned item succeeded."
             : help.layers[context.layer];
-        if (topic === "time") return context.layer === "tool" ? "Each bar counts calls by their recorded start in your display time zone. Undated calls stay in the period total, outside the bars."
+        if (topic === "time") return context.layer === "tool" ? "Each bar counts calls by their recorded start. Undated calls stay in the period total, outside the bars."
             : "Each interval counts qualifying dated records. A record without a usable date cannot be placed on the timeline.";
         if (topic === "services") return "A service is unidentified when the record does not name an app or WIRE cannot map the saved target to one. Each service’s share uses all matching records, and one record can name several services.";
         if (topic === "models") return "Each interaction counts once for each recorded response model. Interactions without a recorded model name stay in the denominator.";
@@ -402,7 +402,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                     : "Dated and undated counts are unavailable."));
                 host.append(section);
             }
-            list.append(definition("Dates and grouping", "Individual calendar days by default. Long timelines page through 90 intervals; Timeline dates below the chart reaches earlier or later dates without changing the selected-period totals. Explicit weekly or monthly views keep their intervals; weeks start Monday. Dates use the display time zone."));
+            list.append(definition("Dates and grouping", "Individual calendar days by default. Long timelines page through 90 intervals; Timeline dates below the chart reaches earlier or later dates without changing the selected-period totals. Explicit weekly or monthly views keep their intervals; weeks start Monday."));
         } else if (topic === "models") {
             if (showFacts()) {
                 const section = group(), data = context.model.models;

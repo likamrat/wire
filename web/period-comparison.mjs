@@ -656,7 +656,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const rows = chartRows(value), maximum = Math.max(0, ...Object.values(rows).flat().map(row => row.count));
         node.append(el("p", `${value.definitions.layer === "tool" ? "Call" : "Record"} count scale: 0 to ${number(maximum)}. Shares use each period's total.`, "compare-caption comparison-scale"));
         if (timeline) {
-            node.append(el("p", `Actual civil dates in ${value.timeContext.timeZone}. ${value.periods.baseline.analytics.timeSeries.gapMeaning}`, "compare-caption"));
+            node.append(el("p", value.periods.baseline.analytics.timeSeries.gapMeaning, "compare-caption"));
             for (const [index, [key, side]] of sides.entries()) {
                 const line = el("div", undefined, "comparison-timeline-series");
                 line.append(el("h4", names[index].label));
