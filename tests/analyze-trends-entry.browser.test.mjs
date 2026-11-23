@@ -96,8 +96,11 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     const { page, url, reads } = await pageEntryFixture(t);
     await page.goto(url + "/"); await ready(page);
     await expect(page.locator("#dateFilter")).toHaveValue("30");
+    await selectActivityOption(page, "dateFilter", "custom");
     await expect(page.locator("#fromFilter")).toHaveValue("2026-09-02");
     await expect(page.locator("#toFilter")).toHaveValue("2026-10-01");
+    await page.locator("#analyzeDates").getByRole("button", {name: "Cancel", exact: true}).click();
+    await page.locator("#closeAnalyzeFilters").click();
     await page.locator("nav [data-nav=trends]").click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
     await expect(page).toHaveURL(url + "/trends?measure=services");

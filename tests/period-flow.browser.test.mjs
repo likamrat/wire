@@ -2,16 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, selectActivityOption, navigateMain, chooseTheme, revealStoredRefresh } from "./helpers.mjs";
-import { reportContents } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme } from "./helpers.mjs";
 
 const proofs = process.env.WORKIQ_SETTINGS_PROOFS;
 async function ready(page) { await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false"); }
-async function setup(t) {
+async function setup(t, { undated = false } = {}) {
     const records = ["2026-07-01", "2026-08-20", "2026-09-20", "2026-10-01"].map((day, index) => {
         const record = fixture("period-" + index);
         record.sourceSessionId = index === 3 ? "session-b" : "session-a";
@@ -20,6 +19,11 @@ async function setup(t) {
         record.userPrompt.sourceTimestamp = record.capturedAt = record.toolCalls[0].startedAt = day + "T12:00:00Z";
         return record;
     });
+    if (undated) {
+        const row = fixture("undated-call");
+        row.capturedAt = "2026-06-02T12:00:00Z";
+        records.push(row);
+    }
     const { context } = await privateFixture(t, records);
     await replaceEvidence(context, () => ({ records, importCoverage: {
         since: "2026-09-05T07:00:00Z", until: "2026-10-05T12:00:00Z",
@@ -29,6 +33,7 @@ async function setup(t) {
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1200, height: 960 }, timezoneId: "America/Los_Angeles", reducedMotion: "reduce" });
     page.setDefaultTimeout(10000);
+    await page.clock.setFixedTime(new Date("2026-10-06T15:00:00Z"));
     const errors = [], posts = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (request.method() === "POST") posts.push({ path: new URL(request.url()).pathname, input: request.postDataJSON() }); });
@@ -48,9 +53,12 @@ test("all retained dates labels the actual evidence, not the last collector wind
     const { page, runtime, posts } = await setup(t);
     await page.goto(runtime.url); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
-    await page.locator("#meaning > summary").click();
-    assert.equal(await page.locator("#periodLabel").innerText(), "Jul 1 - Oct 1");
-    assert.equal(await page.locator("#dateFilter-control").innerText(), "All dates");
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#dateFilter-control")).toHaveAccessibleName("Dates: All dates");
+    await expect(page.locator("#periodResult")).toHaveText("4 Work IQ tool calls (All dates)");
+    await period(page, "2026-07-01", "2026-07-01");
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await expect(page.locator("#periodCoverageText")).toContainText("outside the dates WIRE last checked");
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
 });
 
@@ -59,6 +67,7 @@ test("a restored date route without a range label is custom, never all retained 
     await page.goto(runtime.url + "#home?from=2026-09-01&to=2026-10-05"); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "2");
     assert.equal(await page.locator("#dateFilter").inputValue(), "custom");
+    await selectActivityOption(page,"dateFilter","custom");
     assert.equal(await page.locator("#dateFields").isVisible(), true);
     assert.equal(await page.locator("#fromFilter").inputValue(), "2026-09-01");
     await page.reload(); await ready(page);
@@ -83,15 +92,16 @@ test("a newer submitted period supersedes the pending read", async t => {
     await page.locator("#applyDates").click();
     await requested;
     assert.equal(await page.locator("#activityCount").innerText(), "4");
+    await selectActivityOption(page,"dateFilter","custom");
     await page.locator("#fromFilter").fill("2026-10-01");
     await page.locator("#toFilter").fill("2026-10-01");
     await page.locator("#applyDates").click();
     await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-    release();
-    await page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.from === "2026-09-01");
+    const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.from === "2026-09-01");
+    release(); await (await late).finished();
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-    assert.equal(await page.locator("#fromFilter").inputValue(), "2026-10-01");
+    await expect(page.locator("#dateFilter-control")).toHaveAccessibleName("Dates: Oct 1, 2026");
 });
 
 test("date apply has a real pending indicator and preserves edits made while its read finishes", async t => {
@@ -111,6 +121,7 @@ test("date apply has a real pending indicator and preserves edits made while its
     await requested;
     assert.equal(await page.locator("#periodResult").getAttribute("data-pending"), "true");
     assert.equal(await page.locator("#periodResult .pending-indicator").getAttribute("aria-hidden"), "true");
+    await selectActivityOption(page,"dateFilter","custom");
     await page.locator("#fromFilter").fill("2026-10-01");
     release(); await ready(page);
     assert.equal(await page.locator("#fromFilter").inputValue(), "2026-10-01", "Unsubmitted edits must not be overwritten by the older applied read");
@@ -126,9 +137,7 @@ test("custom date validation and pending layout remain usable in both themes at 
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(runtime.url); await ready(page); await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await page.locator("#dateFilter-control").focus();
-        await page.keyboard.press("c"); await page.keyboard.press("Enter");
-        if (await page.locator("#dateFilter").inputValue() !== "custom") await selectActivityOption(page, "dateFilter", "custom");
+        await selectActivityOption(page, "dateFilter", "custom");
         const count = posts.length;
         assert.equal(await page.locator("#applyDates").isDisabled(), true);
         assert.match(await page.locator("#analyzeCalendarStatus").innerText(), /Choose a start date/);
@@ -142,7 +151,16 @@ test("custom date validation and pending layout remain usable in both themes at 
         const metrics = await page.evaluate(() => {
             const controls = [...document.querySelectorAll("#dateFields input,#dateFields button")].filter(node => node.checkVisibility()).map(node => {
                 const rect = node.getBoundingClientRect();
-                return { id: node.id, width: rect.width, height: rect.height, left: rect.left, right: rect.right, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, fontSize: parseFloat(getComputedStyle(node).fontSize) };
+                let intrinsicWidth = 0;
+                if (node.matches("input[type=date]")) {
+                    const probe = node.cloneNode();
+                    probe.removeAttribute("id");
+                    probe.style.cssText = "position:fixed;visibility:hidden;inline-size:max-content;min-inline-size:0;max-inline-size:none";
+                    node.after(probe);
+                    intrinsicWidth = probe.getBoundingClientRect().width;
+                    probe.remove();
+                }
+                return { id: node.id, width: rect.width, height: rect.height, left: rect.left, right: rect.right, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, intrinsicWidth };
             });
             return { overflow: document.documentElement.scrollWidth - innerWidth, controls, errorVisible: document.querySelector("#dateError").checkVisibility() };
         });
@@ -151,7 +169,7 @@ test("custom date validation and pending layout remain usable in both themes at 
             assert.ok(control.height >= 44, JSON.stringify(control));
             assert.ok(control.left >= 0 && control.right <= width + 1, JSON.stringify(control));
             assert.ok(control.scrollWidth <= control.clientWidth + 1, JSON.stringify(control));
-            if (["fromFilter", "toFilter"].includes(control.id)) assert.ok(control.width >= control.fontSize * 10, "Native segmented date and calendar need text-scaled room: " + JSON.stringify(control));
+            assert.ok(control.width >= control.intrinsicWidth, "The native date segments and picker must fit: " + JSON.stringify(control));
         }
         measurements.push({ theme, width, rootTextScale: scale, ...metrics });
         if (directory) {
@@ -164,7 +182,7 @@ test("custom date validation and pending layout remain usable in both themes at 
         assert.equal(await page.locator("#activityCount").innerText(), "1");
         assert.equal(await page.locator("#dateError").isVisible(), false);
         assert.equal(await page.locator("#fromFilter").getAttribute("aria-invalid"), "false");
-        assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
+        await expect(page.locator("#dateFilter-control")).toBeFocused();
         assert.doesNotMatch(await page.locator("#dateFields").innerText(), /both dates included|inclusive dates/i);
     }
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
@@ -175,11 +193,6 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     const { page, runtime, context, posts } = await setup(t);
     const before = await loadBoardState(context), original = await readFile(path.join(context.dataDir, "private-evidence", before.evidenceFile));
     await page.goto(runtime.url); await ready(page);
-    assert.equal(await page.locator("#moreFilters").count(), 0);
-    assert.equal(await page.locator("#serviceFilter-control").isVisible(), true);
-    assert.equal(await page.locator("#pageAction").isVisible(), true);
-    assert.equal(await page.locator("#exploreLink").isVisible(), false);
-    assert.equal(await page.locator("#reportSelectionBar").isVisible(), false);
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-07-29");
     await page.locator("#toFilter").fill("2026-10-05");
@@ -197,56 +210,60 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     await page.locator("#applyDates").focus(); await page.keyboard.press("Enter");
     assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
     assert.equal(await page.locator("#periodResult").getAttribute("aria-busy"), "true");
-    assert.equal(await page.locator("#pageAction").getAttribute("aria-disabled"), "true");
     release(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)");
-    assert.match(await page.locator("#periodHint").innerText(), /^Jul 29, 2026 - Oct 5, 2026/);
-    assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
+    await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Jul 29–Oct 5, 2026)");
+    await expect(page.locator("#dateFilter-control")).toBeFocused();
     assert.equal(await page.locator("#periodCoverageText").innerText(), "The last history check covered only part of this period.");
-    assert.match(await page.locator("#homeInsightScope").textContent(), /3 request groups.*full retained interaction/);
-    assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)").length), 1);
-    await page.locator("#pageAction").click(); await ready(page);
-    assert.equal(await page.locator(".session-group").count(), 2);
+    await expect(page.locator("#activityListSummary")).toHaveText("3 interactions · 3 matching tool calls");
+    await expect(page.locator("#periodHint")).toHaveText("3 interactions; 2 Copilot chats");
+    assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls (Jul 29–Oct 5, 2026)").length), 1);
     assert.match(page.url(), /from=2026-07-29.*to=2026-10-05/);
-    await page.locator('[data-session-id="session-a"] .session-drill').click(); await ready(page);
-    assert.equal(await page.locator("#pageTitle").innerText(), "Calendar follow-up");
-    assert.match(await page.locator("#periodResult").innerText(), /This Copilot chat: 2 request groups with 2 Work IQ tool calls/);
+    await selectActivityOption(page, "chatFilter", "session-a"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("2");
     await period(page, "2026-09-01", "2026-10-05");
-    assert.match(page.url(), /session=session-a/);
-    assert.match(await page.locator("#periodResult").innerText(), /This Copilot chat: 1 request group with 1 Work IQ tool call/);
-    assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
+    await expect(page.locator("#chatFilter")).toHaveValue("session-a");
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await closeAnalyzeFilters(page);
     await page.locator("#createSessionReport").click();
-    assert.match(await page.locator("#previewSelectionSummary").innerText(), /3 request groups included/, "Session reports keep the deliberate whole-session contract, not only this date slice");
-    await reportContents(page);
-    await page.locator("#exportBtn").click();
-    await page.locator(".attestation input[data-review-control]").waitFor();
-    assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
+    await expect(page.locator("#reportDeskDates")).toHaveAccessibleName("Dates: All retained dates");
+    assert.equal(posts.some(row => row.path === "/api/preview"), false);
+    const response = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.getByRole("button", { name: "Prepare preview", exact: true }).click();
+    const res = await response, preview = await res.json();
+    assert.ok(res.ok(), preview.error);
+    assert.deepEqual(posts.find(row => row.path === "/api/preview").input.selection.scenarioIds.sort(), ["period-0", "period-1", "period-2"]);
+    assert.equal(preview.records.length, 3);
+    await expect(page.locator("#reportStage3")).toBeVisible();
+    assert.equal(preview.privacy.reviewerConfirmed, false);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.deepEqual(await readFile(path.join(context.dataDir, "private-evidence", before.evidenceFile)), original);
     assert.ok(!posts.some(row => ["/api/export", "/api/privacy-review", "/api/record", "/api/move", "/api/collection/configure", "/api/collection/now"].includes(row.path)));
 });
 
 test("empty periods, failed and late snapshots do not claim coverage or a successful apply", { timeout: 60000 }, async t => {
-    const { page, runtime, posts } = await setup(t);
+    const { page, runtime, posts } = await setup(t, { undated: true });
     await page.goto(runtime.url); await ready(page);
-    await period(page, "2027-01-01", "2027-01-03");
-    assert.equal(await page.locator("#periodResult").innerText(), "0 Work IQ tool calls (Jan 1 - Jan 3, 2027)");
-    assert.match(await page.locator("#periodHint").innerText(), /not proof that no activity occurred/);
-    assert.equal(await page.locator("#pageAction").isVisible(), false);
-    await navigateMain(page, "activity"); await ready(page);
-    assert.equal(await page.locator(".session-group").count(), 0, "Unmatched inventory sessions do not contradict period counts");
+    await expect(page.locator("#activityCount")).toHaveText("5");
+    // This interval contains the undated call's capture, not a call start.
+    await period(page, "2026-06-01", "2026-06-03");
+    await expect(page.locator("#periodResult")).toHaveText("0 Work IQ tool calls (Jun 1–3, 2026)");
+    await expect(page.locator("#activityListSummary")).toHaveText("0 interactions · 0 matching tool calls");
+    await expect(page.locator("#periodCoverageText")).toContainText("outside the dates WIRE last checked");
     await page.locator("#resetView").click(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
+    await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (All dates)");
     await page.route("**/api/snapshot", async route => {
         if (route.request().postDataJSON().filters.from === "2026-09-01") return route.fulfill({ status: 500, json: { error: "Synthetic delayed read failed." } });
         await route.continue();
     });
     await period(page, "2026-09-01", "2026-10-05");
     assert.match(await page.locator("#message").innerText(), /Synthetic delayed read failed/);
-    assert.equal(await page.locator("#periodResult").innerText(), "Previous results: 4 Work IQ tool calls (All dates)");
-    assert.equal(await page.locator("#pageAction").isVisible(), false);
+    await expect(page.locator("#periodResult")).toHaveText("Previous results: 5 Work IQ tool calls (All dates)");
+    await expect(page.locator("#periodResult a")).toHaveCount(0);
     await page.unroute("**/api/snapshot");
-    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await closeAnalyzeFilters(page);
+    await page.locator("#analyzeRefresh").click(); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (All dates)");
+    await selectActivityOption(page,"dateFilter","custom");
     let release;
     const hold = new Promise(resolve => { release = resolve; });
     await page.route("**/api/snapshot", async route => {
@@ -257,39 +274,38 @@ test("empty periods, failed and late snapshots do not claim coverage or a succes
     await page.locator("#toFilter").fill("2026-10-05");
     await page.locator("#applyDates").click();
     await page.locator("#resetView").click(); await ready(page);
-    release();
-    await page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.from === "2026-08-01");
-    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
-    assert.match(await page.locator("#periodHint").innerText(), /^All retained dates/);
-    assert.equal(page.url().endsWith("#home"), true);
+    const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.from === "2026-08-01");
+    release(); await (await late).finished();
+    await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (All dates)");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
 });
 
-test("one filter row keeps refinements/routes and fits both themes", { timeout: 90000 }, async t => {
+test("Filters keeps service and date restrictions through history settings and Back in both themes", { timeout: 90000 }, async t => {
     const { page, runtime, posts } = await setup(t);
     if (proofs) await mkdir(proofs, { recursive: true });
     const measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
         await page.setViewportSize({ width, height: 960 });
         await page.goto(runtime.url); await ready(page); await chooseTheme(page, theme);
-        const controls = await page.locator(".period-controls button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length);
-        assert.equal(controls, 14, "Seven selectors and seven help buttons are visible without expansion");
+        await openAnalyzeFilters(page);
+        await expect(page.locator("#dateFilter-control")).toBeVisible();
         await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
-        assert.match(await page.locator("#filterChips").innerText(), /Service: Calendar/);
+        await expect(page.locator("#filterChips")).toContainText("Calendar");
         await period(page, "2026-07-29", "2026-10-05");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
-        measurements.push({ theme, width, filterControls: controls });
+        measurements.push({ theme, width, panel: await page.locator("#analyzeFilterDialog").boundingBox() });
         if (proofs) {
             await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
             await page.screenshot({ path: path.join(proofs, `period-flow-${theme}-${width}.png`), fullPage: true });
         }
         await page.locator("#periodHistoryLink").click();
-        assert.match(page.url(), /#settings.*section=connection.*setting=history-window/);
+        await expect(page).toHaveURL(/\/settings\?.*section=connection.*setting=history-window/);
         assert.equal(await page.locator("#collectionWindow-control").evaluate(node => node === document.activeElement), true);
         await page.goBack(); await ready(page);
-        assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)");
-        assert.equal(await page.locator("#moreFilters").count(), 0);
+        await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Jul 29–Oct 5, 2026)");
+        await expect(page.locator("#serviceFilter")).toHaveValue("Calendar");
     }
     if (proofs) await writeFile(path.join(proofs, "period-controls.json"), JSON.stringify(measurements, null, 2));
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/assessment/consent"].includes(row.path)),
