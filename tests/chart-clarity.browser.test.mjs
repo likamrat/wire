@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
@@ -34,48 +34,43 @@ test("small counts are directly readable and reports are route-first without dup
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     t.after(async () => { await browser.close(); await runtime.close(); assert.deepEqual(records, before); assert.deepEqual(errors, []); });
-    await page.goto(runtime.url);
+    await page.goto(runtime.url + "?bucket=week");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
     await chooseTheme(page, "dark");
     assert.deepEqual(await page.locator(".dimensional-count").allTextContents(), counts.map(n => `${n} calls`));
-    assert.equal(await page.locator("#tableDisclosure").evaluate(node => node.open), false);
-    await page.locator("#tableDisclosure>summary").click();
-    assert.deepEqual(await page.locator("#countTable tbody tr").nth(3).locator("td").allTextContents(), ["Sep 21, 2026", "121", "105", "15", "1"]);
-    assert.equal(await page.locator("#chartReadingNotes").isVisible(), false, "Detailed reading help stays closed, not above the exact numbers");
-    assert.equal(await page.locator("#coverageNotice").isVisible(), false);
-    assert.equal(await page.locator("#activityView #coverageNotice").count(), 1, "Current gaps belong beside the population");
-    await page.locator("#coverage>summary").click();
-    assert.match(await page.locator("#coverageBody").innerText(), /interactions? from/);
-    await page.locator("#coverage>summary").click();
+    await page.locator("#openChartReference").click();
+    await page.getByRole("button", { name: "When calls happened" }).click();
+    await page.getByRole("button", { name: "See exact numbers" }).click();
+    const exact = page.locator("#chartReferenceExact table tbody tr");
+    await expect(exact).toHaveCount(6);
+    await expect(exact.nth(3).locator("td")).toHaveText(["Sep 21, 2026", "121", "105", "15", "1"]);
+    await expect(exact.first().locator("td").last().getByRole("link")).toHaveCount(0);
+    await page.locator("#analyzeResultsSection").click();
     for (const [category, count] of [["success", 193], ["failure", 25], ["unknown", 1]]) {
         assert.equal(await page.locator(`[data-percentage-card=outcomes] [data-category=${category}].percentage-legend-row`).getAttribute("data-count"), String(count));
     }
     const proof = process.env.WORKIQ_CLARITY_PROOFS;
     if (proof) {
         await mkdir(proof, { recursive: true });
-        for (const [name, selector] of [["columns", ".chart-panel"], ["percentages", ".percentage-section"], ["navigation", "#sidebar"]]) {
+        for (const [name, selector] of [["columns", ".time-chart"], ["percentages", "[data-percentage-card=outcomes]"], ["navigation", "#sidebar"]]) {
             await page.locator(selector).screenshot({ path: path.join(proof, `${name}.png`) });
         }
     }
     assert.equal(await page.locator("#sidebarExport,#mobileExportSlot").count(), 0, "Reports navigation replaces the redundant global export");
     assert.equal(await page.locator("#chart .ux-help,.dimensional-small-results,.percentage-associations,.percentage-locator").count(), 0);
-    for (const selector of [".dimensional-cap-clear", ".dimensional-side", ".dimensional-glint", ".percentage-ring"]) {
-        assert.ok(await page.locator(selector).count() > 0, `Approved glass presentation includes ${selector}`);
-    }
-    assert.equal(await page.locator(".dimensional-reflection,.percentage-ground").count(), 0);
-    assert.equal(await page.locator("#chart :is(.time-column,.dimensional-count)[data-ux-tooltip],.percentage-legend [data-ux-tooltip]").count(), 0);
-    assert.ok(await page.locator("#chart [data-segment][data-ux-tooltip]").count() > 0, "Actual outcome surfaces retain user-requested inspection");
+    await expect(page.locator(".time-column").last()).toHaveAccessibleName(/2 tool completed \(100%\).*0 tool failed \(0%\)/);
     const tiny = page.locator(".dimensional-count").last();
     assert.ok((await tiny.boundingBox()).height >= 44, "The visible two-call control is an honest, usable target");
     await tiny.tap();
     await page.locator("#activityView").waitFor({ state: "visible" });
-    assert.match(new URL(page.url()).hash, /from=2026-10-05/);
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 2 matching tool calls");
+    assert.equal(new URL(page.url()).searchParams.get("from"), "2026-10-05");
+    assert.equal(new URL(page.url()).searchParams.get("to"), "2026-10-11");
     await page.goBack();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await navigateMain(page, "reports");
     await page.locator("#reportsView").waitFor({ state: "visible" });
-    assert.equal(await page.locator('[name=reportScope][value=selected]').isChecked(), true);
-    assert.equal(await page.locator("#exportBtn").isDisabled(), true);
-    assert.equal(await page.locator("#coverageNotice").isVisible(), false);
+    await expect(page.getByRole("button", { name: "Prepare preview", exact: true })).toBeVisible();
+    await expect(page.locator("#reportPreviewDrawer")).toBeHidden();
 });

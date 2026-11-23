@@ -13,7 +13,7 @@ import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { createTimeContext } from "../lib/time.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
@@ -26,7 +26,7 @@ async function captureNative(page, name) {
     await capture.detach();
     await writeFile(path.join(proof, name + ".png"), Buffer.from(image.data, "base64"));
 }
-async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZoom = false, observeQualification = false, observeGuide = false } = {}) {
+async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZoom = false, observeGuide = false } = {}) {
     let removeFixture;
     const { context } = await privateFixture({ after: cleanup => { removeFixture = cleanup; } }, records);
     const before = await loadBoardState(context), errors = [], denied = [], requests = [];
@@ -66,25 +66,14 @@ async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZo
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
-            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/session",
+            "/api/evaluation/automatic/summary", "/api/session",
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
         requests.push(url.pathname);
-        if ((observeQualification || observeGuide) && url.pathname === "/") {
+        if (observeGuide && url.pathname === "/") {
             const response = await route.fetch();
-            let html = await response.text();
-            if (observeQualification) {
-                const binding = "readContext: readChartReferenceContext, renderExact:";
-                assert.equal(html.split(binding).length, 2);
-                html = html.replace(binding, `readContext: () => {
-                    const value = readChartReferenceContext(); window.observedGuideQualification = value; return value;
-                }, renderExact:`);
-            }
-            if (observeGuide) {
-                const binding = "const chartReferenceUI =";
-                assert.equal(html.split(binding).length, 2);
-                html = html.replace(binding, `${binding} window.nativeGuide =`);
-            }
-            return route.fulfill({ response, body: html });
+            const html = await response.text(), binding = "const chartReferenceUI =";
+            assert.equal(html.split(binding).length, 2);
+            return route.fulfill({ response, body: html.replace(binding, `${binding} window.nativeGuide =`) });
         }
         return route.continue();
     });
@@ -280,77 +269,17 @@ for (const topic of ["time", "categories"]) test(`native ${topic} exact rows kee
     }
 });
 
-async function compare(page, { emptyB = false } = {}) {
-    if (!await page.locator("#comparePeriods").isVisible()) await page.locator("#navigationToggle").click();
-    await page.locator("#comparePeriods").click();
-    for (const [id, value] of [
-        ["comparisonAFrom", "2026-03-07"], ["comparisonATo", "2026-03-07"],
-        ["comparisonBFrom", emptyB ? "2026-03-11" : "2026-03-08"], ["comparisonBTo", emptyB ? "2026-03-11" : "2026-03-09"],
-    ]) await page.locator("#" + id).fill(value);
-    await page.locator("#applyPeriodComparison").click();
-    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await page.locator("#comparisonRecordsB").click();
-}
-
-for (const reducedMotion of ["reduce", "no-preference"]) test(`native paired guide restores the selected B exact target (${reducedMotion})`, { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t, periodFixture().records, { reducedMotion });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await compare(page);
-    const target = page.locator('[data-period-side="later"] tbody tr').last().locator("a");
-    const position = () => page.evaluate(() => ({
-        y: scrollY, focus: document.activeElement.id, inner: document.getElementById("comparison-record-scroll-B")?.scrollTop ?? null,
-    }));
-    for (const action of ["close", "back"]) {
-        await target.scrollIntoViewIfNeeded(); await target.focus();
-        const before = await position();
-        assert.ok(before.inner > 0, "Return to a real late B record, not the initial roster viewport");
-        await target.click();
-        await expect(page.locator("#contextSidebar")).toBeVisible();
-        if (action === "close") await page.locator("#closeContextSidebar").click(); else await page.goBack();
-        await expect(page.locator("#contextSidebar")).not.toBeVisible();
-        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-        await expect.poll(position).toEqual(before);
-        const reads = requests.filter(path => path === "/api/period-comparison").length;
-        await page.locator("#openChartReference").click();
-        await expect(page.locator("#chartReferenceData table")).toHaveCount(0);
-        await page.locator("#chartReferenceShowData").click();
-        await expect(page.locator("#meaning")).not.toBeVisible();
-        await expect.poll(position).toEqual(before);
-        await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
-        assert.equal(requests.filter(path => path === "/api/period-comparison").length, reads);
-    }
-});
-
-test("native paired guide delegates empty B and rejects a changed pair without ordinary fallback", { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t, periodFixture().records);
-    await compare(page, { emptyB: true });
-    const reads = requests.filter(path => path === "/api/period-comparison").length;
-    await page.locator("#openChartReference").click();
-    await captureNative(page, "comparison-guide");
-    await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#comparisonRecordsB")).toBeFocused();
-    await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("0 calls across 0 interactions");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("No matching activity was found in this period.");
-    await page.locator("#openChartReference").click();
-    const retiredAction = await page.locator("#chartReferenceShowData").elementHandle();
-    await page.locator("#comparisonATo").evaluate(node => {
-        node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    assert.equal(await page.locator("#chartReferenceShowData").evaluate(node => node.disabled), true,
-        "The pair's null publication withdraws the open guide action immediately");
-    await retiredAction.evaluate(node => node.click());
-    await retiredAction.dispose();
-    await expect(page.locator("#meaning")).toBeVisible();
-    await expect(page.locator("#chartReferenceNotice")).toContainText("Comparison records are not available");
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveCount(0);
-    await expect(page.locator("#chartReferenceData table")).toHaveCount(0);
-    assert.equal(requests.filter(path => path === "/api/period-comparison").length, reads);
-});
-
 test("an accepted empty native view has qualified zero counts rather than stale prior values", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, pathRecords(), { hash: "#analyze?range=custom&from=2027-01-01&to=2027-01-02" });
+    const { page } = await setup(t, pathRecords());
+    await exact(page, "outcomes");
+    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("32");
+    await page.locator("#analyzeResultsSection").click();
+    await selectActivityOption(page, "dateFilter", "custom");
+    await page.locator("#fromFilter").fill("2025-01-01");
+    await page.locator("#toFilter").fill("2025-01-02");
+    await page.locator("#applyDates").click();
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    await closeAnalyzeFilters(page);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").click();
@@ -378,51 +307,6 @@ test("an accepted empty native view has qualified zero counts rather than stale 
         await page.locator("#chartReferenceSource>summary").press("Enter");
         await expect(page.locator("#layerFilter")).toHaveValue(layer);
         await page.locator("#analyzeResultsSection").click();
-    }
-});
-
-for (const change of ["reading", "pair"]) test(`the native guide return yields to newer ${change} before its frame commits`, { timeout: 30000 }, async t => {
-    const { page } = await setup(t, periodFixture().records);
-    await compare(page);
-    await page.locator("#openChartReference").click();
-    await page.evaluate(() => {
-        window.originalGuideFrame = window.requestAnimationFrame;
-        window.originalGuideCancel = window.cancelAnimationFrame;
-        window.heldGuideFrames = new Map();
-        let id = 1000000000;
-        window.requestAnimationFrame = callback => { window.heldGuideFrames.set(++id, callback); return id; };
-        window.cancelAnimationFrame = id => {
-            if (!window.heldGuideFrames.delete(id)) window.originalGuideCancel(id);
-        };
-    });
-    try {
-        await page.locator("#chartReferenceShowData").click();
-        assert.ok(await page.evaluate(() => window.heldGuideFrames.size > 0));
-        if (change === "reading") {
-            await page.locator('.primary-navigation [data-nav="analyze"]').focus();
-            await page.evaluate(() => addEventListener("wheel", event => { window.guideWheelObserved = event.isTrusted; }, { once: true }));
-            await page.mouse.wheel(0, 80);
-            await page.waitForFunction(() => window.guideWheelObserved, { }, { polling: 10 });
-        } else await page.locator("#comparisonATo").evaluate(node => {
-            node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-        await page.evaluate(() => new Promise(resolve => window.originalGuideFrame(() => window.originalGuideFrame(resolve))));
-        const before = await page.evaluate(() => ({ y: scrollY, focus: document.activeElement.id }));
-        await page.evaluate(() => {
-            window.requestAnimationFrame = window.originalGuideFrame;
-            window.cancelAnimationFrame = window.originalGuideCancel;
-            for (const callback of window.heldGuideFrames.values()) requestAnimationFrame(callback);
-            window.heldGuideFrames.clear();
-        });
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        if (change === "reading") assert.deepEqual(await page.evaluate(() => ({ y: scrollY, focus: document.activeElement.id })), before);
-        else await expect(page.locator("#message")).toContainText("The comparison records are no longer current");
-        await expect(page.locator("#meaning")).not.toBeVisible();
-    } finally {
-        await page.evaluate(() => {
-            window.requestAnimationFrame = window.originalGuideFrame;
-            window.cancelAnimationFrame = window.originalGuideCancel;
-        });
     }
 });
 
@@ -743,19 +627,24 @@ for (const theme of ["light", "dark"]) test(`Guide explains scope and coverage w
     assert.equal(requests.filter(path => path === "/api/snapshot").length, 1);
 });
 
-for (const paired of [false, true]) for (const nativeZoom of [false, true]) test(`native guide qualification parts preserve complete accepted facts and clear null (${paired ? "paired" : "ordinary"}${nativeZoom ? ", native zoom" : ""})`, {
+for (const nativeZoom of [false, true]) test(`Analyze Guide and exact numbers keep complete filter qualifications until reset${nativeZoom ? " (native zoom)" : ""}`, {
     timeout: 60000, skip: nativeZoom && !process.env.WIRE_CHART_NATIVE_ZOOM,
 }, async t => {
     const project = "Invented guide project \u00b7 original punctuation; long cross-team investigation: evidence and delivery";
     const { records } = periodFixture();
     for (const record of records) { record.projectId = "guide-parts-project"; record.project = project; }
-    const { page } = await setup(t, records, { observeQualification: true, nativeZoom });
+    const { page, snapshot: initial } = await setup(t, records, { nativeZoom });
+    const parts = ["Service: Files", "Includes missing-service context: 2 known matches; 0 context-only",
+        "Outcome: Tool failed", `Project: ${project}`], qualification = parts.join("; ");
     for (const [id, value] of [["serviceAssociationFilter", "Files"], ["outcomeFilter", ["failure"]], ["projectFilter", "guide-parts-project"]]) {
+        const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
         await selectActivityOption(page, id, value);
+        const accepted = await (await read).json();
+        if (id === "projectFilter") assert.deepEqual(accepted.analytics.rows.map(row => row.id).sort(),
+            ['call:["period-chat-0","period-call-0"]', 'call:["period-chat-2","period-call-2"]']);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     }
     await closeAnalyzeFilters(page);
-    if (paired) await compare(page);
     const measurements = [];
     const sizes = nativeZoom ? [[await page.evaluate(() => innerWidth), "native200"]] : [[1440, 1], [768, 1], [390, 2]];
     for (const theme of ["light", "dark"]) for (const [width, scale] of sizes) {
@@ -765,16 +654,12 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
         }
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").press("Enter");
-        if (!paired) await topicChoice(page, "outcomes");
-        const context = await page.evaluate(() => window.observedGuideQualification);
-        assert.equal(context.available, true);
-        assert.ok(context.qualificationParts.includes(`Copilot project: ${project}`));
+        await topicChoice(page, "outcomes");
         const caption = page.locator("#chartReferenceGuide .chart-reference-qualification").first();
-        await expect(caption.locator(".analyze-scope-part")).toHaveCount(context.qualificationParts.length);
-        assert.deepEqual(await caption.locator(".analyze-scope-part").evaluateAll(parts => parts.map(part => part.firstChild.textContent)),
-            context.qualificationParts);
-        assert.equal(await caption.textContent(), context.qualification);
-        assert.match(await caption.ariaSnapshot(), /Copilot project: Invented guide project/);
+        const partTexts = host => host.locator(".analyze-scope-part").evaluateAll(nodes => nodes.map(part => part.firstChild.textContent));
+        assert.deepEqual(await partTexts(caption), parts);
+        await expect(caption).toHaveText(qualification);
+        assert.match(await caption.ariaSnapshot(), /Project: Invented guide project/);
         const geometry = await caption.evaluate(node => {
             const bounds = node.getBoundingClientRect();
             return { overflow: document.documentElement.scrollWidth - innerWidth, clipped: node.scrollWidth - node.clientWidth,
@@ -786,10 +671,10 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
         });
         assert.ok(geometry.overflow <= 1 && geometry.clipped <= 1);
         assert.ok(geometry.lines.every(line => line.left >= geometry.bounds.left - 1 && line.right <= geometry.bounds.right + 1));
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}-top`);
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}-top`);
         await caption.click({ position: { x: 6, y: 6 } });
         await caption.scrollIntoViewIfNeeded();
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}`);
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}`);
         const lastFact = caption.locator(".analyze-scope-part").last();
         await lastFact.scrollIntoViewIfNeeded();
         const fullyReadable = await lastFact.evaluate(node => {
@@ -798,39 +683,35 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
             return [...range.getClientRects()].every(line => line.left >= bounds.left && line.right <= bounds.right
                 && line.top >= bounds.top && line.bottom <= bounds.bottom);
         });
-        assert.equal(fullyReadable, true, "The complete retained name remains readable through native dialog scrolling");
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}-end`);
-        measurements.push({ theme, width, scale, parts: context.qualificationParts, text: context.qualification, geometry });
-        if (!paired) {
-            await page.locator("#chartReferenceShowData").click();
-            const exact = page.locator("#chartReferenceQualification .chart-reference-scope");
-            assert.equal(await exact.textContent(), context.qualification);
-            assert.deepEqual(await exact.locator(".analyze-scope-part").evaluateAll(parts => parts.map(part => part.firstChild.textContent)),
-                context.qualificationParts);
-            await page.locator("#chartReferenceBack").click();
-            await expect(page.locator("#chartReferenceShowData")).toBeFocused();
-        }
+        assert.equal(fullyReadable, true, "The complete retained name remains readable in the in-page Guide");
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}-end`);
+        measurements.push({ theme, width, scale, parts, text: qualification, geometry });
+        await page.locator("#chartReferenceShowData").press("Enter");
+        const exact = page.locator("#chartReferenceQualification .chart-reference-scope");
+        await expect(exact).toHaveText(qualification);
+        assert.deepEqual(await partTexts(exact), parts);
+        await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("2");
+        await page.locator("#chartReferenceBack").press("Enter");
+        await expect(page.locator("#chartReferenceShowData")).toBeFocused();
         await page.locator("#meaning").press("Escape");
+        await expect(page.locator("#openChartReference")).toBeFocused();
     }
     if (!nativeZoom) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     }
-    if (!paired) {
-        await expect(page.locator("#comparePeriods:visible, #navigationToggle:visible").first()).toBeVisible();
-        if (!await page.locator("#comparePeriods").isVisible()) await page.locator("#navigationToggle").click();
-        await page.locator("#comparePeriods").click();
-    }
-    await page.locator("#openChartReference").click();
-    if (paired) await page.locator("#comparisonATo").evaluate(node => {
-        node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveCount(0);
+    await openAnalyzeFilters(page);
+    const reset = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
+    await page.locator("#resetView").press("Enter");
+    const restored = await (await reset).json();
+    assert.deepEqual(restored.analytics.rows.map(row => row.id).sort(), initial.analytics.rows.map(row => row.id).sort());
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await closeAnalyzeFilters(page);
+    await page.locator("#openChartReference").press("Enter");
+    await expect(page.locator("#chartReferenceGuide .analyze-scope-part")).toHaveCount(0);
+    await expect(page.locator("#chartReferenceGuide")).not.toContainText(project);
+    await page.locator("#chartReferenceShowData").press("Enter");
     await expect(page.locator("#chartReferenceQualification")).toHaveText("");
-    const unavailable = await page.evaluate(() => window.observedGuideQualification);
-    assert.equal(unavailable.available, false);
-    assert.deepEqual(unavailable.qualificationParts, []);
-    assert.equal(unavailable.qualification, "");
-    await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
-    if (proof) await writeFile(path.join(proof, `${paired ? "paired" : "ordinary"}-qualification${nativeZoom ? "-zoom200" : ""}.json`), JSON.stringify(measurements, null, 2));
+    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText(String(initial.analytics.rows.length));
+    if (proof) await writeFile(path.join(proof, `ordinary-qualification${nativeZoom ? "-zoom200" : ""}.json`), JSON.stringify(measurements, null, 2));
 });
