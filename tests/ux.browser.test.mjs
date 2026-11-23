@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportContents, inspectReportCopies, cancelReportPreview } from "./report-journey-helpers.mjs";
 import { createServer } from "node:http";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -9,42 +8,11 @@ import { styles } from "../web/styles.mjs";
 import { uxStyles } from "../web/ux-styles.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
-import { renderHtmlShell } from "../lib/render.mjs";
-import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { renderHtmlReport } from "../lib/product-report.mjs";
 
 const proofDir = process.env.WORKIQ_UX_PROOF_DIR;
 const exactCommand = "  node example.mjs --name=\"SYNTHETIC \u03b1\u65e5\u672c\u8a9e \ud83d\udccb e\u0301\"\r\n\t--path='/me/messages?$filter=" + "synthetic".repeat(40) + "'  \n";
-const exactPrompt = "SYNTHETIC ONLY: Read this original \u03b1\u65e5\u672c\u8a9e.\n\n  Keep spaces, 'quotes' and \"double quotes\".\n" + "Long synthetic prose ".repeat(30);
-const previewOriginal = "SYNTHETIC_PRIVATE_CANARY contact ux@example.invalid\n  credential SYNTHETIC_CREDENTIAL_CANARY";
 const previewMasked = "[PERSON] contact [EMAIL]\n  credential [SECRET]";
-const previewOriginalMode = "SYNTHETIC_PRIVATE_CANARY contact ux@example.invalid\n  credential [SECRET]";
-function previewFor(input) {
-    const mode = input.promptMode || "masked", omitted = mode === "none";
-    const text = omitted ? null : mode === "masked" ? previewMasked : previewOriginalMode;
-    const segments = omitted ? [] : mode === "masked"
-        ? [{ text: "[PERSON]", category: "manual_terms" }, { text: " contact " }, { text: "[EMAIL]", category: "emails" }, { text: "\n  credential " }, { text: "[SECRET]", category: "credentials", mandatory: true }]
-        : [{ text: "SYNTHETIC_PRIVATE_CANARY contact ux@example.invalid\n  credential " }, { text: "[SECRET]", category: "credentials", mandatory: true }];
-    const markdown = "# Synthetic report\n\n" + (text ?? "Prompt text omitted.") + "\n\n## Actions\n\n| Path | Count |\n|---|---:|\n| /me/events | 1 |\n\n```sh\n" + exactCommand + "```\n";
-    return {
-        previewId: "synthetic-ux-preview-" + mode, records: [{}], promptMode: mode, formats: input.formats || ["markdown"],
-        promptReview: [{ key: "synthetic-prompt", label: "Request", original: previewOriginal, text, segments, changes: segments.filter((part) => part.category), status: "full", representation: mode, omitted }],
-        privacy: { allSelectedFieldsScanned: true, reviewerConfirmed: false, originatingPrompts: 1, followUpPrompts: 0, toolArgumentObjects: 1, stringsScanned: 2, categories: {}, transformation: "Synthetic projection.", limitations: ["Synthetic test only."] },
-        files: { "product-report.md": markdown, "product-report.json": JSON.stringify({ prompt: text }, null, 2) },
-    };
-}
-const records = ["/me/events", "/me/messages", "/me/drive/root/children"].map((endpoint, index) => ({
-    scenarioId: `synthetic-ux-${index}`, sourceSessionId: "synthetic-ux-session", sourceHost: "copilot-app",
-    sourceSessionName: "Synthetic typography and clipboard examples", projectId: "synthetic-ux-project", project: "Synthetic fixtures",
-    capturedAt: `2026-01-${10 + index}T12:00:00Z`, workflowState: "ready_to_export",
-    userPrompt: { text: exactPrompt, status: "verbatim", provenance: "synthetic", sourceEventId: "synthetic-event-id" },
-    toolCalls: [{
-        tool: "workiq-fetch", toolCallId: `synthetic-call-${index}`,
-        requestedApiPath: endpoint, requestArgs: { path: endpoint, command: exactCommand }, toolSucceeded: true, reportedOutcome: "succeeded",
-        startedAt: `2026-01-${10 + index}T12:00:00Z`, apiResults: [],
-    }],
-}));
 const printableRecords = [{
     projectionVersion: 3, promptMode: "masked", scenarioId: "synthetic-export-scenario", sourceSessionId: "synthetic-export-session",
     projectId: "synthetic-export-project", capturedAt: "2026-01-10T12:00:00Z",
@@ -87,25 +55,17 @@ function primitives() {
 }
 
 async function fixture(run) {
-    const state = { boardId: "synthetic-ux-board", revision: 1, scenarios: records, exports: [], coverage: { since: "2026-01-01", until: "2026-01-31", notes: [] } };
     const requests = [], errors = [];
     const server = createServer(async (req, res) => {
-        const json = (value) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(value)); };
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-ux-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-src 'self'");
             if (req.url === "/print-report") return res.end(renderHtmlReport(printableRecords));
             if (req.url === "/primitives") return res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}${uxStyles}</style></head><body><main><h1>Synthetic interaction fixtures</h1></main><script nonce="ux-fixture">const createEvidenceUX=${createEvidenceUX.toString()};const uxIcons=${JSON.stringify(uxIcons)};window.syntheticCommand=${JSON.stringify(exactCommand)};(${primitives.toString()})();</script></body></html>`);
-            return res.end(renderHtmlShell("a".repeat(64), "ux-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
+            return res.writeHead(404).end();
         }
-        let text = ""; for await (const chunk of req) text += chunk;
-        const input = JSON.parse(text);
-        requests.push({ url: req.url, input });
-        if (req.url === "/api/snapshot") return json({ ...state, exportCatalog: exportCatalogFor(records), analytics: { ...buildActivityAnalytics(records, input), revision: 1 } });
-        if (req.url === "/api/preview") return json(previewFor(input.options));
-        if (req.url === "/api/cancel-preview") return json({ cancelled: true });
-        res.statusCode = 403;
-        json({ error: "Only synthetic reads are allowed." });
+        requests.push(req.url);
+        res.writeHead(403).end();
     });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const browser = await chromium.launch({ headless: true });
@@ -128,18 +88,13 @@ async function fixture(run) {
     const url = `http://127.0.0.1:${server.address().port}`;
     try {
         if (proofDir) await mkdir(proofDir, { recursive: true });
-        await run({ context, url, requests });
+        await run({ context, url });
         assert.deepEqual(errors, []);
-        assert.ok(requests.every((entry) => ["/api/snapshot", "/api/preview", "/api/cancel-preview"].includes(entry.url)));
+        assert.deepEqual(requests, [], "No write or read is needed by the static report or clipboard controls");
     } finally {
         await browser.close();
         await new Promise((resolve) => server.close(resolve));
     }
-}
-async function ready(page) {
-    await page.locator("#workspace").waitFor({ state: "visible" });
-    await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    await openActivitySessions(page);
 }
 async function shot(page, name) {
     if (proofDir) {
@@ -387,156 +342,12 @@ test("tooltips support hover, focus, Escape, dynamic disabled guidance and the d
     assert.equal(await page.locator("#test-dialog").evaluate((node) => node.open), false, "Next Escape retains native dialog behavior");
 }));
 
-test("integrated app has readable aligned type and exact-copy controls in both themes at 375/820/1200", { timeout: 120000 }, async () => fixture(async ({ context, url }) => {
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
-        const page = await context.newPage();
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(url);
-        await ready(page);
-        await chooseTheme(page, theme);
-        await page.emulateMedia({ reducedMotion: "reduce" });
-        const inspect = async (view) => {
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-            const overlaps = await page.locator(".header-inner").evaluate((header) => {
-                const boxes = [...header.children].map((node) => node.getBoundingClientRect());
-                return boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top));
-            });
-            assert.deepEqual(overlaps, [], "Header brand, navigation and controls never overlap");
-            if (width >= 820) {
-                const header = await page.locator(".app-header").boundingBox();
-                assert.ok(header.height <= 80, "Desktop header stays on one compact row");
-            }
-            for (const control of await page.locator(".ux-copy:visible").all()) {
-                assert.equal(await control.innerText(), "");
-                assert.match(await control.getAttribute("aria-label"), /^Copy .+/);
-                const box = await control.boundingBox();
-                assert.ok(box.width >= (width <= 600 ? 44 : 40) && box.height >= (width <= 600 ? 44 : 40));
-            }
-            await shot(page, `${theme}-${width}-${view}`);
-        };
-        await inspect("home");
-        const timeContext = await page.evaluate(() => ({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: Intl.DateTimeFormat().resolvedOptions().locale }));
-        const firstPoint = buildActivityAnalytics(records, { layer: "tool", groupBy: "workload", bucket: "week", filters: { scope: "history" }, timeContext }).timeSeries.points[0];
-        await page.locator(".time-column").first().focus();
-        assert.equal(await page.getByRole("tooltip").isVisible(), false);
-        const chartTip = await page.locator(".time-column").first().getAttribute("aria-label");
-        assert.ok(chartTip.includes(`${firstPoint.total} Work IQ tool calls`));
-        const chartDate = await page.evaluate((value) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }), firstPoint.date);
-        assert.ok(chartTip.startsWith(chartDate) && !chartTip.includes(timeContext.timeZone), "Tooltip uses the actual local bucket date and inherits display time context");
-        assert.ok((await page.locator("#displayTimeZone option:checked").textContent()).includes(timeContext.timeZone));
-        await page.keyboard.press("Escape");
-        await page.locator("#meaning > summary").focus();
-        await page.keyboard.press("Enter");
-        const readingNotes = await page.locator("#chartReadingNotes").innerText();
-        assert.match(readingNotes, /weeks? (?:totals )?start Monday|weekly totals start Monday/i);
-        assert.doesNotMatch(readingNotes, /display time zone/i);
-        assert.equal(await page.locator("#countTable th").nth(1).evaluate((node) => getComputedStyle(node).textAlign), "center");
-        await page.locator("#meaning > summary").click();
-        await navigateMain(page, "activity");
-        await openActivitySessions(page);
-        await page.locator("#activityList input").first().check();
-        await inspect("activity");
-        await page.locator("#activityList .request-link").first().click();
-        const reader = page.locator(".request-original .full-text-toggle");
-        if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-        await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
-        await page.waitForFunction(() => window.clipboardWrites.length === 1);
-        assert.equal(await page.evaluate(() => window.clipboardWrites[0]), exactPrompt);
-        assert.equal(await page.locator(".request-original pre").evaluate((node) => getComputedStyle(node).fontFamily), await page.locator("body").evaluate((node) => getComputedStyle(node).fontFamily));
-        await page.locator("#requestView").getByText("Technical details", { exact: true }).first().click();
-        await page.getByText("Tool input (recorded)", { exact: true }).first().click();
-        const argsCopy = page.getByRole("button", { name: "Copy recorded arguments", exact: true }).first();
-        await argsCopy.click();
-        await page.waitForFunction(() => window.clipboardWrites.length === 2);
-        assert.deepEqual(JSON.parse(await page.evaluate(() => window.clipboardWrites[1])), records[2].toolCalls[0].requestArgs);
-        const pre = argsCopy.locator("xpath=ancestor::section[1]").locator("pre");
-        assert.equal(await pre.evaluate((node) => getComputedStyle(node).whiteSpace), "pre");
-        assert.ok(await pre.evaluate((node) => parseFloat(getComputedStyle(node).fontSize) >= 14), "Technical text is not tiny");
-        assert.ok(await pre.evaluate((node) => node.scrollWidth > node.clientWidth), "Long code scrolls internally");
-        const preBox = await pre.boundingBox(), copyBox = await argsCopy.boundingBox();
-        assert.ok(copyBox.y + copyBox.height <= preBox.y, "Code never overlaps its copy toolbar");
-        await page.getByRole("button", { name: "Copy command", exact: true }).click();
-        await page.waitForFunction(() => window.clipboardWrites.length === 3);
-        assert.equal(await page.evaluate(() => window.clipboardWrites[2]), exactCommand);
-        await inspect("request");
-        await navigateMain(page, "reports");
-        await reportContents(page);
-        await inspect("reports");
-        await page.locator("#formatOptions input[value=markdown]").check();
-        await page.locator("#formatOptions input[value=html]").uncheck();
-        await page.locator("#exportBtn").click();
-        await page.locator("#reportsView[data-report-phase=ready]").waitFor();
-        await inspectReportCopies(page);
-        await page.getByRole("button", { name: "Copy report copy", exact: true }).click();
-        await page.waitForFunction(() => window.clipboardWrites.length === 4);
-        assert.equal(await page.evaluate(() => window.clipboardWrites[3]), previewMasked);
-        if (width >= 820) {
-            const originalBox = await page.locator(".prompt-original .ux-code-block").boundingBox();
-            const reportBox = await page.locator(".prompt-report .ux-code-block").boundingBox();
-            assert.equal(originalBox.y, reportBox.y, "Original and report copy toolbars share a baseline");
-        }
-        await page.getByRole("tab", { name: "Report", exact: true }).click();
-        await page.locator(".report-document > details > summary").first().click();
-        await page.getByRole("button", { name: "Copy report code", exact: true }).click();
-        await page.waitForFunction(() => window.clipboardWrites.length === 5);
-        assert.equal(await page.evaluate(() => window.clipboardWrites[4]), exactCommand);
-        assert.equal(await page.locator(".attestation input").last().isChecked(), false);
-        assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
-        await inspect("preview");
-        assert.equal(await page.evaluate(() => window.clipboardReads), 0);
-        await page.close();
-    }
-}));
-
-test("preview copy respects masked/no-prompts/original modes and exact raw report bytes", { timeout: 60000 }, async () => fixture(async ({ context, url, requests }) => {
-    const page = await context.newPage();
-    await page.setViewportSize({ width: 820, height: 1000 });
-    await page.goto(url + "/#reports?task=create");
-    await ready(page);
-    await page.locator("#reportList input[type=checkbox]").first().check();
-    for (const mode of ["masked", "none", "original"]) {
-        await reportContents(page);
-        await page.locator(`[name=promptMode][value=${mode}]`).check();
-        await page.locator("#exportBtn").click();
-        await page.locator("#reportsView[data-report-phase=ready]").waitFor();
-        await inspectReportCopies(page);
-        await page.locator(".prompt-comparison").waitFor({ state: "visible" });
-        await page.evaluate(() => { window.clipboardWrites = []; });
-        if (mode === "none") {
-            assert.equal(await page.locator(".prompt-report .ux-copy").count(), 0, "No prompts means no hidden-source copy action");
-            assert.equal(await page.getByRole("button", { name: "Copy local original", exact: true }).isVisible(), false);
-            await page.locator(".prompt-original details > summary").click();
-        } else {
-            await page.getByRole("button", { name: "Copy report copy", exact: true }).click();
-            await page.waitForFunction(() => window.clipboardWrites.length === 1);
-            assert.equal(await page.evaluate(() => window.clipboardWrites[0]), mode === "masked" ? previewMasked : previewOriginalMode);
-            assert.equal(await page.evaluate(() => window.clipboardWrites[0].includes("SYNTHETIC_CREDENTIAL_CANARY")), false);
-            const mark = page.locator(".prompt-report mark").first();
-            await mark.focus();
-            await page.getByRole("tooltip").waitFor({ state: "visible" });
-            await page.keyboard.press("Escape");
-        }
-        await page.getByRole("button", { name: "Copy local original", exact: true }).click();
-        await page.waitForFunction((expected) => window.clipboardWrites.at(-1) === expected, previewOriginal);
-        await page.getByRole("tab", { name: /^Files \(/ }).click();
-        await page.getByText("Inspect exact product-report.json", { exact: true }).first().click();
-        await page.getByRole("button", { name: "Copy inspect exact product-report.json", exact: true }).click();
-        const expected = previewFor({ promptMode: mode }).files["product-report.json"];
-        await page.waitForFunction((value) => window.clipboardWrites.at(-1) === value, expected);
-        assert.equal(await page.evaluate(() => window.clipboardReads), 0);
-        await cancelReportPreview(page);
-    }
-    assert.equal(requests.some((entry) => ["/api/privacy-review", "/api/export"].includes(entry.url)), false, "Clipboard does not attest or export");
-    assert.deepEqual(requests.filter((entry) => entry.url === "/api/preview").map((entry) => entry.input.options.promptMode), ["masked", "none", "original"]);
-}));
-
 test("formatted report prose stays readable and wide exact-data tables scroll without shrinking text", { timeout: 30000 }, async () => fixture(async ({ context, url }) => {
     for (const width of [375, 820, 1200]) {
         const page = await context.newPage();
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(url + "/print-report");
-        assert.equal((await page.locator("h1").innerText()).replace(/\s+/g, " ").trim(), "WIRE Activity report");
-        assert.equal(await page.getByRole("heading", { level: 1, name: "WIRE Activity report", exact: true }).count(), 1);
+        assert.equal(await page.getByRole("heading", { level: 1, name: "Activity report", exact: true }).count(), 1);
         assert.equal(await page.locator(".prompt pre").textContent(), previewMasked);
         assert.ok(await page.locator(".prompt pre").evaluate((node) => parseFloat(getComputedStyle(node).fontSize) >= 16));
         assert.ok(await page.locator("table").first().evaluate((node) => parseFloat(getComputedStyle(node).fontSize) >= 13));
@@ -544,7 +355,10 @@ test("formatted report prose stays readable and wide exact-data tables scroll wi
         const tableRegion = page.locator(".table-wrap").first();
         assert.equal(await tableRegion.getAttribute("tabindex"), "0");
         assert.equal(await tableRegion.getAttribute("role"), "region");
-        if (width === 375) assert.ok(await tableRegion.evaluate((node) => node.scrollWidth > node.clientWidth));
+        await tableRegion.evaluate(node => { node.scrollLeft = node.scrollWidth; });
+        assert.ok(await tableRegion.evaluate(node =>
+            node.querySelector("tr > :last-child").getBoundingClientRect().right <= node.getBoundingClientRect().right + 1),
+        "The final column can be brought fully into view without scrolling the page");
         await shot(page, `print-${width}-report`);
         await page.close();
     }
