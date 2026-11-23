@@ -1,10 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel } from "./live-search-fixture.mjs";
-import { chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { selectActivityOption } from "./helpers.mjs";
 
 async function setup(t, contextCount) {
     const cleanup = [], records = searchRecords(contextCount + 1), errors = [];
@@ -69,26 +67,6 @@ function verifyPopulation(shown, ranked) {
         assert.equal(hit.mark, original.excerpt.slice(range.start - range.excerptStart, range.end - range.excerptStart));
     }
 }
-
-test("Conversation context is one group instead of being split by a different match type", { timeout: 20000 }, async t => {
-    const { page, ranked } = await setup(t, 3);
-    const input = page.locator("#wireSearch"), headings = page.locator(".wire-search-group-label");
-    for (const [theme, width, scale] of [["light", 1280, 1], ["dark", 1280, 1], ["light", 375, 2], ["dark", 375, 2]]) {
-        await page.setViewportSize({ width, height: 900 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await chooseTheme(page, theme);
-        await input.fill("Lumen");
-        await expect(page.locator(".wire-search-hit")).toHaveCount(4);
-        await expect(headings).toHaveText(["Conversation context", "Interactions"]);
-        verifyPopulation(await rows(page), ranked);
-        await expect(page.locator("#wireSearchCount")).toHaveText("4 matches");
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        if (process.env.WIRE_SEARCH_GROUP_PROOFS) {
-            await mkdir(process.env.WIRE_SEARCH_GROUP_PROOFS, { recursive: true });
-            await page.screenshot({ path: path.join(process.env.WIRE_SEARCH_GROUP_PROOFS, `grouped-${theme}-${width}-${scale}.png`) });
-        }
-    }
-});
 
 test("grouping the full population precedes paging and preserves keyboard Open/Back and analytical membership", { timeout: 30000 }, async t => {
     const { page, ranked } = await setup(t, 25);

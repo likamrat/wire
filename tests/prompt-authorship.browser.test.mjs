@@ -59,7 +59,10 @@ test("collecting the original event repairs an unverified human prompt without r
     await inspectOriginal(page, human, "Author unverified");
     await expect(page.locator(".request-original .reader-state")).toHaveText("Recorded sender details could not be verified");
     await app.runtime().collector.collectNow();
-    await page.reload(); await ready(page);
+    await page.goto(app.runtime().url); await ready(page);
+    if (!await row.count()) await nextPage(page);
+    await expect(row.locator(".request-card-author")).toHaveText("Human prompt");
+    await row.locator(".request-card-open").press("Enter");
     await inspectOriginal(page, human, "Human prompt");
     await expect(page.locator(".request-original .reader-state")).toHaveCount(0);
     await page.locator("#closeContextSidebar").click();

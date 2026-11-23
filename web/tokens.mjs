@@ -157,6 +157,7 @@ export const screenTokens = `${tokens}
  --navigation-paper:var(--paper);--context-paper:var(--paper);--floating-paper:var(--paper);
  --state-transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease;
 }
+:root[data-switching-appearance] {--state-transition:none;--control-paint-transition:none}
 :root {${screenLight}}
 @media(prefers-color-scheme:dark) {
  :root:not([data-evidence-theme]) {${screenDark}}

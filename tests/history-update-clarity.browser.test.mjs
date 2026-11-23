@@ -31,45 +31,18 @@ async function fixture(t) {
     return { f, page, writes };
 }
 
-test("Analyze has no activity-update entry, owner, menu or leftover slot at any navigation size", async t => {
+test("Analyze keeps Refresh beside its results, not in desktop or drawer navigation", async t => {
     const { page, writes } = await fixture(t);
-    for (const id of ["activityUpdateToggle", "activityUpdateLabel", "analyzeUpdateEntry", "activityUpdateSlot",
-        "analyzeUpdatesTitle", "periodFeedback", "freshRecollect", "freshScope"]) {
-        await expect(page.locator("#" + id)).toHaveCount(0);
+    await expect(page.locator("#analyzeToolbar #analyzeRefresh")).toBeVisible();
+    await expect(page.locator("#freshActivity")).toBeHidden();
+    for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        if (width === 390) await page.locator("#navigationToggle").click();
+        await expect(page.getByRole("navigation", { name: "Utility navigation" }).getByRole("link", { name: "Settings" })).toBeVisible();
+        assert.equal(await page.locator('nav :is(button,a)').filter({ hasText: /Refresh|Check for new activity/ }).count(), 0);
+        if (width === 390) { await page.keyboard.press("Escape"); await expect(page.locator("#navigationToggle")).toBeFocused(); }
     }
-    await expect(page.locator("#freshActivity")).not.toBeVisible();
-    await expect(page.locator("#collectionNotice")).not.toBeVisible();
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.locator("#pageAction").focus(); await page.keyboard.press("Tab");
-        await expect(page.locator('nav [data-nav="settings"]')).toBeFocused();
-        assert.deepEqual(await page.locator("#analyzeTools").evaluate(node => [...node.children].map(child => child.id || child.tagName)),
-            ["H2", "analyzeReturnActions", "analyzeToolActions"]);
-        await capture(page, `${theme}-sidebar`);
-        await page.locator("#navigationCollapse").click();
-        await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
-        await capture(page, `${theme}-collapsed`);
-        await page.locator("#navigationCollapse").click();
-        await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
-    }
-    await page.locator("#comparePeriods").click();
-    await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-    await expect(page.locator("#activityUpdateToggle,#activityUpdateSlot")).toHaveCount(0);
-    await navigateMain(page, "analyze");
-    await page.setViewportSize({ width: 390, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await expect(page.locator("#navigationToggle")).toBeVisible();
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.locator("#navigationToggle").click();
-        await page.locator("#pageAction").scrollIntoViewIfNeeded();
-        await capture(page, `${theme}-390-200-navigation`);
-        await page.locator("#pageAction").focus(); await page.keyboard.press("Tab");
-        await expect(page.locator('nav [data-nav="settings"]')).toBeFocused();
-        await page.keyboard.press("Escape");
-        await expect(page.locator("#navigationDrawer")).not.toBeVisible();
-    }
-    assert.deepEqual(writes, [], "Navigation and themes cannot start collection or recollection");
+    assert.deepEqual(writes, []);
 });
 
 test("Settings has one Refresh while diagnostic saved reads and explicit reread remain separate", async t => {

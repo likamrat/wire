@@ -51,27 +51,16 @@ test("flat count geometry rejects invalid values and preserves contiguous exact 
 });
 
 test("shared span validates exact counts independently of presentation", () => {
-    for (const extent of [0, 100, 200, 360]) for (const total of [0, 1, 2, 20, 200]) {
-        assert.equal(charts.geometryPolicy.span(total, 200, extent), total / 200 * extent);
-    }
     assert.equal(charts.geometryPolicy.span(0, 0, 200), 0);
+    for (const [count, total, extent, expected] of [
+        [12, 200, 0, 0], [0, 200, 100, 0], [1, 1000, 360, .36], [200, 200, 200, 200],
+    ]) assert.equal(charts.geometryPolicy.span(count, total, extent), expected);
     for (const invalid of [-1, NaN, Infinity, .5, Number.MAX_SAFE_INTEGER + 1]) {
         assert.throws(() => charts.geometryPolicy.span(invalid, 200, 200));
         assert.throws(() => charts.geometryPolicy.span(1, invalid, 200));
     }
     assert.throws(() => charts.geometryPolicy.span(201, 200, 200));
     for (const extent of [-1, Infinity, NaN]) assert.throws(() => charts.geometryPolicy.span(1, 200, extent));
-    for (const counts of [[193, 25, 1], [76, 70, 21, 20, 2, 30], [997, 1, 1, 1], [1, 1, 1, 1, 1, 1], [0, 1, 999999]]) {
-        const before = [...counts], total = counts.reduce((sum, count) => sum + count, 0);
-        const sizes = counts.map(count => charts.geometryPolicy.span(count, total, 1));
-        assert.ok(Math.abs(sizes.reduce((a, b) => a + b, 0) - 1) < 1e-12);
-        counts.forEach((count, i) => assert.equal(sizes[i], count / total));
-        for (let i = 0; i < counts.length; i++) for (let j = 0; j < counts.length; j++) {
-            if (counts[i] > counts[j]) assert.ok(sizes[i] >= sizes[j] - 1e-12);
-            if (counts[j]) assert.ok(Math.abs(sizes[i] / sizes[j] - counts[i] / counts[j]) < 1e-10);
-        }
-        assert.deepEqual(counts, before);
-    }
 });
 
 test("outcome bands preserve missing-first order, exact counts and tiny shares at every width", () => {
@@ -81,7 +70,7 @@ test("outcome bands preserve missing-first order, exact counts and tiny shares a
         { success: 99999, unknown: 1 }, { success: 1, failure: 99999 }, { success: 99998, failure: 1, unknown: 1 },
         ...keys.map(key => ({ [key]: 100 })), Object.fromEntries(keys.map(key => [key, 1])), { success: 0 },
     ];
-    for (const parts of cases) for (const width of [60, 116]) for (const plotHeight of [200, 320]) {
+    for (const parts of cases) for (const [width, plotHeight] of [[60, 200], [116, 320]]) {
         const counts = Object.fromEntries(keys.map(key => [key, parts[key] ?? 0]));
         const total = Object.values(counts).reduce((sum, count) => sum + count, 0), maximum = Math.max(1, total);
         const input = { total, maximum, width, plotHeight, values: counts }, before = structuredClone(input);

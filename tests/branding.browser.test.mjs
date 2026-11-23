@@ -102,7 +102,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             if (width >= 700 && await toggle.getAttribute("aria-expanded") === String(compact)) { await toggle.click(); await settled(page); }
             await page.mouse.move(width - 5, 800);
             await brand.hover();
-            await expect(tip).toHaveText("WorkIQ Request Explorer"); await expect(tip).toBeVisible();
+            await expect(tip).toHaveText("Work IQ Request Explorer"); await expect(tip).toBeVisible();
             const geometry = await brand.evaluate(node => {
                 const tip = document.querySelector("#evidence-tooltip"), b = node.getBoundingClientRect(), r = tip.getBoundingClientRect();
                 const c = document.querySelector("#navigationCollapse"), control = c.getBoundingClientRect(), style = getComputedStyle(tip);
@@ -120,7 +120,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             assert.ok(contrast(geometry.foreground, geometry.background) >= 4.5);
             assert.ok(geometry.overflow <= 1);
             await expect(brand).toHaveAccessibleName("WIRE - Work IQ Request Explorer - Analyze");
-            await expect(brand).toHaveAccessibleDescription("WorkIQ Request Explorer");
+            await expect(brand).toHaveAccessibleDescription("Work IQ Request Explorer");
             await expect(brand.locator("button,a")).toHaveCount(0);
             await captureBrand(page, `brand-help-${theme}-${width}-${scale}x-${compact ? "compact" : "expanded"}`, geometry);
             await tip.hover(); await expect(tip).toBeVisible();
@@ -128,7 +128,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             await page.mouse.move(width - 5, 800);
             await page.locator(width < 700 ? "#closeNavigation" : "#themePreference").focus();
             await brand.focus(); await page.keyboard.press("Shift");
-            await expect(tip).toHaveText("WorkIQ Request Explorer"); await expect(brand).toBeFocused();
+            await expect(tip).toBeVisible(); await expect(brand).toBeFocused();
             await page.keyboard.press("Escape"); await expect(tip).toBeHidden(); await expect(brand).toBeFocused();
             await brand.press("Enter"); await ready(page); await expect(tip).toBeHidden();
             await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
@@ -155,9 +155,12 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             assert.equal(metrics.glyph.x + 10, metrics.box.x + 22); assert.equal(metrics.glyph.y + 10, metrics.box.y + 22);
             assert.equal(metrics.gap, 12, "Removing the old collapse row leaves only the rail's normal top inset");
             assert.equal(metrics.hit, true, "The compact target cannot be covered by the toolbar");
+            const paint = node => [node, node.querySelector("svg")].map(part => [
+                getComputedStyle(part).color, getComputedStyle(part).backgroundColor, getComputedStyle(part, "::before").backgroundColor,
+            ]);
+            const rest = await toggle.evaluate(paint);
             await toggle.hover(); await expect(tip).toHaveText(compact ? "Expand navigation" : "Collapse navigation");
-            const hover = await toggle.evaluate(node => getComputedStyle(node).backgroundColor);
-            assert.notEqual(hover, "rgba(0, 0, 0, 0)");
+            await expect.poll(() => toggle.evaluate(paint)).not.toEqual(rest);
             await page.keyboard.press("Escape");
             await toggle.focus(); await page.keyboard.press("Shift");
             await expect(toggle).toBeFocused();

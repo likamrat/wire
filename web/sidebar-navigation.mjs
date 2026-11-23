@@ -256,7 +256,7 @@ export function mountSidebarNavigation(ux, preference) {
     const headerHelpAvoid = () => [...content.querySelectorAll("[data-nav]"),
         ...(media.matches ? [$("closeNavigation")] : [$("wireSearch"), $("themePreference"),
             $("openChartReference"), $("openAnalyzeFilters"), $("refreshBtn")])].filter(Boolean);
-    ux.tooltip(brand.querySelector(".brand-home"), "WorkIQ Request Explorer", {
+    ux.tooltip(brand.querySelector(".brand-home"), "Work IQ Request Explorer", {
         anchor: brand, placement: "right", tone: "contrast", avoid: headerHelpAvoid,
     });
     ux.tooltip(collapse, label, { placement: "right", tone: "contrast", avoid: headerHelpAvoid });

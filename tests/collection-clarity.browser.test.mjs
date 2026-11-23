@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
@@ -43,11 +44,11 @@ async function setup(t) {
     const initial = structuredClone(status), requests = [], errors = [], denied = [];
     let summaryFailure = false, detailsFailure = false, detailsHold, releaseDetails;
     const server = createServer(async (req, res) => {
-        if (req.method === "GET" && req.url === "/") {
+        if (req.method === "GET" && isPagePath(req.url.split("?")[0])) {
             res.setHeader("Content-Type", "text/html");
             return res.end(render("a".repeat(64), "collection-clarity-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
         }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         requests.push({ url: req.url, input });
@@ -192,7 +193,8 @@ test("collection page has measured compact controls, responsive states and local
     await page.getByRole("link", { name: "Open chat activity", exact: true }).click();
     await expect(page.locator("#pageTitle")).toHaveText("Analyze");
     await expect(page.locator("#chatFilter")).toHaveValue("clarity-chat-18");
-    assert.match(page.url(), /session=clarity-chat-18/);
+    assert.equal(new URL(page.url()).searchParams.get("privateView"), "required");
+    assert.doesNotMatch(page.url(), /clarity-chat-18/);
     await expect(page.locator("#contextBack")).toHaveText("Back to history gaps");
     await page.goBack();
     await expect(page.locator("#issueSearch")).toHaveValue("Zephyr <img>");
@@ -212,7 +214,7 @@ test("collection page has measured compact controls, responsive states and local
     await page.locator(".history-reason>summary").nth(1).click();
     await page.locator(".history-reason").nth(1).locator(".history-issue>summary").first().click();
     await expect(page.locator(".history-reason").nth(1)).toContainText("64 MiB");
-    await expect(page.locator(".history-reason").nth(1)).toContainText("another Refresh does not remove");
+    await expect(page.locator(".history-reason").nth(1)).toContainText("While paused, Refresh advances one bounded cycle");
     await expect(page.locator(".history-reason").nth(1)).toContainText("earlier chat context");
     await page.locator("#collectionSetup>summary").click();
     await expect(page.locator("#collectionSetup")).toContainText("A verified location is not a successful read");

@@ -57,6 +57,8 @@ async function setup(t, records = chartRecords(), options = {}) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
+        if (url.origin === origin && url.pathname === "/api/app-update" && request.method() === "POST"
+            && request.postDataJSON()?.action === "status") return route.continue();
         if (url.origin !== origin || request.method() !== "GET" && ![
             "/api/session", "/api/snapshot", "/api/collection/status", "/api/collection/sources/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/trends", "/api/access/watch",
@@ -100,7 +102,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
     const points = snapshots[0].analytics.timeSeries.points;
     assert.equal(new Set(points.flatMap(point => point.drilldownIds)).size, 244);
     const paintedOutcomes = await page.locator(".time-slot").evaluateAll(nodes => nodes.map(node =>
-        Object.fromEntries([...node.querySelectorAll("[data-segment]")].map(segment => [segment.dataset.segment, Number(segment.dataset.count)]))));
+        Object.fromEntries([...node.querySelectorAll(".flat-time-segment")].map(segment => [segment.dataset.segment, Number(segment.dataset.count)]))));
     for (const [index, counts] of paintedOutcomes.entries()) for (const outcome of ["success", "failure", "unknown", "partial", "other", "transport"])
         assert.equal(counts[outcome] ?? 0, points[index][outcome], `${points[index].date}/${outcome}: exact recorded outcomes`);
     assert.deepEqual(initial.dates.map(row => row.text), ["Nov 10", "Nov 11", "Nov 12", "Nov 13", "Nov 14", "Nov 15", "Nov 16"]);
@@ -165,7 +167,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     assert.equal(series.points.length, 90); assert.equal(series.undatedCount, 1);
     assert.equal(series.window.total, 402); assert.equal(series.totals.count, 2);
     await expect(page.locator("#activityCount")).toHaveText("3");
-    await expect(page.locator(".dimensional-time-labels > span")).toHaveCount(90);
+    await expect(page.locator(".dimensional-time-labels > a")).toHaveCount(90);
     await expect(page.locator(".time-zero")).toHaveCount(89);
     await expect(page.locator("#timelineWindow")).toContainText("90 of 402 days");
     assert.ok(await page.locator(".flat-time-scroll *").count() < 500, "DOM work is bounded by the visible calendar window");
@@ -175,7 +177,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     await page.locator(".time-column").last().focus();
     await capture(page, "daily-long-gap", await measure(page));
     await page.getByRole("button", { name: "First dates", exact: true }).click(); await ready(page);
-    await expect(page.locator(".dimensional-time-labels > span").first()).toHaveText("Jan 1");
+    await expect(page.locator(".dimensional-time-labels > a").first()).toHaveText("Jan 1");
     await expect(page.locator("#activityCount")).toHaveText("3");
     await expect(page.locator("#timeline-first")).toBeFocused();
     assert.ok(await page.locator(".flat-time-scroll *").count() < 500);
@@ -191,7 +193,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     const windowOrigin = page.url();
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
-    await expect(page.locator(".dimensional-time-labels > span")).toHaveCount(1);
+    await expect(page.locator(".dimensional-time-labels > a")).toHaveCount(1);
     await page.goBack(); await ready(page);
     assert.equal(page.url(), windowOrigin);
     await expect(page.locator("#activityCount")).toHaveText("3");
@@ -236,7 +238,7 @@ test("removing missing-service context retires the old window without broadening
     assert.equal(page.url(), accepted); assert.equal(reads.length, acceptedReads);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator(".time-column")).toHaveCount(1);
-    await expect(page.locator(".dimensional-time-labels > span")).toHaveText(["Nov 16"]);
+    await expect(page.locator(".dimensional-time-labels > a")).toHaveText(["Nov 16"]);
     await page.setViewportSize({ width: 390, height: 844 }); await chooseTheme(page, "dark"); await ready(page);
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
     await capture(page, "anchor-mail-narrow-dark", await measure(page));
@@ -426,7 +428,7 @@ async function measure(page) {
                 return { text: node.textContent, ...rect(node), ink: rect(range),
                     fontSize: getComputedStyle(node).fontSize, fontFamily: getComputedStyle(node).fontFamily };
             }),
-            dates: [...scroll.querySelectorAll(".dimensional-time-labels > span")].map(node => {
+            dates: [...scroll.querySelectorAll(".dimensional-time-labels > a")].map(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 return { text: node.textContent, ...rect(node), ink: rect(range) };
             }),
@@ -539,20 +541,20 @@ test("native overflow appears only when needed and resize keeps all date targets
     const last = page.locator(".time-column").last();
     await last.focus(); await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText(String(counts.at(-1)));
-    assert.equal(new URL(page.url()).hash, original.at(-1).href);
+    assert.equal(page.url(), new URL(original.at(-1).href, page.url()).href);
     await page.goBack(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText(String(total));
     await expect(page.locator(".time-column").last()).toBeFocused();
-    await page.locator(".time-column .flat-time-segment").first().click(); await ready(page);
+    await page.locator(".dimensional-time-labels > a").first().click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText(String(counts[0]));
-    assert.equal(new URL(page.url()).hash, original[0].href);
+    assert.equal(page.url(), new URL(original[0].href, page.url()).href);
     await page.goBack(); await ready(page);
     const filterEntry = page.locator("#openAnalyzeFilters");
     if (await filterEntry.count()) await filterEntry.click();
     for (const mode of ["workload", "endpoint", "time"]) {
         await page.locator(`[data-chart="${mode}"]`).click(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText(String(total));
-        await expect(page.getByRole("combobox", { name: "Dates", exact: true })).toHaveText(/All dates/);
+        await expect(page.locator("#periodResult")).toContainText("All dates");
     }
     const identity = row => {
         const [view, query] = row.href.split("?");
@@ -604,8 +606,8 @@ test("sidebar animation crosses the fit boundary without a false scrollbar or re
             window.chartFrame = requestAnimationFrame(sample);
         });
         await page.locator("#navigationCollapse").click();
+        await ready(page);
         await page.evaluate(async () => {
-            await Promise.all(document.getAnimations().map(animation => animation.finished));
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             cancelAnimationFrame(window.chartFrame);
         });
@@ -623,7 +625,9 @@ test("sidebar animation crosses the fit boundary without a false scrollbar or re
 
 test("fractional scrollports reveal the complete focused column and count in both directions", async t => {
     const page = await setup(t);
-    await page.setViewportSize({ width: 768, height: 1080 });
+    // Leave room outside the deliberately fixed-width widget so a synthetic width
+    // doesn't push the page beyond the viewport at 200% text.
+    await page.setViewportSize({ width: 1200, height: 1080 });
     await page.locator(".analyze-chart-main").evaluate(node => { node.style.width = "532.078125px"; });
     await ready(page);
     assert.equal((await page.locator(".flat-time-scroll").boundingBox()).width, 490.078125);
@@ -677,7 +681,7 @@ test("fractional scrollports reveal the complete focused column and count in bot
     await action.locator(".dimensional-count").click({ modifiers: ["Control"] });
     const popup = await popupPromise;
     try {
-        await popup.waitForURL(url => url.hash === href);
+        await popup.waitForURL(new URL(href, originalUrl).href);
         assert.equal(page.url(), originalUrl, "Modified date links retain native new-tab navigation");
     } finally { await popup.close(); }
 });

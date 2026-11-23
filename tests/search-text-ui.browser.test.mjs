@@ -55,10 +55,13 @@ async function setup(t, { touch = false, formatted = false } = {}) {
 }
 
 async function openInteraction(page, exactCall = false) {
-    await page.locator("#activityList .request-card-open").first().click();
-    if (!exactCall) return;
-    const call = await page.locator('#requestContent [data-action-id]:not([data-action-id^="http:"])').first().getAttribute("data-action-id");
-    await page.evaluate(call => { location.hash += "&call=" + encodeURIComponent(call); }, call);
+    if (!exactCall) {
+        await page.locator("#activityList .request-card-open").first().click();
+        return;
+    }
+    const call = 'call:["test-session","test-call-search-0"]';
+    const params = new URLSearchParams({ request: "search-0", call, layer: "tool" });
+    await page.goto(new URL("/#request?" + params, page.url()).href);
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
 }
 
@@ -209,7 +212,8 @@ test("body-match omission markers never form dot-only lines and Search results h
     const id = await row.getAttribute("data-search-id");
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-    await expect(page).toHaveURL(/#request\?request=search-0(?:&|$)/);
+    await expect(page).toHaveURL(/\/request\?privateView=required$/);
+    await expect(page.locator(".request-original .full-text-content")).toHaveText(records[0].userPrompt.text);
     await page.goBack();
     await expect(row).toBeFocused(); await expect(row).toHaveAttribute("data-search-id", id);
     await expect(row.locator("mark")).toHaveText("Power");
@@ -240,16 +244,16 @@ test("Search frozen reading retains its receipt fence without borrowing the inde
     await expect(page.locator("#savedReportReader")).toBeHidden();
     await expect(page.locator("#wireSearchPanel")).toBeHidden();
     await navigateMain(page, "reports");
-    await page.locator(`[data-bundle-id="${bundles[0].bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator(`.saved-shelf [data-view-key="open-bundle:${bundles[0].bundleId}"]`).click();
     await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Invented closing notes");
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await page.locator("#wireSearch").fill("POWER");
     await expect(result).toHaveCount(1);
     await result.click();
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
     const reads = requests.filter(item => item.path === "/api/report/open").length;
     await page.reload();
-    await expect(page.locator("#savedReportReader .error")).toContainText("Search destination is no longer current");
+    await expect(page.locator("#message")).toContainText("The private selection could not be restored");
     await expect(page.locator("#savedReportReader iframe,#savedReportReader .report-file-action")).toHaveCount(0);
     assert.equal(requests.filter(item => item.path === "/api/report/open").length, reads, "Reload cannot upgrade Search into a library read");
     assert.deepEqual(await readFile(bundles[0].files["product-report.html"]), bytes);
@@ -392,9 +396,7 @@ test("saved Search Back restores its exact interaction origin with native histor
             await page.evaluate(() => Object.defineProperty(window, "navigation", { configurable: true, value: undefined }));
             await page.getByRole("button", { name: "Back to search", exact: true }).click();
         }
-        await expect(page).toHaveURL(/#request\?/);
-        assert.deepEqual([...new URLSearchParams(new URL(page.url()).hash.split("?")[1])].sort(),
-            [...new URLSearchParams(new URL(origin).hash.split("?")[1])].sort(), "Exact interaction and call route values survive Back");
+        await expect(page).toHaveURL(origin);
         await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
         await expect(page.locator("#savedReportReader")).toBeHidden();
         await expect(page.locator("#wireSearch")).toHaveValue("POWER");
@@ -406,7 +408,7 @@ test("saved Search Back restores its exact interaction origin with native histor
         await page.locator("#wireSearch").press("Escape");
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
-        await expect(page).toHaveURL(/#analyze(?:\?|$)/);
+        await expect(page).toHaveURL(url => url.pathname === "/" && !url.hash);
     });
 });
 
@@ -447,7 +449,7 @@ test("Back before a cross-layer snapshot completes cannot repaint the restored t
         await page.locator(".wire-search-hit").first().click();
         await pending;
         await page.goBack();
-        await expect(page).toHaveURL(/#analyze$/);
+        await expect(page).toHaveURL(url => url.pathname === "/" && !url.search && !url.hash);
         release(); await Promise.all(deliveries);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(page.locator("#layerFilter")).toHaveValue("tool");
@@ -462,6 +464,5 @@ test("zero matches from an incomplete authorized corpus are not an unqualified n
     await page.locator("#wireSearch").fill("ZXQ_NO_CORPUS_MATCH_714");
     await expect(page.locator("#wireSearchPanel")).toHaveAttribute("data-search-state", /^(partial|incomplete|unavailable)$/);
     assert.equal(await page.locator(".wire-search-hit").count(), 0);
-    await expect(page.locator("#wireSearchStatus")).toContainText(/incomplete|unavailable/);
-    assert.doesNotMatch(await page.locator("#wireSearchStatus").textContent(), /^No matches/);
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Some saved content could not be searched.");
 });

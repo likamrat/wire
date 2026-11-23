@@ -131,7 +131,9 @@ test("native outcomes/results and missing/conflicting facts remain distinct thro
 });
 
 test("snapshot and existing HTTP/canvas routes consume the shared carrier while native report admission stays closed", async t => {
-    const app = await setup(t, { records: [githubRecord()] }), api = await app.start();
+    const github = githubRecord();
+    github.toolCalls[0].startedAt = "2026-09-30T12:00:00Z";
+    const app = await setup(t, { records: [github] }), api = await app.start();
     const snapshot = await api("/api/snapshot", selection);
     assert.equal(snapshot.status, 200);
     assert.equal(snapshot.body.scenarios.length, 3);
@@ -178,6 +180,7 @@ test("snapshot and existing HTTP/canvas routes consume the shared carrier while 
         periods: { baseline: { from: "2026-09-30", to: "2026-09-30" }, later: { from: "2026-10-01", to: "2026-10-01" } },
     });
     assert.equal(githubComparison.status, 200);
+    assert.equal(githubComparison.body.periods.baseline.rowIds.length, 1);
     const pairedPreview = await api("/api/preview", { periodComparison: githubComparison.body,
         options: { formats: ["json"], promptMode: "none", timeContext: githubComparison.body.timeContext } });
     assert.equal(pairedPreview.status, 200, JSON.stringify(pairedPreview.body));

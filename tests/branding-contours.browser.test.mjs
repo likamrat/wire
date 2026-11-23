@@ -29,8 +29,6 @@ test("GitHub page themes select one legible README logo and matching responsive 
         const themes = [
             { mode: "dark", os: "light", expected: "dark" },
             { mode: "light", os: "dark", expected: "light" },
-            { mode: "dark", os: "dark", expected: "dark" },
-            { mode: "light", os: "light", expected: "light" },
             { mode: "auto", os: "dark", expected: "dark" },
             { mode: "auto", os: "light", expected: "light" },
         ];

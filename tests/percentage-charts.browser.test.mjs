@@ -220,7 +220,10 @@ test("outcome emphasis preserves light fades, accepted dark fills and forced col
             assert.match(paint.fill, /^url\(/);
             assert.equal(paint.filter, "brightness(0.9)");
         } else {
-            assert.equal(paint.fill, "rgb(242, 139, 130)");
+            const cue = page.locator('[data-percentage-card="outcomes"] [data-category="failure"] .percentage-cue');
+            assert.equal(paint.fill, await cue.evaluate(node => getComputedStyle(node).color));
+            assert.notEqual(paint.fill, await page.locator('[data-percentage-card="outcomes"] [data-category="success"] .percentage-cue')
+                .evaluate(node => getComputedStyle(node).color));
             assert.equal(paint.filter, "none");
         }
         await page.emulateMedia({ forcedColors: "active" });

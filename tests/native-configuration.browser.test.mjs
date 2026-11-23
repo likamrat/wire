@@ -5,27 +5,17 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { chatFixture, coworkFixture } from "./native-read-model-fixtures.mjs";
 import { fixture, privateFixture, selectActivityOption, chooseTheme } from "./helpers.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
-import { mountCollectionSettings } from "../web/settings.mjs";
-import { mountSourceCollectionSettings } from "../web/source-collection-settings.mjs";
-
-const backendRoot = process.env.WIRE_BOUNDED_BACKEND_ROOT || path.resolve(import.meta.dirname, "..");
-const [{ createMicrosoftSession }, { createMicrosoftNativeReadTransport }, { createNativePersistence },
-    { createNativeRuntimeAccess }, { startServer }, { createExportController }, { loadBoardState }] = await Promise.all([
-    "microsoft-session.mjs", "microsoft-native-transport.mjs", "native-persistence.mjs",
-    "runtime-access.mjs", "server.mjs", "export.mjs", "store.mjs",
-].map(file => import(pathToFileURL(path.join(backendRoot, "lib", file)).href)));
-const settingsOverlay = process.env.WIRE_SETTINGS_CANDIDATE === "1" ? await Promise.all([
-    ["settings.mjs", "mountCollectionSettings", mountCollectionSettings],
-    ["source-collection-settings.mjs", "mountSourceCollectionSettings", mountSourceCollectionSettings],
-].map(async ([file, name, candidate]) => ({
-    original: (await import(pathToFileURL(path.join(backendRoot, "web", file)).href))[name].toString(),
-    candidate: candidate.toString(),
-}))) : [];
+import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
+import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-transport.mjs";
+import { createNativePersistence } from "../lib/native-persistence.mjs";
+import { createNativeRuntimeAccess } from "../lib/runtime-access.mjs";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState } from "../lib/store.mjs";
 
 async function setup(t, { beforeAcquire, holdsNetworkRequests = false, missingSourceComposite = false, sourceAware = false,
     verifyNative, mixed = false, github = mixed, nativeAcquisition = false } = {}) {
@@ -72,15 +62,6 @@ async function setup(t, { beforeAcquire, holdsNetworkRequests = false, missingSo
     await page.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== origin) { unexpected.push(url.origin); return route.abort(); }
-        if (url.pathname === "/" && settingsOverlay.length) {
-            const response = await route.fetch();
-            let body = await response.text();
-            for (const replacement of settingsOverlay) {
-                assert.equal(body.split(replacement.original).length, 2, "Replace only the exact original serialized Settings owner.");
-                body = body.replace(replacement.original, () => replacement.candidate);
-            }
-            return route.fulfill({ response, body });
-        }
         if (sourceAware && url.pathname === "/api/collection/microsoft/enrollment") {
             const status = await access.status();
             if (!status.retained) return route.fulfill({ status: 403, json: { code: "wire_access_revoked", error: "WIRE is signed out." } });
@@ -603,7 +584,7 @@ test("in-flight original Connect keeps normal Settings stable across access-watc
         await expect(page.locator("#wireMicrosoftAction")).toBeEnabled();
         assert.equal(app.writes.filter(row => row.body.action === "microsoft-connect").length, 1);
         assert.ok(staleReads > 0);
-        assert.equal(new URL(page.url()).hash, "#settings?section=connection");
+        await expect(page).toHaveURL(new URL("settings?section=connection", app.runtimeUrl).href);
         assert.equal(app.acquisitions, 0);
         t.diagnostic(JSON.stringify({ transitions, watchResponses: watches.length, staleSnapshotRefusals: staleReads,
             originalConnects: app.writes.filter(row => row.body.action === "microsoft-connect").length,

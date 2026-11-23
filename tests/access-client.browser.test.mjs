@@ -699,9 +699,12 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
     await gate(active, "Sign in to WIRE");
     await expect(active.locator("#workspace")).toBeVisible();
     await expect(idle.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-    await idle.locator(".request-card-open").first().click();
+    // The Analyze outcome link is a tab-private call selection, not a renewable record bookmark.
+    const openBookmark = () => idle.goto(app.url + "#request?request=test-scenario");
+    await openBookmark();
     await expect(idle.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     const canonical = idle.url();
+    assert.ok(new URL(canonical).searchParams.get("record"));
     await idle.evaluate(() => {
         window.fixtureCopyWrites = 0;
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
@@ -790,12 +793,11 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
         await idle.goto(canonical);
         await expect(idle.locator("#requestContent")).toContainText("This interaction is unavailable");
         await expect(idle.locator("#requestContent")).not.toContainText("SYNTHETIC_PRIVATE_PROMPT");
-        await idle.goto(app.url);
-        const current = idle.locator('article[data-view-key="request:test-scenario"] .request-card-open');
-        await expect(current).toBeVisible();
-        const freshAddress = new URL(await current.getAttribute("href"), app.url);
-        assert.notEqual(freshAddress.searchParams.get("record"), new URL(canonical).searchParams.get("record"));
-        await current.press("Enter");
+        await openBookmark();
+        await expect(idle.locator("#requestContent")).toHaveAttribute("data-view-key", "request:test-scenario");
+        const currentRecord = new URL(idle.url()).searchParams.get("record");
+        assert.ok(currentRecord);
+        assert.notEqual(currentRecord, new URL(canonical).searchParams.get("record"));
         const freshRead = idle.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok());
         await idle.reload(); await freshRead;
         await expect(idle.locator("#requestContent")).toHaveAttribute("data-view-key", "request:test-scenario");

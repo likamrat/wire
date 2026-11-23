@@ -214,7 +214,7 @@ test("an unrelated stored update cannot replace a selected report's prepared cop
     assert.match(JSON.stringify(p.records),/FROZEN_SELECTED_WORDING/); assert.equal(p.records.length,1);
 });
 
-test("confirming original text cannot save a selection deleted after preparation", async t => {
+for (const change of ["deleted", "changed"]) test(`confirming original text cannot save a selection ${change} after preparation`, async t => {
     const records = [collected("withdrawn-choice"),collected("remaining")];
     const {page,context,sent} = await setup(t,records);
     await pick(page,["withdrawn-choice"]);
@@ -222,12 +222,17 @@ test("confirming original text cannot save a selection deleted after preparation
     const p = await prepare(page);
     await button(page,"Save report").click();
     await expect(button(page,"Save with chat details")).toBeVisible();
-    await replaceEvidence(context,()=>({records:records.slice(1)}));
+    if (change === "changed") {
+        records[0].toolCalls[0].toolSucceeded = false;
+        records[0].toolCalls[0].reportedOutcome = "failed";
+    }
+    await replaceEvidence(context,()=>({records:change === "deleted" ? records.slice(1) : records}));
     const [response] = await Promise.all([page.waitForResponse(r=>r.url().endsWith("/api/export")),button(page,"Save with chat details").click()]);
     assert.equal(response.status(),409);
-    assert.match((await response.json()).error,/Selected evidence changed or was deleted/);
+    assert.match((await response.json()).error,change === "deleted" ? /Selected evidence changed or was deleted/ : /Selected evidence changed\. Prepare a new report preview/);
     await phase(page,"blocked");
     assert.deepEqual(sent("/api/export").map(r=>r.previewId),[p.previewId]);
+    assert.equal(sent("/api/preview").length, 1, "A refused Save must not recapture the changed selection.");
     assert.equal((await loadBoardState(context)).exports.length,0);
 });
 

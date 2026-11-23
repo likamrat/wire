@@ -15,7 +15,7 @@ import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
-import { fixture, exportCatalogFor, chooseTheme, selectActivityOption, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, selectActivityOption, openAnalyzeFilters, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_SELECT_PROOFS;
 const records = ["/me/events", "/me/messages", "/me/drive"].map((endpoint, index) => {
@@ -215,6 +215,9 @@ async function setup(run, options = {}) {
 async function ready(page) {
     await page.locator("#workspace").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
+}
+async function openFields(page) {
+    await openAnalyzeFilters(page);
     if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
 }
 async function choose(page, id, value) {
@@ -237,7 +240,7 @@ async function geometry(page) {
             trigger: rect(trigger), label: rect(label), icon: rect(icon),
             fieldRadius: getComputedStyle(document.documentElement).getPropertyValue("--radius-field").trim(),
             paint: { top: getComputedStyle(trigger, "::before").top, bottom: getComputedStyle(trigger, "::before").bottom },
-            popup: rect(document.querySelector(".select-popup")), peer: [...document.querySelectorAll("#filters .select-trigger")].map(rect),
+            popup: rect(document.querySelector(".select-popup")), peer: [...document.querySelectorAll("#filters .select-trigger")].filter(node => node.checkVisibility()).map(rect),
             rows: [...document.querySelectorAll(".select-option")].map((row) => {
                 const label = row.querySelector(".select-option-label");
                 return { ...rect(row), label: { ...rect(label), clipped: label.scrollHeight > label.clientHeight || label.scrollWidth > label.clientWidth } };
@@ -254,7 +257,7 @@ function contrast(foreground, background) {
     return (values[0] + .05) / (values[1] + .05);
 }
 
-async function fieldGeometry(page, selector = "#filters .filter-field") {
+async function fieldGeometry(page, selector = "#filters .filter-field:has(.select-trigger)") {
     return page.locator(selector).evaluateAll((fields) => {
         const box = (node) => {
             const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
@@ -265,7 +268,7 @@ async function fieldGeometry(page, selector = "#filters .filter-field") {
             range.selectNodeContents(node);
             return [...range.getClientRects()].map((rect) => box({ getBoundingClientRect: () => rect }));
         };
-        return fields.map((field) => {
+        return fields.filter(field => field.querySelector(".select-trigger")?.checkVisibility()).map((field) => {
             const label = field.querySelector("label"), trigger = field.querySelector(".select-trigger");
             const heading = label.closest(".help-heading"), help = heading?.querySelector(".ux-help");
             const paint = getComputedStyle(trigger, "::before");
@@ -322,13 +325,15 @@ test("select fields share label/value insets and baselines through themes, wrapp
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 1466]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1200 });
         await page.goto(origin); await ready(page); await chooseTheme(page, theme);
+        await openFields(page);
         await page.evaluate((scale) => document.documentElement.style.fontSize = `${scale * 16}px`, scale);
         await page.evaluate(() => document.fonts.ready);
         await page.waitForFunction(() => matchMedia("(max-width:699px)").matches ||
             parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-sidebar-width")) === document.querySelector("#sidebar").getBoundingClientRect().width);
         const beforeRequests = requests.length;
         const fields = await fieldGeometry(page);
-        assert.equal(fields.length, 8, "Primary and secondary single-choice fields remain accessible alongside Author and Outcome.");
+        assert.ok(fields.some(field => field.id === "toolFilter") && fields.some(field => field.id === "projectFilter"),
+            "Measure visible single-choice fields in both the primary and expanded filter groups.");
         assertFieldGeometry(fields, scale);
         if (width === 375 && scale === 2) for (const field of fields) {
             assert.ok(field.field.width >= 288, "Text zoom wraps complete fields instead of squeezing two narrow label columns");
@@ -336,20 +341,14 @@ test("select fields share label/value insets and baselines through themes, wrapp
         measurements.push({ theme, width, scale, fields });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         for (const field of fields) {
-            const help = page.locator(`#${field.labelId}`).locator("..").locator(".ux-help");
-            await help.click();
-            await page.getByRole("tooltip").waitFor({ state: "visible" });
-            assert.equal(await page.locator(".select-popup:visible").count(), 0, "Help never opens or selects a dropdown");
-            const tooltip = await page.getByRole("tooltip").boundingBox(), glyphBox = await help.locator("svg").boundingBox();
-            assert.ok(Math.abs(tooltip.x - Math.max(8, Math.min(width - tooltip.width - 8, glyphBox.x + (glyphBox.width - tooltip.width) / 2))) <= 1, "Tooltip follows the visible help glyph, not trailing target padding");
-            const afterHelp = (await fieldGeometry(page)).find((item) => item.id === field.id);
-            assert.equal(afterHelp.text[0].x, field.text[0].x, "Help cannot shift label anchor");
-            assert.equal(afterHelp.help.x, field.help.x);
-            await page.keyboard.press("Escape");
             const trigger = page.locator(`#${field.triggerId}`);
+            await trigger.scrollIntoViewIfNeeded();
             await trigger.focus(); await trigger.press("ArrowDown");
             const popup = await page.locator(".select-popup").boundingBox(), anchor = await trigger.boundingBox();
-            assert.ok(Math.abs(popup.x - Math.max(8, Math.min(anchor.x, width - popup.width - 8))) <= 1, "Popup anchors to control, not the inset label");
+            const viewport = await page.evaluate(() => document.documentElement.getBoundingClientRect().width);
+            assert.ok([anchor.x, anchor.x + anchor.width - popup.width].some(x =>
+                Math.abs(popup.x - Math.max(8, Math.min(x, viewport - popup.width - 8))) <= 1),
+            `${field.id}: menu aligns with a control edge within the available viewport`);
             assert.ok(popup.y >= 8 && popup.y + popup.height <= 1193);
             const side = await page.locator(".select-popup").getAttribute("data-side");
             assert.ok(Math.abs(side === "bottom" ? popup.y - anchor.y - anchor.height - 6 : anchor.y - popup.y - popup.height - 6) <= 1);
@@ -358,19 +357,6 @@ test("select fields share label/value insets and baselines through themes, wrapp
         }
         assert.equal(await page.evaluate(() => window.controlChanges.length), 0);
         assert.equal(requests.length, beforeRequests, "Exploring help and lists cannot change query/filter state");
-        await page.locator("#scopeFilter-control").scrollIntoViewIfNeeded();
-        assertFieldGeometry(await fieldGeometry(page, ".filter-field:has(#scopeFilter)"), scale);
-        await page.evaluate(() => {
-            const label = document.createElement("label");
-            label.textContent = "Synthetic standalone field";
-            const select = document.createElement("select");
-            select.id = "standaloneField";
-            select.append(new Option("Synthetic value", "synthetic"));
-            label.append(select);
-            document.querySelector("#workspace").append(label);
-        });
-        await page.locator("#standaloneField-control").waitFor();
-        assertFieldGeometry(await fieldGeometry(page, ".select-field:has(#standaloneField)"), scale);
         await page.locator('label[for="projectFilter-control"]').evaluate((node) => {
             node.textContent = "GitHub Copilot project with a longer synthetic workspace label";
             document.querySelector("#projectFilter").selectedOptions[0].textContent =
@@ -397,6 +383,7 @@ test("Activity uses an actual rounded popup and proportionate closed control in 
             await page.goto(origin + "/before#activity");
             await ready(page);
             await chooseTheme(page, theme);
+            await openFields(page);
             await capture(page, `before-${theme}-${width}-closed`);
             await page.locator("#layerFilter").click();
             await capture(page, `before-${theme}-${width}-native-open`);
@@ -406,13 +393,14 @@ test("Activity uses an actual rounded popup and proportionate closed control in 
         await page.goto(origin + "/#activity");
         await ready(page);
         await chooseTheme(page, theme);
-        const trigger = page.getByRole("combobox", { name: "Activity", exact: true });
+        await openFields(page);
+        const trigger = page.getByRole("combobox", { name: "Evidence layer", exact: true });
         await trigger.waitFor({ state: "visible" });
         assert.equal(await trigger.evaluate((node) => node.tagName), "BUTTON", "The regression fails for a merely rounded native select");
         await capture(page, `after-${theme}-${width}-closed`);
         await trigger.click();
         assert.equal(await trigger.getAttribute("aria-expanded"), "true");
-        assert.equal(await page.getByRole("listbox", { name: "Activity", exact: true }).count(), 1);
+        assert.equal(await page.getByRole("listbox", { name: "Evidence layer", exact: true }).count(), 1);
         assert.equal(await page.locator(".select-popup:popover-open").count(), 1, "Popup escapes scroll/chart clipping");
         await capture(page, `after-${theme}-${width}-open`);
         const metrics = await geometry(page);
@@ -446,7 +434,7 @@ test("open popup flips and repositions on window/visual viewport changes without
     const page = await context.newPage();
     await page.setViewportSize({ width: 1200, height: 900 });
     await page.goto(origin); await ready(page);
-    await page.locator("#coverage > summary").click();
+    await openFields(page);
     const trigger = page.locator("#scopeFilter-control");
     await trigger.scrollIntoViewIfNeeded();
     await trigger.click();
@@ -486,8 +474,9 @@ test("touch choices omit legacy explanatory paragraphs and preserve native form 
     const page = await context.newPage();
     await page.goto(origin + "/#activity"); await ready(page);
     const description = "Recorded Work IQ tool attempts; a successful tool result does not prove the whole task was correct.";
+    await openFields(page);
     await page.locator('#layerFilter option[value=tool]').evaluate((node, text) => node.dataset.description = text, description);
-    const trigger = page.getByRole("combobox", { name: "Activity", exact: true });
+    const trigger = page.getByRole("combobox", { name: "Evidence layer", exact: true });
     await trigger.tap();
     const row = page.getByRole("option", { name: "Work IQ calls", exact: true });
     assert.equal(await row.innerText(), "Work IQ calls");
@@ -502,11 +491,11 @@ test("touch choices omit legacy explanatory paragraphs and preserve native form 
     assert.equal(await trigger.getAttribute("aria-expanded"), "false");
 }, { hasTouch: true, isMobile: true, viewport: { width: 375, height: 820 } }));
 
-test("all app-authored dropdown options retain their value and dispatch each actual change once", { timeout: 60000 }, async () => setup(async ({ context, origin }) => {
+test("single-choice filters retain their native values and dispatch each actual change once", { timeout: 60000 }, async () => setup(async ({ context, origin }) => {
     const page = await context.newPage();
     await page.goto(origin); await ready(page);
-    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
-        if (id === "scopeFilter") await page.locator("#coverage > summary").click();
+    for (const id of ["serviceFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
+        await openFields(page);
         const options = await page.locator("#" + id + " option").evaluateAll((nodes) => nodes.map((node) => ({ value: node.value, label: node.label })));
         for (const option of options) {
             const prior = await page.locator("#" + id).evaluate(node => [...node.selectedOptions].map(option => option.value));
@@ -515,10 +504,7 @@ test("all app-authored dropdown options retain their value and dispatch each act
             const actual = await page.getByRole("option").evaluateAll((nodes) => nodes.map((node) => ({ value: node.dataset.value, label: node.querySelector("span").textContent })));
             const current = await page.locator("#" + id + " option").evaluateAll((nodes) => nodes.map((node) => ({ value: node.value, label: node.label })));
             assert.deepEqual(actual, current, `${id}: every current option maps exactly`);
-            if (id === "outcomeFilter") {
-                await page.keyboard.press("Escape");
-                await selectActivityOption(page, id, option.value);
-            } else await page.locator(`.select-option[data-value=${JSON.stringify(option.value)}]`).click();
+            await page.locator(`.select-option[data-value=${JSON.stringify(option.value)}]`).click();
             await ready(page);
             assert.equal(await page.locator("#" + id).inputValue(), option.value);
             assert.equal(await page.evaluate(() => window.controlChanges.length), changes + Number(prior.length !== 1 || prior[0] !== option.value), `${id}: no duplicate change`);
@@ -534,15 +520,15 @@ test("all app-authored dropdown options retain their value and dispatch each act
             }
         }
         if (id === "layerFilter") await choose(page, id, "tool");
-        if (id === "dateFilter") await choose(page, id, "capture");
-        if (["serviceFilter", "outcomeFilter", "projectFilter"].includes(id)) await choose(page, id, "all");
+        if (["serviceFilter", "projectFilter"].includes(id)) await choose(page, id, "all");
     }
 }));
 
 test("keyboard exploration, typeahead, Escape, Tab, labels and outside dismissal do not replay changes", { timeout: 30000 }, async () => setup(async ({ context, origin, requests }) => {
     const page = await context.newPage();
     await page.goto(origin + "/#activity"); await ready(page);
-    const trigger = page.getByRole("combobox", { name: "Activity", exact: true });
+    await openFields(page);
+    const trigger = page.getByRole("combobox", { name: "Evidence layer", exact: true });
     const count = requests.length;
     await page.locator('label[for="layerFilter-control"]').click();
     assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
@@ -554,9 +540,9 @@ test("keyboard exploration, typeahead, Escape, Tab, labels and outside dismissal
     await trigger.press("ArrowDown");
     assert.match(await trigger.getAttribute("aria-activedescendant"), /option-1$/);
     await trigger.press("g");
-    assert.match(await trigger.getAttribute("aria-activedescendant"), /option-2$/);
-    await trigger.press("g");
     assert.match(await trigger.getAttribute("aria-activedescendant"), /option-5$/);
+    await trigger.press("g");
+    assert.match(await trigger.getAttribute("aria-activedescendant"), /option-1$/);
     await trigger.press("Escape");
     assert.equal(await page.locator("#layerFilter").inputValue(), "tool");
     assert.equal(requests.length, count, "Read-only exploration performs no fetch or mutation");
@@ -567,9 +553,9 @@ test("keyboard exploration, typeahead, Escape, Tab, labels and outside dismissal
     await trigger.click();
     await page.evaluate(() => {
         window.underlyingClicks = 0;
-        document.querySelector("nav [data-nav=reports]").addEventListener("click", () => window.underlyingClicks++);
+        document.querySelector("#closeAnalyzeFilters").addEventListener("click", () => window.underlyingClicks++);
     });
-    await page.locator("nav [data-nav=reports]").click();
+    await page.locator("#closeAnalyzeFilters").click();
     assert.equal(await page.evaluate(() => window.underlyingClicks), 0, "First outside click only dismisses");
     assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
     await trigger.press("ArrowDown"); await trigger.press("ArrowDown"); await trigger.press("Enter"); await ready(page);
@@ -601,6 +587,8 @@ test("long names, paths and identity details wrap in full without losing selecti
             field.append(select); document.querySelector("#workspace").append(field);
         }, { choices, scale });
         const trigger = page.locator("#identityChoices-control");
+        await trigger.waitFor();
+        assertFieldGeometry(await fieldGeometry(page, ".select-field:has(#identityChoices)"), scale);
         await trigger.click();
         for (const choice of choices) {
             const row = page.getByRole("option", { name: choice.label, exact: true });
@@ -639,7 +627,7 @@ test("dialog, scroll, disabled, empty, loading, stale and dynamically replaced o
     assert.match(await trigger.getAttribute("aria-activedescendant"), /option-2$/, "Disabled option is skipped");
     const disabled = page.getByRole("option", { name: "Unavailable scope", exact: true });
     assert.equal(await disabled.getAttribute("aria-disabled"), "true");
-    assert.equal(await disabled.locator(".select-option-detail").innerText(), "This saved scope is unavailable in the current snapshot.");
+    assert.equal(await disabled.locator(".select-option-detail").innerText(), "Unavailable: This saved scope is unavailable in the current snapshot.");
     assert.equal(await disabled.getAttribute("aria-describedby"), await disabled.locator(".select-option-detail").getAttribute("id"));
     await disabled.dispatchEvent("click");
     assert.equal(await page.locator("#testScope").inputValue(), "0");

@@ -9,9 +9,11 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 async function chooseAuthors(page, values, wait = true) {
+    await openAnalyzeFilters(page);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
     const popup = page.locator(".select-popup:visible");
     for (const actor of ["user", "agent", "unknown"]) {
@@ -21,6 +23,7 @@ async function chooseAuthors(page, values, wait = true) {
     const response = wait ? page.waitForResponse(value => value.url().endsWith("/api/snapshot")) : null;
     await popup.getByRole("button", { name: "Apply", exact: true }).click();
     if (wait) { await response; await ready(page); }
+    await closeAnalyzeFilters(page);
 }
 
 async function setup(t) {
@@ -83,29 +86,29 @@ async function setup(t) {
         }
         return route.continue();
     });
-    await page.goto(runtime.url + "#activity"); await ready(page);
-    const displayedIds = () => page.locator("#activityList .session-group").evaluateAll(nodes => nodes.map(node => node.dataset.sessionId));
+    const byId = new Map((await loadBoardState(context)).evidence.map(r => [r.scenarioId, r.sourceSessionId]));
+    await page.goto(runtime.url); await ready(page);
+    const displayedIds = async () => (await page.locator("#activityList article[data-view-key]").evaluateAll(nodes =>
+        nodes.map(node => node.dataset.viewKey.slice("request:".length)))).map(id => byId.get(id));
     const displayedCount = async () => {
         const summary = await page.locator("#periodResult").textContent();
-        const count = summary.match(/\bwith (\d+) Work IQ tool calls?\b/);
+        const count = summary.match(/^(\d+) Work IQ tool calls?\b/);
         assert.ok(count, `Expected a recorded call count in the displayed period summary: ${summary}`);
         return Number(count[1]);
     };
     return { page, actors, displayedCount, displayedIds, setPendingRelease: fn => { releasePending = fn; } };
 }
 
-test("accepted author filters exclude empty roster chats before pagination while All preserves metadata browsing", { timeout: 45000 }, async t => {
+test("accepted author filters page actual collected interactions, never an empty roster chat", { timeout: 45000 }, async t => {
     const app = await setup(t), { page } = app;
     assert.equal(await app.displayedCount(), 13);
     assert.equal((await app.displayedIds()).length, 8);
-    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 14/);
+    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 13/);
 
     await chooseAuthors(page, ["user"]);
     assert.equal(await app.displayedCount(), 0);
     assert.deepEqual(await app.displayedIds(), [], "Your-only must not resurrect agent/unknown chats as empty groups");
-    assert.equal(await page.getByRole("heading", { name: "No requests match", exact: true }).count(), 1);
-    assert.equal(await page.locator("#activityPager").textContent(), "");
-    assert.equal(await page.locator("#activityInsights .assessment-fact").count(), 0);
+    assert.equal(await page.locator("#activityPager button:enabled").count(), 0);
 
     await chooseAuthors(page, ["user", "agent"]);
     assert.equal(await app.displayedCount(), 10);
@@ -126,18 +129,17 @@ test("accepted author filters exclude empty roster chats before pagination while
     assert.ok(unknown.every(id => app.actors.get(id) === "unknown"));
     assert.equal(await app.displayedCount(), 3);
     assert.match(await page.locator("#activityPager").textContent(), /1-3 of 3/);
-    assert.equal(await page.locator("#activityPager button").count(), 0);
+    assert.equal(await page.locator("#activityPager button:enabled").count(), 0);
 
     await chooseAuthors(page, ["user", "agent", "unknown"]);
     const allFirst = await app.displayedIds();
-    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 14/);
+    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 13/);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
     const all = new Set([...allFirst, ...await app.displayedIds()]);
-    assert.equal(all.size, 14);
-    assert.ok([...all].some(id => app.actors.get(id) === null), "All keeps the eligible chat with no retained activity");
+    assert.deepEqual(all, new Set([...app.actors].filter(([, actor]) => actor !== null).map(([id]) => id)));
 });
 
-test("roster fallback follows accepted authors during pending and failed reads, not requested authors", { timeout: 45000 }, async t => {
+test("collected interactions follow accepted authors during pending and failed reads, not requested authors", { timeout: 45000 }, async t => {
     const app = await setup(t), { page } = app;
     let entered, release;
     const held = new Promise(resolve => { entered = resolve; }), gate = new Promise(resolve => { release = resolve; });
@@ -150,10 +152,9 @@ test("roster fallback follows accepted authors during pending and failed reads, 
         await route.fulfill({ response });
     });
     await chooseAuthors(page, ["user"], false); await held;
-    await page.locator("#activitySearch").fill("Invented");
     assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["user", "agent", "unknown"]);
     assert.equal((await app.displayedIds()).length, 8, "Accepted All roster stays while Your-only is pending");
-    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 14/);
+    assert.match(await page.locator("#activityPager").textContent(), /1-8 of 13/);
     release(); await ready(page);
     assert.deepEqual(await app.displayedIds(), []);
 
@@ -168,13 +169,11 @@ test("roster fallback follows accepted authors during pending and failed reads, 
         await route.fulfill({ status: 503, json: { error: "Invented All-author read failure." } });
     });
     await chooseAuthors(page, ["user", "agent", "unknown"], false); await failingHeld;
-    await page.locator("#activitySearch").fill("");
     assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["user"]);
     assert.deepEqual(await app.displayedIds(), [], "Requested All cannot reinsert roster chats while accepted Your-only is pending");
     failRelease(); await ready(page);
     assert.deepEqual(await app.displayedIds(), []);
-    assert.equal(await page.locator("#activityPager").textContent(), "");
-    assert.equal(await page.getByRole("heading", { name: "No requests match", exact: true }).count(), 1);
+    assert.equal(await page.locator("#activityPager button:enabled").count(), 0);
     assert.match(page.url(), /authors=user/);
     assert.match(await page.locator("#message").textContent(), /could not update|last recorded snapshot/i);
 });

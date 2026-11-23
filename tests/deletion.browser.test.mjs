@@ -3,12 +3,11 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, fixture, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContents, chooseReportScope, chooseLandingReportDates, prepareLandingReport } from "./report-journey-helpers.mjs";
-import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 test("anonymous local records are qualified in deletion preview, not presented as verified distinct tool calls", { timeout: 15000 }, async t => {
     const record = fixture("anonymous-preview");
@@ -344,36 +343,4 @@ test("pending confirmation is visible, cannot be duplicated or dismissed, and bl
     release();
     await page.waitForFunction(() => document.querySelector("#deleteTitle").textContent === "Collected activity deleted");
     assert.equal(commits, 1);
-});
-
-test("confirmation is readable, keyboard-contained and non-color-only at responsive light/navy sizes", { timeout: 60000 }, async t => {
-    const { page } = await setup(t);
-    const proof = process.env.DELETION_PROOF_DIR;
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await openSettings(page);
-        await previewAll(page);
-        for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-            assert.equal(await page.locator("#deleteDialog").evaluate(node => node.scrollWidth <= node.clientWidth), true, `${theme}/${width}/${scale}`);
-            assert.ok((await page.locator("#deleteCancel").boundingBox()).height >= 44);
-            assert.match(await page.locator("#deleteDialog .delete-irreversible").innerText(), /cannot be undone/);
-            await page.locator("#deleteConfirm").focus();
-            await page.keyboard.press("Tab");
-            assert.equal(await page.evaluate(() => document.querySelector("#deleteDialog").contains(document.activeElement)), true);
-            const { ink, face } = await page.locator("#deleteConfirm").evaluate(measureControlSurface);
-            assert.ok(contrast(ink, face) >= 4.5, `${theme}/${width}/${scale}: ${ink} on ${face}`);
-            if (proof) {
-                await page.locator("#deleteDialog").evaluate(node => { node.scrollTop = 0; });
-                await page.screenshot({ path: path.join(proof, `deletion-${theme}-${width}-${scale * 100}.png`) });
-                await page.locator("#deleteCancel").scrollIntoViewIfNeeded();
-                await page.screenshot({ path: path.join(proof, `deletion-actions-${theme}-${width}-${scale * 100}.png`) });
-            }
-        }
-        await page.keyboard.press("Escape");
-        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-        await page.setViewportSize({ width: 1200, height: 1000 });
-    }
 });

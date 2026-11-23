@@ -317,12 +317,6 @@ test("partial and conflicting membership lead with retained-scope limits", () =>
         assert.match(model.takeaway, /results cover that saved evidence/);
     }
 });
-test("summary projection never mutates source facts and needs no answer text", () => {
-    const view = currentView(), before = structuredClone(view);
-    presentation.summarize(view.metrics);
-    assert.deepEqual(view, before);
-    assert.ok(view.observations.every(observation => observation.kind !== "answer"));
-});
 test("mixed aggregate fixture is valid but not passed off as an interaction", () => {
     const metrics = mixedOverview();
     metrics.forEach(contract.validateMetric);

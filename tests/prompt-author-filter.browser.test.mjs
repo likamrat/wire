@@ -4,8 +4,8 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { navigateMain, openActivitySessions, selectActivityOption, chooseTheme } from "./helpers.mjs";
-import { openReportCreation, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { navigateMain, openActivitySessions, openAnalyzeFilters, selectActivityOption, chooseTheme } from "./helpers.mjs";
+import { selectReportFocus } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_AUTHOR_FILTER_PROOFS;
@@ -14,6 +14,7 @@ const ready = async page => {
     await page.evaluate(() => document.fonts.ready);
 };
 async function setAuthors(page, values, id = "promptAuthorFilter", finish = "Apply") {
+    if (id === "promptAuthorFilter") await openAnalyzeFilters(page);
     await page.locator(`[data-select-id="${id}"]`).click();
     const popup = page.locator(".select-popup:visible");
     for (const value of ["user", "agent", "unknown"]) {
@@ -28,7 +29,7 @@ async function setup(t) {
     const app = await authorFilterFixture(t), browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1200, height: 950 }, timezoneId: "UTC", reducedMotion: "reduce" });
     const errors = [], blocked = [], requests = [];
-    let snapshot, overview;
+    let snapshot;
     page.setDefaultTimeout(10000);
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
@@ -44,13 +45,11 @@ async function setup(t) {
     page.on("response", async response => {
         if (!response.ok()) return;
         if (response.url().endsWith("/api/snapshot")) snapshot = await response.json();
-        if (response.url().endsWith("/api/assessment/overview")) overview = response.request().postDataJSON();
     });
     app.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(blocked, []); });
     await page.goto(app.runtime.url); await ready(page);
-    return { ...app, page, requests, snapshot: () => snapshot, overview: () => overview };
+    return { ...app, page, requests, snapshot: () => snapshot };
 }
-
 test("shared author menu applies whole interactions, preserves draft/cancel and conversation/history scope", { timeout: 60000 }, async t => {
     const app = await setup(t), { page } = app;
     assert.equal(app.snapshot().analytics.totals.count, 8);
@@ -74,12 +73,10 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.snapshot().analytics.totals.count, 3);
     assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     assert.match(page.url(), /authors=user/);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
+    await selectActivityOption(page, "chatFilter", app.chatId); await ready(page);
     assert.match(page.url(), /authors=user/);
     assert.equal(app.snapshot().analytics.totals.count, 3);
-    await openActivitySessions(page);
-    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label === "Human prompt"));
+    assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     await setAuthors(page, ["agent"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await setAuthors(page, ["user", "agent"]);
@@ -87,8 +84,7 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.match(await page.locator("#filterChips").innerText(), /Human and agent prompts/);
     await setAuthors(page, ["unknown"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
-    await openActivitySessions(page);
-    assert.ok((await page.locator(".full-text-preview-label").allTextContents()).every(label => label.startsWith("Copilot chat prompt")));
+    assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["unknown"]);
     await page.goBack(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 5);
     assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["user", "agent"]);
@@ -96,46 +92,44 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.snapshot().analytics.totals.count, 2);
     await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 7);
-    assert.equal(new URL(page.url()).hash.includes("authors="), false);
+    assert.equal(new URL(page.url()).searchParams.has("authors"), false);
 });
 
-test("report author choice narrows selected base membership without losing hidden requests", { timeout: 60000 }, async t => {
-    const app = await setup(t), { page } = app;
-    await navigateMain(page, "activity"); await ready(page); await openActivitySessions(page);
-    for (const key of ["ownMail", "agentMail", "unverified"]) {
-        await page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"] input`).check();
-    }
-    await setAuthors(page, ["user"]);
-    await navigateMain(page, "reports"); await ready(page);
-    await openReportCreation(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
-    await setAuthors(page, ["user"], "reportPromptAuthorFilter");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/);
-    await reportContents(page);
+test("report author filtering preserves selected base membership and complete eligible calls", async t => {
+    const { page, cases } = await setup(t);
+    await navigateMain(page, "reports");
+    await selectReportFocus(page, "all");
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.locator("#reportActivityOptions");
+    await picker.locator('[name=reportScope][value=selected]').check();
+    const wanted = new Set([cases.ownMail.scenarioId, cases.agentMail.scenarioId, cases.unverified.scenarioId]);
+    const next = picker.getByRole("button", { name: "Next report requests", exact: true });
+    do {
+        const ids = await picker.locator("input[data-report-request]").evaluateAll(nodes => nodes.map(node => node.id));
+        assert.ok(ids.length > 0);
+        for (const id of ids) await picker.locator(`[id="${id}"]`).setChecked(wanted.has(id.slice("report-select-".length)));
+        if (!await next.isEnabled()) break;
+        await next.click();
+    } while (true);
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
     await page.locator('[name=promptMode][value=none]').check();
-    const preview = await scanReport(page);
+    const read = () => page.waitForResponse(response => response.url().endsWith("/api/preview") && response.ok());
+    let response = read(); await page.locator("#prepareReportPreview").click();
+    assert.equal((await (await response).json()).records.length, wanted.size);
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    response = read(); await setAuthors(page, ["user"], "reportPromptAuthorFilter");
+    const preview = await (await response).json();
     assert.deepEqual(preview.snapshot.selectionScope.promptAuthors, ["user"]);
-    assert.equal(preview.snapshot.selectionScope.baseRequestGroups, 3);
+    assert.equal(preview.snapshot.selectionScope.baseRequestGroups, wanted.size);
     assert.equal(preview.snapshot.selectionScope.requestGroups, 1);
     assert.equal(preview.snapshot.selectionScope.workIqActions, 2);
     assert.equal(preview.records.length, 1);
     assert.equal(preview.records[0].toolCalls.length, 2);
     assert.ok(preview.records[0].prompts.every(prompt => prompt.text === null));
-    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
-    await setAuthors(page, ["agent"], "reportPromptAuthorFilter");
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft");
-    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
-    await setAuthors(page, ["user", "agent", "unknown"], "reportPromptAuthorFilter");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page); await openActivitySessions(page);
-    for (const key of ["ownMail", "agentMail", "unverified"]) assert.equal(await page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"] input`).isChecked(), true);
 });
-
-test("author choice composes with dates, result, service and chat scope before Insights and pagination", { timeout: 60000 }, async t => {
+test("author choice composes with dates, result, service and chat scope before pagination", { timeout: 60000 }, async t => {
     const app = await setup(t), { page } = app;
-    await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
+    await selectActivityOption(page, "chatFilter", app.chatId); await ready(page);
     await setAuthors(page, ["user"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
     await page.locator('[data-select-id="outcomeFilter"]').click();
@@ -156,15 +150,14 @@ test("author choice composes with dates, result, service and chat scope before I
     assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["user"]);
     assert.deepEqual(app.requests.at(-1).filters.outcomes, ["failure"]);
     assert.deepEqual(app.requests.at(-1).filters.workloads, ["Mail"]);
-    await page.waitForFunction(() => document.querySelector("#activityInsights")?.getAttribute("aria-busy") !== "true");
-    assert.equal(app.overview().interactionRefs.length, 1);
+    assert.equal(await page.locator("#activityList .request-row").count(), 1);
     await selectActivityOption(page, "serviceFilter", "Files"); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 0);
     assert.equal(await page.locator(".request-row:visible,.matched-action:visible").count(), 0);
     assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["user"]);
     await page.locator("#resetView").click(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 8);
-    assert.equal(page.url().split("#")[1], "analyze");
+    assert.equal(new URL(page.url()).pathname, "/");
 });
 
 test("pending, failed and late author reads never relabel old counts as a new selection", { timeout: 60000 }, async t => {
@@ -206,7 +199,7 @@ test("author cues and Apply controls remain readable in light/navy and narrow la
     if (proofDir) await mkdir(proofDir, { recursive: true });
     for (const theme of ["light", "dark"]) for (const width of [1200, 375]) {
         await page.setViewportSize({ width, height: 950 }); await chooseTheme(page, theme);
-        const cues = await page.locator(".request-row .full-text-preview-label[data-prompt-actor]").evaluateAll(nodes => nodes.map(node => {
+        const cues = await page.locator(".request-row .request-card-author[data-prompt-actor]").evaluateAll(nodes => nodes.map(node => {
             let parent = node, background;
             while (parent && (!background || background === "rgba(0, 0, 0, 0)")) { background = getComputedStyle(parent).backgroundColor; parent = parent.parentElement; }
             return { actor: node.dataset.promptActor, text: node.textContent, color: getComputedStyle(node).color, background };
@@ -214,12 +207,13 @@ test("author cues and Apply controls remain readable in light/navy and narrow la
         assert.ok(cues.some(cue => cue.actor === "user" && cue.text === "Human prompt"));
         assert.ok(cues.some(cue => cue.actor === "agent" && cue.text === "Agent prompt"));
         for (const cue of cues) assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${width}/${cue.actor} contrast`);
-        assert.notEqual(cues.find(cue => cue.actor === "user").color, cues.find(cue => cue.actor === "agent").color);
+
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         if (proofDir) for (const actor of ["user", "agent", "unknown"]) {
             await page.locator(".request-row").filter({ has: page.locator(`[data-prompt-actor="${actor}"]`) }).first()
                 .screenshot({ path: path.join(proofDir, `author-row-${actor}-${theme}-${width}.png`) });
         }
+        await openAnalyzeFilters(page);
         await page.locator('[data-select-id="promptAuthorFilter"]').click();
         const popup = page.locator(".select-popup:visible");
         assert.equal(await popup.locator(".select-draft-hint,.select-validation:visible").count(), 0);

@@ -109,7 +109,7 @@ test("new report origin explanations are versioned and survive JSON-only saved r
     const { context } = await privateFixture(t, [record]), controller = createExportController(context);
     const bundle = await save(controller, context, { formats: ["json"], promptMode: "original" });
     const snapshot = JSON.parse(await readFile(bundle.files["product-report.json"], "utf8"));
-    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 2 });
+    assert.equal(snapshot.presentation.originExplanationVersion, 1);
     t.mock.method(promptAuthorship, "reason", () => "Changed live screen explanation.");
     const state = await loadBoardState(context), view = await readSavedReportView(context, state, bundle.bundleId);
     assert.match(view.text, /WIRE could not reconcile the recorded origin evidence\./);

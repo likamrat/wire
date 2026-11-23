@@ -237,13 +237,14 @@ test("exact Trends numbers keep date and value text separate and scroll by keybo
     await dates(page, "2026-08-01", "2026-08-01");
     await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    const exact = page.getByRole("region", { name: "Daily exact values", exact: true });
     const failures = [];
     for (const [theme, width, scale] of [["light", 390, 1], ["dark", 390, 1], ["light", 1024, 2]]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 844 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await settle(page);
-        const layout = await page.locator(".trends-exact").evaluate(node => {
+        const layout = await exact.evaluate(node => {
             const cells = [...node.querySelectorAll("tr")].at(-1).children;
             const bounds = cell => { const range = document.createRange(); range.selectNodeContents(cell); return range.getBoundingClientRect(); };
             const date = bounds(cells[0]), value = bounds(cells[1]);
@@ -255,12 +256,11 @@ test("exact Trends numbers keep date and value text separate and scroll by keybo
         if (layout.tabindex !== 0) failures.push(`${theme}/${width}/${scale}: not keyboard scrollable`);
         assert.match(layout.headers, /Date.*fetch.*retrieve.*Interactions.*Calls/);
         await capture(page, `usability-exact-${theme}-${scale}`);
-        if (process.env.WIRE_TRENDS_PROOFS) await page.locator(".trends-exact").screenshot({
+        if (process.env.WIRE_TRENDS_PROOFS) await exact.screenshot({
             path: path.join(process.env.WIRE_TRENDS_PROOFS, `usability-exact-${theme}-${scale}-table.png`),
         });
     }
     assert.deepEqual(failures, []);
-    const exact = page.locator(".trends-exact");
     await exact.focus(); await page.keyboard.press("ArrowRight");
     await expect.poll(() => exact.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
 });
@@ -731,7 +731,7 @@ test("series visibility does not rebase percentages, recreate controls or shift 
     assert.ok(Math.abs(after.top - before.top) < 1); assert.ok(Math.abs(after.y - before.y) < 1);
     assert.equal(reads.length, readCount);
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
-    await expect(page.locator(".trends-exact")).toContainText("Files");
+    await expect(page.getByRole("region", { name: "Daily exact values", exact: true })).toContainText("Files");
     assert.equal(value.totals.values.services.find(row => row.id === "Files").eligible, 60);
     await chooseTheme(page, "dark");
     await page.setViewportSize({ width: 440, height: 1000 });

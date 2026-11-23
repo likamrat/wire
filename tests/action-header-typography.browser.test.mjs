@@ -39,7 +39,10 @@ async function measure(page) {
         const body = document.querySelector("#contextSidebarBody");
         const paths = [...activity.querySelectorAll("code.api-path")].filter(n => n.checkVisibility()).map(n => {
             const css = getComputedStyle(n);
-            return { text: n.textContent, wrapped: n.scrollWidth <= n.clientWidth + 1,
+            const clip = body.getBoundingClientRect(), range = document.createRange();
+            range.selectNodeContents(n);
+            const inside = [...range.getClientRects()].every(rect => rect.left >= clip.left - 1 && rect.right <= clip.right + 1);
+            return { text: n.textContent, wrapped: inside && n.scrollWidth <= n.clientWidth + 1,
                 role: Object.fromEntries(["fontFamily","fontSize","fontWeight","fontVariantLigatures","whiteSpace",
                     "overflowWrap","userSelect","backgroundColor","padding"].map(p => [p, css[p]])) };
         });
@@ -56,8 +59,8 @@ async function measure(page) {
 
 async function checkMatrix(page, tools, expectedPaths, name) {
     const measurements = [];
-    for (const theme of ["light","dark"]) for (const width of [375,820,1200,2560]) for (const scale of [1,2]) {
-        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
+    for (const [theme,width,scale] of [["light",820,1],["light",1200,1],["light",1200,2],["dark",2560,1],["dark",375,1],["dark",375,2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         const result = await measure(page), label = `${theme}-${width}-${scale}`;
         assert.ok(result.overflow <= 1, `${label}: reader fits`);

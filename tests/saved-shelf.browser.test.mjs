@@ -89,13 +89,10 @@ test("Reports starts with creation and three recent saved names; full-library co
     assert.ok(await shelf.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector("#reportCreatePanel")) & Node.DOCUMENT_POSITION_PRECEDING)));
     await expect(page.locator("#savedReportSearch")).toBeHidden();
     await expect(page.locator(".saved-library-row")).toHaveCount(0);
-    await allSaved(page).focus();
-    await page.keyboard.press("Tab");
-    await expect(page.locator('[name=promptMode]:checked')).toBeFocused();
     await recent(page).first().focus();
     await holdTitle(page, "oldShelf");
     await page.keyboard.press("Enter");
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(page.locator("#savedReportReader").getByRole("heading", { level: 1 })).toHaveText("Fir field notes 9");
     await expect(sections(page)).toBeHidden();
     await expectRetired(page, "oldShelf");
     await page.getByRole("button", { name: "Back to Reports" }).click();
@@ -125,7 +122,7 @@ test("Reports starts with creation and three recent saved names; full-library co
     await title.focus();
     const top = await title.evaluate(node => node.getBoundingClientRect().top);
     await title.press("Enter");
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(page.locator("#savedReportReader").getByRole("heading", { level: 1 })).toHaveText("Fir field notes 7");
     await page.getByRole("button", { name: "Back to saved reports" }).click();
     await expect(title).toBeFocused();
     await expect(page.locator("#savedReportSearch")).toHaveValue("Fir field");

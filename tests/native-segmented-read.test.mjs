@@ -13,11 +13,6 @@ import { openNativeSegmentedReader } from "../lib/native-segmented-read.mjs";
 import { stageNativeSegmentedTree } from "../lib/native-segmented-stage.mjs";
 import { nativeV1SegmentedRows, stageNativeV1Segments } from "../lib/native-segmented-v1.mjs";
 import { stageNativeSegmentedCapture } from "../lib/native-segmented-merge.mjs";
-import { stageNativeSegmentedDeletion } from "../lib/native-segmented-delete.mjs";
-import { nativeObservationDeletionIdentity } from "../lib/deletion-identities.mjs";
-import { filterNativeRetainedDocument } from "../lib/native-retention-contract.mjs";
-import { DELETION_LIMITS } from "../lib/deletion-storage.mjs";
-import { inspectNativeSegmentedInventory } from "../lib/native-segmented-inventory.mjs";
 
 function retainedFixture() {
     const source = [...chatFixture(), ...coworkFixture()];
@@ -370,67 +365,4 @@ test("v2 append streams old history, reuses variant blocks and shifts metadata f
             if (index === 2) assert.equal(candidate.rootHash, before);
         } finally { reader.close(); }
     }
-});
-
-test("segmented deletion removes every variant/provenance and repairs shared witnesses without pruning survivors", async () => {
-    const fixture = retainedFixture(), repeated = [...chatFixture(), ...coworkFixture()];
-    for (const row of repeated) {
-        row.scope.account = { tenantId: fixture.account.tenantId, subjectId: fixture.account.subjectId, verification: "verified" };
-        row.capture.captureId += "-cleanup";
-    }
-    repeated[0].ordering.completeness = "drained-exposed-history";
-    fixture.document = mergeNativeRetainedCapture(fixture.document, encodeNativeRetainedCapture(fixture.account, repeated)).document;
-    const storage = graph(fixture.account, rowsFromDocument(fixture.document));
-    const removed = fixture.document.observations.filter(item => item.variants[0].content.scope.surface === "chat"
-        || item.variants[0].content.identity.nativeType === "ts");
-    const identities = removed.map(item => nativeObservationDeletionIdentity(item.key));
-    const oldBlocks = new Map(storage.blocks);
-    const io = { account: fixture.account, maxIndexBytes: DELETION_LIMITS.metadataBytes, assertCurrent() {},
-        readBlock: storage.readBlock, async writeBlock(value) { storage.blocks.set(value.hash, Buffer.from(value.json)); return value.hash; } };
-    const result = await stageNativeSegmentedDeletion({ ...io, rootHash: storage.rootHash, identities });
-    assert.equal(result.removedObservations, removed.length);
-    assert.equal(result.removedVariants, removed.reduce((count, row) => count + row.variants.length, 0));
-    assert.ok(result.removedVariants > result.removedObservations);
-    const reader = await openNativeSegmentedReader({ ...io, rootHash: result.rootHash, expectedAccount: fixture.account });
-    try {
-        const selection = await reader.select({ sources: ["microsoft-365-chat", "microsoft-365-cowork"], scenarioIds: null });
-        const entries = (await collect(reader, selection)).filter(event => event.kind === "conversation-part").flatMap(event => event.entries);
-        assert.deepEqual(entries.toSorted((a, b) => a.inputOrdinal - b.inputOrdinal).map(entry => entry.record),
-            validateNativeRetainedDocument(filterNativeRetainedDocument(fixture.document, { identities })).records);
-        for await (const row of reader.iterateRows({ prefix: "o/" })) {
-            assert.equal(identities.includes(nativeObservationDeletionIdentity(row.identity)), false);
-        }
-    } finally { reader.close(); }
-    for (const [hash, bytes] of oldBlocks) assert.deepEqual(storage.blocks.get(hash), bytes, "Staging never mutates or unlinks the old graph.");
-    const before = storage.blocks.size;
-    const again = await stageNativeSegmentedDeletion({ ...io, rootHash: result.rootHash, identities });
-    assert.equal(again.rootHash, result.rootHash);
-    assert.equal(again.candidate, null);
-    assert.equal(storage.blocks.size, before);
-    const all = fixture.document.observations.map(item => nativeObservationDeletionIdentity(item.key));
-    const empty = await stageNativeSegmentedDeletion({ ...io, rootHash: result.rootHash, identities: all });
-    const emptyReader = await openNativeSegmentedReader({ ...io, rootHash: empty.rootHash });
-    try { assert.equal(emptyReader.recordCount, 0); assert.equal(emptyReader.rowCount, 0); }
-    finally { emptyReader.close(); }
-    const stranded = encodeNativeSegmentedBlock(nativeSegmentedEnvelope(fixture.account, "segment",
-        { entries: [rowsFromDocument(fixture.document).find(row => row.kind === "variant")] }));
-    storage.blocks.set(stranded.hash, Buffer.from(stranded.json));
-    const blockCount = storage.blocks.size;
-    const inventoryInput = {
-        entries: [...storage.blocks.keys()].map(hash => ({ area: "data", hash })),
-        roots: [{ area: "data", hash: empty.rootHash, account: fixture.account }],
-        async readBlock({ area, hash }, { maxBytes }) {
-            assert.equal(area, "data");
-            assert.equal(maxBytes, DELETION_LIMITS.fileBytes);
-            return storage.blocks.get(hash);
-        },
-        assertCurrent() {},
-    };
-    const inventory = await inspectNativeSegmentedInventory(inventoryInput);
-    assert.equal(inventory.blocks.find(item => item.hash === empty.rootHash).disposition, "current-root");
-    assert.equal(inventory.blocks.find(item => item.hash === storage.rootHash).disposition, "historical-root");
-    assert.equal(inventory.blocks.find(item => item.hash === stranded.hash).disposition, "unreferenced");
-    assert.equal(storage.blocks.size, blockCount);
-    const missing = inventoryInput.entries.filter(item => item.hash !== JSON.parse(storage.blocks.get(storage.rootHash)).tree.hash);
-    await assert.rejects(inspectNativeSegmentedInventory({ ...inventoryInput, entries: missing }), { code: "inventory-member-missing" });
 });

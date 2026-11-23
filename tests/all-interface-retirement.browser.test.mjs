@@ -10,7 +10,8 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { assessmentHash } from "../lib/assessment-read-model.mjs";
 import { navigateMain, navigateSettings, selectActivityOption, chooseTheme } from "./helpers.mjs";
-import { scanReport } from "./report-journey-helpers.mjs";
+import { openReportLibrary, prepareReportPreview } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 
 const retiredCopy = /\bAI (?:reviews?|results?|checks?|judgments?)\b|model assessment|assessment coverage|automatic scor|saved reviews?|no saved review|calls and reviews|new assessment|not scored|pass[- ]share colors|quality grade|check errors|\bnot assessed\b|\b\d+ (?:\/ \d+ )?assessed\b|\b(?:personal|your) feedback\b|(?:save|withdraw) feedback/i;
 
@@ -47,13 +48,13 @@ test("every current interface excludes retired reviews, including menus, dialogs
     });
     async function save(owner) {
         const state = await loadBoardState(f.context);
-        const preview = await reports.preview(owner, undefined, { promptMode: "none", formats: ["html", "json"] },
+        const preview = await reports.preview(owner, undefined, { title: owner, promptMode: "none", formats: ["html", "json"] },
             { kind: "all", revision: state.revision });
         await reports.review(owner, preview.previewId, true);
         return (await reports.confirm(owner, preview.previewId, true)).bundle;
     }
-    const earlier = await save("fixture-owner");
-    const later = await save("fixture-owner");
+    const earlier = await save("Earlier Lantern report");
+    const later = await save("Later Lantern report");
     const { bundle: comparison } = await historicalComparison(f.context, earlier.bundleId, later.bundleId, { formats: ["html", "json"] });
     const frozenFiles = [earlier, later, comparison].flatMap(bundle => Object.values(bundle.files));
     const originalHashes = await Promise.all(frozenFiles.map(async file => assessmentHash(await readFile(file))));
@@ -117,12 +118,12 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator("#closeContextSidebar").click();
 
     await navigateMain(page, "settings");
-    for (const category of ["connection", "privacy", "display"]) {
+    for (const category of ["connection", "privacy", "themes"]) {
         await navigateSettings(page, category);
         const root = page.locator(`[data-settings-section="${category}"]`);
         await expand(root); await capture("settings-" + category, root, category === "privacy");
     }
-    await navigateSettings(page, "connection");
+    await navigateSettings(page, "source-access");
     await page.locator("#editSource").click();
     await capture("source-permission-review", page.locator("#sourceEditor"));
     await page.locator("#cancelSource").click();
@@ -162,33 +163,33 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("failed-call-navigation");
 
     await navigateMain(page, "reports");
+    await openReportLibrary(page);
     await capture("report-library", page.locator("#savedReportsPanel"));
-    await page.getByRole("button", { name: "Open saved report", exact: true }).first().click();
+    await page.getByRole("button", { name: "View report: " + earlier.title, exact: true }).click();
+    await expect(page.locator("#savedReportReader")).toBeVisible();
+    await capture("saved-current-reading", page.locator("#savedReportReader"));
+    await selectActivityOption(page, "savedReaderFormat", "html");
     let body = page.frameLocator("iframe:visible").first().locator("body");
     await expect(body.getByRole("heading", { name: earlier.title, level: 1, exact: true })).toBeVisible();
     await expand(body, true); await capture("saved-current-report", body);
-    await navigateMain(page, "reports");
-    await page.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports" }).click();
+    await page.locator(`[data-bundle-id="${comparison.bundleId}"]`).getByRole("button", { name: "Inspect details" }).click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     body = page.frameLocator("iframe:visible").first().locator("body");
     await expect(body.getByRole("heading", { name: comparison.title, level: 1, exact: true })).toBeVisible();
     await expand(body, true); await capture("saved-current-comparison", body);
-    await navigateMain(page, "reports"); await page.locator("#reportCreateLink").click();
+    await navigateMain(page, "reports");
     await capture("report-activity", page.locator("#reportsView"));
-    await page.locator('[data-select-id="reportPromptAuthorFilter"]').click();
+    await page.getByRole("combobox", { name: "Show", exact: true }).click();
     await capture("report-author-filter", page.locator(".select-popup")); await page.keyboard.press("Escape");
-    await page.locator('[name=reportScope][value=all]').check();
-    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
-    await expand(page.locator("#reportStage2")); await capture("report-contents", page.locator("#reportStage2"));
-    const preview = await scanReport(page);
-    body = page.frameLocator("iframe:visible").first().locator("body");
-    await expect(body.getByRole("heading", { name: preview.title, level: 1, exact: true })).toBeVisible();
+    const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview") && response.request().method() === "POST");
+    await prepareReportPreview(page);
+    const response = await prepared;
+    assert.ok(response.ok(), `Prepare preview: ${response.status()} ${(await response.json()).error ?? ""}`);
+    await expect(page.locator("#reportReviewBody")).toBeVisible();
+    body = page.locator("#reportReviewBody").frameLocator("iframe:visible").first().locator("body");
     await expand(body, true); await capture("new-report-preview", body, true);
-    for (const label of [/^Text \(/, /^Files \(/]) {
-        await page.getByRole("tab", { name: label }).click();
-        await capture(label.source.startsWith("^Text") ? "report-text-review" : "report-files", page.locator("#reportReviewBody"));
-    }
-    await page.getByRole("tab", { name: "Report", exact: true }).click();
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
+    await capture("report-preview-actions", page.locator("#reportReviewBody"));
 
     await navigateMain(page, "analyze");
     await page.locator("#openAnalyzeFilters").click();
@@ -198,19 +199,20 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator("#closeAnalyzeFilters").click();
     await ready(); await page.locator("#comparePeriods").click();
     const day = new Date().toISOString().slice(0, 10);
+    await openDatePicker(page, "compare", "Custom dates");
     for (const id of ["comparisonAFrom", "comparisonATo", "comparisonBFrom", "comparisonBTo"]) await page.locator("#" + id).fill(day);
-    await page.locator("#applyPeriodComparison").click();
+    await page.locator("#comparisonCustomDates").getByRole("button", { name: "Apply dates" }).click();
     await expect(page.locator("#periodComparisonResultsTitle")).toBeVisible();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await expand(page.locator("#periodComparison"));
     await capture("period-comparison", page.locator("#periodComparison"), true);
     assert.equal(await page.getByRole("button", { name: "Measure definitions", exact: true }).count(), 0);
-    await page.getByRole("button", { name: "Create comparison report", exact: true }).click();
+    await page.locator("#createPeriodReport").click();
     await capture("period-report-activity", page.locator("#reportsView"));
 
     await navigateMain(page, "settings"); await navigateSettings(page, "display"); await chooseTheme(page, "dark");
     await page.setViewportSize({ width: 375, height: 850 });
-    for (const category of ["connection", "privacy", "display"]) {
+    for (const category of ["connection", "privacy", "themes"]) {
         await navigateSettings(page, category); await capture("narrow-dark-" + category, page.locator("#settingsView"), category === "privacy");
     }
     await navigateSettings(page, "troubleshooting");

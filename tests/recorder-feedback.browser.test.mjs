@@ -129,9 +129,11 @@ test("real click route recorder path persists exact outcomes without workplace c
         await page.locator("#recordBtn").evaluate(node => { node.click(); node.click(); });
         const count = sent.length;
         await navigateMain(page, "home");
+        await expect(page.locator("#activityView")).toBeVisible();
+        const readingAddress = page.url();
         respond(reply);
         await page.waitForFunction(() => !document.querySelector("#recordBtn").disabled);
-        assert.match(page.url(), /#analyze/, "Completion must not navigate back or steal reading context");
+        assert.equal(page.url(), readingAddress, "Completion must not navigate back or steal reading context");
         await navigateMain(page, "collection-status");
         assert.match(await page.locator("#recorderStatus").innerText(), expected);
         assert.equal(sent.length, count);

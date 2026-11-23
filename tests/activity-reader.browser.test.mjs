@@ -143,7 +143,8 @@ test("filtered homepage failure entry is gesture-only and does not override expl
     await page.goto(runtime.url); await ready(page);
     await page.locator(".request-card-open").click(); await settled(page);
     await page.reload(); await ready(page); await settled(page);
-    await expect(page.locator("#contextSidebarTitle")).toBeFocused();
+    await expect(page.locator("#message")).toContainText("This tab no longer has the private view");
+    await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
 });
 
@@ -208,11 +209,12 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.locator(".activity-card [data-outcome=failure]")).toHaveCount(0);
     await closeAnalyzeFilters(page);
     await page.locator(".request-card-open").click(); await settled(page);
-    await expect(page.locator('[data-tool-call-id="activity-3"]')).not.toBeFocused();
+    await expect(page.locator('[data-tool-call-id="activity-3"]')).toHaveCount(0);
     await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(4);
     await page.getByRole("link", { name: "Show full activity" }).click();
-    await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT_3");
     await expect(page.locator(".reader-scope")).toContainText("4 of 6");
     await expect(page.locator('[data-tool-call-id="activity-3"]>.action-context')).toHaveText("Outside current view");
     await capture(page, "filtered-success-full-context");
@@ -276,7 +278,8 @@ test("changed retained evidence forgets the old private disclosure state", async
     const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await read; await ready(page); await settled(page);
-    await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#unavailableCall")).toContainText("The matching evidence changed");
+    await expect(page.locator('[data-tool-call-id="activity-3"]')).toHaveCount(0);
     assert.ok(!(await page.locator("#requestContent").innerHTML()).includes("PRIVATE_CHANGED_ARGUMENT"));
 });
 

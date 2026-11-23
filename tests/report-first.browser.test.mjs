@@ -650,7 +650,9 @@ test("creation text choice applies to the first report without a setup or previe
     const saved = await loadBoardState(context);
     assert.equal(saved.exports[0].promptMode, "none");
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(page.locator("#savedReportReader").getByRole("heading", { level: 1 })).toHaveText(initial.title);
+    await expect(page.getByRole("article", { name: "Report brief" })).toBeVisible();
+    assert.equal(requests.filter(request => request.path === "/api/report/open").at(-1).body.bundleId, initial.bundleId);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
     assert.deepEqual(errors, []);
 });

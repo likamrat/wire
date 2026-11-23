@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
     BASIS_KEYS, CURRENT_DIMENSIONS, RULES, ContractError, defaultConsent, validateInteraction, validateObservation,
     validateObservationForInteraction, validateConsent, captureDecision, validateAssessment,
-    evaluateCheck, appendPersonalRevision, activeAssessment, validateMetric, poolMetrics,
+    evaluateCheck, validateMetric, poolMetrics,
     assertCurrent, affectedDerivedRefs, validateReportFacts, freezeReportFacts, validateRequest,
     validateStoredAssessment, validateAssessmentStore, validateInteractionView, metricSlotKey,
 } from "../lib/assessment-contract.mjs";
@@ -249,25 +249,6 @@ test("synthetic: negative personal verdict, insufficient evidence and evaluator 
     validateAssessment(failedEvaluator);
     failedEvaluator.reason = "missing-evidence";
     rejects(() => validateAssessment(failedEvaluator), "invalid-evaluator-error");
-});
-
-test("synthetic: personal overrides append without mutating raw facts or prior assessment versions", () => {
-    const automatic = makeAssessment(), first = makeAssessment(true), before = JSON.stringify([automatic, first]);
-    const history = appendPersonalRevision([], first);
-    const second = { ...first, assessmentRef: id("assessment", 3), revision: 2, supersedes: first.assessmentRef, verdict: "fail" };
-    const revised = appendPersonalRevision(history, second);
-    assert.equal(activeAssessment(automatic, revised).verdict, "fail");
-    assert.equal(JSON.stringify([automatic, first]), before);
-    assert.equal(history.length, 1);
-    rejects(() => appendPersonalRevision(revised, second), "stale-override");
-});
-
-test("synthetic: optional withdrawal restores automatic unassessed, never fabricates a pass", () => {
-    const first = makeAssessment(true);
-    const withdrawn = { ...first, assessmentRef: id("assessment", 3), revision: 2, supersedes: first.assessmentRef, verdict: "unassessed", reason: "user-withdrawn", withdrawn: true };
-    assert.equal(activeAssessment(makeAssessment(), [first, withdrawn]).verdict, "unassessed");
-    first.basis.sourceRevision++;
-    rejects(() => activeAssessment(makeAssessment(), [first]), "stale-sourceRevision");
 });
 
 test("synthetic: impossible counts/coverage and display percentages are rejected", () => {

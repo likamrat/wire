@@ -14,7 +14,12 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
         const externalRequests = [];
         await context.route("**/*", route => { externalRequests.push(route.request().url()); return route.abort(); });
         const page = await context.newPage();
-        for (const scenario of reportMatrixCases()) {
+        // The controller matrix owns the full population table. Here exercise distinct paints:
+        // mixed/partial/unknown segments, a small nonzero segment, and a separate Graph-only layer.
+        const renderingCases = new Set(["mixed-parallel-batches", "one-failure-among-ninety-nine-successes", "graph-only-visible-and-missing-status"]);
+        const scenarios = reportMatrixCases().filter(scenario => renderingCases.has(scenario.name));
+        assert.equal(scenarios.length, renderingCases.size);
+        for (const scenario of scenarios) {
             await page.setViewportSize({ width: 1200, height: 1000 });
             const selected = scenario.canonicalSelection ? buildExportCatalog(scenario.records).records : scenario.records;
             const bundle = await buildSanitizedBundle(selected, "b".repeat(64), { promptMode: "none", formats: ["html"] });
@@ -56,7 +61,7 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
                 assert.match(note, /Not measured/);
             }
             const layouts = [["light", 1200, "100%"]];
-            if (["mixed-parallel-batches", "high-volume-twelve-interactions", "graph-only-visible-and-missing-status", "all-unknown"].includes(scenario.name)) {
+            if (scenario.name === "mixed-parallel-batches") {
                 layouts.push(["light", 320, "100%"], ["dark", 320, "200%"], ["dark", 768, "100%"]);
             }
             for (const [theme, width, size] of layouts) {

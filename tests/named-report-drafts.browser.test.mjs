@@ -216,7 +216,8 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     await card("y").locator(".request-card-open").click(); await expect(readerAction).toBeVisible();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await page.waitForFunction(() => document.querySelector("#contextSidebar").dataset.mode === "docked" && !document.getAnimations().some(a => a.playState === "running"));
-    const anchor = () => page.evaluate(() => [location.href, scrollY, document.querySelector("#contextSidebarBody").scrollTop]);
+    const anchor = () => page.evaluate(() => [location.href, scrollY,
+        document.querySelector("#contextSidebar .request-original pre").getBoundingClientRect().top]);
     // The first access/status publication and sidebar sizing can still settle after the entrance animation.
     await page.evaluate(() => new Promise(resolve => {
         let prior, stableAt = performance.now();
@@ -227,7 +228,6 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
         }
         frame();
     }));
-    const before = await anchor();
     await capture("reader");
     const source = reader.getByRole("button", { name: "Source", exact: true });
     const style = b => b.evaluate(n => {
@@ -246,7 +246,13 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     assert.equal((await style(readerAction))[3], "none");
     await page.mouse.down(); assert.equal((await style(readerAction))[3], "none"); await page.mouse.up();
     await page.keyboard.press("Escape"); await expect(readerAction).toBeFocused();
-    await readerAction.click(); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
+    const scroller = page.locator("#contextSidebarBody");
+    const target = await scroller.boundingBox();
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+    await page.mouse.wheel(0, 128);
+    await expect.poll(() => scroller.evaluate(n => n.scrollTop)).toBeGreaterThan(0);
+    const before = await anchor();
+    await readerAction.press("Enter"); await expect(panel.getByRole("button", { name: "Add to Release review" })).toBeVisible();
     await capture("picker");
     await panel.getByRole("searchbox").fill("name that does not exist");
     await expect(panel).toContainText("No matching drafts."); await expect(panel).not.toContainText("No drafts yet.");
@@ -271,11 +277,13 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     assert.deepEqual(preparations, []);
     await openedDraft.close(); await page.bringToFront();
     await expect(action("y").locator("svg")).toHaveAttribute("data-lucide-icon", "clipboard-check");
-    await readerAction.click(); await panel.getByRole("searchbox").fill("lease");
+    await readerAction.focus();
+    const beforeRemove = await anchor();
+    await readerAction.press("Enter"); await panel.getByRole("searchbox").fill("lease");
     await expect(panel.getByRole("button", { name: `Remove from ${handoff}` })).toHaveCount(0);
     await capture("filter"); await panel.getByRole("button", { name: "Remove from Release review" }).click();
     await expect(readerAction).toContainText("Handoff"); await expect(readerAction).not.toContainText("Release review");
-    assert.deepEqual(await anchor(), before); await capture("added");
+    assert.deepEqual(await anchor(), beforeRemove); await capture("added");
     await page.locator("#closeContextSidebar").click(); await page.reload();
     await expect(action("x")).toHaveText("In draft: Release review"); await expect(action("y")).toHaveText(`In draft: ${handoff}`);
     await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => document.documentElement.style.fontSize = "125%");

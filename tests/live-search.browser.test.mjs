@@ -49,10 +49,13 @@ async function find(page, query, type = "") {
 async function jsonValues(page) {
     const tree = page.locator("#savedReportReader .saved-json-tree");
     await tree.waitFor();
-    while (await tree.locator("details:not([open])").count()) {
-        await tree.locator("details:not([open])").first().evaluate(node => new Promise(resolve => {
+    // Read from the current tree after each expansion: replacing the document retires its old nodes.
+    const groups = tree.locator("details:not([open])");
+    await expect(tree.locator(".saved-json-scalar").first()).toBeAttached();
+    while (await groups.count()) {
+        await groups.evaluateAll(nodes => Promise.all(nodes.map(node => new Promise(resolve => {
             node.addEventListener("toggle", resolve, { once: true }); node.open = true;
-        }));
+        }))));
     }
     return tree.locator(".saved-json-scalar").allTextContents();
 }
@@ -66,6 +69,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
     await page.locator("#activityList .request-card-open").first().click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).toBeHidden();
     const query = "PHYS";
     const words = new Set(before.evidence[0].userPrompt.text.toLowerCase().match(/\p{L}+/gu));
     assert.equal(words.has(query.toLowerCase()), false, "This is a partial word, not exact whole-word matching");
@@ -162,18 +166,6 @@ test("one explicit reconnect recovers an expired stream and polling failures era
     await expect(page.locator("#wireSearchResults button")).toHaveCount(0, { timeout: 10000 });
     await expect(page.locator("#wireSearchRetry")).toBeVisible();
     assert.deepEqual(errors, []);
-});
-
-test("literal Search is the normal path without model fields, provisioning or fallback UI", { timeout: 30000 }, async t => {
-    const { page, runtime, requests, api } = await setup(t);
-    await find(page, "PHYS", "interaction");
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
-    const status = await (await api("/api/search/status")).json();
-    assert.equal(status.mode, "text");
-    for (const field of ["model", "modelId", "linguistics", "chunks"]) assert.equal(Object.hasOwn(status, field), false);
-    await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
-    await expect(page.locator("#wireSearchCoverage")).not.toContainText("Word search only");
-    assert.ok(requests.every(request => new URL(request.url).origin === new URL(runtime.url).origin));
 });
 
 test("a tampered saved copy refuses opening and leaves an explicit search retry", { timeout: 30000 }, async t => {

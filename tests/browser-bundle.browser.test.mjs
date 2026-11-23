@@ -12,7 +12,11 @@ import { replaceEvidence } from "../lib/store.mjs";
 
 async function setup(t, { enforced = false, frontend = "bundled" } = {}) {
     const cleanup = [];
-    const { context } = await privateFixture({ after: work => cleanup.push(work) }, [fixture("bundled-first"), fixture("bundled-second")]);
+    // A call with no recorded result opens the ordinary interaction. A completed
+    // count instead opens a revision-bound group of matching calls.
+    const ordinary = fixture("bundled-first");
+    Object.assign(ordinary.toolCalls[0], { toolSucceeded: null, reportedOutcome: "unknown", apiResults: [] });
+    const { context } = await privateFixture({ after: work => cleanup.push(work) }, [ordinary, fixture("bundled-second")]);
     const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
     const runtime = await startServer(context, createExportController(context), {
         port: 0, frontend, access, collector: { timers: false },
@@ -56,10 +60,13 @@ test(`reader controls stay compact with doubled text in both layouts (${frontend
 test(`losing an open bookmark releases the old Analyze cards without exposing a fallback (${frontend})`, async t => {
     const { page, runtime, context } = await setup(t, { frontend });
     await page.goto(runtime.url);
-    const link = page.locator("#activityList .request-card-open").first();
-    await expect(link).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-    const priorText = await link.locator(".card-excerpt").evaluateHandle(node => node.firstChild);
-    await link.click();
+    const bookmark = page.locator('#activityList .request-card-open[href*="record="]');
+    const card = page.locator("#activityList article").filter({ has: page.locator('a[href*="record="]') });
+    const excerpt = card.locator(".card-excerpt");
+    await expect(excerpt).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    const priorText = await excerpt.evaluateHandle(node => node.firstChild);
+    await bookmark.click();
+    assert.ok(new URL(page.url()).searchParams.has("record"));
     await expect(page.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await replaceEvidence(context, () => ({ records: [fixture("unrelated")], importCoverage: { counts: {}, roster: [] } }));
     await page.evaluate(() => dispatchEvent(new Event("online")));
@@ -109,10 +116,11 @@ test(`bundled delivery preserves synchronous held-node clearance after another p
     const { page, runtime } = await setup(t, { enforced: true, frontend });
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-    await page.locator("#activityList .request-card-open").first().click();
+    await page.locator('#activityList .request-card-open[href*="record="]').click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     const ordinary = page.url();
     assert.ok(new URL(ordinary).searchParams.has("record"));
+    assert.doesNotMatch(ordinary, /bundled-first|bundled-second|SYNTHETIC_PRIVATE_PROMPT/);
     await page.locator("#wireSearch").fill("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator(".wire-search-hit").first()).toBeVisible();
     await page.locator("#wireSearch").press("Escape");

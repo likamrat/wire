@@ -257,11 +257,8 @@ test("keyboard activation, polling, draft changes and Back retain the Settings s
     await expect(search).toHaveValue("city");
     await page.goForward();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-    await search.fill("record");
+    await search.fill("review deletion");
     await search.press("Tab"); await page.keyboard.press("Tab");
-    const first = page.locator('#settingsSearchResults a[data-setting]').first();
-    await expect(first).toBeFocused();
-    await page.keyboard.press("Tab");
     await expect(page.locator('[data-setting="delete-activity"]')).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator("#deleteActivity")).toBeFocused();

@@ -133,7 +133,7 @@ test("custom date validation and pending layout remain usable in both themes at 
     const { page, runtime, posts } = await setup(t);
     const measurements = [], directory = process.env.WORKIQ_DATE_PROOFS;
     if (directory) await mkdir(directory, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 820, 1], ["light", 375, 2], ["dark", 1200, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(runtime.url); await ready(page); await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);

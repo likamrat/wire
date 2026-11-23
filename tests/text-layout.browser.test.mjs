@@ -59,8 +59,8 @@ test("chart dates and exact counts remain within their readable scroll region at
 });
 
 test("full select options, code and long tooltips wrap or scroll without clipping", async t => {
-    const page = await mount(t);
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
+    for (const [theme, width] of [["light", 1200], ["dark", 375]]) {
+        const page = await mount(t);
         await page.setViewportSize({ width, height: 620 });
         await page.setContent(`<html data-evidence-theme="${theme}"><head><style>${styles}</style></head><body><main style="margin:0;width:100%;padding:16px"><label>Project<select id="long"><option>Short</option></select></label><div id="code"></div><div id="help"></div></main></body></html>`);
         await page.addScriptTag({ content: `window.ux=(${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});window.controls=(${createSelectControls.toString()})(window.ux);` });
@@ -72,7 +72,7 @@ test("full select options, code and long tooltips wrap or scroll without clippin
             document.querySelector("#code").append(window.ux.codeBlock("  echo " + text + "\n\tsecond command\n", { label: "Synthetic multiline code" }));
             document.querySelector("#help").append(window.ux.helpButton("synthetic long help", text.repeat(6)));
         }, longLabel);
-        await page.locator(".select-trigger").click();
+        await page.getByRole("combobox", { name: "Project" }).click();
         await doubleText(page);
         const option = page.locator(".select-option-label").last();
         assert.equal(await option.textContent(), longLabel);

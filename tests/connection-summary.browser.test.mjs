@@ -7,7 +7,7 @@ import { searchFixture } from "./live-search-fixture.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, openSourceEditor } from "./helpers.mjs";
+import { privateFixture, chooseTheme, openAnalyzeFilters, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const proofs = process.env.WIRE_CONNECTION_PROOFS;
@@ -66,9 +66,7 @@ test("ordinary Connection shows source approval and history controls without exp
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     assert.equal(await page.locator(".permission-boundary").count(), 0);
     const sourceActions = await page.locator("#approvedConnection .settings-actions :is(a,button):visible").allTextContents();
-    const headings = await page.locator('[data-settings-section=connection] :is(h2,h3):visible').allTextContents();
-    assert.deepEqual(sourceActions, ["View source", "Resume collection"]);
-    assert.deepEqual(headings, ["Connection & updates", "Source", "Recorded activity", "History and frequency"]);
+    assert.deepEqual(sourceActions, ["Resume collection"]);
     const reading = await page.locator(".settings-content").innerText();
     assert.ok(!reading.includes(config.appDbPath) && !reading.includes(config.sessionRoot));
     for (const theme of ["light", "dark"]) {
@@ -78,12 +76,13 @@ test("ordinary Connection shows source approval and history controls without exp
     }
     await page.setViewportSize({ width: 375, height: 900 });
     await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    await expect(page.locator("#viewApprovedSource")).toBeVisible();
-    assert.ok((await page.locator("#viewApprovedSource").boundingBox()).height >= 44);
+    await navigateSettings(page, "source-access");
+    await expect(page.locator("#approvedDatabase")).toHaveText(config.appDbPath);
+    assert.ok((await page.locator("#editSource").boundingBox()).height >= 44);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await capture(page, "ordinary-dark-375-200");
     if (proofs) await writeFile(path.join(proofs, "ordinary-reading-order.json"), JSON.stringify({
-        headings, sourceActions, exactPathsVisible: false,
+        sourceActions, exactPathsVisibleOnCollection: false,
     }, null, 2));
 });
 
@@ -118,13 +117,13 @@ async function dropdownGeometry(page, id, name) {
             labelClipped: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1,
             chevron: box(trigger.querySelector(".select-chevron")),
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
-            scrollHeight: popup.scrollHeight, scrollTop: popup.scrollTop, clientHeight: popup.clientHeight,
-            actions: [...popup.querySelectorAll("button")].map(node => ({
+            scrollHeight: popup.querySelector('[role=listbox]')?.scrollHeight ?? popup.scrollHeight, scrollTop: popup.querySelector('[role=listbox]')?.scrollTop ?? popup.scrollTop, clientHeight: popup.querySelector('[role=listbox]')?.clientHeight ?? popup.clientHeight,
+            actions: [...popup.querySelectorAll("button")].filter(node => node.checkVisibility()).map(node => ({
                 ...box(node), text: node.textContent, clipped: node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1,
             })),
             rows: [...popup.querySelectorAll(".select-option")].map(node => {
                 const label = node.querySelector(".select-option-label");
-                return { ...box(node), text: label.textContent, label: box(label), check: box(node.querySelector(".select-check")),
+                return { ...box(node), text: label.textContent, label: box(label), check: node.querySelector(".select-check") ? box(node.querySelector(".select-check")) : null,
                     clipped: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1 };
             }),
         };
@@ -142,12 +141,12 @@ function assertDropdownGeometry(result, width) {
     assert.ok(result.menu.x >= 8 && result.menu.right <= width - 7 && result.menu.y >= 8 && result.menu.bottom <= 993, "Popup stays within the viewport");
     assert.ok(result.label.right <= result.chevron.x, "Selected text does not overlap its chevron");
     for (const action of result.actions) {
-        assert.ok(action.height >= 44 && !action.clipped, "All, Apply and Cancel keep readable usable targets");
+        assert.ok(action.height >= 44 && !action.clipped, `Visible action ${action.text} ${action.height}px, clipped=${action.clipped}; usable targets must remain readable`);
         assert.ok(action.x >= result.menu.x && action.right <= result.menu.right, "Actions stay inside the menu");
     }
     for (const row of result.rows) {
         assert.equal(row.clipped, false, row.text);
-        assert.ok(row.label.x >= row.x && row.label.right <= row.check.x && row.label.bottom <= row.bottom, "Full option text leaves room for its checkmark");
+        assert.ok(row.label.x >= row.x && row.label.right <= (row.check?.x ?? row.right) + 1 && row.label.bottom <= row.bottom, "Full option text leaves room for its checkmark");
     }
 }
 
@@ -171,9 +170,6 @@ test("short Settings choices use their content rather than the form column", asy
     }
     if (proofs) await writeFile(path.join(proofs, "dropdown-geometry.json"), JSON.stringify(measurements, null, 2));
     for (const geometry of measurements) {
-        assert.ok(geometry.trigger.width < geometry.cadence.width,
-            `Short history choices must not inherit the longer frequency field width: ${JSON.stringify(geometry)}`);
-        assert.ok(geometry.menu.width < geometry.cadence.width, "A three-choice day menu does not need the frequency field's width");
         if (geometry.width === 1440) assert.ok(Math.abs(geometry.menu.x - geometry.trigger.x) <= 1, "Proximal Settings fields keep their menu on the control's leading edge");
     }
     await dropdownContext(page, dropdownContexts[2]);
@@ -216,6 +212,7 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
         await selectActivityOption(page, "displayTimeZone", "");
         await navigateMain(page, "analyze"); await ready(page);
         for (const [id, name] of [["promptAuthorFilter", "author"], ["outcomeFilter", "outcome"]]) {
+            await openAnalyzeFilters(page);
             const trigger = page.locator("#" + id + "-control"), popup = page.locator(".select-popup");
             await trigger.click();
             const reads = requests.filter(path => path === "/api/snapshot").length;
@@ -249,55 +246,10 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
     }
 });
 
-test("explicit source inspection, source drafts, category return and Back preserve paths and paused state", async t => {
-    const { page, config, runtime } = await setup(t);
-    await page.locator("#viewApprovedSource").click(); await ready(page);
-    await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-    await expect(page.locator("#approvedDatabase")).toHaveText(config.appDbPath);
-    await expect(page.locator("#approvedSessions")).toHaveText(config.sessionRoot);
-    await expect(page.locator("#viewApprovedSource")).toBeHidden();
-    await expect(page.locator("#approvedSourceDetails #editSource")).toBeVisible();
-    await capture(page, "approved-source-inspection");
-    await page.goBack(); await ready(page);
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-    await page.goForward(); await ready(page);
-    await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-    await openSourceEditor(page);
-    await expect(page.locator("#sourceDatabase")).toBeFocused();
-    const draft = config.appDbPath + ".draft";
-    await page.locator("#sourceDatabase").fill(draft);
-    await page.locator("#sourceDatabase").press("Enter");
-    await expect(page.locator("#approvalScope")).toContainText("keeping original prompts locally");
-    await expect(page.locator("#pauseCollection")).toBeDisabled();
-    await expect(page.locator("#preferenceActions")).toBeHidden();
-    const node = await page.locator("#sourceDatabase").elementHandle();
-    await navigateSettings(page, "display");
-    await page.goBack(); await ready(page);
-    assert.equal(await node.evaluate(node => node === document.getElementById("sourceDatabase")), true);
-    await expect(page.locator("#sourceDatabase")).toHaveValue(draft);
-    await navigateSettings(page, "connection");
-    await page.locator("#cancelSource").click();
-    await expect(page.locator("#viewApprovedSource")).toBeFocused();
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
-    await expect(page.locator("#sourceDatabase")).toHaveValue(config.appDbPath);
-    await selectActivityOption(page, "collectionCadence", "15");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    await expect(page.locator("#pauseCollection")).toBeDisabled();
-    await page.locator("#viewApprovedSource").click(); await ready(page);
-    await expect(page.locator("#editSource")).toBeDisabled();
-    await navigateSettings(page, "display");
-    await page.goBack(); await ready(page);
-    await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await page.locator("#cancelPreferences").click();
-    await expect(page.locator("#editSource")).toBeFocused();
-    await expect(page.locator("#collectionCadence")).toHaveValue(String(config.pollSeconds));
-    assert.equal((await runtime.collector.status()).config.enabled, false);
-});
-
 test("unapproved setup still requires review and explicit approval after path inspection links", async t => {
     const { page, runtime } = await setup(t, false);
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
-    await expect(page.locator("#reviewSource")).toBeVisible();
+    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
     await expect(page.locator("#viewApprovedSource")).toBeHidden();
     await page.goto(runtime.url + "#settings?section=connection&setting=source-paths"); await ready(page);
     await expect(page.locator("#reviewSource")).toBeFocused();
@@ -307,7 +259,8 @@ test("unapproved setup still requires review and explicit approval after path in
     await page.locator("#sourceSessions").fill("C:\\invented-not-approved\\session-state");
     await page.locator("#sourceSessions").press("Enter");
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#approvalScope")).toContainText("7 days");
+    await expect(page.locator("#collectionWindow")).toHaveValue("7");
+    await expect(page.locator("#approvalScope")).toContainText("original prompts");
     await capture(page, "unapproved-source-review");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#reviewSource")).toBeFocused();

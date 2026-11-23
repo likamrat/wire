@@ -1003,7 +1003,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const from = sidebarAnimation ? getComputedStyle(contextSidebar).transform : entering ? "translateX(100%)" : "translateX(0)";
         const main = $("main"), docked = contextSidebar.dataset.mode === "docked";
         const width = contextSidebar.getBoundingClientRect().width;
-        const occupied = sidebarColumnAnimation ? document.documentElement.clientWidth - main.getBoundingClientRect().right : entering ? 0 : width;
+        // The width keyframes resolve against body, not the root viewport (which may include a reserved gutter).
+        const occupied = sidebarColumnAnimation ? document.body.getBoundingClientRect().right - main.getBoundingClientRect().right : entering ? 0 : width;
         const anchor = preserveAnchor ? sidebarAnchor() : null, top = anchor?.getBoundingClientRect().top;
         const navigation = workspaceState.navigationGeneration, intent = workspaceState.readingIntent;
         cancelAnimationFrame(sidebarColumnFrame);
