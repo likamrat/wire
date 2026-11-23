@@ -150,8 +150,6 @@ which calls changed. See [Compare two periods](docs/reporting.md#compare).
 - [Use WIRE](docs/user-guide.md)
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
 - [Create and read reports](docs/reporting.md)
-- Settings: [WIRE defaults](docs/user-guide.md#wire-defaults) for starting dates, charts and report formats;
-  [Themes](docs/user-guide.md#themes) for Light or Dark mode and five color palettes.
 - [Develop and troubleshoot](docs/development.md)
 - [Technical documentation](docs/README.md)
 
