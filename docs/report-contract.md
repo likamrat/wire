@@ -49,8 +49,10 @@ execution.
 | Current | Resolve the complete accepted analytical membership, then include complete eligible parent interactions. Chart-matching calls and full report counts are different. |
 | All | All retained reportable activity, including eligible preserved records; independent of Analyze filters/Search/paging and never a source scan. |
 
-Fresh creation opens five built-in choices with a Last 7 days period, inclusive
-of today in the selected IANA zone. It does not inherit Analyze restrictions.
+Fresh creation offers five built-in choices. The reporting period defaults
+to Last 7 days unless the browser has a different [Reports default](user-guide.md#wire-defaults).
+These rolling periods include today in the selected IANA zone. A fresh report
+does not inherit Analyze restrictions.
 Explicit Selected and Current entries retain their own membership. Scope and
 author choices remain panel memory, not persisted across reload. **Authors in
 report** filters whole originating interactions; Human plus Agent excludes

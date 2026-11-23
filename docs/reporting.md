@@ -59,7 +59,7 @@ report's period and activity explicitly. To narrow an open report, use
 | Current Analyze view | Every matching interaction across pages, with its complete eligible evidence, not just the individual calls matching a chart. |
 | All collected activity | Retained reportable activity independently of Analyze dates, filters, Search and paging. It does not collect new history or include complete original chat transcripts. |
 
-From the outline, choose **Activity**, select the scope and use **Use activity**
+From the outline, open **Activity source**, select the scope and choose **Use activity**
 to return without preparing. From an open report use **Show report** to update it.
 The activity picker keeps its actions visible while its
 contents scroll together, without a second scroll area inside the interaction list.

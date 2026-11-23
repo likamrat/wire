@@ -141,7 +141,7 @@ You can also start in Reports with a focus such as **Errors & failures**.
 ## Compare
 
 Compare a selected period with a baseline. Open either period's count to see
-which calls changed. See [Compare two periods](docs/reporting.md#compare).
+the calls it includes. See [Compare two periods](docs/reporting.md#compare).
 
 [![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 

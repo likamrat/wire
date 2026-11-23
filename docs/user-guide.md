@@ -495,12 +495,12 @@ Use **Feedback** beside Help to report a WIRE bug or suggest a feature.
 Enter a title and, optionally, a description. **Open on GitHub** fills in
 those fields on WIRE's new issue form. The issue is public only after you submit it.
 
-In **Privacy & saved data**, **Review deletion** previews an exact activity
-scope before separate confirmation. **Read history again > Choose chats**
-is a different, deliberate reread of selected approved history; restoring
-deleted original prompts is an independent choice. Neither filter reset nor
-ordinary Refresh performs these actions. Saved reports and external downloads
-can retain copies after activity deletion.
+In **Privacy & saved data**, **Review deletion** previews the activity you
+choose before you confirm deletion. **Read history again > Choose chats**
+checks selected approved history for missing activity. It cannot restore
+deleted calls or prompts in a normal installation. Neither Reset filters nor
+Refresh performs these actions. Saved reports and external downloads can
+retain copies after activity deletion.
 
 If a change's result is uncertain, use its offered status/result check rather
 than repeating the action. The [collection and recovery reference](collection.md)

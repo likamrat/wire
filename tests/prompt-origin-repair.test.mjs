@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, writeFile, readdir, appendFile, rename } from "node:fs/promises";
 import path from "node:path";
-import { promptInstallation } from "./prompt-authorship-fixture.mjs";
+import { directMessageReference, promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { hash, atomicJson, TAIL_LIMITS } from "../lib/collector-io.mjs";
@@ -15,6 +15,7 @@ import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { createCollector } from "../lib/collector.mjs";
 import { completionReferenceStore } from "../lib/checkpoint-references.mjs";
 import { inspectPromptOriginRepair, runPromptOriginRepair } from "../lib/prompt-origin-repair.mjs";
+import { chromium, expect } from "@playwright/test";
 
 const digest = value => hash(JSON.stringify(value));
 async function manifest(root) {
@@ -32,14 +33,28 @@ async function manifest(root) {
 }
 async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1 } = {}) {
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
-    const legacy = ["legacy-agent", "archived-agent"].includes(variant);
+    const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair";
     const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
     const repairItems = [item];
     let companion;
-    if (plan || mode || attachment || checkpointCompanion) {
+    if (plan || mode || attachment || checkpointCompanion || linkedPair) {
         const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
         const original = events.find(event => event.id === item.promptId);
-        if (attachment) {
+        if (linkedPair) {
+            item.data.content = "  Invented request.\nKeep this original text.  ";
+            original.data.content = item.data.content;
+            original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
+                + "<copilot_working_context>Invented workspace.</copilot_working_context>\n\n"
+                + item.data.content + directMessageReference();
+            const i = events.indexOf(original) + 1, [start, end] = events.slice(i, i + 2);
+            start.data.turnId = "invented-bound-turn";
+            const request = toolCallId => ({ type: "assistant.message", id: "request-" + toolCallId, timestamp: original.timestamp,
+                data: { originatingMessageId: original.data.messageId, turnId: start.data.turnId, toolRequests: [{ toolCallId }] } });
+            const secondId = "invented-second-call";
+            events.splice(i, 2, request(item.callId), request(secondId), start,
+                { ...start, id: randomUUID(), data: { ...start.data, toolCallId: secondId } }, end,
+                { ...end, id: randomUUID(), data: { ...end.data, toolCallId: secondId } });
+        } else if (attachment) {
             const file = { type: "file", displayName: "invented-notes.md", path: "C:\\invented\\invented-notes.md" };
             item.data.content = `Read ${file.displayName} before planning.`;
             original.data.content = item.data.content;
@@ -96,11 +111,12 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
     }
     const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
     let checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
-    const older = { actor: "unknown", basis: plan ? "conflicting-source" : "invalid-source" };
+    const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan ? "conflicting-source" : "invalid-source" };
+    const olderVersion = linkedPair ? 10 : 6;
     const selectedIds = new Set(repairItems.map(item => item.promptId));
     for (const event of checkpoint.events.filter(event => selectedIds.has(event.id))) {
         if (legacy) { delete event.data.wirePromptAuthorship; delete event.data.wirePromptAuthorshipVersion; }
-        else Object.assign(event.data, { wirePromptAuthorship: older, wirePromptAuthorshipVersion: 6 });
+        else Object.assign(event.data, { wirePromptAuthorship: older, wirePromptAuthorshipVersion: olderVersion });
     }
     if (companion) {
         const event = checkpoint.events.find(event => event.id === companion.id);
@@ -116,15 +132,22 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
             ...(record.followUpPrompts ?? []).map((prompt, index) => ["followup", index, prompt])]) {
             if (record.sourceSessionId === app.child && selectedIds.has(prompt.sourceEventId)) {
                 if (legacy) { delete prompt.authorship; delete prompt.authorshipVersion; }
-                else Object.assign(prompt, { authorship: older, authorshipVersion: 6 });
+                else Object.assign(prompt, { authorship: older, authorshipVersion: olderVersion });
                 aliases.get(prompt.sourceEventId).push({ scenarioId: record.scenarioId, field, index });
             }
         }
     }
     await replaceEvidence(app.context, () => ({ records, importCoverage: initial.importCoverage }));
+    if (linkedPair) {
+        assert.deepEqual(proposed, { actor: "user", basis: "host-direct-input" }, "A newly collected original qualifies.");
+        await app.restart();
+        await app.runtime().collector.collectNow();
+        assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
+        assert.deepEqual((await loadBoardState(app.context)).evidence, records, "Installing a reader is not a historical repair.");
+    }
     const reports = createExportController(app.context), prior = await loadBoardState(app.context);
-    const preview = await reports.preview("owned-repair", undefined, { promptMode: "none", formats: ["json"] },
-        { kind: "all", revision: prior.revision });
+    const preview = await reports.preview("owned-repair", undefined, { promptMode: linkedPair ? "original" : "none", formats: ["json"] },
+        linkedPair ? { kind: "selected", scenarioIds: [item.scenarioId], revision: prior.revision } : { kind: "all", revision: prior.revision });
     await reports.review("owned-repair", preview.previewId, true);
     const saved = (await reports.confirm("owned-repair", preview.previewId, true)).bundle;
     const state = await loadBoardState(app.context);
@@ -181,6 +204,75 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
         journalFile: path.join(app.root, "origin-journal.json"),
     } };
 }
+
+test("a reviewed v10 prompt correction preserves both explicitly linked completions and the frozen report", async t => {
+    const f = await setup(t, "v10-linked-pair"), { app, origins, state } = f;
+    const original = state.evidence.find(r => r.userPrompt.sourceEventId === origins[0].sourceEventId);
+    const actor = { actor: "user", basis: "host-direct-input" };
+    assert.deepEqual(original.userPrompt.authorship, { actor: "unknown", basis: "unsupported-source" });
+    assert.equal(original.userPrompt.authorshipVersion, 10);
+    const item = app.cases.find(row => row.name === "human"), callIds = [item.callId, "invented-second-call"];
+    assert.deepEqual(original.toolCalls.map(call => [call.toolCallId, call.promptLink, call.reportedOutcome]), callIds.map(id => [
+        id, { version: 1, promptEventId: item.promptId, requestEventId: "request-" + id }, "succeeded",
+    ]));
+    async function readPair(label) {
+        const browser = await chromium.launch();
+        try {
+            const page = await browser.newPage();
+            await page.goto(app.runtime().url + "#request?request=" + encodeURIComponent(original.scenarioId));
+            const reader = page.locator("#contextSidebar"), group = `[data-context-group="${original.scenarioId}"]`;
+            const text = reader.getByRole("region", { name: label, exact: true }).getByLabel("Exact recorded prompt text");
+            await expect(text).toBeVisible();
+            assert.equal(await text.textContent(), item.data.content);
+            await expect(reader.locator(".reader-call-row" + group)).toHaveCount(2);
+            await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+            await expect(reader.locator(`${group} .reader-record-limits p`).first()).toHaveText("Copilot linked all 2 tool calls directly to the prompt.");
+        } finally { await browser.close(); }
+    }
+    await app.restart();
+    await readPair("Author unverified");
+    await app.stop();
+    const inspection = await inspectPromptOriginRepair({ dataDir: app.context.dataDir, origins });
+    assert.equal(inspection.authorized, false);
+    assert.deepEqual(inspection.unresolved, []);
+    assert.equal(inspection.targets.length, 1);
+    assert.deepEqual(inspection.targets[0].prompt.authorship, actor);
+    assert.deepEqual(inspection.targets[0].aliases, f.target.aliases);
+    f.plan.targets = inspection.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    assert.deepEqual(await loadBoardState(app.context), state, "Neither inspection nor preparation publishes a correction.");
+    const apply = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
+    const result = await runPromptOriginRepair(apply);
+    assert.equal(result.alreadyCommitted, false);
+    const expected = structuredClone(state.evidence);
+    for (const alias of f.target.aliases) {
+        const record = expected.find(r => r.scenarioId === alias.scenarioId);
+        Object.assign(alias.field === "origin" ? record.userPrompt : record.followUpPrompts[alias.index],
+            { authorship: actor, authorshipVersion: promptAuthorship.version });
+    }
+    const after = await loadBoardState(app.context);
+    assert.equal(after.revision, state.revision + 1);
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, state.exports);
+    assert.equal((await runPromptOriginRepair(apply)).alreadyCommitted, true);
+    assert.deepEqual(await loadBoardState(app.context), after);
+    const again = await inspectPromptOriginRepair({ dataDir: app.context.dataDir, origins });
+    assert.deepEqual(again.targets, []);
+    assert.deepEqual(again.unresolved.map(row => row.reason), ["known-origin-copy"]);
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence, expected);
+    await readPair("Human prompt");
+    for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(app.context.dataDir, pin.path))), pin.sha256);
+    const frozen = JSON.parse(await readFile(after.exports[0].files["product-report.json"], "utf8"));
+    assert.equal(frozen.records.length, 1);
+    const frozenOrigin = frozen.records[0].prompts.find(prompt => prompt.kind === "origin");
+    assert.deepEqual(frozenOrigin.authorship, original.userPrompt.authorship);
+    assert.equal(frozenOrigin.text, item.data.content);
+    assert.deepEqual(await Promise.all(app.sourceFiles.map(file => readFile(file))), f.sourceBytes);
+});
 
 for (const variant of ["legacy-agent", "archived-agent"]) test(`original selectors derive a complete sealed repair without changing source eligibility (${variant})`, async t => {
     const f = await setup(t, variant);

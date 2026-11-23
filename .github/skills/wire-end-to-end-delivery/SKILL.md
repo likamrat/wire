@@ -15,16 +15,11 @@ Recover the current request and acceptance criteria. State the normal user entry
 expected result, required evidence and real authority boundaries in the existing
 task record. Reuse recovered facts; ask only about consequential unknowns.
 
-Inspect the actual checkout and relevant current contracts. Start with
-[Development](../../../docs/development.md) and the pertinent sections of
-[the user guide](../../../docs/user-guide.md),
-[design](../../../docs/design.md),
-[reporting](../../../docs/reporting.md) or
-[Search](../../../docs/live-search.md). Read current scripts from
-`package.json` at the repository root when needed. Historical handoffs can
-describe retired or unshipped features; applicable user decisions govern the
-requested change without silently broadening access. An absent adapter is a
-source/version gap, not proof it is delivered.
+Find the reported entry in [the user guide](../../../docs/user-guide.md) and
+the checkout. Use [Development](../../../docs/development.md#check-a-change)
+for checks; read exact commands from `package.json`. A handoff can describe
+an older or unshipped entry. User decisions about the feature do not grant
+access to private data.
 
 **Ready:** completion can be distinguished from a demo, preparation or a partial
 result. Source-only work can be complete as source-only without claiming live
@@ -42,7 +37,7 @@ Load only the skills whose branches apply:
 | --- | --- |
 | Collection, source adapters, native history or account integration | [Source integration](../wire-source-integration/SKILL.md) |
 | Counts, filters, outcomes, authorship, service or timing meaning | [Evidence semantics](../wire-evidence-semantics/SKILL.md) |
-| Report creation, comparison, exports or saved reading | [Report integrity](../wire-report-integrity/SKILL.md) |
+| Draft membership, report preparation, comparison reports, exports or saved reading | [Report integrity](../wire-report-integrity/SKILL.md) |
 | Search corpus, matching, highlights, result opening or invalidation | [Local Search](../wire-local-search/SKILL.md) |
 | Refresh, repair, recollection, deletion or uncertain operations | [Safe recovery](../wire-safe-recovery/SKILL.md) |
 
@@ -82,7 +77,11 @@ their actual permission gates; this skill supplies none. Prove ordinary product
 entry when that is the acceptance criterion, rather than seeding backend state.
 
 Call a failure inherited only after reproducing it on the baseline with the same
-input and route. Keep diagnosis and routine corrections with the feature owner.
+input and route. If a test opens a retired screen, move it to the supported
+entry and keep the behavior it protected. A failure there may still be a
+product defect. When a full suite is required, report its final exit on the
+combined revision; focused passes, interrupted runs and runs on another
+revision cannot supply it. Name separate qualification lanes as such.
 
 **Ready:** the exact candidate satisfies the relevant behavior, error and
 preservation criteria; unrun real-data or UI criteria remain visibly pending.
