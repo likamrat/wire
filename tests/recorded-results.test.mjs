@@ -589,7 +589,11 @@ test("only a qualified single-target fallback shares its parent's displayed serv
     ];
     assert.equal(inherits(0), false, "Same service, independently returned path: keep its attribution");
     assert.equal(inherits(1), false, "A different returned service must not inherit the parent");
-    assert.equal(inherits(2), true, "Repeated source indices do not determine the result identity");
+    assert.equal(inherits(2), false, "A sibling with a different returned target rules out request fallback");
+    call.apiResults[0].path = call.requestArgs.entityUrls[0];
+    call.apiResults[1].path = call.requestArgs.entityUrls[0];
+    assert.equal(inherits(0), false, "A returned path remains independently attributed");
+    assert.equal(inherits(2), true, "With consistent siblings, a repeated source index does not select their own returned paths");
     const rows = buildRequestActivity([record]), parent = rows.tool[0], row = rows["reported-api"][2];
     const source = structuredClone(call);
     assert.equal(results.inheritsCallService(call, row, { ...parent, id: "unrelated-parent" }), false);
