@@ -1703,6 +1703,7 @@ test("a historical Refresh error cannot claim a later ordinary view failure", { 
     assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
     assert.equal(await page.locator("#refreshBtn").isVisible(), true);
     assert.equal(await page.locator("#message").isVisible(), false);
+    await navigateMain(page, "analyze");
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
     await page.locator("#message:visible").waitFor();
     await ready(page);

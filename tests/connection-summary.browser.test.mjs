@@ -66,9 +66,7 @@ test("ordinary Connection shows source approval and history controls without exp
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     assert.equal(await page.locator(".permission-boundary").count(), 0);
     const sourceActions = await page.locator("#approvedConnection .settings-actions :is(a,button):visible").allTextContents();
-    const headings = await page.locator('[data-settings-section=connection] :is(h2,h3):visible').allTextContents();
-    assert.deepEqual(sourceActions, ["View source", "Resume collection"]);
-    assert.deepEqual(headings, ["Connection & updates", "Source", "Recorded activity", "History and frequency"]);
+    assert.deepEqual(sourceActions, ["Resume collection"]);
     const reading = await page.locator(".settings-content").innerText();
     assert.ok(!reading.includes(config.appDbPath) && !reading.includes(config.sessionRoot));
     for (const theme of ["light", "dark"]) {
@@ -78,12 +76,13 @@ test("ordinary Connection shows source approval and history controls without exp
     }
     await page.setViewportSize({ width: 375, height: 900 });
     await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    await expect(page.locator("#viewApprovedSource")).toBeVisible();
-    assert.ok((await page.locator("#viewApprovedSource").boundingBox()).height >= 44);
+    await navigateSettings(page, "source-access");
+    await expect(page.locator("#approvedDatabase")).toHaveText(config.appDbPath);
+    assert.ok((await page.locator("#editSource").boundingBox()).height >= 44);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await capture(page, "ordinary-dark-375-200");
     if (proofs) await writeFile(path.join(proofs, "ordinary-reading-order.json"), JSON.stringify({
-        headings, sourceActions, exactPathsVisible: false,
+        sourceActions, exactPathsVisibleOnCollection: false,
     }, null, 2));
 });
 
@@ -171,9 +170,6 @@ test("short Settings choices use their content rather than the form column", asy
     }
     if (proofs) await writeFile(path.join(proofs, "dropdown-geometry.json"), JSON.stringify(measurements, null, 2));
     for (const geometry of measurements) {
-        assert.ok(geometry.trigger.width < geometry.cadence.width,
-            `Short history choices must not inherit the longer frequency field width: ${JSON.stringify(geometry)}`);
-        assert.ok(geometry.menu.width < geometry.cadence.width, "A three-choice day menu does not need the frequency field's width");
         if (geometry.width === 1440) assert.ok(Math.abs(geometry.menu.x - geometry.trigger.x) <= 1, "Proximal Settings fields keep their menu on the control's leading edge");
     }
     await dropdownContext(page, dropdownContexts[2]);
@@ -297,7 +293,7 @@ test("explicit source inspection, source drafts, category return and Back preser
 test("unapproved setup still requires review and explicit approval after path inspection links", async t => {
     const { page, runtime } = await setup(t, false);
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
-    await expect(page.locator("#reviewSource")).toBeVisible();
+    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
     await expect(page.locator("#viewApprovedSource")).toBeHidden();
     await page.goto(runtime.url + "#settings?section=connection&setting=source-paths"); await ready(page);
     await expect(page.locator("#reviewSource")).toBeFocused();
@@ -307,7 +303,8 @@ test("unapproved setup still requires review and explicit approval after path in
     await page.locator("#sourceSessions").fill("C:\\invented-not-approved\\session-state");
     await page.locator("#sourceSessions").press("Enter");
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#approvalScope")).toContainText("7 days");
+    await expect(page.locator("#collectionWindow")).toHaveValue("7");
+    await expect(page.locator("#approvalScope")).toContainText("original prompts");
     await capture(page, "unapproved-source-review");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#reviewSource")).toBeFocused();

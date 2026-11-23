@@ -719,7 +719,7 @@ test("Settings distinguishes labels, source permission and collection state with
         await expect(page.locator("#connectionStatus")).toHaveText("Paused");
         await expect(page.locator("#connectionSource").getByText("GitHub Copilot app", { exact: true })).toHaveCount(1);
         await inspectSourcePaths(page);
-        const paths = await page.locator(".settings-paths").evaluate(root => {
+        const paths = await page.locator("#approvedSourceDetails .settings-paths").evaluate(root => {
             const labels = [...root.querySelectorAll("dt")], values = [...root.querySelectorAll("dd")];
             return labels.map((label, index) => ({
                 labelColor: getComputedStyle(label).color, valueColor: getComputedStyle(values[index]).color,
@@ -758,6 +758,7 @@ test("Settings unapproved-source presentation reviews paths without granting per
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
+    await navigateSettings(page, "source-access");
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);

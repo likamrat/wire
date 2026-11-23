@@ -73,10 +73,13 @@ for (const [zone, day, start, end, hours] of [
     assert.equal((Date.parse(end) - Date.parse(start)) / 3600000, hours);
     assert.deepEqual(snapshot.analytics.rows.map(row => row.toolCallId).sort(), ["test-call-civil-boundary-1", "test-call-civil-boundary-2"]);
     for (const bucket of ["day", "week", "month"]) {
-        await setLegacyTimeBucket(page, bucket); await ready(page);
+        const address = new URL(page.url());
+        address.searchParams.set("bucket", bucket);
+        await page.goto(address.href); await ready(page);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
-        assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "2");
+        assert.equal(await page.locator('[data-breakdown="tools"] .percentage-value').textContent(), "100% (2)");
         assert.deepEqual(snapshot.analytics.dateRange, { from: start, to: end, toExclusive: true });
+        assert.deepEqual(snapshot.analytics.rows.map(row => row.toolCallId).sort(), ["test-call-civil-boundary-1", "test-call-civil-boundary-2"]);
     }
     assert.ok(requests.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
     assert.deepEqual(errors, []);

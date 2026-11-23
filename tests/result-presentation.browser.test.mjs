@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildRequestActivity } from "../lib/activity-analytics.mjs";
@@ -211,17 +211,35 @@ test("returned-result pages retain every canonical entry without assigning the f
     }));
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#request?request=many-results"); await ready(page);
-    const summary = page.locator(".request-outcome");
-    assert.deepEqual(await outcomes(summary.locator(".full-request-results [data-result-layer=reported-api]")), { success: 3, failure: 3, unknown: 2 });
-    await summary.locator(".returned-api-details > summary").click();
-    assert.equal(await summary.locator(".api-result-entry").count(), 6);
-    assert.deepEqual(await summary.locator(".api-result-entry code.api-path").allTextContents(), record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
+    const call = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    // Batches containing an error expose every entry together, including a later error.
+    const entries = call.locator(".api-result-entry");
+    await expect(entries).toHaveCount(8);
+    await expect(entries.locator("code.api-path")).toHaveText(record.toolCalls[0].apiResults.map(result => result.path));
+    assert.deepEqual(await entries.locator(".recorded-result").evaluateAll(nodes => nodes.map(n => n.dataset.outcome)),
+        ["success", "failure", "unknown", "success", "failure", "unknown", "success", "failure"]);
+    await expect(call.getByRole("button", { name: "Next returned results" })).toHaveCount(0);
+});
+
+test("successful returned entries can be paged without losing their unique paths", async t => {
+    const record = source("paged-entries");
+    record.toolCalls[0].apiResults = Array.from({ length: 8 }, (_, index) => ({
+        index, path: `/me/messages/{Result-${index}}?Exact=%2F`, statusCode: 204,
+    }));
+    const { page, url } = await setup(t, [record]);
+    await page.goto(url); await ready(page);
+    await page.locator("#activityList .request-card-open").click();
+    const summary = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = summary.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(summary.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
     const next = summary.getByRole("button", { name: "Next returned results", exact: true });
     await next.focus(); await page.keyboard.press("Enter");
     assert.deepEqual(await summary.locator(".api-result-entry code.api-path").allTextContents(), record.toolCalls[0].apiResults.slice(6).map(result => result.path));
-    assert.deepEqual(await outcomes(summary.locator(".full-request-results [data-result-layer=reported-api]")), { success: 3, failure: 3, unknown: 2 });
     await summary.getByRole("button", { name: "Previous returned results", exact: true }).click();
-    assert.equal(await summary.locator(".api-result-entry").count(), 6);
+    await expect(summary.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
 });
 
 test("result hierarchy and literal paths reflow in both themes at all widths and enlarged text", { timeout: 90000 }, async t => {

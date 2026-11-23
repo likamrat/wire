@@ -581,6 +581,10 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
         assert.equal((await host.access.status()).collection, "paused");
         const command = async action => host.access.command(owner, { schemaVersion: 1, action,
             operationId: randomUUID(), generation: (await host.access.status()).generation }, () => true);
+        const identityCaptures = [];
+        if (scenario === "startup-reload") t.mock.method(console, "info", (label, value) => {
+            if (label === "[workiq-native] original read settled") identityCaptures.push(JSON.parse(value).capturedResponses);
+        });
         const connecting = command("microsoft-connect");
         while (!contextReady) await new Promise(resolve => setTimeout(resolve, 10));
         const page = context.pages()[0];
@@ -622,6 +626,22 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
             assert.deepEqual(unchanged.receipts.find(row => row.operationId === receipt.operationId), original);
             return;
         }
+        if (scenario === "startup-reload") {
+            const receipt = await connecting;
+            assert.equal(appDocuments, 2);
+            assert.equal(receipt.outcome, "failed");
+            assert.equal(receipt.reason, "transport-failed");
+            const state = JSON.parse(await readFile(path.join(store.dataDir, "microsoft-session", "session.json"), "utf8"));
+            const original = state.receipts.find(row => row.operationId === receipt.operationId);
+            assert.equal(original.nativeEvidence.firstFailure.code, "NATIVE_TOOL_GUARD_DOCUMENT_UNQUALIFIED");
+            assert.equal(original.nativeEvidence.cleanup.state, "completed");
+            assert.equal(state.connection, "disconnected");
+            assert.equal(state.owner, null);
+            assert.equal(state.partition, null);
+            assert.deepEqual(identityCaptures, [0]);
+            assert.equal(launches, 1);
+            return;
+        }
         if (["nonwork", "work-route-nonwork", "background-loader-nonwork", "startup-conflict"].includes(scenario)) {
             assert.equal((await connecting).outcome, "failed");
             assert.notEqual((await host.access.status()).microsoft.state, "connected");
@@ -639,7 +659,7 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
             assert.notEqual((await host.access.status()).microsoft.state, "connected");
             return;
         }
-        if (["no-principal", "landing-home-missing", "background-loader-missing", "startup-reload", "startup-failed-document"].includes(scenario)) {
+        if (["no-principal", "landing-home-missing", "background-loader-missing", "startup-failed-document"].includes(scenario)) {
             await new Promise(resolve => setTimeout(resolve, 250));
             assert.notEqual((await host.access.status()).microsoft.state, "connected");
             await command("microsoft-cancel");

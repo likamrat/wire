@@ -24,7 +24,7 @@ const cases = [
     { name: "sentinel-error", completion: { success: false, error: { code: "failure" } },
         expected: "The source supplied only a generic failure marker.", members: 0 },
     { name: "failure-no-error", completion: { success: false },
-        expected: "For more detail, check the original Copilot chat, if it is still available.", members: 0 },
+        expected: "The tool did not provide an error reason", members: 0 },
 ];
 
 for (const example of cases) test(`ordinary retained ${example.name} has coherent card, completion filter, widget and reopened reader`, { timeout: 60000 }, async t => {
@@ -49,11 +49,12 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
         await selectActivityOption(page, "outcomeFilter", "success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await closeAnalyzeFilters(page);
-        const card = page.locator(".request-card-open");
-        if (["application-error", "mixed"].includes(example.name)) await expect(card.locator(".request-card-exception")).toHaveText("Reported result issue");
-        else await expect(card.locator(".request-card-exception")).toHaveCount(0);
-        await expect(card).not.toContainText(example.summary);
-        await expect(card).not.toContainText(/tool call failed|worked|missing\.\./i);
+        const card = page.locator("#activityList article");
+        if (["application-error", "mixed"].includes(example.name)) {
+            await expect(card).toContainText(example.expected);
+        } else await expect(card).not.toContainText("Reported result issue");
+        await expect(card.locator(".request-card-open")).toContainText("1 tool call completed");
+        await expect(card).not.toContainText(/tool call failed|missing\.\./i);
     }
     const ready = () => page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     for (const theme of ["light", "dark"]) {
@@ -67,7 +68,7 @@ for (const example of cases) test(`ordinary retained ${example.name} has coheren
         if (["empty-error", "sentinel-error"].includes(example.name)) {
             await expect(call.locator(".reader-call-summary")).not.toContainText(/not retained|not saved/);
         }
-        await expect(call.locator(".reader-failure-guidance")).toHaveCount(example.name === "failure-no-error" ? 1 : 0);
+        if (example.name === "failure-no-error") await expect(call).toContainText("does not identify the failed step");
         if (example.name === "application-error") {
             await expect(call.locator(".journey-result .recorded-result")).toHaveAttribute("data-outcome", "success");
             await expect(call.locator(".journey-result .recorded-result")).toHaveClass(/result-tone-success/);
