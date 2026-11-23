@@ -187,7 +187,7 @@ test("Refresh proportions keep pending geometry and separate notices from adjace
                     return { overflow: document.documentElement.scrollWidth - innerWidth,
                         refresh: data("analyzeRefresh"), filters: data("openAnalyzeFilters"), chart: data("outcomeChart"),
                         notice: data("freshAwayNotice"), manual: data("freshStatus"), checked: data("freshChecked"), freshHeading: data("freshHeading"),
-                        fresh: data("freshActivity"), nextGroup: data("connectionPreferences"),
+                        fresh: data("freshActivity"), preferences: data("connectionPreferences"), statusLink: data("settingsStatusLink"),
                         trailingStatusSpinners: document.querySelectorAll("#freshStatus [data-progress-icon]").length,
                         followingHeading: document.querySelector("#outcomeChart h3").getBoundingClientRect().toJSON(),
                         settingsVisible: document.getElementById("settingsView").checkVisibility() };
@@ -203,7 +203,9 @@ test("Refresh proportions keep pending geometry and separate notices from adjace
                     assert.ok(measurement.manual.fontSize < measurement.freshHeading.fontSize, "The section heading outranks its status");
                     assert.ok(measurement.checked.fontSize <= measurement.manual.fontSize, "Timestamp stays secondary to its result");
                     assert.equal(measurement.trailingStatusSpinners, 0, "The action owns the spinner, without a duplicate after the status");
-                    assert.ok(measurement.nextGroup.rect.top >= measurement.fresh.rect.bottom, "The next Settings group cannot collide with the result");
+                    assert.ok(measurement.fresh.rect.top >= measurement.preferences.rect.bottom, "Refresh stays below the history preferences");
+                    assert.ok(measurement.statusLink.visible && measurement.statusLink.rect.top >= measurement.fresh.rect.bottom,
+                        "The collection status link stays below the complete Refresh result");
                 }
                 if (measurement.notice.visible) assert.ok(measurement.followingHeading.top - measurement.notice.rect.bottom >= 16,
                     "A real notice retains space before the next heading");
@@ -1724,13 +1726,16 @@ test("Refresh and its completion stay in Analyze and the source task, not unrela
     await page.goto(app.runtime().url); await ready(page); await capture("analyze-idle");
     await navigateMain(page, "settings"); await ready(page);
     assert.equal(await page.locator('[data-settings-section="connection"] #freshActivity').count(), 1, "Refresh belongs inside Connection & updates, below its source task");
-    const peers = () => page.locator('[data-settings-section="connection"] > section').evaluateAll(nodes => nodes.map(node => node.id));
-    assert.deepEqual(await peers(), ["connectionSource", "freshActivity", "connectionPreferences"]);
+    const expectPlacement = async () => {
+        await expect(page.locator('[data-settings-section="connection"] > #connectionPreferences ~ #freshActivity + #settingsRefreshSlot ~ #settingsStatusLink')).toHaveCount(1);
+        await expect(page.locator('[data-settings-section="source-access"] #connectionSource')).toHaveCount(1);
+    };
+    await expectPlacement();
     assert.equal(await page.locator("#checkActivity").isVisible(), true);
     await capture("connection-idle");
     await app.check();
     assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
-    assert.deepEqual(await peers(), ["connectionSource", "freshActivity", "connectionPreferences"]);
+    await expectPlacement();
     await capture("connection-completed");
     for (const section of ["themes", "privacy", "regional"]) {
         await navigateSettings(page, section);
@@ -1745,15 +1750,16 @@ test("Refresh and its completion stay in Analyze and the source task, not unrela
     assert.equal(await page.locator("#freshAwayNotice").isVisible(), false);
     await capture("reports-completed");
     await navigateMain(page, "analyze"); await ready(page);
-    assert.equal(await page.locator("#checkActivity").isVisible(), true);
-    assert.equal(await page.locator("#freshStatus").innerText(), "No additional activity in this check.");
+    await expect(page.locator("#analyzeRefresh")).toBeVisible();
+    await expect(page.locator("#checkActivity")).toBeHidden();
+    await expect(page.locator("#analyzeRefreshStatus")).toHaveText("No additional activity in this check.");
     await capture("analyze-completed");
-    await page.locator("#activityList .request-link").first().click(); await ready(page);
+    await page.locator("#activityList .request-card-open").first().click(); await ready(page);
     assert.equal(await page.locator("#checkActivity").isVisible(), false);
     assert.equal(await page.locator("#freshAwayNotice").isVisible(), false);
     await capture("request-completed");
     await page.goto(app.runtime().url + "#settings?setting=collect-now"); await ready(page);
-    assert.deepEqual(await peers(), ["connectionSource", "freshActivity", "connectionPreferences"]);
+    await expectPlacement();
     assert.equal(await page.locator('[data-settings-section="connection"] #checkActivity').evaluate(node => node === document.activeElement), true);
     assert.deepEqual(app.writes, ["/api/collection/now"], "The legacy alias navigates without operating Refresh");
     await page.setViewportSize({ width: 375, height: 1000 });
@@ -2002,7 +2008,7 @@ test("old status failures cannot replace a completed check and reconnect never r
         }, { times: 1 });
         await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
         await pending;
-        await app.check();
+        await app.check("analyze");
         const message = await page.locator("#freshStatus").innerText();
         const oldResponse = page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
         release(); await oldResponse;
@@ -2012,15 +2018,15 @@ test("old status failures cannot replace a completed check and reconnect never r
         const cycles = (await app.runtime().collector.status()).metrics.cycles;
         await page.route("**/api/collection/now", route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Synthetic expired capability" } }), { times: 1 });
         const before = app.writes.length;
-        await app.check();
+        await app.check("analyze");
         assert.equal(app.writes.length, before + 1);
         assert.equal((await app.runtime().collector.status()).metrics.cycles, cycles);
         assert.match(await page.locator("#freshStatus").innerText(), /Local history check failed/);
         assert.match(await page.locator("#freshContextMessage").innerText(), /not replayed/);
         assert.equal(await page.locator("#activityCount").innerText(), "1");
-        await app.check();
+        await app.check("analyze");
         assert.equal(app.writes.length, before + 1, "Recovery after rejection first reads status and stored data only");
-        await app.check();
+        await app.check("analyze");
         assert.match(await page.locator("#freshStatus").innerText(), /No additional activity in this check/);
         assert.equal(app.writes.length, before + 2);
 });
