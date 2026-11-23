@@ -260,7 +260,7 @@ test("built-in motion never accesses the retired preference even when storage re
 });
 
 for (const replace of [false, true]) test(`sidebar close preserves the current anchor ${replace ? "after an off-screen replacement scroll" : "without a replacement scroll"}`, async t => {
-    const { page } = await setup(t);
+    const { page, records } = await setup(t);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.evaluate(node => {
         const box = node.getBoundingClientRect();
@@ -273,7 +273,7 @@ for (const replace of [false, true]) test(`sidebar close preserves the current a
     assert.ok(Math.abs(opened.y - before.y) < 3, "Opening preserves the entry anchor");
     if (replace) {
         await b.click();
-        await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(await b.textContent());
+        await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(records[1].userPrompt.text);
     }
     await a.click();
     const beforeClose = await a.boundingBox(), afterReplaceScroll = await page.evaluate(() => scrollY);
@@ -653,18 +653,20 @@ test("switching prompts keeps each disclosure with its interaction and does not 
     await revealAnalyzeRecords(page);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.click();
-    const first = page.url();
+    const reader = page.locator("#requestContent");
+    await expect(reader).toHaveAttribute("data-view-key", "request:sidebar-0");
     const disclosure = page.getByRole("button", { name: "Source details", exact: true });
     await disclosure.click();
     await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 220);
     const reads = requests.filter(url => url.pathname === "/api/snapshot").length;
-    await b.click(); assert.notEqual(page.url(), first);
+    await b.click();
+    await expect(reader).toHaveAttribute("data-view-key", "request:sidebar-1");
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     await a.click();
-    assert.equal(page.url(), first);
+    await expect(reader).toHaveAttribute("data-view-key", "request:sidebar-0");
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator(".request-original pre")).toBeFocused();
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
+    await expect(disclosure).toBeFocused();
+    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 220);
     assert.equal(requests.filter(url => url.pathname === "/api/snapshot").length, reads, "Switching does not collect or reread the source");
     await selectActivityOption(page, "dateFilter", "7");
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
@@ -766,7 +768,7 @@ test("forced colors keep the reader edge, navigation focus and Search usable", a
 });
 
 test("four-state panel motion keeps anchors, fixed regions and content replacement coherent", { timeout: 60000 }, async t => {
-    const { page } = await setup(t);
+    const { page, records } = await setup(t);
     const traces = [];
     const settled = () => page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
     for (const theme of ["light", "dark"]) for (const navigation of ["expanded", "collapsed"]) {
@@ -826,7 +828,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
         await page.evaluate(() => window.surfaceMotion.phase = "replace");
         const bBox = await b.boundingBox();
         await page.mouse.click(bBox.x + bBox.width / 2, bBox.y + 20);
-        await expect(page.locator(".request-original pre")).toHaveText(await b.textContent());
+        await expect(page.locator(".request-original pre")).toHaveText(records[1].userPrompt.text);
         const aBox = await a.boundingBox();
         await page.mouse.click(aBox.x + aBox.width / 2, aBox.y + 20);
         await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
@@ -1025,7 +1027,7 @@ test("removing retained activity clears the open reader and its detached Copy ac
     const prior = await loadBoardState(context);
     await replaceEvidence(context, () => ({ records: [], importCoverage: prior.importCoverage }));
     await page.evaluate(() => dispatchEvent(new Event("online")));
-    await expect(page.locator("#requestContent")).toContainText("This interaction is unavailable");
+    await expect(page.locator("#unavailableCall")).toContainText("These completed calls are unavailable");
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
     assert.equal(await page.locator("#requestContent .assessment-feedback-dialog").count(), 0);
     assert.equal(await page.locator("body").evaluate((node, prompt) => node.textContent.includes(prompt), records[0].userPrompt.text), false);
@@ -1060,7 +1062,7 @@ for (const exit of ["close", "replace"]) test(`a delayed detail response cannot 
         } else {
             await second.click();
             await expect(page.locator(".request-original pre")).toHaveText(records[1].userPrompt.text);
-            await expect(page.locator(".request-original pre")).toBeFocused();
+            await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
         }
         release(); await Promise.all(deliveries);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
@@ -1069,7 +1071,7 @@ for (const exit of ["close", "replace"]) test(`a delayed detail response cannot 
             await expect(page.locator("#contextSidebar")).toBeHidden(); await expect(first).toBeFocused();
         } else {
             await expect(page.locator(".request-original pre")).toHaveText(records[1].userPrompt.text);
-            await expect(page.locator(".request-original pre")).toBeFocused();
+            await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
         }
     } finally { release(); await Promise.all(deliveries); }
 });
