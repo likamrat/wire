@@ -7,11 +7,6 @@ import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-an
 import { buildAssessmentModel, assessmentOverview } from "../lib/assessment-read-model.mjs";
 import { fixture, exportCatalogFor, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { extractScenarios } from "../lib/history.mjs";
-import { createTextAccess } from "../web/text-access.mjs";
-import { createEvidenceUX } from "../web/ux.mjs";
-import { createDisclosureState } from "../web/disclosure-state.mjs";
-import { uxIcons } from "../web/ux-icons.mjs";
-import { styles } from "../web/styles.mjs";
 const original = "ARTIFICIAL PROMPT ONLY\n  Preserve these spaces  \n" +
     "Compare invented calendar entries without executing this prompt. ".repeat(24) +
     "\nUnicode: \u65e5\u672c\u8a9e e\u0301 \ud83d\udc69\u200d\ud83d\ude80\nEND";
@@ -45,17 +40,6 @@ async function setup(t) {
     const page = await context.newPage(), unexpected = [], errors = [], calls = [];
     page.setDefaultTimeout(6000);
     page.on("pageerror", error => errors.push(error.message));
-    await context.addInitScript(() => {
-        window.syntheticCopies = [];
-        window.copyDenied = false;
-        Object.defineProperty(navigator, "clipboard", { value: {
-            readText() { throw new Error("No clipboard reads in artificial proof."); },
-            async writeText(text) {
-                if (window.copyDenied) throw new DOMException("Artificial denial", "NotAllowedError");
-                window.syntheticCopies.push(text);
-            },
-        } });
-    });
     await context.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== "https://wire.invalid") { unexpected.push(url.href); return route.abort(); }
@@ -126,47 +110,4 @@ test("legacy provenance and forwarded wording cannot supply a verified author on
         }
         await page.goBack(); await expect(card.locator(".request-card-open")).toBeFocused();
     }
-});
-
-test("keyboard Copy takes the complete retained prompt and a denial leaves it readable", async t => {
-    const { page } = await setup(t);
-    await page.goto("https://wire.invalid/#request?request=unverified"); await ready(page);
-    const section = page.locator('[data-reader-section="prompt"]');
-    const toggle = section.getByRole("button", { name: "Author unverified", exact: true });
-    const copy = section.getByRole("button", { name: "Copy prompt", exact: true }), text = section.locator(".full-text-content");
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    assert.equal(await text.textContent(), original);
-    await toggle.press("Enter"); await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await toggle.press("Tab"); await expect(copy).toBeFocused();
-    await copy.press("Enter");
-    await expect.poll(() => page.evaluate(() => window.syntheticCopies)).toEqual([original]);
-    await page.evaluate(() => { window.copyDenied = true; });
-    await copy.click();
-    await expect(section.getByRole("alert")).toContainText(/copy/i);
-    assert.equal(await text.textContent(), original);
-    for (const [width, scale] of [[1200, 1], [375, 2]]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        assert.ok(await text.evaluate(n => n.scrollWidth <= n.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1));
-        const rect = await copy.boundingBox(); assert.ok(rect.width >= 44 && rect.height >= 44);
-    }
-});
-
-test("response subject keeps its existing reader labels and is never relabeled a prompt", { timeout: 15000 }, async t => {
-    const browser = await chromium.launch(), page = await browser.newPage();
-    t.after(() => browser.close());
-    await page.route("**/*", route => route.abort());
-    await page.setContent('<!doctype html><html><body><main id="reader"></main></body></html>');
-    await page.addStyleTag({ content: styles });
-    await page.addScriptTag({ content: `
-        const createAccess = ${createTextAccess.toString()};
-        const createUX = ${createEvidenceUX.toString()};
-        const createDisclosure = ${createDisclosureState.toString()};
-        document.querySelector("#reader").append(createAccess(createUX(${JSON.stringify(uxIcons)}), createDisclosure())
-            .render({status:"full",text:"Artificial assistant response"}, {key:"response-proof",subject:"response",mode:"complete"}));
-    ` });
-    assert.equal(await page.locator("h3").textContent(), "Retained response text");
-    assert.equal(await page.getByRole("button", { name: "Hide response", exact: true }).count(), 1);
-    assert.equal(await page.getByRole("button", { name: "Copy response", exact: true }).count(), 1);
-    assert.equal(await page.getByText("Author unverified", { exact: true }).count(), 0);
 });

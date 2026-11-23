@@ -139,7 +139,10 @@ test("long prompt previews preserve exact text, author, Copy and accessible repe
             assert.equal(await content(page).textContent(), exactPrompt);
             await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeInViewport();
             if (actor === "agent") await capture(page, "prompt-" + theme + "-collapsed");
-            await prompt(page).getByRole("button", { name: "Copy prompt", exact: true }).click();
+            await promptToggle(page).focus(); await page.keyboard.press("Tab");
+            const copyButton = prompt(page).getByRole("button", { name: "Copy prompt", exact: true });
+            await expect(copyButton).toBeFocused();
+            await page.keyboard.press("Enter");
             assert.equal(await page.evaluate(() => window.promptCopies.at(-1)), exactPrompt);
             const copy = await prompt(page).getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
             const toggle = promptToggle(page);
@@ -213,9 +216,12 @@ test("reader date matches its card in the chosen zone and keeps missing-message 
     await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();
     assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
     await capture(page, "reader-date-narrow");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await page.evaluate(() => localStorage.setItem("workiq-evidence.time-zone", "UTC"));
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await open(page, "dated");
     await expect(prompt(page).locator(".reader-interaction-time")).toHaveText("Oct 1, 2026, 6:59 AM");
 });
 
