@@ -11,7 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { executeAssessmentAction } from "../lib/assessment.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { selectActivityOption } from "./helpers.mjs";
+import { navigateSettings, selectActivityOption } from "./helpers.mjs";
 
 const event = (type, data, id = randomUUID()) => ({ id, type, timestamp: new Date().toISOString(), data });
 const jsonl = values => values.map(value => JSON.stringify(value) + "\n").join("");
@@ -61,7 +61,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
         const allowed = url.origin === new URL(runtime.url).origin && (
-            request.method() === "GET" && ["/", "/favicon.svg", "/assets/assessment-contract.mjs"].includes(url.pathname)
+            request.method() === "GET" && ["/", "/settings", "/favicon.svg", "/assets/assessment-contract.mjs"].includes(url.pathname)
             || request.method() === "POST" && ["/api/session", "/api/snapshot", "/api/collection/status", "/api/evaluation/automatic/summary",
                 "/api/assessment/detail", "/api/assessment/overview", "/api/assessment/consent",
                 "/api/assessment/consent/set", "/api/assessment/evidence", "/api/assessment/mutation/status"].includes(url.pathname)
@@ -111,7 +111,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     }
     await page.goto(runtime.url + "#home?range=7&service=Mail&result=success"); await ready(page);
     await unchangedGrant("Ordinary view filters are not capture scope.");
-    await page.goto(runtime.url + "#settings?section=display"); await ready(page);
+    await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
     await unchangedGrant("Display time zone is not capture scope.");
     const poll = page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
