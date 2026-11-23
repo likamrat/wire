@@ -161,7 +161,7 @@ test("long option finders keep the current measure, filters and time zone until 
     await trigger("projectFilter").click(); await pressText("Find a project", "18"); await option("Harbor workspace 18").click();
     await expect(page.locator("#projectFilter")).toHaveValue("harbor-18"); await closeAnalyzeFilters(page);
     const members = records.filter(record => record.projectId === "harbor-18");
-    const cards = page.locator("#activityView .request-card-open");
+    const cards = page.locator("#activityView .request-card-prompt");
     await expect(cards).toHaveCount(members.length);
     for (const record of members) await expect(cards.filter({ hasText: record.userPrompt.text })).toHaveCount(1);
     await navigateMain(page, "settings"); await navigateSettings(page, "regional"); await trigger("displayTimeZone").click();
