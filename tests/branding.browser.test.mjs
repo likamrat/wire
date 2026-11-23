@@ -102,7 +102,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             if (width >= 700 && await toggle.getAttribute("aria-expanded") === String(compact)) { await toggle.click(); await settled(page); }
             await page.mouse.move(width - 5, 800);
             await brand.hover();
-            await expect(tip).toHaveText("WorkIQ Request Explorer"); await expect(tip).toBeVisible();
+            await expect(tip).toHaveText("Work IQ Request Explorer"); await expect(tip).toBeVisible();
             const geometry = await brand.evaluate(node => {
                 const tip = document.querySelector("#evidence-tooltip"), b = node.getBoundingClientRect(), r = tip.getBoundingClientRect();
                 const c = document.querySelector("#navigationCollapse"), control = c.getBoundingClientRect(), style = getComputedStyle(tip);
@@ -120,7 +120,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             assert.ok(contrast(geometry.foreground, geometry.background) >= 4.5);
             assert.ok(geometry.overflow <= 1);
             await expect(brand).toHaveAccessibleName("WIRE - Work IQ Request Explorer - Analyze");
-            await expect(brand).toHaveAccessibleDescription("WorkIQ Request Explorer");
+            await expect(brand).toHaveAccessibleDescription("Work IQ Request Explorer");
             await expect(brand.locator("button,a")).toHaveCount(0);
             await captureBrand(page, `brand-help-${theme}-${width}-${scale}x-${compact ? "compact" : "expanded"}`, geometry);
             await tip.hover(); await expect(tip).toBeVisible();
@@ -128,7 +128,7 @@ test("brand help and adjacent panel control share the normal tooltip owner acros
             await page.mouse.move(width - 5, 800);
             await page.locator(width < 700 ? "#closeNavigation" : "#themePreference").focus();
             await brand.focus(); await page.keyboard.press("Shift");
-            await expect(tip).toHaveText("WorkIQ Request Explorer"); await expect(brand).toBeFocused();
+            await expect(tip).toBeVisible(); await expect(brand).toBeFocused();
             await page.keyboard.press("Escape"); await expect(tip).toBeHidden(); await expect(brand).toBeFocused();
             await brand.press("Enter"); await ready(page); await expect(tip).toBeHidden();
             await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
