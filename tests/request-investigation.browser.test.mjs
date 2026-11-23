@@ -234,4 +234,24 @@ test("selected exact request text survives rebuild but never transfers to change
     await expect(page.locator(".request-original pre")).toHaveCount(0);
     assert.equal(await page.evaluate(() => getSelection().toString()), "");
     await expect(page.locator("#workspace")).not.toContainText(changed.userPrompt.text);
+
+    for (const missing of ["sourceSessionId", "sourceEventId"]) {
+        const app = await setup(t, record => {
+            if (missing === "sourceSessionId") delete record.sourceSessionId;
+            else delete record.userPrompt.sourceEventId;
+            return [record];
+        });
+        await app.page.goto(app.url + "#request?request=investigation"); await ready(app.page);
+        await app.page.locator("[data-reader-section=prompt] .prompt-preview-toggle").click();
+        const unbound = app.page.locator(".request-original pre");
+        await unbound.dblclick({ position: { x: 18, y: 12 } });
+        assert.ok(await app.page.evaluate(() => getSelection().toString().trim()));
+        await replaceEvidence(app.store, () => ({ records: [app.record, fixture("unrelated")],
+            importCoverage: { counts: { includedSessions: 2 }, roster: [] } }));
+        const refreshed = app.page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
+        await app.page.evaluate(() => dispatchEvent(new Event("online")));
+        await refreshed; await ready(app.page);
+        assert.equal(await unbound.textContent(), original, `${missing}: the record remains readable`);
+        assert.equal(await app.page.evaluate(() => getSelection().toString()), "", `${missing}: no borrowed selection`);
+    }
 });
