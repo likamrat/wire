@@ -96,6 +96,16 @@ export const analyzeLayoutStyles = `
 #percentageCharts .percentage-card-heading {margin-bottom:4px;min-height:0}
 #percentageCharts .percentage-card {container:breakdown-card / inline-size}
 #percentageCharts .percentage-legend {gap:4px}
+:is(#outcomeChart,#percentageCharts) .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
+:is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
+:is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
+:is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
+:is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
+.widget-record {display:grid;gap:4px;padding:12px 16px;overflow-wrap:anywhere}
+@media (hover:none) {
+ :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]::before {content:attr(aria-description);display:block;font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);order:1}
+ :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]:not(.author-option-value) {display:flex;flex-direction:column;justify-content:center}
+}
 #percentageCharts .percentage-gap-list {margin:4px 0 0;padding-inline-start:28px;font-size:var(--type-caption);color:var(--muted)}
 #percentageCharts .percentage-gap-list>div {padding-block:2px}
 #percentageCharts [data-breakdown=models] .percentage-label {min-height:36px}
@@ -204,6 +214,8 @@ export const analyzeLayoutStyles = `
 #analyzeResultScope .analyze-scope-caption {margin:0}
 #analyzeResultScope #periodResult:not(.visually-hidden) {display:block;margin:0;color:var(--muted);font-size:var(--type-control)}
 #analyzeResultScope #periodResult :is(#activityCount,#activityUnit) {font:inherit;letter-spacing:normal;color:inherit}
+.population-link {display:inline-block;padding:4px 0;color:inherit;text-decoration:none}
+.population-link:is(:hover,:focus-visible) {color:var(--accent);text-decoration:underline}
 .analyze-toolbar[hidden] {display:none}
 #openAnalyzeFilters {--action-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:max(44px,calc(1lh + 16px));padding:8px 12px;white-space:nowrap;overflow-wrap:normal;font-size:var(--type-control);line-height:var(--leading-control)}
 #openAnalyzeFilters {--pill-border:var(--control);--pill-hover-border:var(--control);flex:none;color:var(--ink)}
@@ -307,6 +319,8 @@ export const analyzeLayoutStyles = `
 :is(#outcomeChart,.native-outcome-chart) .percentage-visual {position:relative}
 .percentage-total {position:absolute;inset:0 0 auto;aspect-ratio:1;display:flex;align-items:center;justify-content:center;flex-direction:column;pointer-events:none;gap:2px}
 .percentage-total-value {font-size:1.875rem;line-height:1.1;font-variant-numeric:tabular-nums;font-weight:var(--weight-strong)}
+.percentage-total-link {pointer-events:auto;display:grid;place-items:center;min-width:44px;min-height:44px;border-radius:var(--radius-small);color:var(--ink);text-decoration:none}
+.percentage-total-link:is(:hover,:focus-visible) {color:var(--accent);background:var(--hover)}
 .percentage-total-unit {font-size:var(--type-small);line-height:var(--leading-caption);color:var(--muted)}
 .percentage-total[data-length=long] .percentage-total-value {font-size:1.25rem}
 .percentage-total[data-length=wide] {position:static;aspect-ratio:auto}

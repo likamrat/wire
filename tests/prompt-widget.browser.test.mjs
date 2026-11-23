@@ -78,8 +78,8 @@ async function exact(page, widget, counts, calls) {
             assert.ok(Math.abs(row.width - row.fraction * 100) < .0001, "CSS percentage serialization keeps its available precision");
         }
     } else assert.deepEqual(rows, []);
-    assert.equal(await widget.locator(".percentage-content :is(a,button,svg:not([aria-hidden=true]))").count(), 0,
-        "The author glyphs are decorative; the legend is not a new drilldown.");
+    assert.equal(await widget.locator(".percentage-content a").count(), rows.length);
+    assert.equal(await widget.locator(".percentage-content :is(button,svg:not([aria-hidden=true]))").count(), 0);
     if (total) await expect(widget.getByRole("link", { name: "View trend: Prompt authors" })).toBeVisible();
     return rows;
 }

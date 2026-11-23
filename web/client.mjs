@@ -290,6 +290,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const metadata = createInlineMetadata(ux);
     // Keep operation wording on screen separate from saved report definitions.
     const recordedCategories = createServiceCategories();
+    const describeService = (value, n) => {
+        const entry = recordedCategories.display(value, n);
+        return entry.id === "Search" ? { ...entry, label: "Search endpoint",
+            description: "The recorded target is a search endpoint. It doesn’t identify every app searched." } : entry;
+    };
     const categories = { ...recordedCategories, entries: recordedCategories.entries.map(entry => recordedCategories.display(entry.id)),
         describe: recordedCategories.display, operation(tool) {
         const operation = recordedCategories.operation(tool);
@@ -318,15 +323,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
-        createLink: (kind, row) => Object.hasOwn(row, "nativeFilter") ? row.nativeFilter ? link("", "activity", { ...row.nativeFilter, page: undefined }) : null
-            : kind === "outcomes" && workspaceState.scope.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
-            : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(workspaceState.route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined,
-                ...(row.sourceId ? { source: row.sourceId } : {}) })
-                : kind === "service-purpose" ? link("", "activity", { endpoint: "operation:workiq-retrieve", page: undefined })
-                    : kind === "service-preparation" ? link("", "activity", { service: "Discovery", page: undefined })
-                        : kind === "service-operation" ? link("", "activity", { tool: "workiq-ask", endpoint: row.endpointId, page: undefined })
-                : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined,
-                    ...(row.sourceId ? { source: row.sourceId } : {}) }) : null });
+        createLink(kind, row) {
+            const changes = Object.hasOwn(row, "nativeFilter") ? row.nativeFilter
+                : kind === "outcomes" ? workspaceState.scope.layer === "code-reference" ? { widget: "all" } : { result: row.id }
+                : kind === "services" ? { withinServices: [...new Set([...(workspaceState.route.withinServices?.split(",") || []), row.id])].sort().join(",") }
+                : kind === "tools" && row.id !== "tool:unidentified" ? { tool: row.id.slice(5) } : null;
+            return changes ? routeLink("", routeFor("activity", { ...changes, ...(row.sourceId ? { source: row.sourceId } : {}), page: undefined }),
+                "", { revealReferenceRecords: true }) : null;
+        } });
     const trendInventory = new WeakMap();
     function retainedTrendTools(snapshot) {
         if (!trendInventory.has(snapshot)) {
@@ -363,7 +367,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     $("chartTitle").after(analyzeTrends.link("rhythm"));
-    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true, includeAuthors: true, trendLink: analyzeTrends.link });
+    function widgetRecordsLink(widget) {
+        return routeLink("", routeFor("activity", { widget, page: undefined }), "", { revealReferenceRecords: true });
+    }
+    function widgetDefinitionLink(topic) {
+        return routeLink("", routeFor("analyze", { analyzeSection: "guide", guideTopic: topic }), "");
+    }
+    function populationLink(total, label, source) {
+        const action = !total ? widgetDefinitionLink("outcomes") : source ? routeLink("", routeFor("activity", { source, page: undefined }), "", { revealReferenceRecords: true }) : widgetRecordsLink("all");
+        action.dataset.viewKey = "population:" + (source ?? "current");
+        action.classList.add("population-link");
+        const tip = total ? `${label} in the current dates and filters.` : "No records match these dates and filters.";
+        action.setAttribute("aria-description", tip);
+        return ux.tooltip(action, tip);
+    }
+    function widgetMeaning(topic, row, layer) {
+        if (topic === "tools") return (!Object.hasOwn(row, "nativeFilter") && ux.operations.toolPurpose(row.label)) ||
+            (row.id === "tool:unidentified" || row.nativeFilter === null ? "The retained records don’t identify individual tools here." : "The tool name recorded for this activity.");
+        if (topic === "outcomes") return help.resultMeaning(row.id, layer);
+        if (topic === "services") return describeService(row.id).description;
+        if (topic === "authors") return ({ user: "The originating prompt was recorded as human-written.", agent: "The originating prompt came from an agent, including automatic continuations.",
+            unknown: "The record doesn’t establish who wrote the originating prompt." })[row.id];
+        if (topic === "models") return "Interactions with a response attributed to this model. One interaction can use several models.";
+    }
+    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true, includeAuthors: true, trendLink: analyzeTrends.link,
+        evidenceLink: widgetRecordsLink, definitionLink: widgetDefinitionLink, meaning: widgetMeaning,
+        mirrorLink: (target, source) => linkTargets.set(target, linkTargets.get(source)) });
     const live = createLiveState();
     const sourceCheckKey = "workiq-evidence.source-check.v1";
     let sourcePending = false, sourceStorageWarning = "";
@@ -2700,6 +2729,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return { ...next, view: view || "settings", section, setting, issues: undefined, settingsWarning: warning || next.settingsWarning };
     }
     function publicField(key, value) {
+        if (key === "guideTopic") return ["time", "tools", "services", "models", "authors", "outcomes"].includes(value);
         if (key === "section") return settingsNavigation.categories.some(item => item.id === value);
         if (key === "setting") return settingsNavigation.entries.some(item => item.id === value);
         if (["service", "services", "withinServices"].includes(key)) return value.split(",").every(id => recordedCategories.entries.some(item => item.id === id));
@@ -2811,7 +2841,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         view = sessionJourney.canonical({ view }).view;
         return filterState.reconcileTimeline(workspaceState.route, {
-            ...workspaceState.route, view, analyzeSection: undefined, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
+            ...workspaceState.route, view, analyzeSection: undefined, guideTopic: undefined, widget: undefined, entryDefault: undefined, bookmark: undefined, searchOwned: undefined,
             completedCalls: undefined, failedCalls: undefined,
             nativeCompletedRef: undefined,
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
@@ -4556,12 +4586,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (chartType === "time" && !workspaceState.analytics.timeSeries) {
                 return { status: "unavailable", reason: "Dated chart values are unavailable for this accepted view." };
             }
-            renderCountTable(chartReferenceCountTable, chartType, (group, label) => {
+            renderCountTable(chartReferenceCountTable, chartType, (group, label, outcome) => {
                 const changes = chartType === "time" ? { range: "custom", from: group.from, to: group.to }
                     : chartType === "endpoint" ? { endpoint: group.id } : { service: group.label };
                     const next = canonicalRoute({ ...workspaceState.acceptedRoute, view: "analyze", analyzeSection: undefined, request: undefined, call: undefined, callRevision: undefined,
-                        ...changes, ...(context.nativeView ? { source: "github-copilot" } : {}), page: undefined });
-                return guarded(viewKey(routeLink(label, next, "chart-data-action text-link"), "chart-reference:" + topic + ":" + (group.id || group.date)));
+                        ...changes, widget: undefined, guideTopic: undefined, ...(outcome ? { result: outcome } : {}), ...(context.nativeView ? { source: "github-copilot" } : {}), page: undefined });
+                return guarded(viewKey(routeLink(label, next, "chart-data-action text-link"), "chart-reference:" + topic + ":" + (group.id || group.date) + (outcome ? ":" + outcome : "")));
             }, { referenceKey: identity.key, isCurrent, rowQuery: presentationState.rowQuery, resetPage: presentationState.resetPage });
         }
         if (context.nativeView) boundedNative.renderExact(host, topic, isCurrent, entry => !presentationState.rowQuery?.trim()
@@ -4599,7 +4629,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const [id, current] of [["analyzeResultsSection", !guide], ["openChartReference", guide]]) {
             if (current) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
         }
-        if (guide && chartReferenceUI.value().view === "closed" && $("workspace").checkVisibility()) chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"));
+        if (guide && chartReferenceUI.value().view === "closed" && $("workspace").checkVisibility()) chartReferenceUI.openAnalyze(pageDefaults.get("guideStart"), route.guideTopic);
         else if (guide || route.view === "analyze" && route.compare) chartReferenceUI.refresh();
         else chartReferenceUI.leave();
     }
@@ -4973,7 +5003,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const model = acceptedAnalyzePeriod();
         setText(homeCount, count(rows.length));
         setText(homeUnit, results.unit(workspaceState.scope.layer, rows.length));
-        $("periodResult").replaceChildren(...(workspaceState.stale ? ["Previous results: "] : []), homeCount, " ", homeUnit, ` (${model.caption})`);
+        const label = `${homeCount.textContent} ${homeUnit.textContent}`;
+        const metric = workspaceState.stale ? el("span") : populationLink(rows.length, label);
+        metric.append(homeCount, " ", homeUnit, ` (${model.caption})`);
+        $("periodResult").replaceChildren(...(workspaceState.stale ? ["Previous results: "] : []), metric);
         $("periodResult").dataset.revision = String(workspaceState.evidence.revision);
         const hint = workspaceState.stale ? "The update failed. The last applied period is still shown; retry before using these results."
             : !workspaceState.evidence.scenarios.length && !collection?.config ? "No activity has been collected."
@@ -5263,7 +5296,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : native.layer === "reported-api" ? "returned-result observations" : "selected records"}`
                 : "Microsoft: current totals unavailable"] : []),
         ];
-        setText($("periodResult"), descriptions.join(" / "));
+        const stats = descriptions.map(text => {
+            const microsoft = text.startsWith("Microsoft:");
+            if (workspaceState.stale || (microsoft ? !native : !githubReady)) return text;
+            const source = microsoft ? nativeView.sourceGroups?.length === 1 ? nativeView.sourceGroups[0].sourceId : "microsoft-365" : null;
+            const action = populationLink(microsoft ? native.selectedRows : workspaceState.analytics.totals.count, text, source);
+            action.textContent = text;
+            if ($("periodResult").classList.contains("visually-hidden")) action.tabIndex = -1;
+            return action;
+        });
+        $("periodResult").replaceChildren(...stats.flatMap((stat, i) => i ? [" / ", stat] : [stat]));
         if (nativeAnalysisState) {
             setText($("wireAnalysisSearchNotice"), native
                 ? "Reports include whole matching conversations."
@@ -5400,14 +5442,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...nativePoints.map(point => ({ ...point, ...point.outcomes, total: point.count, chartSource: "Microsoft 365", native: true }))]
             .sort((a, b) => a.date.localeCompare(b.date) || a.chartSource.localeCompare(b.chartSource));
         const mixed = Boolean(series?.points?.length && nativePoints.length);
+        function periodLink(point, key) {
+            const next = routeFor("activity", { range: "custom", from: point.from, to: point.to, timelineFrom: undefined, page: undefined,
+                ...(key && workspaceState.scope.layer !== "code-reference" ? { result: key } : {}),
+                ...(native ? { source: point.native ? native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365" : "github-copilot" } : {}) });
+            const control = routeLink("", next, "", { revealReferenceRecords: true });
+            const range = date(point.date) + (point.endDate && point.endDate !== point.date ? " to " + date(point.endDate) : "");
+            const tip = key ? `${range}: ${count(point[key])} ${resultLabels[key].toLowerCase()}. ${help.resultMeaning(key, workspaceState.scope.layer)}`
+                : `${count(point.total)} ${chartGroupUnit(point)} dated ${range}.`;
+            control.setAttribute("aria-label", tip);
+            control.setAttribute("aria-description", tip);
+            viewKey(control, `chart:time:${point.chartSource}:${point.date}:${key || "total"}`);
+            return ux.tooltip(control, tip);
+        }
         const chart = dimensional.timeView({
             compact: Boolean(frontendActivity),
             points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
             unit: frontendActivity ? undefined : total => results.columnUnit(workspaceState.scope.layer, total),
             summary: point => `${point.chartSource}: ${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
-            createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, timelineFrom: undefined, page: undefined,
-                ...(native ? { source: point.native ? native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365" : "github-copilot" } : {}) }),
-            inspect: inspectColumnSection,
+            createAction: point => periodLink(point),
+            createSegment: periodLink,
+            zeroDefinition: () => ux.tooltip(widgetDefinitionLink("time"), "No matching records were dated in this period."),
         });
         chart.removeAttribute("aria-label");
         chart.setAttribute("aria-labelledby", "chartTitle");
@@ -5549,7 +5604,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 action.setAttribute("aria-label", `${name}: ${count(group.total)} ${results.unit(workspaceState.scope.layer, group.total)}. View requests.`);
                 label.append(action);
             } else label.append(el("span", "chart-data-label", time ? date(group.date, true) : chartType === "endpoint" ? group.label : serviceLabel(group.label)));
-            row.append(label, el("td", "numeric", count(group.total)), ...keys.map(key => el("td", "numeric", count(group[key]))));
+            row.append(label, el("td", "numeric", count(group.total)), ...keys.map(key => {
+                const cell = el("td", "numeric", count(group[key]));
+                if (time && group[key] && createReferenceAction) {
+                    const action = createReferenceAction(group, count(group[key]), key);
+                    action.setAttribute("aria-label", `${date(group.date, true)}: ${labels[key]}, ${count(group[key])}. View records.`);
+                    cell.replaceChildren(action);
+                }
+                return cell;
+            }));
             return row;
         }, wrapList: tbody => {
             table.replaceChildren(caption, columns, thead, tbody, footer);
@@ -5677,7 +5740,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const scope = frontendActivity
-            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, activityPage]) : "";
+            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage]) : "";
         if (!workspaceState.evidence.nativeRead && frontendActivity?.retain(publication, workspaceState.evidence, scope)) return;
         const stage = frontendActivity?.begin(publication, workspaceState.evidence, scope);
         if (frontendActivity && !stage) return;
@@ -5688,26 +5751,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderActivityContent(publication, host, stage) {
         captureReading();
-        const scenarios = currentViewScenarios();
+        let scenarios = currentViewScenarios();
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         releaseCardPreviews(host);
         nativeActivity.clearCards();
         boundedNative.clearCards();
-        const orphaned = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
+        const widget = underlyingRoute().widget;
+        const group = widget === "all" ? { label: "Recorded activity", drilldownIds: slice.rowIds } : percentages.evidence(widget);
+        const members = new Set(group?.interactionIds ?? group?.drilldownIds);
+        if (widget) scenarios = group?.interactionIds ? scenarios.filter(record => members.delete(percentageMath.interactionIdentity(record))) : [];
+        const orphaned = widget ? [] : selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
         const items = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
-            .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record }))];
-        const native = sharedNativeView(), nativePage = boundedNative.presentation();
+            .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record })),
+            ...(widget && !group?.interactionIds ? selectionRows().filter(row => members.has(row.id)).map(match => ({ match })) : [])];
+        const native = widget ? null : sharedNativeView(), nativePage = boundedNative.presentation();
         const roster = assessmentFactories.activityPage({ index: activityPage, github: items.length,
             native: native?.aggregates.conversations ?? 0, githubSize: pageSize, nativeSize: native?.page.limit ?? 10,
             ...(native && (nativePage.value || nativePage.loading) ? { nativeWindow: { index: nativePage.pageIndex, offset: nativePage.pageOffset,
                 count: nativePage.pageCount, hasNext: nativePage.hasNext } } : {}) });
-        const noun = orphaned.length ? "activity entries" : workspaceState.scope.layer === "http" ? "record groups" : "interactions";
+        const noun = widget && group?.drilldownIds ? results.unit(workspaceState.scope.layer, 2) : orphaned.length ? "activity entries" : workspaceState.scope.layer === "http" ? "record groups" : "interactions";
         $("activityTitle").textContent = "Activity";
         $("activityView").dataset.revision = String(workspaceState.evidence.revision);
         const unlinked = orphaned.length;
         const groups = `${count(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
-        const nativeUnavailable = boundedIncludesMicrosoft() && !native;
-        $("activityListSummary").textContent = native ? [
+        const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native;
+        $("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." :
+            `${group.label}: ${count(items.length)} matching ${group.interactionIds ? items.length === 1 ? "interaction" : "interactions"
+                : workspaceState.scope.layer === "tool" ? items.length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, items.length)}`
+            : native ? [
             ...(items.length ? [`${count(items.length)} GitHub ${items.length === 1 ? "interaction" : "interactions"}`] : []),
             `${count(native.aggregates.conversations)} Microsoft ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}`,
         ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable"
@@ -5717,7 +5788,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityListSummary").hidden = false;
         host.replaceChildren();
         activityPage = roster.index;
-        if (!roster.total && !nativeUnavailable) {
+        if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link", { revealReferenceRecords: true }));
+        if (!roster.total && !nativeUnavailable && !widget) {
             host.append(empty(native ? "No matching activity" : !workspaceState.evidence.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 workspaceState.evidence.scenarios.length
                     ? search ? "Try another phrase or clear Search." : "Try different dates or clear a filter."
@@ -5725,7 +5797,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         : "Check your source and collection progress in Settings."));
         }
         for (const item of items.slice(roster.githubOffset, roster.githubOffset + roster.githubLimit)) {
-            const card = item.scenario ? requestCard(item.scenario, { eventSignal: stage?.signal }) : matchingAction(item.record);
+            const card = item.scenario ? requestCard(item.scenario, { eventSignal: stage?.signal })
+                : item.match ? widgetRecord(item.match) : matchingAction(item.record);
             if (card && stage) host.append(card);
             if (!api.isCurrent(publication)) return false;
             if (card && !stage) host.append(card);
@@ -5765,7 +5838,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         position.dataset.pagePosition = "";
         position.tabIndex = -1;
         if (roster.pages > 1) {
-            const turnPage = offset => navigate(routeFor("analyze", { page: Math.max(0, activityPage + offset) }), false,
+            const turnPage = offset => navigate(routeFor("analyze", { widget, page: Math.max(0, activityPage + offset) }), false,
                 { paging: capturePager(pager, offset) });
             const prev = button("Previous", () => turnPage(-1));
             prev.disabled = activityPage === 0 || !pageReady;
@@ -5778,6 +5851,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             pager.append(prev, next);
         }
         return true;
+    }
+    function widgetRecord(row) {
+        const record = workspaceState.evidence.scenarios.find(scenario => row.scenarioId === scenario.scenarioId);
+        if (!record) return matchingAction(row);
+        const layer = workspaceState.scope.layer, card = viewKey(el("article", "activity-card widget-record"), "widget-record:" + row.id);
+        card.dataset.actionId = row.id;
+        const target = routeFor("request", { request: row.scenarioId, call: row.id, layer,
+            ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
+        const ordinal = layer === "tool" ? requestContext.actionOrdinals(record).get(sourceCallFor(row)) : null;
+        const action = routeLink([ordinal && `Call #${ordinal}`, row.tool, row.endpoint?.path].filter(Boolean).join(" · ") || results.unit(layer, 1), target, "text-link");
+        card.append(action, el("span", "muted", [results.labels(layer)[row.outcome], row.startedAt && time.formatMoment(row.startedAt, workspaceState.scope.timeContext)].filter(Boolean).join(" · ")));
+        return card;
     }
     function matchingAction(row) {
         const card = viewKey(el("article", "matched-action activity-card"), "action:" + row.id);
@@ -5927,7 +6012,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : `${label.unknown}: ${count(summary.unknown)}`;
         return summary.other ? label.other : null;
     }
-    function activityIdentities(rows, layer, { includeTools = true, inspectGap } = {}) {
+    function activityIdentities(rows, layer, { includeTools = true, inspectGap, inspectTool } = {}) {
         const group = el("dl", "card-identities"), tools = new Map(), targets = new Map(), operations = new Map(), gaps = new Map();
         const field = (name, values) => {
             if (!values.length) return;
@@ -5945,7 +6030,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (id === "Discovery" || association?.basis === "tool-purpose" && id === "Search") {
                     const title = categories.operation(row.tool)?.label ?? (id === "Search" ? "Search requested" : serviceLabel(id));
                     operations.set(title, { id, label: title, operationRole: ux.operations.toolRole(row.tool) });
-                } else targets.set(id, categories.describe(id));
+                } else targets.set(id, describeService(id));
             }
             if (association?.status === "not-applicable" && categories.operation(row.tool))
                 operations.set(row.tool, { id: "Discovery", label: categories.operation(row.tool).label, operationRole: ux.operations.toolRole(row.tool) });
@@ -5956,17 +6041,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const gap of association?.gaps ?? [categories.serviceEvidence(row, layer)].filter(Boolean)) {
                 const operation = operationForGap(row, layer, gap), owner = operation ? operations : gaps;
                 if (!owner.has(gap.reason)) owner.set(gap.reason, {
-                    ...(operation ?? { id: "Unknown", label: categories.displayEvidence(gap).label }), reason: gap.reason, rows: [] });
+                    ...(operation ?? { id: "Unknown", ...categories.displayEvidence(gap) }), reason: gap.reason, rows: [] });
                 owner.get(gap.reason).rows.push(row);
             }
         }
         if (includeTools && ["tool", "reported-api"].includes(layer)) {
             const labels = Array.from(tools, ([name, total]) => ({ name,
                 countLabel: total > 1 ? `${count(total)} ${layer === "tool" ? "calls" : "results"}` : null }));
-            field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [ux.cardToolList(labels)] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
+            field(tools.size > 1 ? "Tools" : "Tool", tools.size ? [ux.cardToolList(labels, inspectTool)] : rows?.length ? [el("span", "muted", "Not recorded")] : []);
         }
         const cues = entries => [...entries.values()].map(item => {
             const cue = serviceCue("span", item.id, item);
+            if (item.description) ux.tooltip(cue, item.description);
             return item.rows && inspectGap ? inspectGap(item, cue) : cue;
         });
         const values = cues(targets);
@@ -6067,10 +6153,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const group = entry.rows.length > 1 ? `first of ${count(entry.rows.length)} calls` : null;
             if (group) cue.lastElementChild.append(document.createTextNode(` (${group})`));
             link.setAttribute("aria-label", `${entry.label}: open ${group ?? "call"}`);
+            if (entry.description) { ux.tooltip(link, entry.description); link.setAttribute("aria-description", entry.description); }
             link.append(cue, ux.icon("forward"));
             return link;
         }
-        const identities = activityIdentities(rows, layer, { inspectGap: layer === "tool" && !reportPicker ? inspectGap : null });
+        function inspectTool(name) {
+            const matching = rows.filter(row => row.tool === name);
+            const exact = callInvestigation.firstToolCall(workspaceState.evidence.requestActivity,
+                workspaceState.evidence.scenarios, matching, { ...target, layer }, workspaceState.evidence.revision,
+                row => (row.tool ?? sourceCallFor(row)?.tool) === name);
+            if (!exact) return null;
+            const control = open(name, "record", exact, "card-evidence-link");
+            control.setAttribute("aria-label", `${name}: open ${matching.length === 1 ? "call" : `first of ${matching.length} calls`}`);
+            return control;
+        }
+        const identities = activityIdentities(rows, layer, layer === "tool" && !reportPicker ? { inspectGap, inspectTool } : {});
         const foot = el("div", "card-reading-actions");
         const exception = activityCardException(layer, rows, summary);
         const exact = (row, layer) => ({ ...target, layer, call: row.id, ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
@@ -6492,6 +6589,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             toggle.type = "button";
             const line = el("span", "reader-call-identity-line");
             line.append(...identity.childNodes);
+            const toolName = line.querySelector(".reader-tool-name")?.textContent;
+            const purpose = toolName && ux.operations.toolPurpose(toolName);
+            if (purpose) { ux.tooltip(toggle, purpose); toggle.setAttribute("aria-description", purpose); }
             const disclosure = ux.icon("disclosure");
             disclosure.classList.add("reader-call-disclosure");
             line.append(disclosure);

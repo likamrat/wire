@@ -46,6 +46,21 @@ export function createOperationIcons(entityCollections = graphEntityCollections)
     };
     const slug = name => name.replaceAll("_","-").replace(/([a-z0-9])([A-Z])/g,"$1-$2").toLowerCase();
     const toolRole = name => Object.hasOwn(tools,name) ? "operation-" + slug(name.replace(/^workiq-/,"")) : null;
+    const purposes = {
+        "workiq-retrieve": "Searches work data for matching items and passages.",
+        "workiq-fetch": "Reads items or lists from the requested API paths.",
+        "workiq-ask": "Asks Copilot or a selected agent for an answer.",
+        "workiq-search_paths": "Finds available API paths for an operation.",
+        "workiq-get_schema": "Looks up the inputs and outputs for an operation without running it.",
+        "workiq-list_agents": "Lists available Copilot agents.",
+        "workiq-fetch_blob": "Reads file or attachment content from a requested path.",
+        "workiq-call_function": "Calls a read-only API function.",
+        "workiq-do_action": "Requests an action at an API path.",
+        "workiq-create_entity": "Requests a new item in a collection.",
+        "workiq-update_entity": "Requests changes to an existing item.",
+        "workiq-delete_entity": "Requests removal of an item.",
+    };
+    const toolPurpose = name => Object.hasOwn(purposes, name) ? purposes[name] : null;
     const graphRole = name => "operation-graph-" + slug(name);
     const sources = Object.freeze({
         ...Object.fromEntries(Object.entries(tools).map(([k,v]) => [toolRole(k),v])),
@@ -69,5 +84,5 @@ export function createOperationIcons(entityCollections = graphEntityCollections)
         }
         return [...operations.values()];
     }
-    return { sources, toolRole, pathOperations };
+    return { sources, toolRole, toolPurpose, pathOperations };
 }

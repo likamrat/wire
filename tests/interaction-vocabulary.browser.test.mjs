@@ -10,6 +10,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast, rgb } from "./color-measurements.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
+import { modelRecords } from "./model-widget-fixture.mjs";
 
 function records() {
     return [
@@ -39,15 +40,135 @@ test("Services and operations ends with its request rows and opens their matchin
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const page = await browser.newPage();
+    const errors = [];
+    page.on("pageerror", e => errors.push(e.stack));
     await page.goto(runtime.url);
     const card = page.getByRole("region", { name: "Services and operations", exact: true });
-    for (const [label, count] of [["Search / retrieval", 2], ["Asked Copilot", 1]]) {
+    for (const [label, count] of [["Search requested", 2], ["Asked Copilot", 1]]) {
         const row = card.getByRole("link", { name: new RegExp(`^${label}: ${count} of 3 Work IQ tool calls`) });
         await expect(card.locator(".percentage-content > :last-child")).toHaveRole("list");
         await row.click();
+        assert.deepEqual(errors, []);
         await expect(page.locator("#activityListSummary")).toContainText(`${count} matching tool call`);
         await page.goBack();
     }
+});
+
+test("Analyze widget links explain the mark and open its exact calls or originating interactions", async t => {
+    const [first, second, third] = modelRecords();
+    first.userPrompt.text = "Find the launch brief and check which mailbox items need new IDs.";
+    second.userPrompt.text = "Check the search endpoint for the handover notes.";
+    third.userPrompt.text = "Look up the mail schema before preparing the next request.";
+    const call = (key, tool, requestArgs, at, failed = false) => ({
+        toolCallId: key, startEventId: key + "-start", startedAt: at,
+        tool, requestArgs, toolSucceeded: !failed, reportedOutcome: failed ? "failed" : "succeeded", apiResults: [],
+    });
+    first.toolCalls = [
+        call("convert", "workiq-do_action", { actionUrl: "/me/translateExchangeIds" }, first.capturedAt),
+        call("both", "workiq-fetch", { entityUrls: ["/users/invented-user/translateExchangeIds", "/businessapps/me", "/me/messages"] }, first.capturedAt),
+        call("find", "workiq-retrieve", { query: "Find the launch brief" }, first.capturedAt),
+    ];
+    second.toolCalls = [call("endpoint", "workiq-fetch", { entityUrls: ["/search/query"] }, second.capturedAt, true)];
+    third.toolCalls = [call("schema", "workiq-get_schema", { path: "/me/messages", operationType: "fetch" }, third.capturedAt, true)];
+    const { runtime } = await searchFixture(t, { records: [first, second, third], frontend: "react", reply: false });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, timezoneId: "UTC", reducedMotion: "reduce" });
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", e => errors.push(e.message));
+    await page.route("**/*", route => new URL(route.request().url()).origin === new URL(runtime.url).origin ? route.continue() : route.abort());
+    const response = page.waitForResponse(res => new URL(res.url()).pathname === "/api/snapshot" && res.ok());
+    await page.goto(runtime.url);
+    const { analytics } = await (await response).json(), ids = names => analytics.rows.filter(r => names.includes(r.toolCallId)).map(r => r.id).sort();
+    const service = name => page.locator('[data-breakdown="services"]').getByRole("link", { name: new RegExp("^" + name + ":") });
+    const summary = page.locator("#activityListSummary"), matches = page.locator("#activityList .widget-record");
+    const back = async link => { await page.goBack(); await expect(link).toBeFocused(); };
+    const keyOpen = async link => { await link.focus(); await page.keyboard.press("Enter"); };
+    const directory = process.env.WIRE_WIDGET_PROOF;
+    if (directory) await mkdir(directory, { recursive: true });
+    const tools = page.locator('[data-breakdown="tools"]');
+    for (const [name, words, n] of [["workiq-retrieve", /matching items and passages/, 1], ["workiq-fetch", /requested API paths/, 2]]) {
+        const row = tools.locator(`[data-category="tool:${name}"]`), action = row.getByRole("link");
+        const value = row.locator(".percentage-value");
+        await value.scrollIntoViewIfNeeded();
+        const box = await value.boundingBox(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+        await page.mouse.move(x, y);
+        await expect(page.getByRole("tooltip")).toContainText(words);
+        await expect(row.locator("svg")).toHaveCount(0);
+        await page.mouse.click(x, y);
+        await expect(summary).toContainText(`${n} matching tool call`);
+        await back(action);
+    }
+    for (const [label, names, words] of [
+        ["Exchange ID conversion", ["convert", "both"], /mail, events or contacts/],
+        ["Business app not named", ["both"], /businessapps\/me/],
+        ["Search endpoint", ["endpoint"], /recorded target is a search endpoint/],
+        ["Search requested", ["find"], /which apps were searched/],
+    ]) {
+        const action = service(label);
+        await action.hover();
+        await expect(page.getByRole("tooltip")).toContainText(words);
+        await expect(action).toHaveAccessibleName(new RegExp(`${names.length} of 5`));
+        if (directory && label === "Exchange ID conversion") await page.screenshot({ path: path.join(directory, "widget-hover.png") });
+        await keyOpen(action);
+        await expect(summary).toHaveText(`${label}: ${names.length} matching tool call${names.length === 1 ? "" : "s"}`);
+        assert.deepEqual((await matches.evaluateAll(nodes => nodes.map(n => n.dataset.actionId))).sort(), ids(names));
+        if (label === "Business app not named") {
+            await matches.getByRole("link").click();
+            await expect(page.locator("#selectedCall")).toHaveAttribute("data-tool-call-id", "both");
+            await page.goBack(); await expect(matches).toHaveCount(1);
+        }
+        await back(action);
+    }
+    await chooseTheme(page, "dark");
+    const author = page.locator('[data-breakdown=authors] [data-prompt-actor=agent] a');
+    const model = page.locator('[data-breakdown=models] [data-category="gpt-5.4"] a');
+    for (const [link, expected] of [[author, [third]], [model, [first, second]]]) {
+        await keyOpen(link);
+        await expect(summary).toContainText(`${expected.length} matching interaction`);
+        const cards = page.locator("#activityList .activity-card");
+        assert.deepEqual((await cards.evaluateAll(nodes => nodes.map(node => node.dataset.viewKey))).sort(), expected.map(s => "request:" + s.scenarioId).sort());
+        assert.doesNotMatch(page.url(), /gpt-5|model-request/);
+        await back(link);
+    }
+    const zeroAuthor = page.locator('[data-breakdown=authors] [data-prompt-actor=unknown] a');
+    await keyOpen(zeroAuthor); await expect(page.locator("#chartReferenceTopicTitle")).toContainText(/prompt|author/i);
+    await back(zeroAuthor);
+    const total = page.locator(".percentage-total-link");
+    await keyOpen(total); await expect(summary).toContainText("5 matching tool calls"); await expect(matches).toHaveCount(5);
+    await back(total);
+    const headline = page.locator("#periodResult a").first();
+    await keyOpen(headline); await expect(matches).toHaveCount(5); await back(headline);
+    for (const [link, owners] of [
+        [page.locator("#outcomeChart [data-category=failure] .percentage-label"), [second, third]],
+        [page.locator(".time-segment-link[data-segment=failure]").last(), [second]],
+    ]) {
+        await keyOpen(link);
+        await expect(summary).toContainText(`${owners.length} matching tool call`);
+        assert.deepEqual((await page.locator("#activityList .activity-card").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey))).sort(),
+            owners.map(s => "request:" + s.scenarioId).sort());
+        await back(link);
+    }
+    const zeroDay = page.locator(".time-zero[href]").first();
+    await keyOpen(zeroDay); await expect(page.locator("#chartReferenceTopicTitle")).toContainText(/calls|time/i); await back(zeroDay);
+    const day = page.locator(".time-column").last();
+    await keyOpen(day); await expect(summary).toContainText("4 matching tool calls"); await back(day);
+    if (directory) {
+        await page.locator("#outcomeChart").scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(directory, "widget-outcomes.png") });
+    }
+    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    await mobile.goto(runtime.url);
+    const mobileRow = mobile.locator('[data-service-basis="business-app-not-named"]');
+    await expect(mobileRow.getByRole("link")).toHaveAccessibleDescription(/businessapps\/me/);
+    await expect(mobileRow.getByRole("link")).toHaveCSS("min-width", "44px");
+    const mobileValue = mobileRow.locator(".percentage-value");
+    await mobileValue.scrollIntoViewIfNeeded();
+    const box = await mobileValue.boundingBox();
+    await mobile.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(mobile.locator("#activityListSummary")).toHaveText("Business app not named: 1 matching tool call");
+    assert.deepEqual(errors, []);
 });
 
 test("service evidence explains significance at its call without warning on ordinary operations", { timeout: 60000 }, async t => {
@@ -129,11 +250,10 @@ test("service evidence explains significance at its call without warning on ordi
             await expect(card("mixed")).not.toContainText("Payload too large");
             await expect(card("mixed").locator(".request-card-exception")).toHaveText("1 tool call failed");
             await expect(page.locator("#activityList")).not.toContainText("Some service details unavailable");
-            await expect(page.locator('[data-service-basis="Unknown"] .percentage-label')).toHaveText("Services not fully identified");
-            await expect(page.locator(".percentage-gap-list")).toHaveAttribute("aria-label", "Service attribution limits");
+            for (const reason of ["missing-target", "unsupported-target", "unrecognized-path"])
+                await expect(page.locator(`[data-service-basis="${reason}"]`)).toHaveAttribute("data-count", "1");
             await expect(page.locator('[data-service-basis="Assistance"]')).toHaveAttribute("data-count", "4");
             await expect(page.locator('[data-service-basis="Search"]')).toHaveAttribute("data-count", "5");
-            await expect(page.locator('[data-service-basis="Unknown"]')).toHaveAttribute("data-count", "3");
             const paint = await card("mixed").evaluate(node => ({
                 exception: getComputedStyle(node.querySelector(".request-card-exception")).color,
                 metadata: getComputedStyle(node.querySelector(".request-card-summary")).color,

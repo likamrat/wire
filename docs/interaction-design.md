@@ -64,7 +64,7 @@ and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
 
-Prompt authors is a compact, noninteractive breakdown of canonical originating
+Prompt authors is a compact breakdown of canonical originating
 interactions across the complete accepted slice, before paging. Human prompts,
 Agent prompts and Author unverified use the shared author vocabulary and screen
 colors; all three remain visible when the population is nonempty, including
@@ -72,7 +72,9 @@ known zeros. The chart's accessible description names the total matching
 interactions, not calls, without repeating it on a separate visible line.
 For mixed sources, keep the GitHub denominator visible;
 incompatible Microsoft 365 conversations stay separately unavailable. Exact
-counts and provenance definitions live in Guide, not another drilldown.
+counts and provenance definitions live in Guide. A positive row opens its
+matching interactions; a zero opens the definition. The row label, bar and
+count share one link and one keyboard stop.
 
 Filters opens one panel with the existing controls, applied chips and separate
 View group. On desktop the workspace remains interactive; outside dismissal

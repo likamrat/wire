@@ -86,8 +86,8 @@ an interaction with several recorded models counts under each.
 **Prompt authors** counts each originating interaction once across all matching
 pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
 counts add up to the total in **Chart guide**. Calls and follow-ups do not add
-prompts. To inspect unverified interactions, select **Author unverified** in
-the **Prompt author** filter and open an interaction. Unverified authors stay
+prompts. Select **Author unverified** in the chart to inspect those interactions.
+Unverified authors stay
 in the denominator; missing prompt text alone does not make its author unknown.
 In the reader, **Source** distinguishes a direct link to the prompt from
 grouping by message order. Seeing a skill or system message before a call
@@ -128,9 +128,17 @@ the same filtered results and reading position. In
 **Settings > Analyze > Open Guide to**, you can choose recorded outcomes (default)
 or the last topic read in this tab. This preference does not change the charts.
 
-**Services and operations** distinguishes a hosted Copilot request that did
-not record its downstream services from a saved target path WIRE could not
-classify. Neither tells you who wrote the prompt or whether the call failed.
+Hover or focus a chart row for its meaning. Select a model or author to see
+matching interactions. Select an outcome or a segment of a dated bar for
+that result; the number above the bar includes all results for the interval.
+A zero opens the chart definition instead of a list of records.
+
+In **Services and operations**, **Search endpoint** means the recorded path
+identifies a search endpoint. **Search requested** means the tool requested
+a search without naming a target app. **Business app not named** means the
+recorded path was `/businessapps/me`; WIRE cannot identify the app. Each row
+opens its matching records. A call with several targets can appear in more
+than one row.
 On an interaction card, an operation or service detail with a right arrow
 opens the matching call. **Exchange ID conversion** identifies a request to
 convert item IDs; it does not identify the mailbox item. If several calls match,

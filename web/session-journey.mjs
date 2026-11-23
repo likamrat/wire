@@ -13,7 +13,7 @@ export function createSessionJourney() {
     function returnRoute(value, includeSourceReturn = false) {
         if (!value || !["analyze", "trends", "reports", "settings", "collection-status"].includes(value.view)) return null;
         const keys = ["view", "layer", "chart", "bucket", "timelineFrom", "range", "from", "to", "source", "tool", "services", "includeMissingService",
-            "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded",
+            "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded", "widget", "guideTopic",
             "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "comparisonFocus", "analysisQuery", "search", "inspect", "order", "nativeGroup"];
         const saved = Object.fromEntries(Object.entries(value)
             .filter(([key, entry]) => keys.includes(key) && ["string", "number", "boolean"].includes(typeof entry)));

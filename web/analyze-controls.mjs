@@ -256,6 +256,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         scopeCaption($("analyzeScopeCaption"), { ...value, parts, text: parts.join("; ") });
         $("analyzeScopeCaption").hidden = !parts.length;
         $("periodResult").classList.toggle("visually-hidden", Boolean(parts.length));
+        for (const link of $("periodResult").querySelectorAll("a")) link.tabIndex = parts.length ? -1 : 0;
         if ($("analyzeScopeStatus").textContent !== status) $("analyzeScopeStatus").textContent = status;
         $("analyzeScopeStatus").hidden = !status;
         if ($("analyzeScopeErrorText").textContent !== error) $("analyzeScopeErrorText").textContent = error;

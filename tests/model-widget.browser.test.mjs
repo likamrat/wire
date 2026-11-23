@@ -98,7 +98,8 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     const allDefinitions = "Share of all matching interactions, including those with missing model names; an interaction may use more than one model."
         + " 1 partial / 2 not recorded / 2 not verified / 1 conflicting.";
     await expect(data.locator(".percentage-note")).toHaveText(allDefinitions);
-    assert.equal(await widget.locator("a,button,svg").count(), 0, "No inexact drilldown or overlapping pie");
+    assert.equal(await widget.locator(".percentage-content a").count(), Object.keys(allCounts).length);
+    assert.equal(await widget.locator(".percentage-content :is(button,svg)").count(), 0, "No overlapping pie");
     assert.equal(await page.locator("#dateFilter").count(), 1);
     for (const [value, total, counts, calls] of [
         ["day", 4, { [modelNames[0]]: 2, [modelNames[1]]: 1 }, 6],

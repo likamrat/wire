@@ -365,7 +365,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (context.layer === "tool") {
             const hosted = categories.displayEvidence({ reason: "hosted-routing" }, { screen: true });
             const unmapped = categories.displayEvidence({ reason: "unrecognized-path" }, { screen: true });
-            list.append(definition("Search / retrieval", "Counts a search request, not confirmed use of a named app."),
+            list.append(definition("Search requested", "Counts a search request, not confirmed use of a named app."),
+                definition("Search endpoint", "The recorded target identifies a search endpoint."),
                 definition(categories.operation("workiq-ask").label, hosted.description),
                 definition(unmapped.label, unmapped.description));
             meanings.append(list, el("p", "Use View call beside a service or operation to inspect its evidence. If several calls match, the link opens the earliest one. The tool-call count opens the whole interaction. A service label does not tell you who wrote the prompt or whether the call failed."));
@@ -803,7 +804,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     return {
         open: topic => sync({ view: "guide", topic }),
-        openAnalyze: start => sync({ view: "guide", topic: start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
+        openAnalyze: (start, topic) => sync({ view: "guide", topic: topics.some(([id]) => id === topic) ? topic : start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
         close: requestClose,
         leave: () => sync({ view: "closed" }),
         refresh: () => {

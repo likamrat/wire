@@ -604,15 +604,17 @@ export function createEvidenceUX(icons, operations) {
         node.removeAttribute("id");
         return node;
     }
-    function cardToolList(tools) {
+    function cardToolList(tools, actionFor) {
         const list = document.createElement("ul");
         list.className = "card-tool-list";
         list.setAttribute("role", "list"); // Retain list semantics when markers are suppressed in Safari.
         for (const { name, countLabel } of tools) {
-            const item = document.createElement("li"), label = document.createElement("span");
+            const item = document.createElement("li"), label = actionFor?.(name) ?? document.createElement("span");
             item.className = "card-tool-item";
             label.className = "card-tool-name";
             label.textContent = name;
+            const purpose = operations?.toolPurpose?.(name);
+            if (purpose) { tooltip(label, purpose); label.setAttribute("aria-description", purpose); }
             item.append(label);
             if (countLabel) {
                 const count = document.createElement("span");
