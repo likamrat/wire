@@ -3253,10 +3253,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return expected;
     }
     function sourceCallFor(row) {
-        const scenario = workspaceState.evidence.scenarios.find(item => item.scenarioId === row?.scenarioId);
+        if (!row?.scenarioId) return null;
+        const owners = workspaceState.evidence.scenarios.filter(item => item.scenarioId === row.scenarioId);
+        if (owners.length !== 1) return null;
+        const scenario = owners[0];
         if (nativeActivity.isNative(scenario)) return scenario.nativeConversation.calls.find(call => call.key === (row.parentCallId || row.id));
-        return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
-            : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
+        return callInvestigation.sourceToolCall(scenario, row);
     }
     function callOutcomeLabel(outcome) {
         return ({ success: "completed", failure: "failed", unknown: "has no recorded result",
@@ -7002,15 +7004,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const entryStart = entries.length;
         const ordinals = requestContext.actionOrdinals(scenario);
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : undefined);
-        for (const [toolIndex, tool] of (scenario.toolCalls || []).entries()) {
-            const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
+        for (const [toolIndex, member] of (scenario.toolCalls || []).entries()) {
+            const matches = canonical?.filter(item => {
+                if (item.sourceSessionId !== scenario.sourceSessionId) return false;
+                if (member.toolCallId && item.toolCallId) return member.toolCallId === item.toolCallId;
+                if (!member.startEventId) return false;
+                return item.toolCallId ? sourceCallFor(item)?.startEventId === member.startEventId
+                    : item.id === `event:${JSON.stringify([scenario.sourceSessionId, member.startEventId])}`;
+            });
+            const row = matches?.length === 1 ? matches[0] : null;
             if (row && (seen.has(row.id) || !isSelected && (row.id === target.actionId || countedIds?.has(row.id)))) continue;
             if (row) seen.add(row.id);
-            const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || ["unidentified", workspaceState.evidence.revision, toolIndex]]);
-            const sourceCall = sourceCallFor(row) || tool;
-            const hasInputReferences = Array.isArray(sourceCall.requestArgs?.fileUrls) && sourceCall.requestArgs.fileUrls.length > 0;
+            const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || member.toolCallId || member.startEventId || ["unidentified", workspaceState.evidence.revision, toolIndex]]);
+            // The selected interaction supplies the ordinal; the canonical owner supplies the entire call.
+            const tool = row ? sourceCallFor(row) : matches?.length ? null : member;
+            const ordinal = ordinals.get(member);
+            if (!tool) {
+                entries.push({ key, actionId: row?.id, recordKind: "tool", ordinal,
+                    render: () => el("p", "reader-empty", "The source record for this tool call could not be identified.") });
+                continue;
+            }
+            const hasInputReferences = Array.isArray(tool.requestArgs?.fileUrls) && tool.requestArgs.fileUrls.length > 0;
             const attribution = categories.attributionReading(row ? { ...row, tool: tool.tool } : undefined, "tool", { hasInputReferences });
-            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool", ordinal: ordinals.get(tool),
+            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool", ordinal,
                 identifiers: [["ID", tool.toolCallId], ["start event", tool.startEventId], ["completion event", tool.completionEventId],
                     ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
                     ["error code", row?.outcome === "failure" && tool.failureEvidence?.version === 1
@@ -7023,11 +7039,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const operation = categories.operation(tool.tool);
             const recordLabel = callOutcomeLabel(row?.outcome);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
-            const issue = row?.outcome === "failure" && apiRows?.length && results.cardIssues([row], apiRows, () => sourceCall)[0];
+            const issue = row?.outcome === "failure" && apiRows?.length && results.cardIssues([row], apiRows, () => tool)[0];
             const echoedCode = Boolean(issue && issue.detail === null && issue.entries.length && issue.recordedCause);
             // The call's bare BadRequest glossary adds nothing when its own entry supplies the specific diagnostic.
             const explainedBadRequest = echoedCode && issue.entries.some(({row: entry, code}) => {
-                const diagnostic = results.returnedResult(sourceCall, entry)?.errorDiagnostic;
+                const diagnostic = results.returnedResult(tool, entry)?.errorDiagnostic;
                 return code === "BadRequest" && diagnostic?.message && diagnostic.status === "recorded"
                     && !/^(?:error|failure|bad\s?request|invalid request)[.!]?$/i.test(diagnostic.message.trim());
             });
@@ -7056,11 +7072,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (workspaceState.scope.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
             }
             if (row) {
-                const returned = returnedDetails(sourceCall, row, apiRows,
+                const returned = returnedDetails(tool, row, apiRows,
                     workspaceState.scope.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
                 if (returned && canonical.length > 1 && workspaceState.scope.layer === "tool"
                     && !apiRows.some(entry => ["failure", "transport"].includes(entry.outcome)
-                        || results.returnedResult(sourceCall, entry)?.errorCode || results.diagnosticDetails(results.returnedResult(sourceCall, entry)?.errorDiagnostic).length)) {
+                        || results.returnedResult(tool, entry)?.errorCode || results.diagnosticDetails(results.returnedResult(tool, entry)?.errorDiagnostic).length)) {
                     const detail = el("details", "reader-returned-facts");
                     detail.append(el("summary", "", `${count(apiRows.length)} returned ${apiRows.length === 1 ? "entry" : "entries"}`), returned);
                     item.append(detail);
@@ -7077,7 +7093,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ["Recorded end", tool.completedAt == null ? null : moment(tool.completedAt)]]));
             const input = recordedInput(tool, visibility);
             if (!input.targets) {
-                const targets = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
+                const targets = actionFields(tool, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
                 if (targets.childElementCount) expert.append(targets);
             }
             const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
