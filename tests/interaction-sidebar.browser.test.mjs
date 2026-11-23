@@ -276,7 +276,10 @@ for (const replace of [false, true]) test(`sidebar close preserves the current a
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     const opened = await a.boundingBox(), beforeReplaceScroll = await page.evaluate(() => scrollY);
     assert.ok(Math.abs(opened.y - before.y) < 3, "Opening preserves the entry anchor");
-    if (replace) await b.click();
+    if (replace) {
+        await b.click();
+        await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(await b.textContent());
+    }
     await a.click();
     const beforeClose = await a.boundingBox(), afterReplaceScroll = await page.evaluate(() => scrollY);
     assert.ok(Math.abs(opened.y - beforeClose.y - (afterReplaceScroll - beforeReplaceScroll)) < 3,

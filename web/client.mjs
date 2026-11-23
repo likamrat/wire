@@ -3088,7 +3088,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ownSidebarHistory(true);
             next = { ...next, returnToResults: sessionJourney.returnRoute({ ...workspaceState.route, search }, true), sidebarEntry: sidebarHistoryKey };
         }
-        if (next.view === "request" && workspaceState.route.view === "request") replace = true;
+        if (next.view === "request" && workspaceState.route.view === "request") {
+            replace = true;
+            // A sibling card can still have the link it rendered before the reader opened.
+            if (!next.returnToResults && !options.fromSearch && workspaceState.route.returnToResults)
+                next = { ...next, returnToResults: workspaceState.route.returnToResults };
+        }
         const originPosition = historyPosition;
         rememberRoute(next, replace, options.generalShortcut);
         return applyRoute(next, { ...options, originPosition });
