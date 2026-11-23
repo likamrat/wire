@@ -3805,6 +3805,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (result?.revision !== undefined && result.revision !== next.revision) throw new Error("Activity changed during the read. Try again.");
             if (result?.timeContext && JSON.stringify(result.timeContext) !== JSON.stringify(config.timeContext)) throw new Error("The runtime used a different timezone. Retry the stored-data read before continuing.");
             const validated = validateAnalytics(result, next.scenarios);
+            for (const layer of results.layers) {
+                const rows = next.requestActivity?.[layer];
+                if (rows !== undefined && (!Array.isArray(rows) || rows.some(row => typeof row?.id !== "string" || !row.id))) {
+                    throw new Error("Recorded activity details could not be read.");
+                }
+            }
             if (incomingNavigation && (incomingNavigation.revision !== next.revision
                 || incomingNavigation.nativeRevision !== next.nativeRead?.revision
                 || incomingNavigation.sourceVersion !== next.collection?.configVersion
