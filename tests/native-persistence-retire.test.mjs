@@ -1242,7 +1242,7 @@ test("saved-artifact mutation rejects hidden mixed dependencies before any descr
     });
     await updateBoardState(app.context, state => {
         state.exports.push({ bundleId: reportId, kind: "report", snapshotHash: "c".repeat(64) },
-            { bundleId: comparisonId, kind: "comparison", nativeEvidenceHash: "d".repeat(64),
+            { bundleId: comparisonId, kind: "comparison", comparisonHash: "d".repeat(64), nativeComparisonHash: "d".repeat(64),
                 nativeSourceBinding: { schemaVersion: 1, account: "0".repeat(64) },
                 sourceReports: [{ bundleId: reportId, snapshotHash: "c".repeat(64) }, { bundleId: nativeId, snapshotHash: "b".repeat(64) }] });
     });

@@ -76,10 +76,13 @@ test("the report adapter does not infer call dates or complete history from sele
     assert.equal(result.scope.collectionDefinition, null);
 });
 
-test("unreviewed snapshots fail and source facts remain unchanged", () => {
+test("only a confirmed local save or historical disclosure attestation qualifies without changing frozen facts", () => {
     const facts = makeSnapshot(), before = structuredClone(facts);
-    assert.throws(() => adapt(facts, { ...metadata(), disclosureReviewed: false }), /disclosure-reviewed/);
-    adapt(facts, metadata());
+    assert.throws(() => adapt(facts, { ...metadata(), disclosureReviewed: false }), /verified save confirmation/);
+    const current = adapt(facts, { ...metadata(), disclosureReviewed: false, localSaveConfirmed: true });
+    assert.equal(current.disclosureReviewed, false);
+    assert.equal(current.localSaveConfirmed, true);
+    assert.equal(adapt(facts, metadata()).disclosureReviewed, true);
     assert.deepEqual(facts, before);
     assert.equal(Object.isFrozen(facts), false);
 });
