@@ -375,6 +375,16 @@ ambiguous metadata and any other body difference remain unqualified. This is not
 fuzzy matching or general Markdown removal. Original timeline text stays intact;
 file contents are never opened and attachment paths are not added to retention.
 
+Classifier version 11 checks the direct-message reference and a following image
+notice separately. With a matching timestamp, message ID, delivery and original
+text, the reference can accompany the app's ordered workspace sections outside
+plan mode. A cross-chat sender, automatic continuation or agent-created first
+message still goes through its own origin checks. Workspace text alone does not
+establish a sender. New unverified records distinguish an unsupported source
+value (`source-value-v1`) from workspace details without verified origin
+(`workspace-origin-v1`). WIRE saves neither the source value nor the host text.
+Already-qualified prompts are not reopened or updated on startup.
+
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up
 copy and its checkpoint preimage. Its read-only inspector proposes changes but

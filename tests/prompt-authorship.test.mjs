@@ -20,6 +20,8 @@ import { mergedRecords } from "../lib/collector.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { buildTrends } from "../lib/trends.mjs";
+import { imageReminder, imageReferences } from "./evidence-fidelity-fixture.mjs";
+import { reportPromptOriginReason } from "../lib/report-presentation.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -85,12 +87,45 @@ test("unsupported or ambiguous direct-message reference suffixes remain unverifi
     assert.equal(extract({ ...metadata, transformedContent: stamp + suffix + content }).userPrompt.authorship.actor, "unknown");
 });
 
+test("qualified direct messages survive neutral workspace and image framing without trusting either as a sender", () => {
+    const content = "Invented follow-up.", reference = directMessageReference();
+    const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const workspace = "<copilot_working_context>Invented workspace.</copilot_working_context>\n\n";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const attachment = { type: "file", mimeType: "image/png", assetId: "sha256:" + "b".repeat(64) };
+    const images = imageReminder + imageReferences + JSON.stringify([{ attachment: 1, image_id: attachment.assetId }]);
+    const data = { content, delivery: "idle", messageId: randomUUID(), attachments: [attachment] };
+    const origin = (prefix, tail, extra = {}) => extract({ ...data, transformedContent: stamp + prefix + content + tail, ...extra }).userPrompt.authorship;
+    for (const suffix of [reference, reference + imageReminder, reference + images]) {
+        assert.deepEqual(origin(workspace, suffix), { actor: "user", basis: "host-direct-input" });
+        assert.deepEqual(origin(sender + workspace, suffix), { actor: "agent", basis: "host-agent-envelope" });
+        assert.deepEqual(origin(sender + workspace, suffix, { source: "user" }), { actor: "unknown", basis: "conflicting-source" });
+        assert.deepEqual(origin(workspace, suffix, { isAutopilotContinuation: true }), { actor: "agent", basis: "autopilot" });
+        assert.deepEqual(origin(workspace, suffix, { source: "unrecognized" }),
+            { actor: "unknown", basis: "unsupported-source", issue: "source-value-v1" });
+    }
+    for (const [prefix, tail, extra] of [
+        [workspace, ""], [workspace, imageReminder], [workspace, reference + imageReminder + imageReminder],
+        [workspace, reference + " altered" + imageReminder], [workspace, reference + images, { attachments: [] }],
+        [workspace + workspace, reference], ["<other>Unknown</other>\n\n", reference], [workspace, reference, { messageId: [data.messageId] }],
+        [workspace.replace("Invented workspace.", sender), reference],
+        [workspace, reference + imageReminder, { content: content + reference }], // Reference is displayed text.
+    ]) assert.equal(origin(prefix, tail, extra).actor, "unknown");
+    assert.deepEqual(origin(workspace, ""), { actor: "unknown", basis: "unsupported-source", issue: "workspace-origin-v1" });
+    assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z",
+        data: { ...data, transformedContent: stamp + workspace + content + reference } }, { agentCreatedFirstMessage: true }).actor, "unknown");
+});
+
 test("source-reference origins survive collection, restart and append without upgrading qualified historical copies", async t => {
     const app = await promptInstallation(t), file = app.sourceFiles[1];
     const human = app.cases.find(item => item.name === "human"), agent = app.cases.find(item => item.name === "enveloped-agent");
     const old = app.cases.find(item => item.name === "imitation"), targets = [human, agent, old];
     const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
-    for (const item of targets) events.find(event => event.id === item.promptId).data.transformedContent += directMessageReference();
+    for (const item of targets) {
+        const data = events.find(event => event.id === item.promptId).data;
+        data.transformedContent = data.transformedContent.slice(0, -data.content.length)
+            + "<copilot_working_context>Invented neutral context.</copilot_working_context>\n\n" + data.content + directMessageReference();
+    }
     await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
     await app.runtime().collector.collectNow();
     const collected = await loadBoardState(app.context);
@@ -493,8 +528,14 @@ test("normalized interaction reading preserves precise parsed author gaps withou
         const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] };
         const before = structuredClone(state), model = buildAssessmentModel(state);
         const detail = [...model.details.values()][0];
-        assert.deepEqual(promptAuthorship.read(detail.interaction.message), { actor: "unknown", basis });
+        assert.deepEqual(promptAuthorship.read(detail.interaction.message), { actor: "unknown", basis,
+            ...(basis === "unsupported-source" ? { issue: "source-value-v1" } : {}) });
         assert.equal(promptAuthorship.reason(detail.interaction.message), promptAuthorship.reason(record.userPrompt));
+        if (basis === "unsupported-source") {
+            assert.equal(reportPromptOriginReason(record.userPrompt, { presentation: { originExplanationVersion: 1 } }),
+                promptAuthorship.reason(record.userPrompt));
+            assert.doesNotMatch(JSON.stringify(record), /unsupported-invented-source/);
+        }
         assert.equal(detail.interaction.message.origin, "recorded-unverified");
         assert.equal(detail.interaction.message.association, "nearest-preceding");
         assert.equal(model.catalog.length, 1);

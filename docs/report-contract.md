@@ -58,8 +58,9 @@ unverified. Calls executed by agents stay with their originating interaction.
 Leaving out prompts and replies removes those copies, not membership.
 
 New reports can preserve a closed, versioned author-qualification `issue` on an
-unknown actor/basis pair. It records an observed message-boundary or host-wrapper
-rejection, not an inferred author or a tool-result failure. The reason is carried
+unknown actor/basis pair. It can distinguish an unmatched message boundary,
+unrecognized host framing, workspace details without verified origin, or an
+unsupported sender value. It does not identify an author or a tool failure. The reason is carried
 from retained metadata through normalized facts and included prompt copies.
 Older records without it remain readable and gain no inferred issue. Readers
 predating this extension cannot validate new normalized facts containing it;
