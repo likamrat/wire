@@ -250,9 +250,10 @@ test("local time bucket drilldown preserves the source-session slice and its exa
     await page.goto(runtime.url + "#home?bucket=day&session=first-session&range=custom&from=2026-03-08&to=2026-03-08");
     await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "2");
-    await page.locator(".time-column").click(); await ready(page);
+    await page.locator(".time-column").press("Enter"); await ready(page);
     assert.deepEqual(requests.filter(r => r.path === "/api/snapshot").at(-1).input.filters.sourceSessionIds, ["first-session"]);
-    assert.equal(await page.locator("#activityList .request-row").count(), 2);
+    assert.deepEqual((await page.locator("#activityList .request-row").evaluateAll(rows => rows.map(row => row.dataset.viewKey))).sort(),
+        ["request:timezone-1", "request:timezone-2"]);
     assert.deepEqual(errors, []);
 });
 

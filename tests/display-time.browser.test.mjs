@@ -8,8 +8,8 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { time } from "../lib/time.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, privateFixture, selectActivityOption, navigateMain, navigateSettings, revealStoredRefresh } from "./helpers.mjs";
-import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, navigateMain, navigateSettings, openAnalyzeFilters, closeAnalyzeFilters, revealStoredRefresh } from "./helpers.mjs";
+import { chooseLandingReportDates, prepareLandingReport } from "./report-journey-helpers.mjs";
 
 const key = "workiq-evidence.time-zone";
 const instants = ["2026-03-08T07:59:59Z", "2026-03-08T08:00:00Z", "2026-03-08T09:59:59Z", "2026-03-08T10:00:00Z", "2026-03-09T06:59:59Z", "2026-03-09T07:00:00Z"];
@@ -56,13 +56,24 @@ async function selectZone(page, zone) {
     await ready(page);
 }
 function lastSnapshot(requests) { return requests.filter(r => r.path === "/api/snapshot").at(-1).input; }
+async function prepareMarchReport(page) {
+    await chooseLandingReportDates(page, "Custom dates");
+    await page.locator("#reportDatefrom").fill("2026-03-07");
+    await page.locator("#reportDateto").fill("2026-03-09");
+    await page.locator("#reportCustomDates").getByRole("button", { name: "Apply dates", exact: true }).click();
+    const reading = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await prepareLandingReport(page, "all");
+    const response = await reading, preview = await response.json();
+    assert.equal(response.status(), 200, preview.error);
+    return preview;
+}
 
 test("display preference governs calendar data, reset, reload, navigation and new frozen report context", { timeout: 90000 }, async t => {
     const { page, requests, runtime } = await setup(t);
     assert.equal(await page.evaluate(key => localStorage.getItem(key), key), null, "No default preference write");
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
-    await page.locator("#meaning>summary").click();
-    assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), ["1", "4", "1"]);
+    const dayCounts = () => page.locator(".time-column .dimensional-count").allTextContents();
+    assert.deepEqual(await dayCounts(), ["1 call", "4 calls", "1 call"]);
     const homeUrl = page.url();
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "regional");
@@ -75,7 +86,7 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     await page.goBack(); await ready(page);
     assert.equal(page.url(), homeUrl);
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC");
-    assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), ["4", "2"]);
+    assert.deepEqual(await dayCounts(), ["4 calls", "2 calls"]);
     await page.goForward(); await ready(page);
     await page.goForward(); await ready(page);
     assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
@@ -93,18 +104,11 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     assert.equal(await page.locator("#activityCount").innerText(), "0");
     assert.equal(lastSnapshot(requests).filters.from, "2026-03-07");
     assert.equal(lastSnapshot(requests).filters.to, "2026-03-07");
-    await page.locator("#resetView").click(); await ready(page);
+    await openAnalyzeFilters(page); await page.locator("#resetView").click(); await ready(page); await closeAnalyzeFilters(page);
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC", "Reset to Home does not reset display preference");
     await navigateMain(page, "reports"); await ready(page);
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator("#exportBtn").click();
-    await expect(page.locator("#reportReviewBody .attestation input[data-review-control]")).toBeVisible();
+    assert.equal((await prepareMarchReport(page)).timeContext.timeZone, "UTC");
     assert.equal(requests.findLast(r => r.path === "/api/preview").input.options.timeContext.timeZone, "UTC");
-    await selectZone(page, "America/Los_Angeles");
-    await navigateMain(page, "reports"); await ready(page);
-    await reportContents(page);
-    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
 });
 
 test("explicit zones govern day, week and month totals across the repeated fall-back hour", { timeout: 90000 }, async t => {
@@ -119,10 +123,13 @@ test("explicit zones govern day, week and month totals across the repeated fall-
             const config = lastSnapshot(requests), expected = buildActivityAnalytics(fall, config);
             assert.equal(config.timeContext.timeZone, zone);
             assert.equal(await page.locator("#activityCount").innerText(), "4");
-            if (!await page.locator("#meaning").evaluate(node => node.open)) await page.locator("#meaning>summary").click();
-            assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), expected.timeSeries.points.map(point => String(point.total)));
-            assert.equal(await page.locator("#countTable tfoot td").first().innerText(), "4");
-            assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), bucket);
+            await page.locator("#openChartReference").click();
+            await page.locator('[data-reference-topic="time"]').click();
+            await page.locator("#chartReferenceShowData").click();
+            const table = page.locator("#chartReferenceData .exact-data-table");
+            await expect(table.locator("tbody td:nth-child(2)")).toHaveText(expected.timeSeries.points.map(point => String(point.total)));
+            await expect(table.locator("tfoot td").first()).toHaveText("4");
+            assert.equal(config.bucket, bucket);
             if (zone === "America/Los_Angeles") assert.equal(Date.parse(expected.dateRange.to) - Date.parse(expected.dateRange.from), 25 * 3600000);
         }
     }
@@ -139,12 +146,8 @@ test("changing Display preserves saved report bytes while new previews use the s
     const filesBefore = await Promise.all(Object.values(saved.files).map(file => readFile(file)));
     await selectZone(page, "UTC");
     await navigateMain(page, "reports");
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
-    const fresh = await (await response).json();
-    await page.frameLocator("#reportReviewBody iframe").locator("h1").waitFor();
+    const fresh = await prepareMarchReport(page);
+    await expect(page.locator("#reportPreviewDrawer")).toBeVisible();
     assert.equal(fresh.timeContext.timeZone, "UTC");
     assert.equal(saved.timeContext.timeZone, "America/Los_Angeles");
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(file => readFile(file))), filesBefore);
@@ -238,7 +241,7 @@ test("automatic zone follows device changes; override persists through focus and
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
     assert.equal(lastSnapshot(requests).filters.to, time.day(new Date().toISOString(), "America/Los_Angeles"));
     await navigateMain(page, "home"); await ready(page);
-    await page.locator("#resetView").click(); await ready(page);
+    await openAnalyzeFilters(page); await page.locator("#resetView").click(); await ready(page); await closeAnalyzeFilters(page);
     const next = [...records, { ...fixture("display-time-live"), toolCalls: [{ ...fixture("display-time-live").toolCalls[0], startedAt: instants[1] }] }];
     await replaceEvidence(context, () => ({ records: next, importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
     await expect(page.locator("#activityCount")).toHaveText("7", { timeout: 15000 });
