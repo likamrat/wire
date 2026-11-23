@@ -176,9 +176,11 @@ test("repeated tools keep exact owning details, keyboard focus and expansion thr
     assert.deepEqual(await loadBoardState(context), before);
     const updated = structuredClone(record);
     updated.toolCalls[0].durationMs = 9876;
+    const refreshed = page.waitForResponse(async response => response.ok() && response.url().endsWith("/api/snapshot")
+        && (await response.json()).revision > before.revision);
     await replaceEvidence(context, () => ({ records: [updated, ...others], importCoverage: before.evidence.importCoverage }));
     const stateAfterAppend = await loadBoardState(context);
-    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await refreshed;
     await expect(first.locator("data.call-duration")).toHaveAttribute("value", "9876");
     await expect(summary).toBeFocused();
     // A new evidence revision closes the old private input. Reopen its current owner.

@@ -312,13 +312,16 @@ test("refreshing saved activity keeps the accepted project, date range and reade
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
     await closeAnalyzeFilters(page);
     const prior = page.url(), held = await holdRead(page);
+    const readerLink = page.locator('[data-view-key="request:stability-4"] .request-card-open');
     try {
         await page.getByRole("button", { name: "Refresh", exact: true }).click();
         await held.entered;
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
         assert.deepEqual(await rowKeys(page), evenRows);
+        await readerLink.focus();
     } finally { held.release(); }
     await held.done; await ready(page);
+    await expect(readerLink).toBeFocused();
     assert.equal(page.url(), prior);
     await expect(page.locator("#projectFilter")).toHaveValue("project-a");
     await expect(page.locator("#dateFilter")).toHaveValue("30");

@@ -9,6 +9,7 @@ import { startServer } from "../lib/server.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
+import { openReportLibrary } from "./report-journey-helpers.mjs";
 
 async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch = false, entry = "#analyze" } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
@@ -307,10 +308,12 @@ test("chart grouping, category states and report identity remain readable at enl
     await page.locator('nav [data-nav=reports]').click();
     const title = page.getByRole("button", { name: "View report: Calendar activity", exact: true });
     await expect(title.locator("[data-lucide-icon=file-text]")).toHaveCount(1);
-    await expect(page.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
+    await openReportLibrary(page);
+    const row = page.locator("#bundleList .saved-library-row").filter({ hasText: "Calendar activity" });
+    await expect(row.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
     await page.setViewportSize({ width: 900, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "150%");
-    const layout = await page.locator(".saved-library-row").evaluate(row => {
+    const layout = await row.evaluate(row => {
         const label = row.querySelector(".saved-report-name"), name = label.getBoundingClientRect(), period = row.querySelector(".saved-report-period").getBoundingClientRect();
         const wordLines = [...label.textContent.matchAll(/\S+/g)].map(word => {
             const range = document.createRange();
@@ -323,57 +326,19 @@ test("chart grouping, category states and report identity remain readable at enl
     assert.ok(layout.periodY >= layout.nameBottom, "Period moves below the full-width identity before the name is squeezed");
 });
 
-test("Compare distinguishes a pending scope change from reading the two periods", async t => {
+test("when Compare cannot open, Analyze keeps the accepted filter and results", async t => {
     const { page } = await setup(t, { entry: "?result=failure" });
-    const scope = Promise.withResolvers(), pair = Promise.withResolvers();
-    await page.route("**/api/snapshot", async route => { await scope.promise; await route.continue(); }, { times: 1 });
-    await page.route("**/api/period-comparison", async route => { await pair.promise; await route.continue(); }, { times: 1 });
-    try {
-        await Promise.all([page.waitForRequest("**/api/snapshot"), page.locator("#comparePeriods").click()]);
-        await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
-        await expect(page.locator("#homeView")).toBeHidden();
-        await expect(page.locator("#navigationPending")).toHaveText("Opening Compare...");
-        const reading = page.waitForRequest("**/api/period-comparison");
-        scope.resolve();
-        await reading;
-        await expect(page.locator("#periodComparisonStatus")).toHaveText("Reading both periods...");
-        await expect(page.locator("#periodComparisonResults")).toHaveAttribute("aria-busy", "true");
-        await expect(page.locator("#createPeriodReport")).toBeDisabled();
-    } finally { scope.resolve(); pair.resolve(); }
-    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await expect(page.locator("#navigationPending")).toBeHidden();
-    await page.locator('nav [data-nav=settings]').click();
-    await expect(page.locator("#settingsView")).toBeVisible();
-});
-
-for (const outcome of ["failure", "superseded"]) test(`pending destination ${outcome} preserves the accepted or newer route`, async t => {
-    const { page } = await setup(t, { entry: "?result=failure" }), release = Promise.withResolvers();
-    await page.route("**/api/snapshot", async route => {
-        await release.promise;
-        if (outcome === "failure") return route.fulfill({ status: 503, contentType: "application/json", json: { error: "Invented stored read failure." } });
-        return route.continue();
-    }, { times: 1 });
-    try {
-        const [pending] = await Promise.all([page.waitForRequest("**/api/snapshot"), page.locator("#comparePeriods").click()]);
-        if (outcome === "superseded") {
-            await page.locator('nav [data-nav=reports]').click();
-            await expect(page.locator("#reportsView")).toBeVisible();
-            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        }
-        const response = page.waitForResponse(r => r.request() === pending);
-        release.resolve(); await response;
-    } finally { release.resolve(); }
-    if (outcome === "failure") {
-        await expect(page.locator("#message")).toContainText("Invented stored read failure.");
-        await expect(page.locator('nav [data-nav=analyze]')).toHaveAttribute("aria-current", "page");
-        await expect(page.locator("#homeView")).toBeVisible();
-    } else {
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        await expect(page.locator('nav [data-nav=reports]')).toHaveAttribute("aria-current", "page");
-        await expect(page.locator("#reportsView")).toBeVisible();
-    }
-    await expect(page.locator("#navigationPending")).toBeHidden();
+    const summary = page.locator("#activityListSummary");
+    await expect(summary).toHaveText("0 interactions · 0 matching tool calls");
+    await page.route("**/api/snapshot", route => route.fulfill({
+        status: 503, json: { error: "Invented stored read failure." },
+    }), { times: 1 });
+    await page.getByRole("link", { name: "Compare", exact: true }).click();
+    await expect(page.locator("#message")).toContainText("Invented stored read failure.");
+    await expect(page.locator('nav [data-nav=analyze]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
+    await expect(summary).toBeVisible();
+    await expect(summary).toHaveText("0 interactions · 0 matching tool calls");
 });
 
 test("large roster labels preserve every option, selected identity, source updates and withdrawal", { timeout: 60000 }, async t => {

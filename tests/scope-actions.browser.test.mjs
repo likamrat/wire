@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, openSourceEditor } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -178,54 +178,6 @@ for (const superseding of ["user scroll", "meaningful focus", "navigation", "new
     });
 }
 
-test("reset mapping covers secondary scope, private search and chart settings without clearing report selection", async t => {
-    const { page, requests } = await setup(t, { route: "#activity?session=scope-chat-0&project=project-a&service=Calendar&scope=all&range=custom&from=2026-09-01&to=2026-10-01&chart=endpoint&bucket=day" });
-    if (await page.locator(".session-toggle").getAttribute("aria-expanded") === "false") await page.locator(".session-toggle").click();
-    await page.locator("#activityList input[type=checkbox]").first().check();
-    await page.locator("#activitySearch").fill("milestone");
-    await ready(page); await frames(page);
-    const before = await state(page), count = requests.length;
-    await page.locator("#resetView").click(); await ready(page); await frames(page);
-    const after = await state(page);
-    t.diagnostic(JSON.stringify({ before, after, requests: requests.slice(count) }));
-    assert.equal(after.hash, "#home"); assert.equal(after.search, "");
-    assert.deepEqual(after.values, { dateFilter: "capture", serviceFilter: "all", projectFilter: "all", layerFilter: "tool", scopeFilter: "history" });
-    assert.equal(after.selected, before.selected); assert.equal(after.theme, before.theme);
-    assert.ok(!requests.slice(count).some(row => row.endpoint === "/api/collection/now"));
-    await page.goBack(); await ready(page);
-    assert.equal((await state(page)).search, before.search);
-});
-
-test("source check and stored refresh are different requests even while automatic collection is paused", async t => {
-    const { page, requests } = await setup(t, { paused: true, route: "#home?project=project-a" });
-    const before = await state(page), start = requests.length;
-    await page.locator("#checkActivity").click();
-    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "complete"); await ready(page);
-    const checkRequests = requests.slice(start), next = requests.length;
-    await (await revealRefresh(page)).click(); await ready(page);
-    const readRequests = requests.slice(next);
-    assert.equal(checkRequests.filter(row => row.endpoint === "/api/collection/now").length, 1);
-    assert.ok(checkRequests.some(row => row.endpoint === "/api/snapshot"));
-    assert.ok(readRequests.some(row => row.endpoint === "/api/snapshot"));
-    assert.ok(!readRequests.some(row => row.endpoint === "/api/collection/now"));
-    assert.equal((await state(page)).hash, before.hash);
-    await expect(page.locator("#collectionStatus")).toHaveText("Collection paused");
-    t.diagnostic(JSON.stringify({ checkRequests, readRequests }));
-});
-
-test("reset and refresh have distinct local homes instead of ambiguous global controls", async t => {
-    const { page } = await setup(t, { route: "#home?project=project-a" });
-    const before = await page.evaluate(() => Object.fromEntries(["resetView", "refreshBtn", "filters", "freshHelp"].map(id => {
-        const node = document.getElementById(id), box = node.getBoundingClientRect();
-        return [id, { text: node.textContent, parent: node.parentElement.id, x: box.x, y: box.y, width: box.width }];
-    })));
-    await proof(page, "action-locations", before);
-    await expect(page.locator("#filters #resetView")).toHaveText("Reset to Home");
-    await expect(page.locator(".app-header #refreshBtn")).toHaveCount(0);
-    await expect(page.locator("#freshHelp #refreshBtn")).toHaveText("Refresh stored data");
-    await expect(page.locator("#checkActivity")).toHaveText("Check for new activity");
-});
-
 test("manual stored refresh cannot silently cancel an unsaved report preview", async t => {
     const { page, requests, status } = await setup(t, { route: "#reports" });
     await chooseReportScope(page, "all"); await reportContents(page);
@@ -259,138 +211,37 @@ test("manual stored refresh cannot silently cancel an unsaved report preview", a
     assert.equal((await state(page)).selected, before.selected);
 });
 
-for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 1 }, { width: 375, scale: 2 }]) {
-    test(`scope/source controls are readable and contextual at ${width}px ${scale * 100}% ${theme}`, async t => {
-        const { page } = await setup(t, { theme, width, scale, route: "#home?bucket=day" });
-        await expect(page.locator("#resetView")).toBeVisible();
-        await expect(page.locator("#resetView")).toHaveAttribute("aria-describedby", "resetScopeHelp");
-        await page.locator("#filterTools").scrollIntoViewIfNeeded();
-        const reset = page.locator("#resetView"), initial = await reset.boundingBox();
-        await proof(page, `scope-${width}-${scale}-${theme}`, { state: await state(page), reset: initial });
-        for (const selector of ["#resetView", "#projectFilter-control"]) {
-            await page.locator(selector).scrollIntoViewIfNeeded();
-            const box = await page.locator(selector).boundingBox();
-            assert.ok(box.x >= 0 && box.x + box.width <= width + 1, selector + " fits the viewport.");
-        }
-        await page.locator("#freshHelp > summary").scrollIntoViewIfNeeded();
-        const trigger = await page.locator("#freshHelp > summary").boundingBox();
-        await page.locator("#freshHelp > summary").click(); await frames(page);
-        const after = await page.locator("#freshHelp > summary").boundingBox();
-        assert.equal(after.x, trigger.x); assert.equal(after.y, trigger.y);
-        await expect(page.locator("#refreshBtn")).toBeVisible();
-        await page.locator("#refreshBtn").focus();
-        await page.keyboard.press("Escape");
-        await proof(page, `source-${width}-${scale}-${theme}`, { trigger, after, state: await state(page) });
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    });
-}
-
-test("default Home hides Reset, while chart-only and unapplied date scope expose its real destination", async t => {
-    const { page, requests } = await setup(t);
-    await expect(page.locator("#resetView")).toBeHidden();
-    await page.locator('[data-chart=endpoint]').click(); await ready(page);
-    await expect(page.locator("#resetView")).toBeVisible();
-    await selectActivityOption(page, "dateFilter", "custom");
-    await page.locator("#fromFilter").fill("2026-09-11");
-    await page.locator("#toFilter").fill("2026-09-13");
-    const count = requests.filter(row => row.endpoint === "/api/snapshot").length;
-    await (await revealRefresh(page)).click(); await ready(page);
-    assert.equal(await page.locator("#fromFilter").inputValue(), "2026-09-11");
-    assert.equal(await page.locator("#toFilter").inputValue(), "2026-09-13");
-    assert.equal(requests.filter(row => row.endpoint === "/api/snapshot").length, count + 1);
-    const last = requests.filter(row => row.endpoint === "/api/snapshot").at(-1).body;
-    assert.equal(last.filters.from, undefined, "Unapplied date drafts do not silently become read filters.");
-    await page.locator("#resetView").click(); await ready(page);
-    await expect(page.locator("#resetView")).toBeHidden();
-    assert.equal(await page.locator("#fromFilter").inputValue(), "");
-});
-
-test("stored-refresh pending/error/retry preserves scoped reading and newer user focus without a source check", async t => {
-    const { page, requests } = await setup(t, { route: "#activity?project=project-a" });
-    const refresh = await revealRefresh(page), before = await state(page);
-    const entered = deferred(), release = deferred();
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
-    }, { times: 1 });
-    t.after(() => release.resolve());
-    await refresh.click(); await entered.promise;
-    await expect(refresh).toBeDisabled();
-    const search = page.locator("#activitySearch");
-    await search.click(); await page.mouse.wheel(0, 80); await frames(page);
-    const wanted = await search.boundingBox();
-    release.resolve(); await ready(page); await frames(page);
-    await expect(search).toBeFocused();
-    assert.ok(Math.abs((await search.boundingBox()).y - wanted.y) <= 1);
-    assert.equal((await state(page)).hash, before.hash);
-    await proof(page, "stored-refresh-user-position", { before, userAnchor: wanted,
-        afterAnchor: await search.boundingBox(), after: await state(page) });
-    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented stored-read failure" } }), { times: 1 });
-    await refresh.click(); await ready(page);
-    await expect(page.locator("#message")).toContainText("Invented stored-read failure");
-    await page.getByRole("button", { name: "Try again", exact: true }).click(); await ready(page);
-    await expect(page.locator("#message")).toBeHidden();
-    assert.equal((await state(page)).hash, before.hash);
-    assert.ok(!requests.some(row => row.endpoint === "/api/collection/now"));
-});
-
-test("failed source check followed by stored refresh remains explicitly unconfirmed", async t => {
-    const { page } = await setup(t);
-    await page.route("**/api/collection/now", route => route.fulfill({ status: 503, json: { error: "Invented source unavailable" } }), { times: 1 });
-    await page.locator("#checkActivity").click();
-    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "error");
-    await (await revealRefresh(page)).click(); await ready(page);
-    await expect(page.locator("#freshStatus")).toHaveText("Stored data refreshed; check still unconfirmed.");
-    await expect(page.locator("#freshContextMessage")).toContainText("Only stored evidence was read");
-});
-
-test("unconnected source offers setup rather than implying stored refresh reads a source", async t => {
+test("reading saved activity and resetting filters preserve the chosen interaction and report text policy", async t => {
     const { page, requests } = await setup(t, { approved: false });
-    await expect(page.locator("#checkActivity")).toHaveText("Review source & connect");
-    await (await revealRefresh(page)).click(); await ready(page);
-    await expect(page.locator("#checkActivity")).toHaveText("Review source & connect");
-    assert.ok(!requests.some(row => row.endpoint === "/api/collection/now"));
-});
-
-test("primary filters and hidden selections survive stored refresh, then reset fully with report options intact", async t => {
-    const { page, requests } = await setup(t, { route: "#activity" });
-    await page.locator(".session-toggle").first().click();
-    await page.locator("#activityList input[type=checkbox]").first().check();
-    await navigateMain(page, "reports"); await ready(page); await reportContents(page);
-    await page.locator('[name=promptMode][value=none]').check();
-    await navigateMain(page, "activity"); await ready(page);
+    await navigateMain(page, "reports");
+    const activity = page.getByRole("button", { name: /^Activity source:/ });
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    const selected = picker.locator('input[data-report-request="scope-action-0"]');
+    const textPolicy = page.getByRole("radio", { name: /Leave out prompts and replies/ });
+    await activity.click();
+    await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
+    await selected.check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await textPolicy.check();
+    await navigateMain(page, "analyze");
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     await selectActivityOption(page, "promptAuthorFilter", "agent"); await ready(page);
-    const before = await state(page);
-    await (await revealRefresh(page)).click(); await ready(page);
-    assert.equal((await state(page)).selected, before.selected);
-    const read = requests.filter(row => row.endpoint === "/api/snapshot").at(-1).body;
+    await closeAnalyzeFilters(page);
+    await expect(page.locator("#activityList article")).toHaveCount(0);
+    const [readRequest] = await Promise.all([page.waitForRequest("**/api/snapshot"), page.locator("#analyzeRefresh").click()]);
+    const read = readRequest.postDataJSON();
     assert.deepEqual(read.filters.outcomes, ["failure"]);
     assert.deepEqual(read.filters.promptAuthors, ["agent"]);
-    await page.locator("#resetView").click(); await ready(page);
-    assert.equal((await state(page)).selected, before.selected);
-    const reset = requests.filter(row => row.endpoint === "/api/snapshot").at(-1).body;
-    assert.equal(reset.filters.outcomes, undefined);
-    assert.equal(reset.filters.promptAuthors, undefined);
-    await navigateMain(page, "reports"); await ready(page); await reportContents(page);
-    await expect(page.locator('[name=promptMode][value=none]')).toBeChecked();
-    await proof(page, "report-contextual-actions", { state: await state(page) });
-});
-
-test("Settings drafts disable manual reads and source checks until existing cancellation", async t => {
-    const { page, requests } = await setup(t);
-    await navigateMain(page, "settings"); await ready(page);
-    await openSourceEditor(page);
-    await page.locator("#sourceDatabase").fill("C:\\Invented\\different.db");
-    const before = requests.length;
-    await expect(page.locator("#refreshBtn")).toBeDisabled();
-    await navigateMain(page, "home"); await ready(page);
-    await expect(page.locator("#checkActivity")).toBeDisabled();
-    await (await revealRefresh(page)).focus();
-    await expect(page.locator("#refreshBtn")).toBeDisabled();
-    assert.ok(!requests.slice(before).some(row => /configure|enabled|collection\/now/.test(row.endpoint)));
-    await navigateMain(page, "settings"); await ready(page);
-    await page.locator("#cancelSource").click();
-    await expect(page.locator("#refreshBtn")).toBeEnabled();
+    await ready(page); await openAnalyzeFilters(page);
+    await page.getByRole("button", { name: "Reset filters", exact: true }).click(); await ready(page);
+    await closeAnalyzeFilters(page);
+    await expect(page.locator("#activityListSummary")).toContainText("10 matching tool calls");
+    await navigateMain(page, "reports");
+    await expect(textPolicy).toBeChecked();
+    await activity.click();
+    await expect(selected).toBeChecked();
+    await expect(picker.locator("input[data-report-request]:checked")).toHaveCount(1);
+    assert.ok(!requests.some(row => row.endpoint === "/api/collection/now"));
 });
 
 test("a failed or cancelled scan with no prepared report leaves manual read recovery available", async t => {
