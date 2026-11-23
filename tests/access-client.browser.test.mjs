@@ -153,7 +153,7 @@ test("normal refresh preserves an actionable nonprivate shell through access che
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.locator('[data-nav="settings"]').click();
-    const navigatedWithoutGrant = new URL(page.url()).hash.startsWith("#settings");
+    const navigatedWithoutGrant = new URL(page.url()).pathname === "/settings";
     await capture("04-settings-without-private-access");
     hold = null; later.resolve();
     await page.goto(app.url + "#settings?section=connection");
