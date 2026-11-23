@@ -459,7 +459,7 @@ test("app uncertainty belongs to the exact expanded call, not the prompt or a ne
         await page.setViewportSize({ width: 1440, height: 1000 }); await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 }); await settle();
         for (const [id, count] of [["op-two", 2], ["op-three", 3], ["op-long", 9], ["op-mixed", 4]]) {
-            const card = page.locator(".request-card-open").filter({hasText:`Review the invented ${id} workshop plan.`});
+            const card = page.locator("#activityList article").filter({hasText:`Review the invented ${id} workshop plan.`}).locator(".request-card-open");
             await card.click(); await settle();
             const activity = page.locator('[data-reader-section="activity"]');
             const metrics = await activity.evaluate(node => {
@@ -508,7 +508,7 @@ test("app uncertainty belongs to the exact expanded call, not the prompt or a ne
     if (phase !== "before") {
         await page.goto(runtime.url + "#analyze?tool=workiq-retrieve");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await page.locator(".request-card-open").filter({hasText:"Review the invented op-mixed workshop plan."}).click();
+        await page.locator("#activityList article").filter({hasText:"Review the invented op-mixed workshop plan."}).locator(".request-card-open").click();
         await expect(page.locator("#requestContent .reader-scope")).toContainText("2 of 4");
         await expect(page.locator('[data-reader-section="activity"]')).not.toContainText("which apps");
         await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(4);

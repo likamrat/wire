@@ -93,7 +93,7 @@ test("failure cards and reader explain eight states without invented causes or r
     await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
     for (const [id, , , expected] of cases) {
-        const card = page.locator(".request-card-open").filter({ hasText: `Check the planning feature (${id}).` });
+        const card = page.locator("#activityList article").filter({ hasText: `Check the planning feature (${id}).locator(".request-card-open").` });
         await expect(card).toContainText(expected);
         if (id === "unsaved") {
             await expect(card).toContainText("2 of 6 recorded calls failed.");
@@ -150,7 +150,7 @@ test("failure cards and reader explain eight states without invented causes or r
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
-        const card = page.locator(".request-card-open").filter({ hasText: "Check the planning feature (unsaved)." });
+        const card = page.locator("#activityList article").filter({ hasText: "Check the planning feature (unsaved)." }).locator(".request-card-open");
         await card.click();
         const fourth = page.locator('[data-tool-call-id="invented-unsaved-4"]');
         const fifth = page.locator('[data-tool-call-id="invented-unsaved-5"]');

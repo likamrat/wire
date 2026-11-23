@@ -54,7 +54,7 @@
 .wire-frontend-react #activityList .frontend-record-slot + .frontend-record-slot > .activity-card {
     border-top: 1px solid var(--surface-divider);
 }
-.wire-frontend-react #activityList .request-card-open:not(.recognition-row) {
+.wire-frontend-react #activityList .request-row > .request-card-open {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "author time" "prompt prompt" "more more" "availability availability" "services services" "result result";
@@ -121,7 +121,7 @@
 .wire-frontend-react #workspace:has(#homeView[data-empty=true]) > #frontendBreakdowns,
 .wire-frontend-react.period-comparing #frontendBreakdowns { display: none; }
 @container (max-width: 44rem) {
-    .wire-frontend-react #activityList .request-card-open:not(.recognition-row) {
+    .wire-frontend-react #activityList .request-row > .request-card-open {
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "author" "prompt" "more" "availability" "services" "result" "time";
         gap: 6px;

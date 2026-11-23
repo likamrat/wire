@@ -188,7 +188,7 @@ test("the failure count opens exactly the failed calls in retained chronology", 
     await expect(page.locator('[data-tool-call-id="clarity-call-2-3"]')).toContainText("Access was denied");
 });
 
-test("opening an explicit prompt link starts at its original and restores the list origin", { timeout: 90000 }, async t => {
+test("the reader's Prompt shortcut reaches the original and closing restores the outcome link", { timeout: 90000 }, async t => {
     const evidence = ["top-first", "top-second", "top-ordinary"].map((id, index) => {
         const record = records()[2];
         record.scenarioId = id;
@@ -206,6 +206,8 @@ test("opening an explicit prompt link starts at its original and restores the li
     const phase = process.env.WIRE_READER_TOP_PHASE ?? "after", proof = process.env.WIRE_READER_TOP_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
     const body = page.locator("#contextSidebarBody");
+    const visitPrompt = () => body.getByRole("navigation", { name: "In this interaction" })
+        .getByRole("button", { name: "Prompt", exact: true }).click();
     const settle = async () => {
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
@@ -245,12 +247,13 @@ test("opening an explicit prompt link starts at its original and restores the li
             } else await page.keyboard.press("Enter");
             await expect(page.locator("#contextSidebar")).toBeVisible();
             await settle();
+            await visitPrompt();
             const measurement = await body.evaluate(node => {
                 const promptHeading = node.querySelector('[data-reader-section="prompt"] .reader-section-heading');
                 const viewport = node.getBoundingClientRect(), first = promptHeading.getBoundingClientRect();
                 return { scrollTop: node.scrollTop, scrollHeight: node.scrollHeight, viewportHeight: node.clientHeight,
                     viewportTop: viewport.top, firstContentTop: first.top, firstContentBottom: first.bottom,
-                    focusIsOriginal: document.activeElement === node.querySelector('[data-reader-section="prompt"] .full-text-content') };
+                    focusIsHeading: document.activeElement === promptHeading };
             });
             measurements.push({ theme, width, scale, visit, input, ...measurement });
             if (proof) {
@@ -260,12 +263,11 @@ test("opening an explicit prompt link starts at its original and restores the li
                 });
             }
             if (phase !== "before") {
-                assert.equal(measurement.scrollTop, 0, JSON.stringify(measurements.at(-1)));
                 assert.ok(measurement.firstContentTop >= measurement.viewportTop);
                 assert.ok(measurement.firstContentBottom <= measurement.viewportTop + measurement.viewportHeight);
-                assert.equal(measurement.focusIsOriginal, true);
+                assert.equal(measurement.focusIsHeading, true);
                 await settle();
-                assert.equal(await body.evaluate(node => node.scrollTop), 0, "Focus and settled layout must not move the reset reader.");
+                assert.equal(await body.evaluate(node => node.scrollTop), measurement.scrollTop, "The prompt stays in place.");
             }
             const expandPrompt = body.locator('.prompt-preview-toggle[aria-expanded=false]');
             if (await expandPrompt.isVisible()) await expandPrompt.click();
@@ -296,9 +298,9 @@ test("opening an explicit prompt link starts at its original and restores the li
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             await more.click();
             await settle();
+            await visitPrompt();
             const top = await body.evaluate(node => node.scrollTop);
-            assert.equal(top, 0, visit + " must reset an already open reader.");
-            await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
+            await expect(page.locator('[data-reader-section="prompt"] .reader-section-heading')).toBeFocused();
             measurements.push({ theme: "dark", width: 1440, scale: 1, visit, input: "pointer", scrollTop: top });
         }
         await close();
@@ -312,7 +314,8 @@ test("opening an explicit prompt link starts at its original and restores the li
         await close();
         await ordinary.click();
         await settle();
-        assert.equal(await body.evaluate(node => node.scrollTop), 0, "An explicit prompt link opens the original, not the last technical detail.");
+        await visitPrompt();
+        await expect(body.locator('[data-reader-section="prompt"] .reader-section-heading')).toBeInViewport();
         if (proof) await writeFile(path.join(proof, phase + "-positions.json"), JSON.stringify({
             entries: measurements, ordinarySavedPosition: saved, ordinaryRestoredPosition: await body.evaluate(node => node.scrollTop),
         }, null, 2));
@@ -397,11 +400,11 @@ test("home prompt previews are bounded while exact copied prompts and independen
                     accessibleName, length: accessibleName?.length, originalPromptLength: long.length,
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
-                assert.match(accessibleName, /^Read retained prompt: You are checking the workshop/);
+                assert.equal(accessibleName, "1 tool call failed");
                 assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"));
             }
             for (const card of [first, second]) {
-                const prompt = card.locator(".card-excerpt");
+                const prompt = card.locator("xpath=ancestor::article[1]").locator(".card-excerpt");
                 const geometry = await prompt.evaluate(node => {
                     const css = getComputedStyle(node), box = node.getBoundingClientRect(), lines = new Map();
                     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -421,7 +424,7 @@ test("home prompt previews are bounded while exact copied prompts and independen
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
                 await expect(card.locator(".request-card-read-more")).toHaveCount(0);
-                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toHaveAccessibleName(/^Open activity panel:/);
+                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt a,.request-card-open-label")).toHaveCount(0);
                 assert.ok(geometry.height <= geometry.lineHeight * (geometry.cardWidth <= 36 * geometry.rootSize ? 4 : 3) + 1, JSON.stringify(geometry));
                 if (card === second) assert.equal(omitted, true, "The complete long prompt must not occupy the card.");
                 await expect(prompt).not.toContainText("\u2026");
@@ -445,10 +448,10 @@ test("home prompt previews are bounded while exact copied prompts and independen
             }
         }
         if (phase !== "before") {
-            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toBeVisible();
             await second.focus(); await page.keyboard.press("Enter");
+            await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", {name:"Prompt",exact:true}).click();
             const original = page.locator('[data-reader-section="prompt"] .full-text-content');
-            await expect(original).toBeFocused();
+            await expect(page.locator('[data-reader-section="prompt"] .prompt-preview-toggle')).toHaveAttribute("aria-expanded", "true");
             assert.equal(await original.textContent(), long);
             await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
             assert.equal(await page.evaluate(() => window.copied.at(-1)), long);
@@ -472,9 +475,9 @@ test("home prompt previews are bounded while exact copied prompts and independen
             await call.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
-            await second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label").click();
-            await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
-            await page.keyboard.press("Escape"); await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-open-label")).toBeFocused();
+            await second.click();
+            await expect(call).toBeFocused();
+            await page.keyboard.press("Escape"); await expect(second).toBeFocused();
         } else {
             await second.click();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
@@ -487,7 +490,7 @@ test("home prompt previews are bounded while exact copied prompts and independen
         await expect(first.locator(".request-card-read-more")).toHaveCount(0);
         await page.evaluate(() => {
             window.heldCardPreview = document.querySelector(".request-card-prompt");
-            window.heldCardName = window.heldCardPreview.querySelector("a").getAttributeNode("href");
+            window.heldCardName = window.heldCardPreview.closest("article").querySelector(".request-card-open").getAttributeNode("href");
         });
         await page.goto(page.url().split("#")[0] + "#analyze?result=success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");

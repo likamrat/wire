@@ -139,7 +139,7 @@ async function copyAndReload({ context, page }, kind) {
 test("ordinary interaction card URL opens the exact retained request on copy and reload; Back restores Analyze", async t => {
     const fixture = await readingFixture(t, "record"), { page } = fixture;
     const analyze = page.url();
-    const card = page.locator("#activityList .request-card-open").filter({ hasText: prompt });
+    const card = page.locator("#activityList article").filter({ hasText: prompt }).getByRole("link", { name: /: open call$/ }).first();
     await card.click(); await expect(recordOpen(page)).toBeVisible();
     const copied = new URL(page.url());
     assert.equal(copied.pathname, "/request"); assert.equal(copied.hash, "");

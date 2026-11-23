@@ -81,12 +81,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         node.dataset.cardPreview = "";
         const original = retained(source) ?? "";
         if (home) {
-            const link = openPrompt(original), passage = document.createElement("span");
+            const passage = document.createElement("span");
             passage.className = "card-excerpt";
             passage.append(exactFragment(original));
-            link.replaceChildren(passage);
-            link.setAttribute("aria-label", `Read retained prompt: ${excerpt(source, 96)}`);
-            node.append(link);
+            node.append(passage);
             bindings.set(node, () => clearOwnedContent(node));
             return node;
         }

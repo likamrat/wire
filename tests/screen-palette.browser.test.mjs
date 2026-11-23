@@ -244,7 +244,7 @@ test("the built workbench carries each palette through screens and nested readin
         const disabled = await apply.evaluate(measureControlSurface);
         assert.ok(contrast(disabled.ink, disabled.face) >= 4.5);
         await page.keyboard.press("Escape"); await closeAnalyzeFilters(page);
-        await page.locator('#activityList .request-card-open').filter({ hasText: /Cedar/ }).first().click();
+        await page.locator("#activityList article").filter({ hasText: /Cedar/ }).first().locator(".request-card-open").click();
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
         await inspect("reader", theme);
         await page.locator("#requestContent .reader-call-toggle").first().hover();

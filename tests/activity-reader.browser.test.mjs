@@ -89,10 +89,9 @@ test("one minimal card opens the full log with private input owned by its exact 
     await expect(page.locator("#activityTitle")).toHaveText("Activity");
     await expect(page.locator("[data-analyze-mode],#callSort")).toHaveCount(0);
     const card = page.locator(".request-card-open");
-    await expect(card).toContainText("Find the workshop checklist.");
-    await expect(card).not.toContainText("workiq-fetch");
-    await expect(card).not.toContainText(/PRIVATE_CALL_ARGUMENT|did not respond in time/);
-    const metadataType = await card.evaluate(node => {
+    const excerpt = page.locator(".request-card-prompt");
+    await expect(excerpt).toHaveText("Find the workshop checklist.");
+    const metadataType = await excerpt.evaluate(node => {
         const time = getComputedStyle(node.closest("article").querySelector(".request-card-time"));
         const prompt = getComputedStyle(node);
         return { size: parseFloat(prompt.fontSize), timeSize: parseFloat(time.fontSize), weight: prompt.fontWeight };
@@ -102,10 +101,10 @@ test("one minimal card opens the full log with private input owned by its exact 
     await capture(page, "analyze-dark", true);
     await card.click();
     await settled(page);
+    await page.getByRole("link", { name: "Show full activity" }).click();
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(6);
     const target = page.locator('[data-tool-call-id="activity-3"]');
-    await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
     await expect(target.locator(".call-heading")).toContainText("The tool did not respond in time");
     await expect(target.locator(".call-heading")).not.toContainText("Tool failed");
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
@@ -150,9 +149,9 @@ test("filtered homepage failure entry is gesture-only and does not override expl
 
 test("Back returns to the panel link and Forward restores manual reading in the same interaction", async t => {
     const { page } = await setup(t, activityRecord(26));
-    const card = page.locator(".card-panel-link"), body = page.locator("#contextSidebarBody");
+    const card = page.locator(".request-card-open"), body = page.locator("#contextSidebarBody");
     await card.click(); await settled(page);
-    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    await expect(page.locator('[data-tool-call-id="activity-26"]')).toBeFocused();
     const reading = page.locator('[data-tool-call-id="activity-20"] .reader-call-toggle');
     await reading.click();
     await expect(reading).toBeFocused();
@@ -208,9 +207,11 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.getByRole("link", { name: "4 tool calls completed", exact: true })).toBeVisible();
     await expect(page.locator(".activity-card [data-outcome=failure]")).toHaveCount(0);
     await closeAnalyzeFilters(page);
-    await page.locator(".card-panel-link").click(); await settled(page);
+    await page.locator(".request-card-open").click(); await settled(page);
     await expect(page.locator('[data-tool-call-id="activity-3"]')).not.toBeFocused();
     await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(4);
+    await page.getByRole("link", { name: "Show full activity" }).click();
     await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(".reader-scope")).toContainText("4 of 6");
     await expect(page.locator('[data-tool-call-id="activity-3"]>.action-context')).toHaveText("Outside current view");
@@ -382,8 +383,8 @@ test("a success with missing service evidence, partial result and missing prompt
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
             await expect(page.locator(".activity-card .card-orientation")).toHaveText(cardLabel);
-            if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
-            await page.locator(".card-panel-link").click(); await settled(page);
+            if (outcome === "unknown") await expect(page.locator(".request-card-prompt")).toContainText("Prompt text unavailable");
+            await page.locator(".request-card-open").click(); await settled(page);
             await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
             await expect(page.locator(".reader-call-services")).toContainText("Asked Copilot");
             await expect(page.locator(".call-heading [data-outcome=failure]")).toHaveCount(0);

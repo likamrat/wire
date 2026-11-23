@@ -167,7 +167,7 @@ test("capture documentation through the normal renderer with isolated light-them
         return route.continue();
     });
     const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false } = {}) {
+    async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false, hover } = {}) {
         if (reportsOnly && !name.startsWith("report-") && name !== "saved-report") return;
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "light");
         assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), true);
@@ -178,7 +178,9 @@ test("capture documentation through the normal renderer with isolated light-them
             await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
             await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
         }
-        await page.mouse.move(10, 70);
+        if (hover) {
+            await hover.hover(); await expect(page.getByRole("tooltip")).toHaveText("View call details");
+        } else await page.mouse.move(10, 70);
         const file = path.join(privateOnly ? proof : output, name + ".png");
         const bytes = await locator.screenshot({ path: file, ...(locator === page ? { fullPage } : {}) });
         receipt.images.push({ name, privateOnly, sha256: sha256(bytes), bytes: bytes.length,
@@ -211,18 +213,20 @@ test("capture documentation through the normal renderer with isolated light-them
         await expect(page.locator("#activityList .report-draft-trigger").first()).toBeVisible();
         await capture("analyze");
         await page.setViewportSize({ width: 2100, height: 1250 });
-        const prompt = page.locator('#activityList .request-card-open').filter({ hasText: "jordan@example.invalid" });
-        await prompt.click();
+        const card = page.locator("#activityList article").filter({ hasText: "jordan@example.invalid" });
+        const outcome = card.getByRole("link", { name: "1 tool call failed", exact: true });
+        await outcome.click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
+        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
         await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
         await capture("wire-overview", { top: true });
-        if (analyzeOnly) {
-            await finish();
-            return;
-        }
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await prompt.scrollIntoViewIfNeeded();
-        await capture("interaction");
+        await page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle[aria-expanded=true]').click();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
+        await card.evaluate(n => scrollBy(0, n.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom - 64));
+        await capture("interaction", { hover: outcome.locator('[data-icon-role="forward"]') });
+        if (analyzeOnly) { await finish(); return; }
         if (!widgetsOnly) {
             await page.locator("#contextSidebar .report-draft-trigger").click();
             const picker = page.getByRole("dialog", { name: "Report drafts" });

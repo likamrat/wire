@@ -64,7 +64,7 @@ test("normal cards and reader color compact status units, not explanatory prose,
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
         for (const [id, outcome] of [["completed", "success"], ["failed", "failure"], ["unknown", "unknown"], ["partial", "partial"], ["transport", "failure"]]) {
-            const card = page.locator(".request-card-open").filter({ hasText: `invented ${id} operation` });
+            const card = page.locator("#activityList article").filter({ hasText: `invented ${id} operation` }).locator(".request-card-open");
             const summary = card.locator(".request-card-exception");
             if (outcome === "success") await expect(summary).toHaveCount(0);
             else await expect(summary).toHaveText(({ failure: "1 tool call failed", unknown: "No result recorded", partial: "Partial completion" })[outcome]);

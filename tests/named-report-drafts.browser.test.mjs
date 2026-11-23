@@ -67,7 +67,7 @@ test("Analyze keeps adjacent cards' call actions with their identities even when
     await page.goBack(); await expect(op).toBeFocused();
 });
 
-test("report actions and call counts keep their columns while palettes distinguish add and remove", { timeout: 90000 }, async t => {
+test("report actions stay aligned across counts while palettes distinguish add and remove", { timeout: 90000 }, async t => {
     const counts = [1, 3, 4, 12];
     const records = counts.map((n, i) => {
         const r = fixture(`column-${i}`);
@@ -86,11 +86,10 @@ test("report actions and call counts keep their columns while palettes distingui
     const rows = page.locator("#activityList .card-reading-actions"), action = rows.first().locator(".report-draft-trigger");
     await expect(rows).toHaveCount(4);
     const geometry = () => rows.evaluateAll(footers => footers.map(footer => {
-        const b = footer.querySelector(".report-draft-trigger"), link = footer.querySelector(".card-panel-link");
+        const b = footer.querySelector(".report-draft-trigger");
         const rect = el => el.getBoundingClientRect();
         const text = node => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect(); };
-        return [rect(b.querySelector("svg")).x, text(b.lastElementChild).x, rect(link.querySelector("svg")).x,
-            text(link.lastChild).x, rect(footer).height];
+        return [rect(b.querySelector("svg")).x, text(b.lastElementChild).x, rect(footer).height];
     }));
     const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
     const notice = page.locator(".report-draft-confirmation");
@@ -107,7 +106,7 @@ test("report actions and call counts keep their columns while palettes distingui
         await page.setViewportSize({ width, height: 900 }); await page.evaluate(n => document.documentElement.style.fontSize = `${n * 100}%`, scale);
         await expect(action.locator("span")).toBeVisible(); await expect(action.locator("svg")).toHaveAttribute("data-lucide-icon", "clipboard-plus");
         const before = await geometry();
-        for (const row of before) assert.deepEqual(row.slice(0, 4), before[0].slice(0, 4));
+        for (const row of before) assert.deepEqual(row, before[0]);
         for (const palette of Object.keys(palettes)) for (const theme of ["light", "dark"]) {
             await page.evaluate(([palette, theme]) => {
                 document.documentElement.dataset.evidencePalette = palette; document.documentElement.dataset.evidenceTheme = theme;

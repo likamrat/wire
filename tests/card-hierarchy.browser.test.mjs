@@ -202,7 +202,7 @@ test("reader Source keeps recorded, conflicting, missing and tool-only models di
         ["missing", "Model", "Not recorded"], ["conflicting", "Model", "Conflicting records"]]) {
         const card = interaction(page, id);
         await expect(card.locator(".card-tool-list")).not.toContainText(/recorded-model|tool-hint/);
-        await card.locator(".card-panel-link").click();
+        await card.locator(".request-card-open").click();
         const source = page.locator('[data-reader-section="source"]');
         await source.getByRole("button", { name: "Source details", exact: true }).click();
         const fact = name => source.getByText(name, { exact: true }).and(source.locator("dt")).locator("..").locator("dd");
@@ -225,7 +225,7 @@ test("reader Source keeps recorded, conflicting, missing and tool-only models di
             await expect(page.locator('[data-tool-call-id="missing-0"] .reader-call-duration')).toContainText("Not recorded");
         }
         await page.locator("#closeContextSidebar").click();
-        await expect(card.locator(".card-panel-link")).toBeFocused();
+        await expect(card.locator(".request-card-open")).toBeFocused();
     }
 });
 
@@ -237,6 +237,7 @@ test("long recorded model names and full prompt text wrap without becoming marku
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
         await interaction(page, "long").locator(".request-card-open").click();
+        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
         const text = page.locator('[data-reader-section="prompt"] .full-text-content');
         assert.equal(await text.textContent(), longPrompt);
         await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
@@ -275,8 +276,9 @@ test("the prompt reader keeps exact text, Copy and keyboard return separate from
     const route = page.url();
     const reader = page.locator('#contextSidebar [data-reader-section="prompt"]');
     await open.press("Enter");
+    await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
     const original = reader.locator(".full-text-content");
-    await expect(original).toBeFocused();
+    await expect(reader.locator(".reader-section-heading")).toBeFocused();
     assert.equal(await original.textContent(), longPrompt);
     await reader.getByRole("button", { name: "Copy prompt", exact: true }).tap();
     assert.equal(await page.evaluate(() => window.copiedHierarchyText), longPrompt);
@@ -316,7 +318,7 @@ test("the prompt reader keeps exact text, Copy and keyboard return separate from
     await expect(code.locator("..").locator("dd")).toHaveText("E_ACCESSDENIED");
 });
 
-test("Analyze prompt links use regular Asta Sans and wrap within the card", async t => {
+test("Analyze prompt excerpts use regular Asta Sans and wrap within the card", async t => {
     const { page, data } = await setup(t);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");

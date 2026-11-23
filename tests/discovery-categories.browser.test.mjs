@@ -92,7 +92,7 @@ test("Discovery reads consistently across charts, filters and call details in bo
     });
     const analyze = new URL("/?range=capture&chart=workload", runtime.url).href;
     const services = page.locator('[data-percentage-card="services"]');
-    const calls = page.locator("#activityList .card-panel-link");
+    const calls = page.locator("#activityList .request-card-open");
     for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(analyze); await ready(page);

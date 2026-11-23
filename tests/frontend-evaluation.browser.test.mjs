@@ -158,18 +158,18 @@ test("discovery, schema, agent, retrieval and named Graph actions retain distinc
         await expect(operation).toHaveCount(1);
         const subject = await operation.locator("svg").getAttribute("data-icon-role");
         assert.ok(subject.startsWith("operation-"));
-        await card.locator(".card-panel-link").click();
+        await card.locator(".request-card-open").click();
         const call = page.locator(`#requestContent [data-tool-call-id="op-call-${i}"]`);
         await expect(call.locator(".reader-tool-name")).toHaveText(`workiq-${tool}`);
         await expect(call.locator(".reader-tool-name svg")).toHaveCount(0);
         await expect(call.locator(`.reader-call-services [data-icon-role="${subject}"]`)).toBeVisible();
         if (tool === "get_schema") await expect(call.locator('[data-icon-role="operation-graph-send"]')).toHaveCount(0);
-        await page.goBack(); await expect(card.locator(".card-panel-link")).toBeFocused();
+        await page.goBack(); await expect(card.locator(".request-card-open")).toBeFocused();
     }
     if (proofs) await capture(page, "named-operation-roles");
 });
 
-test("Analyze groups exact tool names and counts in static labels beside genuine reader links", async t => {
+test("Analyze groups exact tool names and links each name to its own call", async t => {
     const records = compactCardRecords();
     const [mixed, repeated, single, example] = records;
     const long = ["workiq-call_function", "workiq-update_entity"];
@@ -213,16 +213,15 @@ test("Analyze groups exact tool names and counts in static labels beside genuine
     await expect(cards.nth(2).locator(".card-tool-count")).toHaveCount(0);
     await expect(toolList.getByRole("listitem").first()).toHaveCSS("list-style-type", "none");
     await expect(cards.nth(1).locator(".card-tool-item")).toHaveCSS("list-style-type", "none");
-    const label = labels.first(), name = label.locator(".card-tool-name"), url = page.url();
+    const label = labels.first(), name = label.locator(".card-tool-name");
     const fill = await label.evaluate(n => getComputedStyle(n).backgroundColor);
     assert.equal(fill, "rgba(0, 0, 0, 0)");
     await name.hover();
-    await expect(name).not.toHaveCSS("cursor", "pointer");
     await expect(label).toHaveCSS("background-color", fill);
-    await name.click(); expect(page.url()).toBe(url);
-    await expect(card.locator(".card-tool-list").getByRole("link")).toHaveCount(0);
-    const panel = card.locator(".card-panel-link");
-    // This read-only fixture has no named-draft action; focus the actual call-count link.
+    await expect(name).toHaveAccessibleName("workiq-retrieve: open first of 2 calls");
+    await name.click(); await expect(page.locator('[data-tool-call-id="checklist-0"]')).toBeFocused();
+    await page.goBack(); await expect(name).toBeFocused();
+    const panel = card.locator(".request-card-open");
     await panel.focus(); await page.keyboard.press("Shift");
     await expect(panel).toBeFocused();
     await expect(panel).toHaveCSS("outline-style", "solid");
@@ -238,7 +237,7 @@ test("Analyze chart, controls and grouped interactions share the available works
     const records = reviewRecords();
     const { page } = await setup(t, "react", [records.at(-1), ...records.slice(0, 7)]);
     const list = page.locator("#activityList"), card = list.locator(".activity-card").first();
-    const opener = card.locator(".card-panel-link"), measurements = [], failures = [];
+    const opener = card.locator(".request-card-open"), measurements = [], failures = [];
     const captureDir = process.env.WIRE_ANALYZE_FRAME_PROOFS;
     if (captureDir) await mkdir(captureDir, { recursive: true });
     for (const state of ["wide", "narrow", "resized", "reader"]) {
@@ -278,7 +277,7 @@ test("Analyze chart, controls and grouped interactions share the available works
                 borders: rows.map(row => [getComputedStyle(row).borderTopWidth, getComputedStyle(row).borderBottomWidth].map(parseFloat)),
                 rowShadows: rows.map(row => getComputedStyle(row).boxShadow),
                 promptWidth: prompt.getBoundingClientRect().width, promptMeasure: parseFloat(getComputedStyle(prompt).maxWidth),
-                contents: [...rows[0].querySelectorAll(".card-tool-item,.request-card-summary,.request-card-open,.card-evidence-link,.card-panel-link")].map(edges),
+                contents: [...rows[0].querySelectorAll(".card-tool-item,.request-card-summary,.request-card-open,.card-evidence-link")].map(edges),
                 overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
             };
         });
@@ -360,9 +359,17 @@ test("completed status opens every counted call and no uncounted sibling", {time
     }
     const {page}=await setup(t,"react",records);
     const unknown=page.locator('#activityList [data-view-key="request:search-5"] .card-outcome');
-    await expect(unknown).toContainText("No result recorded");await expect(unknown.locator("[data-icon-role=forward]")).toHaveCount(0);
+    await expect(unknown).toContainText("No result recorded");
+    await unknown.press("Enter");
+    await expect(page.locator("#requestContent .reader-call-summary")).toContainText("has no recorded result");
+    await page.keyboard.press("Escape"); await expect(unknown).toBeFocused();
     const card=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const link=card.locator(".card-orientation a.card-outcome");
+    await expect(card.locator(".request-card-prompt a,.card-reading-actions a,[data-icon-role=read]")).toHaveCount(0);
+    await link.locator("[data-icon-role=forward]").hover();
+    await expect(page.getByRole("tooltip")).toHaveText("View call details");
+    await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
+    await link.focus(); await expect(page.getByRole("tooltip")).toHaveText("View call details");
     const activity=page.locator('#requestContent [data-reader-section=activity]');
     const list=activity.locator(".reader-call-row");
     if (proofs) {await mkdir(proofs,{recursive:true}); await card.screenshot({path:path.join(proofs,"completed-card.png")});}
@@ -486,11 +493,11 @@ test("failed-call and returned-entry cards keep all counted evidence, exact dest
     await page.goBack(); await expect(top.locator(".card-failure")).toBeFocused();
     const layout = await top.evaluate(n => {
         const box = s=>n.querySelector(s).getBoundingClientRect();
-        return { metadataFirst: box(".card-metadata").bottom < box(".request-card-open").top,
-            eyeSeparate: box(".card-excerpt").right < box("[data-icon-role=read]").left,
+        return { metadataFirst: box(".card-metadata").bottom < box(".card-excerpt").top,
+            promptBeforeOutcome: box(".card-excerpt").bottom <= box(".card-failure").top,
             outcomeBeforeReason: box(".card-failure").bottom <= box(".card-problem-area").top };
     });
-    assert.deepEqual(layout, {metadataFirst:true,eyeSeparate:true,outcomeBeforeReason:true});
+    assert.deepEqual(layout, {metadataFirst:true,promptBeforeOutcome:true,outcomeBeforeReason:true});
     const links = lower.locator(".returned-issue-ink");
     await expect(links).toHaveCount(2);
     for (const [offset,word] of [[0,"date"],[1,"owner"]]) {
@@ -511,7 +518,7 @@ test("reader execution faces match the card without borrowing its total or a ret
     const leftFailure = row.locator(".card-outcome-face");
     await expect(leftFailure).toHaveText("2 tool calls failed");
     const leftSuccess = page.locator("#activityList .card-outcome.result-tone-success .card-outcome-face").first();
-    await row.locator(".card-panel-link").click();
+    await row.locator(".request-card-open").click();
     const reader = page.locator("#requestContent"), call = i => reader.locator(`[data-tool-call-id="review-call-${i}"]`);
     const failed = call(1).locator(".reader-call-summary .card-outcome-face"), completed = call(0).locator(".reader-call-summary .card-outcome-face");
     await expect(failed).toHaveText("1 tool call failed");
@@ -531,7 +538,7 @@ test("reader execution faces match the card without borrowing its total or a ret
             assert.deepEqual(await face.evaluate(paint), await reference.evaluate(paint), theme);
         }
     }
-    await page.goBack(); await expect(row.locator(".card-panel-link")).toBeFocused();
+    await page.goBack(); await expect(row.locator(".request-card-open")).toBeFocused();
 });
 
 test("compact summaries name the scoped causes and open the full diagnostic in the exact reader", { timeout: 60000 }, async t => {
@@ -721,22 +728,28 @@ test("reading a retained prompt never paints or underlines the passage or floats
     const { page } = await setup(t, "react", compactCardRecords());
     const card = page.locator('#activityList [data-view-key="request:review-plural-activity"]');
     const link = card.locator(".request-card-open");
-    const original = await link.textContent();
+    const passage = card.locator(".card-excerpt"), original = await passage.textContent();
     for (const [mode, width, scale] of [["light", 1440, 1], ["dark", 390, 2]]) {
         await chooseTheme(page, mode); await page.setViewportSize({width, height: 900});
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await link.scrollIntoViewIfNeeded(); await link.hover(); await capture(page, `reading-action-${mode}`);
-        const area = await link.boundingBox();
-        await expect(link).toHaveCSS("background-color","rgba(0, 0, 0, 0)",{timeout:1000});
-        await expect(link).toHaveCSS("text-decoration-line","none");
-        assert.equal(await link.getAttribute("title"),null);
+        await passage.scrollIntoViewIfNeeded(); await passage.hover(); await capture(page, `reading-action-${mode}`);
+        const area = await passage.boundingBox();
+        await expect(passage).toHaveCSS("background-color","rgba(0, 0, 0, 0)",{timeout:1000});
+        await expect(passage).toHaveCSS("text-decoration-line","none");
+        assert.equal(await passage.getAttribute("title"),null);
         await page.mouse.down();
         try {
-            await expect(link).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
-            assert.deepEqual(await link.boundingBox(),area);
+            await expect(passage).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+            assert.deepEqual(await passage.boundingBox(),area);
         } finally { await page.mouse.move(0, 0); await page.mouse.up(); }
         await link.focus(); await page.keyboard.press("Enter");
-        await expect(page.locator("#requestContent")).toContainText(original);
+        const reader = page.locator("#requestContent");
+        await reader.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
+        await expect(reader.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(original);
+        await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true,
+            value: { writeText: async text => window.copiedPrompt = text } }));
+        await reader.getByRole("button", { name: "Copy prompt", exact: true }).click();
+        assert.equal(await page.evaluate(() => window.copiedPrompt), original);
         await page.goBack(); await expect(link).toBeFocused();
     }
 });
@@ -817,24 +830,25 @@ test("exact evidence links keep hover and press paint off the full hit target", 
     }
 });
 
-test("the activity panel cue retains its painted size on hover and restores focus on toggle and Back", {timeout:60000}, async t => {
+test("the failed outcome shows a tip without changing size and restores focus on close and Back", {timeout:60000}, async t => {
     const {page} = await setup(t,"react",compactCardRecords());
     const row=page.locator('#activityList [data-view-key="request:review-plural-activity"]');
-    const panel=row.locator(".card-panel-link"), issue=row.locator(".returned-issue-ink");
+    const panel=row.locator(".request-card-open"), issue=row.locator(".returned-issue-ink");
+    await expect(row.locator(".request-card-count")).toHaveText("4 tool calls");
+    await expect(row.locator(".request-card-count a")).toHaveCount(0);
     const settle=()=>page.waitForFunction(()=>document.getAnimations().every(a=>a.playState!=="running" || a.effect?.getTiming().iterations===Infinity));
-    await panel.scrollIntoViewIfNeeded(); await settle(); await expect(panel).toHaveAccessibleName("Open activity panel: 4 tool calls");
+    await panel.scrollIntoViewIfNeeded(); await settle(); await expect(panel).toHaveAccessibleName("1 tool call failed");
     const initial=await panel.boundingBox(); await panel.hover(); await page.mouse.down();
     assert.deepEqual(await panel.boundingBox(),initial);
     await page.mouse.up(); await expect(panel).toHaveAttribute("aria-expanded","true"); await settle();
-    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    await expect(page.locator('[data-tool-call-id="review-call-1"]')).toBeFocused();
     const calls=page.locator('[data-reader-section="activity"] .reader-call-row');
     for (const [ordinal,key] of [[0,"success"],[1,"failure"],[2,"partial"],[3,"unknown"]]) {
         const toggle=calls.nth(ordinal).locator(".reader-call-toggle");
         await expect(toggle.locator(".reader-call-identity-line + .reader-call-summary")).toHaveCount(1);
         await expect(toggle.locator(`.recorded-result[data-outcome="${key}"]`)).toHaveCount(1);
     }
-    await expect(panel).toHaveAccessibleName("Close activity panel: 4 tool calls");
-    await panel.focus(); await page.keyboard.press("Enter"); await expect(panel).toHaveAttribute("aria-expanded","false");
+    await page.keyboard.press("Escape"); await expect(panel).toHaveAttribute("aria-expanded","false");
     await expect(panel).toBeFocused(); await settle();
     await issue.focus(); await page.keyboard.press("Enter"); await expect(page.locator(".api-result-entry:focus")).toContainText("403");
     await page.goBack(); await expect(issue).toBeFocused();
