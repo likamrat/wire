@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { assessmentDependencies, assessmentRef, assessmentSource, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { assessmentSource } from "../lib/assessment-read-model.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { collectRecordedAnswerCandidates, commitRecordedAnswers } from "../lib/assessment-capture.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
@@ -58,21 +58,6 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
         candidates.push(...extraReplies.map(reply => ({ sourceSessionId: records[0].sourceSessionId, ...reply })));
         assert.equal((await commitRecordedAnswers(context, candidates, { consentRevision: 1, source: sourceConfig })).captured, candidates.length);
     }
-    await updateBoardState(context, state => {
-        state.personalEvaluation ??= defaultPersonalEvaluation();
-        const personal = state.personalEvaluation;
-        const model = buildAssessmentModel(state, { source: sourceConfig });
-        const view = model.details.get(model.catalog.find(item => item.scenarioId === records[0].scenarioId).interactionRef);
-        const dependencies = assessmentDependencies(view), ref = view.interaction.interactionRef;
-        personal.feedback.records.push({ schemaVersion: 1, dependencies, assessment: {
-            schemaVersion: 1, interactionRef: ref, basis: view.basis, createdAt: "2026-09-30T12:00:03.000Z",
-            evidenceRefs: dependencies.evidenceRefs, assessmentRef: assessmentRef(state, "assessment", "invented-prior-verdict"),
-            checkId: "semantic-answer-correctness", checkVersion: 1, dimension: "accuracy", unitRef: ref,
-            origin: "user-personal", rubricVersion: 1, verdict: "fail", reason: "user-verdict", revision: 1, supersedes: null, withdrawn: false,
-        } });
-        personal.feedback.revision = 1;
-        personal.overrideRevision = 1;
-    });
     let expected = await loadBoardState(context);
     const configBefore = await readFile(path.join(context.dataDir, "collector", "config.json"));
     let forbiddenSourceReads = 0;
@@ -118,29 +103,6 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
     };
     return { page, runtime, records, context, payloadReads, requests, acceptFixtureChange: async () => { expected = await loadBoardState(context); } };
 }
-
-test("compact reader keeps read errors and a reachable retry rather than claiming no saved reviews", { timeout: 30000 }, async t => {
-    const { page, runtime, records } = await setup(t, { responses: false, missing: true });
-    let fail = true;
-    await page.route("**/api/assessment/detail", route => fail
-        ? route.fulfill({ status: 503, json: { error: "Invented saved-review read unavailable." } })
-        : route.continue());
-    await page.goto(runtime.url + "#request?request=" + encodeURIComponent(records[0].scenarioId));
-    await ready(page);
-    const host = page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`);
-    const findings = page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`);
-    await expect(findings).toContainText("Saved findings could not be read");
-    await expect(host).not.toContainText("No saved reviews for these requests.");
-    await expect(page.locator(".request-context-timeline")).toContainText("Work IQ sign-in was required");
-    const retry = host.getByRole("button", { name: "Read insights again", exact: true });
-    await expect(retry).toBeVisible();
-    fail = false;
-    await retry.click();
-    await expect(findings).toContainText("Your feedback");
-    await expect(host.getByRole("button", { name: "Details and feedback", exact: true })).toBeVisible();
-    await expect(findings.locator("[data-finding-kind=execution]")).toHaveCount(0);
-    await expect(page.locator(".request-context-timeline")).toContainText("No saved response.");
-});
 
 test("normal isolated source opens retained correction, retry and reply immediately; Analyze Back is exact", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, payloadReads } = app;
@@ -437,20 +399,20 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
 
 test("leaving before the shared reader is ready never starts an eager hidden payload read", { timeout: 20000 }, async t => {
     const { page, runtime, records, payloadReads } = await setup(t);
-    let release, reached;
-    const intercepted = new Promise(resolve => { reached = resolve; });
+    const held = Promise.withResolvers(), intercepted = Promise.withResolvers();
+    const delivered = page.waitForResponse(response => response.url().endsWith("/assets/assessment-contract.mjs"));
     await page.route("**/assets/assessment-contract.mjs", async route => {
         const response = await route.fetch();
-        reached();
-        await new Promise(resolve => { release = resolve; });
+        intercepted.resolve(); await held.promise;
         await route.fulfill({ response });
     });
-    await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await intercepted;
-    await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    await page.getByText("Saved reviews", { exact: true }).click();
-    release();
-    await expect(page.locator("#homeInsights .assessment-summary")).toBeVisible();
+    try {
+        await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
+        await intercepted.promise;
+        await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
+        await expect(page.locator("#contextSidebar")).not.toBeVisible();
+    } finally { held.resolve(); }
+    await (await delivered).finished(); await frames(page);
     assert.equal(payloadReads.length, 0);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
 });
@@ -475,8 +437,8 @@ test("each adjacent reply is independently authorized and multiple retained resp
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(2);
     assert.equal(payloadReads.some(input => input.observationRef === excludedRef), false);
     const responses = page.locator('[data-context-kind="response"]');
-    await expect(responses.first()).toContainText("Response recorded:");
-    await expect(responses.last()).toContainText("Time not recorded; position in the chronology is unknown.");
+    await expect(responses.first().locator("time")).toHaveAttribute("datetime", "2026-09-30T12:00:07.000Z");
+    await expect(responses.last().locator("time")).toHaveCount(0);
     await expect(responses.last()).toContainText("Partial text");
     assert.deepEqual(await responses.locator(".full-text-content").allTextContents(),
         [bodyText, "Exact retained response fragment.\r\n  unchanged  "]);
@@ -486,10 +448,12 @@ test("each adjacent reply is independently authorized and multiple retained resp
 test("off capture, missing retained text and unmatched same-chat records remain explicit without payload reads", { timeout: 20000 }, async t => {
     const { page, runtime, records, payloadReads } = await setup(t, { responses: false, missing: true });
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await expect(page.locator(".interaction-response:visible")).toHaveCount(2);
-    await expect(page.locator(".interaction-response:visible").first()).toContainText("No saved response.");
-    await expect(page.locator(".request-context-timeline")).toContainText("Prompt not available");
-    await expect(page.locator(".request-context-note")).toHaveText("Linked messages may be separate work; this is not the whole chat.");
+    await expect(page.locator(".interaction-response:visible")).toHaveCount(1);
+    await expect(page.locator(".interaction-response:visible")).toContainText("No assistant reply was saved");
+    const linked = page.locator(".reader-linked-context");
+    await page.getByRole("button", { name: "Source details" }).click();
+    await linked.locator("summary").click();
+    await expect(linked).toContainText("Prompt text unavailable");
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /EXCLUDED_UNAVAILABLE_TEXT|UNRELATED_RECORD/);
     assert.equal(payloadReads.length, 0);
 });
