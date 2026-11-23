@@ -4195,8 +4195,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rangeLabel = from && to && from <= to ? time.formatCivilRange(from, to, viewerTime)
             : from && !to ? `From ${time.formatDate(from, viewerTime)}` : to && !from ? `Through ${time.formatDate(to, viewerTime)}`
             : $("dateFilter").selectedOptions[0]?.textContent || "All dates";
-        setText(analyzeDatesValue, rangeLabel);
-        analyzeDatesTrigger.setAttribute("aria-label", "Dates: " + rangeLabel);
+        analyzeDatesPicker.showRange(rangeLabel);
         analyzeDatesPicker.sync();
         $("activitySearch").value = search;
         restoring = false;
@@ -10553,10 +10552,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("dateFields").prepend(analyzeCalendarHost);
     const dateSource = $("dateFilter"), dateField = dateSource.closest(".filter-field");
     dateSource.hidden = true; dateSource.dataset.nativeSelect = "";
-    const analyzeDatesValue = el("span"), analyzeDatesTrigger = el("button", "report-toolbar-choice");
-    analyzeDatesTrigger.id = "dateFilter-control"; analyzeDatesTrigger.type = "button";
+    const analyzeDatesTrigger = el("button");
+    analyzeDatesTrigger.id = "dateFilter-control";
     analyzeDatesTrigger.dataset.selectId = dateSource.id;
-    analyzeDatesTrigger.append(ux.icon("calendar"), analyzeDatesValue, ux.icon("chevron"));
     dateField.querySelector("label").htmlFor = analyzeDatesTrigger.id;
     const analyzeDatesPanel = el("section"); analyzeDatesPanel.id = "analyzeDates";
     dateField.append(analyzeDatesTrigger); dateField.after(analyzeDatesPanel); analyzeDatesPanel.append($("dateFields"));
@@ -11157,7 +11155,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
-        analyzeDatesPicker.close(false); ux.setOwnedText(analyzeDatesValue, ""); ux.removeOwnedAttribute(analyzeDatesTrigger, "aria-label");
+        analyzeDatesPicker.close(false); analyzeDatesPicker.showRange("");
         analyzeCalendar.clear();
         namedDrafts.withdrawAccess(); namedReport = null;
         trendPeriodVisit = null; periodBackToTrends.hidden = true;

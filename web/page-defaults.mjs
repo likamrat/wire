@@ -10,7 +10,7 @@ export const pageDefaultSpecs = {
         choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"]] },
     reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
-    reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Includes today in your display time zone.", initial: "7",
+    reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Ends today.", initial: "7",
         choices: rollingPeriods },
     compareDays: { id: "defaultCompareDays", label: "Default comparison period", help: "The two periods are consecutive and equal in length. The latest ends yesterday.", initial: "7",
         choices: recentDays.map(days => [days, `Last ${days} complete days`]) },

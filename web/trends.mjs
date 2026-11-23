@@ -171,8 +171,8 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         const link = button(families[id].label, () => chooseMeasure(id), "trends-measure");
         link.dataset.measure = id; link.setAttribute("aria-controls", `trendsHeading-${id}`); index.append(link);
     }
-    const rangeText = el("span"), periodButton = el("button", "report-toolbar-choice");
-    periodButton.type = "button"; periodButton.id = "trendsPeriod"; periodButton.append(ux.icon("calendar"), rangeText, ux.icon("chevron"));
+    const periodButton = el("button");
+    periodButton.id = "trendsPeriod";
     periodButton.disabled = true; filtersButton.disabled = true;
     const comparePeriods = button("Compare periods", () => {
         if (!current() || !openDialog("Compare periods")) return;
@@ -982,8 +982,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         if (family) chooser.field.value = family;
         datePicker.sync();
         const dateRange = formatRange();
-        rangeText.textContent = `${period === "latest" ? "Latest activity · " : ""}${time.formatCivilRange(range.from,range.to,data.timeContext)}`;
-        periodButton.setAttribute("aria-label", "Dates: " + rangeText.textContent);
+        datePicker.showRange(`${period === "latest" ? "Latest activity · " : ""}${time.formatCivilRange(range.from,range.to,data.timeContext)}`);
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
@@ -1040,7 +1039,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         for (const node of [landingScope, landingDetail, landingRecover, landingWindow]) scrub(node);
         range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
         activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
-        scrub(rangeText); filtersButton.removeAttribute("title"); periodButton.removeAttribute("aria-label"); periodButton.hidden = true;
+        datePicker.showRange(""); filtersButton.removeAttribute("title"); periodButton.hidden = true;
         ux.paintFilterEntry(filtersButton, 0);
         filtersButton.setAttribute("aria-expanded", "false");
         clearFilters.disabled = true;

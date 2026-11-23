@@ -689,6 +689,8 @@ test("the normal panel reports a proved exact refusal without offering to check 
         await selectActivityOption(page, "recollectOperation", mode);
         await page.locator("#recollectLoadSources").click();
         await expect(page.locator("#recollectOperation")).toHaveValue(mode);
+        await expect(page.locator("#recollectFrom")).toHaveAccessibleName("Day");
+        await expect(page.locator("#recollectTo")).toBeHidden();
         await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
         await page.locator("#recollectFrom").fill(f.day);
         const previewed = page.waitForResponse(r => r.url() === `${origin}/api/recollection/preview`);

@@ -328,9 +328,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const calendarActions = el("div", undefined, "report-popover-actions");
     const cancelCalendar = button("Cancel", () => calendarChoices.close());
     calendarActions.append(cancelCalendar, apply); form.append(calendarActions); setup.append(calendar);
-    const datesButton = el("button", undefined, "report-toolbar-choice"), datesValue = el("span");
-    datesButton.id = "comparisonDates"; datesButton.type = "button";
-    datesButton.append(ux.icon("calendar"), datesValue, ux.icon("chevron"));
+    const datesButton = el("button");
+    datesButton.id = "comparisonDates";
     function activePreset() {
         const { route, options } = getContext();
         return ["7", "14", "30"].find(days => Object.entries(presentation.completeDays(Number(days), options.timeContext))
@@ -1297,8 +1296,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             try { rangeLabel = time.formatCivilRange(selectedRange.from, selectedRange.to, context.options.timeContext); }
             catch (error) { if (!(error instanceof RangeError)) throw error; }
         }
-        datesValue.textContent = rangeLabel;
-        datesButton.setAttribute("aria-label", "Dates: " + rangeLabel);
+        calendarChoices.showRange(rangeLabel);
         calendarChoices.sync();
         if (searchInput.value !== context.search) searchInput.value = context.search;
         const refinedNative = Boolean(context.nativeView?.textSelection || context.nativeView?.groupId);
@@ -1476,7 +1474,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         scope.textContent = ""; scope.hidden = true;
         searchInput.value = ""; searchInput.defaultValue = "";
         calendarChoices.close(false);
-        ux.setOwnedText(datesValue, ""); ux.removeOwnedAttribute(datesButton, "aria-label");
+        calendarChoices.showRange("");
         for (const editor of Object.values(calendars)) editor.clear();
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(outcomeLayer);
         if (control) {

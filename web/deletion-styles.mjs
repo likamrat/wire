@@ -9,8 +9,6 @@ export const deletionStyles = `
 :is(#deleteDialog,.deletion-dialog) legend {font-weight:600;margin-bottom:8px}
 :is(#deleteDialog,.deletion-dialog) .delete-choice {display:flex;gap:12px;align-items:center;min-height:44px;padding:8px 0}
 :is(#deleteDialog,.deletion-dialog) input[type=radio] {appearance:auto;min-height:0;width:20px;height:20px;flex:none;accent-color:var(--toggle-on)}
-#deleteDateFields {display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
-:is(#deleteDialog,.deletion-dialog) input[type=date] {width:100%;min-height:44px}
 :is(#deleteDialog,.deletion-dialog) button {display:inline-flex;align-items:center;justify-content:center;text-align:center;min-height:44px;white-space:normal}
 #deletePreview {margin-top:16px}
 #deleteConfirmation {border-left:4px solid var(--danger);padding:4px 0 4px 16px}
@@ -24,7 +22,6 @@ export const deletionStyles = `
 #deleteDialog #deleteBoundary {color:var(--muted);margin-bottom:24px;max-width:62ch}
 #deleteDialog #deleteScopeForm {padding-top:20px;border-top:1px solid var(--rule)}
 #deleteDialog fieldset {margin:0 0 16px}
-#deleteDialog input[type=date] {border-radius:10px;min-width:0}
 #deleteDialog #deleteConfirmation {border-left:0;padding:20px 0 0;border-top:1px solid var(--danger)}
 #deleteDialog .delete-actions {justify-content:flex-start;padding-top:16px;border-top:1px solid var(--rule);gap:8px}
 #deleteDialog .reading-section {padding:0}

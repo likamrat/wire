@@ -37,6 +37,12 @@ dialog for a distinct task or a decision that must be resolved before continuing
 Reports, Trends, Compare and Analyze Filters use the same Dates control. Show the
 applied range on the closed button. Keep the presets visible when Custom dates
 expands. Inside Analyze Filters, expand in place rather than opening another panel.
+Reuse the same labeled fields and calendar when choosing dates for **Delete
+collected activity** or **Read history again**. Embed the editor in the operation
+itself. Choosing dates does not preview, delete or reread anything. Single-day
+recovery shows **Day** instead of a second, unused field. Settings defaults
+choose a rolling duration; saved report dates describe a frozen report. Neither
+is a date picker.
 
 | Surface | Reading and navigation role |
 | --- | --- |

@@ -226,12 +226,14 @@ export function createEvidenceUX(icons, operations) {
     function datesPicker({ panel, trigger, editor, current, selected, onPreset, onCustom, onClose,
         options = [["7", "Last 7 days"], ["14", "Last 14 days"], ["30", "Last 30 days"], ["custom", "Custom dates"]],
         optionKey, embedded = false }) {
-        const choices = document.createElement("div"), anchor = embedded ? null : anchoredChoices(panel);
+        const choices = document.createElement("div"), valueLabel = document.createElement("span"), anchor = embedded ? null : anchoredChoices(panel);
         choices.className = "wire-date-presets";
         choices.setAttribute("role", "group"); choices.setAttribute("aria-label", "Date ranges");
         panel.classList.add("wire-dates-picker");
         panel.setAttribute("role", embedded ? "group" : "dialog"); panel.setAttribute("aria-label", "Dates");
-        trigger.classList.add("wire-dates-trigger");
+        trigger.type = "button";
+        trigger.classList.add("wire-dates-trigger", "report-toolbar-choice");
+        trigger.replaceChildren(icon("calendar"), valueLabel, icon("chevron"));
         trigger.setAttribute("aria-controls", panel.id); trigger.setAttribute("aria-expanded", "false");
         if (embedded) {
             panel.hidden = true;
@@ -293,7 +295,12 @@ export function createEvidenceUX(icons, operations) {
             if (panel.matches(":popover-open") && editor.hidden && (document.activeElement === trigger || document.activeElement === document.body))
                 focusChoice();
         });
-        return { sync, expand, close };
+        function showRange(label) {
+            if (valueLabel.textContent !== label) setOwnedText(valueLabel, label);
+            if (label) trigger.setAttribute("aria-label", "Dates: " + label);
+            else removeOwnedAttribute(trigger, "aria-label");
+        }
+        return { sync, expand, close, showRange };
     }
     // Embedded documents do not bubble pointer/focus events into the shell.
     // Keep native auto-popover dismissal without inspecting or modifying the frame.

@@ -126,8 +126,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const saveSlot = el("div", "report-save-slot"); saveSlot.id = "reportSaveSlot"; nameRow.append(saveSlot);
     const choices = el("div", "report-toolbar-choices");
     const periodPanel = popover("reportPeriodChoices", "Dates");
-    const dateButton = button("", () => {}, "report-toolbar-choice"), dateLabel = el("span");
-    dateButton.append(ux.icon("calendar"), dateLabel, ux.icon("chevron"));
+    const dateButton = el("button");
     dateButton.id = "reportDeskDates";
     const privacy = popover("reportPrivacyOptions", "Report text");
     const promptOptions = byId("promptOptions"), legend = promptOptions.querySelector("legend");
@@ -324,8 +323,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             : value.unavailable ? "Waiting for activity to load." : !value.options.formats.length ? "Choose at least one file format to preview the report." : scopeIssue || "";
         prepareHint.hidden = !prepareHint.textContent;
         if (prepareHint.hidden) prepare.removeAttribute("aria-describedby"); else prepare.setAttribute("aria-describedby", prepareHint.id);
-        dateLabel.textContent = labelDates(value.dates);
-        dateButton.setAttribute("aria-label", "Dates: " + dateLabel.textContent);
+        datePicker.showRange(labelDates(value.dates));
         dateButton.hidden = value.paired;
         const mode = value.options.promptMode;
         backgroundScope.textContent = value.paired ? "Period comparison" : `${compactFocus.selectedOptions[0].textContent} · ${labelDates(value.dates)}`;
@@ -391,7 +389,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
             closeOptions();
             deskFocus = "all";
             calendarEditor.clear();
-            ux.setOwnedText(dateLabel); ux.removeOwnedAttribute(dateButton, "aria-label");
+            datePicker.showRange("");
             scopeCaption.textContent = scopeName.textContent = "";
             backgroundScope.textContent = "";
             scopeChoice.removeAttribute("aria-label");

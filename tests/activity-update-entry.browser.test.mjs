@@ -35,6 +35,41 @@ async function readableDisabled(page, selector) {
     assert.ok(paint.height >= 44);
 }
 
+test("Settings history dates match the workspace fields without requesting a preview", { timeout: 30000 }, async t => {
+    const f = await recollectionFixture(t), browser = await chromium.launch();
+    f.closeClient(() => browser.close());
+    const page = await browser.newPage({ reducedMotion: "reduce", timezoneId: "UTC" }), operations = [];
+    page.on("request", r => { if (/\/api\/(?:deletion|recollection)\/(?:preview|confirm)$/.test(r.url())) operations.push(r.url()); });
+    await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
+    const measure = async input => input.evaluate(n => {
+        const caption = n.labels[0].querySelector("span");
+        const gap = n.getBoundingClientRect().top - caption.getBoundingClientRect().bottom;
+        return { radius: getComputedStyle(n).borderRadius, height: n.getBoundingClientRect().height, gap };
+    });
+    for (const [width, size] of [[1280, 100], [390, 150]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(value => document.documentElement.style.fontSize = `${value}%`, size);
+        await navigateMain(page, "analyze"); await selectActivityOption(page, "dateFilter", "custom");
+        const reference = await measure(page.locator("#fromFilter"));
+        assert.ok(reference.height >= 44 && reference.gap >= 8);
+        await page.locator("#analyzeDates").getByRole("button", { name: "Cancel", exact: true }).click();
+        await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
+        for (const [op, opener, close] of [["delete", "deleteActivity", "deleteCancel"], ["recollect", "recollectActivity", "recollectClose"]]) {
+            await page.locator("#" + opener).click();
+            const dialog = page.locator(`#${op}Dialog`);
+            for (const bound of ["From", "To"]) {
+                const field = dialog.getByLabel(bound, { exact: true });
+                await expect(field).toBeVisible();
+                assert.deepEqual(await measure(field), reference, `${op} ${bound}, ${width}px`);
+                await field.fill(f.firstDay);
+            }
+            await expect(dialog).not.toContainText(/current display time zone/i);
+            await page.locator("#" + close).click(); await expect(page.locator("#" + opener)).toBeFocused();
+        }
+    }
+    assert.deepEqual(operations, []);
+});
+
 test("Settings recollection uses the authoritative preview and preserves the displayed date scope", { timeout: 30000 }, async t => {
     const f = await recollectionFixture(t);
     const deletion = createDeletionController(f.context);

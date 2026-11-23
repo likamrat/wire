@@ -52,7 +52,7 @@ export const recollectionMarkup = `
       <div id="recollectSources" tabindex="-1" aria-describedby="recollectSourceHelp"></div>
     </fieldset>
     <p id="recollectSourceHelp" class="muted">Choose up to 128 chats and a date range before previewing. Search stays in this panel.</p>
-    <div class="recollect-dates"><label><span id="recollectFromLabel">From</span><input id="recollectFrom" type="date" required></label><label id="recollectToChoice">To<input id="recollectTo" type="date" required></label></div>
+    <div class="recollect-dates"><label><span id="recollectFromLabel">From</span><input id="recollectFrom" type="date" required></label><label id="recollectToChoice"><span>To</span><input id="recollectTo" type="date" required></label></div>
     <label id="recollectPromptsChoice" class="delete-choice"><input id="recollectPrompts" type="checkbox"><span>Also restore original prompts for these requests</span></label>
     <p id="recollectPromptsHelp" class="muted">Off by default. Includes available prompts and associated follow-ups.</p>
     <label id="recollectCorrectionsChoice" class="delete-choice" hidden><input id="recollectCorrections" type="checkbox"><span>Also review source-verified corrections to saved calls</span></label>
@@ -82,9 +82,6 @@ export const recollectionStyles = `
 #recollectDialog .list-pager {flex-wrap:wrap}
 #recollectSources .delete-choice {padding:8px 0;align-items:flex-start}
 #recollectSources .delete-choice input {margin-top:2px}
-#recollectDialog input[type=date] {min-width:0;border-radius:10px}
-#recollectDialog .recollect-dates {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
-#recollectDialog .recollect-dates label[hidden] {display:none}
 #recollectExactMembers {padding-inline-start:20px;overflow-wrap:anywhere}
 #recollectExactMembers li + li {margin-top:8px}
 #recollectDialog input[type=checkbox] {appearance:auto;width:20px;height:20px;flex:none;accent-color:var(--toggle-on)}

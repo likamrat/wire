@@ -73,7 +73,7 @@ async function prepareCurrentReport(page) {
     await chooseLandingReportDates(page, "Custom dates");
     await page.locator("#reportDatefrom").fill("2026-09-29");
     await page.locator("#reportDateto").fill("2026-09-30");
-    await page.getByRole("button", { name: "Use dates", exact: true }).click();
+    await page.locator("#reportCustomDates").getByRole("button", { name: "Apply dates", exact: true }).click();
     const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await prepareLandingReport(page, "all");
     assert.equal((await (await preparing).json()).records.length, 2);

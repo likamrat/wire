@@ -91,8 +91,11 @@ test("Last 14 days persists from Settings and opens Analyze on the matching acti
     await expect(page.locator("#defaultAnalyzeRange-control")).toContainText("Last 14 days");
     await page.locator("nav [data-nav=analyze]").click();
     await expect(page.locator("#dateFilter")).toHaveValue("14");
+    await selectActivityOption(page, "dateFilter", "custom");
     await expect(page.locator("#fromFilter")).toHaveValue("2026-09-17");
     await expect(page.locator("#toFilter")).toHaveValue("2026-09-30");
+    await page.locator("#analyzeDates").getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.locator("#dateFilter-control")).toHaveAccessibleName("Dates: Sep 17–30, 2026");
     await expect(page.locator("#activityListSummary")).toContainText("2 matching tool calls");
     const address = new URL(page.url());
     assert.equal(address.searchParams.get("range"), "14");
