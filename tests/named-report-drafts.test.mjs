@@ -77,12 +77,17 @@ test("one interaction can belong to two drafts; removal is local to one draft af
     const read = async () => namedDraftCatalog(await loadBoardState(context), "test-source");
     const edit = async (input) => editNamedDrafts(context, "test-source", { ...input, expected: (await read()).version }, () => {});
     await edit({ name: "Launch review", scenarioId: "x", included: true });
-    const a = (await read()).drafts[0].id;
+    const { id: a, createdAt } = (await read()).drafts[0];
+    assert.equal(new Date(createdAt).toISOString(), createdAt);
     await edit({ id: a, scenarioId: "y", included: true });
     await edit({ name: "Handoff", scenarioId: "y", included: true });
     await edit({ id: a, scenarioId: "y", included: false });
     assert.deepEqual((await read()).drafts.map(d => [d.name, d.scenarioIds]), [["Launch review", ["x"]], ["Handoff", ["y"]]]);
     const state = await loadBoardState(context);
+    assert.equal((await read()).drafts[0].createdAt, createdAt);
+    // Pre-date records remain readable without manufacturing a creation instant.
+    delete Object.values(state.namedReportDrafts.partitions)[0].drafts[0].createdAt;
+    assert.equal(Object.hasOwn(namedDraftCatalog(state, "test-source").drafts[0], "createdAt"), false);
     assert.equal(state.evidence.length, 2);
     assert.deepEqual(state.exports, []);
     assert.deepEqual(namedDraftCatalog(state, "different-source").drafts, []);

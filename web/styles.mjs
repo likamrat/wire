@@ -614,9 +614,20 @@ ${reportJourneyStyles}
 .draft-choice>.wire-icon{width:16px;height:16px;flex:none}.draft-choice>small{margin-inline-start:auto;color:var(--muted)}
 .report-draft-picker form:not([hidden]),.report-draft-picker form label{display:grid;gap:4px}
 .report-draft-picker form>button{justify-self:start}
+.report-draft-picker form label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+:root .report-draft-picker form input{width:min(17ch,100%);padding-inline:8px;min-height:2rem;height:2rem}
 .report-draft-confirmation{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 24px);z-index:100;display:flex;align-items:center;gap:.55em;padding:8px 12px;border:1px solid var(--accent-fill);border-radius:var(--radius-control);background:var(--accent-fill);color:var(--on-accent);box-shadow:0 2px 8px color-mix(in srgb,var(--ink) 13%,transparent);font:var(--weight-medium) var(--type-small)/1.45 var(--font);pointer-events:none;overflow-wrap:anywhere}
 .report-draft-confirmation[data-membership=removed]{background:var(--report-remove-face);color:var(--ink);border-color:var(--control)}
 .report-draft-confirmation>.wire-icon{width:1.2em;height:1.2em;flex:none}
+.report-draft-confirmation[data-membership=added]{pointer-events:auto;gap:2px;padding:2px 4px;max-width:min(34rem,calc(100vw - 24px));font-size:var(--type-body)}
+.report-draft-confirmation button{display:inline-flex;align-items:center;gap:8px;min-height:44px;min-width:0;max-width:100%;color:inherit;background:none;border:0;box-shadow:none;font:inherit;text-align:start}
+.report-draft-confirmation button::before{display:none}
+.report-draft-confirmation .draft-confirmation-open{padding:4px 8px}
+.report-draft-confirmation .draft-confirmation-open>.wire-icon,.report-draft-confirmation .draft-confirmation-dismiss>.wire-icon{width:1.2em;height:1.2em;flex:none}
+.report-draft-confirmation .draft-confirmation-label{white-space:nowrap;text-decoration:underline;text-underline-offset:3px}
+.report-draft-confirmation .draft-confirmation-dismiss{flex:none;min-width:36px;padding:4px;justify-content:center}
+.report-draft-confirmation button:is(:hover,:focus-visible){color:inherit;background:color-mix(in srgb,currentColor 12%,transparent)}
+.report-draft-confirmation button:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 @media(forced-colors:active){#activityList .card-reading-actions>.report-draft-trigger::before{background:ButtonFace;border-color:ButtonText}.report-draft-confirmation[data-membership]{background:Canvas;color:CanvasText;border-color:CanvasText}}
 @media(max-width:430px){.wire-section-nav.reader-section-jumps:has(.report-draft-trigger){column-gap:2px}}
 ${settingsStyles}

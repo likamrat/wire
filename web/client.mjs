@@ -277,6 +277,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let namedReport = null;
     const namedDrafts = assessmentFactories.createReportDraftPicker({ api, ux, searchFields, normalize: assessmentFactories.normalizeSearchText,
         announce, erase: erasePreparedNodes,
+        openDraft: openAddedDraft,
         libraryLink: () => link("Saved library", "reports", { task: "library", request: undefined, inspect: undefined, bundle: undefined }, "text-link"),
         blocked: () => workspaceState.loading || workspaceState.stale || clearingAccess ? "Wait for current activity." : "",
         changed: () => { if (workspaceState.route.view === "reports") reportExperience?.sync(); },
@@ -3008,6 +3009,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function navigate(next, replace = false, options = {}) {
         namedDrafts.close();
+        namedDrafts.dismissNotice();
         if (appUpdate?.locked()) return false;
         if (clearingAccess || !api.publicationToken()) return false;
         next = canonicalRoute(next);
@@ -3767,6 +3769,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else collectionUnavailable("Collection status unavailable from this connection. Reconnect to the maintained runtime.", "", publication);
             render();
             if (!currentRead()) return false;
+            if (incomingNavigation?.namedDraft && workspaceState.route.view === "reports") revealAddedDraft(incomingNavigation.namedDraft);
             if (incomingAnalysisQuery) liveSearchUI.prepareAnalysis(incomingAnalysisQuery);
             incomingNavigation = null;
             if (nativeCollectIntent) {
@@ -10889,23 +10892,60 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         icon: name => ux.icon(name),
         utility: (...args) => ux.utility(...args),
     });
+    function selectNamedReport(id) {
+        if (exportWriting || reportPreparing || reportJourney.snapshot().saveUnconfirmed) return;
+        const item = namedDrafts.read()?.drafts.find(d => d.id === id);
+        if (id && !item) { announce("This draft is no longer available.", "stale"); return; }
+        clearReportSelection();
+        applyReportDefaults();
+        if (item) {
+            namedReport = item; reportScope = "selected"; reportBaseExplicit = true;
+            reportDates = { range: "capture" };
+            for (const id of item.scenarioIds) selected.add(id);
+            draft.change({ title: item.name });
+            draft.synchronizeTime(viewerTime, reportDates);
+        }
+        updateSelection(); reportExperience.sync();
+    }
+    function revealAddedDraft(ref) {
+        const catalog = namedDrafts.read();
+        if (catalog?.source !== ref.source || !catalog?.drafts.some(d => d.id === ref.id)) {
+            announce("This draft is no longer available for the current source.", "stale"); return;
+        }
+        selectNamedReport(ref.id);
+        ($("namedReportDraft-control") || $("namedReportDraft"))?.focus({ preventScroll: true });
+    }
+    async function openAddedDraft(ref, publication) {
+        if (!api.isCurrent(publication)) return;
+        if (workspaceState.loading || workspaceState.stale || !workspaceState.evidence) { announce("Wait for current activity before opening the draft.", "stale"); return; }
+        // A separate Reports tab preserves the other outline's choices, preview and any uncertain Save.
+        if (hasReportDraftChoices() || activePreview || reportPreparing || pendingSaveOwner || exportWriting || reportJourney.snapshot().saveUnconfirmed) {
+            const target = "/reports?privateView=required", recipient = window.open(target, "_blank");
+            if (!recipient) { announce("Allow a new tab to open this draft without replacing your unfinished report.", "stale"); return; }
+            const snapshot = workspaceState.evidence;
+            const value = { namedDraft: ref, fields: {}, search: "", analysisQuery: null, revision: snapshot.revision,
+                nativeRevision: snapshot.nativeRead?.revision, sourceVersion: snapshot.collection?.configVersion,
+                deletionVersion: snapshot.deletionVersion, timeContext: structuredClone(workspaceState.scope.timeContext) };
+            privateNavigations.set(recipient, { publication, recipient, target, value, expiresAt: performance.now() + privateNavigationLifetimeMs,
+                timer: setTimeout(() => forgetPrivateNavigation(recipient), privateNavigationLifetimeMs) });
+            return;
+        }
+        const intent = workspaceState.captureIntent(publication);
+        let fresh;
+        try { fresh = await api("/api/report-drafts/list", {}); }
+        catch (error) { if (workspaceState.intentCurrent(intent)) announce(error.message, "stale"); return; }
+        if (!workspaceState.intentCurrent(intent)) return;
+        if (fresh.source !== ref.source || !fresh.drafts.some(d => d.id === ref.id)) {
+            announce("This draft is no longer available for the current source.", "stale"); return;
+        }
+        namedDrafts.accept(fresh);
+        const moved = navigate({ view: "reports" }), navigation = workspaceState.navigationGeneration;
+        if (await moved && api.isCurrent(publication) && navigation === workspaceState.navigationGeneration && workspaceState.route.view === "reports") revealAddedDraft(ref);
+    }
     reportExperience = assessmentFactories.createReportExperience({
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
-        selectNamed: id => {
-            if (exportWriting || reportPreparing || reportJourney.snapshot().saveUnconfirmed) return;
-            const item = namedDrafts.read()?.drafts.find(d => d.id === id);
-            clearReportSelection();
-            applyReportDefaults();
-            if (item) {
-                namedReport = item; reportScope = "selected"; reportBaseExplicit = true;
-                reportDates = { range: "capture" };
-                for (const id of item.scenarioIds) selected.add(id);
-                draft.change({ title: item.name });
-                draft.synchronizeTime(viewerTime, reportDates);
-            }
-            updateSelection(); reportExperience.sync();
-        },
+        selectNamed: selectNamedReport,
         read: () => ({
             namedDrafts: namedDrafts.read()?.drafts, namedReport,
             dates: effectiveReportDates(), nativeScope: usesBoundedReportView(reportBaseExplicit ? reportScope : "all"),

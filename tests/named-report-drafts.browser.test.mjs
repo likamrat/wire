@@ -120,7 +120,7 @@ test("report actions and call counts keep their columns while palettes distingui
                 await picker.getByRole("button", { name: "New draft", exact: true }).click();
                 await picker.getByLabel("Draft name").fill("Launch readiness"); await picker.getByRole("button", { name: "Create draft and add" }).click();
             } else await picker.getByRole("button", { name: "Add to Launch readiness" }).click();
-            await expect(notice).toHaveText("Added to Launch readiness"); await verify(notice);
+            await expect(notice.getByRole("status")).toHaveText("Added to Launch readiness"); await verify(notice);
             await expect(action.locator("svg")).toHaveAttribute("data-lucide-icon","clipboard-check");
             assert.deepEqual(await geometry(), before);
             await action.click(); await picker.getByRole("button", { name: "Remove from Launch readiness" }).click();
@@ -147,6 +147,8 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     const page = await profile.newPage();
     page.setDefaultTimeout(6000);
     const errors = []; page.on("pageerror", error => errors.push(error.message));
+    const preparations = [];
+    profile.on("request", r => { if (r.url().endsWith("/api/preview") || r.url().endsWith("/api/export")) preparations.push(r.url()); });
     const proof = process.env.WIRE_FRONTEND_PROOFS;
     async function capture(name) {
         if (!proof) return;
@@ -184,6 +186,8 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await expect(panel.getByRole("searchbox")).toBeVisible();
     const fieldHeights = await panel.locator("input").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
     assert.ok(fieldHeights.every(h => h > 0 && h <= 40), `Compact search and name fields: ${fieldHeights}`);
+    const searchBounds = await panel.getByRole("searchbox").boundingBox(), nameBounds = await panel.getByLabel("Draft name").boundingBox();
+    assert.ok(nameBounds.width <= searchBounds.width * .75, "The naming field is narrower than the main search.");
     await capture("create");
     await panel.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(panel.getByRole("button", { name: "New draft", exact: true })).toBeFocused();
@@ -191,6 +195,17 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await panel.getByLabel("Draft name").fill("Release review");
     await panel.getByRole("button", { name: "Create draft and add" }).click();
     await expect(action("x")).toContainText("Release review");
+    const openDraft = text => page.getByRole("button", { name: `Added to ${text}. Open draft`, exact: true });
+    await expect(panel).toHaveCount(0);
+    await expect(action("x")).toHaveText("In draft: Release review"); await expect(action("y")).toHaveText("Add to report");
+    await capture("card-confirmed");
+    await page.keyboard.press("Tab"); await expect(openDraft("Release review")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/reports(?:\?|$)/);
+    await expect(page.locator("#namedReportDraft option:checked")).toHaveText("Release review");
+    assert.deepEqual(preparations, []);
+    await capture("opened-from-card");
+    await navigateMain(page, "analyze");
     // This panel's accepted Analyze snapshot predates creation in the other panel.
     await staleTab.locator("#activityList .report-draft-trigger").first().click();
     const stalePicker = staleTab.getByRole("dialog", { name: "Report drafts", exact: true });
@@ -246,17 +261,27 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
     await readerAction.click(); await panel.getByRole("button", { name: "New draft" }).click();
     const handoff = "Handoff: regional checklist, support coverage and rollout readiness across all workspaces";
     await panel.getByLabel("Draft name").fill(handoff); await panel.getByRole("button", { name: "Create draft and add" }).click();
-    await expect(readerAction).toContainText("(+1)");
+    await expect(readerAction).toHaveText(`In drafts: Release review, ${handoff}`);
+    await expect(action("y")).toHaveText(`In drafts: Release review, ${handoff}`);
+    const newTab = profile.waitForEvent("page");
+    await openDraft(handoff).click();
+    const openedDraft = await newTab;
+    await expect(openedDraft.locator("#namedReportDraft option:checked")).toHaveText(handoff);
+    if (proof) await openedDraft.screenshot({ path: path.join(proof, "draft-opened-from-reader.png") });
+    await expect(reader).toBeVisible(); await expect(page).toHaveURL(/\/request/);
+    assert.deepEqual(preparations, []);
+    await openedDraft.close(); await page.bringToFront();
+    await expect(action("y").locator("svg")).toHaveAttribute("data-lucide-icon", "clipboard-check");
     await readerAction.click(); await panel.getByRole("searchbox").fill("lease");
     await expect(panel.getByRole("button", { name: `Remove from ${handoff}` })).toHaveCount(0);
     await capture("filter"); await panel.getByRole("button", { name: "Remove from Release review" }).click();
     await expect(readerAction).toContainText("Handoff"); await expect(readerAction).not.toContainText("Release review");
     assert.deepEqual(await anchor(), before); await capture("added");
     await page.locator("#closeContextSidebar").click(); await page.reload();
-    await expect(action("x")).toContainText("Release review"); await expect(action("y")).toContainText("Handoff");
+    await expect(action("x")).toHaveText("In draft: Release review"); await expect(action("y")).toHaveText(`In draft: ${handoff}`);
     await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => document.documentElement.style.fontSize = "125%");
     await card("y").locator(".request-card-open").click(); await readerAction.hover();
-    await expect(page.getByRole("tooltip")).toHaveText(`In report: ${handoff}`);
+    await expect(page.getByRole("tooltip")).toHaveText(`In draft: ${handoff}`);
     const box = await readerAction.boundingBox(), strip = await reader.locator(".reader-section-jumps").boundingBox();
     assert.ok(box.height >= 44 && box.x + box.width <= strip.x + strip.width + 1, "The long name fits the strip at enlarged text");
     await readerAction.click();
@@ -281,7 +306,7 @@ test("Analyze and its reader edit distinct named drafts through Prepare, Save an
             const other = await page.context().newPage(); await other.goto(server.url + "#analyze");
             const otherButton = other.locator('#activityList [data-view-key="request:y"] .report-draft-trigger');
             await otherButton.click(); await other.getByRole("button", { name: "Add to Release review", exact: true }).click();
-            await expect(otherButton).toContainText("(+1)"); await other.close();
+            await expect(otherButton).toContainText(`In drafts: Release review, ${handoff}`); await other.close();
         }
         await page.getByRole("button", { name: "Save report", exact: true }).click();
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");

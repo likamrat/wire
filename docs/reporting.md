@@ -73,6 +73,9 @@ exact calls and returned results. **Close** leaves your selection intact; it doe
 On Analyze, choose **Add to report** on the card or after **Source** in
 the reader. Pick an existing draft or use **Search drafts** to filter by name.
 To create one, choose **New draft**, enter its name, then **Create draft and add**.
+The card shows the draft name after the add. Choose **Open draft** in the
+confirmation to open that draft in Reports without preparing or saving it.
+If another report has unfinished choices, it stays intact in its original tab.
 For a previously saved report, choose **Saved library** instead. To remove the interaction from just one draft, reopen
 the picker and choose that draft's **Remove** row. Other drafts and the
 recorded interaction are unchanged.

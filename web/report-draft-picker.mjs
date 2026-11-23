@@ -1,6 +1,6 @@
 // Shared by the renderer bundle and the standalone shell.
-export function createReportDraftPicker({ api, ux, searchFields, normalize, blocked, changed, announce, erase, libraryLink }) {
-    let catalog = null, owner = null, lastId = null, writing = false, timer = null, notice = null;
+export function createReportDraftPicker({ api, ux, searchFields, normalize, blocked, changed, announce, erase, libraryLink, openDraft }) {
+    let catalog = null, owner = null, lastId = null, writing = false, timer = null, notice = null, noticeEvents;
     const keys = new WeakMap();
     const el = (tag, cls, text) => {
         const n = document.createElement(tag);
@@ -8,14 +8,39 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         if (text !== undefined) n.textContent = text;
         return n;
     };
-    function confirm(trigger, text, included) {
-        clearTimeout(timer); if (notice) { erase(notice); notice.remove(); }
-        notice = el("div", "report-draft-confirmation", text);
+    function dismissNotice() {
+        clearTimeout(timer); noticeEvents?.abort(); noticeEvents = null;
+        if (notice) { erase(notice); notice.remove(); notice = null; }
+    }
+    function confirm(trigger, text, included, id, source, publication) {
+        dismissNotice();
+        notice = el("div", "report-draft-confirmation");
         notice.dataset.membership = included ? "added" : "removed";
-        notice.prepend(ux.icon(included ? "report-member" : "report-remove"));
-        notice.setAttribute("role", "status");
+        const message = el("span", "draft-confirmation-text", text); message.setAttribute("role", "status");
+        if (included) {
+            const open = el("button", "draft-confirmation-open"), label = el("span", "draft-confirmation-label", "Open draft");
+            open.type = "button"; open.append(ux.icon("report-member"), message, label);
+            open.setAttribute("aria-label", `${text}. Open draft`);
+            const dismiss = el("button", "icon-only draft-confirmation-dismiss"); dismiss.type = "button";
+            dismiss.setAttribute("aria-label", "Dismiss confirmation"); dismiss.append(ux.icon("close"));
+            const active = notice;
+            open.onclick = () => {
+                if (notice !== active || !api.isCurrent(publication)) return;
+                dismissNotice(); openDraft({ id, source }, publication);
+            };
+            dismiss.onclick = () => { dismissNotice(); if (trigger.isConnected) trigger.focus({ preventScroll: true }); };
+            notice.append(open, dismiss);
+            noticeEvents = new AbortController();
+            document.addEventListener("keydown", event => {
+                if (event.key === "Tab" && !event.shiftKey && event.target === trigger && !owner) {
+                    event.preventDefault(); open.focus({ preventScroll: true });
+                } else if (event.key === "Escape" && active.contains(event.target)) {
+                    event.preventDefault(); event.stopImmediatePropagation(); dismiss.click();
+                }
+            }, { capture: true, signal: noticeEvents.signal });
+        } else notice.append(ux.icon("report-remove"), message);
         (trigger.closest("dialog:modal") || document.body).append(notice);
-        timer = setTimeout(() => { if (notice) { erase(notice); notice.remove(); notice = null; } }, 3500);
+        if (!included) timer = setTimeout(dismissNotice, 3500);
     }
     function close(restore = false) {
         if (!owner) return;
@@ -29,12 +54,13 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
     function paint(b) {
         const { id, reader } = keys.get(b);
         const member = catalog?.drafts.filter(d => d.scenarioIds.includes(id)) ?? [];
-        const label = member.length ? `In report: ${member[0].name}${member.length > 1 ? ` (+${member.length - 1})` : ""}` : "Add to report";
+        const names = member.map(d => d.name).join(", ");
+        const label = member.length ? `In ${member.length === 1 ? "draft" : "drafts"}: ${names}` : "Add to report";
         b.classList.toggle("in-draft", Boolean(member.length));
         const role = member.length ? "report-member" : "report-add";
         if (b.firstElementChild.dataset.iconRole !== role) b.firstElementChild.replaceWith(ux.icon(role));
         if (b.lastElementChild.textContent !== label) b.lastElementChild.textContent = label;
-        const name = member.length ? `Report drafts: ${member.map(d => d.name).join(", ")}. Add or remove interaction` : label;
+        const name = member.length ? `${label}. Add or remove interaction` : label;
         b.setAttribute("aria-label", name);
         if (reader) {
             const value = b.lastElementChild;
@@ -42,6 +68,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         } else b.title = name;
     }
     function accept(value) {
+        if (catalog && catalog.source !== value?.source) dismissNotice();
         if (value && catalog?.source === value.source
             && (value.boardRevision < catalog.boardRevision || value.revision < catalog.revision)) return;
         if (value?.version === catalog?.version) return;
@@ -63,7 +90,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         return b;
     }
     function show(trigger, id) {
-        close();
+        close(); dismissNotice();
         const publication = api.publicationToken(), source = catalog.source, events = new AbortController(), opt = { signal: events.signal };
         let offered = null, readFailed = false;
         const panel = el("section", "report-draft-picker"), heading = el("h2", "", "Report drafts");
@@ -95,7 +122,15 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
                 const result = await api("/api/report-drafts/edit", { expected: offered.version, scenarioId: id, ...command });
                 if (!api.isCurrent(publication)) return;
                 if (current()) close(true);
-                lastId = result.draftId; accept(result.catalog); changed(); confirm(trigger, text, command.included);
+                if (catalog?.source !== source || result.catalog?.source !== source) {
+                    announce("The source changed. Reopen the picker to check this draft.", "stale"); return;
+                }
+                lastId = result.draftId; accept(result.catalog); changed();
+                const saved = catalog.drafts.find(d => d.id === result.draftId);
+                if (!saved || saved.scenarioIds.includes(id) !== command.included) {
+                    announce("Draft membership changed. Reopen the picker to check this interaction.", "stale"); return;
+                }
+                if (trigger.isConnected) confirm(trigger, text, command.included, saved.id, source, publication);
             } catch (error) {
                 if (!api.isCurrent(publication)) return;
                 close(true);
@@ -181,8 +216,7 @@ export function createReportDraftPicker({ api, ux, searchFields, normalize, bloc
         window.addEventListener("resize", place, opt);
         document.addEventListener("scroll", place, { ...opt, capture: true });
     }
-    return { make, accept, close, read: () => catalog, withdrawAccess() {
-        close(); clearTimeout(timer); if (notice) { erase(notice); notice.remove(); }
-        notice = null; catalog = null; lastId = null;
+    return { make, accept, close, dismissNotice, read: () => catalog, withdrawAccess() {
+        close(); dismissNotice(); catalog = null; lastId = null;
     } };
 }
