@@ -8,6 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContents, chooseReportScope, chooseLandingReportDates, prepareLandingReport } from "./report-journey-helpers.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 test("anonymous local records are qualified in deletion preview, not presented as verified distinct tool calls", { timeout: 15000 }, async t => {
     const record = fixture("anonymous-preview");
@@ -281,15 +282,27 @@ test("activity deletion retires an in-flight prepared response before it can rep
 
 test("lost mutation response and stale preview use read-only recovery, never automatic confirmation replay", { timeout: 30000 }, async t => {
     const { page, context } = await setup(t);
+    const operations = [];
+    page.on("request", request => {
+        const endpoint = new URL(request.url()).pathname;
+        if (["/api/deletion/confirm", "/api/deletion/status"].includes(endpoint)) operations.push([endpoint, request.postDataJSON().operationId]);
+    });
+    const offered = async () => {
+        const [response] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/deletion/preview")), previewAll(page)]);
+        assert.ok(response.ok());
+        const { operationId } = await response.json();
+        assert.ok(operationId);
+        return operationId;
+    };
     await openSettings(page);
-    await previewAll(page);
+    const stale = await offered();
     await replaceEvidence(context, (records, importCoverage) => ({ records: [...records, fixture("concurrent")], importCoverage }));
     await page.locator("#deleteConfirm").click();
     await page.locator("#deleteCheck").waitFor({ state: "visible" });
     assert.equal((await loadBoardState(context)).evidence.length, 3);
     await page.locator("#deleteCheck").click();
     await page.waitForFunction(() => document.querySelector("#deleteStatus").textContent.includes("No committed deletion"));
-    await previewAll(page);
+    const committed = await offered();
     let commits = 0;
     await page.route("**/api/deletion/confirm", async route => {
         commits++;
@@ -302,6 +315,11 @@ test("lost mutation response and stale preview use read-only recovery, never aut
     await page.locator("#deleteCheck").click();
     await page.waitForFunction(() => document.querySelector("#deleteTitle").textContent === "Collected activity deleted");
     assert.equal(commits, 1);
+    assert.notEqual(committed, stale);
+    assert.deepEqual(operations, [
+        ["/api/deletion/confirm", stale], ["/api/deletion/status", stale],
+        ["/api/deletion/confirm", committed], ["/api/deletion/status", committed],
+    ]);
     assert.deepEqual((await loadBoardState(context)).evidence, []);
 });
 
@@ -345,13 +363,8 @@ test("confirmation is readable, keyboard-contained and non-color-only at respons
             await page.locator("#deleteConfirm").focus();
             await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.querySelector("#deleteDialog").contains(document.activeElement)), true);
-            const colors = await page.locator("#deleteConfirm").evaluate(node => {
-                const css = getComputedStyle(node);
-                return { foreground: css.color, background: css.backgroundColor };
-            });
-            const luminance = color => color.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(x => x / 255).map(x => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4).reduce((sum, x, i) => sum + x * [.2126, .7152, .0722][i], 0);
-            const fg = luminance(colors.foreground), bg = luminance(colors.background);
-            assert.ok((Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) >= 4.5);
+            const { ink, face } = await page.locator("#deleteConfirm").evaluate(measureControlSurface);
+            assert.ok(contrast(ink, face) >= 4.5, `${theme}/${width}/${scale}: ${ink} on ${face}`);
             if (proof) {
                 await page.locator("#deleteDialog").evaluate(node => { node.scrollTop = 0; });
                 await page.screenshot({ path: path.join(proof, `deletion-${theme}-${width}-${scale * 100}.png`) });
