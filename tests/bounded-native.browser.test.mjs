@@ -519,26 +519,58 @@ test("opening and cancelling a native filter reads only its dimension and exact 
         await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
         const accepted = await narrowed;
         assert.equal(accepted.status(), 200);
-        assert.deepEqual((await accepted.json()).nativeRead.page.items.map(row => row.sourceId), ["microsoft-365-cowork"]);
+        const { nativeRead } = await accepted.json();
+        assert.deepEqual(nativeRead.page.items.map(row => row.sourceId), ["microsoft-365-cowork"]);
+        const conversation = nativeRead.page.items[0];
         assert.ok(calls.filter(call => call.method === "inventory").slice(beforeSource).every(call => call.input.dimension === "sources"),
             "Opening Source must not request other filter dimensions.");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);
         await expect(page.locator("#activityList .activity-card")).toHaveAttribute("data-source-id", "microsoft-365-cowork");
         await closeAnalyzeFilters(page);
+        const detailResponse = predicate => page.waitForResponse(response => response.url().endsWith("/api/retained/microsoft/detail")
+            && predicate(response.request().postDataJSON()));
+        const firstPage = detailResponse(input => input.section === "calls" && input.conversationId === conversation.id);
         await page.locator("#activityList .request-card-open").click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#requestContent .reader-call")).toHaveCount(10);
+        const callResponse = await firstPage;
+        assert.equal(callResponse.status(), 200);
+        const cardDetail = await callResponse.json();
+        assert.equal(cardDetail.revision, nativeRead.revision);
+        assert.equal(cardDetail.sourceRevision, nativeRead.sourceRevision);
+        assert.equal(cardDetail.sourceId, conversation.sourceId);
+        assert.equal(cardDetail.conversationId, conversation.id);
+        const callIds = cardDetail.page.items.map(item => item.callSummaries[0].id);
+        assert.equal(callIds.length, 10);
+        await expect.poll(() => page.locator("#requestContent .reader-call").evaluateAll(rows => rows.map(row => row.dataset.nativeCallId)))
+            .toEqual(callIds);
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
+        const searched = page.waitForResponse(response => response.url().endsWith("/api/retained/microsoft/search")
+            && response.request().postDataJSON().query === "Read");
         await page.locator("#wireSearch").fill("Read");
-        await expect(page.locator("#wireNativeSearch .wire-search-hit").first()).toBeVisible();
+        const searchResponse = await searched;
+        assert.equal(searchResponse.status(), 200);
+        const result = await searchResponse.json(), hit = result.page.items[0];
+        assert.equal(hit.source.sourceId, conversation.sourceId);
+        assert.equal(hit.target.conversationId, conversation.id);
+        assert.ok(Number.isSafeInteger(hit.target.ordinal));
+        const exact = detailResponse(input => input.section === "observations" && input.at === hit.target.ordinal
+            && input.conversationId === hit.target.conversationId && input.sourceRevision === result.sourceRevision);
         const beforeOpen = calls.filter(call => call.method === "detail" && call.input.at !== undefined).length;
-        await page.locator("#wireNativeSearch .wire-search-hit").first().click();
+        await page.locator(`#wireNativeSearch [data-native-search-id="${hit.id}"]`).click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#requestContent [data-native-ordinal]")).not.toHaveCount(0);
+        const exactResponse = await exact;
+        assert.equal(exactResponse.status(), 200);
+        const detail = await exactResponse.json();
+        assert.equal(detail.revision, result.revision);
+        assert.equal(detail.sourceRevision, result.sourceRevision);
+        assert.equal(detail.sourceId, hit.source.sourceId);
+        assert.equal(detail.conversationId, hit.target.conversationId);
+        assert.equal(detail.focusOrdinal, hit.target.ordinal);
+        await expect(page.locator(`#requestContent .reader-source-record[data-native-ordinal="${hit.target.ordinal}"]`)).toBeFocused();
         assert.equal(calls.filter(call => call.method === "detail" && call.input.at !== undefined).length, beforeOpen + 1);
-        assert.ok(Number.isSafeInteger(calls.filter(call => call.method === "detail" && call.input.at !== undefined).at(-1).input.at));
         await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#wireSearch")).toHaveValue("Read");
         await page.locator("#wireSearch").fill("");
         await selectActivityOption(page, "sourceFilter", "github-copilot");
         await expect(page.locator("#boundedNativeSummary,#boundedNativeCards")).toHaveCount(0);

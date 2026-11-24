@@ -39,11 +39,12 @@ async function setup(t, options) {
     });
     return { ...app, page, errors, requests, api };
 }
+const waitForSearchStatus = (page, expected) => expect(page.locator("#wireSearchStatus")).toHaveText(expected, { timeout: 30000 });
 async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved replies are unavailable for Search\.))$/, { timeout: 30000 });
+    await waitForSearchStatus(page, /^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved replies are unavailable for Search\.))$/);
     return page.locator("#wireSearchResults button");
 }
 async function checkFrozenJson(page, name, expectedFile, bundleId) {
@@ -79,8 +80,16 @@ test("normal literal fragments and exact anchors open all types and restore Back
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator(".request-original .full-text-content")).toHaveText("The physician treated an injured patient in the hospital.");
+    const returnQuery = page.waitForResponse(response => {
+        if (!response.url().endsWith("/api/search/query")) return false;
+        const input = response.request().postDataJSON();
+        return input.purpose === "navigation" && input.query === query && input.types.length === 1 && input.types[0] === "interaction";
+    });
     await page.goBack();
     await expect(page.locator("#wireSearch")).toHaveValue(query);
+    assert.equal((await returnQuery).status(), 200);
+    await expect(page.locator("#contextSidebar")).toBeHidden();
+    await waitForSearchStatus(page, "1 match");
     await expect(page.locator(`#wireSearchResults [data-search-id="${openingId}"]`)).toBeFocused();
     const cases = [["context", "subsequent medical", "/request\\?"], ["reply", "lab results", "/request\\?"],
         ["action", "403", "layer=http"], ["tool", "workiq-fet", "privateView=required"],
