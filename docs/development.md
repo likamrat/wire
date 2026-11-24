@@ -63,9 +63,8 @@ not make the last child receipt a clean close. Ordinary startup still refuses
 a child marked `running`. Do not remove its journals or collector leases, move
 the data, or use a development launch to get around that refusal.
 
-If the original owner has an independently recorded custody record and has
-accounted for outstanding work in the original views, the recovery-capable
-launcher supports one explicit restart:
+If the installation owner can identify the interrupted runtime and its store,
+the recovery-capable launcher supports an explicit restart on the same address:
 
 ```text
 npm start -- --recover-launch "<absolute path to reviewed custody JSON>" --port <original port>
@@ -74,23 +73,25 @@ npm start -- --recover-launch "<absolute path to reviewed custody JSON>" --port 
 Use the original clean standalone `main` clone, OS user and data directory.
 The private JSON record has `version: 1`, the canonical `installation` path,
 `interruptedBuild` and approved `targetBuild` (full commits), the original
-launcher `store` fingerprint, numeric `port`, the original collector `host`
-object, `launcherPid`, `writerPid`, the managed fork's `childId`, and the
-two distinct `collectorToken` and `sessionToken` values from that writer's
-root and `microsoft-session` leases. `operationsReviewed: true` attests to
-the original owners' review; it is not a way to declare an unknown Save,
-Delete, Refresh, update or browser edit settled. Do not assemble missing
-historical bindings by copying values from abandoned files after the fact.
-Keep this record private. A v1 installation did not save it for you.
+launcher `store` fingerprint, numeric `port`, `launcherPid` and `writerPid`.
+Use original custody evidence for those values and the separately qualified
+commit for `targetBuild`. Keep the record private. No historical child nonce,
+lease token or assertion that all browser views were clear is required.
 
 Recovery requires an unchanged base activation with no staged slot or update
 in progress. If changing code, separately authorize a compatible fast-forward
 in that clone and build it before invoking recovery. The target must contain
 the recovery launcher **and** child; older builds cannot consume this handoff.
-WIRE reserves the original port, verifies both exact same-host leases and
-checks operation journals before admitting a writer. A successful admission
-records the previous child as **interrupted**. It does not recover an unsaved
-edit, resume an Apply, or retry an operation. Reopen original results normally.
+WIRE locks both installation journals, fences the current child nonce,
+reserves the original port and pins both current lease tokens under their
+recovery locks. Both must belong to the recorded writer PID on this host.
+It checks for unfinished store operations and unaccounted-for exports before
+admitting the new writer. Empty folders left by a completed report deletion
+are preserved only when both its receipt and deletion marker agree.
+A successful admission records the fenced child as **interrupted**, not as
+cleanly closed. It does not recover an unsaved edit, resume an Apply, or retry
+an operation. Old panel capabilities are not renewed. Keep original views
+and check their original results; a restart cannot certify browser-local work.
 After the new runtime actually closes cleanly, a separately qualified older
 reader can use its genuine close receipt; never roll back data. Without the
 required evidence, or if an operation, lease or transition is unresolved,

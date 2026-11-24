@@ -2,16 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, fork } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { release, tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { storeIdentity } from "../lib/update-launch-state.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
+import { createDeletionController } from "../lib/deletion.mjs";
+import { createSavedArtifactDescriptor } from "../lib/report-artifacts.mjs";
+import { initialSessionState, sessionStorage } from "../lib/microsoft-session-state.mjs";
+import { BOARD_ID } from "../lib/evidence.mjs";
 import { fixture } from "./helpers.mjs";
 
 const project = fileURLToPath(new URL("../", import.meta.url));
@@ -48,20 +52,28 @@ test("recover a killed v1 writer in its original standalone installation", { ski
     const context = { dataDir: store };
     await replaceEvidence(context, () => ({ records: [fixture("crash-test")], importCoverage: null }));
     const reports = createExportController(context);
-    const preview = await reports.preview("fixture", undefined, { formats: ["html"], promptMode: "masked" },
-        { kind: "all", revision: (await loadBoardState(context)).revision });
-    await reports.review("fixture", preview.previewId, true);
-    await reports.confirm("fixture", preview.previewId, true);
+    async function saveReport() {
+        const preview = await reports.preview("fixture", undefined, { formats: ["html"], promptMode: "masked" },
+            { kind: "all", revision: (await loadBoardState(context)).revision });
+        await reports.review("fixture", preview.previewId, true);
+        return (await reports.confirm("fixture", preview.previewId, true)).bundle.bundleId;
+    }
+    const emptyRoot = await saveReport(), emptyFiles = await saveReport();
+    const deletion = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context) });
+    const remove = await deletion.previewArtifact("fixture", { scope: "all-reports" });
+    await deletion.confirmArtifact("fixture", { operationId: remove.operationId, confirmed: true });
+    await rmdir(path.join(store, "exports", emptyRoot, "files"));
+    await saveReport();
     const board = await loadBoardState(context), evidence = path.join(store, "private-evidence", board.evidenceFile);
-    const retained = await Promise.all([evidence, ...Object.values(board.exports[0].files)].map(async file => [file, await readFile(file)]));
-    // Independent, pre-crash observation of the real fork. No substituted
-    // server, port, Git implementation, launcher decision or storage owner.
-    const witness = path.join(temp, "witness.mjs"), observed = path.join(temp, "observed.json");
-    await writeFile(witness, `import{writeFileSync}from'node:fs';if(process.env.WIRE_UPDATE_CHILD)writeFileSync(${JSON.stringify(observed)},
-        JSON.stringify({childId:process.env.WIRE_UPDATE_CHILD,writerPid:process.pid,launcherPid:process.ppid}),{flag:'wx'});`);
-    function start(args, observe = false) {
+    const retained = await Promise.all([path.join(store, `${BOARD_ID}.state.json`), evidence, ...Object.values(board.exports[0].files)]
+        .map(async file => [file, await readFile(file)]));
+    const gate = sessionStorage(context);
+    const ambiguous = { operationId: randomUUID(), action: "wire-sign-in", fingerprint: "1".repeat(64), ownerHash: "2".repeat(64),
+        generation: 0, outcome: "ambiguous", reason: "restart-required", revocation: null };
+    await gate.write({ ...initialSessionState(), wire: "signed-in", receipts: [ambiguous] });
+    function start(args) {
         const child = fork(path.join(root, "scripts", "launch.mjs"), args, { cwd: root, execArgv: [],
-            env: { ...env, ...(observe && { NODE_OPTIONS: "--import=" + pathToFileURL(witness).href }) }, stdio: ["ignore", "pipe", "pipe", "ipc"] });
+            env, stdio: ["ignore", "pipe", "pipe", "ipc"] });
         const app = { child, out: "", err: "", done: new Promise(resolve => child.once("exit", resolve)) };
         child.stdout.on("data", b => { app.out += b; }); child.stderr.on("data", b => { app.err += b; });
         active.add(app); app.done.then(() => active.delete(app)); return app;
@@ -77,29 +89,33 @@ test("recover a killed v1 writer in its original standalone installation", { ski
         assert.equal((await fetch(new URL(health.clientEntry, url))).status, 200);
         return { url, id: health.runtimeId };
     }
-    const first = start(["--port", "0"], true), before = await ready(first, original);
+    const first = start(["--port", "0"]), before = await ready(first, original);
     const port = Number(new URL(before.url).port), args = ["--port", String(port)];
     const recoveryArgs = ["--recover-launch", plan, ...args];
-    const receipt = JSON.parse(await readFile(observed, "utf8"));
-    assert.equal(receipt.launcherPid, first.child.pid);
     const files = ["collector.lock", path.join("microsoft-session", "collector.lock")].map(name => path.join(store, name));
-    const leases = await Promise.all(files.map(file => readFile(file, "utf8")));
-    const [collector, session] = leases.map(text => JSON.parse(text));
-    assert.equal(collector.pid, receipt.writerPid); assert.equal(session.pid, receipt.writerPid);
-    assert.deepEqual(collector.host, session.host);
+    const pids = await Promise.all(files.map(async file => JSON.parse(await readFile(file, "utf8")).pid));
+    assert.equal(pids[0], pids[1]);
+    const beforeHtml = await (await fetch(before.url + "settings")).text();
+    const { capability } = JSON.parse(beforeHtml.match(/id="wireBootstrap"[^>]*>([^<]+)<\/script>/)[1]);
+    const headers = { Origin: new URL(before.url).origin, "Content-Type": "application/json", "X-Board-Capability": capability };
+    assert.ok((await fetch(before.url + "api/app-update", { method: "POST", headers, body: '{"action":"status"}' })).ok);
+    // This participating panel does not acknowledge a handoff. There is no
+    // historical fork nonce or lease token in the recovery input.
     const custody = { version: 1, installation: root, interruptedBuild: original, targetBuild: target, store: await storeIdentity(store),
-        port, host: collector.host, ...receipt, collectorToken: collector.token, sessionToken: session.token, operationsReviewed: true };
+        port, launcherPid: first.child.pid, writerPid: pids[0] };
     await writeFile(plan, JSON.stringify(custody));
     const competing = start(args);
     assert.equal(await competing.done, 1); assert.match(competing.err, /already has a launcher/);
-    process.kill(receipt.writerPid, "SIGKILL");
+    process.kill(pids[0], "SIGKILL");
     assert.equal(await first.done, 1);
+    const leases = await Promise.all(files.map(file => readFile(file, "utf8")));
     const childRow = key => {
         const db = new DatabaseSync(path.join(root, ".git", "wire-updates", "child.sqlite"), { readOnly: true });
         try { const row = db.prepare("SELECT value FROM kv WHERE key=?").get(key); return row && JSON.parse(row.value); }
         finally { db.close(); }
     };
-    const prior = { id: receipt.childId, state: "running" };
+    const prior = childRow("child");
+    assert.deepEqual(Object.keys(prior).sort(), ["id", "state"]); assert.equal(prior.state, "running");
     const ordinary = start(args);
     assert.equal(await ordinary.done, 1); assert.match(ordinary.err, /clean close/);
     assert.deepEqual(childRow("child"), prior);
@@ -108,26 +124,45 @@ test("recover a killed v1 writer in its original standalone installation", { ski
         await writeFile(plan, JSON.stringify({ ...custody, ...change }));
         const app = start(recoveryArgs);
         assert.equal(await app.done, 1); assert.match(app.err, reason);
-        assert.deepEqual(childRow("child"), prior); assert.equal(childRow("interrupted:" + receipt.childId), undefined);
+        assert.deepEqual(childRow("child"), prior); assert.equal(childRow("interrupted:" + prior.id), undefined);
         assert.deepEqual(await Promise.all(files.map(file => readFile(file, "utf8"))), leases);
     }
-    await refuse({ childId: undefined, sessionToken: undefined, collectorToken: undefined }, /accounted for/);
-    await refuse({ childId: randomUUID() }, /clean close/);
-    await refuse({ operationsReviewed: false }, /accounted for/);
-    await refuse({ sessionToken: randomUUID() }, /leases/);
+    await refuse({ writerPid: undefined }, /process identities/);
+    await refuse({ store: "0".repeat(64) }, /store/);
+    await refuse({ writerPid: process.pid }, /still present/);
+    await refuse({ writerPid: custody.launcherPid, launcherPid: custody.writerPid }, /leases/);
+    const sessionBefore = await gate.read();
+    await gate.write({ ...sessionBefore, receipts: [{ ...ambiguous, outcome: "pending" }] });
+    await refuse({}, /unresolved/);
+    assert.equal((await gate.read()).receipts[0].outcome, "pending");
+    await gate.write(sessionBefore);
     // A lost Save after exclusive staging must not be cleaned up or retried.
     const unfinished = path.join(store, "exports", ".pending-invented-save");
     await mkdir(unfinished);
     await refuse({}, /unresolved/);
     await rm(unfinished, { recursive: true }); // Remove only this test's injected refusal case.
+    const extra = path.join(store, "exports", emptyFiles, "files", "unaccounted.txt");
+    await writeFile(extra, "unconfirmed bytes", { flag: "wx" });
+    await refuse({}, /unresolved/); assert.equal(await readFile(extra, "utf8"), "unconfirmed bytes");
+    await rm(extra);
     const restored = start(recoveryArgs), after = await ready(restored, target);
     assert.equal(after.url, before.url); assert.notEqual(after.id, before.id);
+    assert.equal((await fetch(after.url + "api/app-update", { method: "POST", headers,
+        body: '{"action":"preferences","enabled":false}' })).status, 403);
+    const settingsHtml = await (await fetch(after.url + "settings")).text();
+    const currentPanel = JSON.parse(settingsHtml.match(/id="wireBootstrap"[^>]*>([^<]+)<\/script>/)[1]);
+    const updated = await (await fetch(after.url + "api/app-update", { method: "POST",
+        headers: { ...headers, "X-Board-Capability": currentPanel.capability }, body: '{"action":"status"}' })).json();
+    assert.equal(updated.automatic, true); assert.equal(updated.candidate, null); assert.equal(updated.installed, target);
     for (const [file, bytes] of retained) assert.deepEqual(await readFile(file), bytes);
     restored.child.disconnect(); assert.equal(await restored.done, 0, restored.err);
+    assert.deepEqual((await gate.read()).receipts, [ambiguous]);
+    assert.deepEqual(await readdir(path.join(store, "exports", emptyRoot)), []);
+    assert.deepEqual(await readdir(path.join(store, "exports", emptyFiles, "files")), []);
     const closed = childRow("child");
-    assert.equal(closed.state, "closed"); assert.notEqual(closed.id, receipt.childId);
-    assert.deepEqual(childRow("interrupted:" + receipt.childId), { ...prior, state: "interrupted", successor: closed.id,
-        build: original, store: custody.store, port });
+    assert.equal(closed.state, "closed"); assert.notEqual(closed.id, prior.id);
+    assert.deepEqual(childRow("interrupted:" + prior.id), { ...prior, state: "interrupted", successor: closed.id,
+        targetBuild: target, targetStore: custody.store, port });
     const replay = start(recoveryArgs);
     assert.equal(await replay.done, 1); assert.deepEqual(childRow("child"), closed);
     // Restore the old code only in this disposable clone. No store rollback or
