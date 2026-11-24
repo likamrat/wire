@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, writeFile, readdir, appendFile, rename } from "node:fs/promises";
+import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { directMessageReference, promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
@@ -528,6 +529,63 @@ test("later pages locate a candidate and disqualify a competing original; source
     await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 }),
         /source changed since the complete historical author review/);
     assert.deepEqual(await loadBoardState(f.app.context), f.state);
+});
+
+for (const change of ["unrelated", "selected", "repeated", "review cut"]) test(`the named author review fences a concurrent metadata commit: ${change}`, async t => {
+    const f = await setup(t), scope = { dataDir: f.app.context.dataDir };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(scope);
+    const writer = new DatabaseSync(f.app.config.appDbPath), prepare = DatabaseSync.prototype.prepare;
+    const before = await readFile(f.checkpointFile);
+    try {
+        writer.exec("PRAGMA journal_mode=WAL; CREATE TABLE author_fixture_counter(n INTEGER); INSERT INTO author_fixture_counter VALUES(0)");
+        let checks = 0;
+        t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+            const statement = prepare.call(this, sql);
+            if (sql === "PRAGMA user_version") {
+                const get = statement.get.bind(statement);
+                statement.get = () => {
+                    const value = get(); checks++;
+                    if (checks === 1 && change === "selected") writer.prepare("UPDATE workspaces SET name=? WHERE session_id=?").run("Changed mapping", f.app.child);
+                    else if (checks === 1 || change === "repeated") {
+                        writer.exec("UPDATE author_fixture_counter SET n=n+1");
+                        if (change === "review cut") appendFileSync(path.join(scope.dataDir, "collector", "config.json"), "\n");
+                    }
+                    return value;
+                };
+            }
+            return statement;
+        });
+        const review = reviewPromptOriginClass({ ...scope, batch });
+        if (change === "unrelated") {
+            const result = await review;
+            assert.equal(result.authorized, false);
+            assert.deepEqual(result.targets.map(t => t.prompt.authorship.basis), ["host-direct-input"]);
+            assert.match(result.targets[0].sourceMapping.metadataSha256, /^[0-9a-f]{64}$/);
+            assert.ok(checks >= 2);
+        } else if (change === "review cut") {
+            await assert.rejects(review, /author review changed/);
+            assert.equal(checks, 1, "The stale selection must not consume its fresh transaction.");
+        } else {
+            await assert.rejects(review, { code: "COLLECTION_SOURCE_CHANGED", sourceChange: change === "selected" ? "membership" : "metadata-read" });
+            assert.equal(checks, 2);
+        }
+        assert.deepEqual(await readFile(f.checkpointFile), before);
+        assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    } finally { writer.close(); }
+});
+
+test("a named proposal cannot prepare after a selected mapping changes outside its older source-binding fields", async t => {
+    const f = await setup(t), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+    const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+    const review = await reviewPromptOriginClass({ ...input, batch });
+    f.plan.targets = review.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const db = new DatabaseSync(f.app.config.appDbPath);
+    try { db.prepare("UPDATE workspaces SET name=? WHERE session_id=?").run("Invented changed selected workspace", f.app.child); }
+    finally { db.close(); }
+    await assert.rejects(runPromptOriginRepair({ ...f.options, mode: "prepare" }), /reviewed author database or selected chat mapping changed/);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
 
 test("archived history requires explicit inclusion and fresh local provenance, not an archive flag alone", async t => {

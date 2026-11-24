@@ -476,6 +476,13 @@ new page separate from the one you're reading. Pages cannot be mixed across
 batches or changed sources. No proposal is made until the full journal has
 been checked for competing event identities. An unreadable, oversized or
 ambiguous source region prevents a complete review; it is not an empty batch.
+If the metadata database changes during a named review read, the selected-chat
+reader can take one fresh transaction. Only its fully fenced result is used.
+The physical database, schema, complete selected mapping (including managed
+events), retained controls and journal boundary must still agree. Repeated
+churn or a changed selected mapping refuses the read. The same mapping proof
+binds page continuations and new proposals; Prepare and Apply still perform
+their own original and checkpoint checks.
 
 The final `targets` are the corrections the original records actually support.
 They may be human **or** agent prompts. `unresolved` explains why other
