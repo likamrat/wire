@@ -394,7 +394,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (topic === "services") return describeService(row.id).description;
         if (topic === "authors") return ({ user: "The originating prompt was recorded as human-written.", agent: "The originating prompt came from an agent, including automatic continuations.",
             unknown: "The record doesn’t establish who wrote the originating prompt." })[row.id];
-        if (topic === "models") return "Interactions with a response attributed to this model. One interaction can use several models.";
     }
     const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true, includeAuthors: true, trendLink: analyzeTrends.link,
         evidenceLink: widgetRecordsLink, definitionLink: widgetDefinitionLink, meaning: widgetMeaning,
