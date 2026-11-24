@@ -683,7 +683,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
     observer.observe(document.body, { childList: true, subtree: true, attributes: true,
         attributeFilter: ["disabled", "hidden", "selected", "label", "value", "class", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "required", "data-select-state", "data-all-label", "data-detail", "data-disabled-reason", "data-option-label", "data-count", "open"] });
     sync();
-    return { sync, close, withdrawAccess, destroy() {
+    return { sync, close, isOpen: select => active?.select === select, withdrawAccess, destroy() {
         close();
         observer.disconnect();
         events.abort();
