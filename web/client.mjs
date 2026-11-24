@@ -347,8 +347,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return trendInventory.get(snapshot);
     }
     function usageCalendar() {
-        return assessmentFactories.usageCalendar(slice.scenarios,selectionRows(),percentageMath.interactionIdentity,
-            value => time.day(value,workspaceState.scope.timeContext.timeZone));
+        const value = assessmentFactories.usageCalendar(slice.scenarios,selectionRows(),percentageMath.interactionIdentity,
+            timestamp => time.day(timestamp,workspaceState.scope.timeContext.timeZone));
+        const {from,to} = workspaceState.scope.filters;
+        if (value.range) value.range = {from:from ? dateInput(from) : value.range.from,to:to ? dateInput(to) : value.range.to};
+        return value;
     }
     const analyzeTrends = assessmentFactories.createAnalyzeTrendsEntry({ time, results, authorship, categories: recordedCategories }).mount({
         announce,
@@ -2643,7 +2646,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onComparePeriods: (dates, filters, usageChoice) => {
             const publication = api.publicationToken();
             if (workspaceState.route.view !== "trends" || !publication || workspaceState.stale || workspaceState.loading) return;
-            const target = { view: "analyze", compare: "periods", layer: "tool", scope: "all", source: "github-copilot",
+            const target = { view: "analyze", compare: "periods", layer: "tool", scope: filters.collection ?? "all", source: "github-copilot",
                 bucket: "day", search: "", analysisQuery: null, ...dates,
                 ...(filters.author ? { authors: filters.author } : {}), ...(filters.tool ? { tool: filters.tool } : {}),
                 ...(filters.service === "Discovery" ? { service: "Discovery" } : filters.service && filters.service !== "missing"
@@ -5662,9 +5665,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native);
         const breakdown = percentages.referenceModel();
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
-        assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations,
-            breakdown.models.usage.metered ? usageCalendar().days : [], day => offersTrends
-                ? analyzeTrends.link("usage",day,date(day,true)) : el("span","",date(day,true)));
+        const calendar = usageCalendar(), usageHost = $("analyzeUsageContent");
+        const summary = {...breakdown.models.usage,eligible:breakdown.models.usage.eligible + breakdown.authors.nativeConversations};
+        if (calendar.range) assessmentFactories.renderDailyTokenChart(el,usageHost,calendar,summary,{
+            formatDate:date, scopeKey:`${workspaceState.evidence.revision}:${calendar.range.from}:${calendar.range.to}`,
+            dateLink:day => offersTrends ? analyzeTrends.link("usage",day,date(day,true)) : el("span","",date(day,true)),
+        });
+        else usageHost.replaceChildren(el("p","percentage-empty",summary.metered ? `${count(summary.total)} tokens · no matching date recorded.`
+            : summary.eligible ? `No verified token totals for the ${count(summary.eligible)} matching ${summary.eligible===1?"interaction":"interactions"}.` : "No matching interactions."));
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
     }
@@ -6492,7 +6500,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const facts = el("div", "request-card-summary");
         const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
             sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
-        if (scenario.usage && !reportPicker) header.append(el("span", "usage-chip", assessmentFactories.usageChip(scenario.usage)));
+        if (!reportPicker && (scenario.usage || ["copilot-app","copilot-app-chat"].includes(scenario.sourceHost)))
+            header.append(el("span",scenario.usage ? "usage-chip" : "usage-chip usage-missing",scenario.usage ? assessmentFactories.usageChip(scenario.usage) : "Tokens unavailable"));
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         } else if (!reportPicker && outcome && summary[outcome.key] < summary.count) {
@@ -6869,6 +6878,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return control;
         }
         const sourceJump = sectionJump(sourceSection, "Source", "section-source");
+        const tokenJump = sectionJump(usageSection,selectedScenario.usage ? assessmentFactories.usageChip(selectedScenario.usage) : "Tokens unavailable","section-charts");
+        tokenJump.classList.add("reader-token-jump");
+        tokenJump.setAttribute("aria-label",`Interaction token usage: ${tokenJump.textContent}. Show details`);
+        $("contextSidebarTitle").after(tokenJump);
+        readerTextReleases.push(()=>{tokenJump.replaceChildren();tokenJump.removeAttribute("aria-label");tokenJump.remove();});
         jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
         const quickReport = underlyingRoute().view === "analyze" && namedRequest(workspaceState.route.request);
         if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId, { reader: true }));

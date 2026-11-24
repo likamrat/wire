@@ -14,7 +14,8 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
         if (includesNative || otherSources || f.sources?.some(source => source !== "github-copilot") || route.nativeGroup) {
             changes.push("Trends uses retained GitHub Copilot activity only. Other sources and Microsoft groups do not carry over.");
         }
-        if (f.scope === "legacy" || f.scope === "history" && hasEarlier) changes.push("Trends uses both retained collections, not just the selected collection.");
+        if (family === "usage" && ["legacy","history"].includes(f.scope)) filters.collection=f.scope;
+        else if (f.scope === "legacy" || f.scope === "history" && hasEarlier) changes.push("Trends uses both retained collections, not just the selected collection.");
         const omitted = [
             [f.projectIds, "project"], [f.sourceSessionIds, "chat or recorder source"], [f.endpoints, "path or operation"],
             [f.workloads, "activity category"], [f.activityTypes, "activity type"],
@@ -74,7 +75,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
                     announce("Open this link in the current tab to carry the widget’s scope.", "info"); return;
                 }
                 const context = getContext(family);
-                if (!context || day && !context.usageCalendar?.days.some(d => d.date === day && d.metered)) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
+                if (!context || day && !context.usageCalendar?.days.some(d => d.date === day && d.active)) { announce("Wait for a current Analyze view before opening this trend.", "stale"); return; }
                 const { changes, entry } = project(family, context,day);
                 if (!changes.length) { open(entry, node); return; }
                 dismiss?.();

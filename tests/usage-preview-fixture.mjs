@@ -9,7 +9,7 @@ import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createProfileSource } from "./source-profile-fixture.mjs";
 
 // One source installation and one independent WIRE store; all text is invented.
-export async function usagePreview(t, frontend = "react", {offline = false, paginated = false, sparse = false} = {}) {
+export async function usagePreview(t, frontend = "react", {offline = false, paginated = false, sparse = false, measuredZero = false} = {}) {
     const root = await mkdtemp(path.join(tmpdir(), "wire-token-preview-"));
     t.after(() => rm(root, {recursive:true,force:true}));
     const config = { appDbPath: path.join(root,"data.db"), sessionRoot: path.join(root,"session-state") };
@@ -29,6 +29,7 @@ export async function usagePreview(t, frontend = "react", {offline = false, pagi
     if (sparse) examples.splice(0,examples.length,
         ["Review calendar",1,"user",["fetch","ask"],"gpt-4.1",[[1500,160000,38000,500]],[300,40]],
         ["Recent question",20,"user",["ask"],null,[],[80]]);
+    if (measuredZero) examples.push(["Zero reading",19,"user",["fetch"],"gpt-4.1",[[0,0,0,0]],[0]]);
     try {
         db.exec("UPDATE accounts SET settings_json='{}'");
         for (const [index,[title, day, actor, tools, model, calls, sizes]] of examples.entries()) {

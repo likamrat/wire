@@ -1,6 +1,5 @@
 export function createUsageReading({ firstUsageDays, tokenKinds, usageSummary, usageQuestions, usageThresholds, usageTools }) {
 const number = new Intl.NumberFormat().format;
-const percent = new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format;
 const names = { freshInput: "Uncached input", cacheRead: "Input reused from cache", cacheWrite: "Input saved to cache", output: "Generated output" };
 function questionControls(doc, prefix, change, { filters = false } = {}) {
     const host = doc.createElement("div"), controls = new Map();
@@ -59,7 +58,7 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
             "partial-receipts":"Some model calls have no token counts.",
             "no-linked-receipt":"No token counts matched this prompt's model calls.",
         };
-        host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts were recorded."));
+        host.append(el("p", "", reasons[scenario?.usageGap] ?? "WIRE has no verified model token count for this interaction."));
         if (!sized.length) return;
     } else {
         renderModelCounts(el, host, u);
@@ -110,7 +109,7 @@ function usageCalendar(scenarios,rows,identity,dayOf) {
     const origins = new Map([...records].map(([id,s]) => [id,identity(s)]));
     const dated = rows.filter(r => origins.has(r.scenarioId) && r.startedAt)
         .map(r => ({originId:origins.get(r.scenarioId),date:dayOf(r.startedAt)}));
-    const first = firstUsageDays(dated);
+    const first = firstUsageDays(dated), active = Map.groupBy(dated,r => r.date);
     let range = null;
     for (const {date} of dated) {
         if (!range) range = {from:date,to:date};
@@ -126,51 +125,12 @@ function usageCalendar(scenarios,rows,identity,dayOf) {
         if (u) { d.total+=u.total; d.metered++; }
         days.set(date,d);
     }
+    for (const [date,rows] of active) {
+        const d = days.get(date) ?? {date,total:0,metered:0,eligible:0};
+        d.active = new Set(rows.map(r=>r.originId)).size;
+        days.set(date,d);
+    }
     return {range,days:[...days.values()].sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""))};
 }
-function homepageUsage(el, host, summary, nativeCount, days, dateLink) {
-    const {eligible,metered,total,tokens} = summary, population = eligible + nativeCount;
-    if (!metered) {
-        host.replaceChildren(el("p","percentage-empty",population
-            ? `No verified token totals for the ${number(population)} matching ${population === 1 ? "interaction" : "interactions"}.`
-            : "No matching interactions."));
-        return;
-    }
-    const grid = el("div","usage-overview"), overview = el("div","usage-by-day"), mix = el("div","usage-mix");
-    const headline = el("p","usage-total",number(total));
-    headline.append(el("span",""," tokens"));
-    const coverage = el("p","usage-coverage",`Counts available for ${number(metered)} of ${number(population)} ${population === 1 ? "interaction" : "interactions"}.`);
-    const measured = days.filter(d => d.metered);
-    overview.append(headline,coverage);
-    if (measured.length === 1) {
-        const when = el("p","usage-only-day","Measured on ");
-        if (measured[0].date) when.append(dateLink(measured[0].date));
-        else when.textContent = "Date not recorded";
-        overview.append(when);
-    } else {
-        const label = el("h4","",measured.length>3 ? "Latest 3 days with counts" : "Days with counts"), list = el("ul","usage-days");
-        list.setAttribute("aria-label",label.textContent);
-        for (const d of measured.slice(0,3)) {
-            const row = el("li");
-            row.append(d.date ? dateLink(d.date) : el("span","","Date not recorded"),el("span","usage-day-total",number(d.total)));
-            list.append(row);
-        }
-        overview.append(label,list);
-    }
-    const breakdown = el("dl","usage-breakdown");
-    for (const kind of tokenKinds) {
-        const n=tokens[kind], row=el("div"), val=el("dd");
-        if (n === null) val.textContent="Not recorded";
-        else {
-            const share = total ? n/total*100 : null;
-            if (share !== null) val.append(el("span","usage-part-share",share>0 && share<0.01 ? "<0.01%" : `${percent(share)}%`));
-            if (share !== null) val.append(" ");
-            val.append(el("span","usage-part-count",share===null?number(n):`(${number(n)})`));
-        }
-        row.append(el("dt","",names[kind]),val); breakdown.append(row);
-    }
-    mix.append(el("h4","","Share of measured tokens"),breakdown);
-    grid.append(overview,mix); host.replaceChildren(grid);
-}
-return { usageChip, usageReading, toolTokenFields, modelShareReading, homepageUsage, usageCalendar, usageSummary, questionControls };
+return { usageChip, usageReading, toolTokenFields, modelShareReading, usageCalendar, usageSummary, questionControls };
 }

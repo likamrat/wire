@@ -16,7 +16,8 @@ test("Analyze attributes a multi-day interaction once but keeps its later calls 
         {scenarioId:"out-of-scope",startedAt:"2026-10-20"},
     ],s=>s.origin,v=>v);
     assert.deepEqual(calendar,{range:{from:"2026-10-14",to:"2026-10-17"},days:[
-        {date:"2026-10-15",total:0,metered:1,eligible:2},{date:"2026-10-14",total:40,metered:1,eligible:1},
+        {date:"2026-10-17",total:0,metered:0,eligible:0,active:1},
+        {date:"2026-10-15",total:0,metered:1,eligible:2,active:2},{date:"2026-10-14",total:40,metered:1,eligible:1,active:1},
     ]});
 });
 

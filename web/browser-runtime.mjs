@@ -90,6 +90,7 @@ import { createWorkspaceState } from "./frontend/workspace-state.ts";
 import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
 import { createUsageReading } from "./usage-reading.mjs";
+import { renderDailyTokenChart } from "./daily-token-chart.mjs";
 import * as usage from "../lib/interaction-usage.mjs";
 
 function factories() {
@@ -99,7 +100,7 @@ function factories() {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
-        createCardVisibility, ...createUsageReading(usage),
+        createCardVisibility, renderDailyTokenChart, ...createUsageReading(usage),
         mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial, rowsFor: homepageRows }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync, homepageRows),
         mountAccountSettings: options => mountAccountSettingsPresentation({

@@ -13,13 +13,19 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     const page=await browser.newPage({viewport:{width,height:900},timezoneId:"America/Los_Angeles",hasTouch:width<500});
     await page.goto(runtime.url);
     if (width<500) await chooseTheme(page,"dark");
-    const card=page.locator("#analyzeUsage"), date=card.locator(".usage-only-day a");
+    const card=page.locator("#analyzeUsage"), date=card.locator(".token-day-date a"), slider=card.getByRole("slider",{name:"Inspect daily token usage"});
     await expect(card).toContainText("Counts available for 1 of 2 interactions");
-    await expect(card.locator(".usage-total")).toHaveText("200,000 tokens");
+    await expect(card.locator(".token-history-total")).toContainText("200,000 measured tokens");
     await expect(card).not.toContainText("Recorded tokens");
-    const breakdown=card.locator(".usage-breakdown>div");
-    await expect(breakdown.filter({hasText:"Generated output"})).toContainText("0.25% (500)");
-    await expect(breakdown.filter({hasText:"Input reused from cache"})).toContainText("80% (160,000)");
+    await expect(card.locator("[data-measured-day]")).toHaveCount(1);
+    await expect(card.locator(".token-line")).toHaveCount(0);
+    await expect(card.locator("[data-activity-day]")).toHaveCount(1);
+    const box=await slider.boundingBox();
+    if(width<500) await slider.tap({position:{x:box.width*.98,y:box.height*.5}});
+    else await slider.hover({position:{x:box.width*.98,y:box.height*.5}});
+    await expect(slider).toHaveAttribute("aria-valuetext",/1 interaction · token count unavailable/);
+    await slider.press("ArrowLeft");await expect(slider).toHaveAttribute("aria-valuetext",/No matching dated activity/);
+    await slider.press("Home");await expect(slider).toHaveAttribute("aria-valuetext",/200,000 tokens/);
     const expected=new Date(); expected.setUTCHours(10,0,0,0); expected.setUTCDate(expected.getUTCDate()-20);
     const dateText=expected.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"short",day:"numeric"});
     await expect(date).toHaveText(dateText);
@@ -33,6 +39,18 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await expect(page.getByRole("dialog").getByRole("row").filter({hasText:dateText})).toContainText("200,000 tokens");
     await page.keyboard.press("Escape"); await page.getByRole("button",{name:"Back to Analyze"}).click();
     await expect(date).toBeFocused();
+});
+
+test("a metered zero is a token point on the baseline, not an unknown or an empty day",async t=>{
+    const cleanup=[];t.after(async()=>{for(const close of cleanup.reverse())await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},"react",{sparse:true,measuredZero:true});
+    const browser=await chromium.launch();cleanup.push(()=>browser.close());
+    const page=await browser.newPage();await page.goto(runtime.url);
+    const chart=page.locator("#analyzeUsage");
+    await expect(chart.locator(".token-day-value")).toHaveText("0 tokens · 1 of 1 interaction measured");
+    await expect(chart.locator(".token-point[cy='75']")).toHaveCount(1);await expect(chart.locator(".token-line")).toHaveCount(0);
+    await chart.getByRole("slider").press("ArrowRight");
+    await expect(chart.locator(".token-day-value")).toHaveText("1 interaction · token count unavailable");
 });
 
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: Most tokens reorders the same cards and both Analyze defaults survive reopening`,async t=>{
@@ -70,7 +88,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
         }
         await expect(listControl).toHaveText(label);
         await expect(prompts(page)).toHaveText(order);
-        if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000 tokens","30,000 tokens","12,000 tokens"]);
+        if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000 tokens","30,000 tokens","12,000 tokens","Tokens unavailable"]);
         assert.equal(page.url(),scope); assert.equal(await page.locator("#activityListSummary").innerText(),summary);
         await expect(page.locator("#analyzeUsage")).toContainText("75,000");
         await expect(page.locator("#analyzeUsage")).toContainText("3 of 4 interactions");
@@ -121,7 +139,10 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     if (width < 500) await chooseTheme(page,"dark");
     await expect(widget).toContainText("342,000");
     await expect(widget).toContainText("7 of 8 interactions");
-    await expect(widget.locator(".usage-days .usage-day-total")).toHaveText(["104,500","30,500","115,000"]);
+    await expect(widget.locator(".token-point")).toHaveCount(4);
+    await expect(widget.locator(".token-line")).toHaveCount(3);
+    await expect(widget.locator(".token-day-value")).toContainText("104,500 tokens");
+    await widget.getByRole("slider").press("ArrowLeft");await expect(widget.locator(".token-day-value")).toHaveText("30,500 tokens · 1 of 2 interactions measured");
     await expect(widget).not.toContainText(/cost|price|\$/i);
     await capture("home",widget);
     const models=page.locator('[data-percentage-card="models"]');
@@ -188,8 +209,11 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(cards.first()).toContainText("Draft next steps");
     await selectActivityOption(page,"activityUsageSort","recent");
     const missing=cards.filter({hasText:"Search for notes"});
-    await expect(missing.locator(".usage-chip")).toHaveCount(0);
+    await expect(missing.locator(".usage-chip")).toHaveText("Tokens unavailable");
     await missing.locator(".request-card-open").first().click();
+    const missingJump=page.locator(".context-sidebar-header").getByRole("button",{name:/Interaction token usage: Tokens unavailable/});
+    await expect(missingJump).toBeInViewport();await missingJump.click();
+    await expect(page.locator("[data-reader-section=usage] h2")).toBeFocused();
     await expect(page.locator("[data-reader-section=usage]")).toContainText("No token counts matched this prompt's model calls.");
     const tokenReader=page.locator("[data-reader-section=usage]");
     await expect(tokenReader.locator(".usage-timeline li").filter({hasText:"Call #1"})).toContainText("~257 tokens of returned text");
@@ -210,6 +234,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(outline.locator(".usage-chip")).toHaveText("30,500 tokens");
     await outline.locator(".request-card-open").first().click();
     const reader=page.locator("[data-reader-section=usage]");
+    await expect(page.locator(".reader-token-jump")).toHaveText("30,500 tokens");
     await expect(reader).toContainText("30,500 tokens"); await expect(reader).toContainText("preview-model");
     await capture("reader-tokens",reader);
     await page.keyboard.press("Escape");
@@ -318,7 +343,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     page.on("pageerror",e=>errors.push(e.message));page.setDefaultTimeout(7500);
     await page.goto(runtime.url);
     const cards=page.locator("#activityList article");
-    await expect(cards).toHaveCount(8); await expect(page.locator(".usage-chip")).toHaveCount(7);
+    await expect(cards).toHaveCount(8); await expect(page.locator(".usage-chip:not(.usage-missing)")).toHaveCount(7);
     await selectActivityOption(page,"activityUsageSort","tokens");
     await expect(cards.first()).toContainText("Draft next steps");await expect(cards.last()).toContainText("Search for notes");
     await expect(cards.filter({hasText:"Find review owners"}).locator(".usage-chip")).toHaveText("33,000 tokens");

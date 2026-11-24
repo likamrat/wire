@@ -8,21 +8,29 @@ export const analyzeLayoutStyles = `
 .analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px 16px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
-.usage-overview {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-md) clamp(24px,5%,72px);align-items:start;font-variant-numeric:tabular-nums}
-.usage-overview h4 {margin:0 0 6px;font:var(--weight-medium) var(--type-body)/1.4 var(--font);color:var(--ink)}
-.usage-total {margin:0;color:var(--ink);font-size:var(--type-title);font-weight:var(--weight-medium)}
-.usage-total span,.usage-coverage,.usage-only-day,.usage-part-count {font-weight:var(--weight-regular);color:var(--muted)}
-.usage-total span,.usage-coverage,.usage-only-day {font-size:var(--type-small)}
-.usage-coverage {margin:2px 0 12px}.usage-only-day {margin:0}
-.usage-overview .usage-date-link {display:inline-flex;align-items:center;margin:0;min-height:44px;font-size:inherit;text-decoration:underline;text-underline-offset:.18em}
-.usage-days {list-style:none;margin:0;padding:0}
-.usage-days li,.usage-breakdown>div {display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0}
-.usage-days li {padding-inline-end:4px}.usage-day-total {color:var(--ink)}
-.usage-breakdown {margin:0}.usage-breakdown>div {padding-block:4px}
-.usage-breakdown dd {margin:0;display:flex;gap:6px;align-items:baseline;justify-content:end;flex-wrap:wrap}
-.usage-breakdown dt,.usage-breakdown dd {font-size:var(--type-small)}
-.usage-breakdown>div:last-child {border-block-start:1px solid var(--rule);margin-block-start:3px}
-@container (max-width:36rem){.usage-overview {grid-template-columns:minmax(0,1fr)}}
+.token-history {font-variant-numeric:tabular-nums;color:var(--ink)}
+.token-history-total,.token-history-key,.token-day-reading {display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.token-history-total strong {font-size:var(--type-title);font-weight:var(--weight-medium)}
+.token-history-total span,.token-history-key,.token-history-dates,.token-history-scale,.token-day-reading {font-size:var(--type-small)}
+.token-history-coverage {color:var(--muted);margin-inline-start:auto}
+.token-history-frame {display:flex;gap:8px;margin-top:7px}
+.token-history-scale {position:relative;min-width:2ch;align-self:stretch;padding-top:3px;text-align:end;color:var(--muted)}
+.token-scale-zero {position:absolute;top:64px;right:0}
+.token-history-plot {position:relative;flex:1;min-width:0}.token-history-plot svg {display:block;overflow:visible}
+.token-history-plot:focus-within {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
+.token-grid {stroke:var(--rule);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
+.token-line,.token-point {stroke:var(--accent);stroke-width:2;fill:var(--paper)}
+.token-unmetered {stroke:var(--muted);stroke-width:3}.token-day-guide {stroke:var(--accent);stroke-dasharray:2 4;opacity:.65}
+.usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:crosshair}
+.token-history-dates {display:flex;justify-content:space-between;gap:8px;color:var(--muted)}
+.token-history-key {gap:5px 16px;color:var(--muted);margin-block:6px 0}.token-history-key span {display:inline-flex;align-items:center;gap:5px}
+.token-history-key i.measured {width:15px;height:2px;background:var(--accent)}
+.token-history-key i.missing {width:3px;height:9px;background:var(--muted)}
+.token-day-reading {gap:8px;align-items:center;min-height:44px}.token-day-date a {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:.18em}
+.usage-chip.usage-missing {color:var(--muted);border-color:transparent;background:transparent}
+.context-sidebar-header .reader-token-jump {margin-inline-end:auto;display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:3px 6px;color:var(--accent);background:transparent;border:0;box-shadow:none;font-size:var(--type-small)}
+.reader-token-jump .wire-icon {width:1em;height:1em;flex:none}
+@container (max-width:36rem){.token-history-coverage {flex-basis:100%;margin:0}.token-day-reading {gap:0 8px}}
 #analyzeUsageContent>p {margin:10px 0 0}
 .usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}

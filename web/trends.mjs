@@ -673,14 +673,17 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const author = select("Prompt authors", [["", "All prompts"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
         const tool = select("Tool", [["", "All tools"], ...data.definitions.tools.map(row => [row.id, row.label])], () => {});
         const service = select("Service", [["", "All services"], ...data.definitions.services.map(row => [row.id, row.label]), ["Discovery", "Discovery / preparation"], ["missing", "Missing service detail"]], () => {});
+        const collection = filters.collection ? select("Collection",[["","Both collections"],["history","Current history"],["legacy","Earlier collection"]],()=>{}) : null;
         author.field.value = filters.author ?? ""; tool.field.value = filters.tool ?? ""; service.field.value = filters.service ?? "";
         local.append(author.label, tool.label, service.label);
+        if (collection) {collection.field.value=filters.collection; local.append(collection.label);}
         const actions = el("div", "trends-dialog-actions");
         if (Object.keys(filters).length) actions.append(button("Clear filters", () => {
             localChoices.close(); void read({ range, period, filters: {}, offset, remember: "filters" });
         }));
         actions.append(button("Cancel", () => localChoices.close()), button("Apply filters", () => {
             const next = Object.fromEntries([["author", author.field.value], ["tool", tool.field.value], ["service", service.field.value]].filter(([, value]) => value));
+            if (collection?.field.value) next.collection=collection.field.value;
             localChoices.close(); void read({ range, period, filters: next, offset, remember: "filters" });
         }, "primary")); local.append(actions); localChoices.place();
         requestAnimationFrame(() => {
@@ -1090,10 +1093,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         datePicker.sync();
         const dateRange = formatRange();
         datePicker.showRange(`${period === "latest" ? "Latest activity · " : ""}${time.formatCivilRange(range.from,range.to,data.timeContext)}`);
-        const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
+        const filterName = (key, value) => key === "collection" ? value === "history" ? "Current history" : "Earlier collection" : (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
         restrictionText.textContent = Object.entries(filters).map(([key, value]) =>
-            `${({author:"Prompt author",tool:"Tool",service:"Service"})[key]}: ${filterName(key,value)}`).join(" · ");
+            `${({author:"Prompt author",tool:"Tool",service:"Service",collection:"Collection"})[key]}: ${filterName(key,value)}`).join(" · ");
         restrictions.hidden = !allCharts || !Object.keys(filters).length;
         if (!Object.keys(filters).length && doc.activeElement === clearFilters) filtersButton.focus({ preventScroll: true });
         clearFilters.disabled = !Object.keys(filters).length;
