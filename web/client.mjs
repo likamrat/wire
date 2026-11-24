@@ -8585,6 +8585,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : [savedReadableFormat(bundle)].filter(Boolean);
         selector.append(option("report", "Report in WIRE"));
         for (const format of formats) selector.append(option(format, reportFileLabel(format)));
+        current.updateViewingChoices = select => {
+            // Finishing verified Open may add a reading mode, but must not move a file choice under the pointer.
+            if (select !== selector || !valid() || selectControls?.isOpen(selector)
+                || !current.reportHost?.classList.contains("saved-brief-host") || selector.querySelector('[value="document"]')) return;
+            selector.options[0].textContent = "Brief";
+            selector.options[0].after(option("document", "Full report"));
+        };
         selector.value = (entry?.reportView ?? !entry?.format) ? "report"
             : formats.includes(entry?.format) ? entry.format : savedReadableFormat(bundle);
         toolbar.append(viewing, selector);
@@ -8675,10 +8682,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!active()) return;
                 download.disabled = false;
                 paintSavedDocument(body, value, active, showingReport, completeDocument);
-                if (showingReport && current.reportHost?.classList.contains("saved-brief-host") && !selector.querySelector('[value="document"]')) {
-                    selector.options[0].textContent = "Brief";
-                    selector.options[0].after(option("document", "Full report"));
-                }
+                if (showingReport) current.updateViewingChoices(selector);
                 selectControls?.sync();
             } catch (error) {
                 if (active()) {
@@ -11365,6 +11369,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         matchesOption: (query, label) => localSearch.matches(query, [label]),
         pagingFor: nativeInventoryPaging,
         onClose: select => {
+            savedReportView?.updateViewingChoices?.(select);
             boundedNative.cancelInventory(nativeFilterDimensions[select.id]);
             queueMicrotask(refreshInventoryControls);
         },

@@ -124,7 +124,9 @@ to read its completion and returned API entries. **Back** returns to the same
 row. **Coverage** holds counts, timing and preparation details.
 
 Choose **Viewing > Full report** for the continuous saved reading or a file
-format to inspect its original. Reports without supported frozen relationships
+format to inspect its original. If **Viewing** is already open when verification
+finishes, file choices stay in place; **Full report** appears the next time you
+open the menu. Reports without supported frozen relationships
 keep their existing reader. Brief does not change saved files or fill gaps from
 current activity.
 
