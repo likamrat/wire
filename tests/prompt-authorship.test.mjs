@@ -266,7 +266,7 @@ test("supported direct host envelope without agentMode keeps the recorded User a
     assert.equal(promptAuthorship.read(detail.interaction.message).actor, "user");
 });
 
-for (const agentMode of [undefined, "interactive", "plan", "autopilot"]) test(`only host-added provenance participates (${agentMode ?? "mode absent"}); imitations and conflicts fail safely`, () => {
+for (const agentMode of [undefined, "interactive", "plan", "autopilot", "shell"]) test(`only host-added provenance participates (${agentMode ?? "mode absent"}); imitations and conflicts fail safely`, () => {
     const content = "Invented content";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
@@ -292,6 +292,23 @@ for (const agentMode of [undefined, "interactive", "plan", "autopilot"]) test(`o
     for (const invalidMode of [null, "", "unsupported", {}, true]) {
         assert.equal(extract({ ...base, agentMode: invalidMode, transformedContent: stamp + content }).userPrompt.authorship.actor, "unknown");
     }
+});
+
+test("a host agent-authored mark identifies the sender, not the user role or the delivery wrapper", () => {
+    const content = "Invented input.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const direct = { content, delivery: "idle", messageId: randomUUID(), transformedContent: stamp + content };
+    const read = data => extract(data).userPrompt.authorship;
+    for (const data of [{ content }, direct, { ...direct, transformedContent: stamp + content + directMessageReference() }]) {
+        assert.deepEqual(read({ ...data, agentAuthored: true }), { actor: "agent", basis: "host-agent-authored" });
+    }
+    for (const source of ["system", "user"]) assert.deepEqual(read({ ...direct, agentAuthored: true, source }),
+        { actor: "unknown", basis: "conflicting-source" });
+    assert.deepEqual(read({ ...direct, agentAuthored: true, source: "skill-invented" }),
+        { actor: "unknown", basis: "unsupported-source", issue: "source-value-v1" });
+    assert.deepEqual(read({ ...direct, agentAuthored: "true" }), { actor: "unknown", basis: "invalid-source" });
+    assert.deepEqual(read({ content, agentAuthored: false }), { actor: "unknown", basis: "missing-source" });
+    assert.deepEqual(read({ ...direct, agentAuthored: false, source: "user" }), { actor: "user", basis: "source-user" });
+    assert.deepEqual(read({ content: '{"agentAuthored":true}' }), { actor: "unknown", basis: "missing-source" });
 });
 
 test("supported host canvas-context suffix is neutral attachment data, not an author claim", () => {

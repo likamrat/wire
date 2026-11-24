@@ -391,6 +391,16 @@ label after an upgrade, even when every call links directly to it. The links
 identify the request, not its author. To correct its retained author, review
 that original through the procedure below rather than refreshing the chat.
 
+Version 13 reads the Copilot journal's `user.message.data.agentAuthored: true`
+as an explicit Agent origin, including a kickoff with no separate sender
+envelope. A false or absent flag does not identify a Human. An explicit user
+or system source that contradicts the flag remains unverified. `shell` is a
+supported execution mode, not a sender: the same direct-input, cross-chat
+sender and kickoff checks apply. Both fields are defined in the
+[Copilot session event schema](https://github.com/microsoft/copilot-sdk/blob/2dfe56f7a205e0a4f13b6c02fc36afeb035650eb/nodejs/src/generated/session-events.ts#L7281).
+Older versioned `missing-source` entries are eligible for the bounded review
+below. A review that still finds no supported sender proposes no change.
+
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up
 copy and its checkpoint preimage. Its read-only inspector proposes changes but
@@ -418,12 +428,20 @@ it contains local source identifiers and hashes, not prompt or reply text.
 
 ```text
 node scripts/maintain-prompt-origins.mjs --mode list --data-dir <absolute-store>
+node scripts/maintain-prompt-origins.mjs --mode list --counts-only --data-dir <absolute-store>
 node scripts/maintain-prompt-origins.mjs --mode review --data-dir <absolute-store> --batch <listed-batch>
 ```
 
 `list` reads only the retained store. It groups older unverified origins and
 their retained copies by chat, lists batches of up to four, and counts excluded
 origins by reason. A candidate is **not** a finding that the author was human.
+`--counts-only` returns no member or batch IDs. It counts canonical Work IQ
+tool calls and their originating interactions across **all retained dates**,
+including earlier/inactive Copilot records and excluding platform metadata.
+Follow-ups do not add interactions. All unverified interactions count, even
+if they have no reviewable event. The reason/version groups describe retained
+evidence, not what a new original lookup would find. The time/archive choices
+below affect review eligibility, not this all-retained denominator.
 The default is the current window and active sources. To review older dates or
 archived local chats, explicitly add `--include-older` or `--include-archived`
 to both commands. These options do not change collection settings.

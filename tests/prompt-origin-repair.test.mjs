@@ -33,9 +33,17 @@ async function manifest(root) {
 }
 async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1 } = {}) {
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
-    const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair";
+    const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair", senderPair = variant === "v12-sender-pair";
     const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
     const repairItems = [item];
+    if (senderPair) {
+        const marked = app.cases.find(row => row.name === "legacy");
+        repairItems.push(marked);
+        const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
+        events.find(event => event.id === item.promptId).data.agentMode = "shell";
+        events.find(event => event.id === marked.promptId).data.agentAuthored = true;
+        await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
+    }
     if (variant === "mixed-review") repairItems.push(...app.cases.filter(row => ["enveloped-agent", "legacy", "conflict"].includes(row.name)));
     if (variant === "paged-review") {
         const agent = app.cases.find(row => row.name === "enveloped-agent");
@@ -125,11 +133,12 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
     const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
     let checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
     const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan ? "conflicting-source" : "invalid-source" };
-    const olderVersion = linkedPair ? 10 : 6;
+    const olderVersion = senderPair ? 12 : linkedPair ? 10 : 6;
+    const beforeOrigin = id => senderPair && id !== item.promptId ? { actor: "unknown", basis: "missing-source" } : older;
     const selectedIds = new Set(repairItems.map(item => item.promptId));
     for (const event of checkpoint.events.filter(event => selectedIds.has(event.id))) {
         if (legacy) { delete event.data.wirePromptAuthorship; delete event.data.wirePromptAuthorshipVersion; }
-        else Object.assign(event.data, { wirePromptAuthorship: older, wirePromptAuthorshipVersion: olderVersion });
+        else Object.assign(event.data, { wirePromptAuthorship: beforeOrigin(event.id), wirePromptAuthorshipVersion: olderVersion });
     }
     if (companion) {
         const event = checkpoint.events.find(event => event.id === companion.id);
@@ -145,7 +154,7 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
             ...(record.followUpPrompts ?? []).map((prompt, index) => ["followup", index, prompt])]) {
             if (record.sourceSessionId === app.child && selectedIds.has(prompt.sourceEventId)) {
                 if (legacy) { delete prompt.authorship; delete prompt.authorshipVersion; }
-                else Object.assign(prompt, { authorship: older, authorshipVersion: olderVersion });
+                else Object.assign(prompt, { authorship: beforeOrigin(prompt.sourceEventId), authorshipVersion: olderVersion });
                 aliases.get(prompt.sourceEventId).push({ scenarioId: record.scenarioId, field, index });
             }
         }
@@ -391,6 +400,66 @@ test("operators can discover and review a mixed historical author cohort without
     }
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, expected);
     assert.deepEqual(run("--mode", "list").batches.map(batch => batch.origins.length), [2]);
+});
+
+test("reviewed v12 missing-sender and shell origins repair both actors, copies and checkpoints without changing the calls", async t => {
+    const f = await setup(t, "v12-sender-pair"), scope = { dataDir: f.app.context.dataDir };
+    const beforeCheckpoint = JSON.parse(await readFile(f.checkpointFile)), originalFiles = f.sourceBytes.map(hash);
+    // The aggregate does not need the original chat or its compact checkpoint.
+    await rename(f.app.sourceFiles[1], f.app.sourceFiles[1] + ".away");
+    await rename(f.checkpointFile, f.checkpointFile + ".away");
+    try {
+        const result = spawnSync(process.execPath, [path.resolve("scripts/maintain-prompt-origins.mjs"),
+            "--mode", "list", "--counts-only", "--include-older", "--data-dir", scope.dataDir], { encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+        const summary = JSON.parse(result.stdout);
+        assert.deepEqual([summary.interactions, summary.calls, summary.authors], [10, 10, { user: 1, agent: 4, unknown: 5 }]);
+        assert.deepEqual(summary.reviewability, { candidate: 2, "not-older-unqualified": 3 });
+        assert.equal(summary.unverifiedReasons.reduce((sum, entry) => sum + entry.count, 0), 5);
+        assert.equal(summary.revision, f.state.revision);
+        assert.equal(summary.classifierVersion, promptAuthorship.version);
+        for (const item of f.app.cases) {
+            assert.ok(!result.stdout.includes(item.promptId) && !result.stdout.includes(item.data.content));
+        }
+    } finally {
+        await rename(f.checkpointFile + ".away", f.checkpointFile);
+        await rename(f.app.sourceFiles[1] + ".away", f.app.sourceFiles[1]);
+    }
+    const catalog = await reviewPromptOriginClass(scope);
+    assert.equal(catalog.batches.length, 1);
+    assert.equal(catalog.batches[0].origins.length, 2);
+    const review = await reviewPromptOriginClass({ ...scope, batch: catalog.batches[0].batch });
+    assert.deepEqual(review.targets.map(row => row.prompt.authorship.basis).sort(), ["host-agent-authored", "host-direct-input"]);
+    assert.deepEqual(review.unresolved, []);
+    assert.equal(review.authorized, false);
+    f.plan.targets = review.targets;
+    await writeFile(f.options.planFile, JSON.stringify(f.plan));
+    f.options.planSha256 = digest(f.plan);
+    const prepared = await runPromptOriginRepair({ ...f.options, mode: "prepare" });
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    await runPromptOriginRepair({ ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 });
+    const expected = structuredClone(f.state.evidence), expectedCheckpoint = structuredClone(beforeCheckpoint);
+    for (const { prompt, aliases } of review.targets) {
+        for (const alias of aliases) {
+            const r = expected.find(record => record.scenarioId === alias.scenarioId);
+            Object.assign(alias.field === "origin" ? r.userPrompt : r.followUpPrompts[alias.index],
+                { authorship: prompt.authorship, authorshipVersion: prompt.authorshipVersion });
+        }
+        Object.assign(expectedCheckpoint.events.find(e => e.id === prompt.sourceEventId).data,
+            { wirePromptAuthorship: prompt.authorship, wirePromptAuthorshipVersion: prompt.authorshipVersion });
+    }
+    assert.deepEqual(JSON.parse(await readFile(f.checkpointFile)), expectedCheckpoint);
+    assert.deepEqual(await Promise.all(f.app.sourceFiles.map(async file => hash(await readFile(file)))), originalFiles);
+    await f.app.restart();
+    await appendFile(f.app.sourceFiles[1], JSON.stringify({ id: randomUUID(), type: "session.info",
+        timestamp: new Date().toISOString(), data: { message: "Invented later append." } }) + "\n");
+    await f.app.runtime().collector.collectNow();
+    const after = await loadBoardState(f.app.context);
+    assert.deepEqual(after.evidence, expected);
+    assert.deepEqual(after.exports, f.state.exports);
+    const counts = await reviewPromptOriginClass({ ...scope, countsOnly: true });
+    assert.deepEqual([counts.interactions, counts.calls, counts.authors], [10, 10, { user: 2, agent: 5, unknown: 3 }]);
+    for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, pin.path))), pin.sha256);
 });
 
 test("later pages locate a candidate and disqualify a competing original; source drift invalidates the review", async t => {
