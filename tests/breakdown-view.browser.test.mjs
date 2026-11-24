@@ -322,20 +322,19 @@ test("returned API entries use their own denominator and exact Mail entry; a zer
     await expect(data.locator("a")).toHaveCount(0);
 });
 
-test("a one-in-1,001 slice stays proportional; zero links to a definition, not fabricated matching evidence", async t => {
-    const row = fixture("breakdown-extreme");
-    row.toolCalls = Array.from({ length: 1001 }, (_, i) => ({
-        toolCallId: `x${i}`, startEventId: `s${i}`, startedAt: row.capturedAt, apiResults: [],
-        tool: i ? "workiq-fetch" : "workiq-call_function", toolSucceeded: i !== 0, reportedOutcome: i ? "succeeded" : "failed",
-    }));
-    const { page } = await setup(t, [row]);
-    const outcomes = card(page, "outcomes");
-    const [start, end, fraction] = await outcomes.locator('.percentage-slice[data-category="failure"]').evaluate(n =>
-        [Number(n.dataset.start), Number(n.dataset.end), Number(n.dataset.exactFraction)]);
-    assert.ok(Math.abs(end - start - 1 / 1001) < 1e-15); assert.equal(fraction, 1 / 1001);
-    await expect(label(page, "outcomes", "failure")).toHaveAccessibleName(/1 of 1,001 Work IQ tool calls \(<0.1%\)/);
-    const zero = label(page, "outcomes", "unknown");
-    await expect(zero).toHaveAccessibleName(/0 of 1,001 Work IQ tool calls \(0%\). Read definition/);
+test("a positive outcome opens its matching evidence; zero opens a definition", async t => {
+    const failed = fixture("breakdown-failed");
+    Object.assign(failed.toolCalls[0], { toolSucceeded: false, reportedOutcome: "failed", apiResults: [] });
+    const { page, revision } = await setup(t, [failed, fixture("breakdown-completed")]);
+    await expect(page.locator("#periodResult")).toHaveAttribute("data-revision", String(revision));
+    const outcomes = page.getByRole("region", { name: "Tool call results", exact: true });
+    await expect(outcomes.getByRole("img")).toHaveAccessibleName(/2 Work IQ tool calls/);
+    const failure = outcomes.getByRole("link", { name: /Tool failed: 1 of 2 Work IQ tool calls \(50%\). View matching records/ });
+    const origin = page.url();
+    await failure.press("Enter");
+    await parents(page, ["breakdown-failed"]);
+    await backTo(page, failure, origin);
+    const zero = outcomes.getByRole("link", { name: /No result recorded: 0 of 2 Work IQ tool calls \(0%\). Read definition/ });
     await zero.click(); await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", "outcomes");
     await page.locator("#chartReferenceShowData").click();
     assert.deepEqual((await tableRows(exact(page)))["No result recorded"], ["0", "0%"]);
