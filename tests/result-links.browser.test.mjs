@@ -4,6 +4,55 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { fixture, privateFixture, restoreLegacySearch } from "./helpers.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
+import { frontendRecords } from "./frontend-fixture.mjs";
+
+test("the Analyze donut opens readable exact calls with paging and an independent returned HTTP status", async t => {
+    const records = frontendRecords(10);
+    const extra = structuredClone(records[1].toolCalls[0]);
+    Object.assign(extra, { toolCallId:"mixed-result", startEventId:"mixed-start", completionEventId:"mixed-end" });
+    extra.apiResults[0].statusCode = 403;
+    records[1].toolCalls.push(extra);
+    const app = await searchFixture(t, { records, frontend:"react", reply:false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({viewport:{width:1150,height:900}, reducedMotion:"reduce"});
+    await page.goto(app.runtime.url);
+    const center = page.locator("#outcomeChart .percentage-total-link");
+    await expect(center).toHaveText("11"); await center.press("Enter");
+    const rows = page.locator("#activityList .widget-record"), position = page.locator("#activityPagePosition");
+    await expect(page.locator("#activityListSummary")).toHaveText("Recorded activity: 11 matching tool calls");
+    await expect(position).toHaveText("1-8 of 11 Work IQ tool calls");
+    async function assertLegible() {
+        const list = await rows.allInnerTexts();
+        assert.ok(list.length && list.every(text => !/\S(?:Tool (?:failed|completed)|No result recorded)/.test(text)), list.join("\n"));
+        assert.ok(await rows.first().evaluate(n => {
+            const a = n.querySelector("a").getBoundingClientRect(), meta = n.lastElementChild.getBoundingClientRect();
+            return (meta.top >= a.bottom + 3 || meta.left >= a.right + 8)
+                && parseFloat(getComputedStyle(n).paddingInlineStart) >= 12;
+        }));
+    }
+    await assertLegible();
+    const ids = () => rows.evaluateAll(nodes => nodes.map(n=>n.dataset.actionId));
+    const first = await ids();
+    await page.locator("#activityPager button[data-page-direction='1']").click();
+    await expect(position).toHaveText("9-11 of 11 Work IQ tool calls");
+    const expected = records.flatMap(r=>r.toolCalls.map(c=>`call:${JSON.stringify([r.sourceSessionId,c.toolCallId])}`)).sort();
+    assert.deepEqual([...first,...await ids()].sort(),expected);
+    await page.goBack(); await expect(position).toHaveText("1-8 of 11 Work IQ tool calls");
+    await page.goBack(); await expect(center).toBeFocused();
+    const completed = page.locator("#outcomeChart [data-category=success] .percentage-label");
+    await completed.press("Enter");
+    await expect(page.locator("#activityListSummary")).toContainText("8 matching tool calls");
+    // An outcome link narrows the accepted scope. The center now opens those exact 8 calls.
+    await expect(center).toHaveText("8"); await center.press("Enter"); await assertLegible();
+    const mixed = rows.filter({has:page.locator("a")}).and(page.locator('[data-action-id*="mixed-result"]'));
+    await expect(mixed).toContainText("Tool completed");
+    await expect(mixed).not.toContainText("Tool failed");
+    const open = mixed.getByRole("link"); await open.press("Enter");
+    const call = page.locator('#requestContent [data-tool-call-id="mixed-result"]');
+    await expect(call).toBeFocused(); await call.locator(".reader-call-toggle").click();
+    await expect(call).toContainText("403"); await page.goBack(); await expect(open).toBeFocused();
+});
 
 test("a positive outcome drilldown keeps the private parent match and does not admit a sibling in its chat", async t => {
     const records = ["Invented survey match", "Invented other parent"].map((text, i) => {

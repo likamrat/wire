@@ -58,9 +58,23 @@ in this release. Saving Copilot reply text is a separate choice under
 ## Read the overview
 
 **Analyze** shows recorded outcomes, activity over time, tools, services and
-available response-model names, plus prompt authors. The interaction list below
+available response-model names, plus prompt authors. The interaction list
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
+On opening Analyze, the charts build to the recorded counts. This is not collection progress.
+With reduced motion, the final values appear immediately. On a narrow screen, the
+Tool call results donut stays visible and its legend fits below it when needed.
+Choose the donut total to list the matching calls, eight per page. Open a call
+by its tool or path. Its outcome describes the tool execution; returned entries
+keep their own statuses in the call reader. **Show all matching activity**
+returns to the interaction list.
+
+In **Settings > Analyze > Homepage layout**, use **Up** or **Down** to move a widget
+or the entire **Interactions** list. For example, move Interactions above the two charts,
+or put Prompt authors first. Choose **View Analyze** to see the result. The order stays
+in this browser after reload; **Restore WIRE layout** puts every section back without
+changing filters or collected activity.
+
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
 row. Typing narrows the choices; Escape leaves the selection alone. A chat is

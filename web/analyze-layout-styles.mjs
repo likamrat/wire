@@ -1,4 +1,22 @@
 export const analyzeLayoutStyles = `
+@property --analyze-sweep {syntax:"<angle>";initial-value:360deg;inherits:false}
+#outcomeChart .percentage-ring[data-building] {mask-image:conic-gradient(black var(--analyze-sweep),transparent 0)}
+/* Keep the exact, accessible value and its width in place; only paint the temporary figure. */
+:is(.percentage-total-value,.percentage-value>*,.dimensional-count)[data-build-value] {-webkit-text-fill-color:transparent}
+:is(.percentage-total-value,.percentage-value>*)[data-build-value] {position:relative}
+:is(.percentage-total-value,.percentage-value>*,.dimensional-count)[data-build-value]::after {content:attr(data-build-value) / "";position:absolute;inset:0;pointer-events:none;-webkit-text-fill-color:currentColor;text-align:inherit;font:inherit;font-variant-numeric:tabular-nums}
+.dimensional-count[data-build-value]::after {display:grid;place-items:center}
+.analyze-dashboard[data-custom-order]:not([hidden]) {display:block!important}
+.analyze-dashboard[data-custom-order]>.analyze-chart-grid,.analyze-dashboard[data-custom-order]>#percentageCharts {display:none!important}
+.analyze-ordered-widgets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
+.analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto!important;min-width:0;margin:0}
+.analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
+.analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
+.analyze-ordered-widgets>.percentage-card {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
+@container analyze-view (max-width:60rem){.analyze-ordered-widgets {grid-template-columns:minmax(0,1fr)}}
+@media(hover:hover) and (pointer:fine) {
+    body.analyze-reading #activityView #activityList .activity-card:hover {background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
+}
 .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);
@@ -101,7 +119,12 @@ export const analyzeLayoutStyles = `
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
-.widget-record {display:grid;gap:4px;padding:12px 16px;overflow-wrap:anywhere}
+#activityList .widget-record {display:grid;grid-template-columns:minmax(0,1fr) minmax(12rem,auto);gap:4px 24px;align-items:center;padding:8px 16px;overflow-wrap:anywhere}
+.widget-record>.text-link,.widget-record-exit {display:inline-flex;align-items:center;justify-self:start;min-height:44px}
+.widget-record-meta {display:grid;gap:2px;min-width:0;font-size:var(--type-small)}
+.widget-record-meta .semantic-cue {font-weight:var(--weight-regular)}
+.widget-record-exit {padding-inline:16px}
+@container (max-width:34rem){#activityList .widget-record {grid-template-columns:minmax(0,1fr)}}
 @media (hover:none) {
  :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]::before {content:attr(aria-description);display:block;font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);order:1}
  :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]:not(.author-option-value) {display:flex;flex-direction:column;justify-content:center}

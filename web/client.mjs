@@ -175,6 +175,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const time = createTimeContext();
     const pageDefaults = assessmentFactories.createPageDefaults();
+    const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token) });
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     let appUpdate;
@@ -5888,7 +5889,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityListSummary").hidden = false;
         host.replaceChildren();
         activityPage = roster.index;
-        if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link", { revealReferenceRecords: true }));
+        if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link widget-record-exit", { revealReferenceRecords: true }));
         if (!roster.total && !nativeUnavailable && !widget) {
             host.append(empty(native ? "No matching activity" : !workspaceState.evidence.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 workspaceState.evidence.scenarios.length
@@ -5960,8 +5961,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const target = routeFor("request", { request: row.scenarioId, call: row.id, layer,
             ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         const ordinal = layer === "tool" ? requestContext.actionOrdinals(record).get(sourceCallFor(row)) : null;
-        const action = routeLink([ordinal && `Call #${ordinal}`, row.tool, row.endpoint?.path].filter(Boolean).join(" · ") || results.unit(layer, 1), target, "text-link");
-        card.append(action, el("span", "muted", [results.labels(layer)[row.outcome], row.startedAt && time.formatMoment(row.startedAt, workspaceState.scope.timeContext)].filter(Boolean).join(" · ")));
+        const action = routeLink([ordinal && `Call #${ordinal}`, row.tool, row.endpoint?.path].filter(Boolean).join(" · ") || results.unit(layer, 1), target, "text-link request-link");
+        action.setAttribute("aria-controls", "contextSidebar");
+        card.dataset.resultLayer = layer;
+        const metadata = el("div", "widget-record-meta"), outcome = el("span", "semantic-cue result-tone-" + row.outcome);
+        outcome.append(ux.icon(results.icon(row.outcome)), el("span", "", results.labels(layer)[row.outcome]));
+        metadata.append(outcome);
+        if (row.startedAt) metadata.append(el("span", "muted", time.formatMoment(row.startedAt, workspaceState.scope.timeContext)));
+        card.append(viewKey(action, "widget-open:" + row.id), metadata);
         return card;
     }
     function matchingAction(row) {
@@ -6121,9 +6128,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 operationRole: ux.operations.toolRole(row.tool), description: categories.operation(row.tool)?.description, rows: [] });
             operations.get(row.tool).rows.push(row);
         }
-        const field = (name, values) => {
+        const field = (name, values, className = "") => {
             if (!values.length) return;
             const line = el("div", "card-identity-field"), items = el("dd", "card-identity-values");
+            if (className) line.classList.add(className);
             for (const value of values) items.append(value);
             line.append(el("dt", "", name), items); group.append(line);
         };
@@ -6170,7 +6178,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             extra.append(el("summary", "", `${more} more ${more === 1 ? "target" : "targets"}`), remainder);
             values.push(extra);
         }
-        field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values);
+        field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values, "card-targets");
         field(operations.size > 1 ? "Operations" : "Operation", cues(operations));
         field("Service", cues(gaps));
         if (!Array.isArray(rows)) field("Evidence", [el("span", "muted", "Not available")]);
@@ -6688,15 +6696,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return node;
         }
         function callHeading(name, result, { tool = false, duration, durationLabel = "Call duration" } = {}) {
-            const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
-            if (tool) identity.append(el("span", "reader-tool-name", name));
+            const heading = el("header", tool ? "call-heading tool-call-heading" : "call-heading"), identity = el("h3", "reader-call-identity");
+            const toolMeta = tool ? el("span", "reader-tool-meta") : null;
+            if (tool) { toolMeta.append(el("span", "reader-tool-name", name)); identity.append(toolMeta); }
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
+            if (tool) summary.append(el("span", "reader-outcome-label", "Outcome"));
             summary.append(result);
             if (duration !== undefined) {
                 const elapsed = el("span", "reader-call-duration"), value = durationValue(duration, true);
                 elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
-                if (tool) identity.append(elapsed); else secondary.append(elapsed);
+                if (tool) toolMeta.append(elapsed); else secondary.append(elapsed);
             }
             heading.append(identity, summary, secondary);
             return heading;
@@ -8965,6 +8975,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("navigationPending").hidden = true;
         const requestRoute = workspaceState.route.view === "request" ? workspaceState.route : null;
         if (requestRoute?.bookmark && !requestRoute.request) {
+            homepage.leave();
             // Refusing a locator is not navigation to the full Analyze population.
             $("workspace").hidden = true;
             boundedNative.clearCards();
@@ -9011,6 +9022,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             publishAcceptedListScope(acceptedDescription);
             if (sourceCollection.active) renderBoundedAnalyze();
         }
+        homepage.present(workspaceState.route.view === "analyze" && !workspaceState.route.compare
+            && workspaceState.route.analyzeSection !== "guide" && (semanticQuery === null || semanticBound), publication, Boolean(requestRoute));
         if (workspaceState.route.view === "reports") renderReports();
         trendsUI.update();
         if (workspaceState.route.view === "settings" && workspaceState.route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
@@ -11444,6 +11457,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        homepage.leave();
         analyzeDatesPicker.close(false); analyzeDatesPicker.showRange("");
         analyzeCalendar.clear();
         namedDrafts.withdrawAccess(); namedReport = null;

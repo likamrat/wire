@@ -426,6 +426,23 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .technical-detail[hidden] {display:none}
 #requestContent .reader-call-row .reader-call-duration {font-size:var(--type-small);color:var(--muted)}
 #requestContent .reader-call-row .reader-call-duration data {color:var(--muted)}
+#requestContent .tool-call-heading {container:tool-call / inline-size}
+#requestContent .tool-call-heading :is(.reader-call-identity-line,.reader-call-summary) {display:grid;grid-template-columns:var(--call-key-width) minmax(0,1fr);align-items:baseline;gap:4px var(--call-key-gap)}
+#requestContent .tool-call-heading .reader-call-identity-line {grid-template-columns:var(--call-key-width) minmax(0,1fr) auto}
+#requestContent .reader-tool-meta {grid-column:2;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;min-width:0}
+#requestContent .reader-tool-meta .reader-tool-name {font:var(--weight-strong) var(--type-reading)/1.45 var(--font);overflow-wrap:anywhere}
+#requestContent .tool-call-heading .reader-call-disclosure {grid-column:3;grid-row:1;align-self:start;margin-block-start:3px}
+#requestContent .reader-outcome-label {color:var(--muted);font:var(--type-small)/1.5 var(--font)}
+#requestContent .tool-call-heading .card-outcome-face {padding:0;border:0;background:none;font-weight:var(--weight-regular)}
+#requestContent .tool-call-heading .reader-call-secondary {margin-top:6px;align-items:stretch}
+@container tool-call (max-width:20rem) {
+ #requestContent .reader-tool-meta {flex-direction:column;align-items:flex-start}
+}
+@container tool-call (max-width:14rem) {
+ #requestContent .tool-call-heading .reader-call-identity-line {display:flex}
+ #requestContent .tool-call-heading .reader-tool-meta {flex:1}
+ #requestContent .tool-call-heading :is(.reader-call-summary,.card-identity-field) {grid-template-columns:minmax(0,1fr);gap:2px}
+}
 #requestContent.tool-activity-log [data-reader-section=activity]>.reader-section-heading {position:sticky;top:calc(-1 * var(--reader-timing-padding,20px));z-index:1;background:var(--paper)}
 #requestContent.tool-activity-log [data-reader-section=activity] :is(.reader-call-row,.reader-call-row .call-heading,.reader-call-toggle) {scroll-margin-block-start:var(--reader-timing-inset,16px)}
 #requestContent .reader-response-availability:has(>.reader-empty) {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin-top:24px;padding-top:20px}
