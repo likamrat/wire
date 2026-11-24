@@ -127,6 +127,10 @@ original address and verifies its bytes. It does not update your installation.
 With Microsoft Edge Stable installed on Windows (Playwright Chromium on WSL), set `WIRE_UPDATE_BROWSER=1`
 to exercise **Update and restart** in Settings and verify that the
 reloaded browser is executing the new build.
+Set `WIRE_UPDATE_BROWSER=reloaded` to exercise Settings and Analyze in two
+windows of the same browser profile. This replaces the disposable starter,
+reloads Analyze during a read, checks a missing readiness acknowledgment in
+both windows, then verifies each window's original destination after one restart.
 
 To try the update yourself on Windows or WSL, set `WIRE_UPDATE_BROWSER=manual`
 and run `npm run test:update-runtime`. In PowerShell:
@@ -267,7 +271,7 @@ For Analyze homepage ordering, build the browser assets and run
 `node --test tests/analyze-layout.qualification.mjs`. Playwright uses the Settings
 arrows to visit all 40,320 arrangements in both renderers and checks the preview
 against wide and narrow Analyze tabs. It then restarts Chromium on the same
-disposable profile to verify both a custom order and **Restore Wired Default Layout**.
+disposable profile to verify both a custom order and **Restore WIRE Default Layout**.
 This longer check uses invented records and no mocked network responses.
 
 For changes to native report selection, saving or recovery, run `npm run build`

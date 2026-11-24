@@ -5,8 +5,9 @@ const topics = [
         <li>Select <strong>Prepare preview</strong>. Review the result, then select <strong>Save report</strong> to keep it.</li></ol>
         <h3>Where does it go?</h3><p>Save writes the files on this device. Open <strong>Reports → Saved library</strong> to find them again.</p>`],
     ["history", "Find missing activity", `<ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
+        <li>If only a few dates fit on the time chart, scroll across it. The dates below the plot show how far it extends. Choose <strong>First dates</strong> when available to reach the earliest days.</li>
         <li>If you hid a card, open <strong>Hidden cards</strong> above the interaction list and choose <strong>Restore</strong> beside it.</li>
-        <li>If the activity is still missing, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
+        <li>If the interaction is still missing from the list, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
         <h3>Missing text in Search</h3><p>Search looks in saved activity and reports. It can’t find reply text that wasn’t retained.</p>`],
     ["counts", "Understand activity counts", `<p>One interaction can include several calls. Not every saved call identifies the prompt that started it.</p>
         <h3>Example</h3><p>If the records link three matching calls to the same originating prompt, Analyze counts <strong>1 interaction</strong> and <strong>3 matching tool calls</strong>. The totals include matches across all pages.</p>
@@ -16,6 +17,8 @@ const topics = [
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>
         <h3>Which app did Copilot use?</h3><p>Look for <strong>Target</strong> on the call. A prompt can mention Calendar without Copilot using it. <strong>Asked Copilot</strong> tells you there was a request. It doesn’t tell you which apps Copilot used.</p>
         <h3>Who sent the prompt?</h3><p>A <strong>Human prompt</strong> came from a person. An <strong>Agent prompt</strong> came from an agent. <strong>Sender unclear</strong> means the saved record doesn't tell WIRE which one sent it. The card shows why.</p>`],
+    ["updates", "When an update stops", `<p>If a window didn’t confirm it was ready, WIRE stopped before restarting. Keep your windows open. Finish any edits and check the result of any pending save or deletion in its original window. Then choose <strong>Settings → General → Update and restart</strong> in one window.</p>
+        <p>If you see <strong>Restart not confirmed</strong>, choose <strong>Check restart status</strong> instead of starting the update again.</p>`],
 ];
 
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>

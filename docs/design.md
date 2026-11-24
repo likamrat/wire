@@ -137,7 +137,9 @@ adjacent rows, without individual card borders or shadows. The prompt leads
 and keeps its shorter reading measure. An adjacent identity key stacks below
 it in narrow columns. A tool failure and a separate returned issue each lead to
 their own evidence; routine rows need no four-state ledger.
-The four supporting breakdowns use paired,
+When the time chart and tool call results share a row, give them equal widths
+and align their top and bottom edges. Let each chart take its natural height
+when stacked. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
 
 Screen headings use sentence case, including **Work IQ**. Keep branding,
@@ -368,7 +370,7 @@ first. A fresh sidebar entry starts on Overview with Errors & failures. The
 section row pairs each icon with a label; an underline identifies the current section.
 Keep the dated population
 beside the measure name. An incomplete service name is a limit on that count,
-not a general warning below every chart. Put the counting details in Data table.
+not a general warning below every chart. Put the counting details in View daily values.
 Named legend controls change what is drawn without changing the population.
 Columns use a zero baseline and a separate bar for each series, even when
 services or models overlap. Straight lines use the same observations; a missing
@@ -384,8 +386,9 @@ period uses a compact dated explanation and optional jump to real activity.
 Dates opens the 7/14/30/custom choices. Never substitute a pending date or
 filter for the last accepted facts. Compare measures uses one accepted scope
 for both series. Overlay only matching units and denominator bases; otherwise
-align dates on separate scales. **All charts**, available under **Arrange charts**,
-retains the full-width overview and its sizing controls.
+align dates on separate scales. **Show or hide charts** belongs in the workspace
+toolbar. Its checkboxes add separate charts below the selected measure;
+**Open all charts** opens the full-width stack with sizing controls.
 
 The same chart owner serves overview and maximized reading. Daily ticks use
 month and day, except Today; the compact index may show fewer tick labels

@@ -125,6 +125,19 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     }
     async function samplePreview(stage) {
         await expect(preview).toBeVisible();
+        const rows = field.locator("li"), middle = rows.nth(1).getByRole("button");
+        const glyphs = await middle.locator("svg path").evaluateAll(paths => paths.map(path => {
+            const {width,height,y} = path.getBoundingClientRect();
+            return [width,height,y];
+        }));
+        assert.equal(glyphs.length,2);
+        assert.deepEqual(glyphs[0],glyphs[1],`${stage}: up and down glyphs match in size and vertical alignment`);
+        for (const [row,direction,column] of [[rows.first(),"down",1],[rows.last(),"up",0]]) {
+            const available = row.getByRole("button");
+            await expect(available).toHaveCount(1);
+            await expect(available).toHaveAccessibleName(new RegExp(` ${direction}$`));
+            assert.equal((await available.boundingBox()).x,(await middle.nth(column).boundingBox()).x);
+        }
         const tiles = await preview.locator("[data-tile]").evaluateAll(nodes => nodes.map(node => {
             const { x, y, width, height } = node.getBoundingClientRect();
             return { key:node.dataset.tile,x,y,width,height };
@@ -184,11 +197,11 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         })),"enlarged labels, tiles and actions must fit");
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     }
+    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Tokens & estimated cost down",exact:true}), control => control.tap());
     const authorIndex = (await settingsOrder()).indexOf("authors");
-    for (let i=1; i<authorIndex; i++) await up("Prompt authors").tap();
-    await steadyMove("usage-tile",up("Tokens & estimated cost"), control => control.tap());
+    for (let i=3; i<authorIndex; i++) await up("Prompt authors").tap();
     const chosen = await settingsOrder();
-    assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
+    assert.deepEqual(chosen.slice(0,4),["interactions","time","outcomes","authors"]);
     await samplePreview("chosen");
     if (width===1440) await chooseTheme(page,"dark");
     await page.reload(); await samplePreview("persisted");
@@ -196,7 +209,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     await observe("chosen"); await page.reload(); await observe("reloaded");
     await page.goto(settings);
     await selectActivityOption(page,"defaultGuideStart","last");
-    const restore = field.getByRole("button",{name:"Restore Wired Default Layout",exact:true}), tip = page.getByRole("tooltip");
+    const restore = field.getByRole("button",{name:"Restore WIRE Default Layout",exact:true}), tip = page.getByRole("tooltip");
     if (width===1440) {
         // This pane crosses the breakpoint where the standard and custom previews
         // no longer use the same column count.
@@ -233,6 +246,11 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         assert.deepEqual(painted.map(card=>[card.key,card.x > left+1,card.x <= left+1 && card.x+card.width >= right-1]),
             previewColumns.get(previewStage),`${stage}: each section occupies the column or full row shown in Settings`);
         const list = cards.find(card=>card.key==="interactions");
+        if (width===1440) {
+            const time = cards.find(card=>card.key==="time"), outcomes = cards.find(card=>card.key==="outcomes");
+            if (Math.abs(time.y-outcomes.y)<=1) assert.ok(Math.abs(time.width-outcomes.width)<=1
+                && Math.abs(time.height-outcomes.height)<=1,`${stage}: time and results share equal chart frames`);
+        }
         for (const card of cards) if (card !== list) {
             assert.ok(card.y+card.height <= list.y+1 || list.y+list.height <= card.y+1,`${stage}: Interactions has its own row`);
         }

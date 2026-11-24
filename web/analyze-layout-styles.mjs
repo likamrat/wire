@@ -49,6 +49,7 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard .analyze-ordered-widgets>[data-home-section] {grid-column:auto;grid-row:auto!important;min-width:0;margin:0}
 .analyze-dashboard .analyze-ordered-widgets>[data-full-row] {grid-column:1/-1}
 .analyze-dashboard .analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary,.percentage-card) {border:1px solid var(--surface-edge);border-radius:var(--radius-small)}
+.analyze-ordered-widgets>:is(.analyze-chart-main,.analyze-outcome-summary) {align-self:stretch}
 .analyze-ordered-widgets>.percentage-card {padding:var(--widget-heading-inset) 16px 16px;background:var(--paper);container:breakdown-card / inline-size}
 @container analyze-view (max-width:60rem){.analyze-ordered-widgets {grid-template-columns:minmax(0,1fr)}}
 @media(hover:hover) and (pointer:fine) {
@@ -100,15 +101,15 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px}
 .analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(0,1fr) minmax(32rem,36rem);grid-auto-rows:1px;gap:0 16px;align-items:start}
 .analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order])>#activityView {grid-column:1/-1;min-width:0;margin:0}
-.analyze-dashboard[data-dashboard-layout=packed] .analyze-chart-grid,
+.analyze-dashboard[data-dashboard-layout=packed]>.analyze-chart-grid {grid-column:1/-1}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-section,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-panels {display:contents}
-.analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order]) :is(.analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card) {align-self:start;grid-column:auto}
+.analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order]) #percentageCharts .percentage-card {align-self:start;grid-column:auto}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-legend {row-gap:0}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] {padding-block-end:8px}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] .percentage-label {min-height:1.5rem}
-.analyze-chart-grid {display:grid;grid-template-columns:minmax(32rem,36rem) minmax(0,1fr);gap:16px;align-items:start;min-width:0}
+.analyze-chart-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch;min-width:0}
 .analyze-outcome-summary {min-width:0;display:flex;flex-direction:column}
 :is(#outcomeChart,.native-outcome-chart) {min-width:0;display:flex;flex:1}
 :is(#outcomeChart,.native-outcome-chart)>.percentage-card {width:100%;padding:20px 20px 0;border:0;background:none;display:flex;flex-direction:column;container:outcome-card / inline-size}
@@ -229,7 +230,7 @@ export const analyzeLayoutStyles = `
  #percentageCharts [data-breakdown=models] {grid-column:auto}
 }
 @container analyze-view (max-width:64rem) {
- .analyze-chart-grid {grid-template-columns:minmax(0,1fr)}
+ body:not(.wire-frontend-react) .analyze-chart-grid,
  .analyze-dashboard[data-dashboard-layout=packed] {grid-template-columns:minmax(0,1fr)}
 }
 @container breakdown-card (min-width:30rem) {

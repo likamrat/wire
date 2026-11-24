@@ -66,7 +66,9 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(widget).toContainText("30,500"); await expect(widget).toContainText("1 of 2 interactions");
     await expect(widget).toContainText("0 of 2 interactions"); await expect(widget).not.toContainText("$0.00");
     await widget.getByRole("link",{name:/View trend/}).click();
-    await expect(page.locator(".trends-panel[data-family=usage]")).toContainText("30,500 tokens");
+    const periodUsage = page.locator(".trends-panel[data-family=usage]");
+    await expect(periodUsage).toContainText("30,500 tokens");
+    await expect(periodUsage.locator(".trends-plot svg")).toBeVisible();
     await page.goto(runtime.url);
     await expect(widget).toContainText("342,000");
     await page.goto(new URL("/settings?section=analyze",runtime.url).href);
@@ -104,7 +106,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await capture("trends-author", panel.locator(".trends-plot"));
     await selectActivityOption(page,"trendsUsagequestion","tool");
     await expect(panel).toContainText("330,000 tokens"); await expect(panel).toContainText("1 without a token count");
-    await panel.getByRole("button",{name:"Data table",exact:true}).click();
+    await panel.getByRole("button",{name:"View daily values",exact:true}).click();
     const toolRow=page.getByRole("table",{name:"Usage in the entire period"}).getByRole("row",{name:/workiq-fetch/});
     await expect(toolRow).toContainText("184,500"); await expect(toolRow).toContainText("~27,500 tokens (4 / 4 calls)");
     await page.keyboard.press("Escape");
@@ -134,7 +136,6 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await selectActivityOption(page,"reportUsageauthor","agent");
     await selectActivityOption(page,"reportUsagetool","workiq-fetch");
     await page.getByRole("button",{name:"View in Trends",exact:true}).click();
-    await panel.getByRole("button",{name:"Tokens",exact:true}).filter({visible:true}).click();
     await expect(panel).toContainText("154,500 tokens · 2 of 2 interactions metered");
     assert.doesNotMatch(page.url(),/agent|fetch|60000/);
     const prepared=page.waitForResponse(r=>r.url().endsWith("/api/preview"));
@@ -207,13 +208,12 @@ test("normal React entry exposes one quiet usage chip, scoped shares, reader, Tr
     await expect(page.locator("#costRateReference")).toContainText("preview-model");
     await expect(page.locator("#costRateReference input,#costRateReference button")).toHaveCount(0);
     await page.goto(new URL("/trends?section=charts",runtime.url).href);
-    await page.getByRole("navigation",{name:"Trend measures"}).getByRole("button",{name:"Tokens & est. cost",exact:true}).click();
+    await page.getByRole("navigation",{name:"Trend measures"}).getByRole("button",{name:"Token usage",exact:true}).click();
     const panel=page.locator('.trends-panel[data-family="usage"]');
-    await expect(panel).toContainText("6 of 8 interactions priced"); await expect(panel).toContainText("1 metered but unpriced");
-    await panel.getByRole("button",{name:"Tokens",exact:true}).filter({visible:true}).click();
+    await expect(panel).toContainText("7 of 8 interactions metered");
     await expect(panel).toContainText("342,000 tokens");
     await panel.getByRole("button",{name:"Compare measures",exact:true}).click();
-    await expect(page.locator(".trends-panel-pair")).toContainText("Tokens & est. cost · Tokens");
+    await expect(page.locator(".trends-panel-pair")).toContainText("Token usage");
     await page.goto(new URL("/compare",runtime.url).href);
     await expect(page.getByRole("table",{name:"Whole interactions with matching records"})).toContainText("342,000");
     await expect(page.getByRole("table",{name:"Why estimated cost changed"})).toContainText("claude-opus-5-5");

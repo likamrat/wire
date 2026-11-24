@@ -211,8 +211,12 @@ Empty Today does not discard useful earlier data or turn the screen into
 unavailable rows. Unknown and incomplete evidence stays explicit.
 Use the full workspace in both orientations without scaling text. Narrow
 layouts wrap the legend; the plot scrolls horizontally. **Dates > Custom
-dates** expands the existing calendar at the same trigger. Filters and Arrange
-charts likewise open at their own controls. The period control (or the title in
+dates** expands the existing calendar at the same trigger. Filters and **Show or
+hide charts** likewise open at their own toolbar controls. Select the extra
+charts to show below the current measure; Cancel leaves that choice alone.
+Opening a different measure from the index starts with just that chart.
+**Back to selected charts** restores the selection after visiting All charts.
+The period control (or the title in
 All charts) names the accepted range. Presets and Apply update the charts
 together; drafts, Cancel, pending reads and failed reads retain the
 accepted range. Today remains a current-day label, not a claim of full-day coverage.
@@ -225,11 +229,11 @@ and unverified presentation as the interaction reader; the chart does not
 infer who wrote a prompt.
 
 In the index, hover/focus previews a mark; click, tap or Enter pins its reading
-and exposes the matching calls. **Data table** includes hidden series and the
+and exposes the matching calls. **View daily values** includes hidden series and the
 full period, not only the drawn window. **Columns / Lines** retains exact
 selection and denominators. In All charts, selection updates the selected-day
 and subject row. Maximize uses the same chart and controls, adding the
-selected-date breakdown and View numbers. Back to overview restores the activating
+selected-date breakdown and View numbers. Back to all charts restores the activating
 control and reading position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.

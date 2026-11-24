@@ -148,8 +148,8 @@ async function setupIndex(t, withBoundary = false, options = {}) {
 }
 
 async function openAllCharts(page) {
-    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
-    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts", exact: true }).click();
+    await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Show or hide charts" }).getByRole("button", { name: "Open all charts", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
 }
 
@@ -162,7 +162,7 @@ async function setupAllCharts(t, withBoundary = false, options = {}) {
 test("Trends opens one count chart with an errors-first visible index and compares named measures without changing the period", async t => {
     const { page, reads } = await setupIndex(t);
     const index = page.getByRole("navigation", { name: "Trend measures" });
-    await expect(index.getByRole("button")).toHaveText(["Errors & failures", "Tool calls", "Tool usage", "Services", "Call duration", "Prompt authors", "Response models", "Tokens & est. cost"]);
+    await expect(index.getByRole("button")).toHaveText(["Errors & failures", "Tool calls", "Tool usage", "Services", "Call duration", "Prompt authors", "Response models", "Token usage"]);
     await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "rhythm");
     await expect(page.getByRole("button", { name: "Count", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -170,9 +170,9 @@ test("Trends opens one count chart with an errors-first visible index and compar
     const before = reads.length;
     await index.getByRole("button", { name: "Services", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "services");
-    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
+    await page.getByRole("button", { name: "Show or hide charts", exact: true }).click();
     await page.getByRole("checkbox", { name: "Call duration", exact: true }).check();
-    await page.getByRole("button", { name: "Apply comparison", exact: true }).click();
+    await page.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(2);
     await expect(page.locator("[data-family=services]")).toBeVisible();
     await expect(page.locator("[data-family=timing]")).toBeVisible();
@@ -684,7 +684,8 @@ test("author, overlapping service/model, error, timing and calendar marks open o
 test("Trends opens normally, keeps 30 daily points and connects exact selected evidence to the existing reader", { timeout: 45000 }, async t => {
     const { page, reads } = await setupAllCharts(t);
     await expect(page.locator(".trends-panel")).toHaveCount(8);
-    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(8);
+    await expect(page.locator(".trends-panel:not([data-family=usage]) .trends-plot svg:visible")).toHaveCount(7);
+    await expect(page.locator('[data-family=usage] .trends-no-activity')).toContainText("No token counts available");
     const data = await dates(page);
     assert.equal(data.days.length, 30);
     assert.equal(data.totals.calls, 60);
@@ -775,7 +776,7 @@ test("the eight simultaneous charts, daily activity and population filters work 
     assert.equal(filtered.days.length, 30);
     assert.equal(filtered.totals.calls, 20);
     await expect(page.locator(".trends-restrictions")).toContainText("Files");
-    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
     await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await expect(page.getByRole("button", { name: "1 filter applied", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
@@ -1150,6 +1151,8 @@ function currentRecords({ emptyToday = false, many = false } = {}) {
         .map((record, index) => {
             const day = Number(record.userPrompt.sourceTimestamp.slice(8, 10));
             const stamp = new Date(end - (30 - day) * 86400000).toISOString();
+            if (index % 6 === 0) record.usageCalls = [{receiptId:`usage-${index}`,apiCallId:`usage-call-${index}`,model:"gpt-4.1",at:stamp,
+                tokens:{freshInput:day*10,cacheRead:0,cacheWrite:0,output:5}}];
             record.userPrompt.sourceTimestamp = stamp;
             record.userPrompt.text = `Find the Cedar release evidence for ${stamp.slice(0, 10)}.`;
             for (const [ordinal, call] of record.toolCalls.entries()) {
@@ -1231,7 +1234,7 @@ test("chart-first entry retains period facts with empty Today and All charts pre
     await assertDailyAxes(page, 30);
     await selectMode(page, "share"); await settle(page);
     assert.equal(await page.locator("#trendsPlot-tools").evaluate(node => node.scrollLeft), 120);
-    await page.getByRole("button", { name: "Back to overview", exact: true }).click(); await settle(page);
+    await page.getByRole("button", { name: "Back to all charts", exact: true }).click(); await settle(page);
     await expect(checkbox).not.toBeChecked();
     await expect(page.locator('[data-family=tools] [data-trend-mode=share]')).toHaveAttribute("aria-pressed", "true");
     assert.equal(await page.locator("#trendsPlot-tools").evaluate(node => node.scrollLeft), 120);
@@ -1247,7 +1250,7 @@ test("chart-first entry retains period facts with empty Today and All charts pre
     for (const id of ["authors", "rhythm", "services", "problems", "models", "timing"]) {
         await page.locator(`[data-family="${id}"] .trends-sizing button:first-child`).click(); await settle(page);
         await assertDailyAxes(page, 30);
-        await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+        await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
     }
     await chooseTheme(page, "dark");
     await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
@@ -1447,7 +1450,7 @@ test("wide populated Trends stays readable through resizing, zoom, chart sizing 
     const readsBefore = reads.length;
     await page.getByRole("checkbox", { name: "Show fetch", exact: true }).uncheck();
     assert.equal(reads.length, readsBefore);
-    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "Show fetch", exact: true })).not.toBeChecked();
     await expect(page.locator(".trends-restrictions")).toContainText("Agent prompts");
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
@@ -1491,7 +1494,8 @@ test("every trend widget spans the workspace in landscape and portrait", { timeo
 test("every overview chart exposes its measures without redundant subheaders", { timeout: 30000 }, async t => {
     const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await settle(page);
-    await expect(page.locator(".trends-modes:visible")).toHaveCount(8);
+    await expect(page.locator(".trends-modes:visible")).toHaveCount(7);
+    await expect(page.locator('[data-family=usage] .trends-modes')).toBeHidden();
     await expect(page.locator(".trends-unit:visible")).toHaveCount(0);
     await expect(page.locator('[data-family=rhythm] h2')).toHaveText("Tool calls");
     await expect(page.locator(".trends-plot svg:visible")).toHaveCount(8);
@@ -1511,7 +1515,7 @@ test("author names stay whole in overview and maximized reading without a vertic
     await page.getByRole("button", { name: "Maximize Prompt authors", exact: true }).click();
     await capture(page, "authors-maximized-repro");
     await check("maximized");
-    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
     await check("overview");
 });
 
@@ -1579,7 +1583,7 @@ test("all eight full-width widgets retain readable labels and measures across si
             await measure(panel, `${orientation}/maximized`);
             await captureWidget(panel, `${orientation}-${id}-maximized`);
             await panel.locator(`[data-trend-mode="${modes[0]}"]`).click();
-            await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+            await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
             await measure(panel, `${orientation}/restored`);
             await expect(panel.locator(`[data-trend-mode="${modes[0]}"]`)).toHaveAttribute("aria-pressed", "true");
             await panel.locator(".trends-sizing button").last().click();
@@ -1942,7 +1946,7 @@ test("touch and keyboard select every chart in place and preserve its point thro
         await panel.locator(".trends-sizing button").first().click();
         await expect(panel).toHaveAttribute("data-maximized", "true");
         await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
-        await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+        await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
         await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
     }
 });
@@ -2094,7 +2098,7 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     const snapshot = async () => page.locator(".trends-panel").evaluateAll(nodes => nodes.map(node => ({
         id: node.dataset.family, heading: node.querySelector(".trends-identity").textContent,
         choices: [...node.querySelectorAll("input")].map(input => [input.dataset.series, input.checked]),
-        mode: node.querySelector("[data-trend-mode][aria-pressed=true]").dataset.trendMode,
+        mode: node.querySelector("[data-trend-mode][aria-pressed=true]")?.dataset.trendMode,
         marks: [...node.querySelectorAll("[data-trend-mark]")].map(node => [node.getAttribute("aria-label"), node.getAttribute("aria-pressed")]),
         dates: [...node.querySelectorAll("[data-date-tick]")].map(node => node.textContent),
     })));
@@ -2152,7 +2156,7 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
     const actual = await evidenceCallIds(page, records);
     assert.deepEqual(actual.sort(), [...expected].sort());
     await page.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+    await page.getByRole("button", { name: "Back to all charts", exact: true }).click();
     await openDatePicker(page, "trends", "Last 7 days");
     await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false"); await settle(page);
     for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {

@@ -17,7 +17,7 @@ export const pageDefaultSpecs = {
         choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["usage", "Tokens & estimated cost"], ["interactions", "Interactions"],
             ["tools", "Work IQ tool calls"], ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"]] },
     trendChart: { id: "defaultTrendChart", label: "Default trend chart", help: "Choose the chart to show on a fresh visit.", initial: "problems",
-        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Tokens &amp; est. cost"]] },
+        choices: [["problems", "Errors &amp; failures"], ["rhythm", "Tool calls"], ["tools", "Tool usage"], ["services", "Services"], ["timing", "Call duration"], ["authors", "Prompt authors"], ["models", "Response models"], ["usage", "Token usage"]] },
     reportFormats: { id: "defaultReportFormats", label: "Default formats", help: "Choose at least one.", initial: ["html"],
         choices: [["html", "HTML"], ["pdf", "PDF"], ["markdown", "Markdown"], ["json", "JSON"]] },
     reportPeriod: { id: "defaultReportPeriod", label: "Default reporting period", help: "Ends today.", initial: "7",
@@ -177,9 +177,9 @@ export function defaultField(key, icons) {
     const status = `<p class="settings-help" role="status" id="${id}Status" hidden></p>`;
     if (pageDefaultSpecs[key].ordered) return `<fieldset class="page-default-field analyze-layout-field" id="${id}" tabindex="-1" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="analyze-layout-editor"><ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
-        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["chart-collapse"]}</button>
-        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
-      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore Wired Default Layout</button>
+        <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["move-up"]}</button>
+        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons["move-down"]}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
+      <div class="analyze-layout-actions"><button type="button" id="restoreAnalyzeLayout" data-restore>Restore WIRE Default Layout</button>
       <a href="/" data-nav="analyze">View Analyze</a></div><p class="visually-hidden" role="status" id="${id}Announcement"></p>${status}</fieldset>`;
     if (Array.isArray(initial)) return `<fieldset id="${id}" class="page-default-field" aria-describedby="${described}">
       <legend>${label}</legend>${hint}<div class="page-default-formats">${choices.map(([v, text]) =>
