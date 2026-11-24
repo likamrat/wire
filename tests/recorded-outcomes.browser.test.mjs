@@ -133,6 +133,8 @@ function measure() {
     return { paintedDiameter: 208 * scale, innerDiameter: 132 * scale, value: text(".percentage-total-value"),
         unit: text(".percentage-total-unit"), widget: box(card), legend: box(legend),
         ring, bottomGap: box(card).bottom - Math.max(box(legend).bottom,ring.bottom),
+        strip: [...root.querySelectorAll(".outcome-share-strip>span")].map(segment=>
+            box(segment).width / box(segment.parentElement).width),
         scopeInWidget: card.contains(scope), scopeInCommands: document.getElementById("analyzeResultCommands").contains(scope),
         rows: [...legend.children].map(row => ({ category: row.dataset.category, count: +row.dataset.count,
             percentage: row.dataset.percentage, label: box(row.querySelector(".percentage-label")),
@@ -204,12 +206,10 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
         assert.equal(current.unit.text, "tool calls", current.key);
         assert.equal(current.fontLoaded, true, current.key);
         assert.equal(current.reducedMotion, false, "Proof waits for real motion; it does not disable it");
-        assert.equal(current.value.size, (current.total === 239 ? 30 : 20) * current.textScale / 100, current.key);
-        assert.equal(current.unit.size, 14 * current.textScale / 100, current.key);
+        assert.ok(current.value.size > current.unit.size,current.key);
+        assert.ok(current.unit.size >= 14 * current.textScale / 100,current.key);
         if (current.width === 1440 && current.textScale === 100 && current.zoom === 1) {
-            assert.ok(Math.abs(current.paintedDiameter - 208 * 208 / 240) < .01, current.key);
-            assert.ok(current.bottomGap <= 12, `${current.key}: tightened space below the legend`);
-            assert.ok(current.widget.height <= 280, `${current.key}: horizontal outcome content stays compact`);
+            assert.ok(current.paintedDiameter >= 160, `${current.key}: the wheel anchors the full-width card`);
         }
         if (current.legend.y < current.ring.bottom) {
             assert.ok(current.legend.x >= current.ring.right + 15, `${current.key}: labels and values sit on the wheel's right`);
@@ -219,7 +219,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
         assert.equal(current.scopeInCommands, true, `${current.key}: result commands retain the scope`);
         assert.ok(current.bottomGap <= 32, `${current.key}: no empty footer band (${current.bottomGap})`);
         for (const label of [current.value, current.unit]) {
-            assert.ok(label.clearance > 0, `${current.key}: the entire text box must stay inside the inner edge (${label.clearance}px clearance)`);
+            assert.ok(label.clearance >= 4, `${current.key}: both center labels need padding inside the inner edge (${label.clearance}px clearance)`);
             assert.equal(label.rectangles.length, 1, `${current.key}: center text stays on one line`);
             assert.equal(label.clipped || label.ellipsis, false, current.key);
         }
@@ -233,6 +233,8 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
             || Math.max(...current.rows.map(row=>row.value.left))-Math.min(...current.rows.map(row=>row.value.left))<1,
             `${current.key}: narrow legend values share an edge`);
         for (const slice of current.slices) assert.equal(slice.fraction, slice.count / current.total);
+        assert.equal(current.strip.length,current.slices.length,current.key);
+        current.strip.forEach((fraction,i)=>assert.ok(Math.abs(fraction-current.slices[i].fraction)<.001,current.key));
         const before = baseline.find(row => row.key === current.key);
         if (before) {
             assert.ok(current.paintedDiameter > before.paintedDiameter, current.key);

@@ -66,9 +66,11 @@ defines when pending reads and return state lose permission to publish.
 
 ## Analyze and filters
 
-Lead with accepted recorded outcomes and activity patterns. The outcome ring
-and right-side legend share a row when the widget has sufficient width; small
-layouts stack without squeezing values. Model, tool and service widgets use
+Lead with accepted recorded outcomes and activity patterns. For comparable tool
+calls, the ring centers the total and unit. Beside it, a square-ended strip shows
+the same shares, with the exact percentage and count beneath each outcome label.
+Small layouts keep the strip and stack the labelled readings below the ring.
+Do not combine separate populations into one strip. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
 The time chart, tool results, token usage, four breakdowns and Interactions can each move in **Settings >
 Analyze**. The original layout is the default. Follow the chosen order in both

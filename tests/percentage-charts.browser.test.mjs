@@ -120,6 +120,7 @@ test("result chart titles and accessible names follow accepted units and clear o
         await page.evaluate(analytics => window.view.update(analytics, { layer: analytics.layer, filters: {} }), analytics);
         await expect(card).toHaveAccessibleName("Results by source");
         await expect(card.locator(".percentage-content")).toHaveAttribute("data-unit-mode", "separate");
+        await expect(card.locator(".outcome-share-strip")).toHaveCount(0);
         assert.equal(await card.locator(".percentage-ring").count(), 0);
         assert.deepEqual(await card.locator("[data-count-unit]").evaluateAll(nodes => nodes.map(node => node.dataset.countUnit)),
             analytics.unitPopulations.map(population => population.unit));

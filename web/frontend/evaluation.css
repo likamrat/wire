@@ -75,7 +75,7 @@
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
 .wire-frontend-react #chart .flat-comparison-segment { background-image: none; }
 .wire-frontend-react #outcomeChart > .percentage-card { --outcome-ring-size: 11rem; padding: var(--widget-heading-inset) 20px 20px; }
-.wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) {
+.wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) {
     grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
     gap: 0 16px;
 }
@@ -112,23 +112,23 @@
     .wire-frontend-react #frontendBreakdowns .percentage-panels { grid-template-columns: minmax(0, 1fr); }
 }
 @container analyze-view (max-width: 60rem) {
-    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend {
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) .percentage-legend {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
     }
     .wire-frontend-react #outcomeChart { container: outcome-widget / inline-size; }
     @container outcome-widget (max-width: 29rem) {
-        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-        .wire-frontend-react #outcomeChart .percentage-visual { max-width: min(100%, 10rem); }
+        .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+        .wire-frontend-react #outcomeChart .percentage-content:not(.outcome-hybrid) .percentage-visual { max-width: min(100%, 10rem); }
     }
-    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend-row {
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) .percentage-legend-row {
         grid-template-columns: max-content minmax(0, 1fr) max-content;
         grid-template-rows: auto;
         grid-row: auto;
         gap: 8px;
         align-items: center;
     }
-    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-value {
+    .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate],.outcome-hybrid) .percentage-value {
         grid-column: 3;
         justify-self: end;
     }

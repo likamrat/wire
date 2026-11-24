@@ -178,17 +178,18 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const standard = await settingsOrder();
     await samplePreview("standard");
     const reads = snapshots.length;
-    await steadyMove("unpair",up("Interactions"), control => control.press("Enter")); await expect(up("Interactions")).toBeFocused();
+    const down = field.getByRole("button",{name:"Move Tool call results down",exact:true});
+    await steadyMove("move-to-first",up("Tool call results"), control => control.press("Enter"));
+    await expect(down).toBeFocused();
     const intermediate = await samplePreview("one-move");
-    await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
+    await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","outcomes");
     assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("one-move");
     await page.goto(settings);
-    await up("Interactions").press("Enter");
     if (width===390) await page.evaluate(() => {document.documentElement.style.fontSize = "200%";});
-    await steadyMove("pair",up("Interactions"), control => control.press("Enter"));
-    await expect(field.getByRole("button",{name:"Move Interactions down"})).toBeFocused();
+    await steadyMove("past-time",down,control=>control.press("Enter"));
+    await expect(down).toBeFocused();
     if (width===390) {
         assert.ok(await field.evaluate(node => [...node.querySelectorAll("button,a,[data-tile]")].every(item => {
             const rect = item.getBoundingClientRect();
@@ -196,16 +197,21 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         })),"enlarged labels, tiles and actions must fit");
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     }
-    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Token usage down",exact:true}), control => control.tap());
-    const authorIndex = (await settingsOrder()).indexOf("authors");
-    for (let i=3; i<authorIndex; i++) await up("Prompt authors").tap();
+    await steadyMove("past-usage",down,control=>control.tap());
+    await down.tap(); await down.tap();
     const chosen = await settingsOrder();
-    assert.deepEqual(chosen.slice(0,4),["interactions","time","outcomes","authors"]);
+    assert.deepEqual(chosen.slice(0,6),["time","usage","interactions","tools","outcomes","services"]);
     await samplePreview("chosen");
     if (width===1440) await chooseTheme(page,"dark");
     await page.reload(); await samplePreview("persisted");
     await field.getByRole("link",{name:"View Analyze"}).tap();
-    await observe("chosen"); await page.reload(); await observe("reloaded");
+    await observe("chosen");
+    const failure=page.locator("#outcomeChart [data-category=failure] .percentage-label");
+    await expect(page.locator("#outcomeChart .outcome-share-strip")).toBeVisible();
+    await expect(failure).toHaveAccessibleName(/Tool failed: 2 of 12/);
+    await failure.press("Enter"); await expect(page.locator("#activityCount")).toHaveText("2");
+    await page.goBack(); await expect(failure).toBeFocused();
+    await page.reload(); await observe("reloaded");
     await page.goto(settings);
     await selectActivityOption(page,"defaultGuideStart","last");
     const restore = field.getByRole("button",{name:"Restore WIRE Default Layout",exact:true}), tip = page.getByRole("tooltip");

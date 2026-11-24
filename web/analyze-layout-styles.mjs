@@ -395,6 +395,43 @@ export const analyzeLayoutStyles = `
 :is(#outcomeChart,.native-outcome-chart) .percentage-visual:has(.percentage-total[data-length=wide]) {width:100%}
 :is(#outcomeChart,.native-outcome-chart) .percentage-visual:has(.percentage-total[data-length=wide])>svg {width:min(13rem,100%);display:block;margin-inline:auto}
 .percentage-total[data-length=wide] .percentage-total-value {font-size:var(--type-data-value);overflow-wrap:anywhere}
+.analyze-outcome-summary #outcomeChart .percentage-content.outcome-hybrid {
+ --hybrid-wheel:clamp(12rem,18cqi,17.5rem);
+ display:grid;grid-template-columns:minmax(0,var(--hybrid-wheel)) minmax(0,1fr);gap:clamp(16px,2.2cqi,40px);align-items:center;padding-block:4px var(--space-lg)
+}
+#outcomeChart .outcome-hybrid .percentage-visual {width:var(--hybrid-wheel);max-width:100%;margin:0}
+#outcomeChart .outcome-hybrid .percentage-total {gap:.16rem}
+#outcomeChart .outcome-hybrid .percentage-total-value {font-size:clamp(2rem,3.3cqi,3.5rem);line-height:1;letter-spacing:-.035em}
+#outcomeChart .outcome-hybrid .percentage-total[data-length=long] .percentage-total-value {font-size:clamp(1rem,2cqi,2rem)}
+#outcomeChart .outcome-hybrid .percentage-total[data-length=wide] .percentage-total-value {font-size:var(--type-data-value)}
+#outcomeChart .outcome-hybrid .percentage-total-unit {font-size:clamp(.875rem,1.1cqi,1.1rem);line-height:1.2}
+.outcome-distribution {min-width:0}
+.outcome-share-strip {display:flex;height:clamp(18px,1.8cqi,32px);margin-block-end:var(--space-md)}
+.outcome-share-strip>span {flex-basis:0;background:var(--column-label)}
+#outcomeChart .outcome-hybrid .percentage-legend {grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:4px clamp(8px,1.5cqi,24px)}
+#outcomeChart .outcome-hybrid .percentage-legend-row {grid-template-columns:auto minmax(0,1fr);gap:0 6px;align-items:center;align-content:start;justify-items:start}
+#outcomeChart .outcome-hybrid .percentage-label {font-size:clamp(1rem,1.25cqi,1.25rem)}
+#outcomeChart .outcome-hybrid .percentage-value {grid-column:2;justify-self:start;padding-inline:6px;font-size:clamp(1.35rem,2.05cqi,2rem);line-height:1.2}
+#outcomeChart .outcome-hybrid .percentage-value>span {font-size:.75em}
+@container outcome-card (max-width:48rem) {
+ .analyze-outcome-summary #outcomeChart .percentage-content.outcome-hybrid {--hybrid-wheel:clamp(9rem,23cqi,11rem);column-gap:var(--space-lg)}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-legend {grid-template-columns:minmax(0,1fr);gap:0}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-legend-row {grid-template-columns:18px minmax(0,1fr) auto;gap:4px}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-value {grid-column:3;grid-row:1;justify-self:end;padding:0;font-size:1rem}
+ #outcomeChart .outcome-hybrid .percentage-value>span {font-size:.9em}
+ #outcomeChart .outcome-hybrid .percentage-total-value {font-size:1.7rem}
+ #outcomeChart .outcome-hybrid .percentage-total-unit {font-size:.875rem}
+ .outcome-share-strip {height:14px;margin-block-end:4px}
+}
+@container outcome-card (max-width:28rem) {
+ .analyze-outcome-summary #outcomeChart .percentage-content.outcome-hybrid {--hybrid-wheel:11rem;grid-template-columns:minmax(0,1fr);gap:var(--space-sm)}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-visual {justify-self:center;max-width:100%}
+ .outcome-share-strip {height:12px}
+}
+@container outcome-card (max-width:12rem) {
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-legend-row {grid-template-columns:18px minmax(0,1fr)}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-value {grid-area:2/2;justify-self:start;padding-inline:6px}
+}
 .percentage-evidence-unit {display:block;text-align:center;font-size:var(--type-caption);line-height:1.4;margin-top:4px;color:var(--muted)}
 :root[data-navigation=collapsed] .app-sidebar #analyzeTools .analyze-tool-action {width:44px;max-width:44px;padding:10px;font-size:0}
 :root[data-navigation=collapsed] .app-sidebar #analyzeTools>.navigation-group-label {height:0;margin:0;padding:0;overflow:hidden}

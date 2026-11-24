@@ -151,7 +151,7 @@ export function bindPageDefaults(prefs, specs, syncSelects, rowsFor) {
 function layoutPreview() {
     // Static silhouettes only: no chart renderer, evidence, or source connection.
     const columns = '<path d="M2 23v-8h5v8zm9 0V6h5v17zm9 0V11h5v12zm9 0V2h5v21zm9 0V9h5v14z"/>';
-    const ring = '<g fill="none" stroke="currentColor" stroke-width="4"><circle cx="13" cy="13" r="9" opacity=".25"/><circle cx="13" cy="13" r="9" pathLength="100" stroke-dasharray="69 31" transform="rotate(-90 13 13)"/></g><path opacity=".55" d="M30 8h13v3H30zm0 7h9v3h-9z"/>';
+    const ring = '<g fill="none" stroke="currentColor" stroke-width="4"><circle cx="12" cy="13" r="9" opacity=".25"/><circle cx="12" cy="13" r="9" pathLength="100" stroke-dasharray="69 31" transform="rotate(-90 12 13)"/></g><path d="M25 8h13v4H25z"/><path opacity=".45" d="M38 8h7v4h-7zm-13 8h5v2h-5zm8 0h5v2h-5zm8 0h4v2h-4z"/>';
     const entries = '<path d="M2 3h54v3H2zm0 11h41v3H2z"/><path opacity=".45" d="M2 8h37v2H2zm0 11h28v2H2z"/>';
     const bars = '<path d="M2 5h39v3H2zm0 7h28v3H2zm0 7h16v3H2z"/>';
     const labels = { time:"Activity over time", tools:"Tool calls", services:"Services" };

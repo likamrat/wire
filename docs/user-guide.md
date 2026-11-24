@@ -64,8 +64,9 @@ available response-model names, plus prompt authors. The interaction list
 follows the same filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
 On opening Analyze, the charts build to the recorded counts. This is not collection progress.
-With reduced motion, the final values appear immediately. On a narrow screen, the
-Tool call results donut stays visible and its legend fits below it when needed.
+With reduced motion, the final values appear immediately. In **Tool call results**,
+the donut shows the total. The strip shows how the calls split across outcomes;
+each label gives the percentage and exact count, even for a share too small to see.
 Choose the donut total to list the matching calls, eight per page. Open a call
 by its tool or path. Its outcome describes the tool execution; returned entries
 keep their own statuses in the call reader. **Show all matching activity**
