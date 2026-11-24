@@ -133,6 +133,23 @@ test("General owns the update card, legacy links and searchable controls without
     assert.ok(actions.every(({ action }) => action === "status"));
 });
 
+test("a manual check cannot publish an old offer after the page was suspended", async t => {
+    const { page, state, actions } = await workspace(t, { offer: null });
+    Object.assign(state, { phase: "available", candidate: next });
+    const responded = page.waitForResponse(r => r.url().endsWith("/api/app-update") && r.request().postDataJSON()?.action === "check");
+    await page.locator("#appUpdateCheck").click(); await responded;
+    await expect(page.locator("#appUpdateCheck")).toHaveAttribute("aria-busy", "true");
+    Object.assign(state, { phase: "current", candidate: null, message: "Up to date." });
+    await page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await expect(page.locator("#appUpdateStatus")).toContainText("Up to date.");
+    await expect(page.locator("#appUpdateCheck")).toBeEnabled();
+    await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+    assert.deepEqual(actions.map(a => a.action), ["status", "check", "status"]);
+});
+
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {
     const { page, actions } = await workspace(t, { renderer: "bundled", automatic: true, supported: false });
     await expect(page.locator(".app-version-card .settings-row-copy")).toHaveText(/^\s*WIRE v1\.0\.0\s*$/);
@@ -358,8 +375,12 @@ test("Settings and the notice offer the same restart; dismissing leaves the Sett
     await expect(install).toBeVisible(); await expect(check).toBeHidden();
     assert.equal(await fill(install), availableFill);
     await install.click();
-    await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
     await expect(page.locator("#appUpdateStatus")).toContainText("Close the other WIRE panel first.");
+    await expect(page.locator("#appUpdateNotice")).toBeHidden();
+    await page.getByRole("link", { name: "Change theme" }).click();
+    await expect(page.getByRole("complementary", { name: "Update not installed" })).toBeVisible();
+    await expect(page.locator("#appUpdateDetail")).toHaveText("Close the other WIRE panel first.");
+    await page.getByRole("button", { name: "Back to General" }).click();
     assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }]);
     Object.assign(state, { phase: "current", candidate: null, message: "Up to date." });
     await page.reload();
@@ -495,10 +516,11 @@ test("manual reload releases a clean page without releasing a suspended page or 
 test("single activation stays fenced through transport loss until the authenticated status, runtime, health and executed target asset agree", async t => {
     const { page, actions, setup, state, pages, healthReads } = await workspace(t);
     const apply = page.locator("#appUpdateApply"), modal = page.locator("#appUpdateFence");
-    await apply.click(); await expect(page.locator("#appUpdateDetail")).toHaveText("Close the other WIRE panel first.");
+    await apply.click(); await expect(page.locator("#appUpdateStatus")).toContainText("Close the other WIRE panel first.");
+    await expect(page.locator("#appUpdateNotice")).toBeHidden();
     const hold = Promise.withResolvers();
     setup.apply = async route => { await hold.promise; await route.abort("connectionreset"); };
-    await apply.click(); await expect(modal).toBeVisible();
+    await page.locator("#settingsAppUpdate").click(); await expect(modal).toBeVisible();
     const activity = page.locator("#appUpdateActivity");
     await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
     const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);

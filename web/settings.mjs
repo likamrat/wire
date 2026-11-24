@@ -34,7 +34,7 @@ export const settingsMarkup = `
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
       </div>
-      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
+      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled><span class="check-action-label">Check for updates</span><span class="check-action-pending" hidden><span class="update-spinner" aria-hidden="true"></span>Checking</span></button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update and restart</button></div>
     </div>

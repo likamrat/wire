@@ -3,6 +3,7 @@ export const settingsStyles = `
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
 #appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(1.25rem);transition-duration:180ms}
+body:has(#appUpdateFence[open]) #appUpdateNotice,body:has(#workspace:not([hidden]) #settingsView:not([hidden]) [data-settings-section=general]:not([hidden])) #appUpdateNotice[data-install-result] {display:none;transition:none}
 @media(min-width:64rem) {
  #appUpdateNotice {position:fixed;z-index:var(--layer-header);inset-inline-start:10px;inset-block-end:7.5rem;width:clamp(14rem,calc(var(--app-sidebar-width,216px) - 20px),19rem);padding:var(--space-md);margin:0}
  :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
@@ -28,10 +29,14 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 #appUpdateFence {box-sizing:border-box;width:min(21rem,calc(100vw - 2rem));padding:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section);line-height:var(--leading-heading)}
 .app-update-title {display:flex;align-items:center;gap:var(--space-sm)}
-#appUpdateActivity {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
-#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:wire-update-spin .9s linear infinite}
+.update-spinner {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
+#appUpdateCheck {display:inline-grid;place-items:center}
+#appUpdateCheck>span {grid-area:1 / 1}
+#appUpdateCheck[aria-busy=true] .check-action-label {visibility:hidden}
+.check-action-pending {display:inline-flex;align-items:center;gap:var(--space-sm)}
+#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:wire-update-spin .9s linear infinite}
 @keyframes wire-update-spin {to {transform:rotate(1turn)}}
-@media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]) {animation:none}}
+@media(prefers-reduced-motion:reduce) {#appUpdateFence[open] #appUpdateActivity:not([hidden]),#appUpdateCheck[aria-busy=true] .update-spinner {animation:none}}
 #appUpdateHint {margin:.25em 0 0 calc(1.125em + var(--space-sm));color:var(--muted)}
 #appUpdateFence:has(#appUpdateActivity[hidden]) #appUpdateHint {margin-inline-start:0}
 #appUpdateFence[open] ~ #loading {visibility:hidden}

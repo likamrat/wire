@@ -47,6 +47,8 @@ Finish any report, close other WIRE panels, and resolve unconfirmed saves or
 deletions before updating. Keep the terminal open while WIRE prepares its
 replacement. App versions and the activation record stay inside this clone’s
 Git directory, separate from evidence. A failed check is not “up to date.”
+On Windows, WIRE enables Git long paths in the new stage only. It verifies
+the fetched `main` revision and checks out the exact commit you chose.
 On restart, return to the same address and reopen an old canvas if needed.
 The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
