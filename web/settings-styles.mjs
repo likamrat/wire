@@ -178,34 +178,43 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .settings-view .page-default-field>.settings-help {margin:.35rem 0 .65rem}
 .page-default-field>.select-control {width:min(100%,22rem)}
-.analyze-layout-editor {display:grid;grid-template-columns:minmax(0,1fr) minmax(13rem,.8fr);align-items:start;gap:var(--space-lg)}
+.analyze-layout-editor {display:grid;grid-template-columns:minmax(0,1fr) minmax(13rem,.8fr);align-items:start;gap:var(--space-lg);overflow-anchor:none}
 .analyze-layout-field ol {min-width:0;margin:0;padding-inline-start:1.75rem;border-block:1px solid var(--rule)}
-.layout-preview {margin:0;padding:12px;background:var(--canvas);border-radius:var(--radius-small);min-width:0}
+.layout-preview {display:grid;align-self:stretch;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;margin:0;padding:12px;background:var(--canvas);border-radius:var(--radius-small);min-width:0}
 .layout-preview figcaption {margin:0 0 8px;font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--ink)}
-.layout-preview-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
-.layout-preview-grid>[data-tile] {display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;align-content:center;gap:4px;padding:6px 8px;border:1px solid transparent;border-radius:4px;background:var(--paper);color:var(--ink);font-size:var(--type-caption);line-height:var(--leading-control);overflow-wrap:anywhere}
+.layout-preview-grid,.layout-preview-size {grid-area:2/1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:4px}
+.layout-preview-size {visibility:hidden;pointer-events:none;grid-template-rows:repeat(var(--paired-rows),1fr)}
+.layout-preview-labels {display:grid}
+.layout-preview-labels>span {grid-area:1/1}
+:is(.layout-preview-grid,.layout-preview-size)>div {display:grid;grid-template-columns:minmax(0,1fr);justify-items:start;align-content:center;gap:4px;padding:3px 8px;border:1px solid transparent;border-radius:4px;background:var(--paper);color:var(--ink);font-size:var(--type-caption);line-height:var(--leading-control);overflow-wrap:anywhere}
 .layout-preview-grid>[data-full-row] {grid-column:1/-1}
 .layout-preview-grid>[data-moved] {border-color:var(--accent);background:var(--accent-soft)}
-.layout-preview-grid svg {display:block;width:2.75rem;height:1.5rem;max-width:100%;fill:currentColor;color:var(--accent)}
+.layout-preview svg {display:block;width:2.75rem;height:1.25rem;max-width:100%;fill:currentColor;color:var(--accent)}
 .layout-preview-grid>[data-tile=interactions] svg {width:65%}
 @container settings (max-width:60rem) {
- .layout-preview-grid {grid-template-columns:minmax(0,1fr)}
- .layout-preview-grid>[data-tile] {grid-template-columns:minmax(0,1fr) auto;align-items:center}
- .layout-preview-grid svg {width:2.25rem;height:1rem}
+ .layout-preview-grid,.layout-preview-size {grid-template-columns:minmax(0,1fr)}
+ .layout-preview-size {grid-template-rows:repeat(var(--stacked-rows),1fr)}
+ :is(.layout-preview-grid,.layout-preview-size)>div {grid-template-columns:minmax(0,1fr) auto;align-items:center}
+ .layout-preview svg {width:2.25rem;height:1rem}
  .layout-preview-grid>[data-tile=interactions] svg {width:2.25rem}
 }
 @container settings (min-width:60.001rem) and (max-width:64rem) {
  body:not(.wire-frontend-react) .layout-preview-grid[data-standard] {grid-template-columns:minmax(0,1fr)}
+ body:not(.wire-frontend-react) .layout-preview-size {grid-template-rows:repeat(var(--stacked-rows),1fr)}
 }
 @container settings (min-width:40.001rem) and (max-width:60rem) {
- .wire-frontend-react .layout-preview-grid[data-standard] {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .wire-frontend-react :is(.layout-preview-grid[data-standard],.layout-preview-size) {grid-template-columns:repeat(2,minmax(0,1fr))}
  .wire-frontend-react .layout-preview-grid[data-standard]>:is([data-tile=time],[data-tile=outcomes]) {grid-column:1/-1}
 }
 @container settings-pane (max-width:34rem) {
  .analyze-layout-editor {grid-template-columns:minmax(0,1fr);gap:var(--space-sm)}
  .layout-preview {grid-row:1}
- .layout-preview-grid {gap:2px}
- .layout-preview-grid>[data-tile] {padding:2px 8px}
+ .layout-preview-grid,.layout-preview-size {gap:2px}
+ :is(.layout-preview-grid,.layout-preview-size)>div {padding:2px 8px}
+}
+@container settings (max-width:40rem) {
+ .layout-preview-size {display:none}
+ .layout-preview-grid {grid-auto-rows:auto}
 }
 @media(forced-colors:active) {
  .layout-preview-grid>[data-tile] {border-color:CanvasText}

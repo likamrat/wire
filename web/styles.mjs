@@ -599,8 +599,13 @@ ${reportJourneyStyles}
 #activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr) auto;align-items:center}
 @media(max-width:760px){#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr)}.card-visibility-actions{grid-column:1;grid-row:auto;justify-self:start}}
 .hidden-cards-dialog{width:min(30rem,calc(100% - 24px))}
-.hidden-card-row{justify-content:space-between;border-top:1px solid var(--rule);padding-block:var(--space-sm)}
-.hidden-card-row small{display:block;font:var(--type-small)/var(--leading-ui) var(--font)}
+.hidden-cards-dialog .dialog-body{padding-block:var(--space-sm)}
+.hidden-card-list{list-style:none;margin:0;padding:0}
+.hidden-card-row{padding-block:var(--space-xs)}
+.hidden-card-row>button{margin-inline-start:auto}
+.hidden-card-row time{display:block;font:var(--type-small)/var(--leading-ui) var(--font)}
+.hidden-card-row+.hidden-card-row,.hidden-card-actions{border-block-start:1px solid var(--rule)}
+.hidden-cards-dialog .hidden-card-actions{display:flex;justify-content:flex-end;margin:0;padding-block-start:var(--space-xs)}
 .hidden-report-card{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-lg);color:var(--muted)}
 #reportStage3[data-cards-covered]{display:none!important}
 #activityList .card-reading-actions>.report-draft-trigger::before{content:"";display:block;position:absolute;inset:calc((100% - 2em)/2) 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--report-action-face);border:1px solid var(--report-action-edge)}

@@ -146,7 +146,7 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all 5,040 Analyz
     }
     await coldRead(previous);
     await settings.goto(settingsUrl);
-    await settings.getByRole("button", { name: "Restore WIRE layout" }).click();
+    await settings.getByRole("button", { name: "Restore Wired Default Layout" }).click();
     await assertSettings(standard);
     await coldRead(standard);
     assert.deepEqual(errors, []);
