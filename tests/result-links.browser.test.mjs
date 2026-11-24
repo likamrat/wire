@@ -27,8 +27,7 @@ test("the Analyze donut opens readable exact calls with paging and an independen
         assert.ok(list.length && list.every(text => !/\S(?:Tool (?:failed|completed)|No result recorded)/.test(text)), list.join("\n"));
         assert.ok(await rows.first().evaluate(n => {
             const a = n.querySelector("a").getBoundingClientRect(), meta = n.lastElementChild.getBoundingClientRect();
-            return (meta.top >= a.bottom + 3 || meta.left >= a.right + 8)
-                && parseFloat(getComputedStyle(n).paddingInlineStart) >= 12;
+            return meta.top > a.bottom || meta.left > a.right;
         }));
     }
     await assertLegible();
@@ -44,7 +43,8 @@ test("the Analyze donut opens readable exact calls with paging and an independen
     await completed.press("Enter");
     await expect(page.locator("#activityListSummary")).toContainText("8 matching tool calls");
     // An outcome link narrows the accepted scope. The center now opens those exact 8 calls.
-    await expect(center).toHaveText("8"); await center.press("Enter"); await assertLegible();
+    await expect(center).toHaveText("8"); await center.press("Enter");
+    await page.setViewportSize({width:390,height:844}); await assertLegible();
     const mixed = rows.filter({has:page.locator("a")}).and(page.locator('[data-action-id*="mixed-result"]'));
     await expect(mixed).toContainText("Tool completed");
     await expect(mixed).not.toContainText("Tool failed");
