@@ -1,6 +1,16 @@
+export function homepageRows(order) {
+    const rows = [];
+    for (const key of order) {
+        const last = rows.at(-1);
+        if (key !== "interactions" && last?.length === 1 && last[0] !== "interactions") last.push(key);
+        else rows.push([key]);
+    }
+    return rows;
+}
+
 // The layout moves the existing hosts. Rendering, navigation and access withdrawal
 // continue to operate on the same chart, card list and pager.
-export function mountAnalyzeHomepage({ prefs, standard, isCurrent }) {
+export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
     const dashboard = document.querySelector(".analyze-dashboard"), home = document.getElementById("homeView");
     const packedBreakdowns = dashboard.querySelector(":scope > #percentageCharts");
     const grid = document.createElement("div");
@@ -42,13 +52,10 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent }) {
                 node.dataset.homeSection = key;
             }
             dashboard.append(grid); dashboard.dataset.customOrder = "";
-            let column = 0;
-            for (const [i, key] of order.entries()) {
+            for (const row of rowsFor(order)) for (const key of row) {
                 const { node } = slots.get(key);
-                const full = key === "interactions" || column === 0 && (i === order.length - 1 || order[i + 1] === "interactions");
-                node.toggleAttribute("data-full-row", full);
+                node.toggleAttribute("data-full-row", row.length === 1);
                 move(grid, node);
-                column = full ? 0 : 1 - column;
             }
         }
         applied = signature;

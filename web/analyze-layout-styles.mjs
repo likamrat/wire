@@ -67,7 +67,7 @@ export const analyzeLayoutStyles = `
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-section,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-panels {display:contents}
-.analyze-dashboard[data-dashboard-layout=packed] :is(.analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card) {align-self:start;grid-column:auto}
+.analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order]) :is(.analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card) {align-self:start;grid-column:auto}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-legend {row-gap:0}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] {padding-block-end:8px}
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts [data-breakdown=models] .percentage-label {min-height:1.5rem}
