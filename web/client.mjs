@@ -618,8 +618,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const invalidatedReaderFocus = new WeakMap();
     let readerWidth = null, readerExpanded = false, readerResize = null, sidebarTextAnchor = null, readerLayoutSize = null;
     let readerSections = null, timingHeadingObserver = null, cardEntry = null;
+    const callHeaderLayouts = [];
     const readerTextReleases = [];
     function clearReaderSections() {
+        callHeaderLayouts.length = 0;
         sidebarTextAnchor = null;
         endReaderResize();
         timingHeadingObserver?.disconnect();
@@ -960,6 +962,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } else document.body.style.removeProperty("--context-sidebar-width");
             if (contextSidebar.open && contextSidebar.matches(":modal") !== modal) contextSidebar.close();
             if (!contextSidebar.open) modal ? contextSidebar.showModal() : contextSidebar.show();
+            for (const layout of callHeaderLayouts) layout(expanded);
         });
         contextBody.scrollTop = top;
         // Content publication and navigation restoration own scrolling when size is unchanged.
@@ -6182,7 +6185,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const cues = entries => [...entries.values()].map(item => {
             const cue = serviceCue("span", item.id, item);
-            if (item.description) ux.tooltip(cue, item.description);
+            if (item.description) ux.tooltip(cue, () => cue.closest(".expanded-call") ? null : item.description);
             return item.rows && inspectGap ? inspectGap(item, cue) : cue;
         });
         const values = cues(targets);
@@ -6727,6 +6730,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return heading;
         }
         function callToggleName(toggle) {
+            const expandedHeader = toggle.closest(".expanded-call");
+            if (expandedHeader) {
+                const ordinal = expandedHeader.querySelector(".reader-entry-label")?.textContent;
+                toggle.setAttribute("aria-label", ordinal ? `Call details: ${ordinal}` : "Call details");
+                return;
+            }
             const copy = toggle.cloneNode(true);
             copy.querySelectorAll("[hidden]").forEach(node => node.remove());
             toggle.setAttribute("aria-label", "Inspect recorded evidence: " + copy.textContent);
@@ -6739,15 +6748,62 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             line.append(...identity.childNodes);
             const toolName = line.querySelector(".reader-tool-name")?.textContent;
             const purpose = toolName && ux.operations.toolPurpose(toolName);
-            if (purpose) { ux.tooltip(toggle, purpose); toggle.setAttribute("aria-description", purpose); }
+            if (purpose) { ux.tooltip(toggle, () => toggle.closest(".expanded-call") ? null : purpose); toggle.setAttribute("aria-description", purpose); }
             const disclosure = ux.icon("disclosure");
             disclosure.classList.add("reader-call-disclosure");
             line.append(disclosure);
-            toggle.append(line, heading.querySelector(".reader-call-summary"));
+            const summary = heading.querySelector(".reader-call-summary");
+            toggle.append(line, summary);
             identity.append(toggle);
             const detail = el("div", "technical-detail");
             item.classList.add("reader-call-row");
             item.append(detail);
+            if (toolName) {
+                // Move the actual evidence and disclosure, not copies: resize must preserve their owner.
+                const undo = [];
+                let wide = null;
+                function move(node, parent) {
+                    const slot = document.createComment("docked");
+                    node.before(slot); parent.append(node);
+                    undo.push(() => slot.replaceWith(node));
+                }
+                callHeaderLayouts.push(expanded => {
+                    if (Boolean(wide) === expanded) return;
+                    if (expanded) {
+                        wide = el("div", "expanded-call");
+                        const bar = el("div", "expanded-call-bar"), lead = el("div", "expanded-call-lead");
+                        const title = el("h3", "expanded-call-operation"), meta = el("div", "expanded-call-meta");
+                        heading.prepend(wide); wide.append(bar); bar.append(lead, meta); lead.append(title);
+                        const operations = heading.querySelector(".reader-call-services .card-identity-field:has([data-operation])");
+                        if (operations) {
+                            for (const cue of [...operations.querySelector("dd").children]) move(cue, title);
+                            operations.hidden = true;
+                            undo.push(() => { operations.hidden = false; });
+                        } else title.textContent = toolName === "workiq-fetch" ? "Fetch requested" : toolName;
+                        const result = summary.querySelector(".recorded-results");
+                        if (result) {
+                            move(result, lead);
+                            for (const note of [...result.querySelectorAll(".result-cause,.returned-coverage")]) {
+                                move(note, wide); note.hidden = false;
+                            }
+                        }
+                        for (const node of line.querySelectorAll(".reader-entry-label,.reader-tool-name,.reader-call-duration"))
+                            if (!node.matches(".reader-tool-name") || title.textContent !== toolName) move(node, meta);
+                        move(toggle, bar); line.hidden = summary.hidden = identity.hidden = true;
+                        const label = el("span", "", "Call details");
+                        toggle.append(label); move(disclosure, toggle);
+                        undo.push(() => label.remove());
+                        toggle.removeAttribute("aria-description");
+                    } else {
+                        for (const restore of undo.splice(0).reverse()) restore();
+                        wide.remove(); wide = null; line.hidden = summary.hidden = identity.hidden = false;
+                        if (purpose) toggle.setAttribute("aria-description", purpose);
+                        if (item.dataset.resultDetails === "true") for (const reason of summary.querySelectorAll(".result-cause"))
+                            reason.hidden = !detail.hidden;
+                    }
+                    callToggleName(toggle);
+                });
+            }
             sections.detail({ key: JSON.stringify(["call-detail", requestIdentity(), key]), toggle, body: detail, visibility,
                 initialOpen: target.status === "available" && target.actionId === actionId && workspaceState.scope.layer !== "reported-api",
                 render, onOpenChange: open => {
@@ -6976,7 +7032,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             placeResponse: (node, observation, position) => {
             if (!journey.isConnected || !currentReader()) return;
             if (isSelected && !responseSection) {
-                responseSection = sections.add("response", "Recorded response", { key: sectionKey("response") });
+                responseSection = sections.add("response", "Copilot reply", { key: sectionKey("response") });
                 responseList = el("ol", "journey reader-response-list");
                 responseSection.body.append(responseList);
                 sourceSection.element.before(responseSection.element);
@@ -7279,6 +7335,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         evidenceScope.append(link("Collection coverage", "collection-status", { setting: "collection-details" }, "text-link"));
         sourceSection.body.append(evidenceScope);
         detailOwner = "request:" + workspaceState.route.request;
+        for (const layout of callHeaderLayouts) layout(contextSidebar.dataset.mode === "expanded");
         sections.refresh();
         updateRequestReportActions();
     }

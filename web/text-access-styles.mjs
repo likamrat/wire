@@ -226,7 +226,9 @@ body[data-reader-expanded]>main {visibility:hidden}
 #readerResize::after {content:"";position:absolute;inset:calc(50% - 24px) auto auto 3px;width:3px;height:48px;border-radius:2px;background:var(--muted);opacity:.5}
 #readerResize:is(:hover,:focus-visible)::after,#contextSidebar[data-resizing] #readerResize::after {background:var(--ink);opacity:1}
 #contextSidebar[data-resizing] {user-select:none;cursor:ew-resize}
-#contextSidebar[data-mode=expanded] #requestView {max-width:72ch;margin-inline:auto}
+#contextSidebar[data-mode=expanded] :is(#requestView,#requestContent) {max-inline-size:none}
+#contextSidebar[data-mode=expanded] #requestContent [data-text-subject=request] .full-text-content {max-inline-size:none}
+#contextSidebar[data-mode=expanded] #requestContent [data-reader-section=response] .full-text-content {max-inline-size:92ch}
 #contextSidebarBody {grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px;padding:20px;container-type:inline-size}
 #contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid transparent;background:var(--paper);min-width:0}
 #contextSidebarFooter:empty {display:none}
@@ -435,6 +437,30 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-outcome-label {color:var(--muted);font:var(--type-small)/1.5 var(--font)}
 #requestContent .tool-call-heading .card-outcome-face {padding:0;border:0;background:none;font-weight:var(--weight-regular)}
 #requestContent .tool-call-heading .reader-call-secondary {margin-top:6px;align-items:stretch}
+#requestContent .expanded-call {display:grid;gap:4px}
+#requestContent .expanded-call-bar,#requestContent .expanded-call-lead,#requestContent .expanded-call-meta {display:flex;align-items:center;flex-wrap:wrap;gap:4px 16px;min-width:0}
+#requestContent .expanded-call-bar {min-height:44px}
+#requestContent .expanded-call .expanded-call-operation {display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;font:var(--weight-strong) var(--type-reading)/1.5 var(--font)}
+#requestContent .expanded-call-operation .semantic-cue {--cue-icon-size:1rem;align-items:center;gap:6px;font:inherit}
+#requestContent .expanded-call-operation .wire-icon {margin:0}
+#requestContent .expanded-call-operation .semantic-cue>span {color:var(--ink)}
+#requestContent .expanded-call :is(.recorded-results,.recorded-result,.result-status) {margin:0;padding:0;border:0;background:none;box-shadow:none;font:var(--type-small)/1.5 var(--font)}
+#requestContent .expanded-call .result-story {display:grid;min-width:0}
+#requestContent .expanded-call .recorded-result::before {content:none}
+#requestContent .expanded-call-meta {margin-inline-start:auto;gap:0 8px;color:var(--muted);font:var(--type-small)/1.5 var(--font);font-variant-numeric:tabular-nums}
+#requestContent .expanded-call-meta :is(.reader-entry-label,.reader-tool-name) {margin:0;color:inherit;font:inherit;overflow-wrap:anywhere}
+#requestContent .expanded-call-meta>span+span::before {content:"\\00b7";margin-inline-end:6px}
+#requestContent .expanded-call .reader-call-toggle {width:auto;flex-direction:row;align-items:center;gap:6px;padding:0 8px;color:var(--accent);font:var(--type-small)/1.5 var(--font)}
+#requestContent .expanded-call .reader-call-toggle::before {content:"";inset-block:7px;border:1px solid var(--control);border-radius:var(--radius-small);position:absolute;inset-inline:0;pointer-events:none}
+#requestContent .expanded-call .reader-call-toggle {position:relative}
+#requestContent .expanded-call .reader-call-disclosure {align-self:center;margin:0}
+#requestContent .expanded-call>.result-cause {display:grid;gap:4px;margin:0;padding:0;max-width:80ch}
+#requestContent .expanded-call .reader-issue-note {margin:0;padding:3px 0 3px 10px;font:var(--type-body)/1.5 var(--font)}
+#requestContent .reader-call-row:has(.expanded-call)>.reader-interpretation {display:grid;gap:4px;margin:8px 0 0;padding:0;max-width:84ch;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
+#requestContent .reader-call-row:has(.expanded-call)>.reader-interpretation>.call-reason-item {display:block;margin:0;padding:0}
+#requestContent .reader-call-row:has(.expanded-call)>.reader-interpretation>.call-reason-item::before {content:none}
+#requestContent .reader-call-row:has(.expanded-call) .card-identity-field:first-child[hidden]+.card-identity-field {margin-top:0}
+#requestContent .request-context-timeline>.reader-call-row:has(.expanded-call) {padding-block:9px;border-bottom:0}
 @container tool-call (max-width:20rem) {
  #requestContent .reader-tool-meta {flex-direction:column;align-items:flex-start}
 }

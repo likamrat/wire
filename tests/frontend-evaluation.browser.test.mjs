@@ -530,6 +530,17 @@ test("reader outcomes keep the card’s status icon without borrowing its total 
     await expect(reader.locator(".card-outcome :is(a,button,[data-icon-role=forward]), .card-outcome:is(a,button,[tabindex])")).toHaveCount(0);
     await expect(failed.locator(".wire-icon")).toHaveAttribute("data-icon-role", await leftFailure.locator(".wire-icon").getAttribute("data-icon-role"));
     await expect(completed.locator(".wire-icon")).toHaveAttribute("data-icon-role", await leftSuccess.locator(".wire-icon").getAttribute("data-icon-role"));
+    const dockedToggle = await call(1).locator(".reader-call-toggle").elementHandle();
+    await page.locator("#expandInteraction").press("Enter");
+    const inspect = call(1).getByRole("button", { name: "Call details: Call #2", exact: true });
+    await expect(inspect).toBeVisible();
+    await expect(call(1).locator(".expanded-call-lead")).toContainText("1 tool call failed");
+    const reason = call(1).getByText(/ToolUnavailable/).filter({ visible: true }).first();
+    await expect(reason).toBeVisible();
+    assert.equal(await reason.evaluate(n => !n.closest("button")), true, "The recorded reason is readable, not part of the disclosure button");
+    await inspect.press("Enter"); await expect(inspect).toBeFocused();
+    await page.locator("#expandInteraction").press("Enter");
+    assert.ok(await dockedToggle.evaluate(n => n.isConnected && n.checkVisibility()), "Restore keeps the original disclosure");
     await page.goBack(); await expect(row.locator(".request-card-open")).toBeFocused();
 });
 

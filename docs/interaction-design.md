@@ -465,6 +465,12 @@ the current visible text anchor and mounted disclosure/focus owners; report
 creation and saved inspection do not inherit them. Narrow modal focus remains
 independent of the navigation drawer.
 
+In the maximized reader, the prompt uses the full width, with Copy at its right
+edge. Lead each Work IQ call with the recorded operation and outcome. Keep the
+ordinal, exact tool name, duration and **Call details** control secondary.
+Show a recorded reason directly under its call and distinguish WIRE's
+interpretation from that reason. The Copilot reply follows all the calls.
+
 ## Search
 
 Use one stationary rounded capsule with results as the user types.
