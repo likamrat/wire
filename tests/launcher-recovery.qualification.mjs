@@ -111,6 +111,7 @@ test("recover a killed v1 writer in its original standalone installation", { ski
         assert.deepEqual(childRow("child"), prior); assert.equal(childRow("interrupted:" + receipt.childId), undefined);
         assert.deepEqual(await Promise.all(files.map(file => readFile(file, "utf8"))), leases);
     }
+    await refuse({ childId: undefined, sessionToken: undefined, collectorToken: undefined }, /accounted for/);
     await refuse({ childId: randomUUID() }, /clean close/);
     await refuse({ operationsReviewed: false }, /accounted for/);
     await refuse({ sessionToken: randomUUID() }, /leases/);

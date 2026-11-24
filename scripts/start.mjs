@@ -7,7 +7,7 @@ import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import path from "node:path";
 
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
-const managed = process.connected && process.env.WIRE_UPDATE_LAUNCHER === "1";
+const managed = process.env.WIRE_UPDATE_LAUNCHER === "1";
 let finishChild, getStoreIdentity, startupMayOwnStorage = false;
 function releaseChild(state) {
     if (!finishChild) return;
@@ -95,6 +95,7 @@ if (managed) process.on("message", message => {
 });
 try {
     if (managed) {
+        if (!process.connected) throw Object.assign(new Error("The original launcher disconnected before its child could start."), { code: "WIRE_LAUNCH" });
         const { claimChild, storeIdentity, canonicalStore } = await import("../lib/update-launch-state.mjs");
         finishChild = claimChild(process.env.WIRE_UPDATE_DIRECTORY, process.env.WIRE_UPDATE_CHILD);
         const dataDir = process.env.WORKIQ_EVIDENCE_DATA_DIR;
@@ -111,7 +112,7 @@ try {
         port: options.port,
         ...(finishChild?.recovery && { recoverLaunch: async initialize => {
             const { recoverLaunch } = await import("../lib/update-launch-recovery.mjs");
-            return recoverLaunch(context, finishChild, initialize);
+            return recoverLaunch(context, finishChild, initialize, () => !stopping && process.connected);
         } }),
         frontend: options.frontend,
         exactRecords: options.exactRecords === true,
