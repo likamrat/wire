@@ -5920,7 +5920,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         closeHiddenDialog();
         const dialog = el("dialog", "hidden-cards-dialog"), head = el("div", "dialog-head"), body = el("div", "dialog-body");
         hiddenDialog = dialog; dialog.setAttribute("aria-labelledby", "hiddenCardsTitle");
-        const title = el("h2", "", "Hidden cards"); title.id = "hiddenCardsTitle";
+        const title = el("h2", "", "Hidden cards"); title.id = "hiddenCardsTitle"; title.tabIndex = -1; title.autofocus = true;
         const dismiss = button("Close", () => dialog.close(), "quiet");
         head.append(title, dismiss);
         const list = hiddenCards.entries();
@@ -5936,7 +5936,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             dialog.remove();
             if (hiddenDialog === dialog) { hiddenDialog = null; if (trigger.isConnected) trigger.focus({ preventScroll: true }); }
         }, { once: true });
-        dialog.showModal(); dismiss.focus();
+        dialog.showModal(); title.focus({ preventScroll: true });
     }
     function undoHideButton() {
         const ref = undoCard, undo = visibilityButton("Undo hide", "reset", () => setCardVisibility(null, [ref]));

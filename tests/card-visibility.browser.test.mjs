@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { navigateMain, selectActivityOption } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { palettes } from "../web/theme.mjs";
+import { contrast, paintedLabelContrast } from "./color-measurements.mjs";
 
 for (const frontend of ["react", "bundled"]) test(`card visibility keeps the reader, search and report copies covered (${frontend})`, async t => {
     const records = searchRecords();
@@ -54,8 +56,10 @@ for (const frontend of ["react", "bundled"]) test(`card visibility keeps the rea
     await page.getByRole("button", { name: "Hidden cards (1)" }).click();
     const dialog = page.getByRole("dialog", { name: "Hidden cards", exact: true });
     await expect(dialog).not.toContainText("physician");
-    await dialog.getByRole("button", { name: "Close" }).press("Enter");
+    await expect(dialog.getByRole("heading", { name: "Hidden cards" })).toBeFocused();
+    await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Hidden cards (1)" })).toBeFocused();
     await page.locator("#wireSearch").click();
     await page.locator("#wireSearch").fill("physician");
     await expect(page.locator("#wireSearchStatus")).toContainText("No visible matches", { timeout: 15000 });
@@ -98,4 +102,120 @@ for (const frontend of ["react", "bundled"]) test(`card visibility keeps the rea
     await expect(dialog).toHaveCount(0); await expect(row).toBeVisible(); await expect(mechanic).toBeVisible();
     if (prepared) { await expect(prepared.locator("#reportStage3")).toBeVisible(); assert.equal(previewReads, 1); }
     assert.deepEqual(errors, []);
+});
+
+test("Hide stays aligned with Add to report across states, text sizes and palettes", { timeout: 120000 }, async t => {
+    const { runtime } = await searchFixture(t, { copilotAccess: true, frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1340, height: 900 }, reducedMotion: "reduce" });
+    await page.goto(runtime.url);
+    const row = page.locator("#activityList .request-row").first();
+    const hide = row.getByRole("button", { name: "Hide", exact: true }), add = row.locator(".report-draft-trigger");
+    await expect(hide).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const metrics = control => control.evaluate(node => {
+        const css = getComputedStyle(node), face = getComputedStyle(node, "::before");
+        const icon = node.querySelector("svg"), glyph = icon.getBoundingClientRect(), box = node.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(node.lastChild); const text = range.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height, faceHeight: parseFloat(face.height),
+            top: glyph.top - box.top, glyph: glyph.width, textTop: text.top - box.top, gap: text.left - glyph.right,
+            left: glyph.left - box.left, right: box.right - text.right, font: css.font, stroke: icon.getAttribute("stroke-width") };
+    });
+
+    const checkRecovery = async () => {
+        for (const [width, scale, theme] of [[1340, 1, "light"], [390, 2, "dark"]]) {
+            const touch = width < 500;
+            const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: touch, reducedMotion: "reduce", colorScheme: theme });
+            const activate = control => touch ? control.tap() : control.click();
+            await page.goto(runtime.url);
+            await page.evaluate(s => { document.documentElement.style.fontSize = `${s * 100}%`; }, scale);
+            const hides = page.locator("#activityList").getByRole("button", { name: "Hide", exact: true });
+            await activate(hides.first());
+            const actions = page.locator("#cardVisibilityActions");
+            const undo = actions.getByRole("button", { name: "Undo hide" });
+            const check = async (control, icon) => {
+                await expect(control.locator("svg")).toHaveCount(1);
+                await expect(control.locator("svg")).toHaveAttribute("data-lucide-icon", icon);
+                await control.scrollIntoViewIfNeeded();
+                const bounds = await control.boundingBox();
+                assert.ok(bounds.height >= 44 && bounds.width >= 44 && bounds.x >= 0 && bounds.x + bounds.width <= width, `Unreachable ${await control.textContent()}: ${JSON.stringify(bounds)}`);
+                const measure = () => control.evaluate(n => {
+                    const glyph = n.querySelector("svg").getBoundingClientRect(), box = n.getBoundingClientRect();
+                    const text = document.createRange(); text.selectNodeContents(n.lastChild);
+                    const rect = text.getBoundingClientRect(), face = getComputedStyle(n, "::before");
+                    return { gap: rect.left - glyph.right, align: Math.abs((glyph.top + glyph.bottom - box.top - box.bottom)/2),
+                        face: face.backgroundColor, topInset: parseFloat(face.top), bottomInset: parseFloat(face.bottom) };
+                });
+                await page.mouse.move(2, 2);
+                const rest = await measure();
+                assert.ok(rest.gap >= 6 && rest.align <= 1 && rest.topInset > 0 && rest.topInset === rest.bottomInset, JSON.stringify(rest));
+                if (touch) { assert.ok(await paintedLabelContrast(control) >= 4.5); return; }
+                await control.hover(); const hovered = await measure(); assert.notEqual(hovered.face, rest.face);
+                await page.mouse.down(); const pressed = await measure(); assert.notEqual(pressed.face, hovered.face);
+                assert.deepEqual(await control.boundingBox(), bounds);
+                assert.ok(await paintedLabelContrast(control) >= 4.5);
+                await page.mouse.move(2, 2); await page.mouse.up();
+            };
+            await check(undo, "rotate-ccw"); await activate(undo); await expect(hides).toHaveCount(3);
+            await activate(hides.first()); await activate(hides.first());
+            const manage = actions.getByRole("button", { name: "Hidden cards (2)" });
+            await check(manage, "eye-off"); await activate(manage);
+            const dialog = page.getByRole("dialog", { name: "Hidden cards", exact: true });
+            await expect(dialog.locator(".dialog-head button svg")).toHaveCount(1);
+            await expect(dialog.locator(".dialog-head button svg")).toHaveAttribute("data-lucide-icon", "x");
+            const restore = dialog.getByRole("button", { name: "Restore", exact: true }).first(), all = dialog.getByRole("button", { name: "Restore all (2)" });
+            await check(all, "rotate-ccw"); await check(restore, "eye");
+            assert.ok(await dialog.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+            await activate(restore); await expect(hides).toHaveCount(2);
+            await activate(actions.getByRole("button", { name: "Hidden cards (1)" }));
+            await activate(dialog.getByRole("button", { name: "Restore all (1)" }));
+            await expect(dialog).toHaveCount(0); await expect(hides).toHaveCount(3);
+            await page.close();
+        }
+    };
+    const paint = control => control.evaluate(node => {
+        const face = getComputedStyle(node, "::before"), style = getComputedStyle(node);
+        return [face.backgroundColor, face.borderTopColor, style.outlineWidth, style.outlineStyle];
+    });
+    for (const [width, scale] of [[1340, 1], [390, 1.5], [390, 2]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(s => { document.documentElement.style.fontSize = `${s * 100}%`; }, scale);
+        await hide.scrollIntoViewIfNeeded();
+        const peer = await metrics(add), own = await metrics(hide);
+        for (const key of ["height", "top", "glyph", "textTop", "gap", "left", "font", "stroke"]) assert.equal(own[key], peer[key], `${width}/${scale}: ${key}`);
+        assert.ok(own.height >= 44 && own.width >= 44 && own.faceHeight <= own.height, `Paint outside hit target: ${JSON.stringify(own)}`);
+        assert.ok(own.left >= 8 && Math.abs(own.left - own.right) <= 1, `Unbalanced padding: ${JSON.stringify(own)}`);
+        const bounds = await row.boundingBox();
+        assert.ok(own.x + own.width <= bounds.x + bounds.width - 8, "Hide must remain inside the card with a trailing inset");
+        if (own.y === peer.y) assert.ok(own.x - (peer.x + peer.width) >= 8, "Separate adjacent hit targets");
+        else assert.ok(own.x === peer.x && own.y >= peer.y + peer.height, "Wrapped commands retain their leading edge and separate targets");
+        assert.equal(await hide.locator("svg").getAttribute("data-lucide-icon"), "eye-off");
+        assert.equal(await hide.locator("svg").getAttribute("aria-hidden"), "true");
+    }
+    await page.setViewportSize({ width: 1340, height: 900 });
+    await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
+    for (const palette of Object.keys(palettes)) for (const theme of ["light", "dark"]) {
+        await page.evaluate(([palette, theme]) => Object.assign(document.documentElement.dataset, { evidencePalette: palette, evidenceTheme: theme }), [palette, theme]);
+        await hide.scrollIntoViewIfNeeded(); await page.mouse.move(1, 1);
+        const normal = await paint(hide), geometry = await metrics(hide), where = `${palette}/${theme}`;
+        const checkInk = async () => assert.ok(await paintedLabelContrast(hide) >= 4.5, `${where}: label contrast`);
+        await checkInk();
+        await hide.hover(); const hover = await paint(hide); await checkInk();
+        assert.notEqual(hover[0], normal[0], `${where}: hover must tint the face`);
+        await page.mouse.down();
+        const press = await paint(hide); await checkInk();
+        assert.notEqual(press[0], hover[0], `${where}: pressed must differ from hover`);
+        assert.deepEqual(await metrics(hide), geometry, `${where}: moving paint must not move the target or text`);
+        await page.mouse.move(1, 1); await page.mouse.up();
+        await add.focus(); await page.keyboard.press("Tab"); await expect(hide).toBeFocused();
+        const [ink, surface, thickness] = await hide.evaluate(node => {
+            const style = getComputedStyle(node);
+            let surface = node.parentElement;
+            while (surface.parentElement && getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)") surface = surface.parentElement;
+            return [style.outlineColor, getComputedStyle(surface).backgroundColor, parseFloat(style.outlineWidth)];
+        });
+        assert.ok(thickness >= 2 && contrast(ink, surface) >= 3, `${where}: keyboard outline ${thickness}px ${ink} on ${surface}`);
+        await checkInk(); await page.keyboard.press("Shift+Tab");
+    }
+    await checkRecovery();
 });
