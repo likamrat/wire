@@ -23,7 +23,7 @@ async function settled(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
     await page.evaluate(() => document.fonts.ready);
 }
-async function browserFor(runtime, extraReads = []) {
+async function browserFor(runtime, extraReads = [], beforeSnapshot) {
     const browser = await chromium.launch(), context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
     const errors = [], forbidden = [], calls = [];
     const allowed = new Set([
@@ -32,10 +32,11 @@ async function browserFor(runtime, extraReads = []) {
         "/api/assessment/evidence", "/api/assessment/consent/set", "/api/assessment/mutation/status",
         ...extraReads,
     ]);
-    await context.route("**/*", route => {
+    await context.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || allowed.has(url.pathname))) {
             if (request.method() === "POST") calls.push(url.pathname);
+            if (beforeSnapshot && url.pathname === "/api/snapshot") await beforeSnapshot();
             return route.continue();
         }
         forbidden.push(url.href); return route.abort();
@@ -188,7 +189,8 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const reports = createExportController(session);
     const runtime = await startServer(session, reports, { port: 0, collector: { timers: false } });
     collector = collectorFor(session);
-    const { context, page, calls, close } = await browserFor(runtime);
+    let readbackGate;
+    const { context, page, calls, close } = await browserFor(runtime, [], () => readbackGate?.promise);
     t.after(async () => {
         try { await close(); }
         finally {
@@ -215,13 +217,31 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     assert.equal(calls.includes("/api/assessment/consent/set"), false);
     await checkbox.check();
-    const enable = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
-    await setup.getByRole("button", { name: "Turn on response saving", exact: true }).click();
-    assert.equal((await enable).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
-    assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
+    // The enable receipt can arrive before the page has applied its refreshed source state.
+    readbackGate = Promise.withResolvers();
+    const turnOff = setup.getByRole("button", { name: "Turn off and delete responses", exact: true });
+    let refreshRequest, consentRevision;
+    try {
+        const [enable, read] = await Promise.all([page.waitForResponse("**/api/assessment/consent/set"),
+            page.waitForRequest("**/api/snapshot"), setup.getByRole("button", { name: "Turn on response saving", exact: true }).click()]);
+        assert.ok(enable.ok());
+        consentRevision = (await enable.json()).basis.consentRevision;
+        refreshRequest = read;
+        await expect(checkbox).toBeChecked();
+        assert.equal(await checkbox.isDisabled(), true, "The confirmed switch must not accept another edit against the pre-write source state.");
+    } finally {
+        readbackGate.resolve();
+        readbackGate = null;
+    }
+    const refreshed = await refreshRequest.response();
+    assert.ok(refreshed?.ok());
+    assert.equal((await refreshed.json()).assessment.basis.consentRevision, consentRevision);
+    await settled(page);
+    await expect(checkbox).toBeEnabled();
     await checkbox.uncheck();
-    assert.equal(await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).isEnabled(), true);
+    await expect(checkbox).not.toBeChecked();
+    await expect(turnOff).toBeEnabled();
+    assert.equal((await loadBoardState(session)).personalEvaluation.consent.state, "enabled", "An unchecked draft is not a revocation.");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const value = await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).evaluate(node => {

@@ -50,7 +50,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     section.append(form);
     root.replaceChildren(section);
     let localError = "";
-    const locked = snapshot => ["pending", "unknown", "checking", "stale"].includes(snapshot.phase);
+    const locked = snapshot => ["pending", "unknown", "checking", "confirmed", "stale"].includes(snapshot.phase);
     const currentEnabled = consent => consent?.state === "enabled" && (!currentSource || currentSource.available === true
         && consent.sourceConfigRef === currentSource.sourceConfigRef && consent.sourceConfigRevision === currentSource.sourceConfigRevision);
     function render() {
@@ -60,8 +60,9 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         const snapshot = control.snapshot();
         const state = snapshot.applied?.state;
         const active = currentEnabled(snapshot.applied), inactiveGrant = state === "enabled" && !active;
-        const idle = snapshot.draft === null && !locked(snapshot);
-        const restoreChoiceFocus = idle && [confirm, cancel].includes(doc.activeElement);
+        const confirmed = snapshot.phase === "confirmed";
+        const idle = snapshot.draft === null && (confirmed || !locked(snapshot));
+        const restoreChoiceFocus = idle && !confirmed && [confirm, cancel].includes(doc.activeElement);
         applied.textContent = inactiveGrant ? currentSource?.available === false
             ? "Response saving is inactive because its source is unavailable."
             : "Response saving is inactive because the approved source changed."
@@ -95,10 +96,11 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         revoke.hidden = state !== "enabled" || snapshot.draft?.enabled !== false;
         renewalImpact.hidden = !inactiveGrant || snapshot.draft?.enabled !== true;
         details.hidden = snapshot.draft?.enabled !== true;
-        status.textContent = localError || (["view", "pending"].includes(snapshot.phase) ? "" : snapshot.message);
+        status.textContent = localError || (confirmed ? "Saved. Reading current reply settings."
+            : ["view", "pending"].includes(snapshot.phase) ? "" : snapshot.message);
         status.hidden = !status.textContent;
         status.setAttribute("role", localError || ["error", "unknown", "stale"].includes(snapshot.phase) ? "alert" : "status");
-        form.setAttribute("aria-busy", String(["pending", "checking"].includes(snapshot.phase)));
+        form.setAttribute("aria-busy", String(confirmed || ["pending", "checking"].includes(snapshot.phase)));
         if (restoreChoiceFocus) input.focus();
         finishPresentation?.();
     }
