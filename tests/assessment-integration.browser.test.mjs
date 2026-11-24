@@ -215,13 +215,39 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     assert.equal(calls.includes("/api/assessment/consent/set"), false);
     await checkbox.check();
-    const enable = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
-    await setup.getByRole("button", { name: "Turn on response saving", exact: true }).click();
-    assert.equal((await enable).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
-    assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
-    await checkbox.uncheck();
-    assert.equal(await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).isEnabled(), true);
+    // The enable receipt can arrive before the page has applied its refreshed source state.
+    const gate = Promise.withResolvers();
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch();
+        await gate.promise;
+        await route.fulfill({ response });
+    }, { times: 1 });
+    const turnOff = setup.getByRole("button", { name: "Turn off and delete responses", exact: true });
+    let refreshRequest, consentRevision, editedBeforeRefresh;
+    try {
+        const [enable, read] = await Promise.all([page.waitForResponse("**/api/assessment/consent/set"),
+            page.waitForRequest("**/api/snapshot"), setup.getByRole("button", { name: "Turn on response saving", exact: true }).click()]);
+        assert.ok(enable.ok());
+        consentRevision = (await enable.json()).basis.consentRevision;
+        refreshRequest = read;
+        await expect(checkbox).toBeChecked();
+        editedBeforeRefresh = await checkbox.isEnabled();
+        if (editedBeforeRefresh) {
+            await checkbox.uncheck();
+            await expect(turnOff).toBeEnabled();
+        }
+    } finally {
+        gate.resolve();
+        await page.unrouteAll({ behavior: "wait" });
+    }
+    const refreshed = await refreshRequest.response();
+    assert.ok(refreshed?.ok());
+    assert.equal((await refreshed.json()).assessment.basis.consentRevision, consentRevision);
+    await settled(page);
+    if (!editedBeforeRefresh) await checkbox.uncheck();
+    await expect(checkbox).not.toBeChecked();
+    await expect(turnOff).toBeEnabled();
+    assert.equal((await loadBoardState(session)).personalEvaluation.consent.state, "enabled", "An unchecked draft is not a revocation.");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const value = await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).evaluate(node => {
