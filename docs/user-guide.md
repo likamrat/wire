@@ -64,6 +64,10 @@ Outcome or Prompt author; **More filters** holds the additional choices.
 On opening Analyze, the charts build to the recorded counts. This is not collection progress.
 With reduced motion, the final values appear immediately. On a narrow screen, the
 Tool call results donut stays visible and its legend fits below it when needed.
+Choose the donut total to list the matching calls, eight per page. Open a call
+by its tool or path. Its outcome describes the tool execution; returned entries
+keep their own statuses in the call reader. **Show all matching activity**
+returns to the interaction list.
 
 In **Settings > Analyze > Homepage layout**, use **Up** or **Down** to move a widget
 or the entire **Interactions** list. For example, move Interactions above the two charts,

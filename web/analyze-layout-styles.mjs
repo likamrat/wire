@@ -119,7 +119,12 @@ export const analyzeLayoutStyles = `
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
-.widget-record {display:grid;gap:4px;padding:12px 16px;overflow-wrap:anywhere}
+#activityList .widget-record {display:grid;grid-template-columns:minmax(0,1fr) minmax(12rem,auto);gap:4px 24px;align-items:center;padding:8px 16px;overflow-wrap:anywhere}
+.widget-record>.text-link,.widget-record-exit {display:inline-flex;align-items:center;justify-self:start;min-height:44px}
+.widget-record-meta {display:grid;gap:2px;min-width:0;font-size:var(--type-small)}
+.widget-record-meta .semantic-cue {font-weight:var(--weight-regular)}
+.widget-record-exit {padding-inline:16px}
+@container (max-width:34rem){#activityList .widget-record {grid-template-columns:minmax(0,1fr)}}
 @media (hover:none) {
  :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]::before {content:attr(aria-description);display:block;font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);order:1}
  :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]:not(.author-option-value) {display:flex;flex-direction:column;justify-content:center}

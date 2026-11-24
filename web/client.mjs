@@ -5889,7 +5889,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityListSummary").hidden = false;
         host.replaceChildren();
         activityPage = roster.index;
-        if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link", { revealReferenceRecords: true }));
+        if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link widget-record-exit", { revealReferenceRecords: true }));
         if (!roster.total && !nativeUnavailable && !widget) {
             host.append(empty(native ? "No matching activity" : !workspaceState.evidence.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 workspaceState.evidence.scenarios.length
@@ -5961,8 +5961,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const target = routeFor("request", { request: row.scenarioId, call: row.id, layer,
             ...(layer === "reported-api" ? { callRevision: workspaceState.evidence.revision } : {}) });
         const ordinal = layer === "tool" ? requestContext.actionOrdinals(record).get(sourceCallFor(row)) : null;
-        const action = routeLink([ordinal && `Call #${ordinal}`, row.tool, row.endpoint?.path].filter(Boolean).join(" · ") || results.unit(layer, 1), target, "text-link");
-        card.append(action, el("span", "muted", [results.labels(layer)[row.outcome], row.startedAt && time.formatMoment(row.startedAt, workspaceState.scope.timeContext)].filter(Boolean).join(" · ")));
+        const action = routeLink([ordinal && `Call #${ordinal}`, row.tool, row.endpoint?.path].filter(Boolean).join(" · ") || results.unit(layer, 1), target, "text-link request-link");
+        action.setAttribute("aria-controls", "contextSidebar");
+        card.dataset.resultLayer = layer;
+        const metadata = el("div", "widget-record-meta"), outcome = el("span", "semantic-cue result-tone-" + row.outcome);
+        outcome.append(ux.icon(results.icon(row.outcome)), el("span", "", results.labels(layer)[row.outcome]));
+        metadata.append(outcome);
+        if (row.startedAt) metadata.append(el("span", "muted", time.formatMoment(row.startedAt, workspaceState.scope.timeContext)));
+        card.append(viewKey(action, "widget-open:" + row.id), metadata);
         return card;
     }
     function matchingAction(row) {
