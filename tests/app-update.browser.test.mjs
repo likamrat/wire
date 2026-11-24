@@ -520,8 +520,16 @@ test("single activation stays fenced through transport loss until the authentica
     await expect(page.locator("#appUpdateNotice")).toBeHidden();
     const hold = Promise.withResolvers();
     setup.apply = async route => { await hold.promise; await route.abort("connectionreset"); };
-    await page.locator("#settingsAppUpdate").click(); await expect(modal).toBeVisible();
+    await page.locator("#settingsAppUpdate").focus();
+    await page.keyboard.press("Enter"); await expect(modal).toBeVisible();
     const activity = page.locator("#appUpdateActivity");
+    if (process.env.WIRE_APP_UPDATE_PROOFS) {
+        await mkdir(process.env.WIRE_APP_UPDATE_PROOFS, { recursive: true });
+        await modal.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "keyboard-update-progress.png") });
+    }
+    assert.equal(await modal.locator("h2").evaluate(title => getComputedStyle(title, "::before").content), "none",
+        "the focused update dialog must not paint a heading marker across its spinner");
+    await expect(modal).toBeFocused();
     await expect(page.locator("#appUpdateHint")).toHaveText("This tab reloads automatically.");
     const rotation = () => activity.evaluate(node => getComputedStyle(node).transform);
     const start = await rotation();
@@ -539,6 +547,7 @@ test("single activation stays fenced through transport loss until the authentica
     setup.health = { ...setup.health, build: next, runtimeId: replacement, clientEntry: "/assets/client/newbuild-12345678.js" };
     await expect(page.locator("#appUpdateHint")).toContainText("runtime identity", { timeout: 12000 });
     await expect(modal).toBeVisible();
+    await page.keyboard.press("Tab"); await expect(page.locator("#appUpdateRecover")).toBeFocused();
     setup.capability = "d".repeat(64); setup.runtimeId = replacement;
     // The shell still names the stale entry: an available JS file is not loaded-client proof.
     await page.reload();
@@ -577,6 +586,7 @@ test("the replacement shell shows recovery before its module loads and stops on 
     try {
         await page.reload({ waitUntil: "commit" });
         await expect(page.getByRole("dialog", { name: "Checking version" })).toBeVisible();
+        await expect(page.getByRole("dialog", { name: "Checking version" })).toBeFocused();
         await expect(page.locator("#loading")).toBeHidden();
         await expect(page.locator("#appUpdateActivity")).toBeVisible();
     } finally { hold.resolve(); }

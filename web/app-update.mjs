@@ -146,7 +146,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         if ($("appUpdateHint").textContent !== hint) $("appUpdateHint").textContent = hint;
         $("appUpdateRecover").hidden = !retry;
         $("appUpdateActivity").hidden = retry;
-        if (!dialog.open) { dialog.showModal(); $("appUpdateFenceTitle").focus(); }
+        if (!dialog.open) dialog.showModal();
     }
     function reconnecting() {
         if (expected && dialog.open && $("appUpdateRecover").hidden) fence("Reconnecting to WIRE");
