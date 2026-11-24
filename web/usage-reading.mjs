@@ -58,7 +58,7 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
             "partial-receipts":"Some model calls have no token counts.",
             "no-linked-receipt":"No token counts matched this prompt's model calls.",
         };
-        host.append(el("p", "", reasons[scenario?.usageGap] ?? "WIRE has no verified model token count for this interaction."));
+        host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts have been verified for this interaction."));
         if (!sized.length) return;
     } else {
         renderModelCounts(el, host, u);
