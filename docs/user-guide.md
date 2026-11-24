@@ -462,7 +462,7 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
 | Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
