@@ -684,7 +684,8 @@ test("author, overlapping service/model, error, timing and calendar marks open o
 test("Trends opens normally, keeps 30 daily points and connects exact selected evidence to the existing reader", { timeout: 45000 }, async t => {
     const { page, reads } = await setupAllCharts(t);
     await expect(page.locator(".trends-panel")).toHaveCount(8);
-    await expect(page.locator(".trends-panel:not([data-family=usage]) .trends-plot svg:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel .trends-plot svg:visible")).toHaveCount(6);
+    await expect(page.locator('[data-family=models] .trends-no-activity')).toContainText("No recorded response models");
     await expect(page.locator('[data-family=usage] .trends-no-activity')).toContainText("No token counts available");
     const data = await dates(page);
     assert.equal(data.days.length, 30);
@@ -754,7 +755,11 @@ test("the eight simultaneous charts, daily activity and population filters work 
     for (const id of ["authors", "services", "problems", "timing", "models", "tools"]) {
         await selectActivityOption(page, "trendsTrend", id);
         await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
-        await expect(page.locator(".trends-panel[data-maximized=true] .trends-plot svg")).toBeVisible();
+        const maximized = page.locator(`.trends-panel[data-family="${id}"][data-maximized=true]`);
+        if (id === "models") {
+            await expect(maximized.locator(".trends-plot")).toBeHidden();
+            await expect(maximized.locator(".trends-no-activity")).toContainText("No recorded response models");
+        } else await expect(maximized.locator(".trends-plot svg")).toBeVisible();
         if (id === "problems") {
             const space = await page.locator(".trends-inspection-body").evaluate(node => ({
                 body: node.getBoundingClientRect().height,
