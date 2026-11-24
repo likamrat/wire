@@ -47,7 +47,7 @@ test("packaged Analyze sections retain filtered results, focus and scroll on tab
         await expect(page.locator("#chartReferenceExplanation")).toContainText("Outcome: Tool failed");
         await expect(commands).toBeHidden(); await expect(page.locator("#pageTitle")).toHaveText("Analyze");
         assert.equal(new URL(page.url()).searchParams.get("section"), "guide");
-        assert.equal(new URL(page.url()).searchParams.get("result"), "failure");
+        assert.equal(new URL(page.url()).searchParams.has("result"), false);
         await capture(`${width}-guide`);
         await page.goBack(); await expect(results).toHaveAttribute("aria-current", "page"); await expect(guide).toBeFocused();
         assert.equal(page.url(), filteredURL); assert.equal(await page.evaluate(() => scrollY), beforeY);

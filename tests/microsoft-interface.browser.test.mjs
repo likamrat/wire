@@ -121,7 +121,7 @@ test("Microsoft records use the existing source, widget, reader, Search and acco
     await ready(page);
     await expect(card).toBeFocused();
     assert.ok(Math.abs((await card.boundingBox()).y - cardTop) <= 2);
-    assert.equal(new URL(page.url()).searchParams.get("source"), "microsoft-365-cowork");
+    assert.equal(new URL(page.url()).searchParams.has("source"), false);
     await page.goto(app.url + "#request?" + new URLSearchParams({ source: "microsoft-365-cowork", request: native.scenarioId, call: call.id }));
     await ready(page);
     await expect(page.locator("#selectedCall")).toContainText("mcp__graph__CallGraph");

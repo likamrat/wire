@@ -428,7 +428,8 @@ test("a late return snapshot cannot settle or replace a newer route read", { tim
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
     releases[1].resolve();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page).toHaveURL(url => url.pathname === "/" && url.search === "?layer=http" && !url.hash);
+    await expect(page).toHaveURL(url => url.pathname === "/" && !url.search && !url.hash);
+    await expect(page.locator("#layerFilter")).toHaveValue("http");
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#reportsView")).toBeHidden();
     await expect(page.locator("#message")).toBeHidden();

@@ -143,7 +143,7 @@ test("normal Analyze shows seven daily populations totaling 244 rather than two 
     const drilled = await (await drilledResponse).json();
     assert.deepEqual(drilled.analytics.rows.map(row => row.id).sort(), [...points.find(point => point.date === "2026-11-15").drilldownIds].sort());
     const params = new URL(page.url()).searchParams;
-    assert.equal(params.get("from"), "2026-11-15"); assert.equal(params.get("to"), "2026-11-15");
+    assert.equal(params.has("from") || params.has("to"), false);
     await expect(page.locator("#activityCount")).toHaveText("34");
     await page.goBack(); await ready(page);
     await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
@@ -189,7 +189,7 @@ test("daily Analyze keeps long-range empty days distinct from undated evidence",
     await page.locator(".time-column").last().focus();
     const target = page.locator(".time-column").last();
     const next = new URLSearchParams((await target.getAttribute("href")).split("?")[1]);
-    assert.equal(next.get("from"), "2026-02-06"); assert.equal(next.get("to"), "2026-02-06");
+    assert.equal(next.has("from") || next.has("to"), false);
     const windowOrigin = page.url();
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
@@ -242,11 +242,11 @@ test("removing missing-service context retires the old window without broadening
     await page.setViewportSize({ width: 390, height: 844 }); await chooseTheme(page, "dark"); await ready(page);
     await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
     await capture(page, "anchor-mail-narrow-dark", await measure(page));
-    await page.goBack(); await ready(page);
+    await page.locator("#openAnalyzeFilters").click();
+    await page.locator("#addServiceContext").click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
-    await expect(page.locator("#timelineWindow")).toContainText("Nov 16, 2016");
     await closeAnalyzeFilters(page);
-    await page.locator('a[href*="withinServices=Mail"]:visible').first().click(); await ready(page);
+    await page.locator('[data-breakdown="services"] a[aria-label^="Mail:"]:visible').first().click(); await ready(page);
     assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), null);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator(".time-column")).toHaveCount(1);
@@ -284,15 +284,16 @@ test("out-of-range short and long timeline links retain keyboard recovery and Ba
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
         if (short && timelineFrom === "1900-01-01") await capture(page, "anchor-short-recovered", await measure(page));
         await page.goBack(); await ready(page);
-        assert.equal(new URL(page.url()).searchParams.get("timelineFrom"), timelineFrom);
+        assert.equal(new URL(page.url()).searchParams.has("timelineFrom"), false);
+        await expect(page.locator("#chart")).toContainText("No dated records in this window");
         await expect(page.locator("#timeline-first")).toBeFocused();
         await page.locator("#timeline-latest").focus(); await page.keyboard.press("Enter"); await ready(page);
         await expect(page.locator(".time-column")).toHaveCount(1);
         await expect(page.locator("#timeline-latest")).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText(short ? "1" : "2");
         const accepted = new URL(page.url()).searchParams;
-        assert.equal(accepted.get("services"), short ? "Mail" : null);
-        assert.equal(accepted.get("bucket"), bucket);
+        assert.equal(accepted.has("services") || accepted.has("bucket"), false);
+        await expect(page.locator("#serviceAssociationFilter")).toHaveValue(short ? "Mail" : "all");
     }
 });
 
@@ -681,7 +682,8 @@ test("fractional scrollports reveal the complete focused column and count in bot
     await action.locator(".dimensional-count").click({ modifiers: ["Control"] });
     const popup = await popupPromise;
     try {
-        await popup.waitForURL(new URL(href, originalUrl).href);
+        await expect(popup.locator("#periodResult")).toContainText("Work IQ tool call");
+        assert.equal(new URL(popup.url()).pathname, new URL(href, originalUrl).pathname);
         assert.equal(page.url(), originalUrl, "Modified date links retain native new-tab navigation");
     } finally { await popup.close(); }
 });

@@ -63,8 +63,8 @@ test("weekly column and outcome segment reach different exact populations and Ba
     await expect(page.locator("#activityCount")).toHaveText("3");
     const prompts = page.locator("#activityList .request-card-prompt");
     assert.deepEqual((await prompts.allTextContents()).sort(), [0,6,12].map(i => `Synthetic chart request 14 ${i}`).sort());
-    assert.equal(new URL(page.url()).searchParams.get("from"), "2026-09-14");
-    assert.equal(new URL(page.url()).searchParams.get("to"), "2026-09-20");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
+    assert.equal(new URL(page.url()).searchParams.has("to"), false);
     await page.goBack(); await ready(page); await expect(failed).toBeFocused();
     await col.focus(); await col.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("17");
@@ -83,12 +83,12 @@ test("inspecting a segment on a narrow screen does not steal keyboard focus", as
 
 test("Reset filters restores the time chart; grouping survives and a cancelled date draft does not enter history", async t => {
     const { page, snapshot } = await setup(t,[["14",17]],"/?chart=endpoint&bucket=month");
-    const previous = page.url(); await reset(page);
+    await reset(page);
+    const previous = page.url();
     assert.equal(snapshot().bucket,"month");
     assert.equal(new URL(page.url()).searchParams.has("chart"),false);
     await expect(page.locator("#activityCount")).toHaveText("17");
-    await page.goBack(); await ready(page); assert.equal(page.url(),previous);
-    await openAnalyzeFilters(page); await expect(page.locator('[data-chart=endpoint]')).toHaveAttribute("aria-pressed","true");
+    await openAnalyzeFilters(page); await expect(page.locator('[data-chart=time]')).toHaveAttribute("aria-pressed","true");
     await selectActivityOption(page,"dateFilter","custom");
     await page.locator("#fromFilter").fill("2026-09-01");
     await page.locator("#analyzeDates").getByRole("button",{name:"Cancel",exact:true}).click();
@@ -127,33 +127,29 @@ for (const multiple of [false,true]) test(`${multiple ? "unequal columns and a g
     }
 });
 
-test("Reset clears applied filters and private Search; browser Back restores scope without leaking its text", async t => {
+test("Reset clears applied filters and private Search without publishing the text or adding a history step", async t => {
     const { page, snapshot } = await setup(t,[["14",17],["17",3]],"/?bucket=month&scope=all&result=failure&range=custom&from=2026-09-14&to=2026-09-17");
     await chooseTheme(page,"dark");
     const query = "Synthetic chart request 14";
     await restoreLegacySearch(page,query);
-    const before = page.url(); assert.ok(!decodeURI(before).includes(query));
+    const before = page.url(), length = await page.evaluate(() => history.length); assert.ok(!decodeURI(before).includes(query));
     await reset(page);
     assert.deepEqual(snapshot().filters, { scope:"history", includeMetadata:false });
     assert.equal(snapshot().bucket,"month");
     await expect(page.locator("#activitySearch")).toHaveValue("");
     await expect(page.locator("#activityCount")).toHaveText("20");
-    const cleared = page.url();
-    await page.goBack(); await ready(page); assert.equal(page.url(),before);
-    await expect(page.locator("#activitySearch")).toHaveValue(query);
-    await expect(page.locator("#activityCount")).toHaveText("3");
-    assert.equal(snapshot().filters.scope,"all");
-    await page.goForward(); await ready(page); assert.equal(page.url(),cleared);
+    assert.equal(await page.evaluate(() => history.length), length);
+    assert.equal(page.url(),before);
+    assert.ok(!(await page.evaluate(() => JSON.stringify(history.state))).includes(query));
     await expect(page.locator("html")).toHaveAttribute("data-evidence-theme","dark");
 });
 
-test("Resetting Both collections returns to the saved collection and Back restores both", async t => {
+test("Resetting Both collections returns to the saved collection in place", async t => {
     const { page,snapshot } = await setup(t,[["14",17]]);
     await selectActivityOption(page,"scopeFilter","all"); await ready(page);
     assert.equal(snapshot().filters.scope,"all"); const before = page.url();
     await reset(page); assert.equal(snapshot().filters.scope,"history");
-    await page.goBack(); await ready(page);
-    assert.equal(page.url(),before); assert.equal(snapshot().filters.scope,"all");
+    assert.equal(page.url(),before); await expect(page.locator("#scopeFilter")).toHaveValue("history");
 });
 
 test("empty evidence has no invented time column or active filter", async t => {
@@ -166,7 +162,7 @@ test("empty evidence has no invented time column or active filter", async t => {
     await expect(page.locator("#resetView")).toBeDisabled();
 });
 
-test("reset and Back restore the filtered record page and its exact reader target", async t => {
+test("Back restores the filtered record page and its exact reader target; reset clears its page", async t => {
     const { page } = await setup(t, [["14",26]], "/?result=success");
     const pager = page.getByRole("navigation",{name:"Analyze result pages"});
     await pager.getByRole("button",{name:"Next",exact:true}).click();
@@ -175,11 +171,10 @@ test("reset and Back restore the filtered record page and its exact reader targe
     const prompts = await links.allTextContents(), first = links.first();
     await first.click(); await expect(page.locator("#contextSidebar")).toBeVisible();
     await page.goBack(); await expect(first).toBeFocused(); await expect(pager).toContainText("9-16");
-    await reset(page); await expect(pager).toContainText("1-8 of 26");
-    await page.goBack(); await ready(page);
     assert.equal(page.url(),pageRoute);
     await expect(pager).toContainText("9-16 of 21");
     await expect(links).toHaveText(prompts);
+    await reset(page); await expect(pager).toContainText("1-8 of 26");
 });
 
 test("reset keeps an interaction selected for a report without publishing a late preview or saving files", async t => {

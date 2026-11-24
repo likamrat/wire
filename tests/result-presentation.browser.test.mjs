@@ -162,7 +162,7 @@ test("matching result navigation keeps exact paths, selected scope and native fo
     await expect(call.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
     await expect(call.locator("tag")).toHaveCount(0);
     await page.goBack(); await expect(link).toBeFocused();
-    assert.match(page.url(), /result=failure/);
+    assert.doesNotMatch(page.url(), /[?&]result=/);
     await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:matching");
 });
 

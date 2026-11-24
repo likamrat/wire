@@ -245,7 +245,8 @@ for (const topic of ["time", "categories"]) test(`native ${topic} exact rows kee
     await exact(page, topic);
     await expect(page.locator("#countTable tfoot td").first()).toHaveText(topic === "time" ? "19" : "32");
     const target = page.locator("#countTable tbody a").first(), href = await target.getAttribute("href");
-    const parameters = new URLSearchParams(href.split("?")[1]);
+    const label = await target.innerText();
+    assert.doesNotMatch(href, /[?&](from|to|service)=/);
     const reads = requests.filter(path => path === "/api/snapshot").length;
     const response = topic === "time" ? null : page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
     await target.click();
@@ -253,19 +254,18 @@ for (const topic of ["time", "categories"]) test(`native ${topic} exact rows kee
     const snapshot = response ? await (await response).json() : initial;
     const expected = buildActivityAnalytics(records, { layer: "tool", groupBy: "workload",
         timeContext: { timeZone: "America/New_York", locale: "en-US" },
-        filters: topic === "time" ? { from: parameters.get("from"), to: parameters.get("to") } : { workloads: [parameters.get("service")] },
+        filters: topic === "time" ? { from: "2026-09-22", to: "2026-09-25" } : { workloads: [label] },
     });
     assert.deepEqual(new Set(snapshot.analytics.rows.map(row => row.id)), new Set(expected.rows.map(row => row.id)));
     assert.ok(snapshot.analytics.rows.length > 0 && snapshot.analytics.rows.length < 32);
     if (topic === "time") {
-        assert.equal(parameters.get("from"), "2026-09-22");
-        assert.equal(parameters.get("to"), "2026-09-25", "A Monday-labeled week cannot expand the accepted dates");
+        await expect(page.locator("#periodResult")).toContainText("Sep 22–25, 2026");
         assert.equal(requests.filter(path => path === "/api/snapshot").length, reads, "An unchanged scope only reveals its existing records");
         await exact(page, "time");
         await expect(page.locator("#countTable tfoot td").first()).toHaveText("19");
     } else {
         await page.goBack();
-        await expect(page.locator("#countTable").locator(`a[href="${href}"]`)).toBeFocused();
+        await expect(target).toBeFocused();
     }
 });
 
@@ -605,7 +605,7 @@ for (const theme of ["light", "dark"]) test(`Guide explains scope and coverage w
     await expect(article).not.toContainText(/\d%/);
     await page.locator("#chartReferenceShowData").click();
     await expect(exactData.locator("tbody tr")).toHaveCount(4);
-    await expect(exactData.locator('tr:has(a[href*="result=success"]) td')).toHaveText(["32", "100%"]);
+    await expect(exactData.locator('tr:has(a[aria-label^="Tool completed:"]) td')).toHaveText(["32", "100%"]);
     await expect(exactData.locator("tbody tr").filter({ hasText: "Tool failed" }).locator("td")).toHaveText(["0", "0%"]);
     await page.locator("#chartReferenceBack").click();
     await topicChoice(page, "services");

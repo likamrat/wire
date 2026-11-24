@@ -264,7 +264,8 @@ Restore all also works after the widgets have been collapsed individually.
 Keep the 7/14/30/custom date family. Bare entry (or a measure-only link) first
 checks the current seven days. Only when that week is empty can it open seven
 days ending at the latest retained matching call. Explicit dates, including
-an empty period, do not widen. Preserve accepted public period/measure history;
+an empty period, do not widen. Keep applied periods and filters in the view,
+not its address. Choosing a chart measure or replacing a filter does not create a Back step;
 do not serialize private filter values or an activity-derived date.
 Every civil day remains separate in the selected IANA zone. A compact index
 plot may thin tick labels, never observations or daily table rows.

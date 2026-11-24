@@ -109,6 +109,7 @@ test("Reports starts with creation and three recent saved names; full-library co
     await expect(recent(page)).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Compare saved reports" })).toHaveCount(0);
     await selectActivityOption(page, "savedReportOrder", "oldest");
+    await expect(page).toHaveURL(url => url.pathname === "/reports" && url.search === "?task=library");
     await expect(page.locator(".saved-report-period").first()).toHaveText("Report period: Dec 29, 2025–Jan 3, 2026");
     for (const query of ["Dec 29, 2025–Jan 3, 2026", "2025-12-29", "2026-01-03 prompts and replies left out"]) {
         await page.locator("#savedReportSearch").fill(query);

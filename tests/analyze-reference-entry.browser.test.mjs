@@ -146,19 +146,19 @@ test("native exact outcome links preserve the accepted cohort and return to the 
     const { page } = await setup(t);
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
-    const worked = page.locator("#chartReferenceData").locator('a[href*="result=success"]');
+    const worked = page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]');
     const href = await worked.getAttribute("href");
-    assert.match(href, /result=success/);
+    assert.doesNotMatch(href, /[?&]result=/);
     await worked.click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#meaning")).not.toBeVisible();
-    assert.match(page.url(), /result=success/);
+    assert.doesNotMatch(page.url(), /[?&]result=/);
     await expect(page.locator("#activityListSummary")).toContainText("6 matching tool calls");
     await page.goBack();
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "data");
     await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("8");
-    await expect(page.locator("#chartReferenceData").locator('a[href*="result=success"]')).toBeFocused();
+    await expect(page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]')).toBeFocused();
 });
 
 test("native guide links retain modified-click behavior without replacing the current view", { timeout: 30000 }, async t => {
@@ -166,7 +166,7 @@ test("native guide links retain modified-click behavior without replacing the cu
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
     const popupReady = page.context().waitForEvent("page");
-    await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     const popup = await popupReady;
     await expect(popup.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(popup.locator("#activityListSummary")).toContainText("6 matching tool calls");
@@ -219,7 +219,7 @@ test("native guide keeps a private narrowed cohort without repeating its search 
     await expect(page.locator("#meaning")).toContainText("Search applied");
     await expect(page.locator("#meaning")).not.toContainText(phrase);
     await page.locator("#chartReferenceShowData").click();
-    const target = page.locator("#chartReferenceData").locator('a[href*="result=success"]');
+    const target = page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]');
     assert.ok(!(await target.getAttribute("href")).includes("Invented"));
     await target.click();
     await expect(page.locator("#activityListSummary")).toBeFocused();
@@ -240,7 +240,7 @@ for (const entry of ["native plot", "chart guide"]) test(`private modified-click
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("1");
     }
     const target = page.locator(entry === "chart guide" ? "#chartReferenceData" : "#outcomeChart li")
-        .locator('a[href*="result=success"]');
+        .locator('a[aria-label^="Tool completed:"]');
     assert.ok(!(await target.getAttribute("href")).includes("Invented"));
     assert.match(await target.getAttribute("href"), /privateView=required/);
     const opened = page.context().waitForEvent("page");
@@ -259,7 +259,7 @@ for (const entry of ["native plot", "chart guide"]) test(`private modified-click
 test("a copied private chart URL without its handoff cannot silently broaden the selection", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await restoreLegacySearch(page, "Invented delegated calendar request.");
-    const href = await page.locator('#outcomeChart li a[href*="result=success"]').getAttribute("href");
+    const href = await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').getAttribute("href");
     const copied = await page.context().newPage();
     await copied.goto(new URL(href, page.url()).href);
     await expect(copied.locator("#message p")).toHaveText(/^The private selection could not be restored\./);
@@ -274,7 +274,7 @@ for (const gesture of [{ name: "middle click", button: "middle" }, { name: "Shif
         await restoreLegacySearch(page, "Invented delegated calendar request.");
         const opened = page.context().waitForEvent("page");
         const { name, ...click } = gesture;
-        await page.locator('#outcomeChart li a[href*="result=success"]').click(click);
+        await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click(click);
         const other = await opened;
         await expect(other.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(other.locator("#activityListSummary")).toContainText("1 matching tool call");
@@ -302,7 +302,7 @@ test("a new tab rebinds private Search with its existing owner and never display
     await page.context().route("**/api/search/query", hold);
     t.after(() => release());
     const opened = page.context().waitForEvent("page");
-    await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     const other = await opened;
     await other.bringToFront();
     try {
@@ -347,7 +347,7 @@ test("private handoff preparation cannot overwrite newer Search input in the rec
     });
     t.after(() => release());
     const opened = page.context().waitForEvent("page");
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     const other = await opened;
     await other.bringToFront();
     try { await arrived; await other.locator("#wireSearch").fill("mechanic"); }
@@ -367,7 +367,7 @@ for (const returning of [false, true]) test(`a private Search guide ${returning 
     await page.locator("#wireSearch").press("Escape");
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
-    await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click();
+    await page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]').click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityListSummary")).toBeVisible();
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
@@ -376,7 +376,7 @@ for (const returning of [false, true]) test(`a private Search guide ${returning 
         await expect(page.locator("#meaning")).toBeVisible();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "data");
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("1");
-        await expect(page.locator("#chartReferenceData").locator('a[href*="result=success"]')).toBeFocused();
+        await expect(page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]')).toBeFocused();
     } else await expect(page.locator("#activityListSummary")).toBeFocused();
 });
 
@@ -389,7 +389,7 @@ test("newer reading input cancels a guide Back restoration awaiting private Sear
     await page.locator("#wireSearch").press("Escape");
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
-    await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click();
+    await page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]').click();
     await expect(page.locator("#activityListSummary")).toBeFocused();
     let release, requested;
     const gate = new Promise(resolve => { release = resolve; });
@@ -417,7 +417,7 @@ test("changed or unavailable private handoffs fail visibly instead of displaying
         return route.fulfill({ response, json: value });
     });
     const opened = page.context().waitForEvent("page");
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     const other = await opened;
     await expect(other.locator("#message")).toContainText("The selected records changed");
     await expect(other.locator("#activityListSummary")).toBeHidden();
@@ -425,7 +425,7 @@ test("changed or unavailable private handoffs fail visibly instead of displaying
     const historyLength = await other.evaluate(() => history.length);
     await other.getByRole("button", { name: "Open this view without the private selection", exact: true }).click();
     await expect(other.locator("#activityListSummary")).toContainText("6 matching tool calls");
-    assert.match(other.url(), /result=success/);
+    assert.doesNotMatch(other.url(), /[?&]result=/);
     assert.equal(await other.evaluate(() => history.length), historyLength);
     await other.close();
     const unavailable = await page.context().newPage();
@@ -464,7 +464,7 @@ test("private handoffs are recipient-bound and one-use, and blocked popups do no
     await page.context().route("**/?*privateView=required*", hold);
     t.after(() => release());
     const opened = page.context().waitForEvent("page");
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     try {
         assert.equal(await page.evaluate(() => {
             const target = new URL(window.privateTargetForTest);
@@ -483,13 +483,13 @@ test("private handoffs are recipient-bound and one-use, and blocked popups do no
     await page.bringToFront();
     const before = page.url();
     await page.evaluate(() => { window.open = () => null; });
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     await expect(page.locator("#message")).toContainText("The new tab was blocked");
     assert.equal(page.url(), before);
     await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
     await openOutcomeGuide(page);
     await page.locator("#chartReferenceShowData").click();
-    await page.locator("#chartReferenceData").locator('a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator("#chartReferenceData").locator('a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     await expect(page.locator("#chartReferenceNotice")).toContainText("The new tab was blocked");
     await expect(page.locator("#meaning")).toBeVisible();
     await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("1");
@@ -509,7 +509,7 @@ test("an expired private preparation cannot become an ordinary result", { timeou
     await page.context().route("**/?*privateView=required*", async route => { await gate; return route.fallback(); });
     t.after(() => release());
     const opened = page.context().waitForEvent("page");
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     try { await page.waitForFunction(() => window.privatePreparationExpiredForTest === 30000); }
     finally { release(); }
     const other = await opened;
@@ -542,7 +542,7 @@ for (const elapsed of [29999, 30000, 30001]) test(`private handoff checks its de
     await page.context().route("**/?*privateView=required*", async route => { await gate; return route.fallback(); });
     t.after(() => release());
     const opened = page.context().waitForEvent("page");
-    await page.locator('#outcomeChart li a[href*="result=success"]').click({ modifiers: ["Control"] });
+    await page.locator('#outcomeChart li a[aria-label^="Tool completed:"]').click({ modifiers: ["Control"] });
     try {
         assert.equal(await page.evaluate(() => window.privateCleanupHeldForTest), 1);
         await page.evaluate(elapsed => { window.privateClockForTest += elapsed; }, elapsed);

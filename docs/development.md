@@ -282,8 +282,11 @@ legacy route fragment is replaced in the same history entry; ordinary document
 anchors are not routes. Do not add a catch-all SPA fallback: assets, APIs, saved
 files and unknown paths must retain their own handling and access checks.
 The bundled and React clients use the same route controller. Its public query
-projection admits known choices and dates, never record IDs, free text, source
-paths or operation receipts. A `privateView=required` marker carries no data
+identifies destinations such as a Settings category, Help topic, or saved report.
+Dates, filters, sort, pagination and chart controls stay off the address and links.
+Only validated display choices can survive a reload in that tab's history entry;
+record-derived selectors and Search text stay in authorized page memory.
+A `privateView=required` marker carries no data
 or authority. Private state and a modified-click handoff live only in the
 authorized page; copying the marker cannot recover them. An ordinary saved
 report link names the saved bundle, not permission to read it.

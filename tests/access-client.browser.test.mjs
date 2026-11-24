@@ -508,7 +508,7 @@ test("a real private cross-tab handoff waits for recipient authority and cannot 
     await expect(source.locator("#activityList .request-card-open")).toHaveCount(1);
     await source.locator("#openChartReference").click();
     await source.locator("#chartReferenceShowData").click();
-    const target = source.locator('#chartReferenceData a[href*="result=success"]');
+    const target = source.locator('#chartReferenceData a[aria-label^="Tool completed:"]');
     await expect(target).toHaveAttribute("href", /privateView=required/);
     assert.equal((await target.getAttribute("href")).includes("SYNTHETIC_PRIVATE_PROMPT"), false);
     await source.evaluate(() => {

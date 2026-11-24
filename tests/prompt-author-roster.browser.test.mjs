@@ -174,6 +174,6 @@ test("collected interactions follow accepted authors during pending and failed r
     failRelease(); await ready(page);
     assert.deepEqual(await app.displayedIds(), []);
     assert.equal(await page.locator("#activityPager button:enabled").count(), 0);
-    assert.match(page.url(), /authors=user/);
+    assert.doesNotMatch(page.url(), /[?&]authors=/);
     assert.match(await page.locator("#message").textContent(), /could not update|last recorded snapshot/i);
 });

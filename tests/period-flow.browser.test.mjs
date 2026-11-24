@@ -135,7 +135,7 @@ test("custom date validation and pending layout remain usable in both themes at 
     if (directory) await mkdir(directory, { recursive: true });
     for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 820, 1], ["light", 375, 2], ["dark", 1200, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
-        await page.goto(runtime.url); await ready(page); await chooseTheme(page, theme);
+        await page.goto(new URL("/?range=capture", runtime.url).href); await ready(page); await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await selectActivityOption(page, "dateFilter", "custom");
         const count = posts.length;
@@ -217,7 +217,7 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     await expect(page.locator("#activityListSummary")).toHaveText("3 interactions · 3 matching tool calls");
     await expect(page.locator("#periodHint")).toHaveText("3 interactions; 2 Copilot chats");
     assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls (Jul 29–Oct 5, 2026)").length), 1);
-    assert.match(page.url(), /from=2026-07-29.*to=2026-10-05/);
+    assert.doesNotMatch(page.url(), /[?&](from|to)=/);
     await selectActivityOption(page, "chatFilter", "session-a"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("2");
     await period(page, "2026-09-01", "2026-10-05");

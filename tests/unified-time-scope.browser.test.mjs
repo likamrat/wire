@@ -132,12 +132,12 @@ test("one visible calendar range changes every widget, headline, row and current
     const weekUrl = page.url();
     await choose("month");
     await scope(["a-0", "a-1", "b-0", "c-0", "d-0", "i-0"], 5, 4);
-    assert.match(page.url(), /to=2026-03-08/);
-    await page.goBack(); await ready(page);
+    assert.equal(new URL(page.url()).search, "");
+    await choose("week");
     assert.equal(page.url(), weekUrl);
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
     await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (Mar 2–8, 2026)");
-    // A date-only address is reloadable; the preceding Back entry can include a tab-local handoff.
+    // A legacy date-only address opens its exact week without re-exposing dates on reload.
     const publicWeek = new URL("/?range=custom&from=2026-03-02&to=2026-03-08", page.url());
     await page.goto(publicWeek.href); await ready(page); await page.reload(); await ready(page);
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);

@@ -268,7 +268,7 @@ test("Compare starts independently; Use Analyze view qualifies both date windows
     await back(page);
     await page.locator('nav [data-nav="analyze"]').click();
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
-    assert.equal(new URL(page.url()).searchParams.get("from"), "2026-03-07");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
     await origin.click();
     await expect(reader.getByRole("button", { name: "Remove from report" })).toBeVisible();
 });

@@ -8,8 +8,10 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 **Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
 Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
-`/compare` and `/settings`). You can bookmark those pages, a Settings category,
-or a public date/filter view. Older WIRE links such as `/#trends` still open.
+`/compare` and `/settings`). You can bookmark a page or a Settings category.
+Dates and filters change the results, not the address. Copying the address opens
+the destination in a fresh tab with its own defaults, not your filtered results.
+Older date and filter links still open their original scope with a clean address.
 
 You can copy an ordinary interaction's address or refresh its reader. WIRE
 opens the same record only if it is still available in the same local store.
@@ -209,8 +211,9 @@ period or Analyze widget never moves automatically. An empty period can offer
 **Show week ending …** without dropping the active filters.
 
 The period control shows the accepted dates while a new read is pending.
-An explicit preset, measure or user-entered custom range can be reopened
-from the address; private filtered selections stay in the original tab.
+The address can reopen the Charts section, not a chart's settings. Reloading
+the same tab keeps its chart measure and ordinary date choices; private filtered
+selections stay in the original visit.
 If WIRE cannot restore a private selection, reopen the result from its original
 tab. To continue without that selection, choose **Open this view without the
 private selection**. Neither action deletes saved activity.
@@ -470,7 +473,7 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 | Category | What you can change |
 | --- | --- |
 | Analyze | Open on All dates or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
-| Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
+| Trends | Choose the trend chart to show on a fresh visit. Changing measures within Charts does not change its address. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
 

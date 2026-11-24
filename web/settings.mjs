@@ -195,7 +195,7 @@ export const settingsMarkup = `
     <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open to read the last saved diagnostic.</p>
     <p id="recorderEvidence" class="settings-help" hidden></p>
     <p id="recorderStorageWarning" class="notice error" role="status" hidden></p>
-    <a id="recorderResultLink" class="text-link" href="/?layer=http" hidden>View HTTP recorder evidence</a>
+    <a id="recorderResultLink" class="text-link" href="/" hidden>View HTTP recorder evidence</a>
   </details>
 </section>`;
 

@@ -65,8 +65,8 @@ test("small counts are directly readable and reports are route-first without dup
     await tiny.tap();
     await page.locator("#activityView").waitFor({ state: "visible" });
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 2 matching tool calls");
-    assert.equal(new URL(page.url()).searchParams.get("from"), "2026-10-05");
-    assert.equal(new URL(page.url()).searchParams.get("to"), "2026-10-11");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
+    assert.equal(new URL(page.url()).searchParams.has("to"), false);
     await page.goBack();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await navigateMain(page, "reports");

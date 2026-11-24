@@ -72,9 +72,9 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     await setAuthors(page, ["user"]);
     assert.equal(app.snapshot().analytics.totals.count, 3);
     assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
-    assert.match(page.url(), /authors=user/);
+    assert.doesNotMatch(page.url(), /[?&]authors=/);
     await selectActivityOption(page, "chatFilter", app.chatId); await ready(page);
-    assert.match(page.url(), /authors=user/);
+    assert.doesNotMatch(page.url(), /[?&]authors=/);
     assert.equal(app.snapshot().analytics.totals.count, 3);
     assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     await setAuthors(page, ["agent"]);
@@ -82,14 +82,11 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     await setAuthors(page, ["user", "agent"]);
     assert.equal(app.snapshot().analytics.totals.count, 5);
     assert.match(await page.locator("#filterChips").innerText(), /Human and agent prompts/);
+    const length = await page.evaluate(() => history.length);
     await setAuthors(page, ["unknown"]);
     assert.equal(app.snapshot().analytics.totals.count, 2);
     assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["unknown"]);
-    await page.goBack(); await ready(page);
-    assert.equal(app.snapshot().analytics.totals.count, 5);
-    assert.deepEqual(app.requests.at(-1).filters.promptAuthors, ["user", "agent"]);
-    await page.goForward(); await ready(page);
-    assert.equal(app.snapshot().analytics.totals.count, 2);
+    assert.equal(await page.evaluate(() => history.length), length);
     await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 7);
     assert.equal(new URL(page.url()).searchParams.has("authors"), false);
@@ -190,7 +187,7 @@ test("pending, failed and late author reads never relabel old counts as a new se
     assert.match(await page.locator("#message").textContent(), /last recorded snapshot|could not update/i);
     assert.equal(await page.locator("#activityCount").textContent(), "2");
     assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["unknown"]);
-    assert.match(page.url(), /authors=unknown/);
+    assert.doesNotMatch(page.url(), /[?&]authors=/);
 });
 
 test("author cues and Apply controls remain readable in light/navy and narrow layouts", { timeout: 60000 }, async t => {

@@ -246,7 +246,8 @@ test("real shared filter gestures preserve date drafts, both accepted periods an
     await ordinary(page);
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     const query = new URLSearchParams(page.url().split("?")[1]);
-    assert.equal(query.get("from"), "2026-03-07"); assert.equal(query.get("to"), "2026-03-07");
+    assert.equal(query.has("from") || query.has("to"), false);
+    await expect(page.locator("#periodResult")).toContainText("Mar 7, 2026");
     await page.locator("#openAnalyzeFilters").click();
     await expect(page.locator("#dateFilter-control")).toBeVisible();
     assert.equal(await page.locator("#dateFields").evaluate(node => node.inert), false);

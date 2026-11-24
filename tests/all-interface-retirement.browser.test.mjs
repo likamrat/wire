@@ -157,9 +157,9 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator("#wireSearch").fill("Failed calls");
     await expect(page.locator("#wireSearchResults")).toContainText("Failed calls");
     await page.locator("#wireSearchResults").getByText("Failed calls", { exact: true }).click();
-    await expect(page).toHaveURL(/result=failure/);
+    await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
     await ready();
-    assert.doesNotMatch(page.url(), /mode=calls|callSort=/); assert.match(page.url(), /result=failure/);
+    assert.doesNotMatch(page.url(), /mode=calls|callSort=/); assert.doesNotMatch(page.url(), /[?&]result=/);
     await capture("failed-call-navigation");
 
     await navigateMain(page, "reports");

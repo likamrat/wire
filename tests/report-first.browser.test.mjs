@@ -908,7 +908,8 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.equal(previews(), beforeDraft + 1);
     assert.equal(body.records.length, 3, "Mail is retained and the original older interaction is admitted");
     await expect(page.locator("#reportExperienceScope")).toContainText("Based on Analyze filters");
-    assert.match(page.url(), new RegExp(`from=${today}&to=${today}`), "Analyze dates were not mutated");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
+    await expect(page.locator("#dateFilter")).toHaveValue("custom");
     assert.deepEqual(errors, []);
 });
 

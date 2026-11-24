@@ -53,7 +53,7 @@ test("chat filters opened from Source or an unavailable chat preserve the remain
     assert.ok(eligible.length);
     await page.getByRole("link", { name: "Clear chat filter", exact: true }).click(); await ready(page);
     await expect(page.locator("#activityList .request-row")).toHaveCount(eligible.length);
-    assert.equal(new URL(page.url()).searchParams.get("authors"), "user");
+    assert.equal(new URL(page.url()).searchParams.has("authors"), false);
 });
 
 test("cross-layer verified Search action restores the tool Analyze controls, counts and records on Close", { timeout: 30000 }, async t => {
@@ -77,7 +77,7 @@ test("cross-layer verified Search action restores the tool Analyze controls, cou
     const hit = page.locator("#wireSearchResults button").filter({ hasText: "429" });
     await expect(hit).toBeVisible();
     await hit.click();
-    await expect(page).toHaveURL(/layer=reported-api/);
+    await expect(page.locator("#layerFilter")).toHaveValue("reported-api");
     await expect(page.locator("#selectedCall")).toContainText("429");
     await expect(page.locator("#layerFilter")).toHaveValue("reported-api");
     await expect(page.locator("#activityCount")).toHaveText("4");

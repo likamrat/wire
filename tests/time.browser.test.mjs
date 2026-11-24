@@ -73,9 +73,8 @@ for (const [zone, day, start, end, hours] of [
     assert.equal((Date.parse(end) - Date.parse(start)) / 3600000, hours);
     assert.deepEqual(snapshot.analytics.rows.map(row => row.toolCallId).sort(), ["test-call-civil-boundary-1", "test-call-civil-boundary-2"]);
     for (const bucket of ["day", "week", "month"]) {
-        const address = new URL(page.url());
-        address.searchParams.set("bucket", bucket);
-        await page.goto(address.href); await ready(page);
+        const query = new URLSearchParams({ range: "custom", from: day, to: day, bucket });
+        await page.goto(new URL("/?" + query, runtime.url).href); await ready(page);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
         assert.equal(await page.locator('[data-breakdown="tools"] .percentage-value').textContent(), "100% (2)");
         assert.deepEqual(snapshot.analytics.dateRange, { from: start, to: end, toExclusive: true });
@@ -105,8 +104,8 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
         const action = table.locator("tbody tr").nth(zone === "America/Los_Angeles" ? 1 : 0).getByRole("link").first();
         await expect(action).toHaveText("8 Mar 2026");
         await action.click(); await ready(page);
-        assert.equal(new URL(page.url()).searchParams.get("from"), "2026-03-08");
-        assert.equal(new URL(page.url()).searchParams.get("to"), "2026-03-08");
+        assert.equal(new URL(page.url()).searchParams.has("from"), false);
+        assert.equal(new URL(page.url()).searchParams.has("to"), false);
         assert.equal(await page.locator("#activityList .request-row").count(), 4);
         const drill = requests.filter(r => r.path === "/api/snapshot").at(-1).input;
         assert.equal(drill.filters.from, "2026-03-08");

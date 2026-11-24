@@ -705,7 +705,7 @@ test("Trends opens normally, keeps 30 daily points and connects exact selected e
     await page.locator(".trends-evidence-row a").first().click();
     await expect(page.locator("#requestContent")).toContainText("Cedar release notes");
     await page.getByRole("button", { name: "Close interaction", exact: true }).click();
-    await expect(page).toHaveURL(/\/trends\?measure=tools&period=custom&from=2026-08-01&to=2026-08-30$/);
+    await expect(page).toHaveURL(/\/trends\?section=charts$/);
     await expect(page.locator(".trends-panel[data-maximized=true] .trends-heading h2")).toHaveText("Tool usage");
     await expect(page.locator(".trends-period-label").first()).toHaveText("(Aug 1–30, 2026)");
     assert.ok(reads.every(read => !("scenarioIds" in read) && read.timeContext.timeZone === "UTC"));

@@ -278,7 +278,7 @@ for (const [width, scale] of [[1440, 1], [390, 2]]) test(`exact and missing call
             return { id: document.activeElement.id, summaryTop: summary.top, summaryBottom: summary.bottom, headerBottom: header.bottom,
                 inViewport: summary.top >= header.bottom && summary.bottom <= innerHeight };
         }));
-        assert.equal(new URL(page.url()).searchParams.get("result"), "failure");
+        assert.equal(new URL(page.url()).searchParams.has("result"), false);
     }
     t.diagnostic(JSON.stringify(returnedFocus));
     assert.ok(returnedFocus.every(value => value.id === "activityListSummary" && value.inViewport),
