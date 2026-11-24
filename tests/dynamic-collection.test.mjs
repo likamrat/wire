@@ -141,6 +141,10 @@ test("history compatibility: two explicitly linked usage receipts survive restar
         inputTokens: 16000, cacheReadTokens: 10000, cacheWriteTokens: 1000, outputTokens: 1000 } });
     start.data.turnId = "turn-one";
     const r1 = receipt(1, "api-one"), r2 = receipt(2, "api-two");
+    r1.data.usage.initiator = "user";
+    r1.data.usage.interactionType = "conversation-user";
+    r2.data.usage.initiator = "agent";
+    r2.data.usage.interactionType = "conversation-agent";
     r2.data.usage.accounting = { usageId: "usage-two" };
     const batch = [event("user.message", { messageId, interactionId, content: "Read the invented schedule." }),
         message("api-one", "turn-one", { toolRequests: [{ toolCallId: "metered-fetch" }] }), start,

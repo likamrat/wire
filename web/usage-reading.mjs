@@ -16,7 +16,7 @@ function questionControls(doc, prefix, change, { filters = false, units = false 
     select("question", "Usage question", Object.entries(usageQuestions));
     select("threshold", "High usage means", usageThresholds.map(n => [n, `At least ${number(n)} tokens`]));
     if (filters) {
-        select("author", "Prompt author", [["","All authors"],["user","Human"],["agent","Agent"],["unknown","Author unverified"]]);
+        select("author", "Prompt author", [["","All authors"],["user","Human"],["agent","Agent"],["unknown","Sender unclear"]]);
         select("tool", "Interaction used", [["","All Work IQ tools"], ...usageTools.map(k => [k,k.replace(/^workiq-/,"")])]);
     }
     if (units) select("unit", "Measure", [["tokens","Tokens"],["usd","Est. USD"]]);
@@ -35,50 +35,50 @@ function usageReading(el, host, scenario, formatTime) {
     const u = scenario?.usage;
     if (!u) {
         const reasons = {
-            "interaction-link-or-boundary":"The retained events do not establish both the originating prompt and its final model response.",
-            "outside-read-window":"The bounded read did not contain the complete prompt and response.",
-            "incomplete-or-nested":"The interaction contains a history gap or nested agent work. Its whole-interaction total cannot be verified.",
-            "conflicting-link":"The recorded request identifiers do not identify a single owner.",
-            "unverified-model-call":"A response lacks a consistent model and request identifier.",
-            "invalid-receipt":"A receipt has unsupported or inconsistent counts, model, or source ownership.",
-            "conflicting-receipt":"Receipts for the same model call disagree.",
-            "partial-receipts":"At least one linked model call has no matching usage receipt.",
-            "no-linked-receipt":"No per-call usage receipt matched the recorded responses in this read.",
+            "interaction-link-or-boundary":"The prompt and final response could not be linked.",
+            "outside-read-window":"The saved history does not cover the full exchange.",
+            "incomplete-or-nested":"A history gap or nested agent work prevents a complete count.",
+            "conflicting-link":"More than one request may own these calls.",
+            "unverified-model-call":"A model call could not be identified.",
+            "invalid-receipt":"A model receipt has invalid counts or conflicting source details.",
+            "conflicting-receipt":"Token counts disagree for the same model call.",
+            "partial-receipts":"Some model calls have no token counts.",
+            "no-linked-receipt":"No token counts matched this prompt's model calls.",
         };
-        host.append(el("p", "", `Usage not recorded. ${reasons[scenario?.usageGap] ?? "This retained record has no verified token total."}`)); return;
+        host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts were recorded.")); return;
     }
     host.classList.add("usage-reading");
     host.append(el("p", "usage-headline", `${formatUsd(u.usd)} · ${number(u.total)} tokens · ${u.steps.length} model ${u.steps.length === 1 ? "call" : "calls"}`));
     const bar = el("div", "usage-bar"); bar.setAttribute("aria-hidden", "true");
     const table = el("table", "usage-table"), head = table.createTHead().insertRow();
-    for (const label of ["Token type", "Tokens", "Est. USD"]) head.append(el("th", "", label));
+    for (const label of ["Token type", "Tokens", ...(u.amounts ? ["Est. USD"] : [])]) head.append(el("th", "", label));
     const body = table.createTBody();
     for (const key of tokenKinds) {
         const segment = el("span"); segment.dataset.kind = key; segment.style.flexGrow = String(u.tokens[key]); bar.append(segment);
-        const tr = body.insertRow(); tr.append(el("th", "", names[key]), el("td", "", u.tokens[key] === null ? "Not recorded" : number(u.tokens[key])), el("td", "", formatUsd(u.amounts?.[key] ?? null)));
+        const tr = body.insertRow(); tr.append(el("th", "", names[key]), el("td", "", u.tokens[key] === null ? "Not recorded" : number(u.tokens[key])));
+        if (u.amounts) tr.append(el("td", "", formatUsd(u.amounts[key])));
     }
     if (tokenKinds.every(k => u.tokens[k] !== null)) host.append(bar);
     host.append(table);
     if (u.usd === null) {
         const unlisted = [...new Set(u.steps.filter(s=>s.reason === "model-not-listed").map(s=>s.model))];
-        if (unlisted.length) host.append(el("p", "muted", `No verified retail rate for ${unlisted.join(", ")} in the ${u.rateDate} snapshot.`));
-        if (u.steps.some(s=>s.reason === "cache-split-missing")) host.append(el("p", "muted", "Total input and output were recorded, but a cache count is missing. WIRE cannot price that call without guessing."));
+        if (unlisted.length) host.append(el("p", "muted", `No retail rate for ${unlisted.join(", ")} (${u.rateDate}).`));
+        if (u.steps.some(s=>s.reason === "cache-split-missing")) host.append(el("p", "muted", "A cache count is missing, so the cost is unknown."));
     }
     const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
     const footprint = Math.round(sized.reduce((n, c) => n + c.returnedTextBytes, 0) / 4);
-    host.append(el("p", "usage-context", sized.length ? `Work IQ context footprint: ~${number(footprint)} tokens returned by ${sized.length} of ${tools.length} calls. Estimated from returned text size, not a separate charge.`
-        : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Work IQ context footprint: a returned text size was recorded, but no call with a size is linked to this prompt."
-        : "Work IQ context footprint: returned text size was not recorded."));
-    const steps = [...u.steps.map(s => ({ at: s.at, label: `Model · ${s.model}`, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out · ${formatUsd(s.usd)}` })),
-        ...sized.map(c => ({ at: c.completedAt, label: `Work IQ · ${c.tool.replace(/^workiq-/, "")}`, detail: `~${number(Math.round(c.returnedTextBytes / 4))} context tokens returned` }))];
+    host.append(el("p", "usage-context", sized.length ? `Work IQ returned ~${number(footprint)} tokens${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
+        : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
+        : "Work IQ return size was not recorded."));
+    const steps = [...u.steps.map(s => ({ at: s.at, label: s.model, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out${s.usd === null ? "" : ` · ${formatUsd(s.usd)}`}` })),
+        ...sized.map(c => ({ at: c.completedAt, label: c.tool, detail: `~${number(Math.round(c.returnedTextBytes / 4))} tokens returned` }))];
     const timeline = el("ol", "usage-timeline");
     for (const step of steps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
         const row = el("li"), label = el("strong", "", step.label), detail = el("span", "", step.detail);
         const clock = el("time", "muted", formatTime(step.at)); clock.dateTime = step.at;
         row.append(label, detail, clock); timeline.append(row);
     }
-    host.append(el("h3", "", "Step-by-step context timeline"), timeline,
-        el("p", "muted", `Model receipt and tool completion times. Retail API-equivalent estimate (${u.rateDate}); not billed Copilot spend.`));
+    host.append(el("h3", "", "Model receipts and tool completions"), timeline);
 }
 function modelShareReading(el, host, s, nativeCount) {
     for (const row of s.models) {
@@ -91,10 +91,10 @@ function modelShareReading(el, host, s, nativeCount) {
         }
         host.append(block);
     }
-    host.append(el("p", "muted", `${s.metered} of ${s.eligible + nativeCount} interactions metered; ${s.priced} priced. Token shares include unpriced interactions. Cost shares use only fully priced interactions.`));
+    host.append(el("p", "muted", `${number(s.metered)} of ${number(s.eligible + nativeCount)} interactions metered${s.priced !== s.metered ? `; ${number(s.priced)} priced` : ""}.`));
 }
 function homepageUsage(el, host, summary, nativeCount) {
-            const { eligible, metered, priced, unpriced, total, usd, tokens } = summary;
+            const { eligible, metered, priced, total, usd, tokens } = summary;
             const population = eligible + nativeCount;
             if (!metered) {
                 host.replaceChildren(el("p", "percentage-empty", population
@@ -104,12 +104,14 @@ function homepageUsage(el, host, summary, nativeCount) {
             }
             const facts = el("dl", "usage-overview-facts");
             for (const [label, value, detail] of [
-                ["Recorded tokens", number(total), `${number(metered)} of ${number(population)} interactions metered`],
+                ["Recorded tokens", number(total), `${number(metered)} of ${number(population)} interactions`],
                 ["Est. retail cost", usd === null ? "Unpriced" : formatUsd(usd),
-                    `${number(priced)} of ${number(metered)} metered interactions priced${unpriced ? ` · ${number(unpriced)} unpriced` : ""}`],
+                    priced < metered ? `${number(priced)} of ${number(population)} interactions` : ""],
             ]) {
                 const fact = el("div");
-                fact.append(el("dt", "", label), el("dd", "", value), el("dd", "usage-overview-detail", detail)); facts.append(fact);
+                fact.append(el("dt", "", label), el("dd", "", value));
+                if (detail) fact.append(el("dd", "usage-overview-detail", detail));
+                facts.append(fact);
             }
             const composition = el("div", "usage-composition"), bar = el("div", "usage-bar");
             bar.setAttribute("aria-hidden", "true");
@@ -121,12 +123,11 @@ function homepageUsage(el, host, summary, nativeCount) {
             }
             if (total > 0 && tokenKinds.every(k => tokens[k] !== null)) composition.append(bar);
             composition.append(legend);
-            host.replaceChildren(facts, composition, el("p", "usage-overview-detail",
-                `Whole interactions. Retail API-equivalent rates as of ${pricingSnapshot.date}; not billed Copilot spend.`));
+            host.replaceChildren(facts, composition);
 }
 function rateReference(el, host, scenarios) {
     host.replaceChildren();
-    host.append(el("h3", "", "Estimated cost rates (read-only)"), el("p", "", `${pricingSnapshot.date} · ${pricingSnapshot.basis}`));
+    host.append(el("h3", "", "Retail rates"), el("p", "", `USD per million tokens · ${pricingSnapshot.date}. These rates estimate model use, not your Copilot bill.`));
     const wrap = el("div", "usage-table-wrap"), table = el("table", "usage-table");
     wrap.tabIndex = 0; wrap.setAttribute("role", "region"); wrap.setAttribute("aria-label", "Offline retail rates per million tokens");
     const head = table.createTHead().insertRow(), body = table.createTBody();
@@ -135,9 +136,9 @@ function rateReference(el, host, scenarios) {
         const row = body.insertRow(); row.append(el("th", "", model), ...tokenKinds.map(k => el("td", "",
             rate[k].toLocaleString("en-US", { style:"currency", currency:"USD", minimumFractionDigits:2, maximumFractionDigits:3 }))));
     }
-    wrap.append(table); host.append(wrap, el("p", "", "Above 100,000 input tokens, Haiku 5.5 uses 5× rates. Above 272,000, GPT-6.1 Sol uses 2× input and cache rates and 1.5× output. Thresholds apply per request, including cached input."));
+    wrap.append(table); host.append(wrap, el("p", "", "Claude cache writes use the 5-minute rate. Above 100,000 input tokens per call, Haiku rates rise 5×. Above 272,000, GPT-6.1 Sol input and cache rise 2×, output 1.5×."));
     const unknown = [...new Set(scenarios.flatMap(s => s.usage?.steps.filter(x => x.reason === "model-not-listed").map(x => x.model) ?? []))];
-    if (unknown.length) host.append(el("p", "", `Not in the bundled rate list: ${unknown.join(", ")}. Shown as Unpriced.`));
+    if (unknown.length) host.append(el("p", "", `Unpriced models: ${unknown.join(", ")}.`));
 }
 return { usageChip, usageReading, rateReference, modelShareReading, homepageUsage, usageSummary, formatUsd, questionControls };
 }

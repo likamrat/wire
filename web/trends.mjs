@@ -54,7 +54,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
     function color(id, family) {
         if (family === "usage" && id === "usage") return cards.get("usage")?.mode === "usd" ? "var(--usage-cost)" : "var(--accent)";
-        if (family === "usage" && id.startsWith("author:")) return authorColors[({"Human":"user","Agent":"agent","Author unverified":"unknown"})[id.slice(7)]];
+        if (family === "usage" && id.startsWith("author:")) return authorColors[({"Human":"user","Agent":"agent","Sender unclear":"unknown"})[id.slice(7)]];
         if (family === "authors") return authorColors[id];
         if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
         if (family === "problems") return "var(--chart-mark-high)";
@@ -790,11 +790,13 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const limits = [];
         if (id === "usage") {
             const u = totals.usagePopulation ?? totals.values.usage[0];
-            if (source.usageQuestion === "tool") limits.push(`At least ${number(source.usageThreshold)} tokens; ${u.unranked} could not be ranked. Tool groups overlap. No per-tool charges.`);
-            if (source.usageQuestion === "model") limits.push("Each model contributes only its recorded calls.");
-            limits.push(`${valueText(u, card)} · ${u.metered} of ${u.eligible} metered; ${u.unpriced} unpriced`);
+            limits.push(`${valueText(u, card)} · ${mode === "usd" ? `${u.priced} of ${u.eligible} interactions priced` : `${u.metered} of ${u.eligible} interactions metered`}`);
+            if (mode === "usd" && u.unpriced) limits.push(`${number(u.unpriced)} metered but unpriced`);
             if (u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
-            limits.push(`Retail API-equivalent estimate (${u.rateDate}); not billed Copilot spend.`);
+            if (source.usageQuestion === "tool") {
+                if (u.unranked) limits.push(`${number(u.unranked)} without a token count`);
+                if (totals.values.usage.reduce((n,g)=>n+g.metered,0) > u.metered) limits.push("An interaction can appear under several tools");
+            }
         }
         const shown = definitions.filter(definition => !hidden.has(definition.id)).length;
         const seriesSubset = shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
@@ -814,7 +816,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
         const summary = id === "timing" ? `${number(totals.timedCalls)} of ${number(totals.calls)} calls timed`
             : `${number(unitIsInteraction ? totals.interactions : totals.calls)} ${unitIsInteraction ? "originating interactions" : "dated calls"}`;
-        const captions = [id === "usage" && totals.usagePopulation ? `${number(totals.usagePopulation.eligible)} matching interactions in this period` : summary + " in this period"];
+        const captions = id === "usage" ? [] : [summary + " in this period"];
         if (seriesSubset) captions.push(seriesSubset);
         if (id === activeMeasure && compared.size) captions.push(`Comparing ${compared.size + 1} measures`);
         if (id === "timing") captions.push("milliseconds");
@@ -822,6 +824,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
         if (Object.keys(filters).length) captions.push(restrictionText.textContent);
         card.indexScope.textContent = captions.join(" · ");
+        card.indexScope.hidden = allCharts || !captions.length;
         paintPoint(card);
         if (section === "charts" && !pairActive && !panel.hidden && !collapsed && !unavailable) {
             const encoding = JSON.stringify([mode, card.type, [...hidden].sort(), allCharts, family === id]);

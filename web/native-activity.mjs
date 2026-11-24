@@ -200,7 +200,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const replies = sections.add("response", replyTitle, { key: key("response"), collapsible: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: false });
         const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
-        usage.body.textContent = "Usage not recorded. This conversation has no model token counts.";
+        usage.body.textContent = "No token counts were recorded for this conversation.";
         const updatesSection = updates.length ? sections.add("updates", "Recorded updates", { key: key("updates") }) : null;
         const emptyMessages = !updates.length && !conversation.messages.length;
         if (dateContext) root.append(node("p", "reader-state", dateContext));

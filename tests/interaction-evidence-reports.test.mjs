@@ -39,6 +39,11 @@ test("token choices freeze across files and verified JSON-only reopening", async
         ]);
         assert.equal(Object.hasOwn(facts.groups[0],"usd"),dollars);
         assert.equal(Object.hasOwn(bundle.snapshot.usageFacts,"pricing"),dollars);
+        if (dollars) {
+            const older = structuredClone(bundle.snapshot);
+            delete older.usageFacts.readingVersion;
+            assert.match(renderHtmlReport(older.records,{snapshot:older}), /Not billed Copilot spend\./);
+        }
         const task=getDocument({data:new Uint8Array(bundle.files["product-report.pdf"])});
         let text="";
         try { const doc=await task.promise; for(let page=1;page<=doc.numPages;page++)
@@ -46,7 +51,8 @@ test("token choices freeze across files and verified JSON-only reopening", async
         for (const content of [text,bundle.previewHtml,bundle.files["product-report.html"],bundle.files["product-report.md"]]) {
             assert.match(content,/320,000 tokens/); assert.equal(content.includes("~$0.23"),dollars);
             assert.match(content,/Usage by model/);
-            assert.equal(/not\s+billed\s+Copilot\s+spend/i.test(content),dollars);
+            assert.equal(content.includes("Est. retail cost:"),dollars);
+            assert.equal(content.includes(`${pricingSnapshot.date} rates`),dollars);
             assert.doesNotMatch(content,/private-model-name|private-receipt|private-call/);
         }
         const preview = await controller.preview("usage-proof",undefined,{formats:["json"],promptMode:"none",usageOptions:options},

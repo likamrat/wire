@@ -50,7 +50,7 @@ export async function usagePreview(t, frontend = "react") {
             event("assistant.turn_end",{turnId});
             if(direct){const end=events.at(-1).id;event("session.completion_receipt",{schemaVersion:1,attempt:1,stopReason:"natural",
                 eventRange:{startEventId:promptId,endEventId:end},sourceEventId:end,successfulToolCount:tools.length,failedToolCount:0});}
-            for(const [i,[fresh,read,write,out]] of calls.entries()) event("session.usage_record",{usage:{apiCallId:receipts[i],interactionId,model,
+            for(const [i,[fresh,read,write,out]] of calls.entries()) event("session.usage_record",{usage:{apiCallId:receipts[i],interactionId,model,initiator:i?"agent":"user",
                 inputTokens:fresh+read+write,cacheReadTokens:read,cacheWriteTokens:write,outputTokens:out,
                 accounting:{sourceSessionId:id,sequence:i+1,usageId:receipts[i]}}});
             const dir=path.join(config.sessionRoot,id);await mkdir(dir);await writeFile(path.join(dir,"events.jsonl"),events.map(e=>JSON.stringify(e)).join("\n")+"\n");

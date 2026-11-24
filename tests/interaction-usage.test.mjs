@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { priceUsage, usageSummary, pricingSnapshot, formatUsd, usageQuestionGroups } from "../lib/interaction-usage.mjs";
+import { retainUsageReceipt } from "../lib/usage-receipts.mjs";
+
+test("an initiator label does not override a delegated or nested model call", () => {
+    const usage = {apiCallId:"root-call",model:"gpt-4.1",initiator:"agent",inputTokens:100,outputTokens:5};
+    const receipt = (extra = {}, envelope = {}) => retainUsageReceipt({type:"session.usage_record",data:{usage:{...usage,...extra}},...envelope});
+    for (const initiator of ["sub-agent","mcp-sampling","unknown"]) assert.equal(receipt({initiator}).data.tokens,null);
+    for (const extra of [{interactionType:"conversation-subagent"}, {interactionType:"conversation-compaction"},
+        {interactionType:"conversation-background"}, {parentToolCallId:"parent"}, {fusion:{}}]) assert.equal(receipt(extra).data.tokens,null);
+    assert.equal(receipt({}, {agentId:"nested"}).data.tokens,null);
+});
 
 test("cache buckets, exact aliases and the long-context boundary apply per request", () => {
     const haiku = { model: "claude-haiku-5.5", tokens: { freshInput: 10000, cacheRead: 89000, cacheWrite: 1000, output: 5000 } };

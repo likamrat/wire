@@ -410,6 +410,8 @@ the question applied separately inside each period. Tool groups can overlap,
 but repeated uses of a tool never multiply an interaction's tokens. Model
 groups use the model on each receipt; partially priced interactions stay out
 of every dollar amount. A missing return size is never counted as zero.
+`usageFacts.readingVersion: 2` uses a shorter summary. Without that marker,
+the JSON reader keeps the original wording.
 Earlier snapshots without `usageFacts` gain no usage section when reopened.
 Readers predating `usageFacts` display a new frozen HTML report as saved.
 For a JSON-only report those readers can verify the original JSON, but their

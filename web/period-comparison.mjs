@@ -1294,9 +1294,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const name = question === "author" ? "Prompt author" : question === "model" ? "Model" : "Interactions that used";
                 const headers = [name,"Baseline","Selected","Change"];
                 const table = (caption, cells) => periodReadings(caption, headers, labels.map(label => [label, ...cells(groups.map(m=>m.get(label)))]));
-                findings.append(el("p",`${pair[0].eligible} baseline and ${pair[1].eligible} selected GitHub interactions.`
-                    + (question === "tool" ? ` Groups overlap; these are whole interactions, not tool charges. ${pair[0].unranked} baseline and ${pair[1].unranked} selected interactions had no token count to rank.` : ""), "compare-caption"));
                 if (!labels.length) { findings.append(el("p","No matching groups in either period.")); return; }
+                if (question === "tool" && pair.some(p=>p.groups.reduce((n,g)=>n+g.eligible,0)>p.eligible))
+                    findings.append(el("p","An interaction can appear under several tools.","compare-caption"));
+                if (question === "tool" && pair.some(p=>p.unranked))
+                    findings.append(el("p",`Without token counts: ${pair[0].unranked} baseline, ${pair[1].unranked} selected.`,"compare-caption"));
                 findings.append(el("h3", money ? "Estimated retail cost by group" : "Recorded tokens by group"),
                 table(money ? "Estimated retail cost by group" : "Recorded tokens by group", sides => {
                     const [first,second] = sides.map(s=>s?.[valueKey]);
@@ -1304,9 +1306,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 }), el("h3",`Per ${denom} interaction`),
                 table(`Per ${denom} interaction`, sides => {
                     const pair = sides.map(s=>s?.[denom] ? s[valueKey]/s[denom] : null);
-                    return [...sides.map((s,i) => `${format(pair[i])} (${s?.[denom] ?? 0} / ${s?.eligible ?? 0})`),
+                    return [...sides.map((s,i) => !s ? "No interactions" : `${format(pair[i])} (${s[denom]} of ${s.eligible} ${denom})`),
                         pair.includes(null) ? "—" : money ? compatible ? costChange(...pair) : "—" : signed(pair[1]-pair[0])];
-                }), el("p",`Coverage in parentheses: ${denom} / all interactions in the group.`,"compare-caption"));
+                }));
                 if (question === "model") findings.append(el("h3","Input read from cache"), table("Share of input read from cache", sides =>
                     [...sides.map(s => s?.cacheReadShare == null ? "Not recorded" : `${number(100*s.cacheReadShare)}%`),
                         sides.every(s=>s?.cacheReadShare != null) ? `${signed((sides[1].cacheReadShare-sides[0].cacheReadShare)*100)} pp` : "—"]));
@@ -1315,8 +1317,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                         sides.every(s=>s?.context.tokens != null && s.context.sized === s.context.calls) ? `~${signed(sides[1].context.tokens-sides[0].context.tokens)}` : "—"]));
             }
             showQuestion();
-            section.append(choices.host, findings, el("p", compatible ? `Both periods use ${a.usage.rateDate} retail rates. Whole-interaction estimates, not billed Copilot spend.`
-                : `Different rate dates (${a.usage.rateDate} and ${b.usage.rateDate}); no cost delta.`, "compare-caption"));
+            section.append(choices.host, findings);
+            if (!compatible) section.append(el("p",`Different rate dates (${a.usage.rateDate} and ${b.usage.rateDate}); no cost delta.`, "compare-caption"));
             content.append(section);
         }
         if (!readCurrent(started, publication)) return;

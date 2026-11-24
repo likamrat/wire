@@ -333,8 +333,8 @@ for baseline and selected dates, missing values, and the calls behind a change.
 To find a high-usage interaction, choose **Most tokens** or **Highest est. cost**
 above the Analyze list. Only cards with complete token counts have a usage
 chip. Open the interaction to see fresh input, cache reads, cache writes and
-output. **Work IQ context footprint** estimates the size of returned tool
-text; it is not part of the bill or an extra amount to add to the total.
+output. The reader separately estimates how many tokens Work IQ returned
+from the size of the tool responses.
 In **Response models**, choose **Token & $ share** to compare token volume with
 the cost share of fully priced interactions. Find the offline rates in
 **Settings → Reports**.

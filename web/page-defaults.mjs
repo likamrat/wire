@@ -7,7 +7,7 @@ export const pageDefaultSpecs = {
         choices: [["manual", "Until I restore them"], ["tab", "Only in this tab"]] },
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
-    analyzeSort: { id: "defaultAnalyzeSort", label: "Default interaction sort", help: "Choose how the Analyze list starts. Sorting on Analyze changes this visit, not the totals.", initial: "recent",
+    analyzeSort: { id: "defaultAnalyzeSort", label: "Default interaction sort", help: "Applies when you open a fresh Analyze view.", initial: "recent",
         choices: [["recent", "Most recent"], ["cost", "Highest est. cost"], ["tokens", "Most tokens"]] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },

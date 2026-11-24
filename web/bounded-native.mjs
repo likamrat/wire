@@ -422,7 +422,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         if (completed) root.append(activity.element);
         else {
             const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
-            usage.body.textContent = "Usage not recorded. This conversation has no model token counts.";
+            usage.body.textContent = "No token counts were recorded for this conversation.";
             root.append(prompt.element, activity.element, context.element, usage.element, source.element);
         }
         // An exact target owns the reveal; set it before subscriptions can start a read.
