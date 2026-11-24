@@ -172,7 +172,7 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 .settings-view .settings-section>h2:has(+ :is(.settings-reply-row,.settings-group,.settings-theme-row,.app-version-card)) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
-.settings-nav-group {padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
+.settings-nav-group {margin-block-end:var(--space-sm);padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
 .settings-view .page-default-field {min-width:0;margin:0;padding:0;border:0}
 .settings-view .page-default-field+.page-default-field {margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--rule)}
 .page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
