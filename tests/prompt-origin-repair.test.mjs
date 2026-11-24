@@ -59,7 +59,13 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
             line = line.replace('"n":1', '"n":12345678901234567890123456,"n":1');
             if (originalFields === "hidden id") line = line.replace('{"id":', `{"\\u0069d":"${marked.promptId}","id":`);
             if (originalFields === "hidden type") line = line.replace('"type":', '"\\u0074ype":"user.message","type":');
-            lines.splice(1, 0, line);
+            if (originalFields.startsWith("oversized")) {
+                line = line.replace("Invented payload, not an origin.", "x".repeat(TAIL_LIMITS.maxLineBytes + 100));
+                if (originalFields === "oversized alias") line = line.replace(/^\{"id":"[^"]+"/, `{"id":"${marked.promptId}"`);
+                if (originalFields === "oversized hidden id") line = line.replace('{"id":', `{"\\u0069d":"${marked.promptId}","id":`);
+                if (originalFields === "oversized malformed") line = line.replace(/}$/, ",}");
+            }
+            lines.splice(originalFields === "oversized malformed" ? lines.length : 1, 0, line);
         }
         await writeFile(app.sourceFiles[1], lines.join("\n") + "\n");
     }
@@ -544,6 +550,24 @@ for (const originalFields of ["unrelated", "selected", "hidden id", "hidden type
     }
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
+
+for (const originalFields of ["oversized disjoint", "oversized alias", "oversized hidden id", "oversized malformed"]) {
+    test(`complete oversized lines can exclude, but never establish, an original: ${originalFields}`, async t => {
+        const f = await setup(t, "v12-sender-pair", { originalFields }), input = { dataDir: f.app.context.dataDir, originatingOnly: true };
+        const { batches: [{ batch }] } = await reviewPromptOriginClass(input);
+        const pending = reviewPromptOriginClass({ ...input, batch });
+        if (originalFields === "oversized hidden id" || originalFields === "oversized malformed") {
+            await assert.rejects(pending, /oversized source entry/);
+        } else {
+            const out = await pending;
+            assert.deepEqual(out.targets.map(t => t.prompt.authorship.basis).sort(), originalFields === "oversized alias"
+                ? ["host-direct-input"] : ["host-agent-authored", "host-direct-input"]);
+            assert.deepEqual(out.unresolved.map(r => r.reason), originalFields === "oversized alias" ? ["duplicate-original"] : []);
+            assert.ok(!JSON.stringify(out).includes("x".repeat(100)));
+        }
+        assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+    });
+}
 
 test("later pages locate a candidate and disqualify a competing original; source drift invalidates the review", async t => {
     const f = await setup(t, "paged-review"), dataDir = f.app.context.dataDir, file = f.app.sourceFiles[1];

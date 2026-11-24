@@ -497,6 +497,11 @@ unselected payload do not establish or disprove a sender. Startup and each
 proposed original still need full-field verification. An ambiguous selected
 payload with a unique envelope stays unresolved; an ambiguous envelope can
 hide another selected ID and blocks the whole page.
+For a complete oversized entry already inside the same page budget, a bounded
+streaming check can establish just its unique outer ID, type and timestamp.
+It does not project a sender or payload. A collision still counts, and an
+oversized selected original cannot become a target. Malformed input, excessive
+parser work, and entries that cannot fit a verified page still refuse.
 If the metadata database changes during a named review read, the selected-chat
 reader can take one fresh transaction. Only its fully fenced result is used.
 The physical database, schema, complete selected mapping (including managed
