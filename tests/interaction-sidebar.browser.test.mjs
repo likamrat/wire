@@ -880,18 +880,44 @@ test("a host reduced-motion change does not cancel built-in contextual glide", {
     const link = page.locator(".request-card-open").first();
     await link.scrollIntoViewIfNeeded();
     const box = await link.boundingBox();
-    await page.mouse.click(box.x + box.width / 2, box.y + 20);
-    await page.locator("#contextSidebar").evaluate(node => { window.ongoingGlide = node.getAnimations()[0]; });
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    const motion = await page.locator("#contextSidebar").evaluate(async node => {
-        const rows = [], animation = window.ongoingGlide;
-        while (node.getAnimations().includes(animation)) {
-            rows.push(node.getBoundingClientRect().x);
-            await new Promise(resolve => requestAnimationFrame(resolve));
-        }
-        return rows;
+    // Acquire the real entrance before a busy test host can miss its frames.
+    await page.locator("#contextSidebar").evaluate(node => {
+        const observer = new MutationObserver(() => {
+            const glide = node.getAnimations().find(animation =>
+                animation.effect.getKeyframes().some(frame => frame.transform));
+            if (!node.open || !glide) return;
+            observer.disconnect();
+            glide.pause();
+            glide.currentTime = Number(glide.effect.getTiming().duration) / 4;
+            window.ongoingGlide = glide;
+        });
+        observer.observe(node, { attributes: true, attributeFilter: ["open"] });
     });
-    assert.ok(new Set(motion.map(Math.round)).size >= 3, "The existing glide continues through the controlled host change");
+    await page.mouse.click(box.x + box.width / 2, box.y + 20);
+    await page.waitForFunction(() => window.ongoingGlide?.playState === "paused");
+    const panel = page.locator("#contextSidebar");
+    const early = await panel.evaluate(node => node.getBoundingClientRect().x);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForFunction(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const motion = await panel.evaluate(async node => {
+        const animation = window.ongoingGlide;
+        if (!node.getAnimations().includes(animation)) throw Error("The host change cancelled the original glide");
+        // Sample real playback in the renderer, not across Playwright round trips.
+        const start = node.getBoundingClientRect().x;
+        animation.updatePlaybackRate(0.25);
+        animation.play();
+        let middle;
+        do {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            middle = node.getBoundingClientRect().x;
+        } while (node.getAnimations().includes(animation) && start - middle <= 1);
+        animation.updatePlaybackRate(1);
+        await animation.finished;
+        return { middle, end: node.getBoundingClientRect().x };
+    });
+    assert.ok(early > motion.middle + 1 && motion.middle > motion.end + 1,
+        `The original glide retains intermediate movement: ${early} -> ${motion.middle} -> ${motion.end}`);
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);

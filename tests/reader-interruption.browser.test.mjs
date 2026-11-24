@@ -59,17 +59,20 @@ async function setup(t, motion) {
         denied.push(url.pathname); return route.abort();
     });
     await page.addInitScript(() => {
-        window.readerInterruption = { armed: null, count: 0 };
+        window.readerInterruption = { armed: null, held: [], moved: false };
         for (const type of ["popstate", "keydown"]) window.addEventListener(type, () => {
             if (window.readerInterruption.armed !== type) return;
             window.readerInterruption.armed = null;
             // Deliver a real entrance reflow before the app's handler and ResizeObserver.
-            for (const animation of document.getAnimations()) {
-                if (!["main", "contextSidebar"].includes(animation.effect.target.id)) continue;
-                animation.pause();
+            const pane = document.getElementById("contextSidebar"), main = document.getElementById("main");
+            const fromX = pane.getBoundingClientRect().x, fromWidth = main.getBoundingClientRect().width;
+            const held = window.readerInterruption.held;
+            if (held.length !== 2 || held.some(a => !a.effect.target.getAnimations().includes(a))) return;
+            for (const animation of held) {
                 animation.currentTime = Number(animation.effect.getTiming().duration) / 8;
-                window.readerInterruption.count++;
             }
+            window.readerInterruption.moved = pane.getBoundingClientRect().x < fromX - 1
+                && main.getBoundingClientRect().width < fromWidth - 1;
         }, { capture: true });
     });
     return { page, runtime };
@@ -117,6 +120,20 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
     await frames(page);
     await expect(originLink).toBeFocused();
+    // Hold the second real entrance at its start. Playwright's focus, route and
+    // assertion round trips must not decide whether there is still a glide to interrupt.
+    await page.locator("#contextSidebar").evaluate(pane => {
+        const observer = new MutationObserver(() => {
+            const owners = [pane, document.getElementById("main")].map(node =>
+                node.getAnimations().find(animation => animation.effect.getKeyframes().some(frame =>
+                    node === pane ? frame.transform : frame.width)));
+            if (!pane.open || owners.some(owner => !owner)) return;
+            observer.disconnect();
+            for (const owner of owners) { owner.pause(); owner.currentTime = 0; }
+            window.readerInterruption.held = owners;
+        });
+        observer.observe(pane, { attributes: true, attributeFilter: ["open"] });
+    });
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebar")).toBeVisible();
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(2);
@@ -177,7 +194,7 @@ for (const action of view === "chart" ? ["history"] : ["history", "close", "newe
     }
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
     await frames(page);
-    assert.equal(await page.evaluate(() => window.readerInterruption.count), 2);
+    assert.equal(await page.evaluate(() => window.readerInterruption.moved), true, "The reader and its origin column actually reflowed");
     assert.equal(page.url(), origin.url);
     const returned = { top: (await originLink.boundingBox()).y, ...await position() };
     if (process.env.WIRE_INTERRUPTION_PROOFS) {
