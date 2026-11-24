@@ -271,8 +271,12 @@ Grouped columns sit above the date they belong to. Their colors match the
 legend. Select a column for its name and exact reading. One zero under a date
 means all **shown** series are zero.
 Unavailable measurements use a dash instead. If none of the matching interactions has a token count, WIRE shows the coverage instead of an empty plot.
-To investigate a high-use day, select it on **Token usage**. Open a matching call
-to see the token count for its whole interaction. **View daily values** includes daily numbers and period
+**Token usage** starts as a line. A measured zero is on the zero axis; a dash
+marks work with no reading for that day. A date without matching calls stays blank.
+Select a measured day to open its contributing calls. On an unmetered day,
+open a call to see why its interaction has no count. Later calls from an
+interaction already counted on an earlier date do not add its tokens again.
+**View daily values** includes daily numbers and period
 totals, including series hidden in the chart.
 
 | Chart | Measure |

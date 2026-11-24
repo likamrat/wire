@@ -1,5 +1,5 @@
 // Rendering only: all membership, counts, rates and timing arrive from the retained projection.
-export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, onWindow, formatDate, formatAxisDate, weekContext, canInspect }) {
+export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, onInspect, onWindow, formatDate, formatAxisDate, weekContext, canInspect, missingTokens }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     let scene = null, active = null, frame = 0, closeTimer = 0, dismissed = null, restoringFocus = false, userScrolling = false;
     const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format;
@@ -105,12 +105,15 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         const denominator = scene.family === "tools" && scene.mode === "reach" ? value.reachEligible : value.eligible;
         const numerator = scene.family === "tools" && scene.mode === "reach" ? value.interactions : value.count;
         const unit = unitFor(scene.family, scene.mode);
-        tooltip.append(element("div", "trends-tip-value", reading(point.amount, scene.family, scene.mode)));
+        tooltip.append(element("div", "trends-tip-value", point.missingLabel || reading(point.amount, scene.family, scene.mode)));
         // The mark already names its date, subject and value. Only its supporting facts describe it.
         const detail = element("div", "trends-tip-detail");
         detail.id = `${tooltip.id}-detail`; tooltip.append(detail);
-        if (scene.family.startsWith("pair-")) detail.append(element("div", "trends-tip-caption", value.context));
-        else if (scene.family === "usage") detail.append(element("div", "trends-tip-caption", `${value.metered} of ${value.eligible} interactions metered`));
+        if (scene.family.startsWith("pair-")) {
+            if (value.context !== point.missingLabel) detail.append(element("div", "trends-tip-caption", value.context));
+        } else if (scene.family === "usage") {
+            if (value.eligible) detail.append(element("div", "trends-tip-caption", `${value.metered} of ${quantity(value.eligible,"interactions")} metered`));
+        }
         else if (scene.family !== "rhythm" || scene.mode === "share")
             detail.append(element("div", "trends-tip-caption", `${number(numerator)} of ${quantity(denominator, unit)}${scene.family === "timing" ? " timed" : ""}`));
         if (scene.family === "rhythm" && scene.mode === "share") {
@@ -131,9 +134,9 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         else if (scene.family === "timing") facts(detail, [[point.id === "p95" ? "Median" : "P95",
             reading(point.id === "p95" ? value.medianMs : value.p95Ms, "timing", scene.mode)],
             ["Timing coverage", rate(value.percent)]]);
-        else if (!scene.family.startsWith("pair-")) facts(detail, [["Interactions", value.interactions]]);
+        else if (scene.family !== "usage" && !scene.family.startsWith("pair-")) facts(detail, [["Interactions", value.interactions]]);
         if (coincident(point).length > 1) detail.append(element("div", "trends-tip-caption", "Several series have this value. Select the point again to inspect the next series."));
-        point.node.setAttribute("aria-describedby", detail.id);
+        if (detail.childElementCount) point.node.setAttribute("aria-describedby", detail.id);
         const at = new DOMPoint(point.x, point.y).matrixTransform(point.node.getScreenCTM());
         const overlay = root.querySelector(".trends-mark-focus");
         overlay?.replaceChildren(outline(point, "var(--ink)", 1.5));
@@ -191,10 +194,12 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         // Size the date window for actual columns, not empty legend slots.
         // Use the unfiltered series here so toggling a checkbox keeps dates in place.
         const columnsPerDay = Math.max(1, ...data.days.map(day => day.values[family].filter(value => occupiesColumn(metric(value,family,mode))).length));
-        const labelWidth = context.measureText(shares ? "100%" : number(maximum)).width + 8 * scale;
         // Keep the day pitch independent of checkboxes and encoding so the same date stays in view.
         const compact = indexed && definitions.length === 1 && data.days.length > 14;
         const tickWidth = Math.max(...labels.map(label => context.measureText(label).width));
+        // A token total can have many digits. Its value label may be omitted,
+        // but it must not force the only measured day outside the initial view.
+        const labelWidth = family === "usage" && compact ? 0 : context.measureText(shares ? "100%" : number(maximum)).width + 8 * scale;
         const dayWidth = pair ? Math.max(40 * scale, tickWidth + 12 * scale) : compact ? Math.max(24 * scale, labelWidth) : Math.max(tickWidth,
             columnsPerDay * 20 * scale) + 16 * scale;
         const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
@@ -296,11 +301,13 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                 const value = values.get(id), amount = metric(value, family, mode), ink = color(id, family);
                 const column = !allZero && occupiesColumn(amount) ? nextColumn++ : -1;
                 const point = { index, id, column, columns, value, amount, rect: bars && amount > 0 ? {} : null };
+                const usageGap = amount === null && (family === "usage" || value.tokenGap);
+                point.missingLabel = usageGap ? (value.tokenGap || missingTokens?.(day,value)) : null;
                 position(point);
                 const n = scene.points.push(point) - 1;
                 const noActivity = options.distinguishEmpty && !day.calls;
                 const node = point.node = svgNode("g", { "data-series": id, "data-trend-mark": n, tabindex: n ? -1 : 0,
-                    role: "button", "aria-pressed": "false", "aria-label": `${formatDate(day.date)}: ${value.label}, ${reading(amount, family, mode)}${noActivity ? ", no matching dated calls" : ""}` });
+                    role: "button", "aria-pressed": "false", "aria-label": `${formatDate(day.date)}: ${value.label}, ${point.missingLabel || reading(amount, family, mode)}${noActivity ? ", no matching dated calls" : ""}` });
                 if (grouped && column < 0 && amount === 0 && columns && !allZero) node.setAttribute("pointer-events","none");
                 const paint = svgNode("g", { "aria-hidden": "true", stroke: "none" }); node.append(paint); svg.append(node);
                 if (point.rect) paint.append(place(svgNode("rect", { fill: ink, "data-trend-bar": "", "data-series": id }), () => point.rect));
@@ -326,7 +333,8 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                     () => ({ cx: point.x, cy: point.y })));
                 // Names belong in the legend and exact reading. A number never
                 // drifts sideways to fit, and coincident gaps get just one dash.
-                if (amount === null ? !labeledMissing : bars && (column >= 0 || !labeledZero && (!columns || allZero) && !compact)) {
+                if (amount === null ? !labeledMissing && (!usageGap || day.calls && (value.eligible || id === "usage" || value.tokenActivity))
+                    : bars && (column >= 0 || !labeledZero && (!columns || allZero) && !compact)) {
                     const text = amount === null ? "—" : shares ? rate(amount) : number(amount);
                     const labelWidth = context.measureText(text).width;
                     paint.append(place(svgNode("text", { "text-anchor": "middle" }, text), () => {
@@ -336,7 +344,7 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
                         const fits = Math.abs(point.x-x(index)) + half <= pitch/2 && (column < 0 || columnValues.every((other,j) =>
                             j === column || Math.abs(y(other)-y(amount)) > 16 * scale || Math.abs(j-column)*stride >= half + columnWidths[j]/2));
                         return { x: point.x, y: amount === null ? point.y + 4 * scale : y(amount) - 5 * scale,
-                            visibility: fits && (!compact || !markedDayLabel || index % tickStride() === 0) ? "visible" : "hidden" };
+                            visibility: fits && (usageGap || !compact || !markedDayLabel || index % tickStride() === 0) ? "visible" : "hidden" };
                     }));
                     if (amount === null) labeledMissing = true;
                     if (amount === 0) labeledZero = true;
@@ -354,12 +362,18 @@ export function mountTrendsChart({ root, tooltip, color, authorIcon, onSelect, o
         root.scrollLeft = !savedReading || savedReading.end ? root.scrollWidth : savedReading.day * pitch;
         if (indexed && !savedReading && root.scrollLeft > 1) {
             const span = Math.max(1, Math.floor((root.clientWidth - left - 12 * scale) / pitch));
-            let total = 0, best = -1, start = 0;
+            let total = 0, best = -1, start = 0, metered = 0, bestMetered = -1;
             // Start with the most activity that fits. Prefer the latest equally populated span.
             for (let i = 0; i < data.days.length; i++) {
                 total += data.days[i].calls;
-                if (i >= span) total -= data.days[i - span].calls;
-                if (i >= span - 1 && total >= best) { best = total; start = i - span + 1; }
+                if (family === "usage") metered += Number(data.days[i].values.usage.some(v=>v.total !== null));
+                if (i >= span) {
+                    total -= data.days[i - span].calls;
+                    if (family === "usage") metered -= Number(data.days[i-span].values.usage.some(v=>v.total !== null));
+                }
+                if (i >= span - 1 && (metered > bestMetered || metered === bestMetered && total >= best)) {
+                    bestMetered = metered; best = total; start = i - span + 1;
+                }
             }
             root.scrollLeft = start * pitch;
         }
