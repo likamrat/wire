@@ -65,6 +65,37 @@ function modelShareReading(el, host, s, nativeCount) {
     }
     host.append(el("p", "muted", `${s.metered} of ${s.eligible + nativeCount} interactions metered; ${s.priced} priced. Token shares include unpriced interactions. Cost shares use only fully priced interactions.`));
 }
+function homepageUsage(el, host, summary, nativeCount) {
+            const { eligible, metered, priced, unpriced, total, usd, tokens } = summary;
+            const population = eligible + nativeCount;
+            if (!metered) {
+                host.replaceChildren(el("p", "percentage-empty", population
+                    ? `No verified token totals for the ${number(population)} matching ${population === 1 ? "interaction" : "interactions"}.`
+                    : "No matching interactions."));
+                return;
+            }
+            const facts = el("dl", "usage-overview-facts");
+            for (const [label, value, detail] of [
+                ["Recorded tokens", number(total), `${number(metered)} of ${number(population)} interactions metered`],
+                ["Est. retail cost", usd === null ? "Unpriced" : formatUsd(usd),
+                    `${number(priced)} of ${number(metered)} metered interactions priced${unpriced ? ` · ${number(unpriced)} unpriced` : ""}`],
+            ]) {
+                const fact = el("div");
+                fact.append(el("dt", "", label), el("dd", "", value), el("dd", "usage-overview-detail", detail)); facts.append(fact);
+            }
+            const composition = el("div", "usage-composition"), bar = el("div", "usage-bar");
+            bar.setAttribute("aria-hidden", "true");
+            const legend = el("ul", "usage-overview-legend");
+            for (const key of tokenKinds) {
+                const segment = el("span"); segment.dataset.kind = key; segment.style.flexGrow = String(tokens[key] ?? 0); bar.append(segment);
+                const item = el("li"), swatch = el("i"); swatch.dataset.kind = key; swatch.setAttribute("aria-hidden", "true");
+                item.append(swatch, `${names[key]}: ${tokens[key] === null ? "not recorded" : number(tokens[key])}`); legend.append(item);
+            }
+            if (total > 0 && tokenKinds.every(k => tokens[k] !== null)) composition.append(bar);
+            composition.append(legend);
+            host.replaceChildren(facts, composition, el("p", "usage-overview-detail",
+                `Whole interactions. Retail API-equivalent rates as of ${pricingSnapshot.date}; not billed Copilot spend.`));
+}
 function rateReference(el, host, scenarios) {
     host.replaceChildren();
     host.append(el("h3", "", "Estimated cost rates (read-only)"), el("p", "", `${pricingSnapshot.date} · ${pricingSnapshot.basis}`));
@@ -80,5 +111,5 @@ function rateReference(el, host, scenarios) {
     const unknown = [...new Set(scenarios.flatMap(s => s.usage?.steps.filter(x => x.reason === "model-not-listed").map(x => x.model) ?? []))];
     if (unknown.length) host.append(el("p", "", `Not in the bundled rate list: ${unknown.join(", ")}. Shown as Unpriced.`));
 }
-return { usageChip, usageReading, rateReference, modelShareReading, usageSummary, formatUsd };
+return { usageChip, usageReading, rateReference, modelShareReading, homepageUsage, usageSummary, formatUsd };
 }

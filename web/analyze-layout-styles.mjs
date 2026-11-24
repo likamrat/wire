@@ -1,5 +1,19 @@
 export const analyzeLayoutStyles = `
 :root {--usage-cost:var(--trends-series-11)}
+.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px 16px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
+.analyze-dashboard>.analyze-usage {grid-column:1/-1}
+.wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
+.usage-overview-facts {display:flex;flex-wrap:wrap;gap:12px 40px;margin:0 0 14px}
+.usage-overview-facts dt {font-size:var(--type-small);color:var(--muted)}
+.usage-overview-facts dd {margin:0;font-variant-numeric:tabular-nums}
+.usage-overview-facts dd:first-of-type {font-size:var(--type-section);color:var(--ink);font-weight:var(--weight-medium)}
+.usage-overview-detail,.usage-overview-legend {font-size:var(--type-small);color:var(--muted)}
+.usage-overview-legend {display:flex;flex-wrap:wrap;gap:4px 20px;padding:0;margin:6px 0 0;list-style:none}
+.usage-overview-legend li {display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.usage-overview-legend i {width:.6em;height:.6em;border-radius:2px;flex:none}
+.usage-overview-legend [data-kind=freshInput]{background:var(--accent)}.usage-overview-legend [data-kind=cacheRead]{background:var(--trends-series-2)}
+.usage-overview-legend [data-kind=cacheWrite]{background:var(--trends-series-4)}.usage-overview-legend [data-kind=output]{background:var(--usage-cost)}
+#analyzeUsageContent>p {margin:10px 0 0}
 .usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .usage-switch {margin-block:6px}

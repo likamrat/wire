@@ -46,6 +46,7 @@ export function mountAnalyzeHomepage({ prefs, standard, isCurrent, rowsFor }) {
             for (const key of standard) {
                 const node = key === "time" ? dashboard.querySelector(".analyze-chart-main") :
                     key === "outcomes" ? dashboard.querySelector(".analyze-outcome-summary") :
+                    key === "usage" ? document.getElementById("analyzeUsage") :
                     key === "interactions" ? document.getElementById("activityView") :
                     document.querySelector(`#percentageCharts [data-breakdown="${key}"]`);
                 mark(key, node);

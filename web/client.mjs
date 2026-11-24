@@ -372,6 +372,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     $("chartTitle").after(analyzeTrends.link("rhythm"));
+    $("analyzeUsageTitle").after(analyzeTrends.link("usage"));
     function widgetRecordsLink(widget) {
         return routeLink("", routeFor("activity", { widget, page: undefined }), "", { revealReferenceRecords: true });
     }
@@ -777,7 +778,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     let historyPosition = Number.isSafeInteger(history.state?.evidenceView?.position) ? history.state.evidenceView.position : 0;
     let search = workspaceState.route.search || "", activityPage = Math.max(0, Number.parseInt(workspaceState.route.page || "0", 10) || 0), restoring = false, mounted = false;
-    let usageSort = "recent";
+    let usageSort = pageDefaults.get("analyzeSort"), explicitUsageSort = false;
     const pageSize = 8;
     const frontendActivity = assessmentFactories.mountActivityList?.({
         root: $("activityList"), pager: $("activityPager"), isCurrent: token => api.isCurrent(token),
@@ -4815,6 +4816,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // Keep native link activation (including opening in another tab) in step with ordinary clicks.
     pageDefaults.subscribe(key => {
         if (clearingAccess || !api.publicationToken()) return;
+        if (key === "analyzeSort" && (!explicitUsageSort || workspaceState.route.view === "settings")) {
+            usageSort = pageDefaults.get(key); explicitUsageSort = false;
+            if ($("activityUsageSort")) $("activityUsageSort").value = usageSort;
+            if (workspaceState.route.view === "analyze" && !workspaceState.route.compare && workspaceState.evidence) renderActivity();
+        }
         for (const node of document.querySelectorAll("[data-nav]"))
             if (browseDefaults[node.dataset.nav] === key) setNavigationLink(node);
     });
@@ -5609,6 +5615,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             + (chartType === "time" ? native?.timeSeries.points.length ?? 0 : native?.grouping.groups.length ?? 0);
         $("chartDataTitle").textContent = `${$("chartTitle").textContent} (${count(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
         percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native);
+        const breakdown = percentages.referenceModel();
+        assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations);
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
@@ -6051,12 +6059,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityListSummary").hidden = false;
         if (!$("activityUsageSort")) {
             const label = el("label", "usage-sort", "Sort: "), select = el("select"); select.id = "activityUsageSort";
-            for (const [key, text] of [["recent", "Most recent"], ["cost", "Highest est. cost"], ["tokens", "Most tokens"]]) {
-                const option = el("option", "", text); option.value = key; select.append(option);
-            }
+            select.append(...[...$("defaultAnalyzeSort").options].map(option => option.cloneNode(true)));
+            select.value = usageSort;
             select.addEventListener("change", () => {
                 if (!api.publicationToken() || clearingAccess) return;
-                usageSort = select.value; activityPage = 0;
+                usageSort = select.value; explicitUsageSort = true; activityPage = 0;
                 if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { page: undefined }), true);
                 else renderActivity();
             });
@@ -11749,7 +11756,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
     firstConnection = assessmentFactories.mountFirstConnection({ api, ux, reviewSource: reviewFirstConnection, collectionStatus: historyStatus });
     const privateContentIds = [
-        "activityList", "activityListSummary", "activityListScope", "activityPager", "costRateReference", "sessionAnalysis", "homeInsights", "homeFindings",
+        "activityList", "activityListSummary", "activityListScope", "activityPager", "analyzeUsageContent", "costRateReference", "sessionAnalysis", "homeInsights", "homeFindings",
         "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
         "detail", "reportList", "reportReviewBody", "reportSaveBody", "reportMatchingContext", "scopeExclusions",
         "pageTitle", "pageIdentity", "pageIntro", "pageProject", "breadcrumbs", "viewingContext", "serviceEvidenceSummary",

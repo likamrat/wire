@@ -153,7 +153,7 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "guideStart", "cardHideDuration"])}
+  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "analyzeSort", "guideStart", "cardHideDuration"])}
   ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
   ${pageSettings("reports", "Reports", "Set defaults for new reports. Existing drafts and saved files stay as they are.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}

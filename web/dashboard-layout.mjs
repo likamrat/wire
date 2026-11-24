@@ -1,7 +1,7 @@
 // Pack existing widgets by their natural size; their renderers still own all data.
 export function mountDashboardLayout(host) {
     const view = host.ownerDocument.defaultView;
-    const selector = ".analyze-outcome-summary,.analyze-chart-main,:scope > #activityView,#percentageCharts .percentage-card";
+    const selector = ".analyze-outcome-summary,.analyze-chart-main,:scope > #analyzeUsage,:scope > #activityView,#percentageCharts .percentage-card";
     const widgets = new Set();
     const resize = new view.ResizeObserver(measure);
     const children = new view.MutationObserver(refresh);
