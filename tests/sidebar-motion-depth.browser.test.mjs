@@ -140,12 +140,37 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         };
         for (const phase of ["open", "close"]) {
             sample(phase);
+            let owners;
+            const observer = new MutationObserver(() => {
+                const reader = panel.getAnimations()[0];
+                if (reader?.startTime == null) return;
+                observer.disconnect();
+                owners = [reader, ...main.getAnimations()].map(animation => ({
+                    animation, start: animation.startTime, rate: animation.playbackRate, state: animation.playState,
+                }));
+                for (const { animation } of owners) animation.pause();
+            });
+            observer.observe(panel, { attributes: true, attributeFilter: [phase === "open" ? "open" : "inert"] });
             document.querySelector(phase === "open" ? ".request-card-open" : "#closeContextSidebar").click();
-            for (let i = 0; i < 120; i++) {
-                await frame(); sample(phase);
-                if (i > 2 && panel.open === (phase === "open") && !panel.getAnimations().length) break;
-                if (i === 119) throw new Error(`${phase} did not settle`);
+            for (let i = 0; i < 120 && !owners; i++) await frame();
+            observer.disconnect();
+            if (!owners) throw Error(`${phase} never started a docked glide`);
+            if (owners.some(owner => owner.start == null || owner.rate <= 0 || owner.state !== "running"))
+                throw Error(`${phase} did not start playing on the document timeline`);
+            const [reader] = owners;
+            // Inspect the same document times, not the same progress on each
+            // effect: independently delayed or differently eased edges must fail.
+            for (const fraction of [.125, .375, .625]) {
+                const time = reader.start + reader.animation.effect.getTiming().duration * fraction / reader.rate;
+                for (const { animation, start, rate } of owners) animation.currentTime = (time - start) * rate;
+                await frame();
+                sample(phase);
             }
+            for (const { animation } of owners) animation.play();
+            await reader.animation.finished;
+            await frame();
+            if (panel.open !== (phase === "open")) throw Error(`${phase} did not settle`);
+            sample(phase);
         }
         return samples;
     });
@@ -156,6 +181,8 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         const maxGap = Math.max(...moving.map(row => Math.abs(row.mainRight - row.panelX)));
         t.diagnostic(JSON.stringify({ phase, widths, maxGap }));
         assert.ok(widths >= 3, `${phase}: main width snaps instead of following the sidebar (${widths} painted width)`);
+        assert.ok((moving[0].mainWidth - moving.at(-1).mainWidth) * (phase === "open" ? 1 : -1) > 40,
+            `${phase}: the main surface must reflow in the direction of the glide`);
         assert.ok(maxGap < 2, `${phase}: main edge must follow the actual exposed sidebar edge, gap ${maxGap}`);
     }
 });
