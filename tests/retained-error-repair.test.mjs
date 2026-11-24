@@ -267,8 +267,18 @@ test("full retained repair seals aliases and older targets, fits references, sur
     for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.context.dataDir, file.path))), file.sha256);
 });
 
+async function assertResumedRepair(f) {
+    const state = await loadBoardState(f.context);
+    assert.deepEqual(state.evidence, f.expected);
+    assert.equal(state.revision, f.state.revision + 1);
+    assert.equal((await readJson(f.indexFile)).completionReferenceMaintenance, undefined);
+    await f.restart(); await f.collector.collectNow();
+    for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.context.dataDir, file.path))), file.sha256);
+}
+
 test("reference fence, checkpoints and evidence publication resume only their sealed operation", { timeout: 120000 }, async t => {
-    for (const boundary of ["compatibility-fence", "checkpoint-1", "checkpoint-2", "snapshot-staged", "board-saved", "complete"]) {
+    // The abrupt-exit cases below exercise the other four boundaries with the same recovery checks.
+    for (const boundary of ["checkpoint-2", "complete"]) {
         await t.test(boundary, async t => {
             const f = await fixture(t), prepared = await runRetainedErrorRepair({ ...f.options, mode: "prepare" });
             const options = { ...f.options, mode: "apply", reviewSha256: prepared.reviewSha256 };
@@ -277,14 +287,8 @@ test("reference fence, checkpoints and evidence publication resume only their se
             await assert.rejects(runRetainedErrorRepair({ ...f.options, mode: "prepare" }), /existing maintenance journal/);
             const resumed = await runRetainedErrorRepair(options);
             assert.equal(resumed.status, "complete");
-            const state = await loadBoardState(f.context);
-            assert.deepEqual(state.evidence, f.expected);
-            assert.equal(state.revision, f.state.revision + 1);
-            assert.equal((await readJson(f.indexFile)).completionReferenceMaintenance, undefined);
-            await f.restart(); await f.collector.collectNow();
-            for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.context.dataDir, file.path))), file.sha256);
+            await assertResumedRepair(f);
         });
-
     }
 });
 
@@ -299,12 +303,12 @@ test("abrupt process exits leave a fenced same-journal recovery, including sourc
                 { encoding: "utf8", timeout: 30000 });
             assert.equal(child.status, 84, child.stderr);
             await assert.rejects(createCollector(f.context, { timers: false }), /unfinished/);
+            await assert.rejects(runRetainedErrorRepair({ ...f.options, mode: "prepare" }), /existing maintenance journal/);
             if (boundary === "board-saved") await rename(f.files[0], f.files[0] + ".unavailable");
             const result = await runRetainedErrorRepair(options);
             assert.equal(result.status, "complete");
-            assert.equal((await loadBoardState(f.context)).revision, f.state.revision + 1);
-            assert.deepEqual((await loadBoardState(f.context)).evidence, f.expected);
-            assert.equal((await readJson(f.indexFile)).completionReferenceMaintenance, undefined);
+            if (boundary === "board-saved") await rename(f.files[0] + ".unavailable", f.files[0]);
+            await assertResumedRepair(f);
         });
     }
 });

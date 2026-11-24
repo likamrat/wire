@@ -1659,12 +1659,19 @@ for (const churnPoint of ["board", "prefix", "unrelated-tail", "final-check"]) t
         assert.ok(changes > 0, `The fixture must change unrelated live-WAL metadata at prefix publication; failures=${JSON.stringify(failures)}.`);
         assert.deepEqual([...failures], [], "Harmless metadata churn must not create unknown publication outcomes.");
         assert.equal(status.backfill?.visitedSources, 1, "The actual automatic prefix progress must be durable.");
-        const prefix = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")));
-        assert.equal(prefix.backfill.sources[0].phase, "visited");
-        assert.equal((await loadBoardState(app.context)).evidence.length, 1);
+        // Drain any later poll before reading the checkpoint and closing this collector.
+        // Restarting in its admission callback correctly supersedes that poll, not this prefix.
+        await app.collector.exclusiveActivity(async () => {
+            const prefix = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")));
+            assert.equal(prefix.backfillSource, app.sourceId);
+            assert.deepEqual(prefix.backfill.sources.map(row => [row.sessionId, row.phase]), [[app.sourceId, "visited"]]);
+            const state = await loadBoardState(app.context);
+            assert.deepEqual(state.evidence.flatMap(record => record.toolCalls.map(call =>
+                [record.sourceSessionId, call.toolCallId])), [[app.sourceId, "prefix-metadata-churn"]]);
+        });
         await app.restart();
         assert.equal((await app.collector.status()).backfill.visitedSources, 1);
-        await app.append(interaction("after-prefix-churn"));
+        await app.collector.exclusiveActivity(() => app.append(interaction("after-prefix-churn")));
         await waitForNativeRecords(app, ["prefix-metadata-churn", "after-prefix-churn"]);
         assert.deepEqual([...failures], []);
     } finally {
