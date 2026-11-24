@@ -304,26 +304,36 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         foot.append(problem);
         article.append(body);
         if (problem.textContent) article.append(foot);
-        cardNodes.set(article, () => {
+        const release = () => {
             if (retired) return;
             retired = true; events.abort();
             item = view = onOpen = selection = target = null;
             clear(article);
             for (const attribute of [...article.attributes]) { attribute.value = ""; article.removeAttributeNode(attribute); }
             cardNodes.delete(article);
-        });
+        };
+        cardNodes.set(article, { get item() { return item; }, get view() { return view; }, owner, release, rebind(next) {
+            // The browser completes the press on the original anchor, not a replayed click.
+            const basis = authorityBasis(view);
+            if (retired || selection || !basis || owner !== next.owner || !api.isCurrent(owner)
+                || view.revision !== next.view.revision || view.sourceRevision !== next.view.sourceRevision
+                || view.selectionRef !== next.view.selectionRef || basis !== authorityBasis(next.view)
+                || JSON.stringify(item) !== JSON.stringify(next.item)) return false;
+            item = next.item; view = next.view;
+            return true;
+        } });
         return article;
     }
     function clearCards(root = $("activityList")) {
         if (!root || typeof root.contains !== "function") throw new TypeError("Card retirement requires its consumer root.");
         let retired = 0;
-        for (const [card, release] of cardNodes) if (card === root || root.contains(card)) { release(); retired++; }
+        for (const [card, binding] of cardNodes) if (card === root || root.contains(card)) { binding.release(); retired++; }
         return retired;
     }
     function seed(snapshot, analytics, restriction = "", group, view = {}) {
         chartType = view.chartType ?? "time";
-        const key = JSON.stringify([snapshot?.revision, snapshot?.sourceRevision, snapshot?.selectionRef, snapshot?.status, snapshot?.reason, analytics, restriction]);
-        if (seedKey === key) return;
+        const key = JSON.stringify([snapshot?.revision, snapshot?.sourceRevision, snapshot?.selectionRef, authorityBasis(snapshot), snapshot?.status, snapshot?.reason, analytics, restriction]);
+        if (seedKey === key && (frame === snapshot || JSON.stringify(frame?.page?.items) === JSON.stringify(snapshot?.page?.items))) return;
         seedKey = key;
         for (const reference of references) clear(reference);
         references.clear();
@@ -841,6 +851,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         acceptReaderTarget, hasReaderTarget, observeReaderAuthority, retireReaderAuthority,
         readerRevision: () => readingAuthority?.revision ?? null,
         clearCards,
+        reuseCard(previous, replacement) {
+            const old = cardNodes.get(previous), next = cardNodes.get(replacement);
+            return Boolean(old && next && old.rebind(next));
+        },
+        releaseCard(card) { cardNodes.get(card)?.release(); },
         presentation: () => ({ ...state.snapshot(), error: restricted || state.snapshot().error, selected: selectedSources.length > 0,
             savedSummary: frame?.status === "bounded" ? savedSummary(frame) : "" }),
         async pageAt(index) {
@@ -876,7 +891,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             seedKey = "";
             for (const reference of references) clear(reference);
             references.clear();
-            for (const release of cardNodes.values()) release();
+            for (const binding of cardNodes.values()) binding.release();
             requests.get(state)?.abort(); state.withdraw(); restricted = reason; paintQuery();
         },
         withdrawAccess() {
@@ -894,7 +909,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             clear(searchHost); searchHost.hidden = true;
             for (const reference of references) clear(reference);
             references.clear();
-            for (const release of cardNodes.values()) release();
+            for (const binding of cardNodes.values()) binding.release();
         },
         resumeAccess() {},
     };

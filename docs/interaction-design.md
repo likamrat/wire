@@ -37,6 +37,9 @@ keeps its existing Open/Close controls and the same mounted brand and links.
 
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent remain current.
+A press on a Microsoft activity card can finish through a refresh if the same
+authorized row stays in place. Replacing its target or withdrawing access
+retires the press; it must not open another conversation.
 Activating Close from the keyboard during reader entry keeps the origin's
 place through the reversal. Scrolling the results cancels that compensation.
 Later user input wins over delayed navigation, reads and motion callbacks.

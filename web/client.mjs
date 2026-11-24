@@ -773,7 +773,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const pageSize = 8;
     const frontendActivity = assessmentFactories.mountActivityList?.({
         root: $("activityList"), pager: $("activityPager"), isCurrent: token => api.isCurrent(token),
-        release: releaseCardPreviews, onError: message => {
+        reuseCard: (previous, replacement) => boundedNative.reuseCard(previous, replacement),
+        release: node => { boundedNative.releaseCard(node); releaseCardPreviews(node); }, onError: message => {
             $("activityListSummary").textContent = "Recorded activity unavailable.";
             $("activityListScope").textContent = "";
             $("activityListScope").hidden = true;
@@ -5866,7 +5867,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         releaseCardPreviews(host);
         nativeActivity.clearCards();
-        boundedNative.clearCards();
+        if (!stage) boundedNative.clearCards();
         const widget = underlyingRoute().widget;
         const group = widget === "all" ? { label: "Recorded activity", drilldownIds: slice.rowIds } : percentages.evidence(widget);
         const members = new Set(group?.interactionIds ?? group?.drilldownIds);
