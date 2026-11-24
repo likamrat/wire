@@ -20,7 +20,6 @@ export const analyzeLayoutStyles = `
 .usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .usage-switch {margin-block:6px}
-.usage-switch [aria-pressed=true] {font-weight:var(--weight-strong);text-decoration:underline;text-underline-offset:4px}
 .usage-sort {justify-self:end}.usage-sort.select-field {display:inline-flex;flex-direction:row;align-items:center;gap:8px}
 @media(min-width:761px){
  #activityView>#activityListContext:has(.usage-sort){grid-template-columns:minmax(0,1fr) auto auto;align-items:center}
