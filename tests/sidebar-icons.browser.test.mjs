@@ -218,7 +218,7 @@ test("sidebar glyphs fit the narrow drawer and 200 percent text without overlapp
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-${width}-text${scale}.png`) });
         if (width < 700) {
-            await page.keyboard.press("Escape");
+            await page.getByRole("button", { name: "Close navigation", exact: true }).click();
             await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
             assert.ok(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement));
         }

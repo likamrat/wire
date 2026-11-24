@@ -171,6 +171,15 @@ test("mobile drawer keeps desktop choice, modal containment and focus across poi
             await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement.closest("#navigationDrawer")), true, "Tab visits the drawer or browser chrome, never hidden/background controls");
         }
+        const close = page.getByRole("button", { name: "Close navigation", exact: true });
+        await close.focus();
+        const help = page.getByRole("tooltip");
+        await help.waitFor();
+        assert.equal(await help.innerText(), "Close navigation");
+        await page.keyboard.press("Escape");
+        await help.waitFor({ state: "hidden" });
+        assert.equal(await page.locator("#navigationDrawer").isVisible(), true);
+        assert.equal(await close.evaluate(node => node === document.activeElement), true);
         await page.keyboard.press("Escape");
         await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
         assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
