@@ -809,8 +809,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     for (const type of ["pointerdown", "wheel", "touchmove", "keydown"]) {
         document.addEventListener(type, event => {
             if (!event.isTrusted) return;
-            // Pointer targeting is already fixed; scrolling here can move its control before release.
-            if (type !== "pointerdown") retainSidebarColumnAnchor();
+            // A wheel or touch scroll can already have moved the viewport at capture.
+            // Retire the old anchor without compensating for this new gesture.
             workspaceState.noteReading();
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });

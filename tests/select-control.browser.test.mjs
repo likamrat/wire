@@ -516,7 +516,7 @@ test("single-choice filters retain their native values and dispatch each actual 
                 await trigger.hover();
                 assert.equal(await trigger.locator(".select-value").evaluate(node => node.scrollWidth <= node.clientWidth + 1 && node.scrollHeight <= node.clientHeight + 1), true,
                     "Long selections wrap visibly instead of requiring a truncation tooltip");
-                await trigger.press("Escape");
+                await page.mouse.move(0, 0);
             }
         }
         if (id === "layerFilter") await choose(page, id, "tool");
