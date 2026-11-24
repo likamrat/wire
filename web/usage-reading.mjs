@@ -91,13 +91,18 @@ function renderModelCounts(el, host, u) {
     host.append(table);
 }
 function modelShareReading(el, host, s, nativeCount) {
+    const list = el("ul", "percentage-legend percentage-tool-list");
     for (const row of s.models) {
-        const block = el("div", "usage-model"), fraction = s.total ? row.total / s.total : null;
-        block.append(el("strong", "", row.model), el("span", "", fraction === null ? `${number(row.total)} tokens` : `${Math.round(fraction*100)}% (${number(row.total)} tokens)`));
-        const track = el("div", "usage-share-track"), fill = el("span");
+        const block = el("li", "percentage-legend-row usage-model"), fraction = s.total ? row.total / s.total : null;
+        const value = el("span", "percentage-value");
+        if (fraction === null) value.textContent = `${number(row.total)} tokens`;
+        else value.append(el("strong", "", `${Math.round(fraction*100)}%`), " ", el("span", "", `(${number(row.total)} tokens)`));
+        block.append(el("span", "percentage-label", row.model), value);
+        const track = el("div", "percentage-bar-track"), fill = el("span", "percentage-bar");
         fill.style.width = `${100 * (fraction ?? 0)}%`; track.setAttribute("aria-hidden", "true"); track.append(fill); block.append(track);
-        host.append(block);
+        list.append(block);
     }
+    if (list.children.length) host.append(list);
     host.append(el("p", "muted", `${number(s.metered)} of ${number(s.eligible + nativeCount)} interactions metered.`));
 }
 function usageCalendar(scenarios,rows,identity,dayOf) {

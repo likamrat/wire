@@ -415,8 +415,8 @@ test("independent breakdowns retain readable rows, linear marks and keyboard acc
             await page.keyboard.press("Tab"); await action.focus(); await expect(action).toBeFocused();
             const surface = await action.evaluate(measureControlSurface);
             assert.ok(contrast(surface.ink, surface.face) >= 4.5);
-            const focus = await rows.first().evaluate(measureControlSurface);
-            assert.ok(focus.focus && focus.focusWidth >= 2, "Keyboard focus outlines the whole row");
+            const focus = await (widget === widgets[0] ? action : rows.first()).evaluate(measureControlSurface);
+            assert.ok(focus.focus && focus.focusWidth >= 2, "Keyboard focus identifies the tool link or service row");
         }
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `${theme}-${width}-text${scale}`, card(page, "services"));

@@ -83,8 +83,15 @@ function geometry() {
     });
     const ring = root.querySelector(".percentage-ring"), legend = root.querySelector("#outcomeChart .percentage-legend");
     const text = [...root.querySelectorAll(".percentage-label,.percentage-value")].filter(node => node.checkVisibility());
+    const readings = [...root.querySelectorAll("#percentageCharts .percentage-tool-list")].map(list => ({
+        card: list.closest(".percentage-card").dataset.breakdown, width: list.clientWidth,
+        rows: [...list.children].map(row => ({
+            row: box(row), label: box(row.querySelector(".percentage-label")),
+            value: box(row.querySelector(".percentage-value")), track: box(row.querySelector(".percentage-bar-track")),
+        })),
+    }));
     const widgetHeight = bounds.height - list.height - parseFloat(getComputedStyle(root).columnGap);
-    return { cards, bounds, gaps, list, widgetHeight, ring: ring && box(ring), legend: legend && box(legend),
+    return { cards, bounds, gaps, list, readings, rem:parseFloat(getComputedStyle(document.documentElement).fontSize), widgetHeight, ring: ring && box(ring), legend: legend && box(legend),
         count: document.querySelector("#activityCount").textContent,
         fontLoaded: document.fonts.check('600 30px "Asta Sans"'),
         typography: text.map(node => {
@@ -104,6 +111,19 @@ function assertPacking(value, key) {
     assert.equal(value.fontLoaded, true, key);
     assert.ok(value.overflow <= 1, key);
     assert.deepEqual(value.clipped, [], key);
+    for (const {card,width,rows} of value.readings) {
+        const paired = width >= 36 * value.rem && card !== "authors" && rows.length >= 4;
+        for (let i=0; i<rows.length; i++) {
+            const {row,label,value:amount,track}=rows[i];
+            if (paired) {
+                if (i%2) {
+                    assert.ok(Math.abs(row.top-rows[i-1].row.top)<1 && row.left>=rows[i-1].row.right,`${key}/${card}: adjacent ranks share a row`);
+                    assert.ok(Math.abs(track.width-rows[i-1].track.width)<1,`${key}/${card}: both bars use equal track widths`);
+                }
+                assert.ok(track.top>=Math.max(label.bottom,amount.bottom)-1 && amount.left-label.right<=9,`${key}/${card}: bar below its adjacent name and value`);
+            } else if (i) assert.ok(row.top>=rows[i-1].row.bottom-1,`${key}/${card}: single list`);
+        }
+    }
     for (const track of value.tracks) if (track.columns > 1) assert.ok(track.gap >= 8, "Inline labels, bars and values keep their horizontal separation");
     assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "usage", "tools", "services", "models", "authors"]);
     for (const card of value.cards) for (const other of value.cards) if (card !== other) {

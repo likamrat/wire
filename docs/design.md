@@ -143,6 +143,10 @@ screens. Scrolling to a different day keeps the same linear scale.
 Label dates and counts on the time chart; the selected date range
 belongs above the widgets. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
+Within a wide Work IQ tool calls or Response models card, four or more entries
+read across in pairs: name, percentage and count together, bar underneath.
+Narrow cards and shorter lists use one entry per row. Prompt authors always
+uses one list. Services and operations keeps its service icons and bar layout.
 
 Screen headings use sentence case, including **Work IQ**. Keep branding,
 genuine acronyms and recorded identifiers unchanged. In the interaction reader,
