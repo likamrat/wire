@@ -586,7 +586,22 @@ ${reportJourneyStyles}
 .reader-section-jumps:has(.report-draft-trigger)>button{flex:none}
 .wire-section-nav.reader-section-jumps>.report-draft-trigger{min-width:0;max-width:min(24em,100%);color:var(--report-action-ink)}
 .reader-section-jumps>.report-draft-trigger>.wire-icon{color:var(--accent)}
-#activityList .card-reading-actions>.report-draft-trigger{justify-self:start;display:inline-flex;align-items:center;gap:.45em;min-width:0;max-width:100%;height:44px;min-height:44px;margin:0;padding:0 .65em;position:relative;isolation:isolate;border:0;background:none;box-shadow:none;color:var(--report-action-ink);font:var(--weight-regular) var(--type-small)/1.4 var(--font);text-decoration:none}
+#activityList .card-reading-actions>:is(.report-draft-trigger,.card-hide-action){justify-self:start;display:inline-flex;align-items:center;gap:.45em;min-width:0;max-width:100%;height:44px;min-height:44px;margin:0;padding:0 .65em;position:relative;isolation:isolate;border:0;background:none;box-shadow:none;color:var(--report-action-ink);font:var(--weight-regular) var(--type-small)/1.4 var(--font);text-decoration:none}
+#activityList .card-reading-actions>.card-hide-action::before{content:"";position:absolute;inset:calc((100% - 2em)/2) 0;z-index:-1;border-radius:var(--radius-control);background:transparent}
+#activityList .card-reading-actions>.card-hide-action:is(:hover,:focus-visible)::before{background:var(--report-action-hover)}
+#activityList .card-reading-actions>.card-hide-action:active::before{background:var(--report-action-pressed)}
+#activityList .card-reading-actions>.card-hide-action>.wire-icon{width:1.125em;height:1.125em;flex:none}
+#activityList .card-reading-actions:has(.card-hide-action){flex-wrap:nowrap}
+#activityList .card-reading-actions>.card-hide-action{flex:none}
+.card-visibility-actions,.hidden-card-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-sm)}
+.card-visibility-actions{justify-self:end;grid-row:1;grid-column:2}
+#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr) auto;align-items:center}
+@media(max-width:760px){#activityView>#activityListContext:has(.card-visibility-actions:not([hidden])){grid-template-columns:minmax(0,1fr)}.card-visibility-actions{grid-column:1;grid-row:auto;justify-self:start}}
+.hidden-cards-dialog{width:min(30rem,calc(100% - 24px))}
+.hidden-card-row{justify-content:space-between;border-top:1px solid var(--rule);padding-block:var(--space-sm)}
+.hidden-card-row small{display:block;font:var(--type-small)/var(--leading-ui) var(--font)}
+.hidden-report-card{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-lg);color:var(--muted)}
+#reportStage3[data-cards-covered]{display:none!important}
 #activityList .card-reading-actions>.report-draft-trigger::before{content:"";display:block;position:absolute;inset:calc((100% - 2em)/2) 0;z-index:-1;pointer-events:none;border-radius:var(--radius-control);background:var(--report-action-face);border:1px solid var(--report-action-edge)}
 #activityList .card-reading-actions>.report-draft-trigger:is(:hover,:focus-visible,[aria-expanded=true])::before{background:var(--report-action-hover)}
 #activityList .card-reading-actions>.report-draft-trigger:active::before{background:var(--report-action-pressed)}

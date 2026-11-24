@@ -1,0 +1,101 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { chromium, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
+import { navigateMain, selectActivityOption } from "./helpers.mjs";
+import { loadBoardState } from "../lib/store.mjs";
+
+for (const frontend of ["react", "bundled"]) test(`card visibility keeps the reader, search and report copies covered (${frontend})`, async t => {
+    const records = searchRecords();
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+    for (const record of records) {
+        record.capturedAt = `${yesterday}T12:00:00Z`;
+        record.userPrompt.sourceTimestamp = record.capturedAt;
+        record.toolCalls[0].startedAt = record.capturedAt;
+    }
+    const { runtime, bundles, context: store } = await searchFixture(t, { records, copilotAccess: true, frontend, reply: false, formats: ["html"] });
+    const saved = bundles[0].files["product-report.html"], bytes = await readFile(saved);
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const context = await browser.newContext(), page = await context.newPage();
+    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url);
+    const row = page.locator("#activityList article").filter({ hasText: "The physician treated" });
+    await expect(row).toBeVisible();
+    await row.locator(".report-draft-trigger").click();
+    const picker = page.getByRole("dialog", { name: "Report drafts", exact: true });
+    await picker.getByRole("button", { name: "New draft", exact: true }).click();
+    await picker.getByLabel("Draft name").fill("Case review");
+    await picker.getByRole("button", { name: "Create draft and add" }).click();
+    await expect(row.locator(".report-draft-trigger")).toContainText("Case review");
+    const membership = (await loadBoardState(store)).namedReportDrafts;
+    const prepared = frontend === "react" ? await context.newPage() : null;
+    let previewReads = 0;
+    if (prepared) {
+        await prepared.goto(new URL("/reports", runtime.url).href);
+        await prepared.getByRole("combobox", { name: "Report draft", exact: true }).click();
+        await prepared.getByRole("option", { name: "Case review", exact: true }).click();
+        prepared.on("request", request => { if (new URL(request.url()).pathname === "/api/preview") previewReads++; });
+        await prepared.locator("#prepareReportPreview").click();
+        await expect(prepared.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+        await page.bringToFront();
+    }
+    await row.locator(".request-card-open").first().click();
+    await expect(page.locator("#requestContent")).toContainText("physician");
+    const original = page.url();
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toBeVisible();
+    const summary = await page.locator("#activityListSummary").textContent();
+    await row.getByRole("button", { name: "Hide", exact: true }).press("Enter");
+    if (prepared) { await expect(prepared.locator("#hiddenPreviewNotice")).toBeVisible(); await expect(prepared.locator("#reportStage3")).toBeHidden(); }
+    await expect(row).toHaveCount(0);
+    await expect(page.locator("#activityListSummary")).toHaveText(summary);
+    await expect(page.getByRole("button", { name: "Undo hide" })).toBeFocused();
+    await page.getByRole("button", { name: "Hidden cards (1)" }).click();
+    const dialog = page.getByRole("dialog", { name: "Hidden cards", exact: true });
+    await expect(dialog).not.toContainText("physician");
+    await dialog.getByRole("button", { name: "Close" }).press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await page.locator("#wireSearch").click();
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchStatus")).toContainText("No visible matches", { timeout: 15000 });
+    await expect(page.locator(".wire-search-hit")).toHaveCount(0);
+    // A counted-call link belongs to its original tab. Revisit its original history entry.
+    await page.goForward();
+    await expect(page.locator("#requestContent")).toContainText("This card is hidden");
+    assert.equal(page.url(), original);
+    await expect(page.locator("#requestContent")).not.toContainText("physician");
+    await navigateMain(page, "reports");
+    await page.getByRole("combobox", { name: "Report draft", exact: true }).click();
+    await page.getByRole("option", { name: "Case review", exact: true }).click();
+    await expect(page.locator("#prepareReportPreview")).toBeDisabled();
+    await expect(page.locator("#prepareReportPreview")).toHaveAccessibleDescription(/hidden card/i);
+    await page.goto(new URL(`/reports?bundle=${bundles[0].bundleId}`, runtime.url).href);
+    await expect(page.locator("#savedReportReader")).toContainText("Saved file kept closed");
+    assert.deepEqual(await readFile(saved), bytes);
+    assert.deepEqual((await loadBoardState(store)).namedReportDrafts, membership);
+    await page.goto(new URL("/compare", runtime.url).href);
+    await page.locator("#viewComparisonCalls").click(); await page.locator("#comparisonRecordsB").click();
+    await expect(page.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(3);
+    await expect(page.locator("#comparisonExactRecordsB tbody tr").filter({ hasText: "Hidden card" })).toHaveCount(1);
+    await page.goto(new URL("/trends?section=charts&measure=rhythm", runtime.url).href);
+    const chart = page.locator(".trends-panel[data-family=rhythm]");
+    await chart.locator('[data-trend-mark][aria-label*="3 calls"]').first().press("Enter");
+    await chart.getByRole("button", { name: "View 3 calls" }).click();
+    await expect(page.locator(".trends-evidence-row")).toHaveCount(3);
+    await expect(page.locator(".trends-evidence-row").filter({ hasText: "Hidden card" })).toHaveCount(1);
+    await page.goto(new URL("/settings?section=analyze", runtime.url).href);
+    await selectActivityOption(page, "defaultCardHideDuration", "tab");
+    await navigateMain(page, "analyze");
+    const mechanic = page.locator("#activityList article").filter({ hasText: "The mechanic repaired" });
+    await mechanic.getByRole("button", { name: "Hide", exact: true }).click();
+    await page.reload(); await expect(mechanic).toHaveCount(0);
+    const other = await context.newPage(); await other.goto(runtime.url);
+    await expect(other.locator("#activityList")).toContainText("The mechanic repaired");
+    await expect(other.locator("#activityList")).not.toContainText("The physician treated");
+    await page.getByRole("button", { name: "Hidden cards (2)" }).click();
+    await dialog.getByRole("button", { name: "Restore all (2)" }).press("Enter");
+    await expect(dialog).toHaveCount(0); await expect(row).toBeVisible(); await expect(mechanic).toBeVisible();
+    if (prepared) { await expect(prepared.locator("#reportStage3")).toBeVisible(); assert.equal(previewReads, 1); }
+    assert.deepEqual(errors, []);
+});

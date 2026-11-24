@@ -356,7 +356,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const updated = value.namedReport && named?.revision !== value.namedReport.revision;
         const resume = !updated && value.resumePreset === focus;
         prepareLabel.data = resume ? "Resume preview" : updated ? "Prepare updated draft" : "Prepare preview";
-        const scopeIssue = !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
+        const scopeIssue = value.hiddenCardIssue || !resume && (value.namedReport ? !named?.scenarioIds.length || named.unavailable
             ? "This draft has no complete available selection. Choose another draft or update its interactions." : "" : value.explicitScope && value.scopeIssue);
         prepare.disabled ||= Boolean(scopeIssue);
         prepareHint.textContent = value.locked ? "Finish or check the current save before preparing another report."

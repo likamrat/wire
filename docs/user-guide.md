@@ -315,6 +315,18 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
+For a demo, choose **Hide** beside **Add to report** on a local Copilot card.
+The card disappears immediately. **Undo hide** brings it back; **Hidden cards**
+lets you restore one or all later without showing their prompts in the list.
+In **Settings → Analyze**, choose whether a new hide lasts until you restore
+it or only in this tab. Changing the default leaves existing hides alone.
+
+Trends and Compare still count the calls, but their detail lists don’t show
+the hidden interaction. Search leaves its excerpts out. A report draft keeps
+its selection; WIRE holds back a preview that could display hidden text.
+Saved files and copies you’ve already shared are unchanged. Hiding a card is
+a display preference in this browser, not deletion or redaction.
+
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
