@@ -349,13 +349,16 @@ from the source diagnostic. It uses fixed local rules, without AI or provider
 calls, and explains what the evidence establishes without suggesting fixes or
 next steps. A clear source explanation needs no additional interpretation.
 
-Drag the reader's left edge or use its minus/plus buttons to narrow or widen
-it. **Maximize interaction** fills the workspace below the toolbar;
-**Restore reader width** returns to your chosen width while keeping your place.
-**Close interaction** leaves the reader instead. When space is limited, WIRE
-uses a single-pane reader and hides the sizing controls.
-
 ![The View call details tip beside 1 tool call failed on an Analyze card, with the failed call and its returned HTTP 403 in the reader.](images/interaction.png)
+
+Drag the reader's left edge or use its minus/plus buttons to change its width.
+Choose **Maximize interaction** to read the calls across the workspace. Each
+call shows its operation and outcome together. A recorded failure reason stays
+with the call it explains; **Call details** opens that call's evidence.
+**Restore reader width** keeps your place. **Close interaction** returns to the
+previous view. On a narrow screen, the reader uses one pane without sizing controls.
+
+![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
 
 **Human prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing Human and
@@ -377,8 +380,7 @@ Copy controls copy the exact retained original, unmasked. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 
-Use **Add to report** on the card, or the same action after
-**Source** in its reader. Choose a draft to add the entire interaction without
+Use **Add to report** on the card or in its reader. Choose a draft to add the entire interaction without
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
 one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
 to prepare, save or delete that selection.
@@ -386,8 +388,8 @@ to prepare, save or delete that selection.
 ## Make a report
 
 In **Reports**, select a named draft or start a **New report**. Check its
-activity, dates, text and formats, then choose **Prepare preview**. Nothing
-has been written. Read the finding and its examples before choosing **Save
+activity, dates, text and formats, then choose **Prepare preview**. No report
+files have been saved. Read the finding and its examples before choosing **Save
 report**. Open an existing report by name in **Saved library**.
 
 [Create and read reports](reporting.md) covers scope, text masking, file
@@ -407,8 +409,9 @@ population and current-view report membership. Selected interactions and All
 collected activity report scopes remain separate. Availability notices identify
 content Search cannot include.
 
-Open a result to inspect its exact verified destination. Back restores the
-Search context while it remains authorized. Missing, changed or unreadable
+Open a result to inspect its exact verified destination. Back returns to the
+matching row while it remains available. If you start a new search while the
+reader is closing, WIRE keeps the new query. Missing, changed or unreadable
 content is not silently replaced with a nearby result. Search runs locally,
 without AI, providers, new collection or credit spending. Its query is not
 placed in URLs or saved as a persistent Search index.

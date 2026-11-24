@@ -107,13 +107,13 @@ rerunning its calls, then keeps local evidence for inspection and reports.
 <a href="docs/images/wire-evidence-flow-dark.png#gh-dark-mode-only">
   <picture>
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
-    <img src="docs/images/wire-evidence-flow-dark.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+    <img src="docs/images/wire-evidence-flow-dark.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends and locally saved reports." width="800">
   </picture>
 </a>
 <a href="docs/images/wire-evidence-flow.png#gh-light-mode-only">
   <picture>
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
-    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends and locally saved reports." width="800">
   </picture>
 </a>
 

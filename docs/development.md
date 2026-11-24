@@ -171,13 +171,13 @@ lets you independently approve supported local Copilot history. Before approval
 the Account menu is neutral; a verified profile comes from that instance's
 approved source, not a copied avatar or the branch name.
 
-If using the optional WIRE canvas, its **updated adapter** accepts
+If using the optional WIRE canvas, its adapter accepts
 `{"boardId":"workiq-evidence-board-v1","runtimePort":4100}` at open. Use the
 actual printed port and a distinct canvas instance; omitting the port selects
-main's default 4000. The installed shim points at one checkout's adapter, not
-its server. If its schema lacks `runtimePort`, use the browser URL or explicitly
-install the updated shim (`npm run install:canvas`) and reload extensions.
-Installing changes the personal adapter for future sessions; it does not start
+main's default 4000. If the canvas does not offer `runtimePort`, use the
+browser URL or run `npm run install:canvas` in this checkout and reload
+extensions. This points your personal canvas launcher at this checkout's
+adapter for future sessions. It does not start
 a writer or grant source access. A closed or replaced runtime requires a
 fresh canvas; resolve uncertain operations in the original instance, never
 replay them on another.
@@ -389,6 +389,7 @@ activity and disposable saved reports. Set `WIRE_DOC_OUTPUT` to an owned image
 directory and `WIRE_DOC_PROOF` to a separate private evidence directory, then run:
 
 ```text
+npm run build
 node --test tests/documentation-screenshots.mjs
 ```
 
@@ -408,6 +409,10 @@ store. It records source and fixture hashes, image hashes and inspected file
 formats in the private evidence directory. Inspect the captures before copying
 the applicable PNGs into `docs/images`; keep receipts and extra proof images out
 of source.
+
+Capture the maximized reader separately. In Analyze, open an invented interaction
+with a returned entry and a separate failed call. Choose **Maximize interaction**
+and keep both calls and the recorded reason in view for `interaction-maximized.png`.
 
 For first-use connection, run `tests/first-connection.browser.test.mjs` with
 `WIRE_FIRST_CONNECTION_PROOFS` set to an owned private directory. It exercises

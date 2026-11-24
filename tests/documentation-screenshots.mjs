@@ -378,6 +378,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await capture("trends-collapsed", { top: true });
 
     await page.locator('nav [data-nav=settings]').click();
+    await expect(page.locator("#settingsSearch")).toBeVisible();
     await navigateSettings(page, "display");
     await page.setViewportSize({ width: 1440, height: 760 });
     await capture("settings-display");

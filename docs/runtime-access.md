@@ -260,8 +260,11 @@ An unavailable source dependency is not an empty or GitHub-only all-source cohor
 
 ## Check an access change
 
-Use runtime-access/watch, collector-access, client-access, account-gate and
-owner-withdrawal suites for the affected boundary. Check backend admission and
-client clearance together, including late responses and a second open panel.
+Use the tests for the affected boundary: [runtime access](../tests/runtime-access.test.mjs)
+and its [watch](../tests/runtime-access-watch.test.mjs), [collector access](../tests/collector-access.test.mjs),
+[client access](../tests/access-client.browser.test.mjs) or the [account gate](../tests/account-gate.browser.test.mjs).
+For withdrawal, include the affected operation, such as a
+[pending write](../tests/mutation-withdrawal.browser.test.mjs). Check backend admission
+and client clearance together, including late responses and a second open panel.
 Use the enforced fixture when testing enforced access, not a substitute
 unbound descriptor.
