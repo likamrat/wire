@@ -142,6 +142,12 @@ test("tool and target labels stay with their values without overlapping or clipp
         const card = interaction(page, "multiple"), facts = card.locator(".card-identities");
         await expect(facts.getByRole("term")).toHaveText(["Tools", "Targets"]);
         await expect(facts.getByRole("definition")).toHaveCount(2);
+        const targets = await facts.locator("[data-service]").evaluateAll(nodes => nodes.map(node => {
+            const { left, top, bottom } = node.getBoundingClientRect();
+            return { left, top, bottom };
+        }));
+        assert.ok(targets.length >= 2 && targets.slice(1).every((r, i) =>
+            Math.abs(r.left - targets[0].left) <= 1 && r.top >= targets[i].bottom - 1), "Targets form one vertical list");
         await expect(card.getByRole("button", { name: "Add to report", exact: true })).toBeVisible();
         await expect(card.locator(".request-card-source")).toHaveCount(0);
         const measured = await facts.locator(".card-identity-field").evaluateAll(fields => fields.map(field => {

@@ -104,11 +104,7 @@ test("tool, returned issue and disclosure inks follow the evidence through each 
         await card.locator(".card-failure").click();
         await paint(page.locator("#requestContent .reader-call-summary .result-status.result-tone-failure, #requestContent .reader-call-summary .recorded-result.failure:not(.result-explained)").first(),"--tool-negative");
         const completed = page.locator("#requestContent .reader-call-summary .result-tone-success .card-outcome-face").first();
-        const { ink, face, backdrop, border } = await completed.evaluate(measureControlSurface);
-        assert.ok(contrast(ink,face) >= 4.5, `${palette}/${mode}: tool wording on its own fill`);
-        // A design floor for the visible layer, not a WCAG requirement for decorative fills.
-        assert.ok(contrast(face,backdrop) >= 1.2 && contrast(border,backdrop) >= 3,
-            `${palette}/${mode}: completed call blends into its reader (${face} on ${backdrop})`);
+        await paint(completed,"--tool-positive");
         await page.locator("#closeContextSidebar").click();
         await page.goto(app.runtime.url+"trends?section=overview");
         await paint(page.locator("#trendsOverviewPlot [data-trend-line]").first(),"--chart-mark-high","stroke");

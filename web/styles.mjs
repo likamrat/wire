@@ -716,7 +716,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .read-in-place[data-detail-active] .card-reading-body,.read-in-place[data-detail-active] .card-reading-actions {background:var(--accent-soft)}
 .card-reading-body {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(17em,.85fr);gap:clamp(16px,3vw,48px);align-items:start;padding:16px 18px 0}
 .card-reading-body:has(>.card-reading-details) {grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:clamp(16px,2vw,32px);padding-block-end:12px}
-.card-reading-details {display:grid;align-content:start;gap:8px;min-width:0;padding-inline-start:16px;border-inline-start:1px solid var(--surface-divider)}
+.card-reading-details {display:grid;align-content:start;gap:12px;min-width:0}
 .card-reading-details>.card-identities {padding:0;border:0}
 .card-reading-details>.card-reading-actions {padding:0;justify-content:flex-start}
 .card-reading-details .card-reading-actions>.card-panel-link {margin-inline-start:0}
@@ -784,10 +784,15 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-tool-item .card-tool-count {white-space:nowrap;font:inherit;color:var(--muted);font-variant-numeric:tabular-nums}
 .card-identities .service-cue {--cue-icon-size:16px;align-items:baseline}
 .card-identities .service-cue>.wire-icon {align-self:flex-start;margin-block-start:.15em}
-.card-reading-details .card-identity-field {grid-template-columns:5.25em minmax(0,1fr);gap:8px}
-.card-reading-details .card-identity-field+.card-identity-field {margin-top:8px}
-.card-reading-details .card-identities :is(dt,dd,.semantic-cue,.card-gap-link) {font:inherit}
-.card-reading-details .card-identities .service-cue>.wire-icon {margin-block-start:calc((1lh - var(--cue-icon-size)) / 2)}
+:is(.card-reading-details,.tool-call-heading) {--call-key-width:4.5rem;--call-key-gap:var(--space-sm)}
+:is(.card-reading-details,.reader-call-services) .card-identity-field {grid-template-columns:var(--call-key-width) minmax(0,1fr);gap:var(--call-key-gap)}
+.card-reading-details .card-identity-field+.card-identity-field {margin-top:6px}
+:is(.card-reading-details,.reader-call-services) .card-targets .card-identity-values {flex-flow:column nowrap;align-items:flex-start;gap:2px}
+:is(.card-reading-details,.reader-call-services) :is(dt,dd,.semantic-cue,.card-gap-link) {font:inherit}
+:is(.card-reading-details,.reader-call-services) .service-cue {--cue-icon-size:1rem;gap:6px}
+:is(.card-reading-details,.reader-call-services) .service-cue>span {color:var(--ink)}
+:is(.card-reading-details,.reader-call-services) .service-cue>.wire-icon {margin-block-start:calc((1lh - var(--cue-icon-size)) / 2)}
+.card-reading-details .card-gap-link:is(:hover,:focus-visible) .service-cue>span {text-decoration:underline;text-underline-offset:3px}
 .card-reading-details .card-gap-link {min-height:2em}
 @media(pointer:coarse) {.card-reading-details .card-gap-link {min-height:44px}}
 .card-reading-actions {display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;padding:2px 18px 5px;color:var(--muted);font:var(--type-small)/1.5 var(--font)}
@@ -835,7 +840,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 @container(max-width:57rem) {.card-reading-body {grid-template-columns:minmax(0,1fr);gap:8px}.card-reading-body>.card-identities {padding:6px 0 0;border-inline-start:0;border-top:1px solid var(--rule)}}
 @container(max-width:57rem) {
  .card-reading-body:has(>.card-reading-details) {grid-template-columns:minmax(0,1fr);gap:12px}
- .card-reading-details {border-inline-start:0;border-block-start:1px solid var(--surface-divider);padding:12px 0 0}
+ .card-reading-details {border-block-start:1px solid var(--surface-divider);padding-block-start:12px}
 }
 @container(max-width:26rem) {.card-reading-body,.card-reading-actions {padding-inline:12px}.card-identity-field {grid-template-columns:minmax(0,1fr);gap:0}}
 @container(max-width:18rem) {.card-reading-details .card-identity-field {grid-template-columns:minmax(0,1fr);gap:2px}}

@@ -6121,9 +6121,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 operationRole: ux.operations.toolRole(row.tool), description: categories.operation(row.tool)?.description, rows: [] });
             operations.get(row.tool).rows.push(row);
         }
-        const field = (name, values) => {
+        const field = (name, values, className = "") => {
             if (!values.length) return;
             const line = el("div", "card-identity-field"), items = el("dd", "card-identity-values");
+            if (className) line.classList.add(className);
             for (const value of values) items.append(value);
             line.append(el("dt", "", name), items); group.append(line);
         };
@@ -6170,7 +6171,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             extra.append(el("summary", "", `${more} more ${more === 1 ? "target" : "targets"}`), remainder);
             values.push(extra);
         }
-        field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values);
+        field(layer === "reported-api" ? "Returned target" : targets.size > 1 ? "Targets" : "Target", values, "card-targets");
         field(operations.size > 1 ? "Operations" : "Operation", cues(operations));
         field("Service", cues(gaps));
         if (!Array.isArray(rows)) field("Evidence", [el("span", "muted", "Not available")]);
@@ -6688,15 +6689,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return node;
         }
         function callHeading(name, result, { tool = false, duration, durationLabel = "Call duration" } = {}) {
-            const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
-            if (tool) identity.append(el("span", "reader-tool-name", name));
+            const heading = el("header", tool ? "call-heading tool-call-heading" : "call-heading"), identity = el("h3", "reader-call-identity");
+            const toolMeta = tool ? el("span", "reader-tool-meta") : null;
+            if (tool) { toolMeta.append(el("span", "reader-tool-name", name)); identity.append(toolMeta); }
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
+            if (tool) summary.append(el("span", "reader-outcome-label", "Outcome"));
             summary.append(result);
             if (duration !== undefined) {
                 const elapsed = el("span", "reader-call-duration"), value = durationValue(duration, true);
                 elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
-                if (tool) identity.append(elapsed); else secondary.append(elapsed);
+                if (tool) toolMeta.append(elapsed); else secondary.append(elapsed);
             }
             heading.append(identity, summary, secondary);
             return heading;

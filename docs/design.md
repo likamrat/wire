@@ -97,8 +97,12 @@ repeated source labels. Name the app when someone is choosing which history
 WIRE can read. Keep provenance in saved reports and name a source on the card when
 it distinguishes activity. Keep date and availability quieter. Group tool
 names separately from requested targets, operation and missing attribution. Keep
-the glyph beside its label. Separate the identity key from the prompt with a
-rule. In the Tools summary, show exact names as plain text without icons,
+the glyph beside its label. On Analyze, use a gutter between the prompt and
+the details; when they stack, use a horizontal rule above the details. Do not run
+a divider beside the report actions. In the card and call reader, align field
+labels with their first value and list targets vertically, one icon and name per
+line. In the reader the outcome belongs to the call, not to its targets.
+In the Tools summary, show exact names as plain text without icons,
 badges or bullets. These are list items, not filters or reader links. Keep a
 repeat count inside its tool’s label, as in `workiq-retrieve (2 calls)`;
 a single call reads `workiq-fetch`. Wrap labels as units where they fit and
