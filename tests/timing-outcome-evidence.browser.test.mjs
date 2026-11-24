@@ -119,9 +119,17 @@ test("retained timeout cause stays with its tool across reader, new files, saved
             assert.match(text, /allowed waiting interval/, format);
         }
     }
-    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    const [opened] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/report/open")
+        && r.request().postDataJSON().view === true), page.getByRole("button", { name: "Open saved report", exact: true }).click()]);
+    assert.ok(opened.ok());
+    assert.equal((await opened.json()).artifact.bundleId, newBundle.bundleId);
+    // Verified Open adds the full-document choice when the brief is ready.
+    const reader = page.locator("#savedReportReader");
+    await expect(reader.getByRole("article", { name: "Report brief" })).toBeVisible();
     await selectActivityOption(page, "savedReaderFormat", "html");
-    await expect(page.frameLocator("#savedReportReader .saved-file-preview:visible iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
+    const savedCall = reader.frameLocator(".saved-file-preview:visible iframe").locator(`[id="${saved.resultFacts.calls[0].ref}"]`);
+    await expect(savedCall.getByRole("heading")).toContainText("workiq-retrieve");
+    await expect(savedCall).toContainText("Request timed out (MCP -32001)");
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     const paired = await historicalComparison(context, oldBundle.bundleId, newBundle.bundleId,
         { formats: ["html", "markdown", "json", "pdf"] });
