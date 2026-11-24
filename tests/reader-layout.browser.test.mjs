@@ -516,7 +516,7 @@ test("missing prompt and action facts stay explicit, while contradictory complet
     // No-action groups have no matching Analyze card; the supported exact link still opens them.
     await page.goto(runtime.url + "#request?request=" + encodeURIComponent(missing.scenarioId));
     const prompt = page.locator('[data-reader-section="prompt"]');
-    await expect(prompt).toContainText("Author unverified");
+    await expect(prompt).toContainText("Sender unclear");
     await expect(prompt).toContainText("Origin details could not be reconciled");
     await expect(prompt).toContainText("Prompt text unavailable");
     await expect(page.locator('[data-reader-section="activity"]')).toContainText("No individual action details were retained");

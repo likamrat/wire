@@ -105,11 +105,11 @@ percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
 
 **Prompt authors** counts each originating interaction once across all matching
-pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
-counts add up to the matching interaction total. Calls and follow-ups do not add
-prompts. Select **Author unverified** in the chart to inspect those interactions.
-Unverified authors stay
-in the denominator; missing prompt text alone does not make its author unknown.
+pages. **Human prompts** came from a person; **Agent prompts** came from an
+agent. **Sender unclear** means WIRE can't tell which one sent the prompt from
+the saved record. Select that row to see the reason on each card. These prompts
+still count. Calls and follow-ups do not add prompts, and missing prompt text
+alone does not make the sender unclear.
 In the reader, **Source** distinguishes a direct link to the prompt from
 grouping by message order. Seeing a skill or system message before a call
 doesn't tell you who asked for the work.
@@ -256,7 +256,7 @@ totals, including series hidden in the chart.
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
-| Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
+| Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Sender unclear. Prompts with an unclear sender still count. |
 | Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; a short rule along the date axis marks partial weeks. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
@@ -324,7 +324,7 @@ Select the outcome below the prompt preview to open
 the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
 In the reader, choose **Prompt** to read and copy the retained original.
 **Human prompt**, **Agent prompt** or
-**Author unverified** describes the prompt’s origin, not its app. A label such
+**Sender unclear** describes the prompt’s origin, not its app. A label such
 as **1 tool call failed** opens the failed call; it does not mean the whole
 request failed. **4 tool calls completed** opens those four calls. If filters
 exclude other calls, they stay out of that list. A completed call can still
@@ -360,11 +360,10 @@ previous view. On a narrow screen, the reader uses one pane without sizing contr
 
 ![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
 
-**Human prompt**, **Agent prompt** and **Author unverified** describe supported
-origin evidence, not who executed or authorized every call. Choosing Human and
-Agent is not the same as All, which also includes unverified authors.
-An unverified card shows the saved reason separately from the call result. In
-**Analyze > Guide > Recorded prompt authors**, **Why authors are unverified**
+The sender label tells you who asked, not who carried out each call. Choosing
+Human and Agent excludes prompts whose sender is unclear.
+Those cards show the saved reason separately from the call result. In
+**Analyze > Guide > Recorded prompt authors**, **Why the sender is unclear**
 counts those reasons across all pages of the current view and shows the saved
 rule version when available. In the reader, **Source details** shows the selected
 prompt's saved rule version and whether its calls link directly to that prompt.

@@ -3,7 +3,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models"];
     const families = {
         authors: { label: "Prompt authors", modes: [["share", "Interactions %"], ["count", "Interactions"]],
-            help: "Each originating interaction counts once per day with a matching call. Unverified authors remain in the denominator. This is not a count of messages sent that day or who executed each call." },
+            help: "Each originating interaction counts once per day with a matching call, even if its sender is unclear. The sender is who asked, not who ran the tool." },
         tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
             help: "Reach counts an interaction once per tool. Tools overlap. Call share uses all matching calls; a multi-target call is one call. Hiding a series never changes either denominator." },
         services: { label: "Services", modes: [["share", "Calls %"], ["count", "Calls"]],
@@ -629,7 +629,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
     function openFilters() {
         if (!beginChoices("Filter activity",filtersButton)) return;
         filtersButton.setAttribute("aria-expanded", "true");
-        const author = select("Prompt authors", [["", "All, including unverified"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
+        const author = select("Prompt authors", [["", "All prompts"], ...data.definitions.authors.map(row => [row.id, row.label])], () => {});
         const tool = select("Tool", [["", "All tools"], ...data.definitions.tools.map(row => [row.id, row.label])], () => {});
         const service = select("Service", [["", "All services"], ...data.definitions.services.map(row => [row.id, row.label]), ["Discovery", "Discovery / preparation"], ["missing", "Missing service detail"]], () => {});
         author.field.value = filters.author ?? ""; tool.field.value = filters.tool ?? ""; service.field.value = filters.service ?? "";

@@ -273,14 +273,14 @@ for (const frontend of ["bundled", "react"]) test(`unverified author reasons bel
     const revision = (await (await snapshot).json()).revision;
     const list = page.locator("#activityList"), reason = "Copilot recorded a sender value that WIRE does not recognize.";
     await expect(list.getByRole("article").filter({ hasText: "Agent prompt" })).not.toContainText(reason);
-    const why = list.getByRole("article").filter({ hasText: "Author unverified" }).getByText(reason, { exact: true });
+    const why = list.getByRole("article").filter({ hasText: "Sender unclear" }).getByText(reason, { exact: true });
     await expect(why).toBeVisible();
     const cardText = await why.evaluateHandle(node => node.firstChild);
     const prior = requests.filter(path => path === "/api/snapshot").length;
     await page.locator("#openChartReference").click();
     const topic = page.getByRole("button", { name: "Recorded prompt authors", exact: true });
     await topic.click();
-    const summary = page.getByRole("region", { name: "Why authors are unverified" });
+    const summary = page.getByRole("region", { name: "Why the sender is unclear" });
     await expect(summary).toContainText(`View revision ${revision}`);
     await expect(summary).toContainText("1 interaction (saved rule v12)");
     const held = await summary.getByText(reason, { exact: true }).evaluateHandle(node => node.firstChild);

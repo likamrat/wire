@@ -281,7 +281,7 @@ test("a reviewed v10 prompt correction preserves both explicitly linked completi
         } finally { await browser.close(); }
     }
     await app.restart();
-    await readPair("Author unverified");
+    await readPair("Sender unclear");
     await app.stop();
     const inspection = await inspectPromptOriginRepair({ dataDir: app.context.dataDir, origins });
     assert.equal(inspection.authorized, false);

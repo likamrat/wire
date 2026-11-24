@@ -490,7 +490,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         const names = await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label")));
         await screenshot(page, `measure-${id}-columns`);
         if (id === "authors") {
-            for (const [actor, text, role] of [["user","Human prompts","author-user"],["agent","Agent prompts","author-agent"],["unknown","Author unverified","author-unknown"]]) {
+            for (const [actor, text, role] of [["user","Human prompts","author-user"],["agent","Agent prompts","author-agent"],["unknown","Sender unclear","author-unknown"]]) {
                 const legend = panel.locator(".trends-series").filter({has:page.getByRole("checkbox",{name:`Show ${text}`,exact:true})});
                 const glyph = legend.locator(".trends-author-icon");
                 await expect(glyph).toHaveAttribute("data-icon-role",role);

@@ -53,7 +53,7 @@ test("Human prompt uses a distinctive shared accent on real light/dark list and 
             assert.ok(own && agent && unknown);
             assert.equal(own.label, "Human prompt");
             assert.equal(agent.label, "Agent prompt");
-            assert.equal(unknown.label, "Author unverified");
+            assert.equal(unknown.label, "Sender unclear");
             for (const cue of cues) {
                 assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${state}: text contrast`);
                 assert.ok(contrast(cue.icon, cue.background) >= 3, `${theme}/${state}: author icon contrast`);

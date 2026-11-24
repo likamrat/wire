@@ -31,8 +31,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const automatic = availability ? availability.state === "automatic" : empty && author?.basis === "autopilot";
         return {
             hasText: false, automatic,
-            label: automatic ? display?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Author unverified"} (automatic continuation)`
-                : author?.actor === "user" ? "Human activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
+            label: automatic ? display?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Sender unclear"} (automatic continuation)`
+                : author?.actor === "user" ? "Human activity" : author?.actor === "agent" ? "Agent activity" : authorship?.unknownLabel ?? "Sender unclear",
             notice: automatic ? "Work continued without a new message." : availability?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable"),
         };
     }
@@ -122,8 +122,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         copyLabel ??= "Copy " + noun;
         let text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
         let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null, releasePreview = null;
-        const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
-            + " Author unverified describes message provenance, not an account sign-in failure." });
+        const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.unverifiedReason(source) });
         const authorGap = subject === "request" && authorship?.read(source).actor === "unknown" ? authorship.unverifiedReason(source) : null;
         const root = document.createElement("div");
         root.className = "full-text" + (complete ? " full-text-complete" : "") + (complete && contentFirst ? " full-text-content-first" : "");
@@ -142,7 +141,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text"
             : complete && text === null ? describePrompt(source).label : promptLabel);
         if (visibility && subject === "request" && authorship?.read(source).actor === "unknown"
-            && !authorship?.display?.(source).automatic) heading.textContent = "Author unverified";
+            && !authorship?.display?.(source).automatic) heading.textContent = authorship.unknownLabel;
         if (visibility && subject === "response" && actionsHost) heading.classList.add("visually-hidden");
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
@@ -159,7 +158,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         if (complete && subject === "request" && (authorship?.read(source).actor ?? "unknown") === "unknown") {
             const author = authorship && !contentFirst ? authorNote(authorGap) : document.createElement("span");
             author.classList.add("reader-state");
-            if (contentFirst || !authorship) author.textContent = authorship ? authorGap : "Author unverified";
+            if (contentFirst || !authorship) author.textContent = authorship ? authorGap : "Sender unclear";
             (contentFirst ? qualifiers : header).append(author);
         }
         const reading = document.createElement("p");

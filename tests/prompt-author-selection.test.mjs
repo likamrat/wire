@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { promptAuthorship } from "../lib/prompt-authorship.mjs";
+import { createPromptAuthorship, promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { buildExportCatalog, selectExportSnapshot } from "../lib/export-selection.mjs";
@@ -20,6 +20,11 @@ test("known Both stays distinct from All including unverified", () => {
     assert.equal(promptAuthorship.selectionLabel(), "All prompts (including unverified)");
     assert.equal(promptAuthorship.filterValue(["unknown", "agent", "user"]), undefined);
     assert.equal(promptAuthorship.filterValue(["agent", "user"]), "user,agent");
+    const screen = createPromptAuthorship({ screen: true });
+    assert.equal(screen.selectionLabel(["unknown"]), "Sender unclear");
+    assert.equal(screen.selectionLabel(), "All prompts");
+    assert.deepEqual(screen.read({}), promptAuthorship.read({}), "Screen wording must not reclassify a record.");
+    assert.equal(promptAuthorship.selectionLabel(["unknown"]), "Author unverified", "Saved-report captions remain compatible.");
 });
 
 test("author filtering keeps complete human-origin calls, not the actor executing each call", () => {

@@ -519,7 +519,14 @@ the earlier first event's digest to this store, source mapping, complete
 journal and exact selected region. An unsealed flag, a nearby timestamp or
 the first event itself cannot remove that guard. Prepare and Apply verify
 the same seal and original; neither edits the collector's first-event pointer.
-They may be human **or** agent prompts. `unresolved` explains why other
+For **new collection**, the reader also checks the startup bytes it already
+reads. If a verified first event is not there, consecutive, already-approved
+prefix pages can establish it across restart. Only the offset and byte anchor
+of a clean prefix carry forward. A gap, malformed or duplicate fields, a
+replay entry or a changed source cannot turn the first *visible* prompt into
+the first prompt of the chat. No extra file scan is started and previously
+retained authors are not bulk-updated.
+Reviewed corrections may identify either a human or an agent. `unresolved` explains why other
 candidates stay unverified. Listing, reviewing and installing a new reader
 do not write these changes. For an approved correction, use the returned
 targets, source and state guard in the existing offline Prepare/Apply plan.

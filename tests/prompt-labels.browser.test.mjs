@@ -96,10 +96,10 @@ test("legacy provenance and forwarded wording cannot supply a verified author on
     await page.goto("https://wire.invalid/"); await ready(page);
     for (const source of sources) {
         const card = page.locator(`article[data-view-key="request:${source.scenarioId}"]`);
-        await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
+        await expect(card.locator(".request-card-author")).toHaveText("Sender unclear");
         await card.locator(".request-card-open").press("Enter");
         const section = page.locator('[data-reader-section="prompt"]');
-        await expect(section.getByRole("heading")).toContainText("Author unverified");
+        await expect(section.getByRole("heading")).toContainText("Sender unclear");
         await expect(section).toContainText("This older record has no sender details");
         if (source.userPrompt.text === null) {
             await expect(section).toContainText("Prompt text unavailable");

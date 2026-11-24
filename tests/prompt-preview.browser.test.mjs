@@ -132,7 +132,7 @@ test("long prompt previews preserve exact text, author, Copy and accessible repe
             await open(page, id);
             measurements.push({ theme, actor, ...await collapsed(page) });
             await expect(prompt(page).locator(".reader-section-title")).toHaveText(
-                { user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+                { user: "Human prompt", agent: "Agent prompt", unknown: "Sender unclear" }[actor]);
             await expect(prompt(page).locator(".reader-interaction-time")).toHaveText(
                 await cardTime(page, id).textContent());
             await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();

@@ -28,7 +28,7 @@ async function setup(t, locale = "en-US", includeAuthors = false) {
         const make = source => (0, eval)(`(${source})`);
         window.chosen = [];
         window.view = make(percentage)({ dimensional: make(dimensional)(), categories: make(categories)(),
-            results: make(results)(), ux: make(ux)(icons), icons: serviceIcons, authorship: make(authorship)(),
+            results: make(results)(), ux: make(ux)(icons), icons: serviceIcons, authorship: make(authorship)({ screen: true }),
             createLink: (kind, row) => {
                 const link = document.createElement("a");
                 link.href = `#analyze?test=${encodeURIComponent(row.id)}`;
@@ -70,7 +70,7 @@ test("prompt shares separate native conversations and erase exact authorship fac
     await expect(card.locator(".percentage-exact .percentage-empty")).toHaveCount(1);
     await render([record]);
     await expect(card.locator(".percentage-denominator")).toBeVisible();
-    await expect(card.locator(".percentage-table tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
+    await expect(card.locator(".percentage-table tbody th")).toHaveText(["Human prompts", "Agent prompts", "Sender unclear"]);
     await page.evaluate(() => window.view.withdrawAccess());
     await expect(card.locator(".percentage-legend,.percentage-table,[data-count]")).toHaveCount(0);
     assert.equal(await card.getAttribute("data-total"), null);

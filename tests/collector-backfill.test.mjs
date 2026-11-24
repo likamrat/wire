@@ -130,6 +130,32 @@ test("one prefix context resumes across restart with charged rereads and no main
     assert.equal(f.source.cursor.droppedBytes, f.prefix.length);
 });
 
+test("a first-prompt proof spans clean prefix pages only, with the same byte budget and exact cursor anchor", async t => {
+    const f = await fixture(t), startup = event("startup", "session.start", { version: 1, sessionId: f.source.sessionId });
+    const padding = Array.from({ length: 4 }, (_, i) => event(`setup-${i}`, "session.info", { message: "x".repeat(40000) }));
+    const kickoff = event(randomUUID()), later = event(randomUUID());
+    await writeFile(f.file, jsonl([startup, ...padding, kickoff, later]));
+    const budget = 130000;
+    const ordinary = await readTail(f.file, f.source.sessionId, undefined, budget);
+    const page = await readTail(f.file, f.source.sessionId, undefined, budget, { firstPromptSource: {} });
+    assert.deepEqual(page.cursor, ordinary.cursor);
+    assert.equal(page.bytesRead, ordinary.bytesRead, "First-prompt checking must not open another source window.");
+    assert.ok(page.cursor.offset > 65536 && page.cursor.partialBytes > 0);
+    assert.deepEqual(page.firstPromptBoundary, { id: null, prefix: { offset: page.cursor.offset, anchor: page.cursor.anchor } });
+    const retained = JSON.parse(JSON.stringify({ cursor: page.cursor, firstPromptPrefix: page.firstPromptBoundary.prefix }));
+    const resume = input => readTail(f.file, f.source.sessionId, page.cursor, budget, { firstPromptSource: input });
+    assert.equal((await resume(retained)).firstPromptBoundary.id, kickoff.id);
+    assert.equal((await resume({ ...retained, firstPromptPrefix: { ...retained.firstPromptPrefix, anchor: "0".repeat(64) } })).firstPromptBoundary.id, null);
+    assert.equal((await resume({ ...retained, cursor: { ...retained.cursor, identity: "other-generation" } })).firstPromptBoundary.id, null);
+    for (const broken of ["not-json", JSON.stringify(kickoff).replace('{"id":', '{"\\u0069d":"hidden-original","id":'),
+        JSON.stringify({ ...kickoff, agentId: "nested-agent" }), JSON.stringify({ ...kickoff, checkpoint: true })]) {
+        await writeFile(f.file, jsonl([startup]) + broken + "\n" + jsonl([later]));
+        const refused = await readTail(f.file, f.source.sessionId, undefined, budget, { firstPromptSource: {} });
+        assert.equal(refused.firstPromptBoundary.id, null, "An unsafe leading record must not promote a later record to first.");
+        assert.equal(refused.firstPromptBoundary.prefix, undefined);
+    }
+});
+
 test("same-size fence and cursor-anchor rewrites invalidate without advancing progress", async t => {
     for (const which of ["fence", "cursor"]) {
         const f = await first(t, { large: true }), snapshot = structuredClone(f.checkpoint);

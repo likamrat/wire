@@ -432,7 +432,7 @@ test("one author/service vocabulary and Asked Copilot color survive cards, reade
     if (phase !== "before") {
         await expect(card("automatic").locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
         await expect(card("automatic")).toContainText("Work continued without a new message.");
-        await expect(card("unknown").locator(".request-card-author")).toHaveText("Author unverified (automatic continuation)");
+        await expect(card("unknown").locator(".request-card-author")).toHaveText("Sender unclear (automatic continuation)");
         await expect(card("unknown").locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
         await expect(card("copilot")).not.toContainText("Not shown");
         await expect(card("copilot").locator(".service-availability")).toHaveCount(0);
