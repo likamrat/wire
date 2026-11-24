@@ -234,7 +234,11 @@ full period, not only the drawn window. **Columns / Lines** retains exact
 selection and denominators. In All charts, selection updates the selected-day
 and subject row. Maximize uses the same chart and controls, adding the
 selected-date breakdown and View numbers. Back to all charts restores the activating
-control and reading position. Collapse/expand and Collapse all/Restore all preserve each chart's
+control and reading position. **Collapse all / Expand all** affects only the
+current stack: selected charts in the index, or all eight in All charts. Expand
+all opens every chart in that stack, including individually collapsed rows.
+The pair reader uses **Collapse both charts / Expand both charts** for two
+aligned plots, and a single disclosure for one graph. These controls preserve
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.
 The lower selected-date values retain a local date/measure/population caption,
@@ -266,7 +270,6 @@ on the collapsed row expands it; clicking an expanded header's non-control
 area collapses it. Measure, sizing, series and evidence controls keep their own
 actions. The named expand/collapse button provides the same action by keyboard
 and exposes its expanded state and content relationship.
-Restore all also works after the widgets have been collapsed individually.
 
 Keep the 7/14/30/custom date family. Bare entry (or a measure-only link) first
 checks the current seven days. Only when that week is empty can it open seven

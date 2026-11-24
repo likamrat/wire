@@ -86,7 +86,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     let data = null, timingData = null, family = null, period = "7", filters = {}, range = null, offset = 0;
     let usageChoice = { question:"all", threshold:30000 };
     let pending = 0, requestedKey = "", acceptedKey = "", enabled = false, bound = null, lastRevision = null;
-    let overviewScroll = 0, dialogOrigin = null, inspecting = null, allCollapsed = null, inspectionKey = "";
+    let overviewScroll = 0, dialogOrigin = null, inspecting = null, inspectionKey = "";
     let evidenceReturn = null, pendingTimer = 0;
     let activeMeasure = "rhythm", allCharts = false, extraCharts = new Set(), entryKey = null, acceptedEntry = null, readingRevision = null, readingZone = null, failedRead = null;
     let routeScopeKey, section = "overview";
@@ -142,20 +142,20 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     guideTopics.forEach(([name],i)=>guideIndex.append(button(name,()=>readTopic(i,true))));
     readTopic(0);
+    function stackCards() {
+        if (section !== "charts" || family || pairActive) return [];
+        return (allCharts ? order : [activeMeasure, ...extraCharts]).map(id => cards.get(id));
+    }
     const collapseAll = button("Collapse all", () => {
         if (!current()) return;
+        const stack = stackCards();
+        if (stack.length < 2) return;
         hideHover();
-        if (allCollapsed) {
-            for (const [id, collapsed] of allCollapsed) cards.get(id).collapsed = collapsed;
-            allCollapsed = null;
-        } else if ([...cards.values()].every(card => card.collapsed)) {
-            for (const card of cards.values()) card.collapsed = false;
-        } else {
-            allCollapsed = new Map([...cards].map(([id, card]) => [id, card.collapsed]));
-            for (const card of cards.values()) card.collapsed = true;
-        }
+        const key = allCharts ? "collapsed" : "indexCollapsed", collapse = stack.some(card => !card[key]);
+        for (const card of stack) card[key] = collapse;
         paint();
     });
+    collapseAll.hidden = true;
     const filterActions = el("div", "trends-filter-actions");
     filterActions.append(filtersButton); toolbarTools.append(collapseAll, filterActions); toolbar.append(toolbarContext,toolbarTools);
     const restrictionText = el("span"), clearFilters = button("Clear filters", () => void read({ range, period, filters: {}, offset, remember: "filters" }));
@@ -419,10 +419,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             if (!current() || !extraCharts.has(id)) return;
             extraCharts.delete(id); card.indexCollapsed=false; paint(); chartsButton.focus();
         });
-        const fold = button("Collapse chart", () => {
-            if (!current()) return;
-            card.indexCollapsed=!card.indexCollapsed;paintStable(card);fold.focus({preventScroll:true});
-        });
+        const fold = button("Collapse chart", () => toggleCollapsed(card));
         fold.setAttribute("aria-controls",content.id);
         actions.append(comparison, numbers); titleGroup.append(fold,remove);
         const reportQuestion = id === "usage" ? directionButton("Preview this report", () => {
@@ -461,7 +458,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             // Painting can replace the clicked glyph before this event reaches the row.
             if (event.defaultPrevented || event.composedPath().some(node => node instanceof Element
                 && node.matches("button,a,input,select,textarea,summary,[role=button]"))) return;
-            if (allCharts && (card.collapsed || heading.contains(event.target))) toggleCollapsed(card);
+            if ((allCharts || extraCharts.size) && (panel.dataset.collapsed === "true" || heading.contains(event.target))) toggleCollapsed(card);
         });
         card.chart = mountChart({ root: plot, tooltip, color, authorIcon, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
             onWindow(first, last, count) {
@@ -647,7 +644,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     function maximize(id) {
         if (!Object.hasOwn(families, id) || !current()) return;
         if (!family) overviewScroll = scrollY;
-        hideHover(); family = id; cards.get(id).collapsed = false; allCollapsed = null; inspectionKey = "";
+        hideHover(); family = id; cards.get(id).collapsed = false; inspectionKey = "";
         paint(); window.scrollTo({ top: 0, behavior: "instant" }); cards.get(id).title.focus({ preventScroll: true });
         rememberScope("measure");
     }
@@ -658,10 +655,11 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function toggleCollapsed(card) {
         if (!current()) return;
-        hideHover(); allCollapsed = null;
+        hideHover();
         if (family === card.id) restore();
-        card.collapsed = !card.collapsed;
-        paintStable(card); card.collapse.focus({ preventScroll: true });
+        const key = allCharts ? "collapsed" : "indexCollapsed";
+        card[key] = !card[key];
+        paintStable(card); (allCharts ? card.collapse : card.fold).focus({ preventScroll: true });
     }
     function openDialog(name) {
         if (!current()) return false;
@@ -756,7 +754,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.indexScope.hidden = allCharts;
         card.actions.hidden = allCharts;
         card.types.hidden = allCharts || unavailable;
-        card.periodLabel.hidden = !allCharts;
+        card.periodLabel.hidden = !allCharts && !collapsed;
         const unit = mode === "count" ? "count" : "share";
         for (const control of card.indexModes.querySelectorAll("[data-unit]")) control.setAttribute("aria-pressed", String(control.dataset.unit === unit));
         if (card.basis) { card.basis.host.hidden = mode === "count"; card.basis.field.value = mode === "reach" ? "reach" : "share"; }
@@ -846,7 +844,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
         if (Object.keys(filters).length) captions.push(restrictionText.textContent);
         card.indexScope.textContent = captions.join(" · ");
-        card.indexScope.hidden = allCharts || !captions.length;
+        card.indexScope.hidden = allCharts || collapsed || !captions.length;
         paintPoint(card);
         if (section === "charts" && !pairActive && !panel.hidden && !collapsed && !unavailable) {
             const encoding = JSON.stringify([mode, card.type, [...hidden].sort(), allCharts, family === id]);
@@ -1069,15 +1067,23 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             node.title=node.disabled?"One of these measures is unavailable in the retained activity.":"";
         });
         overview.hidden = false; overview.classList.toggle("trends-maximized", Boolean(family));
-        detailBar.hidden = !allCharts || !family; inspection.hidden = !allCharts || !family; collapseAll.hidden = !allCharts || Boolean(family);
+        detailBar.hidden = !allCharts || !family; inspection.hidden = !allCharts || !family;
         exactButton.hidden = !allCharts || !family;
         periodButton.hidden = false; homeBack.hidden = !getContext().entry;
-        if (section !== "charts") collapseAll.hidden = true;
+        const disclosed = stackCards();
+        collapseAll.hidden = disclosed.length < 2;
+        if (!collapseAll.hidden) {
+            const key = allCharts ? "collapsed" : "indexCollapsed";
+            const closed = disclosed.every(card => card[key]);
+            collapseAll.textContent = closed ? "Expand all" : "Collapse all";
+            if (closed || disclosed.every(card => !card[key])) collapseAll.setAttribute("aria-expanded",String(!closed));
+            else collapseAll.removeAttribute("aria-expanded");
+            collapseAll.setAttribute("aria-controls",disclosed.map(card => card.content.id).join(" "));
+        }
         for (const control of index.children) {
             const active = !allCharts && activeMeasure === control.dataset.measure;
             if (active) control.setAttribute("aria-current", "page"); else control.removeAttribute("aria-current");
         }
-        collapseAll.textContent = allCollapsed || [...cards.values()].every(card => card.collapsed) ? "Restore all" : "Collapse all";
         if (family) chooser.field.value = family;
         datePicker.sync();
         const dateRange = formatRange();
@@ -1142,7 +1148,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         landingChart.withdrawAccess(); landingSource = null; landing.hidden = true; guide.hidden = true;
         pairActive=false;pairOrigin=null;pair.clear();landingExtra.hidden=true;chartsButton.hidden=selectedCharts.hidden=true;
         for (const node of [landingScope, landingDetail, landingRecover, landingWindow]) scrub(node);
-        range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
+        range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); collapseAll.hidden = true; inspecting = null;
         activeMeasure = "rhythm"; extraCharts.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
         datePicker.showRange(""); filtersButton.removeAttribute("title"); periodButton.hidden = true;
         ux.paintFilterEntry(filtersButton, 0);
@@ -1437,6 +1443,7 @@ export const trendsStyles = `
 #trendsView :is(.trends-choice,.trends-measure):enabled:hover{background:var(--choice-hover,var(--hover))}
 #trendsView :is(.trends-choice,.trends-measure):enabled:active{background:var(--accent-pressed)}
 #trendsView[data-layout=index] .trends-heading{display:flex;align-items:start}
+#trendsView[data-layout=index] .trends-heading:has(.trends-title-group button[aria-expanded]:not([hidden])){cursor:pointer}
 #trendsView[data-layout=index] .trends-identity{flex:1 1 11rem}
 #trendsView[data-layout=index] .trends-index-modes{min-width:0;max-width:100%}
 @container trend-card (max-width:34rem){

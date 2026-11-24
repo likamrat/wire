@@ -46,7 +46,9 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
     let visible = false, sourceKey = "", drawnKey = "", scopeNotice = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
-        if (current()) { collapsed = !collapsed; paint(); }
+        if (!current()) return;
+        if (alignedCharts()) folded.fill(!folded.every(Boolean)); else collapsed = !collapsed;
+        paint();
     });
     title.tabIndex = -1;
     const header = el("div", "trends-landing-head"), body = el("div", "trend-pair-body"), controls = el("div", "trend-pair-picks");
@@ -83,6 +85,8 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     });
     inspector.append(when,...readings.map(r=>r.block));
     const association = el("details"), result = el("p"), exact = el("details"), tableRegion = el("div", "trends-exact");
+    plots.id = "trendsPairPlots"; inspector.id = "trendsPairReadings"; association.id = "trendsPairAssociation";
+    fold.setAttribute("aria-controls",`${plots.id} ${inspector.id} ${association.id}`);
     association.append(el("summary", "", "Do these measures move together?"), result);
     tableRegion.tabIndex = 0; tableRegion.setAttribute("role","region"); tableRegion.setAttribute("aria-label","Daily values for compared measures");
     exact.append(el("summary", "", "Daily values"), tableRegion);
@@ -91,6 +95,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     body.append(controls, modes, hint, grid, association, exact);
     root.append(header, body, exit);
     const choiceAt = n => choices.find(c => c.key === (n ? b : a));
+    const alignedCharts = () => Boolean(choiceAt(1) && (preferAligned || !model.compatible(choiceAt(0),choiceAt(1))));
     const dayAt = () => data?.days.find(d => d.date === date);
     function amount(p, choice) {
         return p.amount === null ? "Unavailable" : choice.basis === "ms" ? `${number(p.amount)} ms`
@@ -114,6 +119,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
             plot = el("div", "trends-plot"), empty = el("p","muted","No daily values available on these dates.");
         head.append(name,toggle); host.append(head,plot,empty); plots.append(host);
         plot.id = `trendPairPlot${n + 1}`; plot.tabIndex = 0; plot.setAttribute("role","region");
+        toggle.setAttribute("aria-controls",plot.id);
         const chart = mountChart({ root: plot, tooltip, canInspect: () => current() && visible, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
             color: id => { const c = choices.find(c => c.key === id); return c ? color(c.id, c.family) : "var(--muted)"; },
             onInspect() {}, onSelect(when, id) {
@@ -152,16 +158,19 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     }
     function paint() {
         if (!visible || !current() || !data) return;
-        const first = choiceAt(0), second = choiceAt(1), compatible = model.compatible(first,second), overlay = compatible && !preferAligned;
+        const first = choiceAt(0), second = choiceAt(1), compatible = model.compatible(first,second), aligned = alignedCharts(), overlay = Boolean(second && !aligned);
+        const closed = aligned ? folded.every(Boolean) : collapsed;
         const opts = JSON.stringify([choices.map(c=>c.key),a]);
         if (opts !== sourceKey) { options(pickers[0]); options(pickers[1],a); sourceKey = opts; }
         pickers[0].value = a; pickers[1].value = b; pickers[1].disabled = !first;
         title.textContent = first && second ? `${first.label} / ${second.label}` : "Compare measures";
         remove.hidden = !second; modes.hidden = !second; fold.hidden = !first;
-        fold.textContent = collapsed ? "Expand chart" : "Collapse chart"; fold.setAttribute("aria-expanded",String(!collapsed));
+        fold.textContent = `${closed ? "Expand" : "Collapse"} ${aligned ? "both charts" : "chart"}`;
+        if (aligned && !closed && folded.some(Boolean)) fold.removeAttribute("aria-expanded");
+        else fold.setAttribute("aria-expanded",String(!closed));
         one.disabled = !compatible; one.setAttribute("aria-pressed",String(overlay)); two.setAttribute("aria-pressed",String(!!second && !overlay));
         hint.textContent = second && !compatible ? `Different scales: ${first.basis} and ${second.basis}. Dates are aligned.` : scopeNotice;
-        hint.hidden = !hint.textContent; plots.hidden = collapsed || !first;
+        hint.hidden = !hint.textContent; plots.hidden = !first || (!aligned && collapsed);
         const key = JSON.stringify([a,b,preferAligned,folded,collapsed]);
         if (key !== drawnKey) {
             drawnKey = key;
@@ -171,11 +180,12 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
                 const list = overlay && n===0 ? [first,second] : [n===0?first:second];
                 scene.host.hidden = !list[0] || n===1 && overlay;
                 const hasValues = !scene.host.hidden && data.days.some(day => list.some(c => model.point(day,c).amount !== null));
-                scene.empty.hidden = hasValues || folded[n]; scene.plot.hidden = !hasValues || folded[n]; scene.toggle.hidden = !second || overlay;
+                const plotClosed = aligned ? folded[n] : collapsed;
+                scene.empty.hidden = hasValues || plotClosed; scene.plot.hidden = !hasValues || plotClosed; scene.toggle.hidden = !aligned;
                 scene.toggle.textContent = folded[n] ? "Expand" : "Collapse"; scene.toggle.setAttribute("aria-expanded",String(!folded[n]));
                 scene.name.textContent = list[0] ? (overlay ? list[0].basis : list[0].label) : "";
                 scene.plot.setAttribute("aria-label",list.filter(Boolean).map(c=>c.label).join(" and "));
-                if (scene.host.hidden || collapsed || scene.plot.hidden) { scene.chart.withdrawAccess(); continue; }
+                if (scene.host.hidden || scene.plot.hidden) { scene.chart.withdrawAccess(); continue; }
                 const basis = list[0].basis, family = `pair-${["ms","tokens"].includes(basis) ? basis : basis.includes("interaction") ? "interactions" : "calls"}`;
                 const defs = list.map(c=>({id:c.key,label:c.label}));
                 const days = data.days.map(day=>({...day, values:{rhythm:day.values.rhythm,[family]:list.map(c=>{
@@ -197,7 +207,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
                 result.textContent=(v.r===null ? "No coefficient: fewer than three paired days or no variation." : `Pearson r = ${v.r.toFixed(2)} across ${number(v.days)} paired days.`)
                     + ` ${data.window.count < data.window.totalDays ? "This date page only. " : ""}Each date has equal weight. Missing values are excluded; measured zeros stay. Movement together does not establish cause.`; }
         }
-        association.hidden = !second || collapsed; exact.hidden = !first; paintReading(); if (collapsed) inspector.hidden=true;
+        association.hidden = !second || closed; exact.hidden = !first; paintReading(); if (closed) inspector.hidden=true;
     }
     function update(source, show) {
         visible=show; root.hidden=!show;
