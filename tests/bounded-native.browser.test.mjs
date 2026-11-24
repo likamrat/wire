@@ -514,7 +514,12 @@ test("opening and cancelling a native filter reads only its dimension and exact 
         assert.equal(calls.filter(call => call.method === "inventory" && call.input.dimension === "tools").length, 3);
         await page.locator("#toolFilter-control").press("Escape");
         const beforeSource = calls.filter(call => call.method === "inventory").length;
+        const narrowed = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
+            && response.request().postDataJSON().filters?.sources?.includes("microsoft-365-cowork"));
         await selectActivityOption(page, "sourceFilter", "microsoft-365-cowork");
+        const accepted = await narrowed;
+        assert.equal(accepted.status(), 200);
+        assert.deepEqual((await accepted.json()).nativeRead.page.items.map(row => row.sourceId), ["microsoft-365-cowork"]);
         assert.ok(calls.filter(call => call.method === "inventory").slice(beforeSource).every(call => call.input.dimension === "sources"),
             "Opening Source must not request other filter dimensions.");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(1);

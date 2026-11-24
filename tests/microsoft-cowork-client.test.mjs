@@ -1336,8 +1336,14 @@ for (const { surfaces, cacheable, pinnedOnly = false, disposeRoot = false, ctiPr
         await page.goto(url + "#settings?section=connection");
         await expect(page.locator("#wireMicrosoftPrepare")).toBeEnabled();
         if (launcher === "connect-early") {
-            await page.locator("#wireMicrosoftPrepare").click();
-            await expect.poll(() => earlyAttempts.length).toBe(1);
+            const [completed] = await Promise.all([
+                page.waitForResponse(response => response.url() === url + "api/access/command"
+                    && response.request().postDataJSON()?.action === "microsoft-connect"),
+                page.locator("#wireMicrosoftPrepare").click(),
+            ]);
+            assert.equal(completed.status(), 200);
+            assert.equal((await completed.json()).outcome, "failed");
+            assert.equal(earlyAttempts.length, 1);
             assert.equal(earlyAttempts[0].forwarded, false);
             assert.deepEqual(earlyAttempts[0].sent, []);
             await expect.poll(() => owned.pages().length).toBe(0);

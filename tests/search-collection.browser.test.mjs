@@ -358,7 +358,12 @@ test("normal Search survives quiet automatic collection and fences real source c
     const changed = (await api("/api/search/status")).body;
     assert.equal(changed.indexId, null);
     releaseRead();
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+    // A collected fence retires the old response and automatically reissues visible navigation
+    // Search. The empty intermediate DOM can be gone before the next browser sample.
+    await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });
+    const refreshed = (await api("/api/search/status")).body;
+    assert.notEqual(refreshed.indexId, ready.indexId);
+    assert.ok(refreshed.corpus.generation > ready.corpus.generation);
     assert.ok((await loadBoardState(context)).evidenceRevision > before.evidenceRevision);
     await input.fill("workiq-retriev");
     await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });

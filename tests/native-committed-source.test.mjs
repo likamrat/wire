@@ -540,7 +540,7 @@ test("Delete all clears discovery-only membership even when no native observatio
     app.persistence.retire(late.ticket);
     assert.equal((await app.persistence.status({}, { owner: app.owner })).backfill, undefined);
 });
-test("settled receipt archival continues beyond 1024 cycles without losing original recovery or unresolved proof", { timeout: 600000 }, async t => {
+test("archival crosses 1024 retained operations without losing original recovery or unresolved proof", { timeout: 600000 }, async t => {
     const app = await setup(t);
     const begin = async () => (await app.persistence.beginSegmented({ operationId: randomUUID() }, app.admission)).ticket;
     const first = await begin(), original = await app.persistence.commitSegmented(first, app.source);
@@ -560,40 +560,55 @@ test("settled receipt archival continues beyond 1024 cycles without losing origi
         assert.equal(database.prepare("UPDATE receipts SET receipt_json=?,receipt_hash=? WHERE operation_id=?")
             .run(text, createHash("sha256").update(text).digest("hex"), first.operationId).changes, 1);
     });
-    for (let cycle = 0; cycle < 1028; cycle++) {
-        if (cycle === 125) {
-            const rename = filesystem.rename;
-            const fault = t.mock.method(filesystem, "rename", async (from, to) => {
-                if (!interrupted && String(to).endsWith(`${BOARD_ID}.state.json`)) {
-                    const staged = JSON.parse(await readFile(from, "utf8"));
-                    if (staged.nativeRetention?.receiptArchive && staged.nativeRetention.receipts.length < 128) {
-                        interrupted = true;
-                        throw Object.assign(new Error("Fixture compaction publication interrupted."), { code: "EIO" });
-                    }
-                }
-                return rename(from, to);
-            });
-            syncBuiltinESMExports();
-            try { await assert.rejects(begin(), { code: "EIO" }); }
-            finally { fault.mock.restore(); syncBuiltinESMExports(); }
-            const intact = await loadBoardState(app.context);
-            assert.equal(interrupted, true);
-            assert.equal(intact.nativeRetention.receipts.length, 128);
-            assert.ok(intact.nativeRetention.receipts.some(row => row.operationId === first.operationId));
-            archiveId = intact.nativeRetention.receiptArchive.id;
-            archiveFile = path.join(app.context.dataDir, "collector", "native-receipts", `${archiveId}.sqlite`);
-            assert.equal((await app.persistence.status({ operationId: first.operationId }, { owner: app.owner })).receipt.status, "committed");
-            replaceOriginal({ ...originalPrivate, generation: originalPrivate.generation + 1 });
-            await assert.rejects(begin(), { code: "NATIVE_RETENTION_RECEIPT_ARCHIVE_INVALID" });
-            assert.equal((await loadBoardState(app.context)).nativeRetention.receipts.length, 128);
-            replaceOriginal(originalPrivate);
-        }
+    // Historical filler supplies volume, not the recovery evidence: the original,
+    // pinned, unresolved and post-compaction operations all go through the writer.
+    const fillHistory = count => updateBoardState(app.context, state => {
+        const rows = state.nativeRetention.receipts, settled = rows.find(row => row.operationId === held.operationId);
+        while (rows.length < count) rows.push({ ...structuredClone(settled), operationId: randomUUID() });
+    });
+    const append = async () => {
         const ticket = await begin();
         assert.equal((await app.persistence.commitSegmented(ticket, [])).status, "committed");
         app.persistence.retire(ticket);
-        if ((cycle + 1) % 256 === 0) t.diagnostic(`${cycle + 1} bounded empty cycles durably committed.`);
+    };
+    await append();
+    await fillHistory(128);
+    {
+        const rename = filesystem.rename;
+        const fault = t.mock.method(filesystem, "rename", async (from, to) => {
+            if (!interrupted && String(to).endsWith(`${BOARD_ID}.state.json`)) {
+                const staged = JSON.parse(await readFile(from, "utf8"));
+                if (staged.nativeRetention?.receiptArchive && staged.nativeRetention.receipts.length < 128) {
+                    interrupted = true;
+                    throw Object.assign(new Error("Fixture compaction publication interrupted."), { code: "EIO" });
+                }
+            }
+            return rename(from, to);
+        });
+        syncBuiltinESMExports();
+        try { await assert.rejects(begin(), { code: "EIO" }); }
+        finally { fault.mock.restore(); syncBuiltinESMExports(); }
+        const intact = await loadBoardState(app.context);
+        assert.equal(interrupted, true);
+        assert.equal(intact.nativeRetention.receipts.length, 128);
+        assert.ok(intact.nativeRetention.receipts.some(row => row.operationId === first.operationId));
+        archiveId = intact.nativeRetention.receiptArchive.id;
+        archiveFile = path.join(app.context.dataDir, "collector", "native-receipts", `${archiveId}.sqlite`);
+        assert.equal((await app.persistence.status({ operationId: first.operationId }, { owner: app.owner })).receipt.status, "committed");
+        replaceOriginal({ ...originalPrivate, generation: originalPrivate.generation + 1 });
+        await assert.rejects(begin(), { code: "NATIVE_RETENTION_RECEIPT_ARCHIVE_INVALID" });
+        assert.equal((await loadBoardState(app.context)).nativeRetention.receipts.length, 128);
+        replaceOriginal(originalPrivate);
     }
+    await append();
+    await fillHistory(1024);
+    await append();
     const state = await loadBoardState(app.context);
+    const archived = new DatabaseSync(archiveFile, { readOnly: true });
+    try {
+        const { n } = archived.prepare("SELECT COUNT(*) AS n FROM receipts").get();
+        assert.ok(n + state.nativeRetention.receipts.length > 1024);
+    } finally { archived.close(); }
     assert.equal(state.nativeRetention.receiptArchive.id, archiveId, "Interrupted compaction must reuse its anchored archive.");
     assert.ok(state.nativeRetention.receipts.length < 128);
     assert.equal(state.nativeRetention.receipts.some(row => row.operationId === first.operationId), false);

@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recollectionFixture } from "./recollection-fixture.mjs";
+import { stoppedRuntimePid } from "./stopped-runtime-fixture.mjs";
 import { createCollector } from "../lib/collector.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { hash, atomicJson, readJson, TAIL_LIMITS } from "../lib/collector-io.mjs";
@@ -140,11 +141,11 @@ async function fixture(t, { retrieve = false, contextEvicted = false, tailPrefix
     await f.stop();
     const state = await loadBoardState(f.context), record = state.evidence.find(record => record.scenarioId === selected.scenarioId);
     const model = buildAssessmentModel(state), call = record.toolCalls[targetCallIndex], completionIndex = events.findIndex(event => event.id === call.completionEventId);
-    const exited = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+    const stoppedPid = await stoppedRuntimePid(t);
     const plan = {
         schemaVersion: 1, operationId: randomUUID(),
         attestation: { packetSha256: hash("invented explicit source-read grant"), recheckSha256: hash("invented bounded source verification"),
-            stoppedRuntimePid: exited.pid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true },
+            stoppedRuntimePid: stoppedPid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true },
         source: { configSha256: hash(await readFile(path.join(f.context.dataDir, "collector", "config.json"))),
             indexSha256: hash(await readFile(indexFile)), ...assessmentSource(state, config), windowDays: config.windowDays },
         stateGuardSha256: maintenanceStateGuard(state),

@@ -438,6 +438,7 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
         });
         const stagedRead = Promise.withResolvers(), releaseStagedRead = Promise.withResolvers();
         const releaseRetirement = Promise.withResolvers();
+        const retirementStarted = Promise.withResolvers(), ownedCloseStarted = Promise.withResolvers();
         let closeAttempts = 0, closeUnproved = scenario === "startup-retire-close-unproved", retirementReleased = false;
         t.after(async () => {
             closeUnproved = false;
@@ -456,6 +457,7 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
             const closeContext = context.close.bind(context);
             if (stalledRetirement) t.mock.method(context, "close", async () => {
                 closeAttempts++;
+                ownedCloseStarted.resolve();
                 if (closeUnproved) throw new Error("Invented owned-close refusal.");
                 return closeContext();
             });
@@ -538,6 +540,7 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
                     if (stalledRetirement && (scenario === "startup-retire-evaluate-stalled"
                         ? method === "Runtime.evaluate" && input.expression?.endsWith("?.retire()")
                         : method === "Page.removeScriptToEvaluateOnNewDocument")) {
+                        retirementStarted.resolve();
                         return releaseRetirement.promise;
                     }
                     const result = await send(method, input);
@@ -549,6 +552,7 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
                     if (expireOnPassiveRead && method === "Runtime.evaluate" && input.expression?.endsWith("?.read()")) {
                         const expired = Date.now() + 90001;
                         t.mock.method(Date, "now", () => expired);
+                        retirementStarted.resolve();
                     }
                     return result;
                 });
@@ -597,15 +601,18 @@ for (const scenario of ["connect", "early-navigation", "cancel", "wrong-retained
             assert.notEqual((await host.access.status()).microsoft.state, "connected");
             return;
         }
+        if (deadlineRetirement) expireOnPassiveRead = true;
         await page.getByRole("button", { name: "Fixture work account" }).click();
         if (stalledRetirement) {
-            if (deadlineRetirement) expireOnPassiveRead = true;
-            const pending = Symbol("retirement-blocked");
+            // Time the actual retirement-to-close fence, not navigation and later receipt persistence.
+            await retirementStarted.promise;
             let timer;
-            const receipt = await Promise.race([connecting,
-                new Promise(resolve => { timer = setTimeout(() => resolve(pending), 3000); })]);
-            clearTimeout(timer);
-            assert.notEqual(receipt, pending, "A stalled retirement must not prevent attempted owned closure.");
+            try {
+                await Promise.race([ownedCloseStarted.promise, new Promise((_, reject) => {
+                    timer = setTimeout(() => reject(new Error("Stalled retirement prevented owned closure.")), 3000);
+                })]);
+            } finally { clearTimeout(timer); }
+            const receipt = await connecting;
             assert.equal(retirementReleased, false);
             assert.equal(receipt.outcome, "failed");
             assert.equal(receipt.reason, deadlineRetirement ? "timed-out" : "transport-failed");
