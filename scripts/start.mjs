@@ -109,6 +109,10 @@ try {
     startupMayOwnStorage = true;
     runtime = await startServer(context, createExportController(context), {
         port: options.port,
+        ...(finishChild?.recovery && { recoverLaunch: async initialize => {
+            const { recoverLaunch } = await import("../lib/update-launch-recovery.mjs");
+            return recoverLaunch(context, finishChild, initialize);
+        } }),
         frontend: options.frontend,
         exactRecords: options.exactRecords === true,
         sourcePolicy: options.developmentMicrosoft ? "microsoft-incubation" : "copilot-only",
@@ -165,7 +169,7 @@ try {
         clean = false;
         console.error(`${PRODUCT_NAME} source cleanup is incomplete.`);
     });
-    console.error(["WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
+    console.error(["WIRE_LAUNCH", "WIRE_START_OPTIONS_INVALID", "WIRE_COPILOT_STORE_INCOMPATIBLE", "WIRE_BROWSER_BUILD_MISSING", "WIRE_BROWSER_BUILD_INVALID", "WIRE_BROWSER_BUILD_STALE"].includes(error.code) ? error.message : error.code === "EADDRINUSE"
         ? "The requested port is already owned. No second evidence writer was started. Choose an unused port for an independent store, or verify the existing owner before using it."
         : `${PRODUCT_NAME} could not start. Check the private data directory, source configuration and runtime installation.`);
     process.exitCode = 1;

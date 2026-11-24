@@ -58,6 +58,44 @@ The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
+**Interrupted managed writer (Windows or WSL).** A dead PID or free port does
+not make the last child receipt a clean close. Ordinary startup still refuses
+a child marked `running`. Do not remove its journals or collector leases, move
+the data, or use a development launch to get around that refusal.
+
+If the original owner has an independently recorded custody record and has
+accounted for outstanding work in the original views, the recovery-capable
+launcher supports one explicit restart:
+
+```text
+npm start -- --recover-launch "<absolute path to reviewed custody JSON>" --port <original port>
+```
+
+Use the original clean standalone `main` clone, OS user and data directory.
+The private JSON record has `version: 1`, the canonical `installation` path,
+`interruptedBuild` and approved `targetBuild` (full commits), the original
+launcher `store` fingerprint, numeric `port`, the original collector `host`
+object, `launcherPid`, `writerPid`, the managed fork's `childId`, and the
+two distinct `collectorToken` and `sessionToken` values from that writer's
+root and `microsoft-session` leases. `operationsReviewed: true` attests to
+the original owners' review; it is not a way to declare an unknown Save,
+Delete, Refresh, update or browser edit settled. Do not assemble missing
+historical bindings by copying values from abandoned files after the fact.
+Keep this record private. A v1 installation did not save it for you.
+
+Recovery requires an unchanged base activation with no staged slot or update
+in progress. If changing code, separately authorize a compatible fast-forward
+in that clone and build it before invoking recovery. The target must contain
+the recovery launcher **and** child; older builds cannot consume this handoff.
+WIRE reserves the original port, verifies both exact same-host leases and
+checks operation journals before admitting a writer. A successful admission
+records the previous child as **interrupted**. It does not recover an unsaved
+edit, resume an Apply, or retry an operation. Reopen original results normally.
+After the new runtime actually closes cleanly, a separately qualified older
+reader can use its genuine close receipt; never roll back data. Without the
+required evidence, or if an operation, lease or transition is unresolved,
+leave the installation stopped.
+
 Store read/write protocol 2 includes the explicit agent-authored origin. The
 managed updater refuses a protocol-1/protocol-2 transition before stopping
 the current writer. Qualify both the primary and fallback for the new retained
