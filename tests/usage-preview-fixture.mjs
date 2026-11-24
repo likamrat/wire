@@ -36,7 +36,7 @@ export async function usagePreview(t, frontend = "react") {
             const direct = index === 2;
             event("session.start",{sessionId:id,version:1}); event("user.message",{content:title,...(direct?{}:{messageId}),interactionId,...(actor?{source:actor==="agent"?"agent-invented":actor}: {})});
             const promptId=events.at(-1).id, link=direct?{interactionId}:{model,originatingMessageId:messageId};
-            const turnId=randomUUID(), apiCallId=randomUUID(), toolIds=tools.map(()=>randomUUID());
+            const turnId=randomUUID(), apiCallId=index === 0 ? "ab/+".repeat(124)+"xy==" : randomUUID(), toolIds=tools.map(()=>randomUUID());
             event("assistant.message",{...link,apiCallId,turnId,toolRequests:toolIds.map(toolCallId=>({toolCallId}))});
             if(calls.length) receipts.push(apiCallId);
             tools.forEach((tool,i)=>{

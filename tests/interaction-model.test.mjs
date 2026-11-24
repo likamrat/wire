@@ -7,6 +7,7 @@ import { extractGraphActivities } from "../lib/graph-history.mjs";
 
 const at = ms => new Date(Date.UTC(2026, 9, 1, 12) + ms).toISOString();
 const record = {
+    scenarioId: "interaction-model-case",
     sourceSessionId: "source-one", userPrompt: { sourceEventId: "prompt", sourceTimestamp: at(0) },
 };
 const prompt = { id: "prompt", type: "user.message", timestamp: at(0), data: { messageId: "message-one" } };

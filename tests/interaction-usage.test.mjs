@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { recordedUsage, usageSummary, usageQuestionGroups } from "../lib/interaction-usage.mjs";
-import { retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
+import { modelRequestKey, retainToolTokens, retainUsageReceipt, toolTokenReadings } from "../lib/usage-receipts.mjs";
+import { retainInteractionModelMetadata } from "../lib/interaction-model.mjs";
 import { qualifiedResultPaths } from "../lib/history.mjs";
 
 test("a tool operation needs its own original completion and a consistent provider meter", () => {
@@ -41,6 +42,23 @@ test("an initiator label does not override a delegated or nested model call", ()
     for (const extra of [{interactionType:"conversation-subagent"}, {interactionType:"conversation-compaction"},
         {interactionType:"conversation-background"}, {parentToolCallId:"parent"}, {fusion:{}}]) assert.equal(receipt(extra).data.tokens,null);
     assert.equal(receipt({}, {agentId:"nested"}).data.tokens,null);
+});
+
+test("opaque request keys match old assistant metadata without admitting raw digest lookalikes or credentials", () => {
+    const raw = "ab/+".repeat(124) + "xy==", key = modelRequestKey({apiCallId:raw});
+    const project = apiCallId => retainInteractionModelMetadata({data:{apiCallId}});
+    const receipt = apiCallId => retainUsageReceipt({type:"session.usage_record",data:{usage:{
+        apiCallId, model:"example", inputTokens:2, outputTokens:1, accounting:{usageId:apiCallId},
+    }}})?.data;
+    const incoming = project(raw);
+    assert.equal(incoming.apiCallId,null); assert.match(incoming.apiCallRef,/^![a-f0-9]{64}$/);
+    assert.equal(modelRequestKey(incoming),key);
+    assert.equal(receipt(raw).apiCallId,key); assert.equal(receipt(raw).accounting.id,key);
+    assert.notEqual(receipt(raw.replace("xy==","yx==")).apiCallId,key);
+    for (const invalid of [key,"A".repeat(513),"ghp_"+"x".repeat(36),raw+"\u0000"])
+        assert.equal(receipt(invalid),undefined);
+    assert.equal(modelRequestKey(project(key)),null);
+    assert.equal(modelRequestKey({apiCallId:"a",apiCallRef:key}),null);
 });
 
 test("model cohorts split multiple calls by recorded model and preserve measured zero", () => {

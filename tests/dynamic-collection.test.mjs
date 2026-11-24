@@ -140,17 +140,19 @@ test("history compatibility: two explicitly linked usage receipts survive restar
         accounting: { sequence: n, sourceSessionId: id, usageId: `usage-${n}` },
         inputTokens: 16000, cacheReadTokens: 10000, cacheWriteTokens: 1000, outputTokens: 1000 } });
     start.data.turnId = "turn-one";
-    const r1 = receipt(1, "api-one"), r2 = receipt(2, "api-two");
+    const opaque = "A/+".repeat(166) + "==";
+    const r1 = receipt(1, "api-one"), r2 = receipt(2, opaque);
     r1.data.usage.initiator = "user";
     r1.data.usage.interactionType = "conversation-user";
     r2.data.usage.initiator = "agent";
     r2.data.usage.interactionType = "conversation-agent";
-    r2.data.usage.accounting = { usageId: "usage-two" };
+    r2.data.usage.accounting = { usageId: opaque };
+    delete r2.data.usage.interactionId;
     const batch = [event("user.message", { messageId, interactionId, content: "Read the invented schedule." }),
         message("api-one", "turn-one", { toolRequests: [{ toolCallId: "metered-fetch" }] }), start,
         event("tool.execution_complete", { toolCallId: "metered-fetch", success: true, result: { content: "INVENTED_RETURN_TEXT" } }), r1,
         event("assistant.turn_start", { turnId: "turn-two" }),
-        message("api-two", "turn-two", { phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+        message(opaque, "turn-two", { phase: "final_answer", content: "Invented answer", toolRequests: [] }),
         event("assistant.turn_end", { turnId: "turn-two" }), event("session.usage_checkpoint", { totalTokens: 900000 })];
     const base = Date.now() - 20000;
     batch.forEach((e, index) => { e.timestamp = new Date(base + index * 100).toISOString(); });
@@ -166,6 +168,8 @@ test("history compatibility: two explicitly linked usage receipts survive restar
     await collector.collectNow();
     const record = await read();
     assert.equal(record.usage?.total, 34000);
+    assert.equal(JSON.stringify(await loadBoardState(app.context)).includes(opaque),false);
+    assert.equal(JSON.stringify(record).includes(opaque),false);
     assert.deepEqual(record.usage.tokens, { freshInput: 10000, cacheRead: 20000, cacheWrite: 2000, output: 2000 });
     assert.equal(record.usage.steps.length, 2);
     assert.equal(record.toolCalls[0].returnedTextBytes, 20);

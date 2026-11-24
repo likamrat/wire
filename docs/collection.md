@@ -222,7 +222,10 @@ the exchange boundary even without saved reply text, latency, a logical
 message ID, or a model name on the reply: the usage receipt identifies the
 model. WIRE still requires a prompt-to-run or prompt-to-message link, at least
 one matching Work IQ tool request, and receipts for every linked response
-call. The [SDK's `initiator`](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts)
+call. Opaque model request and accounting IDs can contain `/`, `+` and `=`.
+WIRE compares bounded, privacy-screened values by an internal digest without
+putting the raw opaque ID in new retained model metadata or in reports.
+The [SDK's `initiator`](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts)
 may be `user` for a model request carrying a prompt or `agent` for the next
 request after a tool result. Neither proves prompt authorship or request
 ownership. Nested activity, a competing owner, or an incomplete window cannot
