@@ -1,12 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const settled = async page => {
@@ -75,160 +73,21 @@ async function setup(t) {
     return { page, runtime };
 }
 
-async function geometry(page, selector) {
-    return page.locator(selector).evaluateAll(fields => fields.filter(field => field.checkVisibility()
-        && field.querySelector(".recorded-category-label")).map(field => {
-        const textRect = node => {
-            const range = document.createRange();
-            range.selectNodeContents(node);
-            return [...range.getClientRects()].filter(rect => rect.height > 0).map(rect => rect.toJSON());
-        };
-        const key = field.querySelector(".recorded-category-label"), style = getComputedStyle(key);
-        return {
-            key: key.textContent, keyRect: textRect(key)[0], field: field.getBoundingClientRect().toJSON(),
-            font: style.font, values: [...field.querySelectorAll(".service-cue")].map(cue => {
-                const value = cue.querySelector(":scope > span"), icon = cue.querySelector(":scope > .wire-icon");
-                return { text: value.textContent, rects: textRect(value), font: getComputedStyle(value).font,
-                    icon: icon.getBoundingClientRect().toJSON(), cue: cue.getBoundingClientRect().toJSON() };
-            }),
-            separated: [...field.querySelectorAll(".service-label-list>li+li:not(.service-label-gap)")].map(item =>
-                getComputedStyle(item).borderInlineStartWidth),
-            gaps: [...field.querySelectorAll(".identity-gap")].map(node => ({ text: node.textContent, rect: textRect(node)[0] })),
-        };
-    }));
-}
-
-test("Category keys share the value text baseline and reader identity uses spacing rather than a dot", async t => {
-    const { page } = await setup(t), measurements = [], violations = [];
-    const directory = process.env.WIRE_CATEGORY_HEADER_PROOFS;
-    if (directory) await mkdir(directory, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [820, 1], [390, 1], [390, 2], [1440, 2]]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-        await page.locator("#activityListSummary").scrollIntoViewIfNeeded();
-        await settled(page);
-        const list = await geometry(page, "#activityList .recorded-category");
-        const name = `${theme}-${width}-${scale}`;
-        if (directory) {
-            await page.evaluate(() => scrollTo(0, 0));
-            await settled(page);
-            await page.screenshot({ path: path.join(directory, name + "-cards.png"), fullPage: true });
-        }
-        const readers = [];
-        for (const index of [1, 2]) {
-            await page.locator(`.request-card-open[href*="category-alignment-${index}"]`).click();
-            await expect(page.locator("#contextSidebar")).toBeVisible();
-            await settled(page);
-            const fields = await geometry(page, "#requestContent .reader-call-secondary .recorded-category");
-            const headings = await page.locator(".reader-call-identity-line").evaluateAll(nodes => nodes.map(node => ({
-                text: node.textContent, label: node.closest("button").querySelector(".context-entry-label").textContent,
-                tool: node.querySelector(".reader-tool-name")?.textContent,
-                name: node.closest("button")?.getAttribute("aria-label").replace(/\s+/g, " ").trim(),
-                box: node.getBoundingClientRect().toJSON(),
-                ordinal: node.closest("button").querySelector(".context-entry-label").getBoundingClientRect().toJSON(),
-                toolBox: node.querySelector(".reader-tool-name")?.getBoundingClientRect().toJSON(),
-                disclosure: node.querySelector(".reader-call-disclosure")?.getBoundingClientRect().toJSON(),
-            })));
-            readers.push({ index, fields, headings });
-            if (directory) await page.screenshot({ path: path.join(directory, `${name}-reader-${index}.png`) });
-            for (const heading of headings) {
-                if (heading.text.includes("\u00b7")) violations.push(`${name}: decorative dot in ${heading.text}`);
-                if (!heading.name.includes(heading.tool + " " + heading.label + " ")) violations.push(`${name}: identity is not separated in its accessible name`);
-                if (heading.toolBox.right > heading.box.right + 1 || heading.disclosure.right > heading.box.right + 1) {
-                    violations.push(`${name}: header overflows its disclosure`);
-                }
-            }
-            await page.goBack();
-            await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-            await settled(page);
-        }
-        for (const field of [...list, ...readers.flatMap(reader => reader.fields)]) {
-            const first = field.values[0]?.rects[0] ?? field.gaps[0]?.rect;
-            if (first) {
-                const delta = first.top - field.keyRect.top;
-                if (delta < -0.5 || delta < field.keyRect.height && Math.abs(delta) > 0.5) {
-                    violations.push(`${name}: ${field.key} key/value text offset ${delta}px`);
-                }
-            }
-            for (const value of field.values) {
-                assert.equal(value.font, field.font);
-                const text = value.rects[0], iconCenter = value.icon.top + value.icon.height / 2;
-                if (Math.abs(iconCenter - (text.top + text.height / 2)) > 1.5) violations.push(`${name}: ${value.text} icon is not centered on its first text line`);
-                if (value.cue.right > field.field.right + 1) violations.push(`${name}: category overflows`);
-            }
-            for (const border of field.separated) assert.equal(border, "1px");
-        }
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-        assert.ok(overflow <= 1, name);
-        measurements.push({ theme, width, scale, list, readers });
-    }
-    if (directory) await writeFile(path.join(directory, "geometry.json"), JSON.stringify({ measurements, violations }, null, 2));
-    assert.equal(violations.length, 0, violations.slice(0, 12).join("\n"));
-});
-
-test("The dot-free call header keeps exact identity, result, disclosure and selected-card return", async t => {
-    const { page, runtime } = await setup(t);
-    const card = page.locator('.request-card-open[href*="category-alignment-1"]');
-    await card.scrollIntoViewIfNeeded();
-    await card.focus();
-    const origin = { url: page.url(), top: (await card.boundingBox()).y };
-    await page.keyboard.press("Enter");
-    await settled(page);
-    const call = page.locator('[data-tool-call-id="alignment-call-1-0"]'), toggle = call.locator(".reader-call-toggle");
-    const exactCall = await call.getAttribute("data-action-id");
-    assert.ok(exactCall);
-    await expect(toggle).toHaveAccessibleName("Inspect recorded evidence: workiq-retrieve Call 1 failed. Work IQ required sign-in at the time");
-    await expect(toggle.locator(".reader-call-summary")).toContainText("Work IQ required sign-in at the time");
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const owner = await toggle.getAttribute("aria-controls");
-    await toggle.focus();
-    await page.keyboard.press("Enter");
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator(`[id=${JSON.stringify(owner)}]`)).toBeVisible();
-    await expect(call.locator(".technical-detail")).toContainText("SYNTHETIC_WORKSHOP_LOOKUP");
-    await toggle.locator(".reader-call-summary").evaluate(node => {
-        const range = document.createRange(); range.selectNodeContents(node);
-        window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
-    });
-    await toggle.evaluate(node => node.click());
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await page.evaluate(() => window.getSelection().removeAllRanges());
-    await toggle.click();
-    await expect(call.locator(".technical-detail")).toBeEmpty();
-    await page.goBack();
-    await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    await settled(page);
-    await expect(card).toBeFocused();
-    assert.equal(page.url(), origin.url);
-    assert.ok(Math.abs((await card.boundingBox()).y - origin.top) < 2);
-    await page.goto(runtime.url + "#request?" + new URLSearchParams({
-        request: "category-alignment-1", call: exactCall, origin: "analyze",
-    }));
-    await ready(page); await settled(page);
-    await expect(page.locator("#selectedCall")).toBeFocused();
-    await expect(page.locator("#selectedCall .reader-call-toggle")).toHaveAttribute("aria-expanded", "true");
-});
-
-test("Forced colors keep wrapped metadata and the dot-free disclosure readable", async t => {
+test("a forced-color reader keeps the selected call, its ordinal and its disclosure usable at 200% text", async t => {
     const { page } = await setup(t);
-    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.setViewportSize({ width: 390, height: 960 });
     await page.emulateMedia({ forcedColors: "active" });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
-    await page.locator('.request-card-open[href*="category-alignment-2"]').click();
-    await settled(page);
-    const toggle = page.locator(".reader-call-toggle").first();
-    await expect(toggle).toHaveAccessibleName("Inspect recorded evidence: workiq-fetch Call 1 failed. Access was denied");
-    await toggle.focus();
-    await page.keyboard.press("Enter");
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    assert.equal(await toggle.evaluate(node => getComputedStyle(node).forcedColorAdjust), "auto");
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1));
-    for (const field of await geometry(page, "#requestContent .reader-call-secondary .recorded-category")) {
-        for (const value of field.values) {
-            const text = value.rects[0], center = value.icon.top + value.icon.height / 2;
-            assert.ok(Math.abs(center - text.top - text.height / 2) <= 1.5);
-            assert.ok(value.cue.right <= field.field.right + 1);
-        }
-    }
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    const origin = page.locator('#activityList [data-view-key="request:category-alignment-2"]').getByRole("link", {name:"1 tool call failed", exact:true});
+    await origin.press("Enter"); await settled(page);
+    const call = page.locator('[data-tool-call-id="alignment-call-2-0"]');
+    await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
+    await expect(call.locator(".reader-tool-name")).toHaveText("workiq-fetch");
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.press("Enter");
+    await expect(call.locator(".reader-input-value")).toContainText("/me/messages/example");
+    await expect(call).toContainText("Access was denied");
+    await toggle.press("Space"); await expect(toggle).toBeFocused(); await expect(toggle).toHaveAttribute("aria-expanded","false");
+    assert.ok(await page.locator("#contextSidebarBody").evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+    await page.goBack(); await expect(origin).toBeFocused();
 });

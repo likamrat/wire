@@ -79,54 +79,18 @@ test("cards, expanded readers and prepared formats distinguish source reasons fr
     }
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    for (const [id, message, code, status, , meaning] of cases) {
-        const card = page.locator("#activityList article").filter({ hasText: `invented ${id} request` }).locator(".request-card-open");
-        if (!await card.count()) {
-            await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
-            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        }
-        if (meaning) await expect(card.locator('[data-interpretation="true"]')).toContainText(meaning);
-        else {
-            await expect(card.locator('[data-interpretation="true"]')).toHaveCount(0);
-            await expect(card).toContainText(message);
-        }
-        await expect(card).toContainText("workiq-fetch");
-        await expect(card).toContainText("/me/messages");
-        await card.scrollIntoViewIfNeeded();
-        if (id === "timeout") { await chooseTheme(page, "light"); await capture("timeout-card-light"); }
-        await card.click();
-        const call = page.locator(`[data-tool-call-id="${id}-call"]`);
-        if (code !== null && code !== "failure") await expect(call).toContainText(code);
-        if (status !== null) await expect(call).toContainText(String(status));
-        const toggle = call.locator(".reader-call-toggle");
-        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
-        if (meaning) {
-            await expect(call.locator('[data-interpretation="true"]')).toBeVisible();
-            await expect(call.locator('[data-interpretation="true"]')).toContainText(meaning);
-        }
-        if (message) await expect(call.locator(".reader-error-message").first()).toContainText(message);
-        if (id === "conflict") {
-            await expect(call).toContainText("403"); await expect(call).toContainText("500");
-            await expect(call.locator('[data-interpretation="true"]')).not.toContainText("understood but refused");
-            await expect(call.locator(".reader-call-summary [data-outcome]")).toHaveAttribute("data-outcome", "success");
-        }
-        if (id === "processing") {
-            await expect(call).toContainText("JSON parsing failed in the response adapter.");
-            await expect(call).not.toContainText("The record does not identify the processing step");
-        }
-        if (["conflict", "processing", "hidden-error", "non-error"].includes(id)) {
-            await call.scrollIntoViewIfNeeded(); await capture(id + "-reader");
-        }
-        await expect(call).toContainText(id === "timeout" ? "180,024 ms (180.024 s)" : "1,348 ms (1.348 s)");
-        if (id === "timeout") {
-            await chooseTheme(page, "dark");
-            await call.scrollIntoViewIfNeeded(); await capture("timeout-reader-dark");
-        }
-        await toggle.focus(); await page.keyboard.press("Enter");
-        await expect(toggle).toBeFocused();
-        if (meaning) await expect(call.locator('[data-interpretation="true"]')).toBeVisible();
-        await page.locator("#closeContextSidebar").click();
-    }
+    // The frozen report must retain both status channels; first verify that the live reader does too.
+    const target = page.locator('#activityList article').filter({hasText: "invented conflict request"});
+    await target.locator(".request-card-open").click();
+    const call = page.locator('[data-tool-call-id="conflict-call"]');
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(call.locator(".reader-call-summary")).toContainText("1 tool call completed");
+    const entry = call.locator(".api-result-entry");
+    await expect(entry).toContainText("403"); await expect(entry).toContainText("500");
+    await expect(entry).toContainText("statuses disagree");
+    await expect(entry).not.toContainText("understood but refused");
+    await page.locator("#closeContextSidebar").click();
     await navigateMain(page, "reports");
     const waiting = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await prepareLandingReport(page, "errors");

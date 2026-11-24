@@ -121,7 +121,10 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
             for (const node of [tree, ...tree.querySelectorAll("*")]) {
                 for (const child of node.childNodes) if (child.nodeType === 3) child.data = "";
                 if ("value" in node) node.value = "";
-                for (const attr of node.attributes) attr.value = "";
+                for (const attr of [...node.attributes]) {
+                    node.removeAttributeNode(attr);
+                    attr.value = ""; // Scrub held references without writing invalid values to live SVG.
+                }
             }
             tree.replaceChildren();
         }
@@ -149,7 +152,14 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
             for (const details of source.querySelectorAll("details:not(.wire-example-editor)")) details.open = expanded;
             refresh();
         },
-        setTitle(title) { if (current()) { source.querySelector("h1").textContent = title; refresh(); } } };
+        setTitle(title) {
+            if (!current()) return;
+            const heading = source.querySelector("h1");
+            const text = source.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+            while (text.nextNode()) text.currentNode.data = "";
+            heading.textContent = title;
+            refresh();
+        } };
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.

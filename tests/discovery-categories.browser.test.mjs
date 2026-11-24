@@ -107,6 +107,7 @@ test("Discovery reads consistently across charts, filters and call details in bo
             await screenshot(page, `${theme}-${width}-200-chart`);
         }
         await calls.click();
+        await page.getByRole("link", { name: "Show full activity", exact: true }).click();
         const toggles = page.locator('[data-reader-section="activity"] .reader-call-toggle');
         await expect(toggles).toHaveCount(8);
         const targets = await toggles.evaluateAll(nodes => nodes.map(node => ({

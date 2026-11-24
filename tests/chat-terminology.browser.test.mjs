@@ -9,10 +9,10 @@ import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, o
 
 const original = "Original session question.\n" + "Retain this session wording exactly. ".repeat(12);
 const title = "Historical session title";
-async function setup(t, { name = title, includeUnlinked = false } = {}) {
+async function setup(t, { name = title, includeUnlinked = false, colliding = false } = {}) {
     const records = ["one", "two", "unnamed"].map(id => {
         const row = fixture(id);
-        row.sourceSessionId = `source-${id}`;
+        row.sourceSessionId = `source-${id}` + (colliding && id !== "unnamed" ? "-12345678" : "");
         row.sourceSessionName = id === "unnamed" ? null : name;
         row.userPrompt.text = original;
         row.userPrompt.sourceTimestamp = row.toolCalls[0].startedAt = "2026-09-30T12:00:00Z";
@@ -125,7 +125,7 @@ test("chat scope preserves recorded text through outcome drilldown, report previ
 
 test("keyboard selection distinguishes duplicate chat names at narrow and enlarged widths", { timeout: 60000 }, async t => {
     const name = `${title} ${"longunbrokentoken".repeat(10)} \u65e5\u672c\u8a9e \u2014 \u00e9vidence`;
-    const { page, url } = await setup(t, { name });
+    const { page, url } = await setup(t, { name, colliding: true });
     await page.goto(url);
     const chat = page.getByRole("combobox", { name: "Chat", exact: true });
     const list = page.getByRole("listbox", { name: "Chat", exact: true });
@@ -138,8 +138,11 @@ test("keyboard selection distinguishes duplicate chat names at narrow and enlarg
             if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
             await chat.scrollIntoViewIfNeeded();
             await chat.press("Enter");
-            for (const suffix of ["urce-one", "urce-two"]) {
-                const option = list.getByRole("option", { name: `${name} (Chat ...${suffix})`, exact: true });
+            const options = list.getByRole("option").filter({ hasText: name });
+            await expect(options).toHaveCount(2);
+            const labels = await options.allTextContents();
+            assert.equal(new Set(labels).size, 2, "Even colliding eight-character ID suffixes must distinguish chats");
+            for (const option of await options.all()) {
                 await expect(option).toBeVisible();
                 const clipped = await option.locator(".select-option-label").evaluate(node =>
                     node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1);
@@ -157,7 +160,7 @@ test("keyboard selection distinguishes duplicate chat names at narrow and enlarg
     await chat.scrollIntoViewIfNeeded(); await chat.press("Enter");
     await chat.press("ArrowDown"); await chat.press("ArrowDown");
     await chat.press("Enter");
-    await expect(page.locator("#chatFilter")).toHaveValue("source-two");
+    await expect(page.locator("#chatFilter")).toHaveValue("source-two-12345678");
     await expect(chat).toBeFocused();
     await closeAnalyzeFilters(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
@@ -168,7 +171,7 @@ test("keyboard selection distinguishes duplicate chat names at narrow and enlarg
     await expect(page.locator('#contextSidebar [data-tool-call-id="test-call-two"]').first()).toBeVisible();
     await page.locator("#closeContextSidebar").click();
     await expect(card).toBeFocused();
-    await expect(page.locator("#chatFilter")).toHaveValue("source-two");
+    await expect(page.locator("#chatFilter")).toHaveValue("source-two-12345678");
 });
 
 test("Close restores the outcome link directly and after visiting the chat from Source", async t => {

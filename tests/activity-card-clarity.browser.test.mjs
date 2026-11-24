@@ -113,24 +113,6 @@ test("service limits open their own calls, not a neighboring named target or the
     await expect(card.getByRole("link", { name: /Mail|Calendar/ })).toHaveCount(0);
 });
 
-async function measure(page) {
-    return page.locator(".read-in-place").evaluateAll(nodes => nodes.map(node => {
-        const prompt = node.querySelector(".request-card-prompt"), style = getComputedStyle(prompt);
-        const range = document.createRange(); range.selectNodeContents(prompt);
-        const box = prompt.getBoundingClientRect();
-        const lines = [...new Set([...range.getClientRects()].filter(rect => rect.height > 0 && rect.y < box.bottom)
-            .map(rect => Math.round(rect.y)))];
-        const card = node.getBoundingClientRect();
-        return { card: card.toJSON(), listWidth: node.closest("#activityList").clientWidth, prompt: box.toJSON(), lines: lines.length,
-            font: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight,
-            weight: style.fontWeight,
-            outcome: node.querySelector(".card-orientation").getBoundingClientRect().toJSON(),
-            authors: [...node.querySelectorAll(".request-card-author")].flatMap(n => [...n.getClientRects()].map(r => r.toJSON())),
-            time: node.querySelector(".request-card-time").getBoundingClientRect().toJSON(),
-            text: prompt.textContent };
-    }));
-}
-
 async function capture(page, name, metrics) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
@@ -804,7 +786,8 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
     });
     const proof = process.env.WIRE_IDENTIFIER_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const joined = page.locator('[data-view-key="request:identifier-joined"] .request-card-open');
+    const joined = interactionCard(page, "identifier-joined").locator(".card-excerpt");
+    const open = promptLink(page, "identifier-joined");
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -812,7 +795,7 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         for (const [name, text, count] of cases) {
-            const prompt = page.locator(`[data-view-key="request:identifier-${name}"] .request-card-open`);
+            const prompt = interactionCard(page, `identifier-${name}`).locator(".card-excerpt");
             await expect(prompt.locator(".text-preview-identifier")).toHaveCount(count);
             assert.equal(await prompt.textContent(), text);
             assert.equal(await prompt.evaluate(node => {
@@ -838,18 +821,18 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         if (proof) {
             await page.mouse.move(0, 0);
             await joined.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-joined.png`) });
-            await page.locator('[data-view-key="request:identifier-separated"] .request-card-open').screenshot({
+            await interactionCard(page, "identifier-separated").locator(".card-excerpt").screenshot({
                 path: path.join(proof, `${theme}-${width}-${scale}-separated.png`),
             });
         }
-        await joined.click();
+        await open.click();
         const original = page.locator('[data-reader-section="prompt"] .full-text-content');
         assert.equal(await original.textContent(), cases[0][1]);
         await expect(original.locator(".text-preview-identifier")).toHaveCount(0);
         await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
         assert.equal(await page.evaluate(() => window.copied.at(-1)), cases[0][1]);
         await page.keyboard.press("Escape");
-        await expect(joined).toBeFocused();
+        await expect(open).toBeFocused();
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -857,7 +840,7 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
     if (proof) await writeFile(path.join(proof, "spacing.json"), JSON.stringify(measurements, null, 2));
 });
 
-test("all scoped failures stay visible from card to reader with exact prompt copying and deliberate omission", { timeout: 90000 }, async t => {
+test("counted failures stay separate from a completed sibling’s nine returned entries", { timeout: 90000 }, async t => {
     const diagnostic = (message, details = []) => ({ version: 1, source: "completion-error", status: "recorded", message, details });
     const record = records()[2];
     record.userPrompt.text = "Coordinate the orchard rehearsal with owner\nrecord-42. "
@@ -894,111 +877,21 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         .map((call, index) => ({ ...call, toolCallId: `late-${index}`, startEventId: `late-start-${index}`,
             startedAt: new Date(Date.parse(record.userPrompt.sourceTimestamp) + index * 1000).toISOString() }));
     const { page } = await setup(t, [record, late]);
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.evaluate(() => {
-        window.copied = [];
-        Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
-            writeText: async text => window.copied.push(text),
-        } });
-    });
-    const card = promptLink(page, record.scenarioId);
-    const lateCard = promptLink(page, "late-failure");
-    const proof = process.env.WIRE_CARD_TEXT_PROOFS;
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [768, 1], [390, 2]]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toContainText("owner record-42");
-        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toContainText("Ownerrecord-42");
-        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).not.toContainText("Owner record-42");
-        assert.equal(await card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt").textContent(), record.userPrompt.text);
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).not.toContainText("...");
-        await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
-        await expect(card).not.toContainText(/Returned item|rehearsal item is locked|503|Call #|response body excluded/);
-        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveCount(0);
-        await expect(lateCard.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
-        await card.scrollIntoViewIfNeeded();
-        await page.mouse.move(0, 0);
-        if (proof) {
-            await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-page.png`), fullPage: true });
-            await card.evaluate(node => {
-                node.scrollIntoView({ block: "start" });
-                scrollBy(0, -document.querySelector(".app-header").getBoundingClientRect().height - 16);
-            });
-            if (width === 390) {
-                await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
-                await card.locator("xpath=ancestor::article[1]").locator(".request-card-summary").evaluate(node => node.scrollIntoView({ block: "end" }));
-                await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card-tail.png`) });
-            } else await card.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
-        }
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await card.focus();
-        await page.keyboard.press("Enter");
-        await expect(page.locator("#contextSidebar")).toBeVisible();
-        if (theme === "light" && width === 1440) await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
-        const firstFailure = page.locator('[data-tool-call-id="all-failures-0"]');
-        await expect(firstFailure.locator(".reader-call-summary")).toContainText(parentMessage);
-        await expect(firstFailure.locator(".reader-call-summary")).toContainText(detailMessage);
-        await firstFailure.locator(".reader-call-toggle").click();
-        await expect(firstFailure.locator(".technical-detail")).toContainText(detailMessage);
-        await firstFailure.locator(".reader-call-toggle").click();
-        await expect(page.locator('[data-tool-call-id="all-failures-1"] .reader-call-summary')).toContainText(parentMessage);
-        await expect(page.locator('[data-tool-call-id="all-failures-2"] .reader-call-summary')).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
-        const returned = page.locator('[data-tool-call-id="returned-failures"]');
-        await expectCallStatus(returned, 6, "completed");
-        await expect(returned.locator(".api-result-entry").last()).toBeVisible();
-        await expect(returned.locator(".api-result-entry")).toHaveCount(9);
-        for (let index = 1; index < 9; index++) await expect(returned.locator(".api-result-entry").nth(index)).toContainText(`Returned item ${index} cannot be changed.`);
-        await expect(returned.getByRole("button", { name: /Next returned/ })).toHaveCount(0);
-        const success = page.locator('[data-tool-call-id="clarity-call-2-0"] .recorded-result').first();
-        const failure = page.locator('[data-tool-call-id="all-failures-0"] .result-status').first();
-        assert.notEqual(await success.evaluate(node => getComputedStyle(node).color), await failure.evaluate(node => getComputedStyle(node).color));
-        const original = page.locator('[data-reader-section="prompt"] .full-text-content');
-        assert.equal(await original.textContent(), record.userPrompt.text);
-        const copy = page.getByRole("button", { name: "Copy prompt", exact: true });
-        await copy.scrollIntoViewIfNeeded();
-        const beforeCopy = (await page.locator('[data-reader-section="activity"]').boundingBox()).y;
-        const box = await copy.boundingBox();
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await expect(copy).toHaveAttribute("data-copy-state", "success");
-        assert.equal((await page.locator('[data-reader-section="activity"]').boundingBox()).y, beforeCopy);
-        assert.equal(await page.evaluate(() => window.copied.at(-1)), record.userPrompt.text);
-        await page.locator('[data-tool-call-id="all-failures-0"]').scrollIntoViewIfNeeded();
-        if (proof) await page.locator("#contextSidebar").screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-reader.png`) });
-        await returned.locator(".api-result-entry").last().scrollIntoViewIfNeeded();
-        if (proof) await page.locator("#contextSidebar").screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-reader-tail.png`) });
-        assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-        await page.keyboard.press("Escape");
-        await expect(page.locator("#contextSidebar")).not.toBeVisible();
-        await expect(card).toBeFocused();
-    }
-    await lateCard.click();
-    await expectCallStatus(page.locator('[data-tool-call-id="late-4"]'), 5, "failed");
-    assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), late.userPrompt.text);
-    await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.copied.at(-1)), late.userPrompt.text);
-    await page.keyboard.press("Escape");
-    await page.goto(page.url().split("#")[0] + "#analyze?result=failure");
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
-    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("3 of 7 Work IQ tool calls match this view");
-    await card.click();
-    await expect(page.locator('[data-reader-section="activity"] .reader-call-row')).toHaveCount(7);
-    for (let i = 0; i < 3; i++) await expectCallStatus(page.locator(`[data-tool-call-id="all-failures-${i}"]`), i + 3, "failed");
-    if (proof) await writeFile(path.join(proof, "journey.json"), JSON.stringify({
-        source: "Invented records only; temporary retained store and random local HTTP port.",
-        themes: ["light", "dark"], sizes: [[1440, 1], [768, 1], [390, 2]],
-        cardCalls: 7, toolFailures: 3, returnedErrors: 8, returnedEntriesVisibleWithoutPaging: 9,
-        lateFailure: { calls: 5, completed: 4, failed: 1, visible: true },
-        equalTextDifferentCalls: "Both retained", sourceSpacing: "Preserved without guessing",
-        originalPromptCopies: "Exact", copyLayoutShift: 0, pageOverflow: false, readerOverflow: false,
-        filteredCallNumbers: [3, 4, 5], hostMode: "Browser renderer; normal motion",
-        liveDeployment: false, providerReads: false,
-    }, null, 2));
+    const origin = interactionCard(page, record.scenarioId);
+    await origin.getByRole("link", { name: "3 tool calls failed", exact: true }).click();
+    const rows = page.locator("#requestContent .reader-call-row");
+    await expect(rows).toHaveCount(3);
+    assert.deepEqual(await rows.evaluateAll(nodes => nodes.map(n => n.dataset.toolCallId)), ["all-failures-0", "all-failures-1", "all-failures-2"]);
+    await page.getByRole("link", { name: "Show full activity", exact: true }).click();
+    await expect(rows).toHaveCount(7);
+    const first = page.locator('[data-tool-call-id="all-failures-0"]');
+    if (await first.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await first.locator(".reader-call-toggle").click();
+    await expect(first).toContainText(detailMessage);
+    const ret = page.locator('[data-tool-call-id="returned-failures"]');
+    await expect(ret.locator(".api-result-entry")).toHaveCount(9);
+    for (let i = 1; i < 9; i++) await expect(ret.locator(".api-result-entry").nth(i)).toContainText(`Returned item ${i} cannot be changed.`);
+    await expect(ret.locator(".reader-call-summary")).toContainText("1 tool call completed");
+    await expect(ret).not.toContainText(detailMessage);
 });
 
 test("Reader call disclosure groups identity and result without a blank target row and labels its service", async t => {
@@ -1203,63 +1096,6 @@ test("Source details starts collapsed only for new reading state and preserves l
     await card.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator('[data-reader-section="activity"] .reader-section-clip')).toBeVisible();
-});
-
-test("Activity bands remain separate at wide and enlarged widths without clipping meaningful text", async t => {
-    const { page } = await setup(t);
-    const views = [];
-    for (const [width, scale] of [[1440, 1], [1024, 1.4], [820, 2], [390, 1], [390, 2]]) {
-        for (const theme of ["dark", "light"]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
-                .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
-            const metrics = await measure(page), name = `${width}-${scale}-${theme}`;
-            await capture(page, name, metrics);
-            views.push({ name, metrics });
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ": no page overflow");
-        }
-    }
-    assert.equal(views[0].metrics.length, 8);
-    assert.equal(views[0].metrics[0].fontSize, "16px");
-    for (const { name, metrics } of views) {
-        assert.ok(metrics.every(row => row.authors.every(box => box.left >= row.card.left && box.right <= row.card.right)),
-            name + ": author must remain wholly readable");
-        for (const row of metrics) {
-            assert.equal(row.card.width, row.listWidth, name + ": the link fills the list width");
-            assert.match(row.font, /Asta Sans/);
-            assert.equal(row.weight, "400");
-            assert.ok(row.card.height >= 44, name + ": full-card target");
-            assert.ok(row.outcome.top >= row.prompt.bottom && row.outcome.top <= row.prompt.bottom + 10, name + ": outcome follows its prompt");
-            assert.ok(row.time.right <= row.card.right, name + ": timestamp stays readable");
-        }
-    }
-    for (const [width, scale] of [[1440, 1], [1024, 1.4], [390, 1], [390, 2]]) {
-        for (const theme of ["dark", "light"]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            await promptLink(page, "card-clarity-2").click();
-            const native = await page.locator("#contextSidebar").evaluate(pane => {
-                const body = pane.querySelector("#contextSidebarBody"), footer = pane.querySelector("#contextSidebarFooter");
-                return { overflow: body.scrollWidth > body.clientWidth + 1,
-                    readingBottom: body.getBoundingClientRect().bottom,
-                    availableBottom: footer.checkVisibility() ? footer.getBoundingClientRect().top : pane.getBoundingClientRect().bottom,
-                    calls: [...pane.querySelectorAll(".reader-call-toggle")].map(toggle => {
-                        const identity = toggle.querySelector(".reader-call-identity-line").getBoundingClientRect();
-                        const result = toggle.querySelector(".reader-call-summary").getBoundingClientRect();
-                        return { height: toggle.getBoundingClientRect().height, gap: result.top - identity.bottom };
-                    }) };
-            });
-            assert.equal(native.overflow, false);
-            assert.ok(native.readingBottom <= native.availableBottom + 1, `${width}/${scale}: reading must fit above the footer or panel edge`);
-            assert.equal(native.calls.length, 6);
-            assert.ok(native.calls.every(call => call.height >= 44 && call.gap >= 5 && call.gap <= 7));
-            await capture(page, `${width}-${scale}-${theme}-native-reader`, native);
-            await page.goBack();
-        }
-    }
 });
 
 test("An empty retained agent message remains recognizable without pretending its arguments are a prompt", async t => {

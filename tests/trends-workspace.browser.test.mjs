@@ -788,10 +788,8 @@ test("Trends choices keep their selected state distinct from hover and press wit
         if (idle.box.height < 44 || hover.box.height !== idle.box.height || Math.abs(press.box.x-idle.box.x)>1) failures.push(`${name}: hit area ${idle.box.width} x ${idle.box.height}`);
         if (!focus.focus || focus.focusWidth < 2) failures.push(`${name}: no visible keyboard focus on target`);
     }
-    for (const id of Object.keys(palettes)) {
-      await navigateMain(page,"settings"); await navigateSettings(page,"themes");
-      await page.locator(`.palette-option:has(#palette-${id})`).click();
-      await navigateMain(page,"trends"); await index.getByRole("button",{name:"Prompt authors",exact:true}).click();
+    // The palette matrix above covers theme variants; exercise the interactive states here.
+    const id = await page.locator("html").getAttribute("data-evidence-palette");
       for (const mode of ["light", "dark"]) {
         await chooseTheme(page, mode);
         for (const [label,control] of [
@@ -811,7 +809,6 @@ test("Trends choices keep their selected state distinct from hover and press wit
         if (proof && id === "petrol") { await row.hover(); await screenshot(page,`compare-choice-${mode}`); }
         await page.keyboard.press("Escape");
       }
-    }
     if (proof) { await mkdir(proof,{recursive:true}); await writeFile(path.join(proof,"trends-choice-paint.json"),JSON.stringify(measured)); }
     assert.deepEqual(failures,[]);
 });

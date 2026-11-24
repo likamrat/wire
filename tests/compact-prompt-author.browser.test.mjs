@@ -81,7 +81,7 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proof, name + ".png") });
 }
 
-test("compact cards name the prompt author without inferring from text or replacing the native full-card link", { timeout: 45000 }, async t => {
+test("compact cards retain prompt authorship, selectable text and native reader links", { timeout: 45000 }, async t => {
     const { page, browserContext } = await setup(t);
     await revealAnalyzeRecords(page);
     for (const [id, actor] of cases) {
@@ -106,7 +106,8 @@ test("compact cards name the prompt author without inferring from text or replac
     const opened = browserContext.waitForEvent("page");
     await link.click({ modifiers: ["Control"] });
     const popup = await opened;
-    await expect(popup.getByRole("button", { name: "Open this view without the private selection" })).toBeVisible();
+    await expect(popup.locator("#requestContent")).toHaveAttribute("data-view-key", await card(page, "mine").getAttribute("data-view-key"));
+    await expect(popup.locator(".request-original .full-text-content")).toHaveText(await passage.textContent());
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await popup.close();
     await link.focus(); await page.keyboard.press("Enter");

@@ -143,6 +143,7 @@ test("the built workbench carries each palette through screens and nested readin
     const before = await loadBoardState(app.context), browser = await chromium.launch();
     const profile = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", reducedMotion: "reduce" });
     const page = await profile.newPage();
+    await page.clock.setFixedTime(new Date("2026-11-16T20:00:00Z"));
     page.setDefaultTimeout(10000);
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => assert.equal(new URL(request.url()).origin, new URL(app.runtime.url).origin));

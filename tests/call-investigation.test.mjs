@@ -60,10 +60,20 @@ test("start-event, Graph sites, visible statuses, code references and owned HTTP
         assert.equal(result.row, rows[0]);
         assert.equal(result.actionId, rows[0].id);
     }
-    scenario.toolCalls.push({ startEventId: "event" });
-    assert.equal(calls.resolve(activity, [scenario], { request: "group", call: activity.tool[0].id }).source, scenario.toolCalls[0]);
     activity["reported-api"] = [{ id: "orphan", scenarioId: "group", parentCallId: "absent" }];
     assert.equal(calls.resolve(activity, [scenario], { request: "group", layer: "reported-api", call: "orphan" }).status, "unavailable");
+});
+
+test("an exact start-event target is unavailable when two owning calls have conflicting arguments", () => {
+    const calls = createCallInvestigation();
+    const scenario = { scenarioId: "group", sourceSessionId: "chat", toolCalls: [
+        { startEventId: "event", requestArgs: { entityUrls: ["/me/messages"] } },
+        { startEventId: "event", requestArgs: { entityUrls: ["/me/events"] } },
+    ] };
+    const row = { id: 'event:["chat","event"]', scenarioId: "group", sourceSessionId: "chat" };
+    const result = calls.resolve({ tool: [row] }, [scenario], { request: "group", layer: "tool", call: row.id });
+    assert.equal(result.status, "unavailable");
+    assert.equal(result.source, undefined);
 });
 
 test("exact targets use canonical identity and API parent links, never an index or nearby action", () => {

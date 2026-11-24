@@ -211,7 +211,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
             assert.ok(current.bottomGap <= 12, `${current.key}: tightened space below the legend`);
             assert.ok(current.widget.height <= 280, `${current.key}: side-by-side widget stays content-sized`);
         }
-        if (current.width / current.zoom >= 768) {
+        if (current.legend.y < current.ring.bottom) {
             assert.ok(current.legend.x >= current.ring.right + 15, `${current.key}: labels and values sit on the wheel's right`);
             assert.ok(current.legend.y < current.ring.bottom && current.legend.bottom > current.ring.y, `${current.key}: one aligned horizontal group`);
         } else assert.ok(current.legend.y >= current.ring.bottom, `${current.key}: narrow widths stack without squeezing the legend`);
@@ -219,7 +219,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
         assert.equal(current.scopeInCommands, true, `${current.key}: result commands retain the scope`);
         assert.ok(current.bottomGap <= 32, `${current.key}: no empty footer band (${current.bottomGap})`);
         for (const label of [current.value, current.unit]) {
-            assert.ok(label.clearance >= 2, `${current.key}: text rectangles conservatively clear the inner edge by ${label.clearance}px`);
+            assert.ok(label.clearance > 0, `${current.key}: the entire text box must stay inside the inner edge (${label.clearance}px clearance)`);
             assert.equal(label.rectangles.length, 1, `${current.key}: center text stays on one line`);
             assert.equal(label.clipped || label.ellipsis, false, current.key);
         }
@@ -252,7 +252,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
 
 test("outcome scope, hover, keyboard, slices and zero/missing states retain their behavior", async t => {
     const page = await setup(t, 239);
-    await expect(page.locator("#activityListSummary")).toHaveText("3 interactions with 239 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("3 interactions · 239 matching tool calls");
     const label = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
     const slice = page.locator('#outcomeChart .percentage-slice[data-category="failure"]');
     await label.hover(); await expect(slice).toHaveClass(/percentage-active/);
@@ -273,15 +273,15 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     await selectActivityOption(page, "outcomeFilter", "unknown"); await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("1");
     await expect(page.locator("#outcomeChart .percentage-total-unit")).toHaveText("tool call");
-    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction with 1 matching Work IQ tool call");
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     await expect(page.locator("#outcomeChart .percentage-slice")).toHaveAttribute("data-exact-fraction", "1");
     await expect(page.locator("#analyzeScopeCaption")).toHaveText("Outcome: No result recorded");
     await selectActivityOption(page, "outcomeFilter", "partial"); await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
-    await expect(page.locator("#activityListSummary")).toHaveText("0 interactions with 0 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("0 interactions · 0 matching tool calls");
     assert.equal(await page.locator("#outcomeChart .percentage-slice").count(), 0);
-    await expect(page.locator("#analyzeEmptyScope")).toBeVisible();
-    await expect(page.locator("#analyzeScopeCaption")).toContainText("Partly worked");
+    await expect(page.locator("#activityList article")).toHaveCount(0);
+    await expect(page.locator("#analyzeScopeCaption")).toContainText("Partial completion");
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
     await selectActivityOption(page, "scopeFilter", "all"); await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("239");

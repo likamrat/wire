@@ -64,7 +64,9 @@ test("card retirement is scoped to its consumer and permanently releases discard
                 sourceId: "microsoft-365-chat", title: "Retained " + name,
                 presentation: {kind: "prompt", tools: ["invented_lookup"], toolCount: 1, contextDateBasis: null},
                 selectedRows: 1, outcomes: {success: 1, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0}};
-            const article = ui.card({item, view: {revision: 7, sourceRevision: "d".repeat(64), aggregates: {layer: "tool"}},
+            const article = ui.card({item, view: {revision: 7, sourceRevision: "d".repeat(64), aggregates: {layer: "tool"},
+                readback: {schemaVersion: 1, snapshotRef: "e".repeat(64), committed: null,
+                    current: {generation: 1, configurationRevision: 1, privacyRevision: 1}, deletionVersion: 0}},
                 selection, onOpen: () => opens.push(name)});
             document.getElementById(rootId).append(article);
             return article;
