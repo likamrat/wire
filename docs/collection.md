@@ -453,6 +453,15 @@ tool call to a message by order.
 
 ### Prompt origin reader compatibility
 
+The [SDK's per-message continuation flag](https://github.com/microsoft/copilot-sdk/blob/2dfe56f7a205e0a4f13b6c02fc36afeb035650eb/nodejs/src/generated/session-events.ts#L7321-L7323)
+records injection by the autopilot loop, not merely the mode that was open.
+Classifier version 15 recognizes such a system-delivered message as **Agent
+prompt (automatic continuation)** when there is no competing sender evidence
+or unresolved kickoff guard. A system message by itself, an idle delivery,
+or wording that sounds automatic is not enough. This is sender evidence for
+the message, not proof it initiated a particular call. Installing the
+classifier does not repair a previously qualified conflicting sender.
+
 Once `host-agent-authored` is written, both the active
 reader and the fallback must recognize it in retained prompts, interaction
 validation and JSON-only saved reports (v13 origin support or a verified

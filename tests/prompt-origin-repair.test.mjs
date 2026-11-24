@@ -37,7 +37,8 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
     const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair", senderPair = variant === "v12-sender-pair";
     const legacyIdle = variant === "legacy-idle-reference", guardedFirst = variant === "guarded-first";
-    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (guardedFirst ? "kickoff" : legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
+    const systemContinuation = variant === "system-continuation";
+    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (systemContinuation ? "automatic" : guardedFirst ? "kickoff" : legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
     const repairItems = [item];
     if (senderPair) {
         const marked = app.cases.find(row => row.name === "legacy");
@@ -162,8 +163,8 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
     }
     const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
     let checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
-    const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan ? "conflicting-source" : "invalid-source" };
-    const olderVersion = legacyIdle || guardedFirst ? 13 : senderPair ? 12 : linkedPair ? 10 : 6;
+    const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan || systemContinuation ? "conflicting-source" : "invalid-source" };
+    const olderVersion = systemContinuation ? 4 : legacyIdle || guardedFirst ? 13 : senderPair ? 12 : linkedPair ? 10 : 6;
     const beforeOrigin = id => senderPair && id !== item.promptId ? { actor: "unknown", basis: "missing-source" } : older;
     const selectedIds = new Set(repairItems.map(item => item.promptId));
     for (const event of checkpoint.events.filter(event => selectedIds.has(event.id))) {
@@ -1000,8 +1001,15 @@ test("a direct-looking first original can inspect an already retained creator ma
     assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
 });
 
-for (const variant of ["direct", "plan-agent", "mode-user", "attachment-user", "legacy-idle-reference"]) test(`sealed origin repair preserves all facts and survives restart (${variant})`, async t => {
+for (const variant of ["direct", "plan-agent", "mode-user", "attachment-user", "legacy-idle-reference", "system-continuation"]) test(`sealed origin repair preserves all facts and survives restart (${variant})`, async t => {
     const f = await setup(t, variant);
+    if (variant === "system-continuation") {
+        const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+        assert.deepEqual(inspected.targets.map(t => t.prompt.authorship), [{ actor: "agent", basis: "autopilot" }]);
+        f.plan.targets = inspected.targets;
+        await writeFile(f.options.planFile, JSON.stringify(f.plan));
+        f.options.planSha256 = digest(f.plan);
+    }
     const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: f.plan.targets });
     assert.equal(inspected.authorized, false);
     assert.equal(inspected.indexAfterSchema, 4);

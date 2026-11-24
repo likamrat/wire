@@ -72,7 +72,7 @@ test("automatic continuations record absence of an original separately from unco
 
     }
     assert.equal(state.evidence[0].userPrompt.authorship.actor, "agent");
-    assert.equal(state.evidence[1].userPrompt.authorship.basis, "conflicting-source");
+    assert.deepEqual(state.evidence[1].userPrompt.authorship, { actor: "agent", basis: "autopilot" });
     assert.doesNotMatch(JSON.stringify(state.evidence), /PRIVATE_HOST_CONTROL|transformedContent/);
     assert.doesNotMatch(JSON.stringify(await app.checkpoint()), /PRIVATE_HOST_CONTROL|transformedContent/);
     assert.equal(state.personalEvaluation, undefined);

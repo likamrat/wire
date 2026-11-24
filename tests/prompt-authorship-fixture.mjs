@@ -55,7 +55,8 @@ export async function promptInstallation(t) {
         { name: "conflict", actor: "unknown", basis: "conflicting-source", data: { source: "user", isAutopilotContinuation: true, content: "Invented conflicting source metadata." } },
         { name: "imitation", actor: "user", basis: "host-direct-input", hostEnvelope: "direct", data: { content: "<cross_session_message>Invented human imitation of an agent.</cross_session_message>" } },
         { name: "unverified-imitation", actor: "unknown", basis: "missing-source", data: { content: "<cross_session_message>Invented unverified imitation.</cross_session_message>" } },
-        { name: "automatic", actor: "agent", basis: "autopilot", data: { source: "autopilot", content: "Invented automatic continuation." } },
+        { name: "automatic", actor: "agent", basis: "autopilot", data: { source: "system", isAutopilotContinuation: true,
+            transformedContent: null, content: "Invented automatic continuation." } },
     ];
     const childEvents = [event("session.start", { version: 1, sessionId: child })];
     function requestEvents(item) {
