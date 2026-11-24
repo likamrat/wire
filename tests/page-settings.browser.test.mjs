@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { fulfillFixtureUpdateStatus, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 
 test("page settings retain a nonempty format choice on reload and expose keyboard-searchable defaults", async t => {
     const { runtime } = await searchFixture(t, { frontend: "react", reply: false });
@@ -75,34 +75,76 @@ test("a real storage refusal is visible beside the edited default without claimi
     await page.reload(); await expect(page.locator("#defaultTrendChart-control")).toContainText("Errors & failures");
 });
 
-test("Last 14 days persists from Settings and opens Analyze on the matching activity", async t => {
+for (const frontend of ["react", "bundled"]) test(`Analyze entry uses the saved date range without overriding an explicit view (${frontend})`, async t => {
     const records = searchRecords(4);
     const starts = ["2026-09-17T03:59:59Z", "2026-09-17T04:00:00Z", "2026-09-30T21:00:00Z", "2026-10-01T04:00:00Z"];
     for (const [i, row] of records.entries()) row.toolCalls[0].startedAt = row.capturedAt = starts[i];
-    const { runtime } = await searchFixture(t, { frontend: "react", reply: false, records });
+    records[1].toolCalls[0].tool = "workiq-ask";
     const browser = await chromium.launch();
     t.after(() => browser.close());
+    const { runtime } = await searchFixture(t, { frontend, reply: false, records });
     const page = await browser.newPage({ timezoneId: "America/New_York" });
     await page.clock.setFixedTime(new Date("2026-10-01T02:00:00Z"));
-    await page.goto(new URL("/settings?section=analyze", runtime.url).href);
+    const refused = [];
+    await page.route(/\/api\/(?:collection\/|recollection\/|import$|refresh$|app-update$)/, async route => {
+        if (await fulfillFixtureUpdateStatus(route, new URL(runtime.url).origin)) return;
+        const path = new URL(route.request().url()).pathname;
+        if (path === "/api/collection/status") return route.continue();
+        refused.push(path);
+        await route.abort();
+    });
+    const viewAnalyze = page.getByRole("link", { name: "View Analyze", exact: true });
+    const rows = page.locator("#activityList article[data-view-key]");
+    async function expectScope(range, dates, ids) {
+        await expect(page.locator("#dateFilter")).toHaveValue(range);
+        await expect(page.locator("#periodResult")).toHaveText(`${ids.length} Work IQ tool call${ids.length === 1 ? "" : "s"} (${dates})`);
+        await expect.poll(() => rows.evaluateAll(nodes => nodes.map(node => node.dataset.viewKey).sort()))
+            .toEqual(ids.map(id => `request:search-${id}`));
+    }
+    await page.goto(runtime.url);
+    await expectScope("capture", "All dates", [0, 1, 2, 3]);
+    await navigateMain(page, "settings");
+    await navigateSettings(page, "analyze");
     await expect(page.locator("#defaultAnalyzeRange option")).toHaveText(["All dates", "Last 7 days", "Last 14 days", "Last 30 days"]);
-    await selectActivityOption(page, "defaultAnalyzeRange", "14");
+    await selectActivityOption(page, "defaultAnalyzeRange", "7");
+    const advertised = await viewAnalyze.getAttribute("href");
+    await viewAnalyze.click();
+    await expectScope("7", "Sep 24–30, 2026", [2]);
+    await expect(page).toHaveURL(new URL(advertised, runtime.url).href);
+    await page.goBack();
     await page.reload();
-    await expect(page.locator("#defaultAnalyzeRange-control")).toContainText("Last 14 days");
-    await page.locator("nav [data-nav=analyze]").click();
-    await expect(page.locator("#dateFilter")).toHaveValue("14");
+    await expect(page.locator("#defaultAnalyzeRange-control")).toContainText("Last 7 days");
+    await navigateMain(page, "analyze");
+    await expectScope("7", "Sep 24–30, 2026", [2]);
+    await page.goto(runtime.url);
+    await expectScope("7", "Sep 24–30, 2026", [2]);
+
+    await selectActivityOption(page, "dateFilter", "14");
+    await expectScope("14", "Sep 17–30, 2026", [1, 2]);
     await selectActivityOption(page, "dateFilter", "custom");
     await expect(page.locator("#fromFilter")).toHaveValue("2026-09-17");
     await expect(page.locator("#toFilter")).toHaveValue("2026-09-30");
     await page.locator("#analyzeDates").getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.locator("#dateFilter-control")).toHaveAccessibleName("Dates: Sep 17–30, 2026");
-    await expect(page.locator("#activityListSummary")).toContainText("2 matching tool calls");
     const address = new URL(page.url());
     assert.equal(address.searchParams.get("range"), "14");
     assert.equal(address.searchParams.has("privateView"), false);
+
+    await selectActivityOption(page, "toolFilter", "workiq-ask");
+    await expectScope("14", "Sep 17–30, 2026", [1]);
+    const explicit = page.url();
+    await navigateMain(page, "settings");
+    await navigateSettings(page, "analyze");
+    await selectActivityOption(page, "defaultAnalyzeRange", "30");
+    await viewAnalyze.click();
+    await expectScope("14", "Sep 17–30, 2026", [1]);
+    await expect(page).toHaveURL(explicit);
     await selectActivityOption(page, "dateFilter", "7");
-    await expect(page.locator("#activityListSummary")).toContainText("1 matching tool call");
+    await expectScope("7", "Sep 24–30, 2026", []);
     await page.goBack();
-    await expect(page.locator("#dateFilter")).toHaveValue("14");
-    await expect(page.locator("#activityListSummary")).toContainText("2 matching tool calls");
+    await expectScope("14", "Sep 17–30, 2026", [1]);
+    await expect(page).toHaveURL(explicit);
+    await page.goto(new URL("/?range=custom&from=2026-10-01&to=2026-10-01", runtime.url).href);
+    await expectScope("custom", "Oct 1, 2026", [3]);
+    assert.deepEqual(refused, []);
 });
