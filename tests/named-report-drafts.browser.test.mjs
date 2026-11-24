@@ -382,10 +382,20 @@ test("Analyze and its reader edit named drafts through Save and Open, then delet
     await expect(lastDecision.getByRole("button", { name: "Delete draft" })).toBeInViewport();
     await capture("delete-confirm-narrow");
     // The writer commits, but the response never reaches the panel.
+    let committedCatalog;
     await page.route("**/api/report-drafts/edit", async route => {
-        assert.ok((await route.fetch()).ok()); await route.abort();
+        const response = await route.fetch();
+        if (!response.ok()) return route.fulfill({ response });
+        committedCatalog = (await response.json()).catalog;
+        await route.abort("connectionreset");
     }, { times: 1 });
-    await lastDecision.getByRole("button", { name: "Delete draft" }).click();
+    const [recovery] = await Promise.all([
+        page.waitForResponse(r => committedCatalog && r.url().endsWith("/api/report-drafts/list")),
+        lastDecision.getByRole("button", { name: "Delete draft" }).click(),
+    ]);
+    assert.ok(recovery.ok());
+    assert.deepEqual(committedCatalog.drafts, []);
+    assert.deepEqual(await recovery.json(), committedCatalog);
     await expect(page.locator(".report-draft-membership")).toBeHidden();
     await expect(page.getByRole("combobox", { name: "Report draft", exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Activity source: All retained activity" })).toBeVisible();
