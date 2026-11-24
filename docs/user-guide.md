@@ -364,7 +364,8 @@ numbered row. **Tool operation tokens** shows what the tool service reported
 for that call, when available. **Returned text (estimate)** describes the size
 of its response. Neither figure is a share of the model's token total.
 In **Response models**, choose **Token share** to compare each model's share
-of the recorded tokens.
+of the recorded tokens. Select a model to see only the interactions with token
+counts for that model. **Interactions** also includes uses without token counts.
 
 For a report on one interaction, choose **Add to report** on its card and add
 it to a new draft. Open that draft in Reports to save the same total. Adding

@@ -88,4 +88,9 @@ test("model cohorts split multiple calls by recorded model and preserve measured
     ]);
     assert.equal(usageSummary([zero.usage]).total,0);
     assert.equal(usageSummary([null]).total,null);
+    const repeated = recordedUsage([sample("gpt-4.1",5),sample("gpt-4.1",7)]);
+    const identified = usageSummary(new Map([["mixed",mixed.usage],["repeated",repeated],["zero",zero.usage],["missing",null]]));
+    assert.deepEqual(identified.models.map(row=>[row.model,row.total,row.interactions,row.interactionIds]),[
+        ["gpt-4.1",24,3,["mixed","repeated","zero"]],["new-private-model",3,1,["mixed"]],
+    ]);
 });

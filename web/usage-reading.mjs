@@ -89,14 +89,21 @@ function renderModelCounts(el, host, u) {
     }
     host.append(table);
 }
-function modelShareReading(el, host, s, nativeCount) {
+function modelShareReading(el, host, s, nativeCount, linkForModel) {
     const list = el("ul", "percentage-legend percentage-tool-list");
     for (const row of s.models) {
         const block = el("li", "percentage-legend-row usage-model"), fraction = s.total ? row.total / s.total : null;
         const value = el("span", "percentage-value");
         if (fraction === null) value.textContent = `${number(row.total)} tokens`;
         else value.append(el("strong", "", `${Math.round(fraction*100)}%`), " ", el("span", "", `(${number(row.total)} tokens)`));
-        block.append(el("span", "percentage-label", row.model), value);
+        const label = linkForModel?.(row.model) ?? el("span");
+        label.classList.add("percentage-label");
+        label.textContent = row.model;
+        if (linkForModel) {
+            label.dataset.viewKey = `percentage:metered-model:${row.model}`;
+            label.setAttribute("aria-label", `${row.model}: ${value.textContent}. View ${number(row.interactions)} metered ${row.interactions === 1 ? "interaction" : "interactions"}.`);
+        }
+        block.append(label, value);
         const track = el("div", "percentage-bar-track"), fill = el("span", "percentage-bar");
         fill.style.width = `${100 * (fraction ?? 0)}%`; track.setAttribute("aria-hidden", "true"); track.append(fill); block.append(track);
         list.append(block);

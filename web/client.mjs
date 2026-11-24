@@ -5150,7 +5150,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (view !== "analyze" || compare || !widget || widget === "all") return null;
         const group = percentages.evidence(widget);
         if (!group) return "Activity list: unavailable chart selection";
-        const name = group.chart === "models" ? "Model" : group.chart === "authors" ? "Prompt author" : "Chart selection";
+        const name = group.chart === "models" ? "Model" : group.chart === "metered-model" ? "Metered model" : group.chart === "authors" ? "Prompt author" : "Chart selection";
         return `Activity list · ${name}: ${group.label}`;
     }
     function renderFilterChips() {
@@ -6112,7 +6112,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const groups = `${count(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
         const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native && showMicrosoftActivity();
         $("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." :
-            `${group.label}: ${count(allItems.length)} matching ${group.interactionIds ? allItems.length === 1 ? "interaction" : "interactions"
+            `${group.label}: ${count(allItems.length)} ${group.chart === "metered-model" ? "metered" : "matching"} ${group.interactionIds ? allItems.length === 1 ? "interaction" : "interactions"
                 : workspaceState.scope.layer === "tool" ? allItems.length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, allItems.length)}`
             : native ? [
             ...(allItems.length ? [`${count(allItems.length)} GitHub ${allItems.length === 1 ? "interaction" : "interactions"}`] : []),
