@@ -16,6 +16,7 @@ export function createEvidenceUX(icons, operations) {
     const tooltipResize = new ResizeObserver(() => positionTooltip());
     let active = null, hovered = null, focused = null, pinned = null, opening = null, openTimer = null, closeTimer = null;
     let suppressedPointer = null, suppressedFocus = null, pointer = null;
+    let hoverPoint = null;
     let inputSource = "focus", focusSource = null;
     let restoredPage = ["reload", "back_forward"].includes(performance.getEntriesByType("navigation")[0]?.type);
     let restoredPointer = restoredPage;
@@ -136,6 +137,7 @@ export function createEvidenceUX(icons, operations) {
         if (bubble.style.top !== position.top + "px") bubble.style.top = position.top + "px";
     }
     function clearTooltip() {
+        hoverPoint?.disconnect(); hoverPoint = null;
         tooltipResize.disconnect();
         clearTimeout(openTimer);
         clearTimeout(closeTimer);
@@ -343,6 +345,7 @@ export function createEvidenceUX(icons, operations) {
         if (!registration) return false;
         const key = identity(node);
         if (source !== "help" && (source === "pointer" ? suppressedPointer === key : suppressedFocus === key)) return false;
+        if (source === "pointer" && (!pointer || !node.contains(document.elementFromPoint(pointer.x, pointer.y)))) return false;
         const text = tooltipText(registration);
         if (!currentTooltip(node, registration)) return false;
         if (!text) { hideTooltip(); return false; }
@@ -364,12 +367,34 @@ export function createEvidenceUX(icons, operations) {
         tooltipResize.observe(node);
         const anchor = tooltipOptions.get(node)?.anchor;
         if (anchor && anchor !== node) tooltipResize.observe(anchor);
+        if (source === "pointer") watchHoverPoint(node);
         return active === node && currentTooltip(node, registration);
+    }
+    // A pure layout shift need not resize the owner or move the pointer. Observe
+    // only this visit's two surfaces against a one-pixel region at the pointer.
+    function watchHoverPoint(node) {
+        hoverPoint?.disconnect(); hoverPoint = null;
+        if (!pointer) return;
+        const x = Math.floor(pointer.x), y = Math.floor(pointer.y);
+        const right = Math.max(0, document.documentElement.clientWidth - x - 1);
+        const bottom = Math.max(0, document.documentElement.clientHeight - y - 1);
+        const observer = new IntersectionObserver(() => {
+            if (hoverPoint !== observer || active !== node) return;
+            const hit = pointer && document.elementFromPoint(pointer.x, pointer.y);
+            if (node.contains(hit) || bubble.contains(hit)) return;
+            if (hovered === node) hovered = null;
+            scheduleDeparture();
+        }, { rootMargin: `${-y}px ${-right}px ${-bottom}px ${-x}px` });
+        hoverPoint = observer;
+        observer.observe(node); observer.observe(bubble);
     }
     function scheduleClose() {
         clearTimeout(openTimer);
         openTimer = null;
         opening = null;
+        scheduleDeparture();
+    }
+    function scheduleDeparture() {
         // Outside movement and description refreshes must not extend the transit grace.
         if (closeTimer !== null) return;
         closeTimer = setTimeout(() => {
@@ -381,7 +406,8 @@ export function createEvidenceUX(icons, operations) {
             const owner = liveOwner(active);
             const keyboardVisit = owner && owner === liveOwner(focused) && focusSource === "focus";
             const sameOwnerHover = owner && owner === liveOwner(hovered);
-            if (!bubble.matches(":hover") && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
+            const overTip = bubble.matches(":hover") && pointer && bubble.contains(document.elementFromPoint(pointer.x, pointer.y));
+            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
         }, 120);
     }
     function cancelClose() {
@@ -395,6 +421,7 @@ export function createEvidenceUX(icons, operations) {
         if (event.pointerType === "touch" || !event.isTrusted) return;
         if (pointer?.x === event.clientX && pointer?.y === event.clientY) return;
         pointer = { x: event.clientX, y: event.clientY };
+        if (hoverPoint && (active.contains(event.target) || bubble.contains(event.target))) watchHoverPoint(active);
         restoredPage = false;
         if (bubble.contains(event.target)) { cancelClose(); return; }
         const node = trigger(event.target);
@@ -493,7 +520,10 @@ export function createEvidenceUX(icons, operations) {
         }
     }, { capture: true });
     listen(document, "scroll", positionTooltip, { capture: true });
-    listen(window, "resize", positionTooltip);
+    listen(window, "resize", () => {
+        positionTooltip();
+        if (hoverPoint) watchHoverPoint(active);
+    });
     listen(document, "toggle", (event) => {
         if (active && event.target instanceof HTMLDetailsElement && !event.target.open && event.target.contains(active)) hideTooltip();
     }, { capture: true });

@@ -394,7 +394,7 @@ export function mountSidebarNavigation(ux, preference) {
         event.preventDefault();
         event.stopPropagation();
         close();
-    }, { capture: true });
+    });
     drawer.addEventListener("click", (event) => {
         if (event.target !== drawer) return;
         const bounds = drawer.getBoundingClientRect();

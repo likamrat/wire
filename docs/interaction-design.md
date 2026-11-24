@@ -28,8 +28,10 @@ time, and an unknown period stays unknown.
 
 The WIRE logo remains a link to Analyze, with **Work IQ Request Explorer** help
 on hover or keyboard focus, including the compact mark and narrow drawer.
-Escape, activation and leaving the target dismiss that help without taking
-focus. The separate panel control beside the desktop logo retains **Collapse
+Escape dismisses open help before the drawer without taking focus. Activating
+the link dismisses its help. Hover-only help also closes when neither the
+target nor the tooltip is under the pointer, even if the layout moved.
+The separate panel control beside the desktop logo retains **Collapse
 navigation** / **Expand navigation** names and expanded state. Narrow navigation
 keeps its existing Open/Close controls and the same mounted brand and links.
 
