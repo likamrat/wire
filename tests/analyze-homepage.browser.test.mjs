@@ -184,9 +184,9 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     }
     const authorIndex = (await settingsOrder()).indexOf("authors");
-    for (let i=1; i<authorIndex; i++) await up("Prompt authors").tap();
+    for (let i=3; i<authorIndex; i++) await up("Prompt authors").tap();
     const chosen = await settingsOrder();
-    assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
+    assert.deepEqual(chosen.slice(0,4),["interactions","time","outcomes","authors"]);
     await samplePreview("chosen");
     if (width===1440) await chooseTheme(page,"dark");
     await page.reload(); await samplePreview("persisted");
@@ -231,6 +231,11 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         assert.deepEqual(painted.map(card=>[card.key,card.x > left+1,card.x <= left+1 && card.x+card.width >= right-1]),
             previewColumns.get(previewStage),`${stage}: each section occupies the column or full row shown in Settings`);
         const list = cards.find(card=>card.key==="interactions");
+        if (width===1440) {
+            const time = cards.find(card=>card.key==="time"), outcomes = cards.find(card=>card.key==="outcomes");
+            if (Math.abs(time.y-outcomes.y)<=1) assert.ok(Math.abs(time.width-outcomes.width)<=1
+                && Math.abs(time.height-outcomes.height)<=1,`${stage}: time and results share equal chart frames`);
+        }
         for (const card of cards) if (card !== list) {
             assert.ok(card.y+card.height <= list.y+1 || list.y+list.height <= card.y+1,`${stage}: Interactions has its own row`);
         }

@@ -72,8 +72,6 @@
 }
 .wire-frontend-react .analyze-dashboard { display: block; }
 .wire-frontend-react .analyze-chart-grid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(27rem, 1fr);
-    align-items: stretch;
     gap: 0;
 }
 .wire-frontend-react .analyze-chart-main {

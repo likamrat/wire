@@ -116,6 +116,10 @@ test("Harbor widgets share row edges without fixed heights or clipped content", 
         measurements.push({ theme, width, textSize, geometry, clipping });
         for (const [left, right] of [["chart", "outcomes"], ["tools", "services"]]) {
             const a = geometry[left], b = geometry[right];
+            if (left === "chart" && width >= 1600) {
+                assert.ok(Math.abs(a.y-b.y) <= 1 && Math.abs(a.width-b.width) <= 1 && Math.abs(a.bottom-b.bottom) <= 1,
+                    `${theme}/${width}: paired chart frames differ (${a.width}x${a.height} vs ${b.width}x${b.height})`);
+            }
             if (Math.abs(a.y - b.y) < 2 && a.right > b.x + 1) {
                 failures.push(`${theme}/${width}: ${left} overlaps ${right}`);
             }

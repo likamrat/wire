@@ -137,7 +137,9 @@ adjacent rows, without individual card borders or shadows. The prompt leads
 and keeps its shorter reading measure. An adjacent identity key stacks below
 it in narrow columns. A tool failure and a separate returned issue each lead to
 their own evidence; routine rows need no four-state ledger.
-The four supporting breakdowns use paired,
+When the time chart and tool call results share a row, give them equal widths
+and align their top and bottom edges. Let each chart take its natural height
+when stacked. The four supporting breakdowns use paired,
 content-sized columns, becoming a single column when needed.
 
 Screen headings use sentence case, including **Work IQ**. Keep branding,
