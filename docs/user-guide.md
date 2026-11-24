@@ -324,8 +324,12 @@ it or only in this tab. Changing the default leaves existing hides alone.
 Trends and Compare still count the calls, but their detail lists don’t show
 the hidden interaction. Search leaves its excerpts out. A report draft keeps
 its selection; WIRE holds back a preview that could display hidden text.
-Saved files and copies you’ve already shared are unchanged. Hiding a card is
-a display preference in this browser, not deletion or redaction.
+
+While a card is hidden in this tab, **no saved report or saved comparison
+opens in WIRE or appears in Search results**, even one about different work.
+A saved report can quote a neighboring interaction that it didn’t count.
+Restore the hidden cards to read saved files in WIRE again. The files themselves
+and copies you’ve already shared are unchanged.
 
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage

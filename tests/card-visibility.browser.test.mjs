@@ -7,6 +7,50 @@ import { navigateMain, selectActivityOption } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { palettes } from "../web/theme.mjs";
 import { contrast, paintedLabelContrast } from "./color-measurements.mjs";
+import { retainedContextFixture } from "./request-context-fixture.mjs";
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
+
+test("saved-file exposure cannot be determined from selected IDs alone", async t => {
+    const records = retainedContextFixture().records;
+    for (const record of records) for (const call of record.toolCalls) call.requestArgs = { entityUrls: ["/me/drive/root/children"] };
+    const app = await searchFixture(t, { records, copilotAccess: true, frontend: "react", reply: false });
+    async function save(index, title, recordedContext = false) {
+        const preview = await app.exports.preview("file-boundary", undefined,
+            { title: `Demo review ${title}`, formats: ["html"], promptMode: "original", recordedContext },
+            { kind: "selected", revision: (await loadBoardState(app.context)).revision, scenarioIds: [records[index].scenarioId] });
+        await app.exports.review("file-boundary", preview.previewId, true);
+        return { preview, entry: (await app.exports.confirm("file-boundary", preview.previewId, true)).bundle };
+    }
+    const selected = await save(0, "selected");
+    const linked = await save(1, "linked", true);
+    const other = await save(3, "separate");
+    const { bundle: unknown } = await historicalComparison(app.context, selected.entry.bundleId, other.entry.bundleId,
+        { title: "Demo review comparison", formats: ["html"] });
+    // Known at fixture preparation, without reading any original to decide whether it can open.
+    assert.deepEqual(linked.entry.scenarioIds, [records[1].scenarioId]);
+    assert.ok(JSON.stringify(linked.preview.snapshot.recordedContext).includes(records[0].userPrompt.text));
+    assert.deepEqual(other.entry.scenarioIds, [records[3].scenarioId]);
+    assert.ok(!JSON.stringify(other.preview.snapshot).includes(records[0].userPrompt.text));
+    assert.ok(!Object.hasOwn(unknown, "scenarioIds"));
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage(); await page.goto(app.runtime.url);
+    const hits = page.locator(".wire-search-hit[data-search-bundle]");
+    async function find() { await page.locator("#wireSearch").click(); await page.locator("#wireSearch").fill("Demo review"); }
+    await find(); await expect(hits).toHaveCount(4, { timeout: 15000 });
+    await page.locator("#wireSearch").press("Escape");
+    await page.locator("#activityList article").filter({ hasText: records[0].userPrompt.text }).getByRole("button", { name: "Hide", exact: true }).click();
+    await find(); await expect(page.locator("#wireSearchStatus")).toContainText("No visible matches"); await expect(hits).toHaveCount(0);
+    const reads = [];
+    page.on("request", req => { if (/\/api\/(?:artifact-file|report\/open|report-original|search\/open)/.test(req.url())) reads.push(req.url()); });
+    for (const { bundleId } of [selected.entry, linked.entry, other.entry, unknown]) {
+        await page.goto(new URL(`/reports?bundle=${bundleId}`, app.runtime.url).href);
+        await expect(page.locator("#savedReportReader")).toContainText("all saved reports and comparisons closed");
+    }
+    assert.deepEqual(reads, []);
+    await page.goto(app.runtime.url); await page.getByRole("button", { name: "Hidden cards (1)" }).click();
+    await page.getByRole("button", { name: "Restore all (1)" }).click();
+    await find(); await expect(hits).toHaveCount(4, { timeout: 15000 });
+});
 
 for (const frontend of ["react", "bundled"]) test(`card visibility keeps the reader, search and report copies covered (${frontend})`, async t => {
     const records = searchRecords();

@@ -8723,7 +8723,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (hiddenCards.any()) {
             clearSavedReader();
             $("savedReportReader").replaceChildren(button("Back to Reports", backSaved, "quiet"),
-                empty("Saved file kept closed", "Saved files can contain hidden text. Restore your hidden cards in Analyze to view this file. The original file has not changed."));
+                empty("Saved file kept closed", "While a card is hidden, WIRE keeps all saved reports and comparisons closed. A file can quote a card it didn’t count. Restore hidden cards in Analyze to open saved files again."));
             return;
         }
         if (savedReportView?.bundleId === workspaceState.route.bundle && savedReportView.entryKey === workspaceState.route.savedEntry) return;
