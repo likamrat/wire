@@ -78,7 +78,9 @@ In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or 
 widgets share a row. It uses sample charts instead of your saved activity.
 Your browser remembers each move. Choose **View Analyze** to open the homepage.
 **Restore Wired Default Layout** returns the sections to their original order.
-Your other Analyze settings, filters and activity stay the same.
+An older custom layout keeps its order and adds the usage widget at the end.
+**Default interaction sort** sets the starting order; sorting above the list
+changes this visit only. Neither setting changes your filters or activity.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
@@ -192,7 +194,15 @@ change. Compare's separate Day/Week/Month control does not change Analyze.
 Choose **Trends** in the sidebar. By default, **Overview** shows how many
 interactions had a recorded error or failure each day. A cross at zero means no matching
 dated calls; a circle at zero means there was activity but no recorded error.
-**Charts** lists the seven measures. **Chart guide** explains their units.
+**Charts** lists eight measures. **Tokens & est. cost** switches between measured
+tokens and the retail cost estimate. Narrow by prompt author or tool to read
+whole interactions that match, not tokens charged to a particular tool.
+Choose **Usage question** to chart Human, Agent and unverified prompts, tools in
+interactions with at least 30,000 or 60,000 tokens, or the models that read
+from cache. **Data table** shows daily readings and coverage. Tool groups
+overlap: an interaction that used both fetch and retrieve appears in both,
+but its tokens count only once in the period total.
+**Chart guide** explains the units.
 On Analyze,
 choose **View trend** on a widget to open its corresponding measure. From
 **Tool call results**, WIRE asks before showing **Errors & failures**: that
@@ -318,6 +328,15 @@ measures over *one* period, stay in Trends. See [Compare two periods](reporting.
 for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
+
+To find a high-usage interaction, choose **Most tokens** or **Highest est. cost**
+above the Analyze list. Only cards with complete token counts have a usage
+chip. Open the interaction to see fresh input, cache reads, cache writes and
+output. The reader separately estimates how many tokens Work IQ returned
+from the size of the tool responses.
+In **Response models**, choose **Token & $ share** to compare token volume with
+the cost share of fully priced interactions. Find the offline rates in
+**Settings → Reports**.
 
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage

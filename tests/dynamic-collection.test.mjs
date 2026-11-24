@@ -92,6 +92,98 @@ const call = (id = "synthetic-call") => event("tool.execution_start", {
 const managedSchema = `CREATE TABLE session_managed_mcp_event_display_names(
     session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT NOT NULL,
     PRIMARY KEY(session_id,event_id));`;
+
+test("history compatibility: an explicit closed run meters without a prompt message ID, response model, reply text or timing", async t => {
+    const app = await installation(t), id = app.session(), interactionId = randomUUID();
+    const tool = call("lookup"), turnId = "turn", apiCallId = "direct-api";
+    const p = event("user.message", { interactionId, content: "Find the invented review notes." });
+    const a = event("assistant.message", { interactionId, turnId, apiCallId, toolRequests: [{toolCallId:"lookup"}] });
+    const end = event("assistant.turn_end", {turnId});
+    const receipt = event("session.usage_record", {usage:{interactionId, apiCallId, model:"gpt-4.1",
+        inputTokens:100, cacheReadTokens:20, cacheWriteTokens:0, outputTokens:5}});
+    const close = event("session.completion_receipt", { schemaVersion:1, attempt:1, stopReason:"natural",
+        eventRange:{startEventId:p.id, endEventId:end.id}, sourceEventId:end.id, successfulToolCount:1, failedToolCount:0 });
+    const missing = event("assistant.message", {interactionId, turnId, apiCallId:"second-api", toolRequests:[]});
+    tool.data.turnId = turnId;
+    const batch = [p, a, tool, event("tool.execution_complete",{interactionId,toolCallId:"lookup",success:true,result:{content:"abcd"}}),
+        missing, receipt, end, close];
+    batch.forEach((e,i)=>{e.timestamp=new Date(Date.now()-10000+i*100).toISOString();});
+    const file = await logFor(app,id,batch);
+    let collector=await createCollector(app.context,{timers:false}); app.cleanup.push(()=>collector.close());
+    await collector.configure({...app.config,approved:true,enabled:false,windowDays:30,pollSeconds:5});
+    const read=async()=>(await currentStatePayload(app.context,await loadBoardState(app.context))).scenarios[0];
+    await collector.collectNow();
+    assert.equal((await read()).usage,null,"missing a receipt is not a whole-interaction total");
+    await collector.close(); collector=await createCollector(app.context,{timers:false});
+    await appendFile(file,JSON.stringify(event("session.usage_record",{usage:{...receipt.data.usage,apiCallId:"second-api",outputTokens:10}}))+"\n");
+    await collector.collectNow();
+    const complete=await read();
+    assert.equal(complete.usage?.total,215);
+    assert.equal(complete.usage?.steps.length,2);
+    assert.notEqual(complete.responseTiming?.status,"measured");
+    assert.deepEqual(complete.originalModel.models,[]);
+    assert.equal(complete.toolCalls[0].promptLink,undefined,"usage evidence must not rewrite historical prompt authorship");
+    assert.equal(complete.toolCalls[0].usageContextLinked,true,"the sized result has an explicit tool request in the same closed run");
+    await appendFile(file,JSON.stringify(event("user.message",{interactionId,content:"A rival prompt claimed this run."}))+"\n");
+    await collector.collectNow();
+    const disputed = await read();
+    assert.equal(disputed.usage,null,"a rival claim withdraws previously verified usage");
+    assert.equal(disputed.toolCalls[0].usageContextLinked,undefined);
+});
+
+test("history compatibility: two explicitly linked usage receipts survive restart without cumulative totals or result text", async t => {
+    const app = await installation(t), id = app.session(), start = call("metered-fetch");
+    const model = "claude-sonnet-5-5", messageId = "metered-prompt", interactionId = "interaction-one";
+    const message = (apiCallId, turnId, fields) => event("assistant.message", { apiCallId, turnId,
+        model, originatingMessageId: messageId, ...fields });
+    const receipt = (n, apiCallId) => event("session.usage_record", { usage: { apiCallId, model, interactionId,
+        accounting: { sequence: n, sourceSessionId: id, usageId: `usage-${n}` },
+        inputTokens: 16000, cacheReadTokens: 10000, cacheWriteTokens: 1000, outputTokens: 1000 } });
+    start.data.turnId = "turn-one";
+    const r1 = receipt(1, "api-one"), r2 = receipt(2, "api-two");
+    r1.data.usage.initiator = "user";
+    r1.data.usage.interactionType = "conversation-user";
+    r2.data.usage.initiator = "agent";
+    r2.data.usage.interactionType = "conversation-agent";
+    r2.data.usage.accounting = { usageId: "usage-two" };
+    const batch = [event("user.message", { messageId, interactionId, content: "Read the invented schedule." }),
+        message("api-one", "turn-one", { toolRequests: [{ toolCallId: "metered-fetch" }] }), start,
+        event("tool.execution_complete", { toolCallId: "metered-fetch", success: true, result: { content: "INVENTED_RETURN_TEXT" } }), r1,
+        event("assistant.turn_start", { turnId: "turn-two" }),
+        message("api-two", "turn-two", { phase: "final_answer", content: "Invented answer", toolRequests: [] }),
+        event("assistant.turn_end", { turnId: "turn-two" }), event("session.usage_checkpoint", { totalTokens: 900000 })];
+    const base = Date.now() - 20000;
+    batch.forEach((e, index) => { e.timestamp = new Date(base + index * 100).toISOString(); });
+    const file = await logFor(app, id, batch);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const read = async () => (await currentStatePayload(app.context, await loadBoardState(app.context))).scenarios[0];
+    assert.equal((await read()).usage, null);
+    await collector.close(); collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, [r2, { ...r2, id: randomUUID() }].map(e => JSON.stringify(e) + "\n").join(""));
+    await collector.collectNow();
+    const record = await read();
+    assert.equal(record.usage?.total, 34000);
+    assert.deepEqual(record.usage.tokens, { freshInput: 10000, cacheRead: 20000, cacheWrite: 2000, output: 2000 });
+    assert.equal(record.usage.steps.length, 2);
+    assert.equal(record.toolCalls[0].returnedTextBytes, 20);
+    assert.doesNotMatch(JSON.stringify(record), /INVENTED_RETURN_TEXT|api-one|api-two/);
+    const additional = receipt(3, "without-message-chunk");
+    delete additional.data.usage.cacheReadTokens;
+    await appendFile(file, JSON.stringify(additional) + "\n");
+    await collector.collectNow();
+    const partialCache = (await read()).usage;
+    assert.equal(partialCache.total, 51000, "A directly linked receipt does not need a separate message chunk.");
+    assert.equal(partialCache.tokens.cacheRead, null); assert.equal(partialCache.tokens.freshInput, null);
+    assert.equal(partialCache.tokens.output, 3000); assert.equal(partialCache.usd, null);
+    assert.equal(partialCache.steps.at(-1).reason, "cache-split-missing");
+    await appendFile(file, JSON.stringify({ ...r1, id: randomUUID(), data: { usage: { ...r1.data.usage, outputTokens: 1500 } } }) + "\n");
+    await collector.collectNow();
+    assert.equal((await read()).usage, null);
+    assert.equal((await read()).usageGap, "conflicting-receipt");
+});
 const managedCall = id => {
     const start = call(id);
     return { ...start, data: { ...start.data, toolName: "cc-invented-connector-fetch",

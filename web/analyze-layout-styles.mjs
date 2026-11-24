@@ -1,4 +1,44 @@
 export const analyzeLayoutStyles = `
+:root {--usage-cost:var(--trends-series-11)}
+.usage-question-controls {display:flex;align-items:end;flex-wrap:wrap;gap:var(--space-sm) var(--space-md);margin-block:var(--space-sm) var(--space-md);min-width:0}
+.usage-question-controls>.report-form-field:not([hidden]) {display:grid;gap:4px;min-width:0;max-width:100%;color:var(--muted);font-size:var(--type-small)}
+.usage-question-controls :is(select,.select-trigger) {min-width:0;max-width:100%;min-height:44px;color:var(--ink)}
+.analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px 16px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
+.analyze-dashboard>.analyze-usage {grid-column:1/-1}
+.wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
+.usage-overview-facts {display:flex;flex-wrap:wrap;gap:12px 40px;margin:0 0 14px}
+.usage-overview-facts dt {font-size:var(--type-small);color:var(--muted)}
+.usage-overview-facts dd {margin:0;font-variant-numeric:tabular-nums}
+.usage-overview-facts dd:first-of-type {font-size:var(--type-section);color:var(--ink);font-weight:var(--weight-medium)}
+.usage-overview-detail,.usage-overview-legend {font-size:var(--type-small);color:var(--muted)}
+.usage-overview-legend {display:flex;flex-wrap:wrap;gap:4px 20px;padding:0;margin:6px 0 0;list-style:none}
+.usage-overview-legend li {display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.usage-overview-legend i {width:.6em;height:.6em;border-radius:2px;flex:none}
+.usage-overview-legend [data-kind=freshInput]{background:var(--accent)}.usage-overview-legend [data-kind=cacheRead]{background:var(--trends-series-2)}
+.usage-overview-legend [data-kind=cacheWrite]{background:var(--trends-series-4)}.usage-overview-legend [data-kind=output]{background:var(--usage-cost)}
+#analyzeUsageContent>p {margin:10px 0 0}
+.usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
+.usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.usage-switch {margin-block:6px}
+.usage-switch [aria-pressed=true] {font-weight:var(--weight-strong);text-decoration:underline;text-underline-offset:4px}
+.usage-sort {justify-self:end}.usage-sort.select-field {display:inline-flex;flex-direction:row;align-items:center;gap:8px}
+@media(min-width:761px){
+ #activityView>#activityListContext:has(.usage-sort){grid-template-columns:minmax(0,1fr) auto auto;align-items:center}
+ #activityListContext>.usage-sort {grid-column:3;grid-row:1}
+}
+#costRateReference{margin-top:var(--space-lg);padding-top:var(--space-md);border-top:1px solid var(--rule)}
+.usage-model,.usage-reading,#costRateReference {font-variant-numeric:tabular-nums}
+.usage-model {display:grid;min-width:0;overflow-wrap:anywhere;gap:3px;margin-block:12px}.usage-model>span {color:var(--muted);font-size:var(--type-small)}
+.usage-share-track,.usage-bar {display:flex;background:var(--paper);height:6px;border-radius:4px;overflow:hidden}
+.usage-share-track span,.usage-bar [data-kind=freshInput]{background:var(--accent)}
+.usage-share-track [data-kind=usd],.usage-bar [data-kind=output]{background:var(--usage-cost)}
+.usage-bar [data-kind=cacheRead]{background:var(--trends-series-2)}.usage-bar [data-kind=cacheWrite]{background:var(--trends-series-4)}
+.usage-bar {height:10px;margin:8px 0}
+.usage-table-wrap {max-width:100%;overflow:auto}
+.usage-table {width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.usage-table :is(th,td){padding:6px;text-align:end;border-bottom:1px solid var(--rule)}.usage-table :first-child:is(th,td){text-align:start}
+.usage-context {padding:10px;background:var(--paper);border-radius:6px}
+.usage-timeline {padding-inline-start:1.5em;overflow-wrap:anywhere}.usage-timeline li {padding-block:5px}
+.usage-timeline li>span,.usage-timeline li>time{display:block}.usage-timeline time{font-size:var(--type-small)}
 @property --analyze-sweep {syntax:"<angle>";initial-value:360deg;inherits:false}
 #outcomeChart .percentage-ring[data-building] {mask-image:conic-gradient(black var(--analyze-sweep),transparent 0)}
 /* Keep the exact, accessible value and its width in place; only paint the temporary figure. */

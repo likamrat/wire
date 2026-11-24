@@ -199,6 +199,8 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
         const activity = sections.add("activity", countedTitle || "Recorded activity", { key: key("activity"), collapsible: false });
         const replies = sections.add("response", replyTitle, { key: key("response"), collapsible: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: false });
+        const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
+        usage.body.textContent = "No token counts were recorded for this conversation.";
         const updatesSection = updates.length ? sections.add("updates", "Recorded updates", { key: key("updates") }) : null;
         const emptyMessages = !updates.length && !conversation.messages.length;
         if (dateContext) root.append(node("p", "reader-state", dateContext));
@@ -206,7 +208,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             ...(updatesSection ? [updatesSection.element] : []),
             ...(!updates.length || conversation.calls.length || conversation.returnedResults.length
                 || activityMessages ? [activity.element] : []),
-            ...(emptyMessages || responses.length ? [replies.element] : []), source.element);
+            ...(emptyMessages || responses.length ? [replies.element] : []), usage.element, source.element);
         const field = (label, value) => {
             const group = node("div"), term = node("dt", "", label), definition = node("dd");
             definition.append(value);

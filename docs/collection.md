@@ -213,6 +213,43 @@ still agree. It does not reset cursors or adopt another host's store.
 
 ## Evidence fidelity
 
+For token usage, WIRE reads numeric `session.usage_record` receipts during
+ordinary approved collection. A call needs an exact model/API-call match to a
+response linked to the originating message or a directly linked interaction
+receipt, with a complete root response boundary. WIRE subtracts recorded cache
+reads and writes from inclusive input. A root completion receipt can establish
+the exchange boundary even without saved reply text, latency, a logical
+message ID, or a model name on the reply: the usage receipt identifies the
+model. WIRE still requires a prompt-to-run or prompt-to-message link, at least
+one matching Work IQ tool request, and receipts for every linked response
+call. The [SDK's `initiator`](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts)
+may be `user` for a model request carrying a prompt or `agent` for the next
+request after a tool result. Neither proves prompt authorship or request
+ownership. Nested activity, a competing owner, or an incomplete window cannot
+establish a whole-interaction total. Missing cache counts still allow an
+exact input/output total, but not an estimated cost. It does not sum `session.usage_checkpoint`, reason from chat
+order alone, subscribe to live SDK events, or start a backfill. Conflicting,
+partial, or unsupported receipts do not establish a whole-interaction count.
+These optional fields use the existing evidence snapshot; no store conversion
+is necessary. A matched Work IQ completion may retain its returned text byte
+count (roughly four UTF-8 bytes per token), not its body.
+When there is no message-level prompt link, an explicitly owned model request
+in the verified run can link its tool ID to one exact start. WIRE can then
+include that call's returned text size without changing prompt authorship.
+Older receipts without that link are not rewritten.
+
+The journal mapping follows the
+[public Copilot reader](https://github.com/markrussinovich/agent-session-insights/blob/d65c0119b31cea27743e4f4ec21be158977e06aa/sources.py)
+and the [SDK per-call/aggregate distinction](https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/usage-and-billing).
+The reference project's [redacted journal](https://github.com/markrussinovich/agent-session-insights/blob/d65c0119b31cea27743e4f4ec21be158977e06aa/examples/creation-session.jsonl)
+has 120 distinct call receipts but only 21 assistant message call IDs. An
+explicit interaction reference can bind additional receipts; message count
+alone is not model-call count. A redacted example does not prove a particular
+installed source has all the required fields.
+WIRE uses independently implemented arithmetic and a dated local
+[rate reference](../lib/retail-pricing.json) with provider sources for every
+model. No rates are fetched at runtime.
+
 | Fact | Preserve |
 | --- | --- |
 | Original prompt and timestamp | Never replace them with a conflicting later delivery or host-transformed instructions. New associations need unique explicit message/tool-request links and compatible ownership. |

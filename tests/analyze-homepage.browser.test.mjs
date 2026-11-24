@@ -167,12 +167,13 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const reads = snapshots.length;
     await steadyMove("unpair",up("Interactions"), control => control.press("Enter")); await expect(up("Interactions")).toBeFocused();
     const intermediate = await samplePreview("one-move");
-    if (width===1440) assert.equal(intermediate[0].width,intermediate[1].width,"a chart alone before Interactions spans the preview");
+    if (width===1440) assert.ok(intermediate[2].width > intermediate[0].width*2-1,"Interactions spans both preview columns");
     await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
     assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
     await observe("one-move");
     await page.goto(settings);
+    await up("Interactions").press("Enter");
     if (width===390) await page.evaluate(() => {document.documentElement.style.fontSize = "200%";});
     await steadyMove("pair",up("Interactions"), control => control.press("Enter"));
     await expect(field.getByRole("button",{name:"Move Interactions down"})).toBeFocused();
@@ -185,6 +186,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     }
     const authorIndex = (await settingsOrder()).indexOf("authors");
     for (let i=1; i<authorIndex; i++) await up("Prompt authors").tap();
+    await steadyMove("usage-tile",up("Tokens & estimated cost"), control => control.tap());
     const chosen = await settingsOrder();
     assert.deepEqual(chosen.slice(0,2),["interactions","authors"]);
     await samplePreview("chosen");

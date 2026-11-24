@@ -2,7 +2,7 @@
 export function createAnalyzeTrendsEntry({ time, results, authorship, categories }) {
     const subjects = {
         rhythm: "Tool calls", problems: "Errors & failures", tools: "Tool usage",
-        authors: "Prompt authors", models: "Response models", services: "Services",
+        authors: "Prompt authors", models: "Response models", services: "Services", usage: "Tokens & estimated cost",
     };
     function project(family, { scope, route, revision, hasSearch, includesNative, hasEarlier, otherSources, supportedTools }) {
         if (!Object.hasOwn(subjects, family)) throw new RangeError("Unknown Analyze widget.");
@@ -48,7 +48,7 @@ export function createAnalyzeTrendsEntry({ time, results, authorship, categories
             period = "7"; range = time.preset(period, zone);
             changes.push(`Analyze has ${f.from || f.to ? "an open-ended period" : "no date limit"}. Trends opens the last 7 days (${range.from} – ${range.to}).`);
         }
-        return { changes, entry: { revision, family, measure: family === "rhythm" ? "count" : "share",
+        return { changes, entry: { revision, family, measure: family === "usage" ? "tokens" : family === "rhythm" ? "count" : "share",
             period, range, timeContext: { ...scope.timeContext }, filters, date: range.from === range.to ? range.from : null,
             series: ({ tools: filters.tool, authors: filters.author, services: filters.service })[family] ?? null } };
     }

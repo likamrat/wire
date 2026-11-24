@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "date": "2026-11-24",
+  "basis": "Standard global retail API-equivalent USD per million tokens; not billed Copilot spend. Claude cache writes use the five-minute retail rate.",
+  "aliases": { "gpt-4.1-2025-04-14": "gpt-4.1", "claude-opus-5.5": "claude-opus-5-5", "claude-sonnet-5.5": "claude-sonnet-5-5", "claude-haiku-5.5": "claude-haiku-5-5" },
+  "models": {
+    "claude-opus-5-5": { "freshInput": 4, "cacheRead": 0.2, "cacheWrite": 5, "output": 20, "source": "https://platform.claude.com/docs/en/models/opus-5-5/overview" },
+    "claude-sonnet-5-5": { "freshInput": 2, "cacheRead": 0.1, "cacheWrite": 2.5, "output": 10, "source": "https://platform.claude.com/docs/en/models/sonnet-5-5/overview" },
+    "claude-haiku-5-5": { "freshInput": 0.1, "cacheRead": 0.01, "cacheWrite": 0.125, "output": 0.5, "aboveInput": 100000, "multiplier": 5, "source": "https://platform.claude.com/docs/en/models/haiku-5-5/overview" },
+    "gpt-4.1": { "freshInput": 2, "cacheRead": 0.5, "cacheWrite": 2, "output": 8, "source": "https://developers.openai.com/api/docs/models/gpt-4.1" },
+    "gpt-6.1-sol": { "freshInput": 2, "cacheRead": 0.1, "cacheWrite": 2.5, "output": 10, "aboveInput": 272000, "multiplier": 2, "outputMultiplier": 1.5, "source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol" }
+  }
+}

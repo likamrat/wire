@@ -429,6 +429,7 @@ test("Period edits stay beside their trigger without shifting the chart or readi
         for(const [width,scale] of [[1280,1],[390,1.5]]){
             await page.setViewportSize({width,height:850});
             await page.evaluate(s=>document.documentElement.style.fontSize=`${s*100}%`,scale);
+            if (width === 390) await page.waitForFunction(()=>getComputedStyle(document.querySelector("#appUpdateNotice")).display==="none");
             await period.scrollIntoViewIfNeeded();
             const plot=page.locator("#trendsPlot-rhythm");
             await plot.evaluate(n=>{window.periodProbe={svg:n.firstElementChild,top:n.getBoundingClientRect().top,scroll:scrollY}});
@@ -441,7 +442,8 @@ test("Period edits stay beside their trigger without shifting the chart or readi
             await expect(panel).not.toContainText(/inclusive dates|UTC/i);
             const geometry=await panel.evaluate(n=>{const r=n.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:document.documentElement.clientWidth,height:innerHeight}});
             assert.ok(geometry.left>=0&&geometry.right<=geometry.width+1&&geometry.top>=0&&geometry.bottom<=geometry.height,JSON.stringify(geometry));
-            assert(await plot.evaluate(n=>window.periodProbe.svg===n.firstElementChild&&Math.abs(n.getBoundingClientRect().top-window.periodProbe.top)<1&&scrollY===window.periodProbe.scroll));
+            const anchor = await plot.evaluate(n=>({same:window.periodProbe.svg===n.firstElementChild,move:n.getBoundingClientRect().top-window.periodProbe.top,scroll:scrollY-window.periodProbe.scroll}));
+            assert(anchor.same && Math.abs(anchor.move)<1 && !anchor.scroll,JSON.stringify({width,scale,...anchor}));
             for (const [bound, day] of [["from","07"],["to","08"]]) {
                 const input = panel.getByLabel(`Trends ${bound}`,{exact:true});
                 await input.focus();
@@ -572,7 +574,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
     await dialog.getByRole("button", { name: "Cancel" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.check();
-    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await services.getByRole("button", { name: "Arrange charts" }).click();
     for (const check of await choices.all()) await check.uncheck();
     await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
@@ -622,6 +624,7 @@ test("Trends keeps its scope toolbar and hit targets in place through zero, one,
     for (const [width, scale] of [[1280, 1], [390, 2]]) {
         await page.setViewportSize({ width, height: 900 });
         await page.evaluate(async scale => { document.documentElement.style.fontSize = `${scale * 100}%`; await document.fonts.ready; }, scale);
+        if (width === 390) await page.waitForFunction(()=>getComputedStyle(document.querySelector("#appUpdateNotice")).display==="none");
         const before = await boxes();
         for (const [field, value, text] of [["trendsPromptauthors", "user", "1 filter applied"], ["trendsTool", "workiq-fetch", "2 filters applied"]]) {
             await filters.press("Enter");
@@ -738,7 +741,7 @@ test("compiled Trends is readable in all five palettes, both modes, narrow and e
         for (const label of ["Response models", "Services", "Call duration"]) {
             await index.getByRole("button", { name: label, exact: true }).click();
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: ${width}px @ ${scale}`);
-            await expect(index.getByRole("button")).toHaveCount(7);
+            await expect(index.getByRole("button")).toHaveCount(8);
             const geometry = await page.locator(".trends-panel:visible").evaluate(panel => ({
                 plot: panel.querySelector(".trends-plot").getBoundingClientRect().top,
                 title: panel.querySelector("h2").getBoundingClientRect().top, focus: document.activeElement.tagName, y: scrollY, h: innerHeight,

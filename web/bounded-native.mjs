@@ -420,7 +420,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const context = sections.add("context", "Context", { key: key("context"), initialOpen: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: ordinal !== undefined });
         if (completed) root.append(activity.element);
-        else root.append(prompt.element, activity.element, context.element, source.element);
+        else {
+            const usage = sections.add("usage", "Token & cost breakdown", { key: key("usage"), collapsible: false });
+            usage.body.textContent = "No token counts were recorded for this conversation.";
+            root.append(prompt.element, activity.element, context.element, usage.element, source.element);
+        }
         // An exact target owns the reveal; set it before subscriptions can start a read.
         if (ordinal !== undefined) source.apply(true, false);
         const request = section => ({ schemaVersion: 1, revision, sources: [sourceId], conversationId,

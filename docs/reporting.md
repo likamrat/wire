@@ -155,6 +155,25 @@ text and report-author notes, and does not recommend next steps.
 
 ## Read and adjust
 
+In **New report**, **Usage question** lets you compare Human and Agent prompts,
+find tools used in high-usage interactions, or compare model mix and cache
+reuse. An unverified sender stays separate. For an interaction report, the
+author, tool and minimum token count narrow the interactions included in the
+report, including its prompt copies. Pick **All interaction usage** to go back
+to the ordinary breakdown. A report started from Compare keeps both accepted
+periods: the usage question breaks down those periods, without replacing
+their original evidence.
+**View in Trends** opens the same question, dates, author and tool for a new
+GitHub interaction report. Trends measures interactions with matching dated
+tool calls. Its **Preview this report** action carries that selection into
+Reports and leaves an unrelated unfinished report alone.
+
+Under **Change what's included**, token and cache counts and retail cost
+estimates start on. Turn off **Include retail API-equivalent USD estimates**
+for a tokens-only report. The optional per-interaction table starts off.
+The preview and saved files use the same membership and rates; reopening a
+saved report does not apply today's prices.
+
 The report shows its period, scope and recorded patterns. An error report
 can say, for example, that 4 of 12 interactions contained a recorded error.
 Only those 4 cases contribute prompt or diagnostic copies. The other

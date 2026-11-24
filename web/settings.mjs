@@ -7,7 +7,7 @@ import { defaultField } from "./page-defaults.mjs";
 function pageSettings(id, title, purpose, fields) {
     return `<section class="settings-section" data-settings-section="${id}" aria-labelledby="${id}SettingsTitle" hidden>
       <h2 id="${id}SettingsTitle" tabindex="-1">${title}</h2><p class="settings-intro">${purpose}</p>
-      ${fields.map(key => defaultField(key, uxIcons)).join("")}</section>`;
+      ${fields.map(key => defaultField(key, uxIcons)).join("")}${id === "reports" ? '<section id="costRateReference" tabindex="-1"></section>' : ""}</section>`;
 }
 
 export const settingsMarkup = `
@@ -153,7 +153,7 @@ export const settingsMarkup = `
       <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "guideStart", "cardHideDuration"])}
+  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "analyzeSort", "guideStart", "cardHideDuration"])}
   ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
   ${pageSettings("reports", "Reports", "Set defaults for new reports. Existing drafts and saved files stay as they are.", ["reportFormats", "reportPeriod"])}
   ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}

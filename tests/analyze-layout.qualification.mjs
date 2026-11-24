@@ -5,7 +5,8 @@ import { chromium, expect } from "@playwright/test";
 import { frontendRecords } from "./frontend-fixture.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 
-const standard = ["time", "outcomes", "interactions", "tools", "services", "models", "authors"];
+const standard = ["time", "outcomes", "usage", "interactions", "tools", "services", "models", "authors"];
+const permutations = standard.reduce((n, _, i) => n * (i+1), 1);
 const previewSelector = "#analyzeLayout [data-tile]";
 const homeSelector = ".analyze-chart-main,.analyze-outcome-summary,#activityView,.percentage-card[data-breakdown]:not([data-breakdown=outcomes])";
 
@@ -66,7 +67,7 @@ function settingsRows() {
     ]);
 }
 
-for (const frontend of ["bundled", "react"]) test(`${frontend}: all 5,040 Analyze layouts and cold persistence`, async t => {
+for (const frontend of ["bundled", "react"]) test(`${frontend}: all ${permutations} Analyze layouts and cold persistence`, async t => {
     const cleanups = [], errors = [];
     let context;
     t.after(async () => {
@@ -92,7 +93,7 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all 5,040 Analyz
         await page.evaluate(() => document.fonts.ready);
     }));
     const assertSettings = async order => {
-        assert.deepEqual(await settings.evaluate(settingsRows), order.map((key, i) => [key, i === 0, i === 6]));
+        assert.deepEqual(await settings.evaluate(settingsRows), order.map((key, i) => [key, i === 0, i === order.length-1]));
         const preview = await settings.evaluate(geometry, previewSelector);
         verify(preview, order, false);
     };
@@ -100,7 +101,7 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all 5,040 Analyz
         // Other tabs receive a real browser storage event asynchronously.
         await page.waitForFunction(({ selector, first, signature }) => {
             const nodes = [...document.querySelectorAll(selector)];
-            return nodes.length === 7 && (first
+            return nodes.length === signature.split(",").length && (first
                 ? !document.querySelector(".analyze-ordered-widgets")
                 : nodes.map(n => n.dataset.homeSection).join(",") === signature);
         }, { selector: homeSelector, first: order.join() === standard.join(), signature: order.join() },
@@ -124,12 +125,12 @@ for (const frontend of ["bundled", "react"]) test(`${frontend}: all 5,040 Analyz
             }
             await Promise.all([assertSettings(order), checkHome(home, order, false), checkHome(phone, order, true)]);
         } catch (cause) {
-            throw new Error(`Layout ${seen.size + 1}/5040 (${signature}) after ${previous?.join() ?? "fresh entry"}`, { cause });
+            throw new Error(`Layout ${seen.size + 1}/${permutations} (${signature}) after ${previous?.join() ?? "fresh entry"}`, { cause });
         }
         seen.add(signature); previous = order;
     }
-    assert.equal(seen.size, 5040);
-    assert.equal(moved.size, 14);
+    assert.equal(seen.size, permutations);
+    assert.equal(moved.size, standard.length*2);
     t.diagnostic(`${seen.size} distinct orders, ${moved.size} arrow controls, preview plus wide and phone Analyze`);
 
     async function coldRead(order) {

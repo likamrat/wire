@@ -286,6 +286,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const presentation = assessmentFactories.periodComparison.createPresentation(time);
     let machine, metricSlotKey, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
     let selectedPeriod = "baseline", rosterKey = "", resultObservationHasError;
+    let usageChoice = {question:"all",threshold:30000,unit:"tokens"};
     let completionIntent = null, entryIntent = null;
     let accessWithdrawn = false, acceptedPublication = null, outcomeLayer = "tool";
     const publicationToken = () => typeof api.publicationToken === "function" ? api.publicationToken() : null;
@@ -381,7 +382,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const selection = context.semanticSearch ? { receipt: structuredClone(context.semanticSearch.receipt),
             ...(value.selection.withinScenarioIds === undefined ? {} : { withinScenarioIds: [...value.selection.withinScenarioIds] }),
         } : undefined;
-        if (publicationCurrent(publication)) createReport?.(value, selection);
+        if (publicationCurrent(publication)) createReport?.(value, selection, usageChoice);
     });
     report.id = "createPeriodReport"; report.disabled = true; report.hidden = true;
     const resultHeading = el("div", undefined, "period-comparison-heading");
@@ -604,6 +605,11 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         table.tHead.before(columns);
         return table;
     }
+    function periodReadings(caption, headers, rows) {
+        const readings = dataTable(caption, headers, rows);
+        readings.className = "compare-period-readings";
+        return alignOutcomeReadings(readings);
+    }
     const signed = value => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number(value)}`;
     const duration = value => assessmentFactories.timing.duration(value);
     const durationChange = value => assessmentFactories.createReportComparison().formatChange(value, "ms");
@@ -763,9 +769,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             detail.append(ux.icon("forward"));
             return [detail, ...cells, change];
         });
-        const readings = dataTable("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows);
-        readings.className = "compare-period-readings";
-        node.append(alignOutcomeReadings(readings));
+        node.append(periodReadings("Change from baseline to selected period", ["Measure", "Baseline", "Selected", "Change"], rows));
         return node;
     }
     function numbersPanel(value, sides, names) {
@@ -1245,6 +1249,78 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             else chart.append(plottedPanel(value, sides, names));
             content.append(chart);
         }
+        if (a.usage && b.usage && (a.usage.eligible || b.usage.eligible)) {
+            const section = panel("Tokens & estimated cost", "compare-usage"), periods = [a.usage,b.usage];
+            const dollars = n => n === null ? "No priced usage" : n > 0 && n < .01 ? "<$0.01" : `~$${n.toFixed(2)}`;
+            const costChange = (a, b) => {
+                const delta = b - a;
+                return delta === 0 ? "$0.00" : Math.abs(delta) < .01 ? `${delta < 0 ? "Decrease" : "Increase"} <$0.01`
+                    : `${delta < 0 ? "−" : "+"}$${Math.abs(delta).toFixed(2)}`;
+            };
+            const compatible = a.usage.rateDate === b.usage.rateDate;
+            const whole = periodReadings("Whole interactions with matching records",
+                ["Measure", "Baseline", "Selected", "Change"], [
+                    ["Metered tokens", ...periods.map(p => p.total === null ? "Not recorded" : number(p.total)),
+                        periods.every(p => p.total !== null) ? signed(b.usage.total-a.usage.total) : "—"],
+                    ["Est. retail cost", ...periods.map(p => dollars(p.usd)), compatible && periods.every(p=>p.usd !== null)
+                        ? costChange(a.usage.usd,b.usage.usd) : "—"],
+                    ["Metered / eligible", ...periods.map(p=>`${p.metered} / ${p.eligible}`), "—"],
+                    ["Priced / metered", ...periods.map(p=>`${p.priced} / ${p.metered}`), "—"],
+                    ["Input read from cache", ...periods.map(p=>p.cacheReadShare===null?"Not recorded":`${number(p.cacheReadShare*100)}%`), "—"],
+                ]);
+            const models = [...new Set(periods.flatMap(p=>p.models.map(m=>m.model)))];
+            const mix = periodReadings("Why estimated cost changed", ["Model","Baseline","Selected","Change"], models.map(name=>{
+                const pair = periods.map(p=>p.models.find(m=>m.model===name));
+                return [name,...pair.map(m=>m?`${dollars(m.usd)} (${counted(m.interactions,"interaction")})`:"No interactions"),
+                    compatible && pair.every(m=>m?.usd != null) ? costChange(pair[0].usd,pair[1].usd) : "—"];
+            }));
+            const findings = el("div"), choices = assessmentFactories.questionControls(doc, "compare", (key, choice) => {
+                if (!section.isConnected || !readCurrent(started, publication)) return;
+                usageChoice = {...usageChoice,[key]:choice}; showQuestion();
+            }, {units:true});
+            function showQuestion() {
+                choices.sync(usageChoice); findings.replaceChildren();
+                const {question,threshold,unit} = usageChoice;
+                if (question === "all") {
+                    findings.append(whole);
+                    if (models.length) findings.append(el("h3","Why estimated cost changed"), mix);
+                    return;
+                }
+                const pair = periods.map(p => p.questions[question === "tool" ? `tool-${threshold}` : question]);
+                const groups = pair.map(p => new Map(p.groups.map(g => [g.label,g])));
+                const labels = [...new Set(groups.flatMap(m => [...m.keys()]))];
+                const money = unit === "usd", valueKey = money ? "usd" : "total", denom = money ? "priced" : "metered";
+                const format = n => n == null ? "No reading" : money ? dollars(n) : number(n);
+                const name = question === "author" ? "Prompt author" : question === "model" ? "Model" : "Interactions that used";
+                const headers = [name,"Baseline","Selected","Change"];
+                const table = (caption, cells) => periodReadings(caption, headers, labels.map(label => [label, ...cells(groups.map(m=>m.get(label)))]));
+                if (!labels.length) { findings.append(el("p","No matching groups in either period.")); return; }
+                if (question === "tool" && pair.some(p=>p.groups.reduce((n,g)=>n+g.eligible,0)>p.eligible))
+                    findings.append(el("p","An interaction can appear under several tools.","compare-caption"));
+                if (question === "tool" && pair.some(p=>p.unranked))
+                    findings.append(el("p",`Without token counts: ${pair[0].unranked} baseline, ${pair[1].unranked} selected.`,"compare-caption"));
+                findings.append(el("h3", money ? "Estimated retail cost by group" : "Recorded tokens by group"),
+                table(money ? "Estimated retail cost by group" : "Recorded tokens by group", sides => {
+                    const [first,second] = sides.map(s=>s?.[valueKey]);
+                    return [format(first),format(second),first == null || second == null ? "—" : money ? compatible ? costChange(first,second) : "—" : signed(second-first)];
+                }), el("h3",`Per ${denom} interaction`),
+                table(`Per ${denom} interaction`, sides => {
+                    const pair = sides.map(s=>s?.[denom] ? s[valueKey]/s[denom] : null);
+                    return [...sides.map((s,i) => !s ? "No interactions" : `${format(pair[i])} (${s[denom]} of ${s.eligible} ${denom})`),
+                        pair.includes(null) ? "—" : money ? compatible ? costChange(...pair) : "—" : signed(pair[1]-pair[0])];
+                }));
+                if (question === "model") findings.append(el("h3","Input read from cache"), table("Share of input read from cache", sides =>
+                    [...sides.map(s => s?.cacheReadShare == null ? "Not recorded" : `${number(100*s.cacheReadShare)}%`),
+                        sides.every(s=>s?.cacheReadShare != null) ? `${signed((sides[1].cacheReadShare-sides[0].cacheReadShare)*100)} pp` : "—"]));
+                if (question === "tool") findings.append(el("h3","Returned Work IQ context"),table("Estimated tokens in returned Work IQ text", sides =>
+                    [...sides.map(s => s?.context.tokens == null ? "Not recorded" : `~${number(s.context.tokens)} (${s.context.sized} / ${s.context.calls} calls)`),
+                        sides.every(s=>s?.context.tokens != null && s.context.sized === s.context.calls) ? `~${signed(sides[1].context.tokens-sides[0].context.tokens)}` : "—"]));
+            }
+            showQuestion();
+            section.append(choices.host, findings);
+            if (!compatible) section.append(el("p",`Different rate dates (${a.usage.rateDate} and ${b.usage.rateDate}); no cost delta.`, "compare-caption"));
+            content.append(section);
+        }
         if (!readCurrent(started, publication)) return;
         syncOutcomeChoices(value);
         if (!readCurrent(started, publication)) return;
@@ -1446,6 +1522,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         setStatus("Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.", "notice");
     }
     function withdrawAccess() {
+        usageChoice = {question:"all",threshold:30000,unit:"tokens"};
         if (accessWithdrawn) return;
         accessWithdrawn = true; generation++;
         inspectionReturn = null;
@@ -1527,7 +1604,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     const workspace = doc.getElementById("workspace");
     if (workspace) new MutationObserver(() => { if (shown) update(); }).observe(workspace, { attributes: true, attributeFilter: ["aria-busy"] });
-    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, closeInspection, stop, withdrawAccess, resumeAccess };
+    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, closeInspection, stop, withdrawAccess, resumeAccess,
+        startUsage(choice) { usageChoice = choice ?? {question:"all",threshold:30000,unit:"tokens"}; } };
 }
 
 export const periodComparisonStyles = `
@@ -1838,6 +1916,13 @@ export const periodComparisonStyles = `
 .comparison-chart{margin-top:var(--space-md)}
 .compare-outcome-readings{display:grid;gap:var(--space-md);align-items:start}
 .compare-outcome-readings>.compare-changes{margin:0}
+.compare-usage.compare-panel{padding-inline:0;margin-top:var(--space-md);background:none}
+.compare-usage table+h3{margin-top:var(--space-lg)}
+@container comparison-panel (max-width:26rem){
+ .compare-usage colgroup{display:none}
+ .compare-usage tr>td:last-child{grid-column:1/-1;color:var(--muted)}
+ .compare-usage tr>td:last-child::before{content:attr(data-label) ": "}
+}
 .compare-changes tbody tr:last-child,.compare-changes tbody tr:last-child>*{border-bottom:0}
 .compare-result-pair{align-items:baseline}
 .compare-result-pair>.compare-outcome-row{margin:0;padding-inline:.5rem;text-align:center;min-width:0}

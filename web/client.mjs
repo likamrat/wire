@@ -327,6 +327,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
+        modelShareReading: assessmentFactories.modelShareReading, usageSummary: assessmentFactories.usageSummary,
         createLink(kind, row) {
             const changes = Object.hasOwn(row, "nativeFilter") ? row.nativeFilter
                 : kind === "outcomes" ? workspaceState.scope.layer === "code-reference" ? { widget: "all" } : { result: row.id }
@@ -371,6 +372,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     $("chartTitle").after(analyzeTrends.link("rhythm"));
+    $("analyzeUsageTitle").after(analyzeTrends.link("usage"));
     function widgetRecordsLink(widget) {
         return routeLink("", routeFor("activity", { widget, page: undefined }), "", { revealReferenceRecords: true });
     }
@@ -776,6 +778,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     let historyPosition = Number.isSafeInteger(history.state?.evidenceView?.position) ? history.state.evidenceView.position : 0;
     let search = workspaceState.route.search || "", activityPage = Math.max(0, Number.parseInt(workspaceState.route.page || "0", 10) || 0), restoring = false, mounted = false;
+    let usageSort = pageDefaults.get("analyzeSort"), explicitUsageSort = false;
     const pageSize = 8;
     const frontendActivity = assessmentFactories.mountActivityList?.({
         root: $("activityList"), pager: $("activityPager"), isCurrent: token => api.isCurrent(token),
@@ -1822,6 +1825,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsNavigation() {
         const section = workspaceState.route.view === "settings" ? settingsNavigation.resolve(workspaceState.route).section : "connection";
+        if (section === "reports" && !clearingAccess && api.publicationToken()) assessmentFactories.rateReference(el, $("costRateReference"), workspaceState.evidence?.scenarios ?? []);
+        else $("costRateReference").replaceChildren();
         $("settingsGeneralBack").hidden = workspaceState.route.view !== "settings"
             || history.state?.evidenceView?.generalShortcut !== section || history.state?.wireAccess?.owner !== historyOwner;
         collectionSettings?.setSection(workspaceState.route.view === "settings" ? section : null, workspaceState.route.setting);
@@ -2624,6 +2629,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     periodBackToTrends.prepend(ux.icon("back")); periodBackToTrends.hidden = true;
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
+        questionControls: assessmentFactories.questionControls,
         root: $("trendsView"), api, time, ux, authorship,
         hiddenInteraction: id => hiddenCards.has(id),
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
@@ -2632,7 +2638,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             routeScope: trendRouteScope(underlyingRoute()),
             timeContext: viewerTime, publication: api.publicationToken(), stale: workspaceState.stale || workspaceState.loading }),
         onScopeChange: rememberTrendScope,
-        onComparePeriods: (dates, filters) => {
+        onComparePeriods: (dates, filters, usageChoice) => {
             const publication = api.publicationToken();
             if (workspaceState.route.view !== "trends" || !publication || workspaceState.stale || workspaceState.loading) return;
             const target = { view: "analyze", compare: "periods", layer: "tool", scope: "all", source: "github-copilot",
@@ -2641,7 +2647,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ...(filters.service === "Discovery" ? { service: "Discovery" } : filters.service && filters.service !== "missing"
                     ? { services: filters.service, includeMissingService: false } : {}) };
             trendPeriodVisit = { publication, destination: historyPosition + 1, target: readingKey(target) };
+            periodComparisonUI.startUsage(usageChoice);
             navigate(target);
+        },
+        onUsageReport: async ({revision, range, filters, question, threshold, scenarioIds}) => {
+            const publication = api.publicationToken();
+            if (!publication || workspaceState.route.view !== "trends" || revision !== workspaceState.evidence?.revision || workspaceState.stale || workspaceState.loading) return;
+            const original = boundTrend(workspaceState.route)?.reportVisit && draft.options().usageOptions;
+            const sameDraft = original && !reportBaseExplicit && !namedReport && question === original.question && filters.author === original.author && filters.tool === original.tool && !filters.service
+                && (question !== "tool" || threshold === (original.threshold ?? 30000))
+                && range.from === effectiveReportDates().from && range.to === effectiveReportDates().to;
+            if ((!sameDraft && hasReportDraftChoices()) || reportPreparing || exportWriting || reportJourney.snapshot().saveUnconfirmed) {
+                announce("Your current report is still open. Finish it in Reports before preparing another question.", "stale"); return;
+            }
+            const catalog = new Set(workspaceState.evidence.exportCatalog.requests.map(r=>r.scenarioId));
+            if (!scenarioIds.length || scenarioIds.some(id=>!catalog.has(id) || hiddenCards.has(id))) {
+                announce("Some chart interactions are hidden or unavailable for a report. Review the selection in Analyze.", "stale"); return;
+            }
+            if (!sameDraft) applyReportDefaults();
+            reportBaseExplicit = true; reportScope = "selected"; reportDates = {range:"custom",...range};
+            for (const id of scenarioIds) selected.add(id);
+            draft.change({usageOptions:{ tokens:true,dollars:true,rows:false,...(sameDraft ? original : {}),question,
+                ...(question === "tool" ? {threshold} : {}), ...(filters.author ? {author:filters.author} : {}), ...(filters.tool ? {tool:filters.tool} : {}) }});
+            if (await navigate({view:"reports",search:"",analysisQuery:null}) && api.isCurrent(publication)) await chooseReportPreset("all");
         },
         onSectionChange: (section, measure) => {
             const route = workspaceState.route;
@@ -2703,7 +2731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
         onAccepted: restorePeriodComparisonReading,
-        createReport: function createPeriodReport(value, semanticSelection) {
+        createReport: function createPeriodReport(value, semanticSelection, usageChoice) {
             if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
             if (exportWriting || workspaceState.loading || workspaceState.stale) return;
             const ids = [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))];
@@ -2713,7 +2741,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             periodReportInvalid = false;
             for (const id of ids) selected.add(id);
             draft.clearSelection();
-            draft.change({ saveMode: "local" });
+            draft.change({ saveMode: "local", ...(usageChoice?.question && usageChoice.question !== "all" ? { usageOptions:{
+                tokens:true, dollars:true, rows:false, question:usageChoice.question,
+                ...(usageChoice.question === "tool" ? {threshold:usageChoice.threshold} : {}),
+            } } : {}) });
             reportBaseExplicit = true;
             go("reports", { task: "create", request: undefined });
             updateSelection(); void previewExport();
@@ -4811,6 +4842,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // Keep native link activation (including opening in another tab) in step with ordinary clicks.
     pageDefaults.subscribe(key => {
         if (clearingAccess || !api.publicationToken()) return;
+        if (key === "analyzeSort" && (!explicitUsageSort || workspaceState.route.view === "settings")) {
+            usageSort = pageDefaults.get(key); explicitUsageSort = false;
+            if ($("activityUsageSort")) $("activityUsageSort").value = usageSort;
+            if (workspaceState.route.view === "analyze" && !workspaceState.route.compare && workspaceState.evidence) renderActivity();
+        }
         for (const node of document.querySelectorAll("[data-nav]"))
             if (browseDefaults[node.dataset.nav] === key) setNavigationLink(node);
     });
@@ -5605,6 +5641,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             + (chartType === "time" ? native?.timeSeries.points.length ?? 0 : native?.grouping.groups.length ?? 0);
         $("chartDataTitle").textContent = `${$("chartTitle").textContent} (${count(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
         percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native);
+        const breakdown = percentages.referenceModel();
+        assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations);
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
@@ -6002,7 +6040,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const scope = frontendActivity
-            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage, hiddenCards.version()]) : "";
+            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage, hiddenCards.version(), usageSort]) : "";
         if (!workspaceState.evidence.nativeRead && frontendActivity?.retain(publication, workspaceState.evidence, scope)) return;
         const stage = frontendActivity?.begin(publication, workspaceState.evidence, scope);
         if (frontendActivity && !stage) return;
@@ -6023,7 +6061,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const members = new Set(group?.interactionIds ?? group?.drilldownIds);
         if (widget) scenarios = group?.interactionIds ? scenarios.filter(record => members.delete(percentageMath.interactionIdentity(record))) : [];
         const orphaned = widget ? [] : selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
-        const allItems = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
+        let ordered = presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId);
+        if (usageSort !== "recent") {
+            const score = s => s.usage ? usageSort === "tokens" ? s.usage.total : s.usage.usd ?? -1 : -2;
+            ordered = scenarios.toSorted((a, b) => score(b) - score(a));
+        }
+        const allItems = [...ordered
             .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record })),
             ...(widget && !group?.interactionIds ? selectionRows().filter(row => members.has(row.id)).map(match => ({ match })) : [])];
         const items = allItems.filter(item => !hiddenCards.has((item.scenario ?? item.match ?? item.record).scenarioId));
@@ -6050,6 +6093,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? selectionRows().length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, selectionRows().length)}`
             + (unlinked ? `. WIRE couldn’t link ${count(unlinked)} ${unlinked === 1 ? "record" : "records"} to an interaction. See the separate list below.` : "");
         $("activityListSummary").hidden = false;
+        if (!$("activityUsageSort")) {
+            const label = el("label", "usage-sort", "Sort: "), select = el("select"); select.id = "activityUsageSort";
+            select.append(...[...$("defaultAnalyzeSort").options].map(option => option.cloneNode(true)));
+            select.value = usageSort;
+            select.addEventListener("change", () => {
+                if (!api.publicationToken() || clearingAccess) return;
+                usageSort = select.value; explicitUsageSort = true; activityPage = 0;
+                if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { page: undefined }), true);
+                else renderActivity();
+            });
+            label.append(select); $("activityListContext").append(label);
+        }
         host.replaceChildren();
         activityPage = roster.index;
         if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link widget-record-exit", { revealReferenceRecords: true }));
@@ -6416,6 +6471,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const facts = el("div", "request-card-summary");
         const header = ux.cardMetadata(author, el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value),
             sourceIdentity && sharedNativeView()?.aggregates.conversations ? el("span", "request-card-source", `Source: ${sourceIdentity.label}`) : null);
+        if (scenario.usage && !reportPicker) header.append(el("span", "usage-chip", assessmentFactories.usageChip(scenario.usage)));
         if (summary && full?.count !== summary.count) {
             facts.append(el("span", "request-card-count", results.countLabel(layer, summary.count, full?.count ?? null)));
         } else if (!reportPicker && outcome && summary[outcome.key] < summary.count) {
@@ -6765,6 +6821,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sectionKey = name => JSON.stringify(["reader", workspaceState.route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
         const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
+        const usageSection = sections.add("usage", "Token & cost breakdown", { key: sectionKey("usage"), collapsible: false });
+        assessmentFactories.usageReading(el, usageSection.body, context.groups.find(group => group.relation === "selected").scenario,
+            at => time.formatTime(at, workspaceState.scope.timeContext));
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         const jumps = el("nav", "wire-section-nav reader-section-jumps");
@@ -6794,7 +6853,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const id = workspaceState.route.request;
             jumps.append(visibilityButton("Hide", "hide", () => setCardVisibility(id)));
         }
-        body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
+        body.append(jumps, promptSection.element, activitySection.element, usageSection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);
         const journey = el("ol", "journey request-context-timeline");
@@ -7301,6 +7360,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length, omitCallKind: explainedBadRequest ? "http-400" : undefined });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
+            if (!(scenario.usage && tool.usageContextLinked) && Number.isSafeInteger(tool.returnedTextBytes)) heading.querySelector(".reader-tool-meta").append(el("span", "reader-call-duration",
+                `~${count(Math.round(tool.returnedTextBytes / 4))} returned context tokens`));
             item.append(heading);
             const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];
             explanations.forEach(node => node.remove());
@@ -7951,6 +8012,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
+        const usageOptions = draft.options().usageOptions ?? { tokens: true, dollars: true, rows: false };
+        $("usageTokens").checked = usageOptions.tokens;
+        $("usageDollars").checked = usageOptions.tokens && usageOptions.dollars;
+        $("usageRows").checked = usageOptions.tokens && usageOptions.rows;
+        $("usageTokens").disabled = exportWriting;
+        $("usageDollars").disabled = $("usageRows").disabled = exportWriting || !usageOptions.tokens;
         $("reportResultText").checked = draft.options().resultText === true;
         $("reportResultText").disabled = exportWriting;
         $("reportRecordedContextHelp").hidden = !$("reportRecordedContext").checked && draft.options().promptMode !== "none";
@@ -11317,6 +11384,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (prepared || activePreview || reportRebuildFrom) updateReportContent({ hide: true, prepare: prepared });
         updateSelection({ refreshingPairedCopies: prepared });
     }));
+    for (const [id, key] of [["usageTokens", "tokens"], ["usageDollars", "dollars"], ["usageRows", "rows"]]) $(id).addEventListener("change", () => {
+        if (exportWriting || clearingAccess || !api.publicationToken()) return;
+        draft.change({ usageOptions: { tokens: true, dollars: true, rows: false, ...draft.options().usageOptions, [key]: $(id).checked } });
+        updateReportContent({ hide: true }); render();
+    });
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
         draft.changeRecordedContext($("reportRecordedContext").checked);
@@ -11550,6 +11622,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (await moved && api.isCurrent(publication) && navigation === workspaceState.navigationGeneration && workspaceState.route.view === "reports") revealAddedDraft(ref);
     }
     reportExperience = assessmentFactories.createReportExperience({
+        viewUsageTrend: () => {
+            if (!api.publicationToken() || reportSelectionBlock() || reportBaseExplicit || namedReport) return;
+            const {question,threshold=30000,author,tool} = draft.options().usageOptions ?? {};
+            const {from,to} = effectiveReportDates();
+            if (!question || !from || !to) return;
+            const key = crypto.randomUUID();
+            trendEntries.set(key,{reportVisit:true,scope:{family:"usage",period:"custom",range:{from,to},filters:{...(author ? {author} : {}),...(tool ? {tool} : {})},
+                usageChoice:{question,threshold}},publication:api.publicationToken(),revision:workspaceState.evidence.revision,timeZone:viewerTime.timeZone});
+            navigate({view:"trends",trendSection:"charts",trendEntry:key,search:"",analysisQuery:null});
+        },
+        questionControls: assessmentFactories.questionControls,
+        changeUsage: (key, value) => {
+            if (exportWriting || reportJourney.snapshot().saveUnconfirmed || clearingAccess || !api.publicationToken()) return;
+            const options = { tokens:true, dollars:true, rows:false, ...draft.options().usageOptions };
+            if (value === "" || key === "question" && value === "all") delete options[key]; else options[key] = value;
+            if (key === "question") {
+                if (value !== "tool") delete options.threshold;
+                if (value === "all") { delete options.author; delete options.tool; }
+            }
+            const prepared = assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).prepared;
+            // A different cohort must prepare from the original selection, never broaden an inherited preview.
+            if (activePreview || reportRebuildFrom) invalidatePreview("", {preserveFileView:true});
+            draft.change({usageOptions:options});
+            if (prepared) updateReportContent({hide:true,prepare:true});
+            updateSelection();
+        },
         root: $("reportsView"), time, ux,
         current: () => !clearingAccess && Boolean(api.publicationToken()),
         selectNamed: selectNamedReport, deleteNamed: deleteNamedReport,
@@ -11720,7 +11818,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
     firstConnection = assessmentFactories.mountFirstConnection({ api, ux, reviewSource: reviewFirstConnection, collectionStatus: historyStatus });
     const privateContentIds = [
-        "activityList", "activityListSummary", "activityListScope", "activityPager", "sessionAnalysis", "homeInsights", "homeFindings",
+        "activityList", "activityListSummary", "activityListScope", "activityPager", "analyzeUsageContent", "costRateReference", "sessionAnalysis", "homeInsights", "homeFindings",
         "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
         "detail", "reportList", "reportReviewBody", "reportSaveBody", "reportMatchingContext", "scopeExclusions",
         "pageTitle", "pageIdentity", "pageIntro", "pageProject", "breadcrumbs", "viewingContext", "serviceEvidenceSummary",

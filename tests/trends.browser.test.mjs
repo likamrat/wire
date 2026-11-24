@@ -150,7 +150,7 @@ async function setupIndex(t, withBoundary = false, options = {}) {
 async function openAllCharts(page) {
     await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
     await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts", exact: true }).click();
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
 }
 
 async function setupAllCharts(t, withBoundary = false, options = {}) {
@@ -162,7 +162,7 @@ async function setupAllCharts(t, withBoundary = false, options = {}) {
 test("Trends opens one count chart with an errors-first visible index and compares named measures without changing the period", async t => {
     const { page, reads } = await setupIndex(t);
     const index = page.getByRole("navigation", { name: "Trend measures" });
-    await expect(index.getByRole("button")).toHaveText(["Errors & failures", "Tool calls", "Tool usage", "Services", "Call duration", "Prompt authors", "Response models"]);
+    await expect(index.getByRole("button")).toHaveText(["Errors & failures", "Tool calls", "Tool usage", "Services", "Call duration", "Prompt authors", "Response models", "Tokens & est. cost"]);
     await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     await expect(page.locator(".trends-panel:visible")).toHaveAttribute("data-family", "rhythm");
     await expect(page.getByRole("button", { name: "Count", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -351,7 +351,7 @@ test("selected overview evidence is available without resizing", { timeout: 4500
     const after = await panel.boundingBox();
     assert.equal(after.height, before.height);
     await expect(panel).toHaveAttribute("data-maximized", "false");
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await expect(panel.getByRole("button", { name: "View evidence", exact: true })).toBeVisible();
     await panel.getByRole("button", { name: "View evidence", exact: true }).click();
     await expect(page.locator(".trends-evidence-row a")).toHaveCount(4);
@@ -683,8 +683,8 @@ test("author, overlapping service/model, error, timing and calendar marks open o
 
 test("Trends opens normally, keeps 30 daily points and connects exact selected evidence to the existing reader", { timeout: 45000 }, async t => {
     const { page, reads } = await setupAllCharts(t);
-    await expect(page.locator(".trends-panel")).toHaveCount(7);
-    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel")).toHaveCount(8);
+    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(8);
     const data = await dates(page);
     assert.equal(data.days.length, 30);
     assert.equal(data.totals.calls, 60);
@@ -740,7 +740,7 @@ test("series visibility does not rebase percentages, recreate controls or shift 
     await capture(page, "trends-services-dark-narrow");
 });
 
-test("the seven simultaneous charts, daily activity and population filters work through ordinary controls", { timeout: 45000 }, async t => {
+test("the eight simultaneous charts, daily activity and population filters work through ordinary controls", { timeout: 45000 }, async t => {
     const { page, reads } = await setupAllCharts(t);
     await dates(page);
     await page.locator('.trends-panel[data-family=rhythm] .trends-sizing button:first-child').click();
@@ -776,7 +776,7 @@ test("the seven simultaneous charts, daily activity and population filters work 
     assert.equal(filtered.totals.calls, 20);
     await expect(page.locator(".trends-restrictions")).toContainText("Files");
     await page.getByRole("button", { name: "Back to overview", exact: true }).click();
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await expect(page.getByRole("button", { name: "1 filter applied", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(page.locator(".trends-restrictions")).toBeHidden();
@@ -1242,7 +1242,7 @@ test("chart-first entry retains period facts with empty Today and All charts pre
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
     await expect(page.locator(".trends-content:visible")).toHaveCount(0);
     await page.getByRole("button", { name: "Restore all", exact: true }).click();
-    await expect(page.locator(".trends-content:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-content:visible")).toHaveCount(8);
     assert.equal(reads.length, calls, "Sizing, measure and visibility changes are display-only");
     for (const id of ["authors", "rhythm", "services", "problems", "models", "timing"]) {
         await page.locator(`[data-family="${id}"] .trends-sizing button:first-child`).click(); await settle(page);
@@ -1482,7 +1482,7 @@ test("every trend widget spans the workspace in landscape and portrait", { timeo
                 return { family: node.dataset.family, width: box.width, available: workspace.width, left: box.left, edge: workspace.left };
             });
         });
-        assert.equal(layout.length, 7);
+        assert.equal(layout.length, 8);
         assert.ok(layout.every(row => Math.abs(row.width - row.available) < 2 && Math.abs(row.left - row.edge) < 2),
             `Each widget needs the full ${viewport.width}px CSS workspace: ${JSON.stringify(layout)}`);
     }
@@ -1491,10 +1491,10 @@ test("every trend widget spans the workspace in landscape and portrait", { timeo
 test("every overview chart exposes its measures without redundant subheaders", { timeout: 30000 }, async t => {
     const { page } = await setupAllCharts(t, false, { records: currentRecords(), viewport: { width: 1920, height: 1080 } });
     await settle(page);
-    await expect(page.locator(".trends-modes:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-modes:visible")).toHaveCount(8);
     await expect(page.locator(".trends-unit:visible")).toHaveCount(0);
     await expect(page.locator('[data-family=rhythm] h2')).toHaveText("Tool calls");
-    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-plot svg:visible")).toHaveCount(8);
 });
 
 test("author names stay whole in overview and maximized reading without a vertical label column", { timeout: 30000 }, async t => {
@@ -1515,7 +1515,7 @@ test("author names stay whole in overview and maximized reading without a vertic
     await check("overview");
 });
 
-test("all seven full-width widgets retain readable labels and measures across sizing and orientation", { timeout: 90000 }, async t => {
+test("all eight full-width widgets retain readable labels and measures across sizing and orientation", { timeout: 90000 }, async t => {
     const { page, reads } = await setupAllCharts(t, false, { records: currentRecords({ many: true, emptyToday: true }),
         viewport: { width: 3440, height: 1440 }, motion: "no-preference", direct: true });
     await openDatePicker(page, "trends", "Last 30 days");
@@ -1566,7 +1566,7 @@ test("all seven full-width widgets retain readable labels and measures across si
         await page.setViewportSize(viewport); await chooseTheme(page, theme);
         await page.evaluate(value => document.documentElement.style.fontSize = `${value * 100}%`, scale);
         await settle(page);
-        await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+        await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
         for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
             const panel = page.locator(`.trends-panel[data-family="${id}"]`);
             await measure(panel, `${orientation}/overview`);
@@ -1780,7 +1780,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
         assert.equal(reads.length, readCount, `${period}: chart controls must not change the population`);
         await capture(page, `all-controls-${period}-collapsed`);
         await page.getByRole("button", { name: "Restore all", exact: true }).click();
-        await expect(page.locator(".trends-content:visible")).toHaveCount(7);
+        await expect(page.locator(".trends-content:visible")).toHaveCount(8);
         await page.getByRole("button", { name: "Filters", exact: true }).click();
         await selectActivityOption(page, "trendsPromptauthors", "agent");
         let response = waitRead();
@@ -1815,7 +1815,7 @@ test("Custom dates is visibly named and every widget names its applied range", {
     await expect(panel.getByRole("button", { name: "Custom dates", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     const expectRange = async text => {
-        await expect(page.locator(".trends-period-label")).toHaveCount(7);
+        await expect(page.locator(".trends-period-label")).toHaveCount(8);
         for (const label of await page.locator(".trends-period-label").all()) await expect(label).toHaveText(text);
     };
     for (const period of ["7", "14", "30"]) {
@@ -1831,7 +1831,7 @@ test("Custom dates is visibly named and every widget names its applied range", {
     assert.equal(data.to, "2026-11-04");
     await capture(page, "dates-overview");
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
-    await expect(page.locator(".trends-period-label:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-period-label:visible")).toHaveCount(8);
     await capture(page, "dates-collapsed");
     await page.getByRole("button", { name: "Maximize Services", exact: true }).click();
     await expect(page.locator('[data-family=services] .trends-period-label')).toHaveText("(Oct 28–Nov 4, 2026)");
@@ -1875,7 +1875,7 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
         window.trendsBoundary.withdraw();
         return { held: text.data, labels: [...document.querySelectorAll(".trends-period-label")].map(node => node.textContent) };
     });
-    assert.deepEqual(cleared, { held: "", labels: ["", "", "", "", "", "", ""] });
+    assert.deepEqual(cleared, { held: "", labels: accepted.map(() => "") });
 });
 
 test("clicking an overview data point never maximizes or moves the workspace", { timeout: 30000 }, async t => {
@@ -1899,7 +1899,7 @@ test("clicking an overview data point never maximizes or moves the workspace", {
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await settle(page);
     await capture(page, "point-click-after");
     assert.deepEqual(await geometry(), before, "Point selection must not change card sizes, sibling visibility or page position");
-    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
     await expect(page.locator(".trends-detail-bar")).toBeHidden();
     await expect(mark).toHaveAttribute("aria-pressed", "true");
     await page.mouse.move(8, 8);
@@ -2026,7 +2026,7 @@ async function measureSidebarMotion(page, { keyboard = false, reverse = false } 
     });
 }
 
-test("populated Trends sidebar motion stays responsive without rebuilding seven plots every animation frame", { timeout: 60000 }, async t => {
+test("populated Trends sidebar motion stays responsive without rebuilding eight plots every animation frame", { timeout: 60000 }, async t => {
     const { page } = await setupAllCharts(t, false, { records: currentRecords({ many: true }), viewport: { width: 1920, height: 1080 },
         motion: "no-preference", direct: true, profile: true });
     const results = [];
@@ -2035,7 +2035,7 @@ test("populated Trends sidebar motion stays responsive without rebuilding seven 
         if (route.startsWith("trends")) {
             await openDatePicker(page, "trends", route === "trends7" ? "Last 7 days" : "Last 30 days");
             await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
-            await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+            await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
         }
         await page.evaluate(() => scrollTo(0, 0)); await settle(page);
         const profiler = process.env.WIRE_TRENDS_PROFILE && route === "trends30" ? await page.context().newCDPSession(page) : null;

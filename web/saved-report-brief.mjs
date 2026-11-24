@@ -115,6 +115,7 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         : g.signal || g.operation;
     function caseLink(id) { return jump(titleOf(interactions, id), "search-interaction", { type: "interaction", id }); }
     const frozenFinding = main.dataset.findingVersion === "1" ? main.querySelector(":scope>#finding") : null;
+    const usageFinding = main.querySelector(":scope>#usage-selected[data-usage-question]");
     function callLink(id) { return jump(titleOf(calls, id), frozenFinding ? "forward" : "search-tool", { type: "call", id }); }
     function facts(parent, pairs) {
         const dl = el("dl", undefined, "brief-facts");
@@ -173,7 +174,28 @@ export function mountSavedReportBrief(host, value, { icon, isCurrent }) {
         showing = route; mark(); panel.replaceChildren(); host.scrollTop = 0;
         if (stack.length) panel.append(action("Back", "back", back));
         const { type, id } = route;
-        if (type === "findings" && frozenFinding) {
+        if (type === "findings" && usageFinding) {
+            heading(text(usageFinding,"h2"));
+            panel.append(el("p",text(usageFinding,":scope>p")));
+            const original = usageFinding.querySelector("table");
+            if (original) {
+                const table = el("table",undefined,"usage-table");
+                table.append(el("caption","Group breakdown","visually-hidden"));
+                const head = table.createTHead().insertRow(), body = table.createTBody();
+                for (const cell of original.tHead.rows[0].cells) { const th=el("th",cell.textContent); th.scope="col"; head.append(th); }
+                for (const r of original.tBodies[0].rows) {
+                    const row = body.insertRow();
+                    for (const cell of r.cells) {
+                        const next=el(cell.cellIndex ? "td" : "th",cell.textContent);
+                        if (!cell.cellIndex) next.scope="row";
+                        row.append(next);
+                    }
+                }
+                const wrap=el("div",undefined,"usage-table-wrap"); wrap.tabIndex=0;
+                wrap.setAttribute("role","region"); wrap.setAttribute("aria-label","Group breakdown");
+                wrap.append(table); panel.append(wrap);
+            }
+        } else if (type === "findings" && frozenFinding) {
             findingFirst(frozenFinding);
         } else if (type === "findings") {
             const [group, ...more] = model.groups;

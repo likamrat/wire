@@ -190,11 +190,13 @@ export function createEvidenceUX(icons, operations) {
             // The root's painted width excludes the stable scrollbar gutter even when clientWidth does not.
             const width = Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width);
             panel.style.maxWidth = Math.max(0, width - pad * 2) + "px";
-            const availableBelow = innerHeight - box.bottom - gap - pad, availableAbove = box.top - gap - pad;
-            const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
+            const availableBelow = Math.min(innerHeight-pad*2, innerHeight - box.bottom - gap - pad);
+            const availableAbove = Math.min(innerHeight-pad*2, box.top - gap - pad);
+            const above = availableBelow < panel.scrollHeight && availableAbove > availableBelow;
             panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
             panel.style.left = Math.max(pad, Math.min(box.left, width - panel.offsetWidth - pad)) + "px";
-            panel.style.top = Math.max(pad, above ? box.top - gap - panel.offsetHeight : box.bottom + gap) + "px";
+            panel.style.top = Math.max(pad, Math.min(innerHeight - pad - panel.offsetHeight,
+                above ? box.top - gap - panel.offsetHeight : box.bottom + gap)) + "px";
         }
         panel.addEventListener("beforetoggle", event => {
             listeners?.abort();
