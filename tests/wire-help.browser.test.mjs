@@ -51,6 +51,10 @@ test("sidebar Help reads topics and returns to the exact workspace without chang
     }
     await page.goto(new URL("/help", runtime.url).href);
     await expect(page.locator("#help-reports")).toBeVisible();
+    await page.getByRole("link", { name: "When an update stops" }).click();
+    await expect(page).toHaveURL(/\/help\?topic=updates$/);
+    await page.reload();
+    await expect(page.locator("#wireHelpView").getByText("Check restart status", { exact: true })).toBeVisible();
     await expect(page.locator("#wireHelpView").getByText(/^Back to /)).toHaveCount(0);
     await page.goto(new URL("/settings?section=troubleshooting&setting=activity-counts", runtime.url).href);
     await expect(page.locator("#help-counts")).toBeVisible();
