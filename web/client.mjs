@@ -1745,6 +1745,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function settingsTarget(entry) {
         if (["app-update", "automatic-updates"].includes(entry.id) && !$("appUpdateGuide").hidden) return "appUpdateGuide";
+        if (entry.id === "app-update" && !$("settingsAppUpdate").hidden) return "settingsAppUpdate";
         if (entry.id === "palette") {
             const checked = document.querySelector("input[name=screenPalette]:checked");
             return checked?.parentElement.hidden ? "paletteQuery" : checked?.id ?? entry.target;

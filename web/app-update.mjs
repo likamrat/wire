@@ -31,25 +31,27 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     }
     function render() {
         const available = state?.supported && state.phase === "available" && sha(state.candidate) && state.candidate !== state.installed;
-        manual.classList.toggle("app-update-action", Boolean(available));
         const shown = available && state.candidate !== state.dismissed;
-        notice.hidden = !shown && !success && !result;
-        $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
-        $("appUpdateDetail").textContent = success || result || feedback || "Update and restart WIRE. Your reports and settings stay here.";
-        $("appUpdateApply").hidden = !shown || Boolean(result || success);
-        // Keep a dismissed build actionable in Settings without duplicating the notice's Update button.
-        $("settingsAppUpdate").hidden = !available || shown && !result;
+        notice.inert = !shown && !success && !result;
+        if (!notice.inert) {
+            $("appUpdateHeading").textContent = success ? "WIRE updated" : result ? "Update not installed" : "WIRE update available";
+            const detail = $("appUpdateDetail");
+            detail.textContent = success || result || feedback;
+            detail.hidden = !detail.textContent;
+            $("appUpdateApply").hidden = !shown || Boolean(result || success);
+        }
+        $("settingsAppUpdate").hidden = !available;
         for (const id of ["appUpdateApply", "settingsAppUpdate", "appUpdateDismiss"]) $(id).disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
         const manualMode = Boolean(manualOnly(state));
-        manual.hidden = manualMode;
+        manual.hidden = manualMode || available;
         $("appUpdateGuide").hidden = !manualMode;
         $("appUpdateAutoRow").hidden = !state?.supported || manualMode;
         manual.disabled = busy || Boolean(expected) || updating || manualMode;
         automatic.disabled = manual.disabled || !state?.supported;
         automatic.checked = !manualMode && (pendingPreference ?? state?.automatic === true);
-        const status = feedback || result || (manualMode ? "" : state?.message ?? "Reading update status…");
-        const lastCheck = state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
+        const status = feedback || result || (available ? "Update available." : manualMode ? "" : state?.message ?? "Reading update status…");
+        const lastCheck = available || state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
         const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
         if (line.textContent !== summary) line.textContent = summary;
         line.hidden = !summary;
@@ -236,8 +238,8 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
     $("appUpdateDismiss").addEventListener("click", () => {
         if (success || result) { success = result = ""; render(); }
         else if (state?.candidate) void run("dismiss", { candidate: state.candidate }).then(() => {
-            if (notice.hidden && document.activeElement === document.body) {
-                (manual.checkVisibility() ? manual : $("pageTitle")).focus({ preventScroll: true });
+            if (notice.inert && document.activeElement === document.body) {
+                ($("settingsAppUpdate").checkVisibility() ? $("settingsAppUpdate") : $("pageTitle")).focus({ preventScroll: true });
             }
         });
     });

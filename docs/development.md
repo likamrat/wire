@@ -26,9 +26,9 @@ official WIRE repository on `main`, with the updater already included.
 Use `npm start` with the usual port and data folder, without development flags.
 Automatic checks are on by default. To check now, open **Settings > General**
 and choose **Check for updates**. This works even if you turned automatic checks
-off. When WIRE offers a build, **Update**
-installs it and restarts at the same address. **Dismiss** hides that notice;
-you can still choose **Update** in General.
+off. When WIRE offers a build, choose **Update and restart** in General or in the
+bottom-right notification. **Dismiss** hides the notification; the update stays
+available in General.
 
 For a clean official `main` clone, use the manual path on macOS or standalone
 Linux, or if the installed version predates the updater. Finish open work and
@@ -39,7 +39,7 @@ A conflict is a reason to stop, not to rebase or discard someone's edits.
 
 WIRE checks when first opened after launch and daily while in use. It compares
 the running app with the official `main` branch, so an app change can be offered
-even if the version still reads **WIRE v1.0.0**. Changes to contributor docs,
+even if the package version stays the same. Changes to contributor docs,
 tests or CI alone do not create an update notice. Git uses the current
 user's repository access; no source approval or Copilot sign-in is requested.
 
@@ -74,7 +74,7 @@ contract rather than silently treating older readers as compatible.
 the platform's own Git, Node and npm, then reopens a saved report at the
 original address and verifies its bytes. It does not update your installation.
 With the project's Playwright Chromium installed, set `WIRE_UPDATE_BROWSER=1`
-to exercise the green **Update** button through restart and verify that the
+to exercise **Update and restart** in Settings and verify that the
 reloaded browser is executing the new build.
 
 To try the update yourself on Windows or WSL, set `WIRE_UPDATE_BROWSER=manual`
@@ -88,7 +88,7 @@ Remove-Item Env:WIRE_UPDATE_BROWSER
 
 Open the printed **Disposable update simulation** address in one tab. In
 **Settings > General**, choose **Check for updates**. Checking does not
-install anything. Try **Dismiss**, then choose **Update** in General.
+install anything. Try **Dismiss**, then choose **Update and restart** in General.
 When the same page says **WIRE updated**, open **Reports** to read the saved
 example. The simulation verifies the running revision. No GitHub release,
 account connection or change to your usual WIRE installation is involved.

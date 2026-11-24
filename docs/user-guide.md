@@ -423,7 +423,8 @@ settings**. Matching destinations appear under their categories.
 **General** shows your WIRE version, update status and last successful check.
 On [supported installations](development.md#updating-wire), automatic checks
 are on by default. You can turn them off and still choose **Check for updates**.
-Choose **Update** to install and restart. If your copy can't check for updates,
+Choose **Update and restart** in General or in the bottom-right notification.
+Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 
 Below updates, **Current theme** shows your palette name, Light or Dark mode,

@@ -25,7 +25,7 @@ export function createSettingsNavigation(search, { updates = true } = {}) {
     const entries = [
         ...(updates ? [
             { id: "app-update", section: "general", title: "Check for WIRE updates", context: "Check for a newer build from main. Checking does not install it.", synonyms: "version application upgrade manual release", target: "appUpdateCheck" },
-            { id: "automatic-updates", section: "general", title: "Automatically check for updates", context: "Check on opening WIRE and daily while it stays open. Installing always requires choosing Update.", synonyms: "automatic update checks preferences enable disable scheduled", target: "appUpdateAuto" },
+            { id: "automatic-updates", section: "general", title: "Automatically check for updates", context: "Check on opening WIRE and daily while it stays open. You choose when to install.", synonyms: "automatic update checks preferences enable disable scheduled", target: "appUpdateAuto" },
         ] : []),
         { id: "analyze-range", section: "analyze", title: "Default date range", context: "Choose All dates, Last 7 days, Last 14 days or Last 30 days for a fresh Analyze view.", synonyms: "date range when opening Analyze starting period filter", target: "defaultAnalyzeRange" },
         { id: "analyze-layout", section: "analyze", title: "Homepage layout", context: "Reorder Analyze widgets and Interactions or restore the original layout.", synonyms: "position placement move arrange cards charts first last", target: "analyzeLayout" },

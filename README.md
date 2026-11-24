@@ -80,7 +80,7 @@ The default browser address is `localhost:4000`. Keep the terminal running
 while you use WIRE.
 
 On Windows or WSL, a clean `main` clone checks for updates by default.
-Choose **Update** to install and restart at the same address with your settings
+Choose **Update and restart** to reopen WIRE at the same address with your settings
 and reports. You can also check or turn off automatic checks in **Settings > General**.
 For other installations, see [Updating WIRE](docs/development.md#updating-wire).
 

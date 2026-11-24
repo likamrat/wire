@@ -1,17 +1,16 @@
 export const settingsStyles = `
-#appUpdateNotice {display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);flex-wrap:wrap;padding:var(--space-md) var(--space-lg);margin-bottom:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper)}
-#appUpdateNotice[hidden] {display:none}
-@media(min-width:64rem) {
- #appUpdateNotice {position:fixed;z-index:var(--layer-header);inset-inline-start:10px;inset-block-end:7.5rem;
-  width:calc(var(--app-sidebar-width,216px) - 20px);min-width:12rem;max-width:19rem;margin:0;
-  padding:var(--space-md);gap:var(--space-xs);box-shadow:var(--surface-shadow)}
- :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
+#appUpdateNotice {position:fixed;z-index:var(--layer-header);right:max(var(--space-lg),env(safe-area-inset-right));bottom:max(var(--space-lg),env(safe-area-inset-bottom));
+ box-sizing:border-box;width:max-content;max-width:min(23rem,calc(100vw - 2 * var(--space-lg)));padding:var(--space-lg);
+ border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
+ transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
+#appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(calc(100% + max(var(--space-lg),env(safe-area-inset-bottom))));transition-duration:180ms}
+body:has(#contextSidebar[open]) #appUpdateNotice {visibility:hidden;transition:none}
+@media(prefers-reduced-motion:reduce) {
+ #appUpdateNotice,#appUpdateNotice[inert] {transition:none;transform:none}
 }
 .app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
-.app-update-actions {display:flex;align-items:center;gap:var(--space-sm)}
+.app-update-actions {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm);margin-top:var(--space-sm)}
 button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--ink))}
-#appUpdateApply {display:inline-flex;align-items:center;gap:var(--pill-gap)}
-#appUpdateApply[hidden] {display:none}
 [data-settings-section=general] .settings-actions {margin-top:0}
 [data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .app-version-card .settings-row-copy {flex:1 1 12rem}

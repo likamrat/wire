@@ -36,7 +36,7 @@ export const settingsMarkup = `
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
-        <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
+        <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update and restart</button></div>
     </div>
     <div class="settings-task-row" id="appUpdateAutoRow" hidden><div class="settings-row-copy"><h3><label for="appUpdateAuto">Automatically check for updates</label></h3></div>
       <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>

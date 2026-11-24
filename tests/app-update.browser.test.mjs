@@ -17,14 +17,14 @@ import { paintedLabelContrast } from "./color-measurements.mjs";
 const origin = "http://127.0.0.1:48197", capability = "c".repeat(64);
 const old = "1".repeat(40), next = "2".repeat(40);
 const originalRuntime = UNBOUND_FIXTURE_BOOTSTRAP.runtimeId, replacement = "00000000-0000-4000-8000-000000000002";
-async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, pending, open = "/settings" } = {}) {
+async function workspace(t, { renderer = "react", automatic = false, supported = true, manual = !supported, offer = next, pending, open = "/settings" } = {}) {
     const assets = await loadBrowserAssets({ renderer }), browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
     const state = { supported, automatic, installed: supported ? old : null, packageVersion: "1.0.0",
-        candidate: manual ? null : next, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
-        phase: manual ? "manual" : "available", message: manual ? "Updates are managed manually." : "A newer build is available." };
+        candidate: manual ? null : offer, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
+        phase: manual ? "manual" : offer ? "available" : "current", message: manual ? "Updates are managed manually." : offer ? "Update available." : "Up to date." };
     const setup = { entry: assets.entry, runtimeId: originalRuntime, capability, health: { service: "workiq-evidence", protocol: 1, runtimeId: originalRuntime, build: old, clientEntry: assets.entry },
         apply: route => route.fulfill({ status: 409, json: { error: "Close the other WIRE panel first." } }) };
     const records = [{ ...fixture("app-update"), capturedAt: new Date().toISOString() }];
@@ -83,9 +83,10 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
 }
 
 test("React Settings checks, opts in and out, dismisses only this build, and schedules checks without applying", async t => {
-    const { page, state, actions } = await workspace(t);
+    const { page, state, actions } = await workspace(t, { offer: null });
     const auto = page.getByRole("switch", { name: "Automatically check for updates" });
     await expect(auto).not.toBeChecked(); assert.deepEqual(actions, [{ action: "status" }]);
+    Object.assign(state, { phase: "available", candidate: next, message: "Update available." });
     await page.getByRole("button", { name: "Check for updates" }).click();
     await page.locator("#appUpdateDismiss").click();
     await expect(page.locator("#appUpdateNotice")).toBeHidden();
@@ -109,18 +110,18 @@ test("General owns the update card, legacy links and searchable controls without
     await expect(general).toHaveAttribute("aria-current", "page");
     await expect(page.locator("#settingsCategoryNav [data-category=updates]")).toHaveCount(0);
     await expect(page.locator("#generalTitle")).toBeVisible();
-    const check = page.getByRole("button", { name: "Check for updates" });
-    await expect(check).toBeVisible();
+    const install = page.locator("#settingsAppUpdate");
+    await expect(install).toBeVisible();
     await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.0");
     await expect(page.locator("#appUpdateVersion")).not.toHaveAttribute("title");
-    await expect(page.locator("#appUpdateStatus")).toContainText("Last checked");
+    await expect(page.locator("#appUpdateStatus")).toHaveText("Update available.");
     await expect.poll(() => page.locator(".app-version-card img").evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
     await page.locator("#settingsCategoryNav [data-category=themes]").click();
     await page.locator("#settingsSearch").fill("Check for WIRE updates");
     const result = page.locator('#settingsSearchResults [data-setting="app-update"]');
     await expect(page.locator(".settings-search-heading")).toContainText("General");
     await result.focus(); await page.keyboard.press("Enter");
-    await expect(check).toBeFocused();
+    await expect(install).toBeFocused();
     await expect(page).toHaveURL(/section=general&setting=app-update/);
     await page.goBack();
     await expect(result).toBeFocused();
@@ -297,31 +298,33 @@ test("manual-only launcher shows instructions without printing its build ID or o
     assert.deepEqual(actions, [{ action: "status" }]);
 });
 
-test("Check for updates signals availability in both themes and stays check-only after Dismiss", async t => {
+test("Settings and the notice offer the same restart; dismissing leaves the Settings action", async t => {
     const { page, state, actions } = await workspace(t);
-    const check = page.getByRole("button", { name: "Check for updates" });
+    const check = page.locator("#appUpdateCheck"), install = page.locator("#settingsAppUpdate"), popup = page.locator("#appUpdateApply");
     const fill = button => button.evaluate(node => getComputedStyle(node, "::before").backgroundColor);
     for (const [theme, width] of [["dark", 1280], ["light", 390]]) {
         await page.setViewportSize({ width, height: 900 });
         await chooseTheme(page, theme);
         await page.waitForFunction(() => !document.getAnimations().some(animation =>
             animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)));
-        await expect(page.locator("#appUpdateApply")).toBeVisible();
+        await expect(popup).toBeVisible();
+        await expect(install).toHaveAccessibleName("Update and restart");
+        await expect(popup).toHaveAccessibleName("Update and restart");
         const paint = await page.locator("#appUpdateApply").evaluate(node => {
             const color = getComputedStyle(node, "::before").backgroundColor;
             return { rgb: color.match(/\d+/g)?.map(Number), overflow: document.documentElement.scrollWidth > innerWidth,
                 height: node.getBoundingClientRect().height };
         });
         assert.ok(paint.rgb && paint.rgb[1] > paint.rgb[0] && paint.rgb[1] > paint.rgb[2], `${theme}: ${paint.rgb}`);
-        await expect(check).toBeVisible();
-        assert.equal(await fill(check), await fill(page.locator("#appUpdateApply")));
-        await check.hover(); await page.mouse.down();
+        await expect(check).toBeHidden();
+        assert.equal(await fill(install), await fill(popup));
+        await install.hover(); await page.mouse.down();
         try {
             await page.waitForFunction(() => !document.getAnimations().some(a => a.playState === "running" && Number.isFinite(a.effect?.getComputedTiming().endTime)));
-            const painted = await paintedLabelContrast(check);
+            const painted = await paintedLabelContrast(install);
             assert.ok(painted >= 4.5, `${theme}: pressed update text against its painted face (${painted.toFixed(2)}:1)`);
         } finally { await page.mouse.move(1, 1); await page.mouse.up(); }
-        await expect.poll(() => fill(check)).toBe(await fill(page.locator("#appUpdateApply")));
+        await expect.poll(() => fill(install)).toBe(await fill(popup));
         assert.ok(paint.height >= 44);
         assert.equal(paint.overflow, false);
         if (process.env.WIRE_APP_UPDATE_PROOFS) {
@@ -329,10 +332,16 @@ test("Check for updates signals availability in both themes and stays check-only
             await page.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, `${theme}-${width}.png`) });
         }
     }
-    const availableFill = await fill(check);
+    const availableFill = await fill(install);
     await page.getByRole("button", { name: "Dismiss", exact: true }).click();
     await expect(page.locator("#appUpdateNotice")).toBeHidden();
-    assert.equal(await fill(check), availableFill);
+    await expect(install).toBeVisible(); await expect(check).toBeHidden();
+    assert.equal(await fill(install), availableFill);
+    await install.click();
+    await expect(page.locator("#appUpdateStatus")).toContainText("Close the other WIRE panel first.");
+    assert.deepEqual(actions.filter(a => a.action === "apply"), [{ action: "apply", candidate: next }]);
+    Object.assign(state, { phase: "current", candidate: null, message: "Up to date." });
+    await page.reload();
     for (const phase of ["current", "error", "unknown", "manual"]) {
         Object.assign(state, { phase, message: `Fixture ${phase}` });
         await check.click();
@@ -345,7 +354,50 @@ test("Check for updates signals availability in both themes and stays check-only
             await expect.poll(() => fill(check)).not.toBe(availableFill);
         }
     }
-    assert.deepEqual(actions.map(a => a.action), ["status", "dismiss", "check", "check", "check", "check"]);
+    assert.equal(actions.filter(a => a.action === "check").length, 4);
+});
+
+test("the bottom-right offer glides without moving General or taking focus; reduced motion stays still", async t => {
+    const { page, state } = await workspace(t, { offer: null });
+    const notice = page.locator("#appUpdateNotice"), card = page.locator(".app-version-card");
+    for (const reduced of [false, true]) {
+        await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+        Object.assign(state, { phase: "current", candidate: null, dismissed: null, message: "Up to date." });
+        await page.reload();
+        await expect(page.locator("#appUpdateStatus")).toContainText("Up to date.");
+        await expect(notice).toBeHidden();
+        const top = (await card.boundingBox()).y;
+        await notice.evaluate(n => {
+            const sample = () => {
+                window.offerFrames.push({ y: n.getBoundingClientRect().y, inert: n.inert, alpha: Number(getComputedStyle(n).opacity) });
+                window.offerFrame = requestAnimationFrame(sample);
+            };
+            window.offerFrames = []; sample();
+        });
+        Object.assign(state, { phase: "available", candidate: next, message: "Update available." });
+        await page.locator("#appUpdateCheck").click();
+        await expect(notice).toHaveCSS("opacity", "1");
+        await page.waitForFunction(() => document.querySelector("#appUpdateNotice").getAnimations().length === 0);
+        const corner = await notice.boundingBox(), beforeDismiss = await card.boundingBox();
+        assert.equal(beforeDismiss.y, top);
+        const anchored = await notice.evaluate(n => ({ takesFocus: n.contains(document.activeElement),
+            right: innerWidth - n.getBoundingClientRect().right, bottom: innerHeight - n.getBoundingClientRect().bottom }));
+        assert.ok(!anchored.takesFocus && anchored.right >= 15 && anchored.right < 36
+            && anchored.bottom >= 15 && anchored.bottom < 36, JSON.stringify(anchored));
+        await page.locator("#navigationCollapse").click();
+        assert.deepEqual(await notice.boundingBox(), corner);
+        await page.locator("#navigationCollapse").click();
+        await expect.poll(() => card.boundingBox()).toEqual(beforeDismiss);
+        await page.locator("#appUpdateDismiss").click();
+        await expect(notice).toBeHidden();
+        assert.deepEqual(await card.boundingBox(), beforeDismiss);
+        await expect(page.locator("#settingsAppUpdate")).toBeVisible();
+        const samples = await page.evaluate(() => { cancelAnimationFrame(window.offerFrame); return window.offerFrames; });
+        for (const inert of [false, true]) {
+            const movement = samples.filter(f => f.inert === inert && f.alpha > 0 && f.alpha < 1 && f.y > corner.y + .1);
+            assert.equal(new Set(movement.map(f => f.y)).size >= 2, !reduced, `inert=${inert}, reduced=${reduced}`);
+        }
+    }
 });
 
 test("unfinished settings and report selection block activation from the normal React shell", async t => {
