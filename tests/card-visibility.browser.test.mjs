@@ -16,7 +16,7 @@ test("saved-file exposure cannot be determined from selected IDs alone", async t
     const app = await searchFixture(t, { records, copilotAccess: true, frontend: "react", reply: false });
     async function save(index, title, recordedContext = false) {
         const preview = await app.exports.preview("file-boundary", undefined,
-            { title: `Demo review ${title}`, formats: ["html"], promptMode: "original", recordedContext },
+            { title: `Workshop review ${title}`, formats: ["html"], promptMode: "original", recordedContext },
             { kind: "selected", revision: (await loadBoardState(app.context)).revision, scenarioIds: [records[index].scenarioId] });
         await app.exports.review("file-boundary", preview.previewId, true);
         return { preview, entry: (await app.exports.confirm("file-boundary", preview.previewId, true)).bundle };
@@ -25,7 +25,7 @@ test("saved-file exposure cannot be determined from selected IDs alone", async t
     const linked = await save(1, "linked", true);
     const other = await save(3, "separate");
     const { bundle: unknown } = await historicalComparison(app.context, selected.entry.bundleId, other.entry.bundleId,
-        { title: "Demo review comparison", formats: ["html"] });
+        { title: "Workshop review comparison", formats: ["html"] });
     // Known at fixture preparation, without reading any original to decide whether it can open.
     assert.deepEqual(linked.entry.scenarioIds, [records[1].scenarioId]);
     assert.ok(JSON.stringify(linked.preview.snapshot.recordedContext).includes(records[0].userPrompt.text));
@@ -35,7 +35,7 @@ test("saved-file exposure cannot be determined from selected IDs alone", async t
     const browser = await chromium.launch(); t.after(() => browser.close());
     const page = await browser.newPage(); await page.goto(app.runtime.url);
     const hits = page.locator(".wire-search-hit[data-search-bundle]");
-    async function find() { await page.locator("#wireSearch").click(); await page.locator("#wireSearch").fill("Demo review"); }
+    async function find() { await page.locator("#wireSearch").click(); await page.locator("#wireSearch").fill("Workshop review"); }
     await find(); await expect(hits).toHaveCount(4, { timeout: 15000 });
     await page.locator("#wireSearch").press("Escape");
     await page.locator("#activityList article").filter({ hasText: records[0].userPrompt.text }).getByRole("button", { name: "Hide", exact: true }).click();

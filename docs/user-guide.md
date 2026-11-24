@@ -315,22 +315,6 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
-For a demo, choose **Hide** beside **Add to report** on a local Copilot card.
-The card disappears immediately. **Undo hide** brings it back; **Hidden cards**
-lets you restore one or all later without showing their prompts in the list.
-In **Settings → Analyze**, choose whether a new hide lasts until you restore
-it or only in this tab. Changing the default leaves existing hides alone.
-
-Trends and Compare still count the calls, but their detail lists don’t show
-the hidden interaction. Search leaves its excerpts out. A report draft keeps
-its selection; WIRE holds back a preview that could display hidden text.
-
-While a card is hidden in this tab, **no saved report or saved comparison
-opens in WIRE or appears in Search results**, even one about different work.
-A saved report can quote a neighboring interaction that it didn’t count.
-Restore the hidden cards to read saved files in WIRE again. The files themselves
-and copies you’ve already shared are unchanged.
-
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.
@@ -400,6 +384,26 @@ Use **Add to report** on the card or in its reader. Choose a draft to add the en
 leaving Analyze. Reopen the picker to add it to another draft or remove it from
 one. See [Keep interactions in a draft](reporting.md#keep-interactions-in-a-draft)
 to prepare, save or delete that selection.
+
+### Hide and restore cards
+
+On a local Copilot interaction card in Analyze, choose **Hide**. To bring it
+back right away, choose **Undo hide** above the list. Later, open **Hidden
+cards** and choose **Restore** for one card or **Restore all**.
+
+![Hidden cards lists each card by number and the time you hid it, without showing its prompt.](images/hidden-cards.png)
+
+Cards stay hidden until you restore them. For a shorter duration, go to
+**Settings → Analyze → Keep hidden cards out of view** and choose **Only in
+this tab**. The setting applies the next time you hide a card.
+
+Hiding a card leaves the counts in Analyze, Trends and Compare unchanged.
+Its prompt and call details stay out of view, including in Search. A report
+draft keeps its selection, but WIRE won’t show a preview that could reveal
+the card. While any card is hidden in this tab, **all saved reports and
+comparisons** stay closed in WIRE and out of Search: even a report about
+other work can quote the hidden interaction. Files you’ve saved or shared
+don’t change.
 
 ## Make a report
 

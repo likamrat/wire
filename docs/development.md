@@ -403,6 +403,8 @@ Set `WIRE_DOC_CAPTURE=reports` for report choices, reading, copy inspection,
 file views and Save/Open without recapturing Analyze, comparisons or Settings.
 Set `WIRE_DOC_CAPTURE=analyze` for Analyze, the outcome link and reader, and the README overview, without
 creating saved-report fixtures or visiting unrelated destinations.
+Use `WIRE_DOC_CAPTURE=cards` for those views plus the draft picker, Search,
+and the **Hidden cards** list with its restore actions.
 
 The capture uses the feature checkout's compiled React renderer and requires
 committed product source. It uses an available loopback port
