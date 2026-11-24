@@ -77,8 +77,8 @@ In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or 
 **Interactions** list. The preview outlines the section you moved and shows which
 widgets share a row. It uses sample charts instead of your saved activity.
 Your browser remembers each move. Choose **View Analyze** to open the homepage.
-**Restore WIRE layout** puts the time chart first, tool call results second, and
-Interactions third, before the four breakdowns. Your filters and activity stay the same.
+**Restore Wired Default Layout** returns the sections to their original order.
+Your other Analyze settings, filters and activity stay the same.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
@@ -397,7 +397,8 @@ to prepare, save or delete that selection.
 
 On a local Copilot interaction card in Analyze, choose **Hide**. To bring it
 back right away, choose **Undo hide** above the list. Later, open **Hidden
-cards** and choose **Restore** for one card or **Restore all**.
+cards** and choose **Restore** beside a card. If several are hidden, **Restore all**
+below the list brings them all back.
 
 ![Hidden cards lists each card by number and the time you hid it, without showing its prompt.](images/hidden-cards.png)
 

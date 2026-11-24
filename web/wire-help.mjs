@@ -4,8 +4,8 @@ const topics = [
         <li>Choose your file formats and whether to keep, mask or leave out chat details.</li>
         <li>Select <strong>Prepare preview</strong>. Review the result, then select <strong>Save report</strong> to keep it.</li></ol>
         <h3>Where does it go?</h3><p>Save writes the files on this device. Open <strong>Reports → Saved library</strong> to find them again.</p>`],
-    ["history", "Find missing activity", `<p>First check whether a filter hides the activity or whether WIRE never collected it.</p>
-        <ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
+    ["history", "Find missing activity", `<ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
+        <li>If you hid a card, open <strong>Hidden cards</strong> above the interaction list and choose <strong>Restore</strong> beside it.</li>
         <li>If the activity is still missing, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
         <h3>Missing text in Search</h3><p>Search looks in saved activity and reports. It can’t find reply text that wasn’t retained.</p>`],
     ["counts", "Understand activity counts", `<p>One interaction can include several calls. Not every saved call identifies the prompt that started it.</p>

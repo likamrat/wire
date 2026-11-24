@@ -73,6 +73,9 @@ content-sized layout, not equal-height filler or hidden rows for symmetry.
 The two charts, four breakdowns and Interactions can each move in **Settings >
 Analyze**. The original layout is the default. Follow the chosen order in both
 the painted layout and keyboard navigation; Interactions always occupies its own row.
+In the Settings editor, pairing or separating charts changes the miniature,
+without moving the surrounding controls or scrolling the page. Focus follows
+the section's arrow, switching direction when it reaches an end.
 The entrance build presents accepted numbers only, not acquisition progress.
 Reduced motion and assistive technology get the final values without counting through them.
 

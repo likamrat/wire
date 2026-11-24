@@ -48,7 +48,7 @@ test("saved-file exposure cannot be determined from selected IDs alone", async t
     }
     assert.deepEqual(reads, []);
     await page.goto(app.runtime.url); await page.getByRole("button", { name: "Hidden cards (1)" }).click();
-    await page.getByRole("button", { name: "Restore all (1)" }).click();
+    await page.getByRole("dialog", { name: "Hidden cards" }).getByRole("button", { name: "Restore", exact: true }).click();
     await find(); await expect(hits).toHaveCount(4, { timeout: 15000 });
 });
 
@@ -169,8 +169,10 @@ test("Hide stays aligned with Add to report across states, text sizes and palett
     const checkRecovery = async () => {
         for (const [width, scale, theme] of [[1340, 1, "light"], [390, 2, "dark"]]) {
             const touch = width < 500;
-            const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: touch, reducedMotion: "reduce", colorScheme: theme });
+            const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: touch, reducedMotion: "reduce", colorScheme: theme, locale:"en-GB", timezoneId:"UTC" });
             const activate = control => touch ? control.tap() : control.click();
+            await page.goto(new URL("/settings?section=regional",runtime.url).href);
+            await selectActivityOption(page,"displayTimeZone","Asia/Tokyo");
             await page.goto(runtime.url);
             await page.evaluate(s => { document.documentElement.style.fontSize = `${s * 100}%`; }, scale);
             const hides = page.locator("#activityList").getByRole("button", { name: "Hide", exact: true });
@@ -194,11 +196,12 @@ test("Hide stays aligned with Add to report across states, text sizes and palett
                 const rest = await measure();
                 assert.ok(rest.gap >= 6 && rest.align <= 1 && rest.topInset > 0 && rest.topInset === rest.bottomInset, JSON.stringify(rest));
                 if (touch) { assert.ok(await paintedLabelContrast(control) >= 4.5); return; }
-                await control.hover(); const hovered = await measure(); assert.notEqual(hovered.face, rest.face);
+                await control.hover({position:{x:2,y:bounds.height/2}}); const hovered = await measure(); assert.notEqual(hovered.face, rest.face);
                 await page.mouse.down(); const pressed = await measure(); assert.notEqual(pressed.face, hovered.face);
                 assert.deepEqual(await control.boundingBox(), bounds);
-                assert.ok(await paintedLabelContrast(control) >= 4.5);
-                await page.mouse.move(2, 2); await page.mouse.up();
+                const ratio = await paintedLabelContrast(control);
+                assert.ok(ratio >= 4.5, `${await control.textContent()} pressed contrast ${ratio}`);
+                await page.mouse.move(bounds.x-1,bounds.y+bounds.height/2); await page.mouse.up();
             };
             await check(undo, "rotate-ccw"); await activate(undo); await expect(hides).toHaveCount(3);
             await activate(hides.first()); await activate(hides.first());
@@ -209,11 +212,20 @@ test("Hide stays aligned with Add to report across states, text sizes and palett
             await expect(dialog.locator(".dialog-head button svg")).toHaveAttribute("data-lucide-icon", "x");
             const restore = dialog.getByRole("button", { name: "Restore", exact: true }).first(), all = dialog.getByRole("button", { name: "Restore all (2)" });
             await check(all, "rotate-ccw"); await check(restore, "eye");
+            const last = await dialog.locator(".hidden-card-row").last().boundingBox(), bulk = await all.boundingBox();
+            assert.ok(bulk.y >= last.y + last.height && Math.abs(bulk.x + bulk.width - last.x - last.width) <= 1);
             assert.ok(await dialog.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
             await activate(restore); await expect(hides).toHaveCount(2);
             await activate(actions.getByRole("button", { name: "Hidden cards (1)" }));
-            await activate(dialog.getByRole("button", { name: "Restore all (1)" }));
+            await expect(dialog.getByRole("button", { name: /Restore all/ })).toHaveCount(0);
+            const stamp = dialog.locator("time");
+            const localDate = await stamp.evaluate(n => new Intl.DateTimeFormat(navigator.language, {
+                timeZone:"Asia/Tokyo",year:"numeric",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",
+            }).format(new Date(n.dateTime)));
+            await expect(stamp).toHaveText(localDate);
+            await activate(restore);
             await expect(dialog).toHaveCount(0); await expect(hides).toHaveCount(3);
+            await expect(page.locator("#activityListSummary")).toBeFocused();
             await page.close();
         }
     };
