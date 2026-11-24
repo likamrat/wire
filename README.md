@@ -125,6 +125,8 @@ Follow changes in daily tool use, errors or timing. Select a day to inspect
 the calls behind it, or compare two measures over the same dates.
 See [Trends](docs/user-guide.md#trends) for the seven measures and what each counts.
 
+[![Trends Overview showing daily interactions with errors and the option to compare two measures.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
+
 ## Reports
 
 In Analyze, choose **Add to report** on an interaction card or in the reader to
