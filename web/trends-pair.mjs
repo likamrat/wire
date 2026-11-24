@@ -6,8 +6,8 @@ export function createTrendPairModel() {
             const interaction = ["problems", "authors", "models"].includes(family);
             const name = family === "rhythm" ? "Tool calls" : family === "timing" ? "Call duration" : label;
             const add = (mode, measure, basis) => result.push({ family, id, mode, basis,
-                key: JSON.stringify([family, id, mode]), label: `${name} · ${measure}` });
-            if (family === "usage") { add("usd", "Est. USD", "USD"); add("tokens", "Tokens", "tokens"); }
+                key: JSON.stringify([family, id, mode]), label: family === "usage" && id === "usage" ? name : `${name} · ${measure}` });
+            if (family === "usage") add("tokens", "Tokens", "tokens");
             else if (family === "timing") { add("median", "median", "ms"); add("p95", "95th percentile", "ms"); }
             else {
                 add("count", interaction ? "interactions" : "calls", interaction ? "interactions" : "calls");
@@ -22,9 +22,7 @@ export function createTrendPairModel() {
     function point(day, choice) {
         const v = day.values[choice.family].find(v => v.id === choice.id);
         const reach = choice.mode === "reach", timing = choice.family === "timing";
-        if (choice.family === "usage") return { amount: choice.mode === "usd" ? v.usd : v.total,
-            numerator: choice.mode === "usd" ? v.priced : v.metered, denominator: v.eligible,
-            rowIds: choice.mode === "usd" ? v.pricedRows : v.meteredRows };
+        if (choice.family === "usage") return { amount:v.total, numerator:v.metered, denominator:v.eligible, rowIds:v.meteredRows };
         const amount = timing ? choice.mode === "p95" ? v.p95Ms : v.medianMs
             : choice.mode === "count" ? v.count : reach ? v.reach : v.percent;
         return { amount, numerator: reach ? v.interactions : v.count,
@@ -46,7 +44,7 @@ export function createTrendPairModel() {
 
 export function mountTrendPair({ root, el, button, directionButton, scrub, mountChart, model, tooltip, current, color, fullDate, axisDate, number, weekContext, evidence, close }) {
     let data, choices = [], a = "", b = "", date = null, preferAligned = false, collapsed = false;
-    let visible = false, sourceKey = "", drawnKey = "", folded = [false, false];
+    let visible = false, sourceKey = "", drawnKey = "", scopeNotice = "", folded = [false, false];
     const title = el("h2", "", "Compare measures"), fold = button("Collapse chart", () => {
         if (current()) { collapsed = !collapsed; paint(); }
     });
@@ -55,7 +53,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     header.append(title, fold);
     const remove = button("Remove comparison", () => {
         if (!current()) return;
-        b = ""; folded = [false, false]; paint(); focusPicker(1);
+        b = ""; scopeNotice = ""; folded = [false, false]; paint(); focusPicker(1);
     });
     const pickers = ["Measure", "Compare with"].map((name, n) => {
         const label = el("label", "trends-control"), input = el("select");
@@ -64,7 +62,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
             if (!current()) return;
             if (n === 0) { if (input.value === b) b = a; a = input.value; }
             else b = input.value;
-            folded = [false, false]; paint();
+            scopeNotice = ""; folded = [false, false]; paint();
         });
         controls.append(label); return input;
     });
@@ -95,11 +93,11 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     const choiceAt = n => choices.find(c => c.key === (n ? b : a));
     const dayAt = () => data?.days.find(d => d.date === date);
     function amount(p, choice) {
-        return p.amount === null ? "Unavailable" : choice.basis === "USD" ? p.amount > 0 && p.amount < .01 ? "<$0.01" : `~$${p.amount.toFixed(2)}` : choice.basis === "ms" ? `${number(p.amount)} ms`
+        return p.amount === null ? "Unavailable" : choice.basis === "ms" ? `${number(p.amount)} ms`
             : choice.basis.endsWith("share") ? `${number(p.amount)}%` : `${number(p.amount)} ${choice.basis}`;
     }
     function detail(p, c, day) {
-        if (c.family === "usage") return `${number(p.numerator)} of ${number(p.denominator)} interactions ${c.mode === "usd" ? "priced" : "metered"}`;
+        if (c.family === "usage") return `${number(p.numerator)} of ${number(p.denominator)} interactions metered`;
         if (c.basis === "ms") return `${number(p.numerator)} of ${number(p.denominator)} calls timed`;
         if (!c.basis.endsWith("share")) return `${number(p.rowIds.length)} matching calls`;
         const unit = c.basis === "daily interaction share" ? "interaction" : "call";
@@ -113,8 +111,8 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     const scenes = [0, 1].map(n => {
         const host = el("section", "trend-pair-scene"), head = el("div","trends-landing-head"), name = el("h3"),
             toggle = button("Collapse", () => { if (current()) { folded[n] = !folded[n]; paint(); } }),
-            plot = el("div", "trends-plot");
-        head.append(name,toggle); host.append(head,plot); plots.append(host);
+            plot = el("div", "trends-plot"), empty = el("p","muted","No daily values available on these dates.");
+        head.append(name,toggle); host.append(head,plot,empty); plots.append(host);
         plot.id = `trendPairPlot${n + 1}`; plot.tabIndex = 0; plot.setAttribute("role","region");
         const chart = mountChart({ root: plot, tooltip, canInspect: () => current() && visible, formatDate: fullDate, formatAxisDate: axisDate, weekContext,
             color: id => { const c = choices.find(c => c.key === id); return c ? color(c.id, c.family) : "var(--muted)"; },
@@ -131,7 +129,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
             if (visible && !host.hidden && !other.host.hidden && plot.checkVisibility() && other.plot.checkVisibility()
                 && Math.abs(other.plot.scrollLeft - plot.scrollLeft) > 1) other.plot.scrollLeft = plot.scrollLeft;
         }, {passive:true});
-        return {host, head, name, toggle, plot, chart};
+        return {host, head, name, toggle, plot, chart, empty};
     });
     function paintReading() {
         const day = dayAt(); inspector.hidden = !day || !a;
@@ -162,7 +160,7 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
         remove.hidden = !second; modes.hidden = !second; fold.hidden = !first;
         fold.textContent = collapsed ? "Expand chart" : "Collapse chart"; fold.setAttribute("aria-expanded",String(!collapsed));
         one.disabled = !compatible; one.setAttribute("aria-pressed",String(overlay)); two.setAttribute("aria-pressed",String(!!second && !overlay));
-        hint.textContent = second && !compatible ? `Different scales: ${first.basis} and ${second.basis}. Dates are aligned.` : "";
+        hint.textContent = second && !compatible ? `Different scales: ${first.basis} and ${second.basis}. Dates are aligned.` : scopeNotice;
         hint.hidden = !hint.textContent; plots.hidden = collapsed || !first;
         const key = JSON.stringify([a,b,preferAligned,folded,collapsed]);
         if (key !== drawnKey) {
@@ -172,12 +170,13 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
             for (const [n, scene] of scenes.entries()) {
                 const list = overlay && n===0 ? [first,second] : [n===0?first:second];
                 scene.host.hidden = !list[0] || n===1 && overlay;
-                scene.plot.hidden = folded[n]; scene.toggle.hidden = !second || overlay;
+                const hasValues = !scene.host.hidden && data.days.some(day => list.some(c => model.point(day,c).amount !== null));
+                scene.empty.hidden = hasValues || folded[n]; scene.plot.hidden = !hasValues || folded[n]; scene.toggle.hidden = !second || overlay;
                 scene.toggle.textContent = folded[n] ? "Expand" : "Collapse"; scene.toggle.setAttribute("aria-expanded",String(!folded[n]));
                 scene.name.textContent = list[0] ? (overlay ? list[0].basis : list[0].label) : "";
                 scene.plot.setAttribute("aria-label",list.filter(Boolean).map(c=>c.label).join(" and "));
-                if (scene.host.hidden || collapsed || folded[n]) { scene.chart.withdrawAccess(); continue; }
-                const basis = list[0].basis, family = `pair-${["ms","tokens","USD"].includes(basis) ? basis.toLowerCase() : basis.includes("interaction") ? "interactions" : "calls"}`;
+                if (scene.host.hidden || collapsed || scene.plot.hidden) { scene.chart.withdrawAccess(); continue; }
+                const basis = list[0].basis, family = `pair-${["ms","tokens"].includes(basis) ? basis : basis.includes("interaction") ? "interactions" : "calls"}`;
                 const defs = list.map(c=>({id:c.key,label:c.label}));
                 const days = data.days.map(day=>({...day, values:{rhythm:day.values.rhythm,[family]:list.map(c=>{
                     const p = model.point(day,c); return { id:c.key,label:c.label,amount:p.amount,context:detail(p,c,day),secondary:c===second };
@@ -203,7 +202,11 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
     function update(source, show) {
         visible=show; root.hidden=!show;
         if (source!==data) { data=source; choices=model.choices(source); drawnKey="";
-            if (!choiceAt(0)) a=""; if (!choiceAt(1)) b="";
+            scopeNotice = "";
+            if (a && !choiceAt(0) || b && !choiceAt(1)) {
+                a = choiceAt(0)?.key ?? choiceAt(1)?.key ?? ""; b = ""; collapsed = false; folded = [false,false];
+                scopeNotice = a ? "The other measure is unavailable for these dates and filters." : "The previous selection is unavailable for these dates and filters.";
+            }
             if (!dayAt()) date=(source.days.findLast(d=>d.calls)||source.days.at(-1)).date; }
         if (show) paint(); else scenes.forEach(s=>s.chart.hide());
     }
@@ -211,11 +214,11 @@ export function mountTrendPair({ root, el, button, directionButton, scrub, mount
         const input=pickers[n]; (root.ownerDocument.getElementById(input.id+"-control")??input).focus();
     }
     function start(first, second, when) {
-        a=first?.key||""; b=second?.key||""; date=when??date; collapsed=false; preferAligned=false; folded=[false,false]; drawnKey="";
+        a=first?.key||""; b=second?.key||""; date=when??date; scopeNotice=""; collapsed=false; preferAligned=false; folded=[false,false]; drawnKey="";
         paint(); if(first) title.focus(); else focusPicker(0);
     }
     function clear() {
-        data=null; choices=[]; a=b=sourceKey=drawnKey=""; date=null; visible=false; collapsed=false; folded=[false,false];
+        data=null; choices=[]; a=b=sourceKey=drawnKey=scopeNotice=""; date=null; visible=false; collapsed=false; folded=[false,false];
         root.hidden=true; for(const scene of scenes){scene.chart.withdrawAccess();scene.name.textContent="";scene.plot.removeAttribute("aria-label");}
         pickers.forEach(scrub); title.textContent="Compare measures"; when.textContent=hint.textContent=result.textContent="";
         for(const row of readings)row.label.textContent=row.value.textContent=row.inspect.firstChild.textContent="";

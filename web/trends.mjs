@@ -2,8 +2,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models", "usage"];
     const families = {
-        usage: { label: "Tokens & est. cost", modes: [["usd", "Est. USD"], ["tokens", "Tokens"]],
-            help: "Each whole interaction counts once, on its first matching call date in this period. Later matching calls from that interaction do not add its tokens again. These are not per-tool charges." },
+        usage: { label: "Token usage", modes: [["tokens", "Tokens"]],
+            help: "Each interaction contributes its tokens once, on its first matching call date in this period. A tool group includes the whole interaction." },
         authors: { label: "Prompt authors", modes: [["share", "Interactions %"], ["count", "Interactions"]],
             help: "Each originating interaction counts once per day with a matching call, even if its sender is unclear. The sender is who asked, not who ran the tool." },
         tools: { label: "Tool usage", modes: [["reach", "Interactions %"], ["share", "Calls %"], ["count", "Calls"]],
@@ -53,7 +53,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const colors = new Map(), tools = ["fetch", "retrieve", "ask", "get_schema", "call_function", "do_action",
         "search_paths", "fetch_blob", "create_entity", "update_entity", "delete_entity", "list_agents"];
     function color(id, family) {
-        if (family === "usage" && id === "usage") return cards.get("usage")?.mode === "usd" ? "var(--usage-cost)" : "var(--accent)";
+        if (family === "usage" && id === "usage") return "var(--accent)";
         if (family === "usage" && id.startsWith("author:")) return authorColors[({"Human":"user","Agent":"agent","Sender unclear":"unknown"})[id.slice(7)]];
         if (family === "authors") return authorColors[id];
         if (family === "services") return `var(--chart-service-${id.toLowerCase()}-label)`;
@@ -88,7 +88,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     let pending = 0, requestedKey = "", acceptedKey = "", enabled = false, bound = null, lastRevision = null;
     let overviewScroll = 0, dialogOrigin = null, inspecting = null, allCollapsed = null, inspectionKey = "";
     let evidenceReturn = null, pendingTimer = 0;
-    let activeMeasure = "rhythm", allCharts = false, compared = new Set(), entryKey = null, acceptedEntry = null, readingRevision = null, readingZone = null, failedRead = null;
+    let activeMeasure = "rhythm", allCharts = false, extraCharts = new Set(), entryKey = null, acceptedEntry = null, readingRevision = null, readingZone = null, failedRead = null;
     let routeScopeKey, section = "overview";
     function rememberScope(kind) {
         onScopeChange?.({ family: family ?? activeMeasure, period, range, filters }, kind);
@@ -119,18 +119,18 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     const guideContext = el("p","trends-guide-context"), guideBack = directionButton("Back to charts",()=>{if(current())onSectionChange("charts");},"back");
     guideIndex.setAttribute("aria-label","Chart guide topics"); guide.append(guideIndex,guideArticle);
     const guideTopics = [
-        ["Compare measures", "Do two measures change on the same days?", "Choose any two readings. One graph is available when their units and counting groups match. For call volume and duration, read the same date on aligned charts with separate scales.", "In four interactions, two can have an error and three can use a tool. That is 50% and 75%; it does not tell you which interactions overlap."],
+        ["Compare measures", "Do two measures change on the same days?", "Compare measures pairs two daily readings. They can share a graph when their units and counting groups match. To keep separate charts for the same dates, use Show or hide charts.", "In four interactions, two can have an error and three can use a tool. That is 50% and 75%; it does not tell you which interactions overlap."],
         ["Dates and evidence", "Which calls contributed to this point?", "Select a date, then open its matching calls. The reader shows the full interaction, which may contain other calls.", "Calls are dated by their recorded start. An undated call cannot be placed on the graph."],
         ["Filters and series", "Why did the total change?", "Filters change which calls are counted. Showing or hiding a line changes only the drawing.", "No matching calls gives a count of zero. With nothing to divide by, a percentage is unavailable."],
         ...order.map(id => [families[id].label, {
             problems:"How many interactions had a recorded error?",rhythm:"How many calls started each day?",tools:"How widely or often was a tool used?",
-            services:"Which services appeared in calls?",timing:"How long did measured calls take?",authors:"Who wrote the originating prompts?",models:"Which models were recorded?",usage:"How did token volume and estimated cost change?",
+            services:"Which services appeared in calls?",timing:"How long did measured calls take?",authors:"Who wrote the originating prompts?",models:"Which models were recorded?",usage:"How many tokens did these interactions use?",
         }[id],families[id].help,{
             problems:"Two failed calls in one interaction count as one affected interaction that day.",rhythm:"Three calls on Monday and one on Tuesday make Monday’s share 75% if those were the week’s only matching calls.",
             tools:"Three uses of one tool in a single interaction count as three calls but one interaction reached.",services:"One call naming both Mail and Files contributes to both series, but is still one call.",
             timing:"With no qualified interval, the duration is unavailable, not zero milliseconds.",authors:"A human prompt followed by three calls counts as one originating interaction that day.",
             models:"An interaction with two recorded models contributes to both model series.",
-            usage:"Two matching tool calls from the same prompt do not double its tokens. Unpriced interactions add tokens but no dollar estimate.",
+            usage:"Two matching tool calls from the same prompt do not double its tokens. An interaction without a token count stays in the coverage total.",
         }[id]])];
     function readTopic(i, focus=false) {
         const [label,question,reading,example]=guideTopics[i];
@@ -167,7 +167,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             void read(failedRead.next);
         } else { requestedKey = ""; entryKey = null; void reload(); }
     }); retry.hidden = true;
-    const detailBar = el("div", "trends-detail-bar"), back = button("Back to overview", restore);
+    const detailBar = el("div", "trends-detail-bar"), back = button("Back to all charts", restore);
     back.prepend(ux.icon("back"));
     const chooser = select("Trend", order.map(id => [id, families[id].label]), maximize);
     detailBar.append(back, chooser.label); detailBar.hidden = true;
@@ -204,7 +204,17 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 (family ?? activeMeasure) === "usage" ? {...usageChoice,unit:cards.get("usage").mode} : undefined);
         },"forward","primary"));dialogBody.append(actions);
     });
-    comparePeriods.id="trendsComparePeriods";toolbarTools.prepend(periodButton,comparePeriods);
+    const chartsButton = button("Show or hide charts", openChartChoices, "report-toolbar-choice");
+    chartsButton.append(ux.icon("chevron"));
+    chartsButton.setAttribute("aria-haspopup","dialog"); chartsButton.setAttribute("aria-expanded","false");
+    chartsButton.setAttribute("aria-controls","trendsLocalChoices"); chartsButton.hidden = true;
+    const selectedCharts = directionButton("Back to selected charts", () => {
+        if (!current()) return;
+        allCharts = false; paint(); rememberScope("measure"); chartsButton.focus();
+    }, "back");
+    selectedCharts.hidden = true;
+    comparePeriods.id="trendsComparePeriods";toolbarTools.prepend(periodButton,comparePeriods,chartsButton);
+    toolbar.prepend(selectedCharts);
     const homeBack = button("Back to Analyze", () => { if (current() && getContext().entry) returnToAnalyze?.(); });
     homeBack.prepend(ux.icon("back")); homeBack.hidden = true; toolbar.prepend(homeBack);
     const primaryColumn = el("div", "trends-primary-column");
@@ -277,16 +287,16 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         onSectionChange("charts", "problems");
         if (getContext().section !== "charts" || !current()) return;
         const card = cards.get("problems");
-        activeMeasure = "problems"; family = null; allCharts = false; compared.clear();
+        activeMeasure = "problems"; family = null; allCharts = false; extraCharts.clear();
         card.mode = "count"; card.type = "lines"; card.selection = date ? { date, id: "problems" } : null;
         paint(); if (date) card.chart.reveal(date); card.title.focus();
     }
     const pairHost=el("section","trends-panel-pair"), landingExtra=el("div","trends-discover");
-    let pairActive=false;
+    let pairActive=false, pairOrigin=null;
     pairHost.hidden=landingExtra.hidden=true;
     const pair = mountTrendPair({root:pairHost,el,button,directionButton,scrub,model:createTrendPairModel(),mountChart,tooltip,current,color,number,axisDate,fullDate,weekContext,
-        evidence:(choice,day,ids,origin)=>openMembers(day,choice.label,ids,origin,choice.key),
-        close:()=>{pairActive=false;paint();index.querySelector(`[data-measure="${activeMeasure}"]`).focus();}});
+        evidence:(choice,day,ids,origin)=>openMembers(day,choice.label,ids,origin,choice.key,choice.family === "usage"),
+        close:()=>{pairActive=false;paint();(pairOrigin?.checkVisibility() ? pairOrigin : index.querySelector(`[data-measure="${activeMeasure}"]`)).focus();}});
     const examples=el("section","trends-start"), explore=el("section","trends-start trends-explore");
     examples.append(el("h2","","Compare two measures"),directionButton("Compare measures",()=>startPair(),"forward","primary"),el("h3","","Examples"));
     const presets=[["Errors and tool usage",["problems","share"],["tools","reach"]],["Call volume and duration",["rhythm","count"],["timing","median"]],["Response models and errors",["models","share"],["problems","share"]]];
@@ -295,11 +305,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         node.append(ux.icon("forward"));examples.append(node);return node;
     });
     explore.append(el("h2","","Explore a measure"));
-    for (const id of order) {const node=button(families[id].label,()=>{if(!current())return;pairActive=false;onSectionChange("charts",id);});
+    for (const id of order) {const node=button(families[id].label,()=>{if(!current())return;pairActive=false;allCharts=false;family=null;activeMeasure=id;extraCharts.clear();onSectionChange("charts",id);});
         node.append(ux.icon("forward"));explore.append(node);}
     landingExtra.append(examples,explore);
     function startPair(first,second,when) {
         if (!current()) return;
+        pairOrigin = doc.activeElement;
         if(section!=="charts")onSectionChange("charts");
         if(getContext().section!=="charts")return;
         allCharts=false;family=null;pairActive=true;paint();pair.start(first,second,when);
@@ -347,7 +358,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const content = el("div", "trends-content"), modes = el("div", "trends-modes");
         content.id = `trendsContent-${id}`; collapse.setAttribute("aria-controls", content.id);
         modes.setAttribute("role", "group"); modes.setAttribute("aria-label", `${spec.label} measure`);
-        for (const [value, label] of spec.modes) {
+        for (const [value, label] of spec.modes.length > 1 ? spec.modes : []) {
             const control = button(label, () => {
                 if (!current()) return;
                 if (id === "timing") {
@@ -359,10 +370,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             control.dataset.trendMode = value; modes.append(control);
         }
         const indexModes = el("div", "trends-index-modes");
-        if (id !== "timing") {
+        if (id !== "timing" && id !== "usage") {
             const units = el("div", "trends-switch");
             units.setAttribute("role", "group"); units.setAttribute("aria-label", `${spec.label} units`);
-            for (const [value, label] of id === "usage" ? spec.modes : [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
+            for (const [value, label] of [["count", "Count"], ["share", id === "rhythm" ? "Share within week" : "Percentage"]]) {
                 const control = button(label, () => {
                     if (!current()) return;
                     card.mode = value === "share" && id === "tools" ? card.percentMode : value;
@@ -400,20 +411,20 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const visibleDays = el("p", "trends-visible-days"); visibleDays.hidden = true;
         const actions = el("div", "trends-secondary");
         const comparison = directionButton("Compare measures", () => {
-            const mode = id === "timing" ? card.selection?.id === "p95" ? "p95" : "median" : card.mode;
-            const subject = id === "timing" ? "timing" : card.selection?.id;
-            startPair(pair.choice(id,mode,subject),null,card.selection?.date);
-        }), numbers = directionButton("Data table", () => openTable(card));
-        const arrange = button("Arrange charts", () => openComparison(card));
-        const remove = button("Remove chart", () => {
-            if (!current() || !compared.has(id)) return;
-            compared.delete(id); card.indexCollapsed=false; paint(); cards.get(activeMeasure).comparison.focus();
+            const subject = card.selection?.id ?? viewData(card).definitions[id].find(series => !card.hidden.has(series.id))?.id;
+            const mode = id === "timing" ? subject === "p95" ? "p95" : "median" : card.mode;
+            startPair(subject ? pair.choice(id,mode,id === "timing" ? "timing" : subject) : null,null,card.selection?.date);
+        }), numbers = directionButton("View daily values", () => openTable(card));
+        const remove = button("Hide chart", () => {
+            if (!current() || !extraCharts.has(id)) return;
+            extraCharts.delete(id); card.indexCollapsed=false; paint(); chartsButton.focus();
         });
         const fold = button("Collapse chart", () => {
             if (!current()) return;
             card.indexCollapsed=!card.indexCollapsed;paintStable(card);fold.focus({preventScroll:true});
         });
-        actions.append(comparison, arrange, numbers); identity.append(fold,remove);
+        fold.setAttribute("aria-controls",content.id);
+        actions.append(comparison, numbers); titleGroup.append(fold,remove);
         const reportQuestion = id === "usage" ? directionButton("Preview this report", () => {
             if (!current() || root.getAttribute("aria-busy") === "true" || failedRead) return;
             onUsageReport({ revision:data.revision, range:{...range}, filters:{...filters}, question:data.usageQuestion, threshold:data.usageThreshold,
@@ -437,11 +448,14 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             card.hidden.clear(); card.selection = null;
             void read({range,period,filters,offset});
         }) : null;
-        if (questions) content.prepend(questions.host);
+        if (questions) {
+            const controls = el("div", "trends-usage-controls");
+            controls.append(questions.host,indexModes); content.prepend(controls);
+        }
         const card = { id, panel, title, periodLabel, expand, collapse, content, modes, body, summary, totals, legend, plot, limits,
             point, pointDate, pointScope, pointText, pointSpace, pointActions, evidence, pointKey: "", empty, emptyTitle, emptyDetail, showWeek, visibleDays,
-            types, indexModes, indexScope, basis, comparison, numbers, actions, remove, fold, arrange, indexCollapsed:false, type: "columns", percentMode: "share",
-            mode: id === "usage" ? "usd" : id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
+            types, indexModes, indexScope, basis, actions, remove, fold, indexCollapsed:false, type: "columns", percentMode: "share",
+            mode: id === "usage" ? "tokens" : id === "timing" ? "both" : "count", hidden: new Set(), selection: null, collapsed: false, key: "", width: 0, height: 0 };
         card.questions = questions; card.reportQuestion = reportQuestion; cards.set(id, card);
         panel.addEventListener("click", event => {
             // Painting can replace the clicked glyph before this event reaches the row.
@@ -483,7 +497,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function chooseMeasure(id) {
         if (!Object.hasOwn(families, id) || !current()) return;
-        hideHover(); pairActive=false; activeMeasure = id; family = null; allCharts = false; compared.delete(id);
+        if (id !== activeMeasure || allCharts) extraCharts.clear();
+        hideHover(); pairActive=false; activeMeasure = id; family = null; allCharts = false;
         evidenceReturn = null; paint();
         rememberScope("measure");
         const card = cards.get(id);
@@ -492,26 +507,30 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             card.title.scrollIntoView({ block: "start", behavior: "instant" });
         }
     }
-    function openComparison(card) {
-        if (!beginChoices("Arrange charts",card.arrange)) return;
+    function openChartChoices() {
+        if (localPanel.matches(":popover-open") && chartsButton.getAttribute("aria-expanded") === "true") { localChoices.close(); return; }
+        if (!beginChoices("Show or hide charts",chartsButton)) return;
         const choices = el("div", "trends-compare-choices");
+        const title = el("h2","",`Show below ${families[activeMeasure].label}`);
+        choices.setAttribute("role","group"); title.id = "trendsChartChoicesTitle"; choices.setAttribute("aria-labelledby",title.id);
         for (const id of order.filter(id => id !== activeMeasure)) {
             const label = el("label"), check = el("input");
-            check.type = "checkbox"; check.value = id; check.checked = compared.has(id);
+            check.type = "checkbox"; check.value = id; check.checked = extraCharts.has(id);
             label.append(check, el("span", "", families[id].label)); choices.append(label);
         }
         const actions = el("div", "trends-dialog-actions");
-        actions.append(button("All charts", () => {
-            localChoices.close(); family = null; allCharts = true; hideHover(); paint();
-            collapseAll.focus({ preventScroll: true });
-        }), button("Cancel", () => localChoices.close()), button("Apply comparison", () => {
-            compared = new Set([...choices.querySelectorAll("input:checked")].map(check => check.value));
-            localChoices.close(); paintStable(card);
+        const openAll = directionButton("Open all charts", () => {
+            localChoices.close(false); family = null; allCharts = true; hideHover(); paint();
+            selectedCharts.focus();
+        });
+        actions.append(button("Cancel", () => localChoices.close()), button("Apply", () => {
+            extraCharts = new Set([...choices.querySelectorAll("input:checked")].map(check => check.value));
+            localChoices.close(); paint();
         }, "primary"));
-        local.append(choices, actions); localChoices.place(); choices.querySelector("input")?.focus({preventScroll:true});
+        local.append(title, choices, actions, openAll); localChoices.place(); choices.querySelector("input")?.focus({preventScroll:true});
     }
     function openTable(card) {
-        if (!openDialog("Data table")) return;
+        if (!openDialog("Daily values")) return;
         const region = el("div", "trends-exact"); region.tabIndex = 0; region.setAttribute("role", "region");
         region.setAttribute("aria-label", `${families[card.id].label} exact values`);
         drawTable(card, region, true); dialogBody.append(region);
@@ -606,11 +625,11 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 if (changedPopulation) card.selection = null;
                 for (const definition of data.definitions[id]) color(definition.id, id);
             }
-            if (next.routeFamily) { activeMeasure = next.routeFamily; family = null; allCharts = false; compared.clear(); }
+            if (next.routeFamily) { activeMeasure = next.routeFamily; family = null; pairActive = allCharts = false; extraCharts.clear(); }
             if (next.entry && getContext().entry?.key === next.entry.key) {
                 const entry = next.entry, card = cards.get(entry.family);
                 acceptedEntry = entry.key;
-                activeMeasure = entry.family; family = null; allCharts = false; compared.clear();
+                activeMeasure = entry.family; family = null; allCharts = false; extraCharts.clear();
                 card.mode = entry.measure; card.percentMode = entry.measure === "reach" ? "reach" : "share"; card.hidden.clear();
                 const day = entry.date ? data.days.find(day => day.date === entry.date) : selectedDay(card);
                 card.selection = day && (entry.date || entry.series) ? { date: day.date,
@@ -672,9 +691,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function valueText(value, card) {
         const amount = card.chart.metric(value, card.id, card.mode);
-        if (card.id === "usage") return amount === null ? "Unavailable" : card.mode === "usd" ? (amount > 0 && amount < .01 ? "<$0.01" : `~$${amount.toFixed(2)}`) : `${number(amount)} tokens`;
+        if (card.id === "usage") return amount === null ? "Unavailable" : `${number(amount)} tokens`;
         return amount === null ? "Unavailable" : card.id === "timing" ? `${number(amount)} ms`
             : card.mode === "count" ? number(amount) : `${rate(amount)} (${number(card.id === "tools" && card.mode === "reach" ? value.interactions : value.count)})`;
+    }
+    function usageCoverage(value) {
+        return `${number(value.metered)} of ${number(value.eligible)} ${value.eligible === 1 ? "interaction" : "interactions"} metered`;
     }
     function metricStat(value, label) {
         const stat = el("div", "trends-stat"); stat.append(el("span", "trends-stat-value", value));
@@ -686,30 +708,29 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (card.id === "timing") card.mode = card.hidden.has("timing") ? card.hidden.has("p95") ? "none" : "p95"
             : card.hidden.has("p95") ? "median" : "both";
         const { id, panel, hidden, mode } = card, spec = families[id], source = viewData(card), totals = source.totals;
-        if (!compared.size || activeMeasure !== id && !compared.has(id)) card.indexCollapsed=false;
+        if (!extraCharts.size || activeMeasure !== id && !extraCharts.has(id)) card.indexCollapsed=false;
         const collapsed = allCharts ? card.collapsed : card.indexCollapsed;
         card.content.hidden = collapsed;
-        panel.hidden = allCharts ? Boolean(family && family !== id) : activeMeasure !== id && !compared.has(id);
+        panel.hidden = allCharts ? Boolean(family && family !== id) : activeMeasure !== id && !extraCharts.has(id);
         panel.dataset.maximized = String(allCharts && family === id); panel.dataset.collapsed = String(collapsed);
         if (card.reportQuestion) {
             card.reportQuestion.hidden = !source.usageQuestion || source.usageQuestion === "all";
             card.reportQuestion.disabled = !totals.usagePopulation?.eligible;
         }
-        panel.style.order = !allCharts && id === activeMeasure ? "-1" : "";
         panel.dataset.manySeries = String(source.definitions[id].length > 6);
-        card.modes.hidden = collapsed || !allCharts;
-        card.remove.hidden = allCharts || !compared.has(id);
-        card.fold.hidden = allCharts || !compared.size;
+        card.modes.hidden = collapsed || !allCharts || !card.modes.childElementCount;
+        card.remove.hidden = allCharts || !extraCharts.has(id);
+        card.fold.hidden = allCharts || !extraCharts.size;
         card.fold.textContent = card.indexCollapsed ? "Expand chart" : "Collapse chart";
         card.fold.setAttribute("aria-expanded",String(!card.indexCollapsed));
-        card.arrange.hidden = !allCharts && id !== activeMeasure;
         card.totals.hidden = collapsed || !allCharts;
         const noCalls = !totals.calls, noMeasure = !allCharts && totals.calls && (
             id === "timing" && !totals.timedCalls || id === "models" && totals.missingModels === totals.interactions
             || id === "services" && !totals.values.services.some(value => value.calls));
-        const unavailable = noCalls || Boolean(noMeasure) || id === "usage" && !source.definitions.usage.length;
+        const usage = totals.usagePopulation;
+        const missingUsage = id === "usage" && source.definitions.usage.length > 0 && usage?.eligible > 0 && usage.metered === 0;
+        const unavailable = noCalls || Boolean(noMeasure) || missingUsage || id === "usage" && !source.definitions.usage.length;
         card.indexModes.hidden = allCharts || unavailable || collapsed;
-        card.body.hidden = unavailable;
         card.plot.hidden = unavailable;
         card.empty.hidden = !unavailable;
         if (unavailable) {
@@ -722,7 +743,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 : id === "timing" ? "A duration needs a recorded start and completion." : "The calls are included in the period count.";
             card.showWeek.hidden = !(noCalls && latest);
             if (!card.showWeek.hidden) card.showWeek.textContent = `Show week ending ${axisDate(latest)}`;
-            if (!noCalls && id === "usage") {
+            if (missingUsage) {
+                card.emptyTitle.textContent = "No token counts available";
+                card.emptyDetail.textContent = `${usageCoverage(usage)}.`;
+            } else if (!noCalls && id === "usage") {
                 card.emptyTitle.textContent = "No matching usage groups";
                 card.emptyDetail.textContent = "Change the question, filters or dates to see a reading.";
             }
@@ -731,10 +755,9 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         }
         card.indexScope.hidden = allCharts;
         card.actions.hidden = allCharts;
-        card.types.hidden = allCharts;
-        card.comparison.hidden = !allCharts && id !== activeMeasure;
+        card.types.hidden = allCharts || unavailable;
         card.periodLabel.hidden = !allCharts;
-        const unit = id === "usage" ? mode : mode === "count" ? "count" : "share";
+        const unit = mode === "count" ? "count" : "share";
         for (const control of card.indexModes.querySelectorAll("[data-unit]")) control.setAttribute("aria-pressed", String(control.dataset.unit === unit));
         if (card.basis) { card.basis.host.hidden = mode === "count"; card.basis.field.value = mode === "reach" ? "reach" : "share"; }
         for (const control of card.types.children) control.setAttribute("aria-pressed", String(control.dataset.chartType === card.type));
@@ -786,12 +809,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             row.querySelector(".trends-value-fill").style.width = `${(amount ?? 0) * 100 / maximum}%`;
         }
         card.summary.hidden = !card.legend.childElementCount;
+        card.body.hidden = unavailable && (!missingUsage || card.summary.hidden);
         card.body.dataset.summary = String(!card.summary.hidden);
         const limits = [];
         if (id === "usage") {
             const u = totals.usagePopulation ?? totals.values.usage[0];
-            limits.push(`${valueText(u, card)} · ${mode === "usd" ? `${u.priced} of ${u.eligible} interactions priced` : `${u.metered} of ${u.eligible} interactions metered`}`);
-            if (mode === "usd" && u.unpriced) limits.push(`${number(u.unpriced)} metered but unpriced`);
+            if (!missingUsage) limits.push(`${valueText(u, card)} · ${usageCoverage(u)}`);
             if (u.cacheReadShare !== null) limits.push(`${rate(100*u.cacheReadShare)} of input read from cache`);
             if (source.usageQuestion === "tool") {
                 if (u.unranked) limits.push(`${number(u.unranked)} without a token count`);
@@ -818,7 +841,6 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             : `${number(unitIsInteraction ? totals.interactions : totals.calls)} ${unitIsInteraction ? "originating interactions" : "dated calls"}`;
         const captions = id === "usage" ? [] : [summary + " in this period"];
         if (seriesSubset) captions.push(seriesSubset);
-        if (id === activeMeasure && compared.size) captions.push(`Comparing ${compared.size + 1} measures`);
         if (id === "timing") captions.push("milliseconds");
         if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
@@ -848,7 +870,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function evidenceValues(day, card) {
         const visible = day.values[card.id].filter(value => card.selection?.id ? value.id === card.selection.id : shown(value, card));
-        return card.id === "usage" ? visible.map(v => ({...v,rowIds:card.mode === "usd" ? v.pricedRows : v.meteredRows})) : visible;
+        return card.id === "usage" ? visible.map(v => ({...v,rowIds:v.meteredRows})) : visible;
     }
     function shown(value, card) {
         return !card.hidden.has(value.id);
@@ -864,7 +886,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     }
     function dayScope(day, card) {
         const usage = day.usagePopulation ?? day.values.usage?.[0];
-        const scope = card.id === "usage" ? `${usage.metered} of ${usage.eligible} interactions metered`
+        const scope = card.id === "usage" ? usageCoverage(usage)
             : card.id === "timing" ? `${day.timedCalls} of ${day.calls} calls timed`
             : ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? `${day.interactions} interactions` : `${day.calls} calls`;
         const measure = card.id === "timing" ? "" : `${families[card.id].modes.find(([id]) => id === card.mode)[1]} · `;
@@ -887,7 +909,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             const unit = ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? "interactions" : "calls";
             let measure = `${number(ids.size)} matching calls`;
             if (selected) {
-                if (card.id === "usage") measure = `${valueText(selected, card)} · ${selected.metered} of ${selected.eligible} metered`;
+                if (card.id === "usage") measure = `${valueText(selected, card)} · ${usageCoverage(selected)}`;
                 else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${number(day.calls)} calls timed`;
                 else if (card.mode === "count") measure = `${number(selected.count)} ${unit}`;
                 else {
@@ -945,15 +967,16 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
     function showEvidence(card) {
         if (!current()) return;
         const day = selectedDay(card), values = evidenceValues(day, card), ids = new Set(values.flatMap(value => value.rowIds));
-        openMembers(day, values.length === 1 ? values[0].label : "Shown series", ids, card.evidence, card.id);
+        openMembers(day, values.length === 1 ? values[0].label : "Shown series", ids, card.evidence, card.id, card.id === "usage");
     }
-    function openMembers(day, label, members, origin, subject) {
+    function openMembers(day, label, members, origin, subject, tokenUsage) {
         if (!current()) return;
         const ids = new Set(members), source = data, key = JSON.stringify([acceptedKey, subject, day.date, [...ids]]);
         const saved = evidenceReturn?.key === key ? evidenceReturn : null;
         if (!openDialog(`${fullDate(day.date)} · ${label}`)) return;
         dialogOrigin = origin;
-        dialogBody.append(el("p", "muted", `${number(ids.size)} matching calls. Opening a call shows its full interaction.`));
+        const count = `${number(ids.size)} matching ${ids.size === 1 ? "call" : "calls"}.`;
+        dialogBody.append(el("p", "muted", `${count} ${tokenUsage ? "Open a call to see the token count for its whole interaction." : "Opening a call shows its full interaction."}`));
         let returnLink = null;
         for (const member of data.members.filter(row => ids.has(row.id))) {
             if (hiddenInteraction(member.scenarioId)) { dialogBody.append(el("p", "trends-evidence-row", "Hidden card")); continue; }
@@ -987,13 +1010,15 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const head = el("thead"), body = el("tbody");
         const windowLabel = source.window.count < source.window.totalDays ? ` · Daily rows: ${dayPage()}` : "";
         table.append(el("caption", "", `${families[family].label} · ${formatRange()}${windowLabel}`));
-        for (const label of ["Date", ...source.definitions[family].map(value => value.label), "Interactions", "Calls"]) {
+        for (const label of ["Date", ...source.definitions[family].map(value => family === "usage" && value.id === "usage" ? "Tokens" : value.label),
+            ...(family === "usage" ? ["Interactions metered"] : []), "Interactions", "Calls"]) {
             const cell = el("th", "", label); cell.scope = "col"; header.append(cell);
         }
         head.append(header); table.append(head, body);
         for (const day of includePeriod ? [source.totals, ...source.days] : source.days) {
             const row = el("tr"), date = el("th", "", day.date ? fullDate(day.date) : "Entire period"); date.scope = "row"; row.append(date);
             for (const value of day.values[family]) row.append(el("td", "", !day.date && family === "rhythm" && card.mode === "share" ? "Not a daily share" : valueText(value, card)));
+            if (family === "usage") row.append(el("td","",`${number(day.usagePopulation.metered)} of ${number(day.usagePopulation.eligible)}`));
             row.append(el("td", "", number(day.interactions)), el("td", "", number(day.calls))); body.append(row);
         }
         target.append(table);
@@ -1001,7 +1026,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             const groups = el("table","exact-data-table"), head = groups.createTHead().insertRow();
             groups.append(el("caption","","Usage in the entire period"));
             const tool = source.usageQuestion === "tool";
-            for (const label of ["Group","Metered / all","Tokens","Input read from cache",...(card.mode === "usd" ? ["Priced / all","Est. USD"] : []),...(tool ? ["Returned context (est.)"] : [])]) {
+            for (const label of ["Group","Metered / all","Tokens","Input read from cache",...(tool ? ["Returned context (est.)"] : [])]) {
                 const th = el("th","",label); th.scope = "col"; head.append(th);
             }
             const body = groups.createTBody();
@@ -1009,7 +1034,6 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
                 const row = body.insertRow(), label = el("th","",v.label); label.scope = "row"; row.append(label);
                 const c = v.context;
                 for (const text of [`${v.metered} / ${v.eligible}`, v.total === null ? "Not recorded" : number(v.total),rate(v.cacheReadShare === null ? null : 100*v.cacheReadShare),
-                    ...(card.mode === "usd" ? [`${v.priced} / ${v.eligible}`,valueText(v,card)] : []),
                     ...(tool ? [c?.tokens == null ? "Not recorded" : `~${number(c.tokens)} tokens (${c.sized} / ${c.calls} calls)`] : [])]) row.append(el("td","",text));
             }
             target.append(groups);
@@ -1031,6 +1055,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             if (toolbarHost === root) landingGrid.before(toolbar); else toolbarHost.prepend(toolbar);
         }
         toolbar.hidden = section === "guide";
+        chartsButton.hidden = section !== "charts" || inPair || allCharts;
+        selectedCharts.hidden = section !== "charts" || !allCharts || Boolean(family);
         toolbarContext.hidden = section === "guide" || (!inPair && !allCharts && section !== "overview");
         toolbarContext.textContent = toolbarContext.hidden ? "" : `${number(data.totals.calls)} dated ${data.totals.calls === 1 ? "call" : "calls"}`;
         landingExtra.hidden = section !== "overview"; workspace.hidden=inPair;
@@ -1068,6 +1094,12 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         const limits = [];
         if (allCharts && data.coverage.undatedCalls) limits.push(`${number(data.coverage.undatedCalls)} calls have no start date and are left out.`);
         qualification.textContent = limits.join(" "); qualification.hidden = !limits.length;
+        // Keep keyboard and screen-reader order identical to the visible stack.
+        const stack = allCharts ? order : [activeMeasure, ...order.filter(id => id !== activeMeasure)];
+        for (const [i,id] of stack.entries()) {
+            const panel = cards.get(id).panel;
+            if (overview.children[i] !== panel) overview.insertBefore(panel, overview.children[i]);
+        }
         for (const card of cards.values()) paintCard(card, dateRange);
         const feedbackHost = section === "overview" ? landing : inPair ? pairHost : cards.get(family ?? (allCharts ? order[0] : activeMeasure)).panel;
         if (feedback.parentElement !== feedbackHost) feedbackHost.append(feedback);
@@ -1108,10 +1140,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         pending++; enabled = false; bound = null; data = timingData = null; requestedKey = acceptedKey = ""; lastRevision = null;
         workspace.before(feedback);
         landingChart.withdrawAccess(); landingSource = null; landing.hidden = true; guide.hidden = true;
-        pairActive=false;pair.clear();landingExtra.hidden=true;
+        pairActive=false;pairOrigin=null;pair.clear();landingExtra.hidden=true;chartsButton.hidden=selectedCharts.hidden=true;
         for (const node of [landingScope, landingDetail, landingRecover, landingWindow]) scrub(node);
         range = null; routeScopeKey = undefined; filters = {}; family = null; offset = 0; period = "7"; colors.clear(); allCollapsed = null; inspecting = null;
-        activeMeasure = "rhythm"; compared.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
+        activeMeasure = "rhythm"; extraCharts.clear(); allCharts = false; acceptedEntry = entryKey = null; failedRead = null; readingRevision = null; readingZone = null; homeBack.hidden = true;
         datePicker.showRange(""); filtersButton.removeAttribute("title"); periodButton.hidden = true;
         ux.paintFilterEntry(filtersButton, 0);
         filtersButton.setAttribute("aria-expanded", "false");
@@ -1119,7 +1151,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         filtersButton.disabled = true; periodButton.disabled = true;
         for (const card of cards.values()) {
             card.chart.withdrawAccess(); card.drawing = null; card.hidden.clear(); card.selection = null; card.key = ""; card.collapsed = card.indexCollapsed = false;
-            card.mode = card.id === "usage" ? "usd" : card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
+            card.mode = card.id === "usage" ? "tokens" : card.id === "timing" ? "both" : "count"; card.type = "columns"; card.percentMode = "share";
             card.pointKey = "";
             for (const node of [card.periodLabel, card.totals, card.indexScope, card.legend, card.limits, card.pointDate, card.pointText, card.pointSpace, card.evidence.firstChild,
                 card.emptyTitle, card.emptyDetail, card.showWeek, card.visibleDays]) scrub(node);
@@ -1176,7 +1208,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             if (!same || root.getAttribute("aria-busy") === "true") {
                 void read({ ...target, initial: Boolean(target.adaptive), routeFamily: target.family }); return;
             }
-            activeMeasure = target.family; family = null; compared.clear(); allCharts = false; paint(); return;
+            activeMeasure = target.family; family = null; extraCharts.clear(); pairActive = allCharts = false; paint(); return;
         }
         routeScopeKey = routeKey;
         if (root.getAttribute("aria-busy") === "true" && readingRevision === context.revision && readingZone === context.timeContext.timeZone) {
@@ -1371,8 +1403,12 @@ export const trendsStyles = `
 #trendsView[data-layout=index] [data-family=authors] .trends-series{grid-template-columns:auto auto minmax(0,1fr)}
 #trendsView[data-layout=index] .trends-point{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0;padding:4px 8px;background:var(--canvas);border-radius:var(--radius-small)}
 #trendsView[data-layout=index] .trends-point-actions{margin-left:auto}#trendsView[data-layout=index] .trends-point-space{display:none}
-.trends-secondary{border-top:1px solid var(--surface-divider);justify-content:space-between;padding-top:4px;margin-top:8px}.trends-secondary>button{--pill-border:transparent;--pill-fill:transparent;color:var(--muted)}
-.trends-secondary>button:last-child{margin-inline-start:auto}.trends-chart-types{margin-inline-start:auto}.trends-index-modes .trends-control{font-size:var(--type-small);gap:4px}
+.trends-secondary{border-top:1px solid var(--surface-divider);padding-top:4px;margin-top:8px}.trends-secondary>button{--pill-border:transparent;--pill-fill:transparent;color:var(--muted)}
+.trends-chart-types{margin-inline-start:auto}.trends-index-modes .trends-control{font-size:var(--type-small);gap:4px}
+.trends-usage-controls{display:flex;flex-wrap:wrap;align-items:end;gap:var(--space-xs) var(--space-md);margin-block:var(--space-sm)}
+.trends-usage-controls .usage-question-controls{margin:0;max-width:100%}
+.trends-local-choices h2{font-size:var(--type-body);margin:0 0 var(--space-xs)}
+.trends-local-choices .trends-dialog-actions+.icon-action{margin-block-start:var(--space-xs)}
 .trends-index-modes .trends-control select{width:auto}.trends-compare-choices{display:grid;gap:4px}
 .trends-compare-choices label{display:grid;grid-template-columns:auto minmax(0,1fr);align-content:center;align-items:start;gap:8px;min-height:44px;padding:6px 12px;border-radius:var(--radius-small);cursor:pointer}
 .trends-compare-choices input{width:18px;height:18px;margin:0;margin-block-start:max(0px,calc((1lh - 18px)/2));font:inherit}

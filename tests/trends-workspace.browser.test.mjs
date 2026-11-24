@@ -257,7 +257,7 @@ test("first entry finds the latest retained week; an explicitly empty period sta
     for (const id of ["rhythm","problems","services","tools","models","timing","authors"]) {
         await index.locator(`[data-measure="${id}"]`).click();
         await expect(panelOf(page,id).locator(".trends-plot")).toBeHidden();
-        await expect(panelOf(page,id).getByRole("button",{name:"Data table"})).toBeVisible();
+        await expect(panelOf(page,id).getByRole("button",{name:"View daily values"})).toBeVisible();
     }
     await index.locator('[data-measure="rhythm"]').click();
     await screenshot(page,"explicit-empty-week");
@@ -305,6 +305,127 @@ async function screenshot(page, name) {
     await page.screenshot({ path: path.join(proof, `${name}.png`) });
 }
 
+test("choosing charts keeps only the requested families on screen", async t => {
+    const { page, index, reads } = await setup(t, true);
+    await page.goto(new URL("/",page.url()).href); await navigateMain(page, "trends");
+    const nav = page.getByRole("navigation", {name:"Trends sections"});
+    await nav.getByRole("button", {name:"Overview"}).click();
+    await page.locator(".trends-explore").getByRole("button",{name:"Token usage"}).click();
+    const usage = panelOf(page,"usage"), families = page.locator(".trends-panel:visible h2");
+    const choose = page.getByRole("group",{name:"Trend scope and options"}).getByRole("button",{name:"Show or hide charts",exact:true});
+    const dates = await page.locator("#trendsPeriod").innerText(), before = reads.length;
+    await expect(usage.locator(".trends-plot")).toBeHidden();
+    await expect(usage.getByRole("button",{name:"Tokens",exact:true})).toHaveCount(0);
+    await expect(usage.getByRole("heading",{name:"No token counts available"})).toBeVisible();
+    await expect(usage.locator(".trends-no-activity")).toContainText("0 of 3 interactions metered");
+    await choose.press("Enter");
+    const popup = page.getByRole("dialog",{name:"Show or hide charts"});
+    await expect(popup.getByRole("heading")).toHaveText("Show below Token usage");
+    for (const name of ["Services","Call duration"]) await popup.getByRole("checkbox",{name,exact:true}).check();
+    await screenshot(page,"choose-charts");
+    await popup.getByRole("button",{name:"Apply"}).click();
+    const selected = ["Token usage","Services","Call duration"];
+    await expect(families).toHaveText(selected); await expect(choose).toBeFocused();
+    await screenshot(page,"selected-charts");
+    await usage.getByRole("button",{name:"View daily values"}).click();
+    const table = page.getByRole("dialog",{name:"Daily values"}).getByRole("table");
+    await expect(table.locator("caption")).toContainText(selected[0]);
+    await expect(table.locator("tbody tr")).toHaveCount(8);
+    await expect(table.getByRole("row",{name:/Entire period/})).toContainText("Unavailable");
+    await page.keyboard.press("Escape"); await expect(usage.getByRole("button",{name:"View daily values"})).toBeFocused();
+    await choose.click(); await popup.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
+    await page.keyboard.press("Escape"); await expect(choose).toBeFocused(); await expect(families).toHaveText(selected);
+    await panelOf(page,"timing").getByRole("button",{name:"Hide chart"}).click(); await expect(choose).toBeFocused();
+    await expect(families).toHaveText(selected.slice(0,2));
+    await choose.click(); await expect(popup.getByRole("checkbox",{name:"Call duration"})).not.toBeChecked();
+    await popup.getByRole("button",{name:"Open all charts"}).click();
+    const all = await index.getByRole("button").allTextContents();
+    await expect(families).toHaveText(all);
+    await page.getByRole("button",{name:"Back to selected charts"}).press("Enter");
+    await expect(choose).toBeFocused(); await expect(families).toHaveText(selected.slice(0,2));
+    await nav.getByRole("button",{name:"Chart guide"}).click(); await expect(choose).toBeHidden();
+    await page.goBack(); await expect(families).toHaveText(selected.slice(0,2));
+    await index.getByRole("button",{name:"Prompt authors"}).click();
+    await expect(families).toHaveText(["Prompt authors"]);
+    await page.setViewportSize({width:390,height:844}); await chooseTheme(page,"dark");
+    await choose.tap();
+    await expect(popup.getByRole("checkbox",{checked:true})).toHaveCount(0);
+    await popup.getByRole("checkbox",{name:"Tool calls",exact:true}).tap(); await popup.getByRole("button",{name:"Apply"}).tap();
+    await expect(families).toHaveText(["Prompt authors","Tool calls"]);
+    await panelOf(page,"rhythm").getByRole("button",{name:"Lines",exact:true}).tap();
+    await choose.scrollIntoViewIfNeeded(); await screenshot(page,"selected-charts-narrow-dark");
+    await choose.tap(); await popup.getByRole("checkbox",{name:"Tool calls",exact:true}).tap(); await popup.getByRole("button",{name:"Apply"}).tap();
+    await expect(families).toHaveText(["Prompt authors"]);
+    assert.equal(await page.locator("#trendsPeriod").innerText(),dates); assert.equal(reads.length,before);
+    await page.reload(); await expect(families).toHaveText(["Prompt authors"]); await expect(page.locator("#trendsPeriod")).toHaveText(dates);
+    await choose.tap(); await expect(popup.getByRole("checkbox",{checked:true})).toHaveCount(0);
+});
+
+test("a filter that removes a paired reading keeps only the measure still available", async t => {
+    const { page, index } = await setup(t), card = panelOf(page,"usage");
+    await index.getByRole("button",{name:"Token usage"}).click();
+    await selectActivityOption(page,"trendsUsagequestion","author");
+    await expect(card.getByRole("checkbox",{name:"Show Human"})).toBeVisible();
+    await card.getByRole("button",{name:"Compare measures"}).click();
+    await selectActivityOption(page,"trendsPairMeasure1",JSON.stringify(["usage","author:Human","tokens"]));
+    await expect(page.locator(".trend-pair-scene:visible")).toContainText("No daily values available");
+    await expect(page.locator(".trend-pair-scene .trends-plot:visible")).toHaveCount(0);
+    await selectActivityOption(page,"trendsPairMeasure2",JSON.stringify(["rhythm","rhythm","count"]));
+    await page.locator("#trendsView .filter-entry").click();
+    await selectActivityOption(page,"trendsService","Calendar");
+    await page.getByRole("button",{name:"Apply filters"}).click();
+    const pair = page.locator(".trends-panel-pair");
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy","false");
+    await expect(pair.locator("#trendsPairMeasure1")).toHaveValue(JSON.stringify(["rhythm","rhythm","count"]));
+    await expect(pair.locator("#trendsPairMeasure2")).toHaveValue("");
+    await expect(pair.locator(".trends-plot:visible")).toHaveCount(1);
+    await expect(pair.locator(".trend-pair-readings")).toContainText("Tool calls · calls");
+    await expect(pair.locator(".trends-index-scope")).toContainText("The other measure is unavailable");
+    await pair.getByText("Daily values",{exact:true}).click();
+    await expect(pair.getByRole("columnheader")).toHaveText(["Date","Tool calls · calls"]);
+    await expect(page.locator("#trendsView .notice:visible")).toHaveCount(0);
+    await page.locator("#trendsView .filter-entry").click();
+    await page.getByRole("button",{name:"Clear filters",exact:true}).click();
+    await expect(page.locator("#trendsView .filter-entry")).toHaveText("Filters");
+    await expect(pair.locator("#trendsPairMeasure2")).toHaveValue("");
+    await expect(pair.getByRole("columnheader")).toHaveText(["Date","Tool calls · calls"]);
+});
+
+test("daily tokens distinguish zero and missing, and lead back to the contributing interaction", async t => {
+    const records = callsFixture();
+    const unmetered = fixture("chart-no-token-count");
+    unmetered.toolCalls[0].startedAt = records[0].toolCalls[0].startedAt;
+    unmetered.userPrompt = {...records[0].userPrompt,text:"Review the unmetered harbor note.",sourceEventId:"unmetered-prompt"};
+    records.push(unmetered);
+    for (const [sample,total] of [[records[0],3200],[records[1],800],[records[2],0]]) {
+        sample.usageCalls = [{receiptId:`receipt-${total}`,apiCallId:`call-${total}`,model:"gpt-4.1",at:sample.userPrompt.sourceTimestamp,
+            tokens:{freshInput:total,cacheRead:0,cacheWrite:0,output:0}}];
+    }
+    const {page,index} = await setup(t,false,{records});
+    await index.getByRole("button",{name:"Token usage"}).click();
+    const card = panelOf(page,"usage");
+    await expect(card.locator(".trends-limits")).toContainText("4,000 tokens · 3 of 4 interactions metered");
+    const point = card.locator(".trends-plot").getByRole("button",{name:/Nov 16.*4,000 tokens/});
+    await point.press("Enter");
+    await expect(card.locator(".trends-point")).toContainText("2 of 3 interactions metered");
+    await screenshot(page,"token-day");
+    const calls = card.getByRole("button",{name:"View 3 calls"});
+    await calls.click();
+    const links = page.getByRole("dialog").locator(".trends-evidence-row a");
+    await expect(links).toHaveCount(3);
+    const firstInteraction = links.filter({hasText:"Review the invented harbor notes mon-a."});
+    await expect(firstInteraction).toHaveCount(2);
+    await expect(links.filter({hasText:"Review the invented harbor notes mon-b."})).toHaveCount(1);
+    await firstInteraction.last().click();
+    await expect(page.locator("[data-reader-section=usage]:visible")).toContainText("3,200 tokens");
+    await page.goBack(); await expect(calls).toBeFocused(); await expect(point).toHaveAttribute("aria-pressed","true");
+    await card.getByRole("button",{name:"View daily values"}).click();
+    const rows = page.getByRole("dialog",{name:"Daily values"}).getByRole("row");
+    await expect(rows.filter({hasText:"Nov 16, 2026"}).getByRole("cell")).toHaveText(["4,000 tokens","2 of 3","3","4"]);
+    await expect(rows.filter({hasText:"Nov 17, 2026"})).toContainText("Unavailable");
+    await expect(rows.filter({hasText:"Nov 18, 2026"})).toContainText("0 tokens");
+});
+
 test("service columns share their card surface and label sparse daily groups without losing any series", async t => {
     const { page, index } = await setup(t,true);
     await index.getByRole("button",{name:"Services",exact:true}).click();
@@ -321,7 +442,7 @@ test("service columns share their card surface and label sparse daily groups wit
     await expect(plot.getByText("0",{exact:true})).toHaveCount(6); // Five all-zero days and the scale origin.
     await expect(plot.locator("[data-trend-mark]")).toHaveCount(21);
     await plot.getByRole("button",{name:"Nov 16, 2026: Mail, 2 calls"}).tap();
-    await expect(card.getByRole("button",{name:"Data table"}).locator('[data-icon-role="forward"]')).toBeVisible();
+    await expect(card.getByRole("button",{name:"View daily values"}).locator('[data-icon-role="forward"]')).toBeVisible();
     await expect(card.getByRole("button",{name:"View 2 calls"}).locator('[data-icon-role="forward"]')).toBeVisible();
     await card.getByRole("button",{name:"View 2 calls"}).click();
     await expect(page.locator(".trends-evidence-row")).toHaveCount(2);
@@ -395,7 +516,7 @@ test("compiled index applies every available filter, supports calendar navigatio
     await page.getByLabel("Trends from", { exact: true }).fill("2026-07-01"); await page.getByLabel("Trends to", { exact: true }).fill("2026-11-18");
     await page.getByRole("button", { name: "Apply dates", exact: true }).click(); await expect(region).toHaveAttribute("aria-busy", "false");
     await expect(region.locator(".trends-paging")).toContainText("91–141 of 141");
-    await card.getByRole("button", { name: "Data table" }).click();
+    await card.getByRole("button", { name: "View daily values" }).click();
     const table = region.getByRole("dialog").getByRole("table");
     await expect(table).toHaveAccessibleName(/Daily rows: 91–141 of 141 days/);
     await expect(table.getByRole("rowheader", { name: "Entire period" })).toBeVisible();
@@ -520,14 +641,14 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         for (const check of await panel.locator(".trends-series input").all()) { await check.uncheck(); await expect(check).not.toBeChecked(); }
         if (series[id] > 1) await expect(panel.locator("[data-trend-mark]")).toHaveCount(0);
         for (const check of await panel.locator(".trends-series input").all()) await check.check();
-        await panel.getByRole("button", { name: "Data table", exact: true }).click();
+        await panel.getByRole("button", { name: "View daily values", exact: true }).click();
         const table = page.locator(".trends-dialog table"); await expect(table.locator("tbody tr")).toHaveCount(8);
         const monday = table.locator("tbody tr").filter({ hasText: "Nov 16" });
         await expect(monday.locator("td").nth(-2)).toHaveText("2"); await expect(monday.locator("td").last()).toHaveText("3");
         if (id === "rhythm") await expect(monday.locator("td").first()).toHaveText("3");
         if (id === "timing") { await expect(monday).toContainText("0 ms"); await expect(monday).toContainText("180 ms"); }
         if (id === "problems") { await expect(monday.locator("td").first()).toHaveText("1"); await expect(table.locator("tbody tr").filter({ hasText: /Nov 18|Today/ })).toContainText("1"); }
-        await page.keyboard.press("Escape"); await expect(panel.getByRole("button", { name: "Data table" })).toBeFocused();
+        await page.keyboard.press("Escape"); await expect(panel.getByRole("button", { name: "View daily values" })).toBeFocused();
     }
     assert.equal(reads.length, initial, "Style, inspection, visibility and unit must not change the retained population");
     await index.getByRole("button", { name: "Tool usage", exact: true }).click();
@@ -568,16 +689,17 @@ test("compiled Trends uses the exact daily populations on both chart types and k
     const times = await page.locator(".trends-evidence-time").allTextContents();
     assert(times.some(text => text.includes("12:15")) && times.some(text => text.includes("12:16")), times.join("; "));
     await page.keyboard.press("Escape");
-    await services.getByRole("button", { name: "Arrange charts" }).click();
-    const dialog = page.getByRole("dialog", { name: "Arrange charts" }), choices = dialog.getByRole("checkbox");
+    const chooseCharts = page.getByRole("button", { name: "Show or hide charts" });
+    await chooseCharts.click();
+    const dialog = page.getByRole("dialog", { name: "Show or hide charts" }), choices = dialog.getByRole("checkbox");
     await dialog.getByRole("checkbox", { name: "Call duration", exact: true }).check();
     await dialog.getByRole("button", { name: "Cancel" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
-    await services.getByRole("button", { name: "Arrange charts" }).click();
+    await chooseCharts.click();
     for (const check of await choices.all()) await check.check();
-    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
-    await services.getByRole("button", { name: "Arrange charts" }).click();
+    await dialog.getByRole("button", { name: "Apply" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(8);
+    await chooseCharts.click();
     for (const check of await choices.all()) await check.uncheck();
-    await dialog.getByRole("button", { name: "Apply comparison" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
+    await dialog.getByRole("button", { name: "Apply" }).click(); await expect(page.locator(".trends-panel:visible")).toHaveCount(1);
     assert.equal(reads.length, initial);
 });
 
@@ -688,15 +810,15 @@ test("compiled Trends keeps the reading anchor across refinements, compare, empt
     });
     await watch("change measure and return", async () => { await choose(index,"Response models"); await tool.click(); });
     await watch("add comparison", async () => {
-        await choose(panel,"Arrange charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
-        await choose(view,"Apply comparison"); await expect(panelOf(page,"services")).toBeVisible();
-        await expect(panel.locator(".trends-index-scope")).toContainText("Comparing 2 measures");
+        await choose(view,"Show or hide charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).check();
+        await choose(view,"Apply"); await expect(panelOf(page,"services")).toBeVisible();
+        await expect(view.locator(".trends-panel:visible h2")).toHaveText(["Tool usage","Services"]);
         await expect(filters).toHaveText("Filters");
     }, {scene:true});
     await watch("remove comparison", async () => {
-        await choose(panel,"Arrange charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
-        await choose(view,"Apply comparison");
-        await expect(panel.locator(".trends-index-scope")).not.toContainText("Comparing");
+        await choose(view,"Show or hide charts"); await view.getByRole("checkbox",{name:"Services",exact:true}).uncheck();
+        await choose(view,"Apply");
+        await expect(view.locator(".trends-panel:visible h2")).toHaveText(["Tool usage"]);
     }, {scene:true});
     await watch("empty filter", async () => { await applyService("Discovery"); await expect(panel.locator(".trends-no-activity")).toContainText("No matching calls"); });
     await watch("clear empty", async () => { await filters.click(); await choose(view,"Clear filters"); await expect(panel.locator(".trends-index-scope")).toContainText("4 dated calls"); await expect(filters).toBeFocused(); });
@@ -751,7 +873,7 @@ test("compiled Trends is readable in all five palettes, both modes, narrow and e
         await screenshot(page, `product-narrow-${width}-${scale}`);
         if (scale === 2) {
             const duration = panelOf(page, "timing");
-            await duration.getByRole("button", { name: "Data table" }).tap();
+            await duration.getByRole("button", { name: "View daily values" }).tap();
             const region = page.getByRole("dialog").locator(".trends-exact");
             const sizes = await region.evaluate(node => {
                 const heading = node.querySelector("th"), range = document.createRange();
@@ -806,7 +928,7 @@ test("Trends choices keep their selected state distinct from hover and press wit
         ]) await states(control,`${id}/${mode} ${label}`);
         const series = card.locator(".trends-series").first();
         await states(series,`${id}/${mode} series`,series.locator("input"));
-        await card.getByRole("button",{name:"Arrange charts"}).click();
+        await view.getByRole("button",{name:"Show or hide charts"}).click();
         const row = view.getByRole("dialog").locator(".trends-compare-choices label").first(), check = row.locator("input");
         await states(row,`${id}/${mode} comparison unchecked`,check);
         await check.check(); await states(row,`${id}/${mode} comparison checked`,check);
