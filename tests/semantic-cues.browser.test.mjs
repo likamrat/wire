@@ -59,7 +59,10 @@ test("catalog-selected reports preserve frozen service facts in HTML, JSON and b
     assert.equal(catalog.excluded.requestGroupsWithoutEligibleEvidence, 1);
     assert.equal(catalog.excluded.platformDiagnosticEvidenceRecords, 1);
     assert.equal(catalog.excluded.excludedOrDuplicateEvidenceRecords, 1);
-    await assert.rejects(buildSanitizedBundle([records[10]], "a".repeat(64), { promptMode: "none", formats: ["json"] }), /Invalid frozen result facts/);
+    const diagnostic = await buildSanitizedBundle([records[10]], "a".repeat(64), { promptMode: "none", formats: ["json"] });
+    const partial = JSON.parse(diagnostic.files["product-report.json"]);
+    assert.equal(partial.evaluationFacts.scope.membership, "partial-retained");
+    assert.deepEqual(partial.resultFacts.calls, [], "The diagnostic request has no attributable tool results");
     const bundle = await buildSanitizedBundle(catalog.records, "a".repeat(64), { promptMode: "none", formats: ["html", "pdf", "json"] });
     assert.deepEqual(records, original);
     assert.equal(bundle.privacy.reviewerConfirmed, false);
