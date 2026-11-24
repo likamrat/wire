@@ -137,7 +137,7 @@ test("current reader keeps succeeded, partial and unknown results with their cal
     await page.locator(".request-card-open").click();
     const calls = page.locator("#requestContent .reader-call-row");
     await expect(calls).toHaveCount(3);
-    await expect(calls.nth(0).locator(".reader-call-summary")).toHaveText("1 tool call completed");
+    await expect(calls.nth(0).getByRole("group", { name: "Tool completion: 1 Work IQ tool call", exact: true })).toHaveText("1 tool call completed");
     await expect(calls.nth(1).locator(".reader-call-summary")).toContainText("partly completed");
     await expect(calls.nth(2).locator(".reader-call-summary")).toContainText("has no recorded result");
     for (const [index, outcome] of ["success", "partial", "unknown"].entries()) {
