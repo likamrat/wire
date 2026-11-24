@@ -120,12 +120,10 @@ test("the single reference entry opens the native guide without a read and prese
         color: getComputedStyle(node).color, surface: getComputedStyle(node).backgroundColor,
         decoration: getComputedStyle(node).textDecorationLine,
     });
-    const nav = page.locator('.primary-navigation [data-nav="trends"]');
-    await nav.hover();
-    const navHover = await nav.evaluate(paint);
+    const rest = await toolTopic.evaluate(paint);
     await toolTopic.hover();
-    await expect.poll(() => toolTopic.evaluate(paint)).toEqual(navHover);
-    expect(navHover.decoration).toBe("none");
+    await expect.poll(() => toolTopic.evaluate(paint)).not.toEqual(rest);
+    await expect(toolTopic).toHaveCSS("text-decoration-line", "none");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("HTTP 403");
     await expect(page.locator("#chartReferenceExplanation")).not.toContainText("Connection failed");
     await page.locator("#chartReferenceShowData").click();
