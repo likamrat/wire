@@ -25,7 +25,13 @@ test("page settings retain a nonempty format choice on reload and expose keyboar
     const ids = await nav.getByRole("link").evaluateAll(links => links.map(a => a.dataset.category));
     for (const id of ids) {
         await nav.locator(`[data-category="${id}"]`).click();
-        await expect(page.locator(`[data-settings-section="${id}"] > h2 + .settings-intro`)).toBeVisible();
+        if (id === "general") {
+            const card = page.locator("#generalTitle + .app-version-card");
+            await expect(card.getByRole("heading", { name: /^WIRE v/ })).toBeVisible();
+            await expect(card.getByRole("link", { name: "Update instructions" })).toBeVisible();
+        } else {
+            await expect(page.locator(`[data-settings-section="${id}"] > h2 + .settings-intro`)).toBeVisible();
+        }
         if (id in namedDefaults) await expect(page.locator(`[data-settings-section="${id}"] > .settings-intro`)).toHaveText(/default/i);
         for (const [control, name] of namedDefaults[id] ?? []) {
             await expect(page.locator("#" + control)).toHaveAccessibleName(name);
