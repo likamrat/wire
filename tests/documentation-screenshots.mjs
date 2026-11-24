@@ -380,6 +380,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
 
+    await page.goto(app.runtime.url); await ready();
     await page.locator('nav [data-nav=trends]').click();
     const sections = page.getByRole("navigation", { name: "Trends sections" });
     await sections.getByRole("button", { name: "Overview" }).click();

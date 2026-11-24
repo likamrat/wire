@@ -1244,7 +1244,7 @@ test("chart-first entry retains period facts with empty Today and All charts pre
     await expect(checkbox).not.toBeChecked();
     await page.getByRole("button", { name: "Collapse all", exact: true }).click();
     await expect(page.locator(".trends-content:visible")).toHaveCount(0);
-    await page.getByRole("button", { name: "Restore all", exact: true }).click();
+    await page.getByRole("button", { name: "Expand all", exact: true }).click();
     await expect(page.locator(".trends-content:visible")).toHaveCount(8);
     assert.equal(reads.length, calls, "Sizing, measure and visibility changes are display-only");
     for (const id of ["authors", "rhythm", "services", "problems", "models", "timing"]) {
@@ -1783,7 +1783,7 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
         }
         assert.equal(reads.length, readCount, `${period}: chart controls must not change the population`);
         await capture(page, `all-controls-${period}-collapsed`);
-        await page.getByRole("button", { name: "Restore all", exact: true }).click();
+        await page.getByRole("button", { name: "Expand all", exact: true }).click();
         await expect(page.locator(".trends-content:visible")).toHaveCount(8);
         await page.getByRole("button", { name: "Filters", exact: true }).click();
         await selectActivityOption(page, "trendsPromptauthors", "agent");

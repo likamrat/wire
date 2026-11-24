@@ -316,8 +316,9 @@ the index starts with that chart alone. These extra charts are not saved on relo
 
 For the full-width stack choose **Show or hide charts → Open all charts**.
 **Back to selected charts** returns to your selection. From a maximized chart,
-**Back to all charts** returns to its row. Collapse or restore charts
-without losing their measure, series choices or horizontal reading position.
+**Back to all charts** returns to its row. **Collapse all** folds the current
+stack; **Expand all** opens every chart in it. Neither changes your measures,
+series choices or selected date.
 Collapsed widgets show their names and applied dates. Click anywhere on a collapsed row to
 open it, or the open widget's header to close it. The arrow button does the same
 with Enter or Space; the other controls keep their own actions.

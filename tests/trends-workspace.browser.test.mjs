@@ -196,7 +196,11 @@ test("custom pairs keep units, members, collapse and day through the real period
     await page.goBack();await expect(reading.getByRole("button",{name:"View 2 calls"})).toBeFocused();
     await pair.getByRole("button",{name:"Aligned charts",exact:true}).click();await expect(graph).toHaveCount(2);
     await pair.locator(".trend-pair-scene").last().getByRole("button",{name:"Collapse",exact:true}).click();await expect(graph).toHaveCount(1);
-    await pair.getByRole("button",{name:"Expand",exact:true}).click();
+    await pair.getByRole("button",{name:"Collapse both charts",exact:true}).press("Enter");await expect(graph).toHaveCount(0);
+    const expandBoth = pair.getByRole("button",{name:"Expand both charts",exact:true});await expect(expandBoth).toBeFocused();
+    await pair.getByRole("button",{name:"One graph",exact:true}).click();await expect(graph).toHaveCount(1);
+    await pair.getByRole("button",{name:"Aligned charts",exact:true}).click();await expect(graph).toHaveCount(0);
+    await expandBoth.press("Space");await expect(graph).toHaveCount(2);await expect(reading).toContainText("Nov 16");
     await select(second,["timing","timing","p95"]);await expect(pair.getByRole("button",{name:"One graph"})).toBeDisabled();
     await expect(reading).toContainText("180 ms");
     await expect(pair.getByRole("button",{name:"Back to charts"}).locator('[data-icon-role="back"]')).toBeVisible();
@@ -389,6 +393,48 @@ test("a filter that removes a paired reading keeps only the measure still availa
     await expect(page.locator("#trendsView .filter-entry")).toHaveText("Filters");
     await expect(pair.locator("#trendsPairMeasure2")).toHaveValue("");
     await expect(pair.getByRole("columnheader")).toHaveText(["Date","Tool calls · calls"]);
+});
+
+test("bulk disclosure acts only on this chart stack and keeps the pinned reading", async t => {
+    const { page, index, reads } = await setup(t,true);
+    const toolbar = page.getByRole("group",{name:"Trend scope and options"}), cards = page.locator(".trends-panel:visible");
+    const closeAll = toolbar.getByRole("button",{name:"Collapse all",exact:true}), openAll = toolbar.getByRole("button",{name:"Expand all",exact:true});
+    const choose = toolbar.getByRole("button",{name:"Show or hide charts"}), popup = page.getByRole("dialog",{name:"Show or hide charts"});
+    const opened = cards.filter({has:page.locator(".trends-content:visible")}).locator("h2");
+    await expect(closeAll).toHaveCount(0);
+    await choose.click();
+    for (const name of ["Services","Call duration"]) await popup.getByRole("checkbox",{name,exact:true}).check();
+    await popup.getByRole("button",{name:"Apply"}).click();
+    const before = reads.length, period = await toolbar.locator("#trendsPeriod").innerText(), rhythm = panelOf(page,"rhythm");
+    const point = rhythm.getByRole("button",{name:/Nov 16.*3 calls/});
+    await point.press("Enter");
+    await panelOf(page,"services").getByRole("button",{name:"Collapse chart"}).click();
+    await expect(opened).toHaveText(["Tool calls","Call duration"]);
+    await expect(closeAll).toBeVisible();
+    assert.equal(await closeAll.getAttribute("aria-expanded"),null);
+    await closeAll.press("Space"); await expect(opened).toHaveCount(0); await expect(openAll).toBeFocused();
+    await expect(openAll).toHaveAttribute("aria-expanded","false");
+    await expect(cards.locator("h2")).toHaveText(["Tool calls","Services","Call duration"]);
+    await expect(cards.locator(".trends-period-label:visible")).toHaveCount(3);
+    await openAll.press("Enter"); await expect(opened).toHaveText(["Tool calls","Services","Call duration"]);
+    await expect(closeAll).toHaveAttribute("aria-expanded","true");
+    await expect(point).toHaveAttribute("aria-pressed","true");
+    await panelOf(page,"timing").getByRole("button",{name:"Collapse chart"}).click();
+    await choose.tap(); await popup.getByRole("button",{name:"Open all charts"}).tap();
+    const allNames = await index.getByRole("button").allTextContents(); await expect(opened).toHaveText(allNames);
+    await page.getByRole("button",{name:"Collapse Services",exact:true}).press("Enter");
+    await closeAll.tap(); await expect(opened).toHaveCount(0);
+    await page.setViewportSize({width:390,height:844}); await chooseTheme(page,"dark");
+    await screenshot(page,"expand-all-narrow");
+    await openAll.tap(); await expect(opened).toHaveText(allNames);
+    await toolbar.getByRole("button",{name:"Back to selected charts"}).tap();
+    await expect(opened).toHaveText(["Tool calls","Services"]);
+    await closeAll.tap(); await expect(openAll).toBeVisible();
+    await panelOf(page,"services").locator("h2").tap();
+    await expect(opened).toHaveText(["Services"]); await expect(closeAll).toBeVisible();
+    await closeAll.tap(); await openAll.tap(); await expect(point).toHaveAttribute("aria-pressed","true");
+    assert.equal(await toolbar.locator("#trendsPeriod").innerText(),period); assert.equal(reads.length,before);
+    await index.getByRole("button",{name:"Token usage"}).tap(); await expect(closeAll).toHaveCount(0); await expect(openAll).toHaveCount(0);
 });
 
 test("daily tokens distinguish zero and missing, and lead back to the contributing interaction", async t => {
