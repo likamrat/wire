@@ -1,7 +1,7 @@
 // Pack existing widgets by their natural size; their renderers still own all data.
 export function mountDashboardLayout(host) {
     const view = host.ownerDocument.defaultView;
-    const selector = ".analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card";
+    const selector = ".analyze-outcome-summary,.analyze-chart-main,:scope > #activityView,#percentageCharts .percentage-card";
     const widgets = new Set();
     const resize = new view.ResizeObserver(measure);
     const children = new view.MutationObserver(refresh);
@@ -18,8 +18,6 @@ export function mountDashboardLayout(host) {
         }
     }
     function refresh() {
-        const model = host.querySelector("#percentageCharts [data-breakdown=models]");
-        if (model && model.parentElement.firstElementChild !== model) model.parentElement.prepend(model);
         const current = new Set(host.querySelectorAll(selector));
         for (const widget of widgets) if (!current.has(widget)) {
             resize.unobserve(widget);

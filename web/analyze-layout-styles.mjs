@@ -61,7 +61,8 @@ export const analyzeLayoutStyles = `
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
 .analyze-dashboard,#frontendBreakdowns {--widget-heading-inset:16px}
-.analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(32rem,36rem) minmax(0,1fr);grid-auto-rows:1px;gap:0 16px;align-items:start}
+.analyze-dashboard[data-dashboard-layout=packed] {display:grid;grid-template-columns:minmax(0,1fr) minmax(32rem,36rem);grid-auto-rows:1px;gap:0 16px;align-items:start}
+.analyze-dashboard[data-dashboard-layout=packed]:not([data-custom-order])>#activityView {grid-column:1/-1;min-width:0;margin:0}
 .analyze-dashboard[data-dashboard-layout=packed] .analyze-chart-grid,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts,
 .analyze-dashboard[data-dashboard-layout=packed] #percentageCharts .percentage-section,
