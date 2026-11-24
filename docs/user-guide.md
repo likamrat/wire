@@ -339,6 +339,10 @@ In **Response models**, choose **Token & $ share** to compare token volume with
 the cost share of fully priced interactions. Find the offline rates in
 **Settings → Reports**.
 
+In **Interactions** mode, choose a model to show its cards. Open **Filters** to
+see or remove that model under **Applied filters**. This narrows the card list;
+the chart still shows all models in your date range and other filters.
+
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.

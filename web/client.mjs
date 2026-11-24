@@ -3166,7 +3166,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function refineScope(changes) {
         const view = workspaceState.route.view === "request" ? "analyze" : workspaceState.route.view;
-        return navigate(routeFor(view, { ...changes, page: undefined, request: undefined }), view === workspaceState.route.view, { keepFocus: true });
+        return navigate(routeFor(view, { widget: workspaceState.route.widget, ...changes, page: undefined, request: undefined }), view === workspaceState.route.view, { keepFocus: true });
     }
     function rememberHistoryAnalysis(query, publication, existingKey) {
         const remembered = analysisNavigations.get(existingKey);
@@ -4296,7 +4296,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && workspaceState.route.view === "analyze" && workspaceState.route.view === previousRoute.view
             && workspaceState.route.session === previousRoute.session && workspaceState.route.request === previousRoute.request
             && (queryChanged || workspaceState.route.range !== previousRoute.range || workspaceState.route.chart !== previousRoute.chart || workspaceState.route.withinServices !== previousRoute.withinServices);
-        const controlsOnly = refinement && !queryChanged && workspaceState.route.chart === previousRoute.chart && workspaceState.route.withinServices === previousRoute.withinServices;
+        const controlsOnly = refinement && !queryChanged && workspaceState.route.chart === previousRoute.chart && workspaceState.route.withinServices === previousRoute.withinServices && workspaceState.route.widget === previousRoute.widget;
         if (refinement && clearingFilter) {
             const controls = { source: "sourceFilter", tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", withinServices: "serviceAssociationFilter", service: "serviceFilter",
                 project: "projectFilter", session: "chatFilter", layer: "layerFilter", scope: "scopeFilter", result: "outcomeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
@@ -5139,9 +5139,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             host.append(back);
         }
     }
+    function activityListRestriction() {
+        const { view, compare, widget } = workspaceState.route;
+        if (view !== "analyze" || compare || !widget || widget === "all") return null;
+        const group = percentages.evidence(widget);
+        if (!group) return "Activity list: unavailable chart selection";
+        const name = group.chart === "models" ? "Model" : group.chart === "authors" ? "Prompt author" : "Chart selection";
+        return `Activity list · ${name}: ${group.label}`;
+    }
     function renderFilterChips() {
         const host = $("filterChips");
         host.replaceChildren();
+        const listRestriction = activityListRestriction();
+        if (listRestriction) {
+            const chip = button(listRestriction, () => {
+                ux.restoreFocus($("closeAnalyzeFilters"));
+                refineScope({widget:undefined});
+            }, "filter-chip");
+            chip.setAttribute("aria-label", `Remove ${listRestriction}`);
+            chip.append(ux.icon("close")); host.append(chip);
+        }
         if (search) {
             const chip = button("Private search applied", () => refineScope({ search: "" }), "filter-chip");
             chip.setAttribute("aria-label", "Remove private search");
@@ -5286,7 +5303,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             !updateExplained && updateState.sourceBlocked ? "Source checks are read-only in this tab." : "",
             empty ? period.warning : "",
         ].filter(Boolean);
-        analyzeControls.caption({ ...description, status: [...new Set(status)].join(" "), error: [...new Set(errors)].join(" "), revision: workspaceState.evidence.revision, empty });
+        analyzeControls.caption({ ...description, listRestriction:activityListRestriction(), status: [...new Set(status)].join(" "), error: [...new Set(errors)].join(" "), revision: workspaceState.evidence.revision, empty });
         publishAcceptedListScope(description);
         return description;
     }
@@ -6106,7 +6123,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             select.addEventListener("change", () => {
                 if (!api.publicationToken() || clearingAccess) return;
                 usageSort = select.value; explicitUsageSort = true; activityPage = 0;
-                if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { page: undefined }), true);
+                if (workspaceState.route.page) navigate(routeFor(underlyingRoute().view, { widget: underlyingRoute().widget, page: undefined }), true);
                 else renderActivity();
             });
             label.append(select); $("activityListContext").append(label);
@@ -9356,15 +9373,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.stale || Boolean(search.trim()) || Boolean(workspaceState.route.withinServices));
         const references = chatCopy.references(workspaceState.evidence.sessions, workspaceState.evidence.scenarios);
         renderTimeContext();
-        renderControls(references); renderNavigation(references); renderFilterChips(); renderViewingContext();
+        renderControls(references); renderNavigation(references); renderViewingContext();
         const sourceCoverage = renderSessionAnalysis();
         analyzeControls.sourceCoverage(sourceCoverage);
         chartReferenceSourceCoverage = sourceCoverage?.textContent || "";
-        const acceptedDescription = renderPeriodFeedback();
         detailOwner = workspaceState.route.view;
         if (workspaceState.route.view === "analyze") {
             if (sourceCollection.active) seedBoundedNative();
             renderHome();
+        }
+        // The widget owns its accepted membership. Read its labels only after it has updated.
+        renderFilterChips();
+        const acceptedDescription = renderPeriodFeedback();
+        if (workspaceState.route.view === "analyze") {
             renderActivity();
             publishAcceptedListScope(acceptedDescription);
             if (sourceCollection.active) renderBoundedAnalyze();

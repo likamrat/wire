@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { usagePreview } from "./usage-preview-fixture.mjs";
-import { selectActivityOption, chooseTheme } from "./helpers.mjs";
+import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
 
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: scoped usage questions from homepage to frozen report (${width}px)`, async t => {
@@ -40,6 +40,27 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     if (width < 500) await interactions.tap(); else await interactions.click();
     await expect(interactions).toHaveAttribute("aria-pressed","true");
     await capture("model-selector",models);
+    const modelName = "claude-sonnet-5-5", modelRow = models.locator(".percentage-label").filter({hasText:modelName});
+    const filterButton = page.locator("#openAnalyzeFilters"), chips = page.locator("#filterChips");
+    const clearModel = chips.getByRole("button",{name:`Remove Activity list · Model: ${modelName}`,exact:true});
+    const rows = page.locator("#activityList article");
+    await modelRow.click(); await expect(rows).toHaveCount(2);
+    await expect(filterButton).toHaveText("1 filter applied");
+    await expect(filterButton).toHaveAccessibleDescription(/Activity list · Model: claude-sonnet-5-5/);
+    await openAnalyzeFilters(page); await expect(clearModel).toBeVisible();
+    await capture("model-filter",clearModel);
+    await selectActivityOption(page,"toolFilter","workiq-fetch"); await closeAnalyzeFilters(page);
+    await expect(rows).toHaveCount(1); await expect(rows.first()).toContainText("Launch notes");
+    await expect(filterButton).toHaveText("2 filters applied");
+    await openAnalyzeFilters(page); await clearModel.press("Enter");
+    await expect(clearModel).toHaveCount(0); await expect(chips).toContainText("workiq-fetch");
+    await closeAnalyzeFilters(page); await expect(rows).toHaveCount(4); await expect(filterButton).toHaveText("1 filter applied");
+    await modelRow.click(); await expect(rows).toHaveCount(1);
+    await rows.first().locator(".request-card-open").first().click(); await page.goBack();
+    await expect(rows).toHaveCount(1); await openAnalyzeFilters(page); await expect(clearModel).toBeVisible();
+    await page.locator("#resetView").click(); await closeAnalyzeFilters(page);
+    await expect(rows).toHaveCount(8); await expect(filterButton).toHaveText("Filters");
+    assert.ok(!page.url().includes(modelName));
     const day=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
     await page.goto(new URL(`/?range=custom&from=${day(2)}&to=${day(2)}`,runtime.url).href);
     await expect(widget).toContainText("30,500"); await expect(widget).toContainText("1 of 2 interactions");

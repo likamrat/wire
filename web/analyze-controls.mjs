@@ -263,7 +263,8 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if ($("analyzeScopeErrorText").textContent !== error) $("analyzeScopeErrorText").textContent = error;
         $("analyzeScopeError").hidden = !error;
         scope.dataset.revision = String(revision);
-        entryScope(activeCount, scopeDescription.id + " analyzeScopeStatus analyzeScopeError", value.text);
+        entryScope(activeCount + (value.listRestriction ? 1 : 0), scopeDescription.id + " analyzeScopeStatus analyzeScopeError",
+            [value.text,value.listRestriction].filter(Boolean).join("; "));
     }
     function sourceCoverage(notice) {
         if (withdrawn || !canPublish()) return;
