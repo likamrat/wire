@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
@@ -33,7 +35,7 @@ async function setup(t, { reports = false } = {}) {
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const card = (page, id) => page.locator(`article[data-view-key="request:${id}"]`);
 const nextPage = page => page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
-const label = item => ({ user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" })[item.actor]
+const label = item => ({ user: "Human prompt", agent: "Agent prompt", unknown: "Sender unclear" })[item.actor]
     + (item.data.isAutopilotContinuation || item.data.source === "autopilot" ? " (automatic continuation)" : "");
 
 async function inspectOriginal(page, item, name) {
@@ -54,9 +56,9 @@ test("collecting the original event repairs an unverified human prompt without r
     await page.goto(app.runtime().url); await ready(page);
     if (!await card(page, human.scenarioId).count()) await nextPage(page);
     const row = card(page, human.scenarioId);
-    await expect(row.locator(".request-card-author")).toHaveText("Author unverified");
+    await expect(row.locator(".request-card-author")).toHaveText("Sender unclear");
     await row.locator(".request-card-open").press("Enter");
-    await inspectOriginal(page, human, "Author unverified");
+    await inspectOriginal(page, human, "Sender unclear");
     await expect(page.locator(".request-original .reader-state")).toHaveText("Recorded sender details could not be verified");
     await app.runtime().collector.collectNow();
     await page.goto(app.runtime().url); await ready(page);
@@ -148,4 +150,58 @@ test("Analyze, the reader and a saved report preserve the recorded author and ex
     assert.equal(projection.includes(app.parent), false);
     assert.deepEqual(saved.evidence, before.evidence);
     assert.deepEqual(await sources(), originalFiles);
+});
+
+test("marked agent kickoffs and incremental shell inputs survive the compact checkpoint and reach the correct Analyze reader", async t => {
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const app = await promptInstallation(t), file = app.sourceFiles[1];
+    const startup = JSON.parse((await readFile(file, "utf8")).split("\n")[0]);
+    let clock = Date.parse(startup.timestamp);
+    const event = (type, data) => ({ type, id: randomUUID(), timestamp: new Date(++clock).toISOString(), data });
+    const prompt = (content, fields) => {
+        const e = event("user.message", { content, messageId: randomUUID(), delivery: "idle", ...fields });
+        e.data.transformedContent = `<current_datetime>${e.timestamp}</current_datetime>\n\n${content}`;
+        return e;
+    };
+    const linkedCall = p => {
+        const toolCallId = randomUUID(), turnId = randomUUID();
+        return [event("assistant.message", { originatingMessageId: p.data.messageId, toolRequests: [{ toolCallId }], turnId }),
+            event("tool.execution_start", { toolName: "workiq-retrieve", toolCallId, turnId, arguments: { query: "Invented lookup." } }),
+            event("tool.execution_complete", { toolCallId, success: true })];
+    };
+    const encode = events => events.map(e => JSON.stringify(e) + "\n").join("");
+    const agent = prompt("Invented agent-created kickoff without a matching creator receipt.", { agentAuthored: true });
+    const first = linkedCall(agent);
+    const disputed = prompt("Invented competing origins.", { agentAuthored: true, source: "user" });
+    await writeFile(file, encode([startup, agent, ...first, disputed, ...linkedCall(disputed)]));
+    await app.runtime().collector.collectNow();
+    const initial = await loadBoardState(app.context);
+    assert.deepEqual(initial.evidence.find(r => r.userPrompt.sourceEventId === agent.id).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-authored" });
+    await app.restart();
+    const human = prompt("Invented shell-mode direct input.", { agentMode: "shell" }), late = linkedCall(agent);
+    await appendFile(file, encode([human, ...linkedCall(human), ...late]));
+    await app.runtime().collector.collectNow();
+    await app.restart(); await app.runtime().collector.collectNow();
+    const state = await loadBoardState(app.context), dir = path.join(app.context.dataDir, "collector");
+    const index = JSON.parse(await readFile(path.join(dir, "index.json"), "utf8"));
+    const checkpoint = JSON.parse(await readFile(path.join(dir, index.fingerprint, app.child + ".json"), "utf8"));
+    const page = await browser.newPage(); await page.goto(app.runtime().url); await ready(page);
+    for (const [e, actor, basis, label] of [[agent, "agent", "host-agent-authored", "Agent prompt"],
+        [human, "user", "host-direct-input", "Human prompt"], [disputed, "unknown", "conflicting-source", "Sender unclear"]]) {
+        const record = state.evidence.find(r => r.sourceSessionId === app.child && r.userPrompt.sourceEventId === e.id);
+        assert.deepEqual(record.userPrompt.authorship, { actor, basis });
+        const compact = checkpoint.events.find(row => row.id === e.id).data;
+        assert.deepEqual(compact.wirePromptAuthorship, record.userPrompt.authorship);
+        assert.equal(compact.wirePromptAuthorshipVersion, record.userPrompt.authorshipVersion);
+        assert.ok(!Object.hasOwn(compact, "transformedContent") && !Object.hasOwn(compact, "agentAuthored"));
+        assert.ok(record.toolCalls.every(c => c.promptLink?.promptEventId === e.id && c.reportedOutcome === "succeeded"));
+        if (e === agent) assert.deepEqual(record.toolCalls.map(c => c.promptLink.requestEventId), [first[0].id, late[0].id]);
+        const row = card(page, record.scenarioId), link = row.locator(".request-card-open");
+        await expect(row.locator(".request-card-author")).toHaveText(label); await link.press("Enter");
+        const selected = page.locator('[data-reader-section="prompt"] .request-original');
+        await expect(selected.locator("[data-prompt-actor]")).toHaveAttribute("data-prompt-actor", actor);
+        await expect(selected.locator("pre")).toHaveText(e.data.content);
+        await page.goBack(); await expect(link).toBeFocused();
+    }
 });

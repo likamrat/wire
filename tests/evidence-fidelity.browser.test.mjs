@@ -41,11 +41,11 @@ test("cards, reader and author filters explain fresh and retained failures witho
     const card = id => page.locator(`.request-row[data-view-key="request:${id}"]`);
     const reason = "Work IQ reported HTTP 503 (Service unavailable). No further error details are retained.";
     for (const [index, actor] of ["user", "agent", "unknown"].entries()) {
-        await expect(card(records[index].scenarioId)).toContainText({ user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+        await expect(card(records[index].scenarioId)).toContainText({ user: "Human prompt", agent: "Agent prompt", unknown: "Sender unclear" }[actor]);
         await expect(card(records[index].scenarioId)).toContainText(reason);
     }
     await expect(card("invented-legacy")).toContainText("The tool reported HTTP 503 (Service unavailable). No further error details are retained.");
-    await expect(card("invented-legacy")).toContainText("Author unverified");
+    await expect(card("invented-legacy")).toContainText("Sender unclear");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await card(records[0].scenarioId).locator(".request-card-open").click();
@@ -64,9 +64,9 @@ test("cards, reader and author filters explain fresh and retained failures witho
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     }
     for (const [id, label, expectedReason] of [
-        ["invented-legacy", "Author unverified", "The tool reported HTTP 503 (Service unavailable). No further error details are retained."],
+        ["invented-legacy", "Sender unclear", "The tool reported HTTP 503 (Service unavailable). No further error details are retained."],
         [records[1].scenarioId, "Agent prompt", reason],
-        [records[2].scenarioId, "Author unverified", reason],
+        [records[2].scenarioId, "Sender unclear", reason],
     ]) {
         await card(id).locator(".request-card-open").click();
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);

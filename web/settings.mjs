@@ -34,7 +34,7 @@ export const settingsMarkup = `
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
       </div>
-      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
+      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled><span class="check-action-label">Check for updates</span><span class="check-action-pending" hidden><span class="update-spinner" aria-hidden="true"></span>Checking</span></button>
         <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update and restart</button></div>
     </div>
@@ -195,7 +195,7 @@ export const settingsMarkup = `
     <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open to read the last saved diagnostic.</p>
     <p id="recorderEvidence" class="settings-help" hidden></p>
     <p id="recorderStorageWarning" class="notice error" role="status" hidden></p>
-    <a id="recorderResultLink" class="text-link" href="/?layer=http" hidden>View HTTP recorder evidence</a>
+    <a id="recorderResultLink" class="text-link" href="/" hidden>View HTTP recorder evidence</a>
   </details>
 </section>`;
 

@@ -629,9 +629,8 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     assert.equal(await page.locator('.percentage-legend-row[data-category=failure]').getAttribute("data-percentage"), "25%");
     for (const topic of ["categories", "paths", "time"]) await exactTotal(topic, 4);
     for (const bucket of ["day", "week", "month"]) {
-        const address = new URL(page.url());
-        address.searchParams.set("bucket", bucket);
-        await page.goto(address.href); await ready(page);
+        const query = new URLSearchParams({ range: "custom", from: date, to: next, bucket });
+        await page.goto(new URL("/?" + query, page.url()).href); await ready(page);
         await verify(`aggregation-${bucket}`, ["start", "end", "next-day", "fresh-in-range"]);
         await exactTotal("time", 4);
         assert.equal(accepted.query.filters.from, date);
@@ -753,7 +752,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await page.locator("#fromFilter").fill(other); await page.locator("#toFilter").fill(other);
     await page.locator("#applyDates").click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-    await expect(page).toHaveURL(new RegExp(`[?&]from=${other}&to=${other}(?:&|$)`));
+    await expect(page).toHaveURL(url => url.pathname === "/" && !url.searchParams.has("from") && !url.searchParams.has("to"));
     const acceptedChart = await page.locator("#chart").innerHTML();
     const chartValues = () => page.locator("#chart .dimensional-column").evaluateAll(nodes => nodes.map(node => ({
         count: node.dataset.total, height: node.dataset.frontHeight, label: node.closest("button,a").getAttribute("aria-label"),

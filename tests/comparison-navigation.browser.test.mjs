@@ -233,7 +233,7 @@ test("comparison peers align at narrow enlarged text and menu combinations stay 
     await selectActivityOption(page, "comparisonQuickChoice", "mine"); await ready(page);
     await expect(page.locator("#comparisonQuickChoice-control")).toContainText("Completed calls + Human prompts");
     assert.deepEqual(comparisons.at(-1).options.filters.promptAuthors, ["user"]);
-    assert.match(page.url(), /comparisonFocus=completed/);
+    assert.doesNotMatch(page.url(), /comparisonFocus=/);
     await selectActivityOption(page, "comparisonQuickChoice", "all"); await ready(page);
     const measurements = [], output = process.env.WIRE_COMPARISON_PROOFS;
     if (output) await mkdir(output, { recursive: true });
@@ -364,7 +364,7 @@ test("primary comparison opens complete days independently, keeps chart membersh
     assert.equal(comparisons.length, reads);
     await page.locator("nav [data-nav=analyze]").click();
     await expect(page.locator("#toolFilter")).toHaveValue("workiq-ask");
-    await expect(page).toHaveURL(/\/\?privateView=required$/);
+    await expect(page).toHaveURL(url => url.pathname === "/" && !url.search);
     await page.locator("#comparePeriods").click(); await ready(page);
     assert.deepEqual(comparisons.at(-1).periods.later.range, pair.periods.later.range);
     assert.equal(comparisons.at(-1).options.filters.tools, undefined);
@@ -479,8 +479,9 @@ test("later period choices win over held replies without relabeling unsupported 
     release();
     await expect.poll(() => comparisons.length).toBeGreaterThan(3);
     await expect(page.getByRole("button", { name: /^Change selected period: Feb 8.*Mar 9, 2026$/ })).toBeVisible();
-    await expect(page.locator('nav [data-nav="compare"]')).toHaveAttribute("href", /bFrom=2026-02-08&bTo=2026-03-09/);
+    await expect(page.locator('nav [data-nav="compare"]')).toHaveAttribute("href", "/compare");
     assert.equal(accepted.later.range.from, "2026-02-08");
+    assert.equal(accepted.later.range.to, "2026-03-09");
 });
 test("access withdrawal scrubs comparison marks, inspection and held links without replay", { timeout: 60000 }, async t => {
     const { page, server } = await setup(t, "#analyze", { enforced: true });

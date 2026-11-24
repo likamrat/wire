@@ -85,7 +85,7 @@ test("compact cards retain prompt authorship, selectable text and native reader 
     const { page, browserContext } = await setup(t);
     await revealAnalyzeRecords(page);
     for (const [id, actor] of cases) {
-        const row = card(page, id), label = actor === "user" ? "Human prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
+        const row = card(page, id), label = actor === "user" ? "Human prompt" : actor === "agent" ? "Agent prompt" : "Sender unclear";
         await expect(row.locator(".request-card-author")).toHaveText(label);
         await expect(row.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
         await expect(row.locator(".request-card-open")).toHaveCount(1);
@@ -119,7 +119,7 @@ test("compact cards retain prompt authorship, selectable text and native reader 
         assert.deepEqual((await page.locator(".request-card-author").evaluateAll(nodes => nodes.map(node => node.dataset.promptActor))).sort(),
             cases.filter(([, actor]) => actors === "all" || actors.includes(actor)).map(([, actor]) => actor).sort());
     }
-    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Author unverified"]);
+    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Sender unclear"]);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
     await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("Human prompts");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -144,7 +144,7 @@ test("the report picker and its reader keep the selected interactions' author an
             await (await next.isEnabled() ? next : dialog.getByRole("button", { name: "Previous report requests", exact: true })).click();
         }
         await entry.getByRole("checkbox").check();
-        const name = { user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor];
+        const name = { user: "Human prompt", agent: "Agent prompt", unknown: "Sender unclear" }[actor];
         await expect(entry.locator(".request-card-author")).toHaveText(name);
         await expect(entry.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
         await entry.locator(".request-card-open").press("Enter");

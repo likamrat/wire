@@ -44,7 +44,11 @@ a missing or failed watch. Enforced renewal cannot silently downgrade.
 
 Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
 random capabilities, TTL and the 128-panel limit still apply. Each page GET
-allocates a panel, including on reload. On a clean departure, a verified
+allocates a capability, including on reload. Fetching HTML alone does not register
+an update blocker. A managed browser view participates after it uses its capability.
+Each participating view must fence its own edits and acknowledge the same update
+operation before one launcher restarts the installation. The notification carries
+no private data and cannot authorize an update or renew data access. On a clean departure, a verified
 browser page releases only its original panel. Suspended pages and pages
 with unfinished work do not release it. If the browser cannot deliver the
 release, the ordinary session expires after inactivity; expiry does not

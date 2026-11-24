@@ -1148,7 +1148,7 @@ test("unavailable and empty nonautomatic records retain their own identity witho
     evidence[2].userPrompt = { ...evidence[2].userPrompt, text: "", authorship: { actor: "unknown", basis: "conflicting-source" } };
     const { page } = await setup(t, evidence);
     for (const [index, label, notice] of [[0, "Human activity", "Prompt text unavailable"],
-        [1, "Agent activity", "Prompt text unavailable"], [2, "Author unverified", "No prompt text retained"]]) {
+        [1, "Agent activity", "Prompt text unavailable"], [2, "Sender unclear", "No prompt text retained"]]) {
         const card = interactionCard(page, `card-clarity-${index}`);
         await expect(card.locator(".request-card-author")).toHaveText(label);
         await expect(card).toContainText(notice);
@@ -1173,9 +1173,9 @@ test("cards and the reader distinguish observed automatic control, known gaps an
     evidence[2].userPrompt = { text: "", status: "full", authorship: { actor: "unknown", basis: "legacy-missing" } };
     const { page } = await setup(t, evidence);
     for (const [index, label, notice] of [
-        [1, "Author unverified (automatic continuation)", "Work continued without a new message."],
-        [0, "Author unverified", "Prompt unavailable: a saved history entry could not be read."],
-        [2, "Author unverified", "No prompt text retained"],
+        [1, "Sender unclear (automatic continuation)", "Work continued without a new message."],
+        [0, "Sender unclear", "Prompt unavailable: a saved history entry could not be read."],
+        [2, "Sender unclear", "No prompt text retained"],
     ]) {
         const card = interactionCard(page, `card-clarity-${index}`);
         await expect(card.locator(".request-card-author")).toHaveText(label);
@@ -1189,7 +1189,7 @@ test("cards and the reader distinguish observed automatic control, known gaps an
         await expect(prompt).toContainText(notice);
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
         if (index === 1) {
-            await expect(prompt.locator("h2")).toHaveText("Author unverified (automatic continuation)");
+            await expect(prompt.locator("h2")).toHaveText("Sender unclear (automatic continuation)");
             await expect(prompt).not.toContainText("Prompt unavailable");
         } else await expect(prompt).not.toContainText("No new message was sent");
         await capture(page, `capture-state-${index}`, []);
@@ -1205,7 +1205,7 @@ test("immutable first-saved prompt text keeps its shared qualification in card a
     const { page } = await setup(t, [record]);
     const notice = "The source changed this message. The first saved text is shown.";
     const card = page.locator(".request-card-open");
-    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Author unverified");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Sender unclear");
     await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(shortPrompt);
     await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-availability")).toHaveText(notice);
     await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);

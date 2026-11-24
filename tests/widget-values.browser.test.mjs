@@ -122,7 +122,11 @@ test("normal grouped widgets and live comparisons use complete accepted populati
         await chooseTheme(page, theme);
         await capture(`paths-${theme}`, ".analyze-dashboard");
     }
-    await grouped("#analyze?chart=endpoint&expanded=true", true);
+    const beforeExpand = await page.evaluate(() => [location.href, history.length]);
+    await page.locator("#chartFooter").getByRole("button", { name: "Show all" }).click(); await ready();
+    await expect(page.locator("#chart .flat-comparison-action")).toHaveCount(analytics.groups.length);
+    assert.deepEqual(await page.evaluate(() => [location.href, history.length]), beforeExpand);
+    await expect(page).toHaveURL(runtime.url);
     await expect(page.locator("#chart .flat-comparison-count").filter({ hasText: "<0.1% (1)" })).toHaveCount(1);
     await grouped("#analyze?chart=workload");
     await chooseTheme(page, "light");
@@ -135,7 +139,7 @@ test("normal grouped widgets and live comparisons use complete accepted populati
     await control.focus(); await page.keyboard.press("Enter");
     const accepted = (await (await drilldown).json()).analytics;
     assert.deepEqual(accepted.rows.map(row => row.id).sort(), [...filtered.groups[0].drilldownIds].sort());
-    await expect(page).toHaveURL(/privateView=required/);
+    await expect(page).toHaveURL(runtime.url);
     assert.equal(new URL(page.url()).searchParams.has("endpoint"), false);
     await expect(page.locator("#activityList .request-card-prompt")).toHaveText(source[2].userPrompt.text);
     await page.goBack(); await ready();

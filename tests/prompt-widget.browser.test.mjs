@@ -22,6 +22,7 @@ async function setup(t, { completeSearch = false, disputedOrigin = false, qualif
     if (disputedOrigin) records[1].userPrompt.sourceEventId = records[0].userPrompt.sourceEventId;
     if (qualifiedIssues) {
         records[14].userPrompt.authorship.issue = "body-boundary-v1";
+        records[14].userPrompt.authorshipVersion = 10;
         records[11].userPrompt.authorship.issue = "host-wrapper-v1";
     }
     if (mixedLinks) {
@@ -71,7 +72,7 @@ async function exact(page, widget, counts, calls) {
     if (total) {
         assert.deepEqual(rows.map(row => row.actor), ["user", "agent", "unknown"]);
         assert.deepEqual(rows.map(row => row.count), counts);
-        assert.deepEqual(rows.map(row => row.label), ["Human prompts", "Agent prompts", "Author unverified"]);
+        assert.deepEqual(rows.map(row => row.label), ["Human prompts", "Agent prompts", "Sender unclear"]);
         for (const row of rows) {
             assert.equal(row.value, `${Number((row.count / total * 100).toFixed(1))}% (${row.count})`);
             assert.equal(row.fraction, row.count / total);
@@ -105,10 +106,10 @@ test("a disputed canonical origin stays unknown through filters and the actual r
     await exact(page, widget, [0, 0, 7], 21);
     for (const index of [0, 1]) {
         const card = page.locator(`[data-view-key="request:prompt-widget-${index}"]`);
-        await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
+        await expect(card.locator(".request-card-author")).toHaveText("Sender unclear");
         await card.locator(".request-card-open").click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#contextSidebar [data-prompt-actor=unknown]:not(.visually-hidden)")).toHaveText("Author unverified");
+        await expect(page.locator("#contextSidebar [data-prompt-actor=unknown]:not(.visually-hidden)")).toHaveText("Sender unclear");
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
     }
@@ -124,18 +125,29 @@ test("retained origin causes reach the reader without changing author shares or 
     await selectActivityOption(page, "promptAuthorFilter", "unknown");
     await closeAnalyzeFilters(page);
     await exact(page, widget, [0, 0, 6], 18);
+    await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="authors"]').click();
+    const summary = page.getByRole("region", { name: "Why the sender is unclear" });
+    await expect(summary).toContainText("WIRE could not match the original prompt to a supported host message layout.");
+    await expect(summary).toContainText("1 interaction (saved rule v10)");
+    await expect(summary).toContainText(`View revision ${await page.locator("#promptAuthorSummary").getAttribute("data-revision")}`);
+    await page.locator("#analyzeResultsSection").click();
     for (const [index, reason, width, theme] of [
         [14, "WIRE could not match the original prompt to a supported host message layout.", 1440, "light"],
         [11, "WIRE does not recognize the host-added context before the original prompt.", 390, "dark"],
     ]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1100 });
-        await page.locator(`[data-view-key="request:prompt-widget-${index}"] .request-card-open`).click();
+        const card = page.locator(`[data-view-key="request:prompt-widget-${index}"]`);
+        await expect(card.getByText(reason, { exact: true })).toBeVisible();
+        await card.locator(".request-card-open").click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator("#contextSidebar .reader-state")).toContainText(reason);
         const firstCall = page.locator("#contextSidebar .reader-call-toggle").first();
         await expect(firstCall).toContainText("Call #1");
         await expect(firstCall).toContainText(index === 14 ? "1 tool call completed" : "1 tool call failed");
+        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Source", exact: true }).click();
+        await expect(page.locator('[data-reader-section="source"]')).toContainText(index === 14 ? "Saved author rule v10" : "Author rule version unavailable");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `origin-issue-${index}-${width}`);
         await page.locator("#closeContextSidebar").click();
@@ -152,7 +164,7 @@ test("a direct link for one call does not verify the sender or the other calls i
     await expect(reader.locator(".reader-record-limits").first()).toContainText("Copilot linked 1 of 3 tool calls directly to the prompt.");
     await expect(reader.locator(".reader-record-limits").first()).toContainText("No direct link was retained for the others.");
     await page.locator("#closeContextSidebar").click();
-    await expect(page.locator('[data-view-key="request:prompt-widget-2"] .request-card-author')).toHaveText("Author unverified");
+    await expect(page.locator('[data-view-key="request:prompt-widget-2"] .request-card-author')).toHaveText("Sender unclear");
 });
 
 test("ordinary Analyze shows complete prompt origins through filters, paging, guide and composed layouts", { timeout: 120000 }, async t => {
@@ -191,7 +203,7 @@ test("ordinary Analyze shows complete prompt origins through filters, paging, gu
     await page.keyboard.press("Enter");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("One originating prompt per matching interaction, across all pages.");
     await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
+    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["Human prompts", "Agent prompts", "Sender unclear"]);
     await expect(page.locator("#chartReferenceData tbody td")).toHaveText(["6", "33.3%", "6", "33.3%", "6", "33.3%"]);
     await page.locator("#chartReferenceData summary").click();
     await expect(page.locator("#chartReferenceData")).toContainText("missing text alone does not change authorship");

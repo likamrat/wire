@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel, saveSearchComparison } from "./live-search-fixture.mjs";
+import { corpusId } from "../lib/search-corpus-content.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { chooseTheme, selectActivityOption, openSearchFilters, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { openDatePicker } from "./analytics-date-picker.mjs";
@@ -92,8 +93,8 @@ test("normal literal fragments and exact anchors open all types and restore Back
     await waitForSearchStatus(page, "1 match");
     await expect(page.locator(`#wireSearchResults [data-search-id="${openingId}"]`)).toBeFocused();
     const cases = [["context", "subsequent medical", "/request\\?"], ["reply", "lab results", "/request\\?"],
-        ["action", "403", "layer=http"], ["tool", "workiq-fet", "privateView=required"],
-        ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "/$"],
+        ["action", "403", "/request\\?privateView=required$"], ["tool", "workiq-fet", "/$"],
+        ["service", "Calendar", "/$"], ["view", "Recorded timing", "/$"],
         ["setting", "Color palette", "section=themes&setting=palette"]];
     for (const [type, query, destination] of cases) {
         if (type === "reply") {
@@ -118,7 +119,12 @@ test("normal literal fragments and exact anchors open all types and restore Back
             assert.equal(await page.locator("#toolFilter").inputValue(), "workiq-fetch");
             assert.ok(!page.url().includes("workiq-fetch"));
         }
-        if (type === "action") await expect(page.locator("#selectedCall")).toBeVisible();
+        if (type === "action") {
+            await expect(page.locator("#selectedCall")).toBeVisible();
+            await expect(page.locator("#selectedCall")).toContainText("403");
+            await expect(page.locator("#layerFilter")).toHaveValue("http");
+        }
+        if (type === "service") await expect(page.locator("#serviceAssociationFilter")).toHaveValue("Calendar");
         if (type === "setting") await expect(page.locator("#palette-petrol")).toBeFocused();
         if (type === "context") await page.evaluate(() => {
             const panel = document.querySelector("#contextSidebar");
@@ -308,7 +314,11 @@ test("correction: page-two cross-layer action Back retains result page and focus
     const hit = page.locator("#wireSearchResults button").first(), id = await hit.getAttribute("data-search-id");
     await hit.click();
     await expect(page.locator("#selectedCall")).toBeVisible();
-    await expect(page).toHaveURL(/layer=http/);
+    await expect(page).toHaveURL(/\/request\?privateView=required$/);
+    await expect(page.locator("#layerFilter")).toHaveValue("http");
+    const selected = page.locator("#selectedCall");
+    await expect(selected).toContainText("403");
+    assert.equal(corpusId("action", ["http", await selected.getAttribute("data-action-id")]), id);
     await page.waitForTimeout(250);
     delaySnapshot = true;
     await page.goBack();

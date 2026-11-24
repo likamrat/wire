@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, fork } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -11,6 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fixture } from "./helpers.mjs";
 import { replaceEvidence, loadBoardState } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
+import { createRuntimeClient } from "../lib/runtime-client.mjs";
 import pkg from "../package.json" with { type: "json" };
 
 const exec = promisify(execFile);
@@ -21,15 +22,20 @@ const handsOn = process.env.WIRE_UPDATE_BROWSER === "manual";
 // not a replacement server or mock health endpoint. Use only a synthetic source.
 test("full WIRE clone updates on the original address and reopens the same saved report", { timeout: handsOn ? 25 * 60000 : 300000 }, async t => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "wire-full-update-"));
-    const origin = path.join(temp, "origin"), root = path.join(temp, "installed"), store = path.join(temp, "store");
+    const origin = path.join(temp, "origin"), store = path.join(temp, "store");
+    // A nested Windows install puts Git's pack-<hash>.keep beyond MAX_PATH in the stage.
+    const installName = process.platform === "win32" ? "installed".padEnd(159 - path.join(temp, ".git", "wire-updates").length - 1, "-") : "installed";
+    const root = path.join(temp, installName);
     const env = { ...process.env, COPILOT_HOME: path.join(temp, "empty-source"), GH_CONFIG_DIR: path.join(temp, "empty-gh"),
         WORKIQ_EVIDENCE_DATA_DIR: store, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: path.join(temp, "no-git-config"),
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1", npm_config_audit: "false", npm_config_fund: "false" };
     for (const key of Object.keys(env)) if (/^(?:GH|GITHUB|COPILOT).*TOKEN$/.test(key) || key === "NODE_OPTIONS") delete env[key];
     const git = async (cwd, ...args) => (await exec("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
         "-c", "commit.gpgSign=false", ...args], { cwd, env, maxBuffer: 4 * 1024 * 1024 })).stdout.trimEnd();
-    let app, ended, stderr = "", stdout = "";
+    let app, ended, independent, independentExit, stderr = "", stdout = "";
     t.after(async () => {
+        if (independent?.connected) independent.disconnect();
+        if (independentExit) await independentExit;
         if (app?.connected) app.disconnect();
         if (ended) {
             const timer = setTimeout(() => app.kill(), 12000);
@@ -71,15 +77,18 @@ test("full WIRE clone updates on the original address and reopens the same saved
     const reportHashes = await Promise.all(Object.values(bundle.files).map(async file => [file, hash(await readFile(file))]));
     const configBytes = await readFile(cfgPath);
     // The injection substitutes only the repository address for this local qualification.
-    const sourceURL = pathToFileURL(path.join(root, "lib", "update-source.mjs")).href;
-    const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
+    async function originHook(installation, name) {
+        const sourceURL = pathToFileURL(path.join(installation, "lib", "update-source.mjs")).href;
+        const seam = `import {createUpdateSource} from ${JSON.stringify(sourceURL)};
         export const {inspectInstallation,checkMain,stageMain}=createUpdateSource({fixtureRemote:${JSON.stringify(origin)}});`;
-    const hook = path.join(temp, "fixture-origin.mjs");
-    await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
-        if(c.parentURL===${JSON.stringify(pathToFileURL(path.join(root, "lib", "update-launch.mjs")).href)}&&s==="./update-source.mjs")
+        const hook = path.join(temp, name);
+        await writeFile(hook, `import{registerHooks}from'node:module';registerHooks({resolve(s,c,next){
+        if(c.parentURL===${JSON.stringify(pathToFileURL(path.join(installation, "lib", "update-launch.mjs")).href)}&&s==="./update-source.mjs")
         return {url:${JSON.stringify("data:text/javascript," + encodeURIComponent(seam))},shortCircuit:true};return next(s,c)}});`);
+        return pathToFileURL(hook).href;
+    }
     app = fork(path.join(root, "scripts/launch.mjs"), ["--port","0"], {
-        cwd: root, env: { ...env, NODE_OPTIONS: "--import=" + pathToFileURL(hook).href }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
+        cwd: root, env: { ...env, NODE_OPTIONS: "--import=" + await originHook(root, "fixture-origin.mjs") }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
     app.stdout.on("data", data => { stdout += data; }); app.stderr.on("data", data => { stderr += data; });
     ended = new Promise(resolve => app.once("exit", resolve));
     async function until(work, timeout = 90000, interval = 120) {
@@ -164,45 +173,121 @@ test("full WIRE clone updates on the original address and reopens the same saved
     if (process.env.WIRE_UPDATE_BROWSER === "1") {
         await post("api/app-update/release-panel", {});
         const { chromium, expect } = await import("@playwright/test");
+        const slots = async directory => (await readdir(path.join(directory, ".git", "wire-updates"), { withFileTypes: true }))
+            .filter(entry => entry.isDirectory()).length;
         const windows = process.platform === "win32";
         const browser = await chromium.launch(windows ? { channel: "msedge", headless: false } : {});
         t.diagnostic(`${windows ? "Microsoft Edge Stable" : "Chromium"} ${browser.version()}`);
         try {
             const browsing = await browser.newContext(), page = await browsing.newPage();
+            const applyAttempts = [];
+            const recordApply = request => {
+                if (request.url() === url + "api/app-update" && request.postDataJSON()?.action === "apply") applyAttempts.push(request);
+            };
+            page.on("request", recordApply);
+            const independentRoot = path.join(temp, "independent"), independentStore = path.join(temp, "independent-store");
+            await git(temp, "clone", "-q", origin, independentRoot);
+            await exec(process.execPath, [npm, "ci", "--include=dev"], { cwd: independentRoot, env });
+            await exec(process.execPath, [npm, "run", "build"], { cwd: independentRoot, env });
+            independent = fork(path.join(independentRoot, "scripts/launch.mjs"), ["--port", "0"], {
+                cwd: independentRoot, env: { ...env, WORKIQ_EVIDENCE_DATA_DIR: independentStore,
+                    NODE_OPTIONS: "--import=" + await originHook(independentRoot, "other-origin.mjs") }, execArgv: [], stdio: ["ignore","pipe","pipe","ipc"] });
+            independentExit = new Promise(resolve => independent.once("exit", resolve));
+            let announcement = "";
+            independent.stdout.on("data", bytes => { announcement += bytes; });
+            const otherUrl = await until(() => announcement.match(/ready at (http:\/\/127\.0\.0\.1:\d+\/)/)?.[1]);
+            const separate = await browsing.newPage(), independentHealth = () => fetch(otherUrl + "health").then(r => r.json());
+            await separate.goto(otherUrl + "settings");
+            await expect(separate.locator("#appUpdateAuto")).toBeEnabled();
+            const independentBefore = await independentHealth();
+            assert.notEqual(otherUrl, url); assert.notEqual(independentBefore.runtimeId, original.runtimeId);
             page.on("requestfailed", req => {
                 if (req.resourceType() === "script") t.diagnostic(`Script request failed: ${new URL(req.url()).pathname} (${req.failure()?.errorText})`);
             });
-            await browsing.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin
+            const alias = new URL(url); alias.hostname = "localhost";
+            await browsing.route("**/*", route => (new URL(route.request().url()).origin === new URL(url).origin
+                || route.request().isNavigationRequest() && route.request().url() === alias.href)
                 ? route.continue() : route.abort());
+            // A clean Settings page can reload even while a manual read-only check is in flight.
+            let firstCheck = true;
+            const readStarted = Promise.withResolvers(), finishRead = Promise.withResolvers();
+            const slowOpeningCheck = async route => {
+                if (!firstCheck || route.request().postDataJSON()?.action !== "check") return route.fallback();
+                firstCheck = false;
+                const response = await route.fetch();
+                readStarted.resolve(); await finishRead.promise;
+                await route.fulfill({ response }).catch(() => {}); // The original document left.
+            };
+            await page.route("**/api/app-update", slowOpeningCheck);
             await page.goto(url + "settings?section=general");
+            await expect(page.locator("#settingsView")).toBeVisible();
+            await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            await page.getByRole("button", { name: "Check for updates" }).click();
+            await readStarted.promise;
+            try { await page.reload(); } finally { finishRead.resolve(); }
+            await page.unroute("**/api/app-update", slowOpeningCheck);
             const check = page.getByRole("button", { name: "Check for updates" });
             await expect(check).toBeEnabled({ timeout: 30000 });
             const heading = page.locator("#appUpdateVersion"), status = page.locator("#appUpdateStatus");
             const before = await health();
             await expect(heading).toHaveText(`WIRE v${pkg.version}`);
             await expect(page.getByRole("switch", { name: "Automatically check for updates" })).toBeChecked();
-            const other = await browsing.newPage();
+            const peerContext = await browser.newContext();
+            await peerContext.route("**/*", r => new URL(r.request().url()).origin === new URL(url).origin ? r.continue() : r.abort());
+            const other = await peerContext.newPage();
+            other.on("request", recordApply);
             await other.goto(url + "settings");
             const otherCheck = other.getByRole("button", { name: "Check for updates" });
             await expect(other.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            await other.route("**/api/app-update", async route => {
+                if (route.request().postDataJSON()?.action !== "check") return route.fallback();
+                const response = await route.fetch();
+                await delay(4000);
+                await route.fulfill({ response });
+            });
             const completed = other.waitForResponse(r => r.url() === url + "api/app-update" && r.request().postDataJSON()?.action === "check");
             await otherCheck.click();
+            await other.emulateMedia({ reducedMotion: "reduce" });
+            await expect(other.locator("#appUpdateCheck .update-spinner")).toHaveCSS("animation-name", "none");
             assert.equal((await (await completed).json()).phase, "current");
-            await expect(otherCheck).toBeEnabled();
+            await expect(otherCheck).toBeEnabled({ timeout: 2000 });
+            await other.unroute("**/api/app-update");
             await page.bringToFront();
             await appendFile(path.join(origin, "web", "browser-entry.mjs"), '\ndocument.documentElement.dataset.wireFixtureBuild = "updated";\n');
             await git(origin, "commit", "-qam", "Fixture update from browser");
             const tip = await git(origin, "rev-parse", "HEAD");
             const checked = page.waitForResponse(response => response.url() === url + "api/app-update"
                 && response.request().postDataJSON().action === "check");
+            const checkBox = await check.boundingBox();
+            const checkStarted = performance.now();
             await check.click();
             await expect(status).toHaveText("Checking for updates");
+            const pending = page.getByRole("button", { name: "Checking", exact: true });
+            await expect(pending.locator(".update-spinner")).toBeVisible();
+            const rotation = () => pending.locator(".update-spinner").evaluate(n => getComputedStyle(n).transform);
+            await expect.poll(rotation).not.toBe(await rotation());
+            assert.deepEqual(await pending.boundingBox(), checkBox);
             const offer = await (await checked).json();
             assert.equal(offer.installed, before.build); assert.equal(offer.candidate, tip);
             await expect(status).toHaveText("Update available.");
+            assert.ok(performance.now() - checkStarted >= 3000);
             const action = { name: "Update and restart", exact: true };
             await expect(page.locator("#appUpdateNotice").getByRole("button", action)).toBeVisible();
             await expect(check).toBeHidden();
+            const adapter = createRuntimeClient(new URL(url).origin, { requireEnforced: true });
+            await adapter.open("fixture-adapter");
+            const extra = await browsing.newPage();
+            await extra.goto(alias.href);
+            assert.equal(new URL(extra.url()).origin, new URL(url).origin);
+            await expect(extra.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            await expect(extra.locator("#appUpdateCheck")).toBeEnabled();
+            await extra.goto(url + "settings");
+            await expect(extra.locator("#appUpdateAuto")).toBeEnabled();
+            await expect(extra.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+            await extra.close({ runBeforeUnload: true });
+            await fetch(url + "settings").then(r => r.text()); // A document fetched but never mounted.
+            await other.locator('#settingsCategoryNav [data-category="source-access"]').click();
+            await other.locator("#reviewSource,#editSource").filter({ visible: true }).first().click();
             if (process.env.WIRE_APP_UPDATE_PROOFS) {
                 await mkdir(process.env.WIRE_APP_UPDATE_PROOFS, { recursive: true });
                 await page.screenshot({ path: path.join(process.env.WIRE_APP_UPDATE_PROOFS, "windows-settings-offer.png"), animations: "disabled" });
@@ -213,15 +298,34 @@ test("full WIRE clone updates on the original address and reopens the same saved
             assert.equal(refusal.status(), 409);
             const { error, code } = await refusal.json();
             assert.equal(code, "wire_update_blocked");
-            await expect(page.locator("#appUpdateHeading")).toHaveText("Update not installed");
-            await expect(page.locator("#appUpdateDetail")).toHaveText(error);
+            assert.match(error, /Settings edit/);
             await expect(status).toContainText(error);
+            await expect(page.locator("#appUpdateNotice")).toBeHidden();
             assert.equal((await health()).build, before.build);
-            await other.close({ runBeforeUnload: true });
+            await other.locator("#cancelSource").click();
+            await other.locator('#settingsCategoryNav [data-category="general"]').click();
+            await otherCheck.click();
+            const peerInstall = other.locator(".app-version-card").getByRole("button", action);
+            await expect(peerInstall).toBeEnabled({ timeout: 30000 });
+            const activationsBefore = stdout.match(/WIRE ready at /g).length;
+            const slotsBefore = await slots(root);
             const applied = page.waitForRequest(request => request.url() === url + "api/app-update" && request.postDataJSON().action === "apply");
-            await page.locator(".app-version-card").getByRole("button", action).click({ timeout: 30000 });
+            // Dispatch gestures in the same turn across separate browser contexts.
+            await Promise.all([page.locator(".app-version-card").getByRole("button", action), peerInstall]
+                .map(button => button.evaluate(node => node.click())));
             assert.equal((await applied).postDataJSON().candidate, tip);
+            await expect(page.locator("#appUpdateFence")).toBeVisible();
+            await expect(page.locator("#appUpdateNotice")).toBeHidden();
+            await expect(other.locator("#appUpdateFence")).toBeVisible();
+            await until(async () => {
+                const text = await status.innerText().catch(() => "");
+                if (text.startsWith("Update not installed")) throw Error(text);
+                return (await health().catch(() => null))?.build === tip;
+            });
             await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
+            await expect(other.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
+            await expect(other.locator("#appUpdateCheck")).toBeEnabled();
+            assert.equal(await other.locator("html").getAttribute("data-wire-fixture-build"), "updated");
             await expect(page.locator("#appUpdateDetail")).toHaveText(`WIRE v${pkg.version} is running.`);
             const after = await health();
             assert.equal(after.build, tip); assert.notEqual(after.runtimeId, before.runtimeId);
@@ -232,7 +336,16 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await expect(page.getByRole("button", action)).toHaveCount(0);
             assert.equal(await page.locator("html").getAttribute("data-wire-fixture-build"), "updated");
             assert.equal(new URL(page.url()).origin, new URL(url).origin);
-            t.diagnostic(`Settings: ${before.build} → offered/applied ${offer.candidate} → running ${after.build} at ${new URL(url).origin}`);
+            assert.equal(new URL(other.url()).origin, new URL(url).origin);
+            assert.equal(stdout.match(/WIRE ready at /g).length, activationsBefore + 1);
+            assert.equal(await slots(root), slotsBefore + 1);
+            assert.equal(applyAttempts.length, 3, "one refused gesture, then two gestures for one activation");
+            assert.equal((await independentHealth()).runtimeId, independentBefore.runtimeId);
+            await expect(separate.locator("#appUpdateFence")).toBeHidden();
+            await expect(separate.locator("#appUpdateCheck")).toBeEnabled();
+            assert.equal(await slots(independentRoot), 0);
+            await assert.rejects(adapter.action("fixture-adapter", "get_summary", {}), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+            t.diagnostic(`Two Edge views, one restart at ${new URL(url).origin}: ${before.build} → ${after.build}. Independent ${new URL(otherUrl).origin} stayed on ${independentBefore.build}.`);
         } finally { await browser.close(); }
         cap = await getPage();
         assert.ok(await post("api/report/open", { bundleId: bundle.bundleId }));

@@ -75,16 +75,17 @@ function geometry() {
             key: node.dataset.breakdown || (node.matches(".analyze-outcome-summary") ? "outcomes" : "time"),
             ...box(node), content: node.innerText, rowSpan: node.style.gridRowEnd,
         }));
-    const bounds = box(root);
-    const gaps = cards.map(card => {
-        const above = cards.filter(other => Math.abs(card.x - other.x) < 1 && other.bottom <= card.y + .1);
+    const bounds = box(root), list = box(document.querySelector("#activityView"));
+    const sections = [...cards, { key: "interactions", ...list }];
+    const gaps = sections.map(card => {
+        const above = sections.filter(other => other.x < card.right && other.right > card.x && other.bottom <= card.y + .1);
         return { key: card.key, gap: card.y - Math.max(bounds.y, ...above.map(other => other.bottom)) };
     });
     const ring = root.querySelector(".percentage-ring"), legend = root.querySelector("#outcomeChart .percentage-legend");
     const text = [...root.querySelectorAll(".percentage-label,.percentage-value")].filter(node => node.checkVisibility());
-    return { cards, bounds, gaps, ring: ring && box(ring), legend: legend && box(legend),
+    const widgetHeight = bounds.height - list.height - parseFloat(getComputedStyle(root).columnGap);
+    return { cards, bounds, gaps, list, widgetHeight, ring: ring && box(ring), legend: legend && box(legend),
         count: document.querySelector("#activityCount").textContent,
-        listY: box(document.querySelector("#activityListContext")).y,
         fontLoaded: document.fonts.check('600 30px "Asta Sans"'),
         typography: text.map(node => {
             const css = getComputedStyle(node);
@@ -96,7 +97,7 @@ function geometry() {
         }),
         clipped: text.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
         overflow: document.documentElement.scrollWidth - innerWidth,
-        unusedArea: bounds.width * bounds.height - cards.reduce((sum, card) => sum + card.width * card.height, 0),
+        unusedArea: bounds.width * widgetHeight - cards.reduce((sum, card) => sum + card.width * card.height, 0),
     };
 }
 function assertPacking(value, key) {
@@ -104,14 +105,15 @@ function assertPacking(value, key) {
     assert.ok(value.overflow <= 1, key);
     assert.deepEqual(value.clipped, [], key);
     for (const track of value.tracks) if (track.columns > 1) assert.ok(track.gap >= 8, "Inline labels, bars and values keep their horizontal separation");
-    assert.deepEqual(value.cards.map(card => card.key), ["outcomes", "time", "models", "tools", "services", "authors"], "Compact prompt authors follow the existing breakdowns without changing their reading order");
+    assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "tools", "services", "models", "authors"]);
     for (const card of value.cards) for (const other of value.cards) if (card !== other) {
         assert.ok(card.right <= other.x + 1 || other.right <= card.x + 1 || card.bottom <= other.y + 1 || other.bottom <= card.y + 1,
             `${key}: ${card.key} and ${other.key} do not overlap`);
     }
     for (const { key: name, gap } of value.gaps) assert.ok(gap >= -.1 && gap <= 18,
         `${key}: ${name} follows the actual card above, not a taller neighboring row (${gap}px)`);
-    assert.ok(value.listY >= Math.max(...value.cards.map(card => card.bottom)), `${key}: matching records follow all widgets`);
+    for (const card of value.cards) assert.ok(["time","outcomes"].includes(card.key)
+        ? card.bottom <= value.list.top : card.top >= value.list.bottom, `${key}: Interactions separates the charts from the breakdowns`);
 }
 
 test("whole dashboard packs sparse, populated and long-label widgets without reserved empty bands", async () => {
@@ -154,7 +156,7 @@ test("whole dashboard packs sparse, populated and long-label widgets without res
         if (value.kind === "reference" && value.width >= 1440) {
             if (before) {
                 assert.ok(value.unusedArea < before.unusedArea * .6, `${value.key}: remove at least 40% of unused dashboard area`);
-                assert.ok(value.bounds.height < before.bounds.height, `${value.key}: shorter total dashboard, not stretched cards`);
+                assert.ok(value.widgetHeight < (before.widgetHeight ?? before.bounds.height), `${value.key}: shorter widget area, not stretched cards`);
             }
         }
     }

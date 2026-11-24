@@ -96,7 +96,7 @@ test("late, failed and equal-count mismatched unions cannot replace the accepted
     await selectActivityOption(page, "outcomeFilter", ["unknown", "other"]); await ready(page);
     assert.match(await page.locator("#message").innerText(), /Synthetic union failure/);
     assert.deepEqual(await selectedResults(page), ["success", "partial"]);
-    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("result"), "success,partial");
+    assert.equal(new URL(page.url()).searchParams.has("result"), false);
     await page.unroute("**/api/snapshot");
     await page.route("**/api/snapshot", async route => {
         const input = route.request().postDataJSON();
@@ -248,14 +248,14 @@ test("pending, failed, late and malformed reads keep the complete last accepted 
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "unknown");
     assert.deepEqual(await rowIds(page), ["request:shared-result-2"]);
-    assert.match(page.url(), /result=unknown/);
+    assert.doesNotMatch(page.url(), /[?&]result=/);
     await page.unroute("**/api/snapshot");
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Synthetic result filter failure" } }));
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "unknown");
     assert.match(await page.locator("#message").innerText(), /Synthetic result filter failure/);
     assert.match(await page.locator("#periodResult").innerText(), /Previous results/);
-    assert.match(page.url(), /result=unknown/);
+    assert.doesNotMatch(page.url(), /[?&]result=/);
     await page.unroute("**/api/snapshot");
     await page.route("**/api/snapshot", async route => {
         const response = await route.fetch(), snapshot = await response.json();
@@ -335,7 +335,7 @@ test("choosing the accepted value cancels newer intent and an unchanged backgrou
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.outcomes?.[0] === "failure");
     release(); await late;
-    assert.match(page.url(), /result=success/);
+    assert.doesNotMatch(page.url(), /[?&]result=/);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     await page.locator("#outcomeFilter-control").press("ArrowDown");
     await page.locator("#outcomeFilter-control").press("ArrowDown");

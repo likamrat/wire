@@ -203,9 +203,10 @@ test("custom pairs keep units, members, collapse and day through the real period
     await nav.getByRole("button",{name:"Chart guide"}).click();await expect(page.locator(".trends-guide")).toContainText("95th percentile");
     await page.goBack();await expect(second).toHaveValue(JSON.stringify(["timing","timing","p95"]));
     const periodTransfer=page.locator("#trendsComparePeriods");
+    const comparing = page.waitForRequest("**/api/period-comparison");
     await periodTransfer.click();await page.getByRole("button",{name:"Open comparison",exact:true}).click();
-    await expect(page).toHaveURL(/\/compare\?/);
-    const u=new URL(page.url());assert.deepEqual(["aFrom","aTo","bFrom","bTo"].map(k=>u.searchParams.get(k)),["2026-11-05","2026-11-11","2026-11-12","2026-11-18"]);
+    await expect(page).toHaveURL(/\/compare$/);
+    assert.deepEqual((await comparing).postDataJSON().periods, { baseline: { from: "2026-11-05", to: "2026-11-11" }, later: { from: "2026-11-12", to: "2026-11-18" } });
     await expect(page.locator("#analyzeResultCommands")).toBeHidden();
     await expect(page.locator("#analyzeRefresh")).toBeHidden();
     await expect(page.locator("#comparisonOptionsSlot #openAnalyzeFilters")).toBeVisible();
@@ -490,7 +491,7 @@ test("compiled Trends uses the exact daily populations on both chart types and k
         const names = await panel.locator("[data-trend-mark]").evaluateAll(ns => ns.map(n => n.getAttribute("aria-label")));
         await screenshot(page, `measure-${id}-columns`);
         if (id === "authors") {
-            for (const [actor, text, role] of [["user","Human prompts","author-user"],["agent","Agent prompts","author-agent"],["unknown","Author unverified","author-unknown"]]) {
+            for (const [actor, text, role] of [["user","Human prompts","author-user"],["agent","Agent prompts","author-agent"],["unknown","Sender unclear","author-unknown"]]) {
                 const legend = panel.locator(".trends-series").filter({has:page.getByRole("checkbox",{name:`Show ${text}`,exact:true})});
                 const glyph = legend.locator(".trends-author-icon");
                 await expect(glyph).toHaveAttribute("data-icon-role",role);

@@ -17,7 +17,7 @@ const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-b
 const visiblePanel = page => page.locator(".trends-panel:visible");
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const day = "2026-09-30";
-const privateTrends = "/trends?privateView=required";
+const privateTrends = "/trends?section=charts&privateView=required";
 const builds = new Map();
 test.before(async () => {
     for (const renderer of ["react", "bundled"]) builds.set(renderer, await loadBrowserAssets({ renderer }));
@@ -32,7 +32,7 @@ async function setup(t, frontend, records) {
         historyCoverage: null, historyIssues: [], metrics: {}, cadence: null };
     const browser = await chromium.launch({ channel: process.env.WIRE_FRONTEND_BROWSER });
     const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, timezoneId: "America/Los_Angeles", reducedMotion: "reduce" });
-    const reads = [], errors = [], denied = [];
+    const reads = [], comparisons = [], errors = [], denied = [];
     t.after(async () => {
         try { await browser.close(); assert.deepEqual(state, before); }
         finally { assert.deepEqual(errors, []); assert.deepEqual(denied, []); }
@@ -55,7 +55,7 @@ async function setup(t, frontend, records) {
             if (p === "/api/snapshot") return json({ ...await currentStatePayload({ sessionId: "memory-only" }, { ...state, revision }, body), collection: { ...collection, revision } });
             if (p === "/api/collection/status") return json({ ...collection, revision });
             if (p === "/api/trends") { reads.push(body); return json(buildTrends({ ...state, revision }, body)); }
-            if (p === "/api/period-comparison") return json(buildPeriodComparison({ ...state, revision }, body));
+            if (p === "/api/period-comparison") { comparisons.push(body.periods); return json(buildPeriodComparison({ ...state, revision }, body)); }
             if (p === "/api/assessment/overview" || p === "/api/assessment/detail") {
                 const model = cachedAssessmentModel({ ...state, revision });
                 return json({ schemaVersion: 1, basis: model.basis, data: p.endsWith("/overview")
@@ -67,7 +67,7 @@ async function setup(t, frontend, records) {
         }
         denied.push(p); return route.abort();
     });
-    return { page, reads, url, advanceRevision: () => { revision++; } };
+    return { page, reads, comparisons, url, advanceRevision: () => { revision++; } };
 }
 function records() {
     return ["fetch", "retrieve"].map((tool, i) => {
@@ -103,7 +103,7 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     await page.locator("#closeAnalyzeFilters").click();
     await page.locator("nav [data-nav=trends]").click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
-    await expect(page).toHaveURL(url + "/trends?measure=services");
+    await expect(page).toHaveURL(url + "/trends?section=charts");
     const index = page.getByRole("navigation", { name: "Trend measures" });
     await index.getByRole("button", { name: "Prompt authors", exact: true }).click();
     await page.reload(); await expect(visiblePanel(page)).toHaveAttribute("data-family", "authors");
@@ -115,7 +115,8 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
     assert.deepEqual(reads.slice(count).map(read => read.filters), [{ author: "user" }]);
     await page.getByRole("button", { name: "Back to Analyze" }).click();
-    await expect(page).toHaveURL(url + "/?authors=user");
+    await expect(page).toHaveURL(url + "/");
+    await expect(page.locator("#promptAuthorFilter")).toHaveValues(["user"]);
     await page.goto(url + "/trends");
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "services");
     await page.locator("nav [data-nav=analyze]").click(); await ready(page);
@@ -125,7 +126,7 @@ test("page defaults: direct Analyze and sidebar Trends use real scopes; selectio
     await expect(page.locator("#dateFilter")).toHaveValue("capture");
 });
 test("page defaults: direct and sidebar Compare start on complete civil days; Back and explicit pairs win", async t => {
-    const { page, url } = await pageEntryFixture(t);
+    const { page, url, comparisons } = await pageEntryFixture(t);
     async function checkSelected(days) {
         const panel = await openDatePicker(page, "compare");
         await expect(panel.getByRole("button", { name: `Last ${days} days`, exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -134,8 +135,9 @@ test("page defaults: direct and sidebar Compare start on complete civil days; Ba
     async function check14() {
         await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
         await checkSelected(14);
-        const p = new URL(page.url()).searchParams;
-        assert.deepEqual(["aFrom", "aTo", "bFrom", "bTo"].map(key => p.get(key)),
+        await expect(page).toHaveURL(url + "/compare");
+        const { baseline, later } = comparisons.at(-1);
+        assert.deepEqual([baseline.from, baseline.to, later.from, later.to],
             ["2026-09-03", "2026-09-16", "2026-09-17", "2026-09-30"]);
     }
     await page.goto(url + "/trends?section=guide");
@@ -144,7 +146,6 @@ test("page defaults: direct and sidebar Compare start on complete civil days; Ba
     await openDatePicker(page, "compare", "Last 7 days");
     await checkSelected(7);
     await page.reload(); await checkSelected(7);
-    await page.goBack(); await check14();
     await page.goBack(); await expect(page.locator(".trends-guide")).toBeVisible();
     await page.goto(url + "/compare"); await check14();
     await page.goBack(); await expect(page.locator(".trends-guide")).toBeVisible();
@@ -153,10 +154,10 @@ test("page defaults: direct and sidebar Compare start on complete civil days; Ba
     await page.locator("#trendsComparePeriods").click();
     await page.getByRole("button", { name: "Open comparison" }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    assert.equal(new URL(page.url()).searchParams.get("bFrom"), day);
-    assert.equal(new URL(page.url()).searchParams.get("bTo"), day);
+    await expect(page).toHaveURL(url + "/compare");
+    assert.deepEqual([comparisons.at(-1).later.from, comparisons.at(-1).later.to], [day, day]);
     await page.getByRole("button", { name: "Back to Trends" }).click();
-    await expect(page).toHaveURL(bounded);
+    await expect(page).toHaveURL(url + "/trends?section=charts");
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "tools");
 });
 test("page defaults: changing a preference updates the next untouched sidebar entry, not browser Back", async t => {
@@ -168,7 +169,7 @@ test("page defaults: changing a preference updates the next untouched sidebar en
     await navigateSettings(page, "trends");
     await selectActivityOption(page, "defaultTrendChart", "models");
     const sidebar = page.locator("nav [data-nav=trends]");
-    await expect(sidebar).toHaveAttribute("href", "/trends?measure=models");
+    await expect(sidebar).toHaveAttribute("href", "/trends?section=charts");
     await sidebar.click();
     await expect(visiblePanel(page)).toHaveAttribute("data-family", "models");
     await page.goBack(); await page.goBack(); await page.goBack();
@@ -354,7 +355,7 @@ test("accepted private Search and weekly grouping stay in Analyze, not in the Tr
     await expect(page.locator("#activitySearch")).toHaveValue(query); await expect(link).toBeFocused();
 });
 
-test("compiled Trends restores explicit period and measure via URL, reload and Back without a default read", async t => {
+test("compiled Trends accepts legacy dates and restores the period without adding filter history", async t => {
     const { page, url, reads } = await setup(t, "react", records());
     await page.clock.setFixedTime(new Date("2026-11-20T05:30:00Z")); // Nov 19 in the display zone
     await page.goto(url + "/trends?measure=models&period=14");
@@ -362,27 +363,27 @@ test("compiled Trends restores explicit period and measure via URL, reload and B
     await expect(panel).toHaveAttribute("data-family", "models");
     assert.deepEqual(reads.map(({ from, to }) => [from, to]), [["2026-11-06", "2026-11-19"]]);
     await index.getByRole("button", { name: "Services", exact: true }).click();
-    await expect(page).toHaveURL(url + "/trends?measure=services&period=14");
+    await expect(page).toHaveURL(url + "/trends?section=charts");
     assert.equal(reads.length, 1, "presentation alone must not reread the projection");
     await page.locator("#trendsPeriod").click();
     await page.getByRole("button", { name: "Last 30 days", exact: true }).click();
-    await expect(page).toHaveURL(url + "/trends?measure=services&period=30");
+    await expect.poll(() => reads.at(-1).from).toBe("2026-10-21");
+    await expect(page).toHaveURL(url + "/trends?section=charts");
     await page.reload(); await expect(panel).toHaveAttribute("data-family", "services");
     assert.deepEqual(reads.map(r => [r.from, r.to, r.timeContext.timeZone]), [
         ["2026-11-06", "2026-11-19", "America/Los_Angeles"],
         ["2026-10-21", "2026-11-19", "America/Los_Angeles"],
         ["2026-10-21", "2026-11-19", "America/Los_Angeles"],
     ]);
-    await page.goBack(); await expect(page).toHaveURL(url + "/trends?measure=services&period=14");
-    await expect.poll(() => reads.at(-1).from).toBe("2026-11-06");
-    await page.goBack(); await expect(panel).toHaveAttribute("data-family", "models");
+    await index.getByRole("button", { name: "Response models", exact: true }).click();
+    await expect(panel).toHaveAttribute("data-family", "models");
     await page.locator("#trendsPeriod").click();
     await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     await page.getByLabel("Trends from", { exact: true }).fill(day);
     await page.getByLabel("Trends to", { exact: true }).fill(day);
     await page.getByRole("button", { name: "Apply dates", exact: true }).click();
-    const custom = `${url}/trends?measure=models&period=custom&from=${day}&to=${day}`;
-    await expect(page).toHaveURL(custom);
+    await expect.poll(() => reads.at(-1).from).toBe(day);
+    await expect(page).toHaveURL(url + "/trends?section=charts");
     await page.reload(); await expect(panel).toHaveAttribute("data-family", "models");
     assert.deepEqual([reads.at(-1).from, reads.at(-1).to], [day, day]);
 });
@@ -431,7 +432,8 @@ test("compiled Trends keeps explicit filters tab-bound, never broadens on expire
     await selectActivityOption(page, "trendsTool", "workiq-fetch");
     await selectActivityOption(page, "trendsService", "Calendar");
     await page.getByRole("button", { name: "Apply filters", exact: true }).click();
-    await expect(page).toHaveURL(publicRoute + "&privateView=required");
+    const clean = `${url}/trends?section=charts`;
+    await expect(page).toHaveURL(clean);
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /workiq-fetch|Calendar/);
     const filters = { tool: "workiq-fetch", service: "Calendar" };
     assert.deepEqual(reads.at(-1).filters, filters);
@@ -439,9 +441,13 @@ test("compiled Trends keeps explicit filters tab-bound, never broadens on expire
     await expect(entry).toHaveAccessibleName("2 filters applied");
     await entry.click();
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
-    await expect(page).toHaveURL(publicRoute);
+    await expect(page).toHaveURL(clean);
     await expect(entry).toHaveText("Filters");
-    await page.goBack(); await expect(page).toHaveURL(publicRoute + "&privateView=required");
+    await entry.click();
+    await selectActivityOption(page, "trendsTool", "workiq-fetch");
+    await selectActivityOption(page, "trendsService", "Calendar");
+    await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+    await expect(page).toHaveURL(clean);
     await expect.poll(() => reads.at(-1).filters).toEqual(filters);
     await expect(entry).toHaveText("2 filters applied");
     const privateCount = reads.length;
@@ -476,7 +482,7 @@ test("compiled Trends keeps an implicit historical week adaptive across measure 
     await expect.poll(() => reads.at(-1)?.to).toBe(day);
     await page.getByRole("button", { name: "Charts", exact: true }).click();
     await index.getByRole("button", { name: "Services", exact: true }).click();
-    const adaptive = url + "/trends?measure=services";
+    const adaptive = url + "/trends?section=charts";
     await expect(page).toHaveURL(adaptive);
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-09-30|privateView/);
     const count = reads.length;
@@ -484,9 +490,11 @@ test("compiled Trends keeps an implicit historical week adaptive across measure 
     await expect.poll(() => reads.slice(count).map(r => r.to)).toEqual(["2026-11-19", day]);
     await page.locator("#trendsPeriod").click();
     await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
-    await expect(page).toHaveURL(adaptive + "&period=7");
+    await expect.poll(() => reads.at(-1)?.to).toBe("2026-11-19");
+    await expect(page).toHaveURL(adaptive);
     await page.getByRole("button", { name: /^Show week ending / }).click();
-    await expect(page).toHaveURL(adaptive + "&privateView=required");
+    await expect.poll(() => reads.at(-1)?.to).toBe(day);
+    await expect(page).toHaveURL(adaptive);
     assert.equal(reads.at(-1).to, day);
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify(history.state)), /2026-09-30/);
     const privateCount = reads.length;

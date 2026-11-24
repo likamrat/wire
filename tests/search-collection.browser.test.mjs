@@ -376,7 +376,7 @@ test("normal Search survives quiet automatic collection and fences real source c
     await expect(page.locator("#selectedCall")).toContainText("workiq-retrieve");
     const address = new URL(page.url());
     assert.equal(address.pathname, "/request");
-    assert.deepEqual([...address.searchParams].sort(), [["layer", "tool"], ["privateView", "required"]]);
+    assert.deepEqual([...address.searchParams], [["privateView", "required"]]);
     assert.equal(address.hash, "");
     await page.goBack();
     await expect(input).toHaveValue("workiq-retriev");

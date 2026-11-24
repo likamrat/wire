@@ -653,7 +653,7 @@ test("percentage links drill down without duplicate help or a second keyboard ac
         if (proxy) assert.deepEqual(proxy, { tabIndex: -1, hidden: "true", sameRoute: true }, "Painted pointer proxies share the visible label's route, never a second keyboard stop");
     }
     await legend.tap(); await ready(page); await noTooltip(page);
-    assert.equal(new URL(page.url()).searchParams.get("result"), "success");
+    assert.equal(new URL(page.url()).searchParams.has("result"), false);
     await page.goBack(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.deepEqual(writes, []);

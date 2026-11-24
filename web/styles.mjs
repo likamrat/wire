@@ -737,6 +737,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .card-reading-details>.card-reading-actions {padding:0;justify-content:flex-start}
 .card-reading-details .card-reading-actions>.card-panel-link {margin-inline-start:0}
 .card-request-context {min-width:0;max-width:78ch;display:grid;align-content:start;gap:8px}
+.request-card-origin-reason {margin:0;color:var(--muted);font-size:var(--type-small);line-height:var(--leading-ui)}
 .card-request-context .request-card-summary {margin:0;gap:4px 12px}
 :is(.card-request-context .request-card-summary,.card-orientation):empty {display:none}
 .card-metadata {--author-icon-size:max(var(--icon-size-small),calc(1.05 * var(--type-small)));--author-gutter:calc(var(--author-icon-size) + 6px);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;padding-inline-start:var(--author-gutter);min-width:0;color:var(--muted);font:var(--type-caption)/var(--leading-ui) var(--font)}

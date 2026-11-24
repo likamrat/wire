@@ -173,7 +173,7 @@ test("private Search, dates, authors and outcome union survive independent tool,
         const filters = reads.at(-1).filters;
         assert.deepEqual(filters.promptAuthors, ["user"]); assert.deepEqual(filters.services, ["Files"]);
         assert.equal(filters.from, "2026-09-30"); assert.equal(filters.to, "2026-09-30");
-        if (topic === "services") assert.equal(new URL(page.url()).searchParams.get("withinServices"), "Files");
+        if (topic === "services") assert.equal(new URL(page.url()).searchParams.has("withinServices"), false);
         assert.deepEqual(sorted(filters.outcomes), topic === "outcomes" ? ["failure"] : ["failure", "success"]);
         await page.goBack(); await ready(page); await expect(page).toHaveURL(origin);
         await parents(page, ids(0, 2, 4, 6)); await expect(page.locator("#activityCount")).toHaveText("5");
@@ -182,7 +182,9 @@ test("private Search, dates, authors and outcome union survive independent tool,
     await page.getByRole("button", { name: "Remove missing-service context" }).click(); await ready(page);
     await closeAnalyzeFilters(page);
     await expect(page.locator("#activityCount")).toHaveText("4"); await parents(page, ids(0, 2, 4, 6));
-    await page.goBack(); await ready(page); await expect(page.locator("#activityCount")).toHaveText("5");
+    await openAnalyzeFilters(page);
+    await page.locator("#addServiceContext").click(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("5");
 });
 
 test("Back restores the activating breakdown link after private Search membership is read again", async t => {
@@ -252,17 +254,18 @@ test("Files then Mail intersects call membership; Current Analyze report takes t
     await page.goForward(); await ready(page); await parents(page, ["overlap"]);
     await verifyCurrentPreview(page, ["overlap"], [["workiq-fetch", "workiq-call_function"]]);
 
-    // Re-enter via the same public selectors after changing only the invented source.
+    // Re-enter via a legacy link to the same intersection after changing only the invented source.
     const next = structuredClone(source);
     next[2].toolCalls[0].requestArgs = { entityUrls: ["/me/drive/root", "/me/messages"] };
     await replaceEvidence(context, () => ({ records: next, importCoverage: { counts: {}, roster: [] } }));
-    await page.goto(refined); await ready(page);
+    const legacy = new URL("/?services=Files&withinServices=Mail", refined).href;
+    await page.goto(legacy); await ready(page);
     await parents(page, ["overlap", "files-only"]); await expect(page.locator("#activityCount")).toHaveText("2");
-    assert.equal(new URL(page.url()).searchParams.get("withinServices"), "Mail");
+    assert.equal(new URL(page.url()).searchParams.has("withinServices"), false);
     assert.deepEqual(reads.at(-1).filters.services, ["Files"]);
     assert.ok(reads.every(input => !Object.hasOwn(input.filters, "withinServices")));
     await verifyCurrentPreview(page, ["overlap", "files-only"], [["workiq-fetch"], ["workiq-fetch", "workiq-call_function"]]);
-    await page.goto(refined); await ready(page);
+    await page.goto(legacy); await ready(page);
     await choose(page, "serviceAssociationFilter", "Mail");
     assert.equal(new URL(page.url()).searchParams.has("withinServices"), false);
     await parents(page, ["overlap", "files-only", "mail-only"]);

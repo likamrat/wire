@@ -391,7 +391,7 @@ for (const width of [1440, 390]) test(`reader copy states limits once without de
     await context.locator(".reader-section-toggle").click();
     await expect(context.locator(".reader-section-toggle")).toHaveText("Context (2 saved records)");
     await expect(context).not.toContainText("Other saved text and task updates");
-    assert.equal((await context.innerText()).match(/author unverified/g)?.length, 1);
+    assert.equal((await context.innerText()).match(/sender unclear/g)?.length, 1);
     await expect(context).toContainText("Task: completed");
     await expect(context).toContainText("Distinct unverified fragment");
     const source = reader.locator("[data-reader-section=source]");
@@ -825,7 +825,7 @@ test("multipart context states authorship once and keeps each original Copy subj
     const { page } = await setup(t, values);
     const context = page.locator("[data-reader-section=context]");
     await context.locator(".reader-section-toggle").click();
-    assert.equal((await context.innerText()).match(/author unverified/g)?.length, 1);
+    assert.equal((await context.innerText()).match(/sender unclear/g)?.length, 1);
     await context.getByRole("button", { name: "Copy text fragment 1", exact: true }).click();
     await context.getByRole("button", { name: "Copy text fragment 2", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => copies), [

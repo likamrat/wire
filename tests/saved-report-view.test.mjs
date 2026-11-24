@@ -117,6 +117,25 @@ test("new report origin explanations are versioned and survive JSON-only saved r
     assert.match(view.text, /wire-light-human-path-upper/);
 });
 
+test("a JSON-only saved marked Agent prompt stays Agent after live evidence is removed", async t => {
+    const record = fixture("marked-origin");
+    record.userPrompt.authorship = { actor: "agent", basis: "host-agent-authored" };
+    record.userPrompt.authorshipVersion = 13;
+    record.followUpPrompts = [];
+    const { context } = await privateFixture(t, [record]), controller = createExportController(context);
+    const bundle = await save(controller, context, { formats: ["json"], promptMode: "original" });
+    const bytes = await readFile(bundle.files["product-report.json"]);
+    const [origin] = JSON.parse(bytes).records[0].prompts.filter(p => p.kind === "origin");
+    assert.deepEqual(origin.authorship, record.userPrompt.authorship);
+    await replaceEvidence(context, () => ({ records: [], importCoverage: {} }));
+    const view = await readSavedReportView(context, await loadBoardState(context), bundle.bundleId);
+    assert.equal(view.sourceFormat, "json");
+    const heading = view.text.match(/<h([2-6]) data-prompt-actor="agent">([\s\S]*?)<\/h\1>/)?.[2];
+    assert.match(heading ?? "", /Agent prompt/);
+    assert.doesNotMatch(view.text, /Author not verified\. WIRE could not verify the recorded host message format or author fields/);
+    assert.deepEqual(await readFile(bundle.files["product-report.json"]), bytes);
+});
+
 test("JSON-only activity, period and comparison reports render their frozen saved facts without writes", async t => {
     const { records, input } = periodFixture();
     records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };

@@ -485,7 +485,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         function messageBlock(item, contextual = false) {
             const message = item.fields.message, author = message?.value?.author;
-            const partsLabel = `Text fragment${item.messageParts.length === 1 ? "" : "s"} (author unverified)`;
+            const partsLabel = `Text fragment${item.messageParts.length === 1 ? "" : "s"} (sender unclear)`;
             const partsOnly = !message && !item.outcomes.task && item.messageParts.length > 0;
             const label = author === "user" ? message.value.representation === "follow-up" ? "Follow-up" : "Recorded user message"
                 : author === "assistant" ? "Assistant reply" : item.outcomes.task ? "Task: " + item.outcomes.task.state

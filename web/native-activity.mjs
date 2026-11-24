@@ -7,7 +7,7 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
     const isNative = record => record?.recordKind === "native-conversation";
     const present = fact => fact?.availability === "recorded";
     const text = fact => present(fact) && typeof fact.value?.text === "string" ? fact.value.text : null;
-    const names = { user: "Recorded user message", assistant: "Assistant reply", tool: "Tool message", unknown: "Author unverified" };
+    const names = { user: "Recorded user message", assistant: "Assistant reply", tool: "Tool message", unknown: "Sender unclear" };
     function messagePresentation(message) {
         const author = message.value?.author, representation = message.value?.representation;
         if (author === "user") return { section: "prompt", kind: "prompt", label: representation === "follow-up" ? "Follow-up" : names.user };
@@ -15,12 +15,12 @@ export function createNativeActivityPresentation({ api, ux, presentation, create
             label: representation === "reply-fragment" ? "Assistant reply fragment" : names.assistant };
         if (author === "tool") return { section: "activity", kind: "tool", label: names.tool };
         if (message.reason === "native-thinking-fragment-author-unqualified") {
-            return { section: "activity", kind: "thinking", label: "Thinking fragment (author unverified)" };
+            return { section: "activity", kind: "thinking", label: "Thinking fragment (sender unclear)" };
         }
         if (message.reason === "native-text-delta-author-unqualified" || representation === "reply-fragment") {
-            return { section: "activity", kind: "text-fragment", label: "Text fragment (author unverified)" };
+            return { section: "activity", kind: "text-fragment", label: "Text fragment (sender unclear)" };
         }
-        return { section: "activity", kind: "unverified", label: "Recorded text (author unverified)" };
+        return { section: "activity", kind: "unverified", label: "Recorded text (sender unclear)" };
     }
     const availability = {
         "absent-in-response": "Not in the recorded source", "excluded-by-policy": "Not retained", "credential-excluded": "Excluded for privacy",

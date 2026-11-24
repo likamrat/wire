@@ -171,7 +171,7 @@ for (const failed of [false, true]) test(`paging during a held ${failed ? "faile
     assert.equal(observed.scroll, observed.expected);
     await expect(page.locator("#message").filter({ hasText: "Invented paging read failed" })).toBeHidden();
     await expect(pager.getByRole("button", { name: "Previous", exact: true })).toBeFocused();
-    assert.equal(new URL(page.url()).searchParams.get("page"), "4");
+    assert.equal(new URL(page.url()).searchParams.has("page"), false);
 });
 
 for (const scale of [1, 2]) test(`narrow outer pagination keeps its section and first-page keyboard action at ${scale * 100}% text`, async t => {

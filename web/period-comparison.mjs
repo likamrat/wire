@@ -633,7 +633,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const combination = [
             route.comparisonFocus === "completed" ? "Completed calls" : route.comparisonFocus === "errors" ? "Errors & failures" : "",
             ...(options.filters.outcomes ?? []).map(outcome => results.labels(options.layer)[outcome]),
-            ...(authors ?? []).map(author => author === "user" ? "Human prompts" : author === "agent" ? "Agent prompts" : "Author unverified"),
+            ...(authors ?? []).map(author => author === "user" ? "Human prompts" : author === "agent" ? "Agent prompts" : "Sender unclear"),
         ].filter(Boolean);
         quick.querySelector('[value="custom"]').textContent = combination.join(" + ") || "Custom activity";
         quick.dataset.preset = quick.value;

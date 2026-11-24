@@ -43,14 +43,26 @@ even if the package version stays the same. Changes to contributor docs,
 tests or CI alone do not create an update notice. Git uses the current
 user's repository access; no source approval or Copilot sign-in is requested.
 
-Finish any report, close other WIRE panels, and resolve unconfirmed saves or
-deletions before updating. Keep the terminal open while WIRE prepares its
+Start the update from any browser view of the installation. WIRE coordinates
+the open views on its configured address and port; you do not need to close clean
+tabs. Finish an unsaved report or Settings edit in its original view, and resolve
+unconfirmed saves or deletions before updating. Keep the terminal open while WIRE prepares its
 replacement. App versions and the activation record stay inside this clone’s
 Git directory, separate from evidence. A failed check is not “up to date.”
-On restart, return to the same address and reopen an old canvas if needed.
+On Windows, WIRE enables Git long paths in the new stage only. It verifies
+the fetched `main` revision and checks out the exact commit you chose.
+On restart, participating browser views reload at the same address. A canvas
+tool connection pinned to the old runtime must be reopened before using its tools.
+Another installation on a different port and store is not updated.
 The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
+
+Store read/write protocol 2 includes the explicit agent-authored origin. The
+managed updater refuses a protocol-1/protocol-2 transition before stopping
+the current writer. Qualify both the primary and fallback for the new retained
+and saved-report vocabulary before a manual transition or author repair;
+see [prompt origin reader compatibility](collection.md#prompt-origin-reader-compatibility).
 
 Archives without `.git`, contributor worktrees, forks, modified clones and special
 development launch modes stay manual. Do not use a new data folder to resolve an update problem.
@@ -212,6 +224,13 @@ Use `npm run test:packaging` for the production-only installation check. It
 builds the browser assets, then checks the packaged browser and local Search
 against the same disposable install.
 
+For Analyze homepage ordering, build the browser assets and run
+`node --test tests/analyze-layout.qualification.mjs`. Playwright uses the Settings
+arrows to visit all 5,040 arrangements in both renderers and checks the preview
+against wide and narrow Analyze tabs. It then restarts Chromium on the same
+disposable profile to verify both a custom order and **Restore WIRE layout**.
+This longer check uses invented records and no mocked network responses.
+
 For changes to native report selection, saving or recovery, run `npm run build`
 followed by `node --test tests/native-report-save.qualification.mjs`. This
 browser check uses invented Microsoft activity and a disposable store. It
@@ -263,8 +282,11 @@ legacy route fragment is replaced in the same history entry; ordinary document
 anchors are not routes. Do not add a catch-all SPA fallback: assets, APIs, saved
 files and unknown paths must retain their own handling and access checks.
 The bundled and React clients use the same route controller. Its public query
-projection admits known choices and dates, never record IDs, free text, source
-paths or operation receipts. A `privateView=required` marker carries no data
+identifies destinations such as a Settings category, Help topic, or saved report.
+Dates, filters, sort, pagination and chart controls stay off the address and links.
+Only validated display choices can survive a reload in that tab's history entry;
+record-derived selectors and Search text stay in authorized page memory.
+A `privateView=required` marker carries no data
 or authority. Private state and a modified-click handoff live only in the
 authorized page; copying the marker cannot recover them. An ordinary saved
 report link names the saved bundle, not permission to read it.

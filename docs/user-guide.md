@@ -8,8 +8,10 @@ Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 **Analyze is the home page.** Open the address printed by WIRE as-is. Trends,
 Reports, Compare and Settings have their own addresses (`/trends`, `/reports`,
-`/compare` and `/settings`). You can bookmark those pages, a Settings category,
-or a public date/filter view. Older WIRE links such as `/#trends` still open.
+`/compare` and `/settings`). You can bookmark a page or a Settings category.
+Dates and filters change the results, not the address. Copying the address opens
+the destination in a fresh tab with its own defaults, not your filtered results.
+Older date and filter links still open their original scope with a clean address.
 
 You can copy an ordinary interaction's address or refresh its reader. WIRE
 opens the same record only if it is still available in the same local store.
@@ -71,11 +73,12 @@ returns to the interaction list.
 
 <a id="analyze-homepage-layout"></a>
 
-In **Settings > Analyze > Homepage layout**, use the up or down arrow to move a widget
-or the entire **Interactions** list. For example, move Interactions above the two charts,
-or put Prompt authors first. Choose **View Analyze** to see the result. The order stays
-in this browser after reload; **Restore WIRE layout** puts every section back without
-changing filters or collected activity.
+In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
+**Interactions** list. The preview outlines the section you moved and shows which
+widgets share a row. It uses sample charts instead of your saved activity.
+Your browser remembers each move. Choose **View Analyze** to open the homepage.
+**Restore WIRE layout** puts the time chart first, tool call results second, and
+Interactions third, before the four breakdowns. Your filters and activity stay the same.
 
 To read one conversation, open **Filters**, expand **More filters** if needed,
 and choose **Chat**. Type part of its title in a long list, then choose the
@@ -105,11 +108,11 @@ percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
 
 **Prompt authors** counts each originating interaction once across all matching
-pages: **Human prompts**, **Agent prompts**, or **Author unverified**. The three
-counts add up to the matching interaction total. Calls and follow-ups do not add
-prompts. Select **Author unverified** in the chart to inspect those interactions.
-Unverified authors stay
-in the denominator; missing prompt text alone does not make its author unknown.
+pages. **Human prompts** came from a person; **Agent prompts** came from an
+agent. **Sender unclear** means WIRE can't tell which one sent the prompt from
+the saved record. Select that row to see the reason on each card. These prompts
+still count. Calls and follow-ups do not add prompts, and missing prompt text
+alone does not make the sender unclear.
 In the reader, **Source** distinguishes a direct link to the prompt from
 grouping by message order. Seeing a skill or system message before a call
 doesn't tell you who asked for the work.
@@ -211,8 +214,9 @@ period or Analyze widget never moves automatically. An empty period can offer
 **Show week ending …** without dropping the active filters.
 
 The period control shows the accepted dates while a new read is pending.
-An explicit preset, measure or user-entered custom range can be reopened
-from the address; private filtered selections stay in the original tab.
+The address can reopen the Charts section, not a chart's settings. Reloading
+the same tab keeps its chart measure and ordinary date choices; private filtered
+selections stay in the original visit.
 If WIRE cannot restore a private selection, reopen the result from its original
 tab. To continue without that selection, choose **Open this view without the
 private selection**. Neither action deletes saved activity.
@@ -259,7 +263,7 @@ totals, including series hidden in the chart.
 | Chart | Measure |
 | --- | --- |
 | Tool usage | **Interactions %** shows the share of matching interactions that used a tool at least once (its reach). **Calls %** shows the tool's share of matching calls; **Calls** shows the count. Several tools can reach the same interaction. |
-| Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Author unverified. Unverified authors stay in the denominator. |
+| Prompt authors | Matching originating interactions, split into Human prompts, Agent prompts and Sender unclear. Prompts with an unclear sender still count. |
 | Tool calls | Matching tool calls per day. **Share within week** uses the matching calls in that calendar week within the selected dates. Point context names that week and denominator; a short rule along the date axis marks partial weeks. |
 | Services | Matching calls involving each service, as a share of all matching calls. One call can involve several services, so shares can overlap. Missing service detail and preparation calls remain separate. |
 | Errors & failures | Matching interactions with a failed call or recorded application/API error, as a share of all matching interactions. Unknown call outcomes are separate; a tool can complete while its result contains an error. |
@@ -336,7 +340,7 @@ Select the outcome below the prompt preview to open
 the right-hand reader. Hover over its arrow or focus the link to see **View call details**.
 In the reader, choose **Prompt** to read and copy the retained original.
 **Human prompt**, **Agent prompt** or
-**Author unverified** describes the prompt’s origin, not its app. A label such
+**Sender unclear** describes the prompt’s origin, not its app. A label such
 as **1 tool call failed** opens the failed call; it does not mean the whole
 request failed. **4 tool calls completed** opens those four calls. If filters
 exclude other calls, they stay out of that list. A completed call can still
@@ -372,10 +376,14 @@ previous view. On a narrow screen, the reader uses one pane without sizing contr
 
 ![Four calls in a maximized interaction. The fetch has two returned entries; the separate Ask Copilot call shows its recorded timeout.](images/interaction-maximized.png)
 
-**Human prompt**, **Agent prompt** and **Author unverified** describe supported
-origin evidence, not who executed or authorized every call. Choosing Human and
-Agent is not the same as All, which also includes unverified authors.
-The reader explains retained origin gaps separately from call results. For
+The sender label tells you who asked, not who carried out each call. Choosing
+Human and Agent excludes prompts whose sender is unclear.
+Those cards show the saved reason separately from the call result. In
+**Analyze > Guide > Recorded prompt authors**, **Why the sender is unclear**
+counts those reasons across all pages of the current view and shows the saved
+rule version when available. In the reader, **Source details** shows the selected
+prompt's saved rule version and whether its calls link directly to that prompt.
+Neither view rereads chats or changes an author. For
 example, WIRE may not recognize the host's message format even when the prompt
 text and tool result were saved. Older records may lack that specific reason.
 
@@ -456,11 +464,14 @@ settings**. Matching destinations appear under their categories.
 On [supported installations](development.md#updating-wire), automatic checks
 are on by default. You can turn them off and still choose **Check for updates**.
 Choose **Update and restart** in General or in the update notification. Leave
-the tab open: WIRE shows its progress, restarts, then reloads the same address.
+your tabs open: WIRE shows its progress and reloads the views of this installation
+at the same address. If a view has an unfinished edit, finish it there first.
 Dismissing the notification leaves the update available in General. If your copy can't check for updates,
 General links to **Update instructions** instead.
 
-If WIRE says **Update not installed**, follow the reason shown before trying again.
+The Check button shows **Checking** while it looks for an update. If installation
+fails, General shows **Update not installed** and the reason. Away from General,
+look for the same message in the notification.
 
 Below updates, **Current theme** shows your palette name, Light or Dark mode,
 and a preview with its colors.
@@ -473,8 +484,8 @@ Under **WIRE defaults**, choose how views open and new reports and comparisons s
 
 | Category | What you can change |
 | --- | --- |
-| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
-| Trends | Choose the default trend chart. A link to a specific measure still opens that chart. |
+| Analyze | Open on All dates or the last 7, 14 or 30 days, including today. **View Analyze** and the sidebar use this range for a fresh view and keep any dates or filters you chose in an existing view. This filters saved activity. Choose Guide's opening topic or [reorder the homepage widgets and Interactions](#analyze-homepage-layout). |
+| Trends | Choose the trend chart to show on a fresh visit. Changing measures within Charts does not change its address. |
 | Reports | Preselect HTML, PDF, Markdown or JSON (at least one), and the last 7, 14 or 30 days including today. These choices start a fresh draft; they do not prepare or save files. |
 | Compare | Start with the last 7, 14 or 30 complete days, ending yesterday, versus the preceding period of the same length. A comparison from Trends keeps its chosen dates. |
 

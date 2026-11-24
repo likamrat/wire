@@ -78,7 +78,7 @@ Reduced motion and assistive technology get the final values without counting th
 
 Prompt authors is a compact breakdown of canonical originating
 interactions across the complete accepted slice, before paging. Human prompts,
-Agent prompts and Author unverified use the shared author vocabulary and screen
+Agent prompts and Sender unclear use the shared author vocabulary and screen
 colors; all three remain visible when the population is nonempty, including
 known zeros. The chart's accessible description names the total matching
 interactions, not calls, without repeating it on a separate visible line.
@@ -264,7 +264,8 @@ Restore all also works after the widgets have been collapsed individually.
 Keep the 7/14/30/custom date family. Bare entry (or a measure-only link) first
 checks the current seven days. Only when that week is empty can it open seven
 days ending at the latest retained matching call. Explicit dates, including
-an empty period, do not widen. Preserve accepted public period/measure history;
+an empty period, do not widen. Keep applied periods and filters in the view,
+not its address. Choosing a chart measure or replacing a filter does not create a Back step;
 do not serialize private filter values or an activity-derived date.
 Every civil day remains separate in the selected IANA zone. A compact index
 plot may thin tick labels, never observations or daily table rows.

@@ -670,7 +670,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await page.goBack();
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator("#activityListScope")).toContainText("Search applied");
-    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
+    assert.equal(new URL(page.url()).searchParams.has("bucket"), false);
     await input.focus();
     await selectActivityOption(page, "wireSearchScope", "everywhere");
     await expect(page.locator("#activityCount")).toHaveText("6");
@@ -698,7 +698,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
         await expect(result).toHaveAttribute("data-search-id", id);
         await expect(input).toHaveValue(query);
         await expect(page.locator("#wireSearchType")).toHaveValue("setting");
-        assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
+        assert.equal(new URL(page.url()).searchParams.has("bucket"), false);
     }
     await input.press("Escape");
     await expect(page.locator("#filterChips")).toBeEmpty();

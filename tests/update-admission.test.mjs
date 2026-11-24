@@ -15,7 +15,8 @@ async function managedFixture(t, options) {
     channel.send = msg => {
         if (msg.type === "wire-update-request") {
             calls.push(msg.request);
-            queueMicrotask(() => channel.emit("message", { type: "wire-update-response", id: msg.id, value: { phase: "preparing" } }));
+            const value = msg.request.action === "status" ? { phase: "available", installed: "0".repeat(40), candidate: "1".repeat(40) } : { phase: "preparing" };
+            queueMicrotask(() => channel.emit("message", { type: "wire-update-response", id: msg.id, value }));
         } else final = msg;
     };
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, updateChannel: channel, ...options });
@@ -34,16 +35,18 @@ async function managedFixture(t, options) {
     return { page, post, apply, prepare, calls, origin, runtime, channel };
 }
 
-test("expiry withdraws data access without retiring a suspended browser's update blocker", async t => {
+test("expiry withdraws data access without retiring a suspended browser's update blocker", { timeout: 18000 }, async t => {
     const { page, post, apply } = await managedFixture(t, { sessionTtlMs: 100 });
     const suspended = await page();
+    await post("/api/app-update", { action: "status" }, suspended);
     await delay(160);
     const current = await page();
     assert.equal((await apply(current)).status, 409);
     assert.equal((await post("/api/app-update", { action: "status" }, suspended)).status, 403);
     assert.equal((await post("/api/app-update/release-panel", {}, suspended)).status, 200);
     assert.equal((await post("/api/app-update", { action: "status" }, suspended)).status, 403);
-    assert.equal((await apply(current)).status, 200);
+    assert.equal((await post("/api/app-update/release-panel", {}, current)).status, 200);
+    assert.equal((await apply(await page())).status, 200);
 });
 
 test("an admitted collector owner defers cutover; no scheduled or queued work starts behind the fence", async t => {
@@ -62,19 +65,69 @@ test("an admitted collector owner defers cutover; no scheduled or queued work st
     assert.equal(await runtime.collector.exclusiveActivity(() => true), true);
 });
 
-test("only the sole browser panel may activate; recheck panels and in-flight Save at final cutover", async t => {
+test("releasing a page ends its pending update watch without publishing an offer or restoring authority", async t => {
+    const { page, post, apply, runtime, calls } = await managedFixture(t);
+    const departing = await page(), current = await page();
+    await post("/api/app-update", { action: "status" }, departing);
+    const listening = Promise.withResolvers();
+    runtime.server.once("request", req => req.once("end", listening.resolve));
+    const pending = post("/api/app-update/watch", {}, departing);
+    await listening.promise;
+    assert.equal((await post("/api/app-update/release-panel", {}, departing)).status, 200);
+    const withdrawn = await pending;
+    assert.equal(withdrawn.status, 403);
+    assert.equal((await withdrawn.json()).code, "session_expired");
+    assert.equal((await post("/api/app-update/watch", {}, departing)).status, 403);
+    assert.equal((await apply(current)).status, 200);
+    assert.equal(calls.filter(c => c.action === "apply").length, 1);
+});
+
+test("a late Settings hold supersedes readiness before dispatch and at final cutover", async t => {
+    const { page, post, apply, prepare, calls } = await managedFixture(t);
+    const first = await page(), peer = await page(), delayed = await page();
+    for (const cap of [peer, delayed]) await post("/api/app-update", { action: "status" }, cap);
+    const report = (offer, hold) => post("/api/app-update/readiness", { ...offer, hold }, peer);
+    const watch = () => post("/api/app-update/watch", {}, peer).then(r => r.json());
+    const watching = watch(), applying = apply(first);
+    const offer = await watching;
+    assert.equal((await report(offer, "")).status, 200);
+    assert.equal((await report(offer, "settings")).status, 200);
+    assert.equal((await applying).status, 409);
+    assert.equal(calls.filter(c => c.action === "apply").length, 0);
+    assert.equal((await post("/api/app-update/release-panel", {}, delayed)).status, 200);
+
+    const watchingAgain = watch(), nextApply = apply(first);
+    const next = await watchingAgain;
+    assert.notEqual(next.operation, offer.operation);
+    assert.equal((await report(offer, "")).status, 409);
+    assert.equal((await report(next, "")).status, 200);
+    assert.equal((await nextApply).status, 200);
+    assert.equal((await report(next, "settings")).status, 200);
+    assert.match(prepare().error, /Settings edit/);
+});
+
+test("cutover refuses an expired ready page even before the periodic prune", async t => {
+    const { page, apply, prepare } = await managedFixture(t, { sessionTtlMs: 60000 });
+    assert.equal((await apply(await page())).status, 200);
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now + 60001);
+    assert.equal(prepare().ok, false);
+});
+
+test("unused HTML and idle adapters do not veto one shared activation; verify ownership and in-flight Save at cutover", async t => {
     const { page, post, apply, prepare, calls, origin, runtime, channel } = await managedFixture(t);
     const first = await page(), other = await page();
-    assert.equal((await apply(first)).status, 409);
-    assert.deepEqual(calls, []);
-    await post("/api/app-update/release-panel", {}, other);
+    await post("/api/app-update", { action: "status" }, other);
     const adapter = (await (await post("/api/session", {}, null, { "X-Wire-Session-Protocol": "1" })).json()).capability;
     assert.equal((await apply(adapter)).status, 403);
-    await post("/api/session/release", {}, adapter);
-    assert.equal((await apply(first)).status, 200);
+    const watched = post("/api/app-update/watch", {}, other);
+    const applying = apply(first);
+    assert.equal((await (await watched).json()).candidate, "1".repeat(40));
+    assert.equal((await apply(other)).status, 200);
+    assert.equal((await applying).status, 200);
+    assert.equal(calls.filter(c => c.action === "apply").length, 1);
     const newTab = await page();
-    assert.equal(prepare().ok, false);
-    await post("/api/app-update/release-panel", {}, newTab);
+    assert.equal((await post("/api/app-update", { action: "status" }, newTab)).status, 409);
     const pending = request(origin + "/api/export", { method: "POST", headers: { Origin: origin,
         "Content-Type": "application/json", "X-Board-Capability": first } });
     const started = new Promise(resolve => runtime.server.once("request", resolve));

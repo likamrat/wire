@@ -153,7 +153,8 @@ async function fixture(t, host) {
     }
     async function commit(behavior, incompatible = false) {
         await writeFile(path.join(origin, "lib", "behavior.txt"), behavior);
-        if (incompatible) await writeFile(path.join(origin, "lib", "update-compatibility.json"), '{"launcherProtocol":2}');
+        if (incompatible) await writeFile(path.join(origin, "lib", "update-compatibility.json"),
+            '{"launcherProtocol":1,"storeReadWriteProtocol":1,"canvasAdapterProtocol":1}\n');
         git(origin, "commit", "-qam", "Invented next build");
         return git(origin, "rev-parse", "HEAD");
     }
@@ -227,6 +228,10 @@ activationTest("owned replacement retains a single writer, port, settings and or
     await rm(path.join(f.store, "busy"));
     const rechecked = await request(url, "check");
     assert.equal(rechecked.candidate, candidate);
+    // With protocol v0, the old SHA is no longer advertised after this docs-only advance.
+    f.git(f.root, "config", "--global", "protocol.version", "0");
+    await writeFile(path.join(f.origin, "README.md"), "Revised instructions.");
+    f.git(f.origin, "add", "README.md"); f.git(f.origin, "commit", "-qm", "Docs after the offer");
     assert.equal((await request(url, "apply", { candidate })).phase, "preparing");
     const status = await phase(url, "current");
     assert.equal(status.installed, candidate);

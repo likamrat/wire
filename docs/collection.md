@@ -421,6 +421,37 @@ label after an upgrade, even when every call links directly to it. The links
 identify the request, not its author. To correct its retained author, review
 that original through the procedure below rather than refreshing the chat.
 
+Version 13 reads the Copilot journal's `user.message.data.agentAuthored: true`
+as an explicit Agent origin, including a kickoff with no separate sender
+envelope. A false or absent flag does not identify a Human. An explicit user
+or system source that contradicts the flag remains unverified. `shell` is a
+supported execution mode, not a sender: the same direct-input, cross-chat
+sender and kickoff checks apply. Both fields are defined in the
+[Copilot session event schema](https://github.com/microsoft/copilot-sdk/blob/2dfe56f7a205e0a4f13b6c02fc36afeb035650eb/nodejs/src/generated/session-events.ts#L7281).
+Older versioned `missing-source` entries are eligible for the bounded review
+below. A review that still finds no supported sender proposes no change.
+
+Version 14 handles an older idle original with no logical send ID. It requires
+a valid journal event ID, the matching timestamp and exact original display
+boundary, plus either the validated app direct-input reference or an explicit
+host-added cross-chat sender. An ID, plain timestamped text, or a marker typed
+in the prompt is insufficient. The creator/kickoff and competing-source
+checks still apply. This does not invent a logical message ID or attach a
+tool call to a message by order.
+
+### Prompt origin reader compatibility
+
+Once `host-agent-authored` is written, both the active
+reader and the fallback must recognize it in retained prompts, interaction
+validation and JSON-only saved reports (v13 origin support or a verified
+reader backport). A v12 reader can open the saved JSON yet render the Agent
+prompt as unverified. An unchanged file hash or a healthy server does not
+prove compatible reading. Before first collection or offline repair on the
+real store, verify the intended primary and fallback on an invented marked
+prompt and its JSON-only saved report, as well as a previously saved report.
+Do not use a v12 fallback after a marked origin is written. The existing
+collector schema-4 guard is separate and does not establish this compatibility.
+
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up
 copy and its checkpoint preimage. Its read-only inspector proposes changes but
@@ -448,12 +479,38 @@ it contains local source identifiers and hashes, not prompt or reply text.
 
 ```text
 node scripts/maintain-prompt-origins.mjs --mode list --data-dir <absolute-store>
+node scripts/maintain-prompt-origins.mjs --mode list --counts-only --data-dir <absolute-store>
 node scripts/maintain-prompt-origins.mjs --mode review --data-dir <absolute-store> --batch <listed-batch>
 ```
 
 `list` reads only the retained store. It groups older unverified origins and
 their retained copies by chat, lists batches of up to four, and counts excluded
 origins by reason. A candidate is **not** a finding that the author was human.
+`--counts-only` returns no member or batch IDs. It counts canonical Work IQ
+tool calls and their originating interactions across **all retained dates**,
+including earlier/inactive Copilot records and excluding platform metadata.
+Follow-ups do not add interactions. All unverified interactions count, even
+if they have no reviewable event. The reason/version groups describe retained
+evidence, not what a new original lookup would find. The time/archive choices
+below affect review eligibility, not this all-retained denominator.
+Use `--mode list --originating-only` for a private case list on **one** verified
+retained revision. Each unverified canonical interaction has a store-bound
+case reference and either its batch/one-based position or an exclusion. The
+saved call-to-prompt association is separate from who sent the message:
+message order alone cannot identify the initiating request. A
+listed source's `consumedBytes` is its retained fully consumed cursor (or
+null), not a live file check. Follow-up copies of selected originals are
+counted, but follow-up-only originals do not enter these batches. Use the
+same `--originating-only` and time/archive choices with `--mode review`;
+a general batch cannot be substituted. The list needs no journal or
+checkpoint read. It is not a proposal, permission or persistent index.
+Between pages of that exact source, a new check time, cycle counter or
+another chat's cursor alone does not invalidate already verified bytes.
+The selected source and cursor, compact checkpoint preimage, original
+journal, database identity and mapping, board/configuration, source
+membership, host owners and global guards must still match. Each invocation
+requires a stable control read; the final proposal seals the **current exact**
+index bytes. Prepare and Apply do not use this page-continuation exception.
 The default is the current window and active sources. To review older dates or
 archived local chats, explicitly add `--include-older` or `--include-archived`
 to both commands. These options do not change collection settings.
@@ -466,15 +523,53 @@ new page separate from the one you're reading. Pages cannot be mixed across
 batches or changed sources. No proposal is made until the full journal has
 been checked for competing event identities. An unreadable, oversized or
 ambiguous source region prevents a complete review; it is not an empty batch.
+Every ordinary entry must establish an unambiguous outer event ID and type,
+including escaped JSON keys. Noncanonical or duplicate fields inside an
+unselected payload do not establish or disprove a sender. Startup and each
+proposed original still need full-field verification. An ambiguous selected
+payload with a unique envelope stays unresolved; an ambiguous envelope can
+hide another selected ID and blocks the whole page.
+For a complete oversized entry already inside the same page budget, a bounded
+streaming check can establish just its unique outer ID, type and timestamp.
+It does not project a sender or payload. A collision still counts, and an
+oversized selected original cannot become a target. Malformed input, excessive
+parser work, and entries that cannot fit a verified page still refuse.
+If the metadata database changes during a named review read, the selected-chat
+reader can take one fresh transaction. Only its fully fenced result is used.
+The physical database, schema, complete selected mapping (including managed
+events), retained controls and journal boundary must still agree. Repeated
+churn or a changed selected mapping refuses the read. The same mapping proof
+binds page continuations and new proposals; Prepare and Apply still perform
+their own original and checkpoint checks.
 
 The final `targets` are the corrections the original records actually support.
-They may be human **or** agent prompts. `unresolved` explains why other
+If an agent-created chat lacks its saved first-prompt ID, a completed review
+can still prove a selected direct input was **not** its kickoff. It seals
+the earlier first event's digest to this store, source mapping, complete
+journal and exact selected region. An unsealed flag, a nearby timestamp or
+the first event itself cannot remove that guard. Prepare and Apply verify
+the same seal and original; neither edits the collector's first-event pointer.
+For **new collection**, the reader also checks the startup bytes it already
+reads. If a verified first event is not there, consecutive, already-approved
+prefix pages can establish it across restart. Only the offset and byte anchor
+of a clean prefix carry forward. A gap, malformed or duplicate fields, a
+replay entry or a changed source cannot turn the first *visible* prompt into
+the first prompt of the chat. No extra file scan is started and previously
+retained authors are not bulk-updated.
+Reviewed corrections may identify either a human or an agent. `unresolved` explains why other
 candidates stay unverified. Listing, reviewing and installing a new reader
 do not write these changes. For an approved correction, use the returned
 targets, source and state guard in the existing offline Prepare/Apply plan.
 Preserve its stopped-runtime attestation, saved-file guards, review seal and
 separate confirmation. A changed source invalidates the proposal. A stale
 batch must be listed again; do not weaken the guards or replay calls.
+
+For an exact original the classifier cannot qualify, the private review receipt
+includes the failed host-envelope condition, a fixed sender/delivery category,
+the host flag states, and the checked original-region pin. It contains no raw
+sender value, prompt or transformed input. For example, a missing logical
+message ID and a timestamp disagreement are separate observations. These
+observations explain a refusal; neither assigns a sender nor grants another read.
 
 For a complete correction batch, `inspectPromptOriginRepair` also accepts
 `origins`: exact source/event identities, pinned original regions and the

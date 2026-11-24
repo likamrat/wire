@@ -121,7 +121,7 @@ test("Search removes caption recitals without merging the interaction and its re
     await expect(page.locator("#selectedCall")).toBeVisible();
     const target = new URL(page.url()).searchParams;
     await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-0");
-    assert.equal(target.get("layer"), "tool");
+    assert.equal(target.has("layer"), false);
     const call = `call:${JSON.stringify([records[0].sourceSessionId, records[0].toolCalls[0].toolCallId])}`;
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
     await page.goBack(); await expect(action).toBeFocused();
@@ -221,11 +221,11 @@ test("Search retires current review navigation without suppressing authorized fr
     await expect(rows).toHaveCount(1);
     await expect(rows.locator(".wire-search-title")).toHaveText("Failed calls");
     await rows.click();
-    await expect(page).toHaveURL(/\/\?.*\bresult=failure/);
+    await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
     const destination = new URL(page.url()).searchParams;
-    assert.equal(destination.has("mode"), false); assert.equal(destination.get("result"), "failure");
+    assert.equal(destination.has("mode") || destination.has("result"), false);
     await expect(page.locator("#layerFilter")).toHaveValue("tool");
     const call = `call:${JSON.stringify([records[0].sourceSessionId, records[0].toolCalls[0].toolCallId])}`;
     await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:search-0");
@@ -233,7 +233,7 @@ test("Search retires current review navigation without suppressing authorized fr
     await page.goBack(); await expect(rows).toBeFocused();
     await expect(input).toHaveValue("Failed calls");
     await rows.click();
-    await expect(page).toHaveURL(/\/\?.*\bresult=failure/);
+    await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.locator("#activityList .request-card-open").click();
     await expect(page.locator(`[data-action-id='${call}']`).first()).toBeVisible();

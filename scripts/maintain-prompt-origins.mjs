@@ -22,16 +22,17 @@ async function previousPage(file, batch) {
 try {
     const { values } = parseArgs({ options: { ...Object.fromEntries([
         "mode", "data-dir", "batch", "previous", "plan", "plan-sha256", "journal", "review-sha256", "source-manifest", "source-identity",
-    ].map(name => [name, { type: "string" }])), "include-older": { type: "boolean" }, "include-archived": { type: "boolean" } } });
+    ].map(name => [name, { type: "string" }])), "include-older": { type: "boolean" }, "include-archived": { type: "boolean" },
+        "counts-only": { type: "boolean" }, "originating-only": { type: "boolean" } } });
     if (["list", "review"].includes(values.mode)) {
         const review = values.mode === "review";
-        if (Object.keys(values).some(key => !["mode", "data-dir", "include-older", "include-archived", ...(review ? ["batch", "previous"] : [])].includes(key))
+        if (Object.keys(values).some(key => !["mode", "data-dir", "include-older", "include-archived", "originating-only", ...(review ? ["batch", "previous"] : ["counts-only"])].includes(key))
             || review && !values.batch) throw new BoardError("List retained candidates first, then review one named batch.", 422);
         console.log(JSON.stringify(await reviewPromptOriginClass({ dataDir: values["data-dir"], batch: values.batch,
-            includeOlder: values["include-older"], includeArchived: values["include-archived"],
+            includeOlder: values["include-older"], includeArchived: values["include-archived"], countsOnly: values["counts-only"], originatingOnly: values["originating-only"],
             continuation: values.previous === undefined ? undefined : await previousPage(values.previous, values.batch) })));
     } else {
-        if (["batch", "previous", "include-older", "include-archived"].some(key => key in values)) throw new BoardError("A review batch does not authorize preparation or Apply.", 422);
+        if (["batch", "previous", "include-older", "include-archived", "counts-only", "originating-only"].some(key => key in values)) throw new BoardError("A review batch does not authorize preparation or Apply.", 422);
         console.log(JSON.stringify(await runPromptOriginRepair({
             mode: values.mode, dataDir: values["data-dir"], planFile: values.plan, planSha256: values["plan-sha256"],
             journalFile: values.journal, reviewSha256: values["review-sha256"],

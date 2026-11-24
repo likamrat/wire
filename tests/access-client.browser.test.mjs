@@ -13,7 +13,7 @@ import { prepareReportPreview } from "./report-journey-helpers.mjs";
 import { openDatePicker } from "./analytics-date-picker.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
-async function setup(t, { signedIn = false, unbound = false, records } = {}) {
+async function setup(t, { signedIn = false, unbound = false, records, frontend } = {}) {
     const cleanup = [];
     if (!records) {
         const current = fixture();
@@ -23,7 +23,7 @@ async function setup(t, { signedIn = false, unbound = false, records } = {}) {
     const { context } = await privateFixture({ after: work => cleanup.push(work) }, records);
     const lifecycle = await createMicrosoftSession(context, { collection: { paused: true, windowDays: 30 } });
     const access = unbound ? undefined : await createFixtureRuntimeAccess(context, { lifecycle });
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, access });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, access, frontend });
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
         headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" }, body: "{}" }).then(response => response.json());
@@ -257,6 +257,46 @@ test("idle revocation erases private activity and fresh access resolves the cano
     assert.equal(requests.filter(path => path === "/api/snapshot").length, before + 1);
 });
 
+for (const frontend of ["bundled", "react"]) test(`unverified author reasons belong only to the accepted Analyze publication (${frontend})`, async t => {
+    const known = fixture("known-origin"), unknown = fixture("unverified-origin");
+    const at = new Date().toISOString();
+    for (const record of [known, unknown]) {
+        record.toolCalls[0].startedAt = record.userPrompt.sourceTimestamp = at;
+        record.userPrompt.sourceEventId = record.scenarioId;
+    }
+    known.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    unknown.userPrompt.authorship = { actor: "unknown", basis: "unsupported-source", issue: "source-value-v1" };
+    unknown.userPrompt.authorshipVersion = 12;
+    const { page, command, requests, url } = await setup(t, { signedIn: true, records: [known, unknown], frontend });
+    const snapshot = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
+    await page.goto(url);
+    const revision = (await (await snapshot).json()).revision;
+    const list = page.locator("#activityList"), reason = "Copilot recorded a sender value that WIRE does not recognize.";
+    await expect(list.getByRole("article").filter({ hasText: "Agent prompt" })).not.toContainText(reason);
+    const why = list.getByRole("article").filter({ hasText: "Sender unclear" }).getByText(reason, { exact: true });
+    await expect(why).toBeVisible();
+    const cardText = await why.evaluateHandle(node => node.firstChild);
+    const prior = requests.filter(path => path === "/api/snapshot").length;
+    await page.locator("#openChartReference").click();
+    const topic = page.getByRole("button", { name: "Recorded prompt authors", exact: true });
+    await topic.click();
+    const summary = page.getByRole("region", { name: "Why the sender is unclear" });
+    await expect(summary).toContainText(`View revision ${revision}`);
+    await expect(summary).toContainText("1 interaction (saved rule v12)");
+    const held = await summary.getByText(reason, { exact: true }).evaluateHandle(node => node.firstChild);
+    await page.getByRole("button", { name: "Which tools ran", exact: true }).click();
+    assert.equal(await held.evaluate(node => node.data), "");
+    await topic.click();
+    const current = await summary.getByText(reason, { exact: true }).evaluateHandle(node => node.firstChild);
+    assert.equal(requests.filter(path => path === "/api/snapshot").length, prior);
+    assert.ok(!requests.includes("/api/assessment/detail") && !requests.includes("/api/collection/now"));
+    await command("wire-sign-out");
+    await expect(page.locator("#workspace")).toBeHidden();
+    assert.equal(await current.evaluate(node => node.data), "");
+    assert.equal(await cardText.evaluate(node => node.data), "");
+    await expect(page.locator("body")).not.toContainText(reason);
+});
+
 test("access revocation retires a maximized reader and active resize without retained text or geometry replay", { timeout: 30000 }, async t => {
     const record = fixture("combined-reader-withdrawal");
     record.toolCalls[0].startedAt = record.capturedAt;
@@ -468,7 +508,7 @@ test("a real private cross-tab handoff waits for recipient authority and cannot 
     await expect(source.locator("#activityList .request-card-open")).toHaveCount(1);
     await source.locator("#openChartReference").click();
     await source.locator("#chartReferenceShowData").click();
-    const target = source.locator('#chartReferenceData a[href*="result=success"]');
+    const target = source.locator('#chartReferenceData a[aria-label^="Tool completed:"]');
     await expect(target).toHaveAttribute("href", /privateView=required/);
     assert.equal((await target.getAttribute("href")).includes("SYNTHETIC_PRIVATE_PROMPT"), false);
     await source.evaluate(() => {

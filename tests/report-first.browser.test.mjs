@@ -310,7 +310,7 @@ test("Reports author pointer drafts stay inside their popover until Apply or Can
         [...node.selectedOptions].map(option => option.value)), ["user", "agent", "unknown"]);
     await trigger.click();
     await page.getByRole("option", { name: "Human prompts", exact: true }).click();
-    await page.getByRole("option", { name: "Author unverified", exact: true }).click();
+    await page.getByRole("option", { name: "Sender unclear", exact: true }).click();
     const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator(".select-popup").getByRole("button", { name: "Apply", exact: true }).click();
     const updated = await (await pending).json();
@@ -908,7 +908,8 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.equal(previews(), beforeDraft + 1);
     assert.equal(body.records.length, 3, "Mail is retained and the original older interaction is admitted");
     await expect(page.locator("#reportExperienceScope")).toContainText("Based on Analyze filters");
-    assert.match(page.url(), new RegExp(`from=${today}&to=${today}`), "Analyze dates were not mutated");
+    assert.equal(new URL(page.url()).searchParams.has("from"), false);
+    await expect(page.locator("#dateFilter")).toHaveValue("custom");
     assert.deepEqual(errors, []);
 });
 
