@@ -11,7 +11,7 @@ import { fixture, privateFixture, chooseTheme, setLegacyTimeBucket } from "./hel
 
 const proof = process.env.WIRE_DASHBOARD_PACKING_PROOFS;
 const baselineFile = process.env.WIRE_DASHBOARD_PACKING_BASE;
-const widgetSelector = ".analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card";
+const widgetSelector = ".analyze-outcome-summary,.analyze-chart-main,#analyzeUsage,#percentageCharts .percentage-card";
 
 function records(kind) {
     if (kind === "zero") return [];
@@ -70,7 +70,7 @@ async function setup(t, kind) {
 function geometry() {
     const root = document.querySelector(".analyze-dashboard");
     const box = node => node.getBoundingClientRect().toJSON();
-    const cards = [...root.querySelectorAll(".analyze-outcome-summary,.analyze-chart-main,#percentageCharts .percentage-card")]
+    const cards = [...root.querySelectorAll(".analyze-outcome-summary,.analyze-chart-main,#analyzeUsage,#percentageCharts .percentage-card")]
         .filter(node => node.checkVisibility()).map(node => ({
             key: node.dataset.breakdown || (node.matches(".analyze-outcome-summary") ? "outcomes" : "time"),
             ...box(node), content: node.innerText, rowSpan: node.style.gridRowEnd,
@@ -105,14 +105,14 @@ function assertPacking(value, key) {
     assert.ok(value.overflow <= 1, key);
     assert.deepEqual(value.clipped, [], key);
     for (const track of value.tracks) if (track.columns > 1) assert.ok(track.gap >= 8, "Inline labels, bars and values keep their horizontal separation");
-    assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "tools", "services", "models", "authors"]);
+    assert.deepEqual(value.cards.map(card => card.key), ["time", "outcomes", "usage", "tools", "services", "models", "authors"]);
     for (const card of value.cards) for (const other of value.cards) if (card !== other) {
         assert.ok(card.right <= other.x + 1 || other.right <= card.x + 1 || card.bottom <= other.y + 1 || other.bottom <= card.y + 1,
             `${key}: ${card.key} and ${other.key} do not overlap`);
     }
     for (const { key: name, gap } of value.gaps) assert.ok(gap >= -.1 && gap <= 18,
         `${key}: ${name} follows the actual card above, not a taller neighboring row (${gap}px)`);
-    for (const card of value.cards) assert.ok(["time","outcomes"].includes(card.key)
+    for (const card of value.cards) assert.ok(["time","outcomes","usage"].includes(card.key)
         ? card.bottom <= value.list.top : card.top >= value.list.bottom, `${key}: Interactions separates the charts from the breakdowns`);
 }
 

@@ -35,7 +35,6 @@
     transition: border-color .15s ease-out;
 }
 .wire-frontend-react input.search-capsule-input:focus-visible { outline-color: var(--focus); }
-.wire-frontend-react .analyze-chart-grid,
 .wire-frontend-react #activityList:has(.activity-card) {
     border: 1px solid var(--surface-edge);
     border-radius: var(--radius);
@@ -71,22 +70,6 @@
     background: var(--accent-soft);
 }
 .wire-frontend-react .analyze-dashboard { display: block; }
-.wire-frontend-react .analyze-chart-grid {
-    gap: 0;
-}
-.wire-frontend-react .analyze-chart-main {
-    grid-column: 1;
-    grid-row: 1;
-    border: 0;
-    border-radius: 0;
-}
-.wire-frontend-react .analyze-outcome-summary {
-    grid-column: 2;
-    grid-row: 1;
-    border: 0;
-    border-inline-start: 1px solid var(--surface-divider);
-    border-radius: 0;
-}
 .wire-frontend-react #chart .dimensional-scroll { padding-bottom: 8px; }
 .wire-frontend-react #chart .dimensional-time-labels { min-height: 32px; padding-top: 8px; }
 .wire-frontend-react #chart .flat-time-segment { fill: var(--column-label); }
@@ -129,13 +112,6 @@
     .wire-frontend-react #frontendBreakdowns .percentage-panels { grid-template-columns: minmax(0, 1fr); }
 }
 @container analyze-view (max-width: 60rem) {
-    .wire-frontend-react .analyze-chart-grid { grid-template-columns: minmax(0, 1fr); }
-    .wire-frontend-react .analyze-outcome-summary {
-        grid-column: 1;
-        grid-row: 2;
-        border-inline-start: 0;
-        border-top: 1px solid var(--surface-divider);
-    }
     .wire-frontend-react #outcomeChart .percentage-content:not([data-unit-mode=separate]) .percentage-legend {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
@@ -177,7 +153,6 @@
 @media (forced-colors: active) {
     .wire-frontend-react #activityList:has(.activity-card),
     .wire-frontend-react #activityList .frontend-record-slot + .frontend-record-slot > .activity-card,
-    .wire-frontend-react .analyze-chart-grid { border-color: CanvasText; }
     .wire-frontend-react #activityList .request-row[data-detail-active] > .request-card-open { outline: 2px solid Highlight; }
 }
 .wire-frontend-react #wireReactShell,

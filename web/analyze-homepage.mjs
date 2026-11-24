@@ -1,8 +1,9 @@
 export function homepageRows(order) {
     const rows = [];
+    const fullWidth = new Set(["time", "outcomes", "usage", "interactions"]);
     for (const key of order) {
         const last = rows.at(-1);
-        if (key !== "interactions" && last?.length === 1 && last[0] !== "interactions") last.push(key);
+        if (!fullWidth.has(key) && last?.length === 1 && !fullWidth.has(last[0])) last.push(key);
         else rows.push([key]);
     }
     return rows;

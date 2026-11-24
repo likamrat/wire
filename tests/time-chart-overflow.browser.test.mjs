@@ -491,13 +491,12 @@ function assertChart(geometry, expected) {
     assert.equal(geometry.marks.length, expected.length);
     assert.equal(geometry.dates.length, expected.length);
     assert.equal(geometry.viewport.pageOverflow, 0);
-    assert.deepEqual(geometry.axis.map(row => row.text), [String(Math.max(...expected)), "0"]);
+    assert.deepEqual(geometry.axis, [], "exact counts belong on the columns, not on a disconnected scale");
     for (const item of [...geometry.counts, ...geometry.dates]) {
         assert.ok(item.ink.x >= item.x && item.ink.right <= item.right, "Labels stay inside their own lane");
         assert.ok(item.ink.x >= geometry.plot.x && item.ink.right <= geometry.plot.right, "All label ink stays inside the plot");
         assert.ok(item.ink.y >= geometry.plot.y && item.ink.bottom <= geometry.plot.bottom, "No clipped label headroom");
     }
-    for (const item of geometry.axis) assert.ok(item.x >= geometry.plot.x && item.right <= geometry.plot.right);
     for (const [index, mark] of geometry.marks.entries()) {
         assert.equal(mark.total, expected[index]);
         assert.equal(mark.encodedHeight, expected[index] / Math.max(...expected) * 200);
@@ -524,9 +523,7 @@ test("native overflow appears only when needed and resize keeps all date targets
         assert.equal(geometry.overflowing, String(overflow));
         assert.equal(geometry.scrollbarHeight > 0, overflow, "Real native scrolling, not hidden/clipped overflow");
         assert.equal(Boolean(geometry.description), overflow);
-        const range = page.locator("#chartFooter .chart-size-note");
-        if (overflow) await expect(range).toHaveText(/Feb 2.*Mar 22, 2026.*Scroll/);
-        else await expect(range).toBeHidden();
+        await expect(page.locator("#chartFooter")).not.toContainText(/Chart dates|Scroll horizontally/i);
         assert.deepEqual(await links(), original);
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         for (let index = 0; index < counts.length; index++) {
@@ -592,8 +589,8 @@ test("genuinely dense time bins keep a native scroller and the final column at w
 
 test("sidebar animation crosses the fit boundary without a false scrollbar or replaced columns", async t => {
     const page = await setup(t);
-    // With equal chart columns, expanding the rail at this width crosses the seven-bin minimum.
-    await page.setViewportSize({ width: 1920, height: 1080 });
+    // The full-width timeline crosses its seven-bin minimum as the rail expands.
+    await page.setViewportSize({ width: 1040, height: 1080 });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await ready(page);
     const first = await page.locator(".time-column").first().elementHandle();

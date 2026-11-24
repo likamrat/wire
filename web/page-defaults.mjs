@@ -162,11 +162,10 @@ function layoutPreview() {
         const box = key === "interactions" ? 'viewBox="0 0 60 26" preserveAspectRatio="none"' : 'viewBox="0 0 46 26"';
         return `<div data-tile="${key}"><span>${label}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
     });
-    // Size the miniature independently of its current order. The longest label
-    // at column width and a split pair on either side of Interactions must fit.
+    // Full-width sections can separate every pair. Reserve space for one row per
+    // section so a reorder never moves the controls below the preview.
     const names = items.map(([,label]) => `<span>${label}</span>`).join("");
-    const rows = Math.min(tiles.length, Math.floor((tiles.length - 1) / 2) + 2);
-    return `<figure class="layout-preview" aria-hidden="true" style="--paired-rows:${rows};--stacked-rows:${tiles.length}"><figcaption>Layout preview</figcaption>
+    return `<figure class="layout-preview" aria-hidden="true" style="--preview-rows:${tiles.length}"><figcaption>Layout preview</figcaption>
       <div class="layout-preview-size"><div><div class="layout-preview-labels">${names}</div><svg></svg></div></div>
       <div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
 }
