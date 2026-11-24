@@ -280,9 +280,17 @@ test("Search opens the full long prompt and Back preserves the literal result an
     const hit = page.locator('.wire-search-hit[data-search-type="interaction"]');
     await expect(hit).toHaveCount(1);
     await expect(hit.locator("mark")).toHaveText("violet-lantern");
+    const hitId = await hit.getAttribute("data-search-id");
+    assert.ok(hitId);
+    const verified = page.waitForResponse(response => response.url().endsWith("/api/search/open"));
     await hit.focus(); await page.keyboard.press("Enter");
+    const opened = await verified;
+    assert.equal(opened.status(), 200);
+    assert.equal(opened.request().postDataJSON().id, hitId);
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-long");
     await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(content(page)).toBeFocused();
     assert.equal(await content(page).textContent(), exactPrompt);
     const expanded = await geometry(page);
     assert.ok(Math.abs(expanded.height - expanded.fullHeight) <= 1, "The Search destination is not clipped");
@@ -291,6 +299,7 @@ test("Search opens the full long prompt and Back preserves the literal result an
     await page.goBack();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#wireSearch")).toHaveValue("violet-lantern");
+    await expect(hit).toHaveAttribute("data-search-id", hitId);
     await expect(hit).toBeFocused();
     await capture(page, "prompt-search-return");
     assert.ok(!page.url().includes("violet"));

@@ -1329,6 +1329,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sidebarIdentity = null; requestRenderKey = null; sidebarReadingFocus = null;
         updateActiveCard();
         moveSidebar(false, () => {
+            // Search (or another control) may already own focus before the exit finishes.
+            const returnFocus = contextSidebar.contains(document.activeElement) || document.activeElement === document.body;
             contextSidebar.close();
             document.body.removeAttribute("data-context-docked");
             document.body.removeAttribute("data-reader-expanded");
@@ -1340,7 +1342,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 contextOwner = null;
             }
             if (preserveAnchor && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
-            if (restoreFocus && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent) {
+            if (restoreFocus && returnFocus && navigation === workspaceState.navigationGeneration && intent === workspaceState.readingIntent) {
                 const route = underlyingRoute(), saved = workspaceState.positions.get(readingKey(route));
                 // A nested visit can rebuild the article and lose its originating-link marker.
                 const focus = saved && api.isCurrent(saved.publication) ? saved.focus : null;
@@ -2329,15 +2331,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             searchOpenedRequest = next.view === "request" ? next.request : null;
             searchReturnMarker = liveSearchUI.returnKey();
             searchTargetInvalid = false;
-            await navigate(next.view === "analyze" ? next
+            const intent = workspaceState.readingIntent;
+            const entered = await navigate(next.view === "analyze" ? next
                 : { ...workspaceState.route, ...next, request: next.request, call: next.call, callRevision: next.callRevision }, false, { fromSearch: true, isCurrent });
-            if (!isCurrent()) return false;
-            if (next.view === "request" && !next.call) {
-                textAccess.revealPrompt($("selectedContext")?.querySelector(".full-text"));
-            }
+            if (!entered || !isCurrent() || intent !== workspaceState.readingIntent) return false;
             if (target.focus) {
                 const nativeTarget = target.focus.startsWith("native-source-fact-") || target.focus.startsWith("native-message-");
-                const node = nativeTarget ? readerSections?.revealTarget?.(target.focus) : $(target.focus);
+                let node = nativeTarget ? readerSections?.revealTarget?.(target.focus) : $(target.focus);
+                if (next.view === "request" && target.focus === "selectedContext") {
+                    if (!node || node.dataset.contextGroup !== next.request || workspaceState.route.request !== next.request) return false;
+                    cancelSidebarReading?.();
+                    textAccess.revealPrompt(node.querySelector(".full-text"));
+                    node = node.querySelector(".full-text-content");
+                }
                 if (!isCurrent()) return false;
                 if (nativeTarget && !node) {
                     announce("This exact recorded text is no longer available. Search again to open the current record.", "stale");
