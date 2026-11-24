@@ -810,9 +810,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     for (const type of ["pointerdown", "wheel", "touchmove", "keydown"]) {
         document.addEventListener(type, event => {
             if (!event.isTrusted) return;
-            // A wheel or touch scroll can already have moved the viewport at capture.
-            // Retire the old anchor without compensating for this new gesture.
-            workspaceState.noteReading();
+            // Keyboard Close reverses the entrance; it doesn't change where the user was
+            // reading. Carry only its still-current origin through to the return navigation.
+            const closing = type === "keydown" && event.target === $("closeContextSidebar")
+                && (event.key === "Enter" || event.key === " ") && sidebarIdentity
+                && sidebarColumnAnchor?.intent === workspaceState.readingIntent;
+            const intent = workspaceState.noteReading();
+            if (closing) sidebarColumnAnchor.intent = intent;
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });
     }

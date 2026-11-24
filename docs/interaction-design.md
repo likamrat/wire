@@ -37,6 +37,8 @@ keeps its existing Open/Close controls and the same mounted brand and links.
 
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent remain current.
+Activating Close from the keyboard during reader entry keeps the origin's
+place through the reversal. Scrolling the results cancels that compensation.
 Later user input wins over delayed navigation, reads and motion callbacks.
 Pointer presses must not trigger older scroll restoration that moves the
 targeted control before release.
