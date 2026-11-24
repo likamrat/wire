@@ -19,7 +19,7 @@ for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${fronten
     await expect(card).not.toContainText("Recorded tokens");
     await expect(card.locator("[data-measured-day]")).toHaveCount(1);
     await expect(card.locator(".token-line")).toHaveCount(0);
-    await expect(card.locator("[data-activity-day]")).toHaveCount(1);
+    await expect(card.locator("[data-activity-day]")).toHaveCount(2);
     const box=await slider.boundingBox();
     if(width<500) await slider.tap({position:{x:box.width*.98,y:box.height*.5}});
     else await slider.hover({position:{x:box.width*.98,y:box.height*.5}});

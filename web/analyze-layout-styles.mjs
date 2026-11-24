@@ -20,12 +20,12 @@ export const analyzeLayoutStyles = `
 .token-history-plot:focus-within {outline:2px solid var(--focus,var(--accent));outline-offset:2px}
 .token-grid {stroke:var(--rule);stroke-width:1}.token-axis {stroke:var(--muted);stroke-width:1}
 .token-line,.token-point {stroke:var(--accent);stroke-width:2;fill:var(--paper)}
-.token-unmetered {stroke:var(--muted);stroke-width:3}.token-day-guide {stroke:var(--accent);stroke-dasharray:2 4;opacity:.65}
+.token-activity-mark {stroke:var(--muted);stroke-width:3}.token-day-guide {stroke:var(--accent);stroke-dasharray:2 4;opacity:.65}
 .usage-date-slider {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:crosshair}
 .token-history-dates {display:flex;justify-content:space-between;gap:8px;color:var(--muted)}
 .token-history-key {gap:5px 16px;color:var(--muted);margin-block:6px 0}.token-history-key span {display:inline-flex;align-items:center;gap:5px}
 .token-history-key i.measured {width:15px;height:2px;background:var(--accent)}
-.token-history-key i.missing {width:3px;height:9px;background:var(--muted)}
+.token-history-key i.activity {width:3px;height:9px;background:var(--muted)}
 .token-day-reading {gap:8px;align-items:center;min-height:44px}.token-day-date a {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:.18em}
 .usage-chip.usage-missing {color:var(--muted);border-color:transparent;background:transparent}
 .context-sidebar-header .reader-token-jump {margin-inline-end:auto;display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:3px 6px;color:var(--accent);background:transparent;border:0;box-shadow:none;font-size:var(--type-small)}

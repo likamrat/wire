@@ -40,8 +40,8 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
             mark("circle",{cx:at,cy:y(d.total),r:3.8,class:"token-point","data-measured-day":d.date});
             last={i,total:d.total};
         }
-        if (d.active && (d.metered < d.eligible || !d.eligible)) {
-            mark("line",{x1:at,x2:at,y1:87,y2:97,class:"token-unmetered","data-activity-day":d.date});
+        if (d.active) {
+            mark("line",{x1:at,x2:at,y1:87,y2:97,class:"token-activity-mark","data-activity-day":d.date});
         }
     }
     const cursor = mark("line",{y1:6,y2:99,class:"token-day-guide"});
@@ -51,7 +51,7 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
     const labels=el("div","token-history-dates");
     labels.append(el("span","",formatDate(range.from)));if(span)labels.append(el("span","",formatDate(range.to)));
     const key=el("div","token-history-key");
-    for(const [cls,label] of [["measured","Measured tokens"],["missing","Activity with missing counts"]]) {
+    for(const [cls,label] of [["measured","Measured tokens"],["activity","Work IQ activity"]]) {
         const item=el("span");item.append(el("i",cls),document.createTextNode(label));key.append(item);
     }
     const detail=el("div","token-day-reading"), dateHost=el("span","token-day-date"), reading=el("span","token-day-value");
@@ -61,9 +61,10 @@ export function renderDailyTokenChart(el, host, calendar, summary, { formatDate,
         const index=Math.max(0,Math.min(span,value)); if (current===index) return;
         current=index;const date=dateAt(index), d=byDay.get(date), pos=x(index);
         slider.value=String(index);cursor.setAttribute("x1",pos);cursor.setAttribute("x2",pos);
-        const text = d?.metered ? `${number(d.total)} tokens · ${number(d.metered)} of ${number(d.eligible)} ${d.eligible===1?"interaction":"interactions"} measured`
+        let text = d?.metered ? `${number(d.total)} tokens · ${number(d.metered)} of ${number(d.eligible)} ${d.eligible===1?"interaction":"interactions"} measured`
             : d?.eligible ? `${number(d.eligible)} ${d.eligible===1?"interaction":"interactions"} · token count unavailable`
-            : d?.active ? "Activity from an interaction counted on an earlier day" : "No matching dated activity";
+            : d?.active ? "Continuing activity · usage belongs to an earlier day" : "No matching dated activity";
+        if(d?.eligible && d.active>d.eligible) text+=` · ${number(d.active-d.eligible)} continuing from earlier`;
         reading.textContent=text; slider.setAttribute("aria-valuetext",`${formatDate(date,true)}: ${text}`);
         dateHost.replaceChildren(d?.active ? dateLink(date) : el("span","",formatDate(date,true)));
     }

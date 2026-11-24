@@ -12,12 +12,12 @@ test("Analyze attributes a multi-day interaction once but keeps its later calls 
         {scenarioId:"c",origin:"two",usage:{total:0}},{scenarioId:"d",origin:"three",usage:null}];
     const calendar=usageCalendar(list,[
         {scenarioId:"a",startedAt:"2026-10-17"},{scenarioId:"b",startedAt:"2026-10-14"},
-        {scenarioId:"c",startedAt:"2026-10-15"},{scenarioId:"d",startedAt:"2026-10-15"},
+        {scenarioId:"a",startedAt:"2026-10-15"},{scenarioId:"c",startedAt:"2026-10-15"},{scenarioId:"d",startedAt:"2026-10-15"},
         {scenarioId:"out-of-scope",startedAt:"2026-10-20"},
     ],s=>s.origin,v=>v);
     assert.deepEqual(calendar,{range:{from:"2026-10-14",to:"2026-10-17"},days:[
         {date:"2026-10-17",total:0,metered:0,eligible:0,active:1},
-        {date:"2026-10-15",total:0,metered:1,eligible:2,active:2},{date:"2026-10-14",total:40,metered:1,eligible:1,active:1},
+        {date:"2026-10-15",total:0,metered:1,eligible:2,active:3},{date:"2026-10-14",total:40,metered:1,eligible:1,active:1},
     ]});
 });
 

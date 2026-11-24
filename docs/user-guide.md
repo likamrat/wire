@@ -351,7 +351,7 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 In Analyze, **Token usage** plots measured tokens per day. Hover, tap or use
 the arrow keys to inspect a date. A dot on zero is a measured zero. A short
-tick below the line means there was activity without a complete daily count.
+tick below the line means Work IQ activity took place, whether measured or not.
 WIRE leaves gaps between measured days; it doesn't estimate the missing usage.
 Open a date in Trends for its evidence, or choose **View by day** for the period.
 On an interaction card or in the slide-out header, read the count or **Tokens
