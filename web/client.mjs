@@ -821,6 +821,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });
     }
+    // Pasting or replacing a query need not start with a key or pointer event.
+    $("wireSearch").addEventListener("input", event => {
+        if (event.isTrusted) workspaceState.noteReading();
+    });
     // Feedback actions reuse the controllers released by the exiting reader.
     document.addEventListener("click", event => {
         const action = event.target.closest?.("[data-insight-details]");
