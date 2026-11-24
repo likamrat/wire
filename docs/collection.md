@@ -401,6 +401,14 @@ sender and kickoff checks apply. Both fields are defined in the
 Older versioned `missing-source` entries are eligible for the bounded review
 below. A review that still finds no supported sender proposes no change.
 
+Version 14 handles an older idle original with no logical send ID. It requires
+a valid journal event ID, the matching timestamp and exact original display
+boundary, plus either the validated app direct-input reference or an explicit
+host-added cross-chat sender. An ID, plain timestamped text, or a marker typed
+in the prompt is insufficient. The creator/kickoff and competing-source
+checks still apply. This does not invent a logical message ID or attach a
+tool call to a message by order.
+
 ### Prompt origin reader compatibility
 
 Once `host-agent-authored` is written, both the active

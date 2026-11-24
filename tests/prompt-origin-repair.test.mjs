@@ -35,7 +35,8 @@ async function manifest(root) {
 async function setup(t, variant = "direct", { checkpointCompanion = false, absentTargetEvent = false, batchOrigins = 1, originalFields } = {}) {
     const plan = variant === "plan-agent", mode = variant === "mode-user", attachment = variant === "attachment-user";
     const legacy = ["legacy-agent", "archived-agent"].includes(variant), linkedPair = variant === "v10-linked-pair", senderPair = variant === "v12-sender-pair";
-    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
+    const legacyIdle = variant === "legacy-idle-reference", guardedFirst = variant === "guarded-first";
+    const app = await promptInstallation(t), item = app.cases.find(row => row.name === (guardedFirst ? "kickoff" : legacy || variant === "explicit-agent" ? "agent" : plan ? "enveloped-agent" : "human"));
     const repairItems = [item];
     if (senderPair) {
         const marked = app.cases.find(row => row.name === "legacy");
@@ -75,10 +76,14 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
         await writeFile(app.sourceFiles[1], events.map(event => JSON.stringify(event) + "\n").join(""));
     }
     let companion;
-    if (plan || mode || attachment || checkpointCompanion || linkedPair) {
+    if (plan || mode || attachment || checkpointCompanion || linkedPair || legacyIdle || guardedFirst) {
         const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(JSON.parse);
         const original = events.find(event => event.id === item.promptId);
-        if (linkedPair) {
+        if (legacyIdle || guardedFirst) {
+            if (legacyIdle) delete original.data.messageId;
+            original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
+                + original.data.content + (legacyIdle ? directMessageReference() : "");
+        } else if (linkedPair) {
             item.data.content = "  Invented request.\nKeep this original text.  ";
             original.data.content = item.data.content;
             original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n`
@@ -151,7 +156,7 @@ async function setup(t, variant = "direct", { checkpointCompanion = false, absen
     const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
     let checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
     const older = { actor: "unknown", basis: linkedPair ? "unsupported-source" : plan ? "conflicting-source" : "invalid-source" };
-    const olderVersion = senderPair ? 12 : linkedPair ? 10 : 6;
+    const olderVersion = legacyIdle || guardedFirst ? 13 : senderPair ? 12 : linkedPair ? 10 : 6;
     const beforeOrigin = id => senderPair && id !== item.promptId ? { actor: "unknown", basis: "missing-source" } : older;
     const selectedIds = new Set(repairItems.map(item => item.promptId));
     for (const event of checkpoint.events.filter(event => selectedIds.has(event.id))) {
@@ -824,7 +829,17 @@ test("source mapping drift after preparation refuses the write and the same jour
     for (const file of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(f.app.context.dataDir, file.path))), file.sha256);
 });
 
-for (const variant of ["direct", "plan-agent", "mode-user", "attachment-user"]) test(`sealed origin repair preserves all facts and survives restart (${variant})`, async t => {
+test("a direct-looking first original can inspect an already retained creator match without opening the parent journal or proposing an author", async t => {
+    const f = await setup(t, "guarded-first");
+    await rename(f.app.sourceFiles[0], f.app.sourceFiles[0] + ".away");
+    const result = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, origins: f.origins });
+    assert.deepEqual(result.targets, []);
+    assert.deepEqual(result.unresolved.map(u => [u.authorship.basis, u.creatorEvidence.status]),
+        [["missing-source", "retained-kickoff-without-child-receipt"]]);
+    assert.deepEqual((await loadBoardState(f.app.context)).evidence, f.state.evidence);
+});
+
+for (const variant of ["direct", "plan-agent", "mode-user", "attachment-user", "legacy-idle-reference"]) test(`sealed origin repair preserves all facts and survives restart (${variant})`, async t => {
     const f = await setup(t, variant);
     const inspected = await inspectPromptOriginRepair({ dataDir: f.app.context.dataDir, targets: f.plan.targets });
     assert.equal(inspected.authorized, false);

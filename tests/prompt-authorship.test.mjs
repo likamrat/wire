@@ -354,6 +354,22 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
         "Tags inside the exact displayed body cannot establish Agent provenance");
 });
 
+test("an idle original without a logical message ID still needs independent host sender or direct-reference evidence", () => {
+    const timestamp = "2026-10-06T12:00:00Z", stamp = `<current_datetime>${timestamp}</current_datetime>\n\n`;
+    const content = "Invented earlier request.", reference = directMessageReference(), eventId = randomUUID();
+    const sender = `<cross_session_message>\nfrom_session_id: ${randomUUID()}\n</cross_session_message>\n\n`;
+    const event = (prefix, suffix, extra = {}) => ({ type: "user.message", id: eventId, timestamp,
+        data: { content, delivery: "idle", transformedContent: stamp + prefix + content + suffix, ...extra } });
+    assert.deepEqual(promptAuthorship.fromEvent(event("", reference)), { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(promptAuthorship.fromEvent(event(sender, "")), { actor: "agent", basis: "host-agent-envelope" });
+    for (const input of [event("", ""), event("", reference, { messageId: null }), event("", reference, { delivery: "steering" }),
+        event("", "", { content: content + reference, transformedContent: stamp + content + reference }),
+        { ...event("", reference), id: undefined }, { ...event("", reference), timestamp: "2026-10-06T12:00:12Z" },
+        event("<unknown-context>invented</unknown-context>", reference)]) assert.equal(promptAuthorship.fromEvent(input).actor, "unknown");
+    assert.equal(promptAuthorship.fromEvent(event("", reference), { agentCreatedFirstMessage: true }).actor, "unknown");
+    assert.equal(promptAuthorship.fromEvent(event(sender, "", { source: "user" })).basis, "conflicting-source");
+});
+
 test("a timestamp-free steering sender frame identifies only the recorded agent, never an unmarked human", () => {
     const content = "Invented steering request.";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
