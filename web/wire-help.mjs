@@ -15,6 +15,8 @@ const topics = [
         <h3>If a call failed</h3><p>Open the interaction and expand the affected call to read the recorded reason, if available. A call with no recorded result is not a failed call.</p>
         <h3>Which app did Copilot use?</h3><p>Look for <strong>Target</strong> on the call. A prompt can mention Calendar without Copilot using it. <strong>Asked Copilot</strong> tells you there was a request. It doesn’t tell you which apps Copilot used.</p>
         <h3>Who sent the prompt?</h3><p>A <strong>Human prompt</strong> came from a person. An <strong>Agent prompt</strong> came from an agent. <strong>Sender unclear</strong> means the saved record doesn't tell WIRE which one sent it. The card shows why.</p>`],
+    ["updates", "When an update stops", `<p>If a window didn’t confirm it was ready, WIRE stopped before restarting. Keep your windows open. Finish any edits and check the result of any pending save or deletion in its original window. Then choose <strong>Settings → General → Update and restart</strong> in one window.</p>
+        <p>If you see <strong>Restart not confirmed</strong>, choose <strong>Check restart status</strong> instead of starting the update again.</p>`],
 ];
 
 export const wireHelpMarkup = `<section id="wireHelpView" class="wire-help" aria-labelledby="pageTitle" hidden>
