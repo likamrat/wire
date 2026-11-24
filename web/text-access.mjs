@@ -124,16 +124,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null, releasePreview = null;
         const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
             + " Author unverified describes message provenance, not an account sign-in failure." });
-        const origin = authorship?.read(source);
-        const authorGap = origin?.issue || origin?.basis === "missing-source" && authorship.capture(source)?.reason
-            ? authorship.reason(source) : {
-            "missing-source": "Who sent this was not recorded",
-            "legacy-missing": "This older record has no sender details",
-            "conflicting-source": "Origin details could not be reconciled",
-            "unsupported-source": "The recorded sender format is not supported",
-            "system-source": "Recorded as system-supplied context",
-            "invalid-source": "Recorded sender details could not be verified",
-        }[origin?.basis] || "Recorded sender details could not be verified";
+        const authorGap = subject === "request" && authorship?.read(source).actor === "unknown" ? authorship.unverifiedReason(source) : null;
         const root = document.createElement("div");
         root.className = "full-text" + (complete ? " full-text-complete" : "") + (complete && contentFirst ? " full-text-content-first" : "");
         if (visibility) root.classList.add("reader-owned-text");

@@ -6,6 +6,7 @@ import { createServiceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createTimeContext } from "../lib/time.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { chartReferenceFacts } from "../web/chart-reference.mjs";
 import { fixture } from "./helpers.mjs";
 
@@ -40,8 +41,8 @@ test("an unsupported exact-data grouping cannot silently become API paths", () =
 
 test("the guide receives immutable display facts, not private payloads or membership arrays", () => {
     const records = [fixture("reference-facts")], analytics = buildActivityAnalytics(records);
-    const charts = createPercentageCharts({ categories: createServiceCategories(), results: createRecordedResults() });
-    const model = { ...charts.model(analytics), models: charts.modelUsage(records), privatePrompt: "EXCLUDED_PRIVATE_PROMPT" };
+    const charts = createPercentageCharts({ categories: createServiceCategories(), results: createRecordedResults(), authorship: promptAuthorship });
+    const model = { ...charts.model(analytics), models: charts.modelUsage(records), authors: charts.authorUsage(records), privatePrompt: "EXCLUDED_PRIVATE_PROMPT" };
     model.separateUnits = true;
     analytics.privateQuery = "EXCLUDED_PRIVATE_QUERY";
     const result = chartReferenceFacts(analytics, model);
@@ -49,6 +50,8 @@ test("the guide receives immutable display facts, not private payloads or member
     assert.equal(result.model.separateUnits, true, "Source-defined units must survive the immutable guide projection");
     assert.deepEqual(result.facts.categories, analytics.workloadGroups.map(group => group.label));
     assert.equal(result.model.models.total, 1);
+    assert.deepEqual(result.model.authors.unverifiedReasons, [{ reason: "This older record has no sender details", version: null, count: 1 }]);
+    assert.ok(Object.isFrozen(result.model.authors.unverifiedReasons[0]));
     assert.equal(Object.isFrozen(result.model.services.recordedRows), true);
     assert.doesNotMatch(JSON.stringify(result), /EXCLUDED_PRIVATE|drilldownIds|interactionIds|scenarioId|sourceSessionId/);
     assert.throws(() => { result.facts.totals.count = 40; }, TypeError);

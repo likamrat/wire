@@ -53,7 +53,9 @@ test("prompt counts use accepted date/service/tool/outcome/author and authorized
         [{ from: "2020-01-01", to: "2020-01-02" }, [0, 0, 0]],
     ]) {
         const input = { ...options, filters: { ...options.filters, ...filters } };
-        assert.deepEqual(counts(charts.authorUsage(refine(snapshot(input), input).scenarios)), expected);
+        const usage = charts.authorUsage(refine(snapshot(input), input).scenarios);
+        assert.deepEqual(counts(usage), expected);
+        assert.equal(usage.unverifiedReasons.reduce((sum, row) => sum + row.count, 0), expected[2]);
     }
     const input = snapshot(options), row = input.analytics.rows.find(row => row.scenarioId === "prompt-widget-2");
     const receipt = { schemaVersion: searchWireContract.schemaVersion, panelId: "11111111-1111-4111-8111-111111111111",
@@ -71,6 +73,17 @@ test("prompt counts use accepted date/service/tool/outcome/author and authorized
     assert.equal(empty.total, 0);
     assert.deepEqual(empty.rows.map(row => row.fraction), [null, null, null]);
     assert.deepEqual(empty.rows.map(row => row.percentage), ["Not applicable", "Not applicable", "Not applicable"]);
+});
+
+test("unverified reasons count each origin once and never choose one alias's reason or rule version", () => {
+    const example = (basis, version) => ({ ...records[2], userPrompt: { ...records[2].userPrompt,
+        authorship: { actor: "unknown", basis }, authorshipVersion: version } });
+    const a = example("missing-source", 8), b = example("missing-source", 10), c = example("system-source", 10);
+    const reasons = items => charts.authorUsage([...items, records[0]]).unverifiedReasons;
+    assert.deepEqual(reasons([a, a]), [{ reason: "Who sent this was not recorded", version: 8, count: 1 }]);
+    assert.deepEqual(reasons([b, a]), [{ reason: "Who sent this was not recorded", version: "mixed", count: 1 }]);
+    assert.deepEqual(reasons([c, a]), [{ reason: "Saved copies give different sender details", version: "mixed", count: 1 }]);
+    assert.deepEqual(reasons([a, c]), reasons([c, a]));
 });
 
 test("incompatible native conversations stay outside prompt shares and factory serialization retains the contract", () => {

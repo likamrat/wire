@@ -363,7 +363,12 @@ previous view. On a narrow screen, the reader uses one pane without sizing contr
 **Human prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing Human and
 Agent is not the same as All, which also includes unverified authors.
-The reader explains retained origin gaps separately from call results. For
+An unverified card shows the saved reason separately from the call result. In
+**Analyze > Guide > Recorded prompt authors**, **Why authors are unverified**
+counts those reasons across all pages of the current view and shows the saved
+rule version when available. In the reader, **Source details** shows the selected
+prompt's saved rule version and whether its calls link directly to that prompt.
+Neither view rereads chats or changes an author. For
 example, WIRE may not recognize the host's message format even when the prompt
 text and tool result were saved. Older records may lack that specific reason.
 
