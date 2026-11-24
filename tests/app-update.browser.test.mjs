@@ -310,6 +310,25 @@ test("Settings and the notice offer the same restart; dismissing leaves the Sett
         await expect(popup).toBeVisible();
         await expect(install).toHaveAccessibleName("Update and restart");
         await expect(popup).toHaveAccessibleName("Update and restart");
+        if (width === 1280) {
+            const lines = await page.locator("#appUpdateDetail").evaluate(node => {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                return new Set([...range.getClientRects()].map(rect => rect.top)).size;
+            });
+            assert.equal(lines, 2, "All of the update copy fits on two lines");
+            const notice = await page.locator("#appUpdateNotice").boundingBox(), search = await page.locator("#settingsSearch").boundingBox();
+            assert.ok(notice.x + notice.width <= search.x);
+            const dismiss = await page.locator("#appUpdateDismiss").boundingBox();
+            assert.ok(dismiss.y < (await popup.boundingBox()).y);
+        } else {
+            const search = page.locator("#settingsSearch");
+            await search.scrollIntoViewIfNeeded();
+            await search.click();
+            await expect(search).toBeFocused();
+            const notice = await page.locator("#appUpdateNotice").boundingBox();
+            assert.ok(notice.y + notice.height <= (await search.boundingBox()).y);
+        }
         const paint = await page.locator("#appUpdateApply").evaluate(node => {
             const color = getComputedStyle(node, "::before").backgroundColor;
             return { rgb: color.match(/\d+/g)?.map(Number), overflow: document.documentElement.scrollWidth > innerWidth,

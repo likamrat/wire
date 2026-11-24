@@ -1,17 +1,24 @@
 export const settingsStyles = `
-#appUpdateNotice {position:absolute;z-index:var(--layer-header);
- box-sizing:border-box;width:max-content;max-width:min(23rem,calc(100vw - 2 * var(--space-lg)));padding:var(--space-lg);
+#appUpdateNotice {position:relative;box-sizing:border-box;max-width:100%;padding:var(--space-lg);margin-bottom:var(--space-lg);
  border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);box-shadow:var(--surface-shadow);
  transition:transform 300ms cubic-bezier(.2,0,0,1),opacity 200ms ease-out,visibility 300ms}
 #appUpdateNotice[inert] {visibility:hidden;pointer-events:none;opacity:0;transform:translateY(1.25rem);transition-duration:180ms}
 @media(min-width:64rem) {
- #appUpdateNotice {position:fixed;inset-inline-start:10px;inset-block-end:7.5rem;width:clamp(12rem,calc(var(--app-sidebar-width,216px) - 20px),19rem);padding:var(--space-md)}
+ #appUpdateNotice {position:fixed;z-index:var(--layer-header);inset-inline-start:10px;inset-block-end:7.5rem;width:clamp(14rem,calc(var(--app-sidebar-width,216px) - 20px),19rem);padding:var(--space-md);margin:0}
  :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
+}
+@media(width < 64rem) {
+ #appUpdateNotice {transition-property:transform,opacity,visibility,display;transition-behavior:allow-discrete}
+ #appUpdateNotice[inert] {display:none}
+ @starting-style {#appUpdateNotice:not([inert]) {opacity:0;transform:translateY(1.25rem)}}
 }
 @media(prefers-reduced-motion:reduce) {
  #appUpdateNotice,#appUpdateNotice[inert] {transition:none;transform:none}
 }
 .app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
+.app-update-copy strong {display:block;padding-inline-end:2rem}
+#appUpdateDetail {text-wrap:balance}
+#appUpdateDismiss {position:absolute;top:0;inset-inline-end:0}
 .app-update-actions {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm);margin-top:var(--space-sm)}
 button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--ink))}
 [data-settings-section=general] .settings-actions {margin-top:0}
