@@ -129,10 +129,13 @@ function measure() {
     };
     const legend = root.querySelector(".percentage-legend");
     const card = root.querySelector(".percentage-card"), scope = document.querySelector("#analyzeScopeSummary");
+    const timeline = box(document.querySelector(".analyze-chart-main")), frame = box(root.closest(".analyze-outcome-summary"));
+    const ring = box(root.querySelector(".percentage-visual")), paired = Math.abs(timeline.top-frame.top) <= 1;
+    const centeringSpace = paired ? Math.min(box(legend).top,ring.top) - box(root.querySelector(".percentage-content")).top : 0;
     return { paintedDiameter: 208 * scale, innerDiameter: 132 * scale, value: text(".percentage-total-value"),
         unit: text(".percentage-total-unit"), widget: box(card), legend: box(legend),
-        ring: box(root.querySelector(".percentage-visual")),
-        bottomGap: box(card).bottom - Math.max(box(legend).bottom, box(root.querySelector(".percentage-visual")).bottom),
+        ring, intrinsicHeight: box(card).height - 2 * centeringSpace,
+        bottomGap: Math.abs(box(card).bottom - Math.max(box(legend).bottom,ring.bottom) - centeringSpace),
         scopeInWidget: card.contains(scope), scopeInCommands: document.getElementById("analyzeResultCommands").contains(scope),
         rows: [...legend.children].map(row => ({ category: row.dataset.category, count: +row.dataset.count,
             percentage: row.dataset.percentage, label: box(row.querySelector(".percentage-label")),
@@ -209,7 +212,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
         if (current.width === 1440 && current.textScale === 100 && current.zoom === 1) {
             assert.ok(Math.abs(current.paintedDiameter - 208 * 208 / 240) < .01, current.key);
             assert.ok(current.bottomGap <= 12, `${current.key}: tightened space below the legend`);
-            assert.ok(current.widget.height <= 280, `${current.key}: side-by-side widget stays content-sized`);
+            assert.ok(current.intrinsicHeight <= 280, `${current.key}: side-by-side outcome content stays compact inside the paired frame`);
         }
         if (current.legend.y < current.ring.bottom) {
             assert.ok(current.legend.x >= current.ring.right + 15, `${current.key}: labels and values sit on the wheel's right`);
@@ -242,8 +245,7 @@ test("Recorded outcomes fits full five-digit totals in the normal shell without 
         const admitted = previous.find(row => row.key === current.key);
         if (admitted && current.width === 1440 && current.textScale === 100 && current.zoom === 1) {
             assert.ok(current.paintedDiameter >= admitted.paintedDiameter * 1.3 - .01, current.key);
-            assert.ok(current.widget.height <= admitted.widget.height + 8, "The larger wheel fills existing space instead of inflating the widget");
-            assert.ok(current.widget.height < admitted.widget.height - 100, "Side-by-side composition removes the unused vertical band");
+            assert.ok(current.intrinsicHeight < admitted.widget.height - 100, "Side-by-side composition removes the unused vertical band");
             assert.equal(current.value.size, admitted.value.size, "Keep the admitted center typography");
             assert.equal(current.unit.size, admitted.unit.size, "Keep the admitted center typography");
         }

@@ -461,6 +461,7 @@ async function captureFocus(page, name, bounds) {
 
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {
     const page = await setup(t);
+    await page.setViewportSize({width:2048,height:1080}); await ready(page);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     const { root } = await cdp.send("DOM.getDocument");
@@ -589,8 +590,8 @@ test("genuinely dense time bins keep a native scroller and the final column at w
 
 test("sidebar animation crosses the fit boundary without a false scrollbar or replaced columns", async t => {
     const page = await setup(t);
-    // The side-by-side outcome column moves the same chart fit boundary 192px wider.
-    await page.setViewportSize({ width: 1632, height: 1080 });
+    // With equal chart columns, expanding the rail at this width crosses the seven-bin minimum.
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await ready(page);
     const first = await page.locator(".time-column").first().elementHandle();
