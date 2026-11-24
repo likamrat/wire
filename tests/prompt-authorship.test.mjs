@@ -1083,6 +1083,36 @@ for (const gap of ["after-first", "before-first", "windowed-after-first", "non-e
     assert.equal(await readFile(file, "utf8"), text);
 });
 
+test("ordinary incremental collection recovers the actual first event from its existing startup bytes before classifying a later direct input", async t => {
+    const app = await promptInstallation(t), file = app.sourceFiles[1], first = app.cases[0];
+    await app.runtime().collector.collectNow();
+    const old = await loadBoardState(app.context);
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    await app.restart(async () => {
+        const index = JSON.parse(await readFile(indexFile, "utf8"));
+        assert.equal(index.sources[app.child].firstPromptEventId, first.promptId);
+        delete index.sources[app.child].firstPromptEventId;
+        delete index.sources[app.child].promptStartObserved;
+        await writeFile(indexFile, JSON.stringify(index));
+    });
+    const timestamp = new Date().toISOString(), content = "Invented later request.", id = randomUUID(), messageId = randomUUID(), turnId = randomUUID();
+    await appendFile(file, [
+        { type: "user.message", timestamp, id, data: { content, messageId, delivery: "idle",
+            transformedContent: `<current_datetime>${timestamp}</current_datetime>\n\n${content}` } },
+        { type: "assistant.message", timestamp, id: randomUUID(), data: { originatingMessageId: messageId, turnId, toolRequests: [{ toolCallId: "later" }] } },
+        { type: "tool.execution_start", timestamp, id: randomUUID(), data: { turnId, toolCallId: "later", toolName: "workiq-ask", arguments: { question: "Invented." } } },
+        { type: "tool.execution_complete", timestamp, id: randomUUID(), data: { toolCallId: "later", success: true } },
+    ].map(e => JSON.stringify(e) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    await app.restart();
+    const state = await loadBoardState(app.context), record = state.evidence.find(r => r.userPrompt.sourceEventId === id);
+    assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    assert.equal(record.toolCalls[0].promptLink.promptEventId, id);
+    assert.equal(JSON.parse(await readFile(indexFile)).sources[app.child].firstPromptEventId, first.promptId);
+    const original = s => s.evidence.find(r => r.userPrompt.sourceEventId === first.promptId);
+    assert.deepEqual(original(state).userPrompt, original(old).userPrompt);
+});
+
 test("targeted qualification stops at its byte budget and resumes rather than rescanning a creator", async t => {
     const app = await promptInstallation(t);
     const parentEvents = (await readFile(app.sourceFiles[0], "utf8")).trim().split("\n").map(line => JSON.parse(line));
