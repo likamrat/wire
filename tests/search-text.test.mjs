@@ -241,13 +241,16 @@ test("retained titles are bounded original grapheme slices without synthetic ell
 });
 
 test("JSON, Markdown and PDF saved report bodies use real non-AI extraction", { timeout: 60000 }, async t => {
-    const noInference = forbidInference(t, { pdf: true });
+    let pdfParses = 0;
+    const noInference = forbidInference(t, { pdf: true, onPdf: () => pdfParses++ });
     const { context } = await privateFixture(t, [row("body", "PowerPoint format body marker")]);
     const exports = createExportController(context), bundles = [];
     for (const format of ["json", "markdown", "pdf"]) bundles.push(await saveReport(context, exports, "body", format));
     const engine = createSearchRetrieval(context, { source: inventedSource, onInvalidate: () => {} });
     t.after(() => engine.close());
     assert.equal((await engine.build()).mode, "text");
+    const indexedParses = pdfParses;
+    assert.ok(indexedParses > 0);
     let hits;
     await engine.search({ query: "POWER", requestId: 0, types: ["report"] }, value => { hits = value; });
     assert.deepEqual(new Set(hits.map(hit => hit.target.bundleId)), new Set(bundles.map(bundle => bundle.bundleId)));
@@ -257,6 +260,15 @@ test("JSON, Markdown and PDF saved report bodies use real non-AI extraction", { 
         assert.match(hit.excerpt, /PowerPoint/);
         assert.equal(hit.target.kind, "open-saved-report-file");
     }
+    assert.equal(pdfParses, indexedParses, "Delivering an unchanged saved hit must not start its PDF parser again");
+    const pdf = bundles.find(bundle => bundle.formats.includes("pdf")), file = pdf.files["product-report.pdf"];
+    const bytes = await fs.readFile(file);
+    await fs.writeFile(file, Buffer.from(bytes).fill(0, 0, 1));
+    const changed = await engine.search({ query: "POWER", requestId: 1, types: ["report"] }, () => assert.fail("Changed PDF bytes were disclosed"));
+    assert.equal(changed.indexId, null);
+    await fs.writeFile(file, bytes);
+    assert.equal((await engine.build()).mode, "text");
+    assert.ok(pdfParses > indexedParses, "The evicted PDF extraction must not survive invalidation");
     await engine.close();
     noInference();
 });
