@@ -346,9 +346,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return trendInventory.get(snapshot);
     }
+    function usageCalendar() {
+        return assessmentFactories.usageCalendar(slice.scenarios,selectionRows(),percentageMath.interactionIdentity,
+            value => time.day(value,workspaceState.scope.timeContext.timeZone));
+    }
     const analyzeTrends = assessmentFactories.createAnalyzeTrendsEntry({ time, results, authorship, categories: recordedCategories }).mount({
         announce,
-        getContext: () => {
+        getContext: family => {
             const { scope, acceptedRoute: route, evidence: snapshot } = workspaceState;
             if (!scope || !snapshot || !api.publicationToken() || workspaceState.loading || workspaceState.stale || workspaceState.route.view !== "analyze"
                 || route?.view !== "analyze" || route.compare || scope.layer !== "tool" || !retainedTrendTools(snapshot).size
@@ -356,6 +360,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const githubOnly = scope.filters.sources?.length === 1 && scope.filters.sources[0] === "github-copilot";
             return { scope, route, snapshot, revision: snapshot.revision, hasSearch: Boolean(route.search?.trim() || semanticQuery),
                 supportedTools: retainedTrendTools(snapshot), searchMembership: semanticMembership,
+                ...(family === "usage" ? {usageDays:usageCalendar()} : {}),
                 includesNative: !githubOnly && (boundedIncludesMicrosoft() && hasMicrosoftSource() || snapshot.scenarios.some(nativeActivity.isNative)),
                 otherSources: !githubOnly && snapshot.scenarios.some(s => s.recordKind !== "native-conversation" && !["copilot-app", "copilot-app-chat"].includes(s.sourceHost)),
                 hasEarlier: snapshot.scenarios.some(s => s.isLegacy || s.collectionInactive) };
@@ -5656,8 +5661,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("chartDataTitle").textContent = `${$("chartTitle").textContent} (${count(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
         percentages.update(workspaceState.analytics, { ...workspaceState.scope, search: Boolean(search), withinServices: workspaceState.route.withinServices?.split(",") || [] }, slice.scenarios, native);
         const breakdown = percentages.referenceModel();
-        assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations);
         const offersTrends = layer === "tool" && retainedTrendTools(workspaceState.evidence).size > 0;
+        assessmentFactories.homepageUsage(el, $("analyzeUsageContent"), breakdown.models.usage, breakdown.authors.nativeConversations,
+            breakdown.models.usage.metered ? usageCalendar() : [], day => offersTrends
+                ? analyzeTrends.link("usage",day,date(day,true)) : el("span","",date(day,true)));
         for (const link of document.querySelectorAll(".analyze-trend-link")) link.hidden = !offersTrends;
         publishChartReference();
     }

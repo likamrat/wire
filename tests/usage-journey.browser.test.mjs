@@ -3,8 +3,106 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { usagePreview } from "./usage-preview-fixture.mjs";
-import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain } from "./helpers.mjs";
+import { selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters, navigateMain, navigateSettings } from "./helpers.mjs";
 import { prepareLandingReport } from "./report-journey-helpers.mjs";
+
+for (const [frontend,width] of [["react",1440],["bundled",390]]) test(`${frontend}: Analyze explains sparse token usage and opens the actual measured day`,async t=>{
+    const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend,{sparse:true});
+    const browser=await chromium.launch(); cleanup.push(()=>browser.close());
+    const page=await browser.newPage({viewport:{width,height:900},timezoneId:"America/Los_Angeles",hasTouch:width<500});
+    await page.goto(runtime.url);
+    if (width<500) await chooseTheme(page,"dark");
+    const card=page.locator("#analyzeUsage"), date=card.locator(".usage-only-day a");
+    await expect(card).toContainText("Counts available for 1 of 2 interactions");
+    await expect(card.locator(".usage-total")).toHaveText("200,000 tokens");
+    await expect(card).not.toContainText("Recorded tokens");
+    const breakdown=card.locator(".usage-breakdown>div");
+    await expect(breakdown.filter({hasText:"Generated output"})).toContainText("0.25% (500)");
+    await expect(breakdown.filter({hasText:"Input reused from cache"})).toContainText("80% (160,000)");
+    const expected=new Date(); expected.setUTCHours(10,0,0,0); expected.setUTCDate(expected.getUTCDate()-20);
+    const dateText=expected.toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",year:"numeric",month:"short",day:"numeric"});
+    await expect(date).toHaveText(dateText);
+    if (process.env.WIRE_USAGE_PROOFS) await card.screenshot({path:path.join(process.env.WIRE_USAGE_PROOFS,`${frontend}-${width}-usage-dated.png`)});
+    await date.press("Enter");
+    const panel=page.locator(".trends-panel[data-family=usage]");
+    await expect(panel).toContainText("200,000 tokens");
+    await expect(panel).toContainText("1 of 2 interactions metered");
+    await expect(panel.getByRole("button",{name:"View 2 calls"})).toBeVisible();
+    await panel.getByRole("button",{name:"View daily values",exact:true}).click();
+    await expect(page.getByRole("dialog").getByRole("row").filter({hasText:dateText})).toContainText("200,000 tokens");
+    await page.keyboard.press("Escape"); await page.getByRole("button",{name:"Back to Analyze"}).click();
+    await expect(date).toBeFocused();
+});
+
+for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: Most tokens reorders the same cards and both Analyze defaults survive reopening`,async t=>{
+    const cleanup=[]; t.after(async()=>{for(const close of cleanup.reverse()) await close();});
+    const {runtime}=await usagePreview({after:f=>cleanup.push(f)},frontend,{paginated:true});
+    const browser=await chromium.launch(); cleanup.push(()=>browser.close());
+    const context=await browser.newContext({viewport:{width,height:900},timezoneId:"UTC",reducedMotion:"reduce",hasTouch:width===390});
+    const settings=await context.newPage();
+    await settings.goto(new URL("/settings?section=analyze",runtime.url).href);
+    await expect(settings.locator("#defaultAnalyzeSort-control")).toHaveText("Most recent");
+    await settings.locator("#analyzeLayout").getByRole("button",{name:"Move Interactions up",exact:true}).click();
+    const day=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
+    const page=await context.newPage();
+    await page.goto(new URL(`/?range=custom&from=${day(4)}&to=${day(1)}`,runtime.url).href);
+    await expect(page.locator("#activityList article")).toHaveCount(8);
+    await openAnalyzeFilters(page);
+    await selectActivityOption(page,"promptAuthorFilter",["user"]); await closeAnalyzeFilters(page);
+    const prompts=p=>p.locator("#activityList article .request-card-prompt");
+    const recent=["Read project brief","Search for notes","Find review owners","Launch notes"];
+    const byTokens=["Find review owners","Launch notes","Read project brief","Search for notes"];
+    const layout=p=>p.locator(".analyze-chart-main:visible,.analyze-outcome-summary:visible,#analyzeUsage:visible,#activityView:visible,.percentage-card[data-breakdown]:not([data-breakdown=outcomes]):visible")
+        .evaluateAll(nodes=>nodes.map(n=>({key:n.id || n.dataset.breakdown || n.className,x:n.getBoundingClientRect().x,y:n.getBoundingClientRect().y}))
+            .sort((a,b)=>a.y-b.y || a.x-b.x).map(n=>n.key));
+    await expect(prompts(page)).toHaveText(recent);
+    const initialLayout=await layout(page), scope=page.url(), summary=await page.locator("#activityListSummary").innerText();
+    const listControl=page.locator("#activityUsageSort-control");
+    for (const [label,order] of [["Most tokens",byTokens],["Most recent",recent]]) {
+        if (width===390) await listControl.tap(); else await listControl.press("Enter");
+        const option=page.getByRole("option",{name:label,exact:true});
+        if (width===390) await option.tap();
+        else {
+            await listControl.press(label==="Most tokens"?"ArrowDown":"ArrowUp");
+            await expect(option).toHaveAttribute("data-active","true");
+            await listControl.press("Enter");
+        }
+        await expect(listControl).toHaveText(label);
+        await expect(prompts(page)).toHaveText(order);
+        if (label==="Most tokens") await expect(page.locator("#activityList article .usage-chip")).toHaveText(["33,000 tokens","30,000 tokens","12,000 tokens"]);
+        assert.equal(page.url(),scope); assert.equal(await page.locator("#activityListSummary").innerText(),summary);
+        await expect(page.locator("#analyzeUsage")).toContainText("75,000");
+        await expect(page.locator("#analyzeUsage")).toContainText("3 of 4 interactions");
+        assert.deepEqual(await layout(page),initialLayout);
+    }
+    const allRecent=["Read project brief","Draft next steps","Search for notes","Meeting outline","Consolidate changes","Find review owners","Follow-up summary","Launch notes"];
+    const allTokens=["Earlier planning","Draft next steps","Consolidate changes","Follow-up summary","Find review owners","Meeting outline","Launch notes","Read project brief"];
+    for (const [choice,label,order,override] of [["tokens","Most tokens",allTokens,"recent"],["recent","Most recent",allRecent,"tokens"]]) {
+        await selectActivityOption(settings,"defaultAnalyzeSort",choice);
+        await settings.getByRole("link",{name:"View Analyze",exact:true}).click();
+        await expect(prompts(settings)).toHaveText(order);
+        await expect(settings.locator("#activityUsageSort-control")).toHaveText(label);
+        await navigateMain(settings,"settings"); await navigateSettings(settings,"analyze");
+        await settings.reload();
+        await expect(settings.locator("#defaultAnalyzeSort-control")).toHaveText(label);
+        const fresh=await context.newPage(); await fresh.goto(runtime.url);
+        await expect(fresh.locator("#activityUsageSort-control")).toHaveText(label);
+        await expect(prompts(fresh)).toHaveText(order);
+        const pager=fresh.getByRole("navigation",{name:"Analyze result pages"});
+        await pager.getByRole("button",{name:"Next",exact:true}).click();
+        await expect(prompts(fresh)).toHaveText([choice==="recent"?"Earlier planning":"Search for notes"]);
+        await selectActivityOption(fresh,"activityUsageSort",override);
+        await expect(prompts(fresh)).toHaveText(override==="recent"?allRecent:allTokens);
+        await expect(pager).toContainText("1-8 of 9");
+        await fresh.reload();
+        await expect(prompts(fresh)).toHaveText(order);
+        await expect(fresh.locator("#activityUsageSort-control")).toHaveText(label);
+        await fresh.close();
+        await expect(listControl).toHaveText("Most recent");
+        await expect(prompts(page)).toHaveText(recent);
+    }
+});
 
 for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${frontend}: scoped usage questions from homepage to frozen report (${width}px)`, async t => {
     const cleanups=[]; t.after(async()=>{ for (const close of cleanups.reverse()) await close(); });
@@ -23,6 +121,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     if (width < 500) await chooseTheme(page,"dark");
     await expect(widget).toContainText("342,000");
     await expect(widget).toContainText("7 of 8 interactions");
+    await expect(widget.locator(".usage-days .usage-day-total")).toHaveText(["104,500","30,500","115,000"]);
     await expect(widget).not.toContainText(/cost|price|\$/i);
     await capture("home",widget);
     const models=page.locator('[data-percentage-card="models"]');
@@ -64,7 +163,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     const day=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
     await page.goto(new URL(`/?range=custom&from=${day(2)}&to=${day(2)}`,runtime.url).href);
     await expect(widget).toContainText("30,500"); await expect(widget).toContainText("1 of 2 interactions");
-    await widget.getByRole("link",{name:/View trend/}).click();
+    await widget.getByRole("link",{name:/View by day/}).click();
     const periodUsage = page.locator(".trends-panel[data-family=usage]");
     await expect(periodUsage).toContainText("30,500 tokens");
     await expect(periodUsage.locator(".trends-plot svg")).toBeVisible();
@@ -122,7 +221,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(repeat).toContainText("~1,000 tokens");
     await expect(repeat).not.toContainText(/30,000|27 output/);
     await page.keyboard.press("Escape"); await expect(launchOpen).toBeFocused();
-    await widget.getByRole("link",{name:/View trend/}).press("Enter");
+    await widget.getByRole("link",{name:/View by day/}).press("Enter");
     const panel=page.locator(".trends-panel[data-family=usage]");
     await expect(panel).toContainText("342,000 tokens");
     await selectActivityOption(page,"trendsUsagequestion","author");
@@ -141,7 +240,7 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await selectActivityOption(page,"trendsUsagequestion","model");
     await expect(panel.locator(".trends-legend-row").filter({hasText:"claude-opus-5-5"})).toContainText("154,500 tokens");
     await page.getByRole("button",{name:"Back to Analyze"}).click();
-    await expect(widget.getByRole("link",{name:/View trend/})).toBeFocused();
+    await expect(widget.getByRole("link",{name:/View by day/})).toBeFocused();
     assert.equal(new URL(page.url()).search,"");
     await page.goto(new URL(`/compare?aFrom=${day(4)}&aTo=${day(3)}&bFrom=${day(2)}&bTo=${day(1)}`,runtime.url).href);
     await selectActivityOption(page,"compareUsagequestion","author");
@@ -221,7 +320,7 @@ test("normal React entry exposes exact interaction tokens, scoped shares, reader
     await expect(reading).toContainText("Work IQ returned ~12,000 tokens");
     await expect(reading.locator(".usage-timeline li")).toHaveCount(5);
     await chooseTheme(page, "dark");
-    await expect(reading.locator(".usage-bar span")).toHaveCount(4);
+    await expect(reading.getByRole("row",{name:"Generated output 2,000"})).toBeVisible();
     await page.setViewportSize({width:390,height:844});await page.keyboard.press("Escape");await expect(open).toBeFocused();
     await launch.getByRole("button",{name:"Hide",exact:true}).click();
     await expect(cards).toHaveCount(7);

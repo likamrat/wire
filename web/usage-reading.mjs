@@ -1,6 +1,7 @@
-export function createUsageReading({ tokenKinds, usageSummary, usageQuestions, usageThresholds, usageTools }) {
+export function createUsageReading({ firstUsageDays, tokenKinds, usageSummary, usageQuestions, usageThresholds, usageTools }) {
 const number = new Intl.NumberFormat().format;
-const names = { freshInput: "Fresh input", cacheRead: "Cache reads", cacheWrite: "Cache writes", output: "Output" };
+const percent = new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format;
+const names = { freshInput: "Uncached input", cacheRead: "Input reused from cache", cacheWrite: "Input saved to cache", output: "Generated output" };
 function questionControls(doc, prefix, change, { filters = false } = {}) {
     const host = doc.createElement("div"), controls = new Map();
     host.className = "usage-question-controls";
@@ -81,15 +82,12 @@ function usageReading(el, host, scenario, formatTime, callLabel) {
 }
 function renderModelCounts(el, host, u) {
     host.append(el("p", "usage-headline", `${number(u.total)} tokens · ${u.steps.length} model ${u.steps.length === 1 ? "call" : "calls"}`));
-    const bar = el("div", "usage-bar"); bar.setAttribute("aria-hidden", "true");
     const table = el("table", "usage-table"), head = table.createTHead().insertRow();
     for (const label of ["Token type", "Tokens"]) head.append(el("th", "", label));
     const body = table.createTBody();
     for (const key of tokenKinds) {
-        const segment = el("span"); segment.dataset.kind = key; segment.style.flexGrow = String(u.tokens[key]); bar.append(segment);
         const tr = body.insertRow(); tr.append(el("th", "", names[key]), el("td", "", u.tokens[key] === null ? "Not recorded" : number(u.tokens[key])));
     }
-    if (tokenKinds.every(k => u.tokens[k] !== null)) host.append(bar);
     host.append(table);
 }
 function modelShareReading(el, host, s, nativeCount) {
@@ -102,31 +100,64 @@ function modelShareReading(el, host, s, nativeCount) {
     }
     host.append(el("p", "muted", `${number(s.metered)} of ${number(s.eligible + nativeCount)} interactions metered.`));
 }
-function homepageUsage(el, host, summary, nativeCount) {
-            const { eligible, metered, total, tokens } = summary;
-            const population = eligible + nativeCount;
-            if (!metered) {
-                host.replaceChildren(el("p", "percentage-empty", population
-                    ? `No verified token totals for the ${number(population)} matching ${population === 1 ? "interaction" : "interactions"}.`
-                    : "No matching interactions."));
-                return;
-            }
-            const facts = el("dl", "usage-overview-facts");
-            const fact = el("div");
-            fact.append(el("dt", "", "Recorded tokens"), el("dd", "", number(total)),
-                el("dd","usage-overview-detail",`${number(metered)} of ${number(population)} interactions`));
-            facts.append(fact);
-            const composition = el("div", "usage-composition"), bar = el("div", "usage-bar");
-            bar.setAttribute("aria-hidden", "true");
-            const legend = el("ul", "usage-overview-legend");
-            for (const key of tokenKinds) {
-                const segment = el("span"); segment.dataset.kind = key; segment.style.flexGrow = String(tokens[key] ?? 0); bar.append(segment);
-                const item = el("li"), swatch = el("i"); swatch.dataset.kind = key; swatch.setAttribute("aria-hidden", "true");
-                item.append(swatch, `${names[key]}: ${tokens[key] === null ? "not recorded" : number(tokens[key])}`); legend.append(item);
-            }
-            if (total > 0 && tokenKinds.every(k => tokens[k] !== null)) composition.append(bar);
-            composition.append(legend);
-            host.replaceChildren(facts, composition);
+function usageCalendar(scenarios,rows,identity,dayOf) {
+    const records = new Map(scenarios.filter(s => s.recordKind !== "native-conversation").map(s => [s.scenarioId,s]));
+    const origins = new Map([...records].map(([id,s]) => [id,identity(s)]));
+    const first = firstUsageDays(rows.map(r => ({originId:origins.get(r.scenarioId),date:r.startedAt && dayOf(r.startedAt)})));
+    const usage = new Map([...records.values()].map(s => [origins.get(s.scenarioId),s.usage]));
+    const days = new Map();
+    for (const [origin,u] of usage) {
+        const date = first.get(origin) ?? null;
+        const d = days.get(date) ?? {date,total:0,metered:0,eligible:0};
+        d.eligible++;
+        if (u) { d.total+=u.total; d.metered++; }
+        days.set(date,d);
+    }
+    return [...days.values()].sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""));
 }
-return { usageChip, usageReading, toolTokenFields, modelShareReading, homepageUsage, usageSummary, questionControls };
+function homepageUsage(el, host, summary, nativeCount, days, dateLink) {
+    const {eligible,metered,total,tokens} = summary, population = eligible + nativeCount;
+    if (!metered) {
+        host.replaceChildren(el("p","percentage-empty",population
+            ? `No verified token totals for the ${number(population)} matching ${population === 1 ? "interaction" : "interactions"}.`
+            : "No matching interactions."));
+        return;
+    }
+    const grid = el("div","usage-overview"), overview = el("div","usage-by-day"), mix = el("div","usage-mix");
+    const headline = el("p","usage-total",number(total));
+    headline.append(el("span",""," tokens"));
+    const coverage = el("p","usage-coverage",`Counts available for ${number(metered)} of ${number(population)} ${population === 1 ? "interaction" : "interactions"}.`);
+    const measured = days.filter(d => d.metered);
+    overview.append(headline,coverage);
+    if (measured.length === 1) {
+        const when = el("p","usage-only-day","Measured on ");
+        if (measured[0].date) when.append(dateLink(measured[0].date));
+        else when.textContent = "Date not recorded";
+        overview.append(when);
+    } else {
+        const label = el("h4","",measured.length>3 ? "Latest 3 days with counts" : "Days with counts"), list = el("ul","usage-days");
+        list.setAttribute("aria-label",label.textContent);
+        for (const d of measured.slice(0,3)) {
+            const row = el("li");
+            row.append(d.date ? dateLink(d.date) : el("span","","Date not recorded"),el("span","usage-day-total",number(d.total)));
+            list.append(row);
+        }
+        overview.append(label,list);
+    }
+    const breakdown = el("dl","usage-breakdown");
+    for (const kind of tokenKinds) {
+        const n=tokens[kind], row=el("div"), val=el("dd");
+        if (n === null) val.textContent="Not recorded";
+        else {
+            const share = total ? n/total*100 : null;
+            if (share !== null) val.append(el("span","usage-part-share",share>0 && share<0.01 ? "<0.01%" : `${percent(share)}%`));
+            if (share !== null) val.append(" ");
+            val.append(el("span","usage-part-count",share===null?number(n):`(${number(n)})`));
+        }
+        row.append(el("dt","",names[kind]),val); breakdown.append(row);
+    }
+    mix.append(el("h4","","Share of measured tokens"),breakdown);
+    grid.append(overview,mix); host.replaceChildren(grid);
+}
+return { usageChip, usageReading, toolTokenFields, modelShareReading, homepageUsage, usageCalendar, usageSummary, questionControls };
 }

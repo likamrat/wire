@@ -5,16 +5,21 @@ export const analyzeLayoutStyles = `
 .analyze-usage {min-width:0;padding:var(--widget-heading-inset) 20px 16px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:var(--radius-small);container:usage-card / inline-size}
 .analyze-dashboard>.analyze-usage {grid-column:1/-1}
 .wire-frontend-react .analyze-dashboard>.analyze-usage {margin-top:16px}
-.usage-overview-facts {display:flex;flex-wrap:wrap;gap:12px 40px;margin:0 0 14px}
-.usage-overview-facts dt {font-size:var(--type-small);color:var(--muted)}
-.usage-overview-facts dd {margin:0;font-variant-numeric:tabular-nums}
-.usage-overview-facts dd:first-of-type {font-size:var(--type-section);color:var(--ink);font-weight:var(--weight-medium)}
-.usage-overview-detail,.usage-overview-legend {font-size:var(--type-small);color:var(--muted)}
-.usage-overview-legend {display:flex;flex-wrap:wrap;gap:4px 20px;padding:0;margin:6px 0 0;list-style:none}
-.usage-overview-legend li {display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
-.usage-overview-legend i {width:.6em;height:.6em;border-radius:2px;flex:none}
-.usage-overview-legend [data-kind=freshInput]{background:var(--accent)}.usage-overview-legend [data-kind=cacheRead]{background:var(--trends-series-2)}
-.usage-overview-legend [data-kind=cacheWrite]{background:var(--trends-series-4)}.usage-overview-legend [data-kind=output]{background:var(--trends-series-11)}
+.usage-overview {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-md) clamp(24px,5%,72px);align-items:start;font-variant-numeric:tabular-nums}
+.usage-overview h4 {margin:0 0 6px;font:var(--weight-medium) var(--type-body)/1.4 var(--font);color:var(--ink)}
+.usage-total {margin:0;color:var(--ink);font-size:var(--type-title);font-weight:var(--weight-medium)}
+.usage-total span,.usage-coverage,.usage-only-day,.usage-part-count {font-weight:var(--weight-regular);color:var(--muted)}
+.usage-total span,.usage-coverage,.usage-only-day {font-size:var(--type-small)}
+.usage-coverage {margin:2px 0 12px}.usage-only-day {margin:0}
+.usage-overview .usage-date-link {display:inline-flex;align-items:center;margin:0;min-height:44px;font-size:inherit;text-decoration:underline;text-underline-offset:.18em}
+.usage-days {list-style:none;margin:0;padding:0}
+.usage-days li,.usage-breakdown>div {display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0}
+.usage-days li {padding-inline-end:4px}.usage-day-total {color:var(--ink)}
+.usage-breakdown {margin:0}.usage-breakdown>div {padding-block:4px}
+.usage-breakdown dd {margin:0;display:flex;gap:6px;align-items:baseline;justify-content:end;flex-wrap:wrap}
+.usage-breakdown dt,.usage-breakdown dd {font-size:var(--type-small)}
+.usage-breakdown>div:last-child {border-block-start:1px solid var(--rule);margin-block-start:3px}
+@container (max-width:36rem){.usage-overview {grid-template-columns:minmax(0,1fr)}}
 #analyzeUsageContent>p {margin:10px 0 0}
 .usage-chip {margin-inline-start:auto;align-self:start;white-space:nowrap;font-size:var(--type-small);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 7px}
 .usage-switch,.usage-sort {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -26,11 +31,8 @@ export const analyzeLayoutStyles = `
 }
 .usage-model,.usage-reading {font-variant-numeric:tabular-nums}
 .usage-model {display:grid;min-width:0;overflow-wrap:anywhere;gap:3px;margin-block:12px}.usage-model>span {color:var(--muted);font-size:var(--type-small)}
-.usage-share-track,.usage-bar {display:flex;background:var(--paper);height:6px;border-radius:4px;overflow:hidden}
-.usage-share-track span,.usage-bar [data-kind=freshInput]{background:var(--accent)}
-.usage-bar [data-kind=output]{background:var(--trends-series-11)}
-.usage-bar [data-kind=cacheRead]{background:var(--trends-series-2)}.usage-bar [data-kind=cacheWrite]{background:var(--trends-series-4)}
-.usage-bar {height:10px;margin:8px 0}
+.usage-share-track {display:flex;background:var(--paper);height:6px;border-radius:4px;overflow:hidden}
+.usage-share-track span {background:var(--accent)}
 .usage-table-wrap {max-width:100%;overflow:auto}
 .usage-table {width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.usage-table :is(th,td){padding:6px;text-align:end;border-bottom:1px solid var(--rule)}.usage-table :first-child:is(th,td){text-align:start}
 .usage-context {padding:10px;background:var(--paper);border-radius:6px}

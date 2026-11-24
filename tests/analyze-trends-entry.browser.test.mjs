@@ -300,7 +300,8 @@ for (const frontend of ["react", "bundled"]) {
             if (activity.card.x + activity.card.w <= result.card.x + 2 && Math.abs(activity.card.y-result.card.y)<2)
                 if (Math.abs(activity.link.y-result.link.y)>1) issues.push(`${width}: adjacent action tops differ by ${activity.link.y-result.link.y}px`);
             for (const row of rows) {
-                if (row.text !== "View trend" || !row.accessible?.startsWith("View trend: ")) issues.push(`${row.id} wording: ${row.text}`);
+                const action = row.id === "analyze-trend-usage" ? "View by day" : "View trend";
+                if (row.text !== action || !row.accessible?.startsWith(action + ": ")) issues.push(`${row.id} wording: ${row.text}`);
                 if (row.font < row.rootFont) issues.push(`${width} ${row.id}: ${row.font}px link below reading size`);
                 if (row.link.h<44 || row.link.x<row.header.x-1 || row.link.x+row.link.w>row.header.x+row.header.w+1)
                     issues.push(`${width} ${row.id}: action outside header or less than 44px tall`);

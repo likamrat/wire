@@ -9,7 +9,7 @@ import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createProfileSource } from "./source-profile-fixture.mjs";
 
 // One source installation and one independent WIRE store; all text is invented.
-export async function usagePreview(t, frontend = "react") {
+export async function usagePreview(t, frontend = "react", {offline = false, paginated = false, sparse = false} = {}) {
     const root = await mkdtemp(path.join(tmpdir(), "wire-token-preview-"));
     t.after(() => rm(root, {recursive:true,force:true}));
     const config = { appDbPath: path.join(root,"data.db"), sessionRoot: path.join(root,"session-state") };
@@ -25,6 +25,10 @@ export async function usagePreview(t, frontend = "react") {
         ["Draft next steps",20,"agent",["fetch","ask"],"claude-opus-5-5",[[12000,72000,4000,4500]],[12500,6200]],
         ["Read project brief",20,"user",["fetch"],"gpt-4.1",[[4000,7000,0,1000]],[2500]],
     ];
+    if (paginated) examples.push(["Earlier planning",16,"user",["fetch"],"gpt-4.1",[[90000,9000,0,1000]],[1000]]);
+    if (sparse) examples.splice(0,examples.length,
+        ["Review calendar",1,"user",["fetch","ask"],"gpt-4.1",[[1500,160000,38000,500]],[300,40]],
+        ["Recent question",20,"user",["ask"],null,[],[80]]);
     try {
         db.exec("UPDATE accounts SET settings_json='{}'");
         for (const [index,[title, day, actor, tools, model, calls, sizes]] of examples.entries()) {
@@ -62,10 +66,11 @@ export async function usagePreview(t, frontend = "react") {
     const context={dataDir:path.join(root,"wire-store")};
     const collector=await createCollector(context,{timers:false});
     try {
-        await collector.configure({...config,approved:true,enabled:false,windowDays:90,pollSeconds:30});
+        await collector.configure({...config,approved:true,enabled:offline,windowDays:90,pollSeconds:30});
         await collector.collectNow();
     } finally {await collector.close();}
     const access=await createCopilotRuntimeAccess(context);
+    if (offline) { await access.close(); return {context,root,config}; }
     t.after(()=>access.close());
     const runtime=await startServer(context,createExportController(context),{port:0,frontend,access,collector:{timers:false},
         githubProfile:{fetch(){throw Error("No network profile requests in the usage fixture.");}},
