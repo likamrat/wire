@@ -1,4 +1,4 @@
-export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods }) {
+export function mountTrends({ root, api, time, ux, authorship, createCalendar, mountChart, createTrendPairModel, mountTrendPair, getContext, recordLink, reload, returnToAnalyze, onScopeChange, onSectionChange, onComparePeriods, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument, ns = "http://www.w3.org/2000/svg";
     const order = ["problems", "rhythm", "tools", "services", "timing", "authors", "models"];
     const families = {
@@ -908,6 +908,7 @@ export function mountTrends({ root, api, time, ux, authorship, createCalendar, m
         dialogBody.append(el("p", "muted", `${number(ids.size)} matching calls. Opening a call shows its full interaction.`));
         let returnLink = null;
         for (const member of data.members.filter(row => ids.has(row.id))) {
+            if (hiddenInteraction(member.scenarioId)) { dialogBody.append(el("p", "trends-evidence-row", "Hidden card")); continue; }
             const row = el("div", "trends-evidence-row"), link = recordLink(member);
             if (!current()) { for (const attribute of [...link.attributes]) { attribute.value = ""; link.removeAttributeNode(attribute); } scrub(link); return; }
             link.append(ux.icon("forward"));

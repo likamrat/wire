@@ -85,6 +85,7 @@ import { createSavedFilePreview, createPreparedFileInspection } from "./saved-fi
 import { mountFirstConnection } from "./first-connection.mjs";
 import { mountAppUpdate } from "./app-update.mjs";
 import { createPageDefaults, bindPageDefaults, pageDefaultSpecs } from "./page-defaults.mjs";
+import { createCardVisibility } from "./card-visibility.mjs";
 import { createWorkspaceState } from "./frontend/workspace-state.ts";
 import { createReportDraftPicker } from "./report-draft-picker.mjs";
 import { normalizeSearchText } from "../lib/search-normalize.mjs";
@@ -96,6 +97,7 @@ function factories() {
         createOperationIcons, timing, renderTiming: renderRecordedTiming, wording, reportIdentity: createReportIdentity(), preparedFrame: createPreparedReportFrame,
         createPagePaths, createSearchFields, createAnalyzeScope, createAnalyzeTrendsEntry, mountAnalyzeControls, mountFirstConnection, createWorkspaceState,
         createPageDefaults: () => createPageDefaults(pageDefaultSpecs),
+        createCardVisibility,
         mountAnalyzeHomepage: options => mountAnalyzeHomepage({ ...options, standard: pageDefaultSpecs.analyzeLayout.initial }),
         bindPageDefaults: (prefs, sync) => bindPageDefaults(prefs, pageDefaultSpecs, sync),
         mountAccountSettings: options => mountAccountSettingsPresentation({

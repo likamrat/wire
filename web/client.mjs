@@ -175,6 +175,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const time = createTimeContext();
     const pageDefaults = assessmentFactories.createPageDefaults();
+    const hiddenCards = assessmentFactories.createCardVisibility(window, refreshCardVisibility);
+    let undoCard = null, hiddenDialog = null;
     const homepage = assessmentFactories.mountAnalyzeHomepage({ prefs: pageDefaults, isCurrent: token => api.isCurrent(token) });
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
@@ -2235,6 +2237,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return text.length > length ? text.slice(0, length).trimEnd() + "..." : text;
     }
     function excerpt(scenario) {
+        if (hiddenCards.has(scenario.scenarioId)) return "Hidden card";
         if (nativeActivity.isNative(scenario)) return nativeActivity.recognition(scenario).text;
         return textAccess.excerpt(scenario.userPrompt);
     }
@@ -2313,6 +2316,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     liveSearchUI = assessmentFactories.liveSearch.mount({
         api, ux, searchFields, results, authorship, createState: assessmentFactories.liveSearch.createState,
+        showHit: hit => {
+            if (!workspaceState.evidence && !["view", "setting"].includes(hit.type)) return false;
+            if (!hiddenCards.any()) return true;
+            if (["report", "comparison"].includes(hit.type)) return false;
+            const query = hit.target?.href?.split("?")[1];
+            return !query || !hiddenCards.has(new URLSearchParams(query).get("request"));
+        },
         nativeSearch: {
             active: () => sourceCollection.active && showMicrosoftActivity(),
             changed: value => boundedNative.searchChanged({ ...value,
@@ -2328,7 +2338,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return serviceCue("span", services[0]).querySelector(".wire-icon");
         },
         async presentDocument(value, { isCurrent, returnKey }) {
-            if (!isCurrent()) return;
+            if (!isCurrent() || hiddenCards.any()) return;
             const key = savedEntry("reader", value.artifact, document.activeElement, { value, isCurrent, searchReturn: returnKey });
             const entered = await navigate({ ...routeFor("reports"), bundle: value.artifact.bundleId, savedEntry: key, savedAuthority: "search" }, false, { fromSearch: true, isCurrent });
             if (!entered) { savedEntries.delete(key); return false; }
@@ -2613,6 +2623,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("periodComparisonSetup").prepend(periodBackToTrends);
     const trendsUI = assessmentFactories.mountTrends({
         root: $("trendsView"), api, time, ux, authorship,
+        hiddenInteraction: id => hiddenCards.has(id),
         getContext: () => ({ active: underlyingRoute().view === "trends" && !expiredTrendEntry(underlyingRoute()), revision: workspaceState.evidence?.revision,
             entry: trendOrigin(underlyingRoute())?.entry ?? null, get hasMicrosoftSource() { return hasMicrosoftSource(); },
             section: trendSection(underlyingRoute()),
@@ -2652,6 +2663,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
+        hiddenInteraction: id => hiddenCards.has(id),
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,
         projection: createActivityProjection(time, recordedCategories, resultKeys),
         createState: assessmentFactories.periodComparison.createState, assessmentFactories, bindDetails,
@@ -3891,6 +3903,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!workspaceState.acceptRead(request, publication, {
                 evidence: next, analytics: validated, scope: config, route: acceptedRoute,
             })) return false;
+            hiddenCards.bind(next);
             namedDrafts.accept(next.namedDrafts);
             syncNamedReport();
             if (acceptedRoute.view === "request") rememberRoute(acceptedRoute, true);
@@ -4953,6 +4966,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportExperience?.sync();
         reportExperience?.syncDrawer(drawer, current?.saveUnconfirmed ? "Check save status" : current?.phase === "saved"
             ? "Report saved" : current?.phase === "unavailable" ? "Report unavailable" : "Report preview");
+        const stage = $("reportStage3");
+        if (stage) {
+            const covered = drawer && !current?.saveUnconfirmed && !current?.completed && Boolean(hiddenReportBlock());
+            let notice = $("hiddenPreviewNotice");
+            if (covered && !notice) {
+                notice = empty("Preview kept closed", "This preview could show a hidden card. Restore it in Analyze to read the preview. The report has not changed.");
+                notice.id = "hiddenPreviewNotice"; stage.before(notice);
+            }
+            if (covered && !stage.hasAttribute("inert") && stage.contains(document.activeElement)) {
+                notice.tabIndex = -1; notice.focus({ preventScroll: true });
+            }
+            if (notice) notice.hidden = !covered;
+            stage.toggleAttribute("data-cards-covered", covered); stage.inert = covered;
+        }
     }
     function returnToReportOutline() {
         const newOrdinaryDraft = reportJourney.snapshot().completed && !reportBaseExplicit && !periodReport && !selected.size;
@@ -5858,11 +5885,82 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (source.missing || source.unavailable || source.eligible === false || source.pending || reasons.length || !source.coverageKnown) return coverageNotice;
     }
+    function closeHiddenDialog() {
+        if (hiddenDialog) { hiddenDialog.close(); hiddenDialog.remove(); hiddenDialog = null; }
+    }
+    function refreshCardVisibility() {
+        if (clearingAccess || !api.publicationToken() || !workspaceState.evidence) return;
+        ux.hideTooltip(); closeHiddenDialog();
+        namedDrafts.close(false); namedDrafts.dismissNotice();
+        requestRenderKey = null;
+        liveSearchUI.visibilityChanged();
+        trendsUI.leave(); periodComparisonUI.closeInspection();
+        if (hiddenCards.any()) clearSavedReader();
+        render();
+    }
+    function setCardVisibility(id, restoreRefs) {
+        if (clearingAccess || !api.publicationToken()) return;
+        if (workspaceState.stale || workspaceState.loading) { announce("Wait for current activity before changing hidden cards.", "stale"); return; }
+        try {
+            if (restoreRefs) { hiddenCards.restore(restoreRefs); undoCard = null; }
+            else undoCard = hiddenCards.hide(id, pageDefaults.get("cardHideDuration"));
+        } catch (error) { announce("Could not save card visibility on this device: " + error.message, "error"); return; }
+        refreshCardVisibility();
+        announce(restoreRefs ? restoreRefs.length === 1 ? "Card restored." : "Cards restored." : "Card hidden.");
+        const target = workspaceState.route.view === "request" ? $("requestContent").querySelector("[data-undo-hide],button")
+            : $("cardVisibilityActions")?.querySelector("[data-undo-hide],button") ?? $("activityListSummary");
+        target?.focus({ preventScroll: true });
+    }
+    function visibilityButton(label, role, onClick, cls = "quiet") {
+        const publication = api.publicationToken();
+        const node = button(label, () => { if (node.isConnected && api.isCurrent(publication)) onClick(); }, cls);
+        node.classList.add("icon-action"); node.prepend(ux.icon(role)); return node;
+    }
+    function showHiddenCards(trigger) {
+        closeHiddenDialog();
+        const dialog = el("dialog", "hidden-cards-dialog"), head = el("div", "dialog-head"), body = el("div", "dialog-body");
+        hiddenDialog = dialog; dialog.setAttribute("aria-labelledby", "hiddenCardsTitle");
+        const title = el("h2", "", "Hidden cards"); title.id = "hiddenCardsTitle"; title.tabIndex = -1; title.autofocus = true;
+        const dismiss = button("Close", () => dialog.close(), "quiet");
+        head.append(title, dismiss);
+        const list = hiddenCards.entries();
+        body.append(visibilityButton(`Restore all (${count(list.length)})`, "reset", () => setCardVisibility(null, list.map(v => v.ref))));
+        for (const entry of list) {
+            const row = el("div", "hidden-card-row"), identity = el("div");
+            identity.append(el("span", "", entry.order ? `Hidden card ${entry.order}` : "Hidden card"));
+            if (entry.at && Number.isFinite(new Date(entry.at).getTime())) identity.append(el("small", "muted", "Hidden " + timestamp(new Date(entry.at).toISOString())));
+            row.append(identity, visibilityButton("Restore", "read", () => setCardVisibility(null, [entry.ref]))); body.append(row);
+        }
+        dialog.append(head, body); document.body.append(dialog);
+        dialog.addEventListener("close", () => {
+            dialog.remove();
+            if (hiddenDialog === dialog) { hiddenDialog = null; if (trigger.isConnected) trigger.focus({ preventScroll: true }); }
+        }, { once: true });
+        dialog.showModal(); title.focus({ preventScroll: true });
+    }
+    function undoHideButton() {
+        const ref = undoCard, undo = visibilityButton("Undo hide", "reset", () => setCardVisibility(null, [ref]));
+        undo.dataset.undoHide = ""; return undo;
+    }
+    function renderHiddenActions() {
+        let actions = $("cardVisibilityActions");
+        if (!actions) { actions = el("div", "card-visibility-actions"); actions.id = "cardVisibilityActions"; $("activityListSummary").after(actions); }
+        const list = hiddenCards.entries();
+        actions.replaceChildren(); actions.hidden = !list.length;
+        if (!list.length) {
+            undoCard = null;
+            if (hiddenCards.problem()) { actions.hidden = false; actions.append(el("span", "context-help-note", hiddenCards.problem())); }
+            return;
+        }
+        if (list.some(v => v.ref === undoCard)) actions.append(undoHideButton());
+        const manage = visibilityButton(`Hidden cards (${count(list.length)})`, "hide", () => showHiddenCards(manage));
+        actions.append(manage);
+    }
     function renderActivity() {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const scope = frontendActivity
-            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage]) : "";
+            ? JSON.stringify([workspaceState.scope, search, semanticQuery, semanticMembership?.receipt, workspaceState.route.withinServices, underlyingRoute().widget, activityPage, hiddenCards.version()]) : "";
         if (!workspaceState.evidence.nativeRead && frontendActivity?.retain(publication, workspaceState.evidence, scope)) return;
         const stage = frontendActivity?.begin(publication, workspaceState.evidence, scope);
         if (frontendActivity && !stage) return;
@@ -5883,9 +5981,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const members = new Set(group?.interactionIds ?? group?.drilldownIds);
         if (widget) scenarios = group?.interactionIds ? scenarios.filter(record => members.delete(percentageMath.interactionIdentity(record))) : [];
         const orphaned = widget ? [] : selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
-        const items = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
+        const allItems = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
             .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record })),
             ...(widget && !group?.interactionIds ? selectionRows().filter(row => members.has(row.id)).map(match => ({ match })) : [])];
+        const items = allItems.filter(item => !hiddenCards.has((item.scenario ?? item.match ?? item.record).scenarioId));
+        renderHiddenActions();
         const native = widget ? null : sharedNativeView(), nativePage = boundedNative.presentation();
         const roster = assessmentFactories.activityPage({ index: activityPage, github: items.length,
             native: native?.aggregates.conversations ?? 0, githubSize: pageSize, nativeSize: native?.page.limit ?? 10,
@@ -5898,10 +5998,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const groups = `${count(scenarios.length)} ${workspaceState.scope.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
         const nativeUnavailable = !widget && boundedIncludesMicrosoft() && !native && showMicrosoftActivity();
         $("activityListSummary").textContent = widget ? !group ? "This chart selection is no longer available." :
-            `${group.label}: ${count(items.length)} matching ${group.interactionIds ? items.length === 1 ? "interaction" : "interactions"
-                : workspaceState.scope.layer === "tool" ? items.length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, items.length)}`
+            `${group.label}: ${count(allItems.length)} matching ${group.interactionIds ? allItems.length === 1 ? "interaction" : "interactions"
+                : workspaceState.scope.layer === "tool" ? allItems.length === 1 ? "tool call" : "tool calls" : results.unit(workspaceState.scope.layer, allItems.length)}`
             : native ? [
-            ...(items.length ? [`${count(items.length)} GitHub ${items.length === 1 ? "interaction" : "interactions"}`] : []),
+            ...(allItems.length ? [`${count(allItems.length)} GitHub ${allItems.length === 1 ? "interaction" : "interactions"}`] : []),
             `${count(native.aggregates.conversations)} Microsoft ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}`,
         ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable"
             : `${nativeUnavailable ? "GitHub: " : ""}${groups} \u00b7 ${count(selectionRows().length)} matching ${workspaceState.scope.layer === "tool"
@@ -5911,7 +6011,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         host.replaceChildren();
         activityPage = roster.index;
         if (widget) host.append(routeLink("Show all matching activity", routeFor("activity"), "text-link widget-record-exit", { revealReferenceRecords: true }));
-        if (!roster.total && !nativeUnavailable && !widget) {
+        if (!roster.total && allItems.length && !items.length) {
+            host.append(empty("All matching cards are hidden", "Choose Hidden cards to restore them."));
+        } else if (!roster.total && !nativeUnavailable && !widget) {
             host.append(empty(native ? "No matching activity" : !workspaceState.evidence.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 workspaceState.evidence.scenarios.length
                     ? search ? "Try another phrase or clear Search." : "Try different dates or clear a filter."
@@ -6392,7 +6494,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const details = el("div", "card-reading-details");
             details.append(identities);
             const named = namedRequest(scenario.scenarioId);
-            if (named) { foot.append(namedDrafts.make(named.scenarioId)); details.append(foot); }
+            if (named) foot.append(namedDrafts.make(named.scenarioId));
+            if (hiddenCards.available(scenario.scenarioId)) foot.append(visibilityButton("Hide", "hide", () => setCardVisibility(scenario.scenarioId), "card-hide-action"));
+            if (foot.childElementCount) details.append(foot);
             body.append(context, details); row.append(body);
         }
         cardOwners.set(row, events);
@@ -6501,6 +6605,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!publication || clearingAccess) return;
         if (workspaceState.route.view !== "request") return;
         if (pageInactive) return;
+        if (hiddenCards.has(workspaceState.route.request)) {
+            clearReaderSections(); $("contextSidebarTitle").textContent = "Hidden interaction";
+            const body = $("requestContent");
+            body.replaceChildren(empty("This card is hidden", "Its prompt and call details are out of view."));
+            if (hiddenCards.entries().some(v => v.ref === undoCard)) body.append(undoHideButton());
+            const id = workspaceState.route.request;
+            if (hiddenCards.available(id)) body.append(visibilityButton("Restore card", "read", () => setCardVisibility(null, [hiddenCards.ref(id)])));
+            else body.append(el("p", "context-help-note", hiddenCards.problem()));
+            $("contextSidebarFooter").replaceChildren(); return;
+        }
         if (requestInvalidated) return;
         if (searchTargetInvalid && workspaceState.route.request === searchOpenedRequest) return;
         if (sourceCollection.active && workspaceState.route.nativeSource && readerSections?.retains?.(nativeReaderScope())) {
@@ -6632,6 +6746,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         jumps.append(sectionJump(promptSection, "Prompt", "section-prompt"), sectionJump(activitySection, "Activity", "section-activity"), sourceJump);
         const quickReport = underlyingRoute().view === "analyze" && namedRequest(workspaceState.route.request);
         if (quickReport) jumps.append(namedDrafts.make(quickReport.scenarioId, { reader: true }));
+        if (hiddenCards.available(workspaceState.route.request)) {
+            const id = workspaceState.route.request;
+            jumps.append(visibilityButton("Hide", "hide", () => setCardVisibility(id)));
+        }
         body.append(jumps, promptSection.element, activitySection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
         promptSection.body.append(promptList);
@@ -6952,6 +7070,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         references ??= chatCopy.references(workspaceState.evidence.sessions, workspaceState.evidence.scenarios);
         for (const group of context.groups) {
+            if (hiddenCards.has(group.scenario.scenarioId)) continue;
         const scenario = group.scenario, isSelected = group.relation === "selected";
         const groupVisibility = isSelected ? activitySection.visibility : linkedVisibility;
         detailOwner = "request:" + scenario.scenarioId;
@@ -7436,6 +7555,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function reportUnavailability(blocked) {
         return blocked?.code === "native-report-provenance-unqualified" ? "Reports for Microsoft activity are not available." : blocked?.reason || "";
     }
+    function hiddenReportBlock(kind = reportScope) {
+        if (!hiddenCards.any()) return "";
+        const scope = reportSelection(kind);
+        const requests = scope.requests;
+        const hiddenLinkedContext = draft.options().recordedContext && requests.some(r =>
+            requestContext.select(workspaceState.evidence.scenarios, r.scenarioId).groups.some(g => hiddenCards.has(g.scenario.scenarioId)));
+        if (hiddenLinkedContext || reportDatesReplaced && kind === "current" || requests.some(r => r.aliases.some(id => hiddenCards.has(id)))) {
+            return "This preview could show a hidden card. Restore it in Analyze or choose other interactions. Your selection has not changed.";
+        }
+        return "";
+    }
     function nativeReportBlock(kind = reportScope) {
         const scope = reportSelection(kind);
         if (scope.issue) return scope.issue;
@@ -7626,6 +7756,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return workspaceState.evidence.scenarios.filter(scenario => ids.has(scenario.scenarioId));
     }
     function matchesReportRequest(scenario, query) {
+        if (hiddenCards.has(scenario.scenarioId)) return !query.trim();
         return localSearch.matches(query, [scenario.userPrompt?.text, scenario.title, scenario.sourceSessionName,
             sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId,
             nativeActivity.isNative(scenario) ? filterState.sourceLabel(scenario.sourceId) : "GitHub Copilot"]);
@@ -7920,7 +8051,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("scopeSummary").textContent = "Matching records remain separate for Period A and Period B. Recorded timing keeps its original interaction scope.";
             $("reportMatchingContext").hidden = true;
         }
-        const nativeBlock = nativeReportBlock();
+        const nativeBlock = nativeReportBlock() || hiddenReportBlock();
         $("exportBtn").disabled = workspaceState.loading || workspaceState.stale || periodReportInvalid || !workspaceState.evidence.exportCatalog || value.available === false || unknownSelected || !hasReportPopulation || !draft.options().formats.length
             || Boolean(nativeBlock) && !reportJourney?.snapshot().hasPreview;
         for (const notice of $("reportReviewBody")?.querySelectorAll(".rebuild-preview") || []) {
@@ -7970,6 +8101,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
         const renderItem = entry => {
                 const { scenario, nativeItem, nativeView } = entry;
+                if (scenario && hiddenCards.has(scenario.scenarioId)) {
+                    const row = el("div", "report-entry hidden-report-card");
+                    if (picking) {
+                        const toggle = selectionCheckbox(scenario, true);
+                        toggle.disabled = reportRequestSelection(scenario.scenarioId).disabled;
+                        const label = el("label", "report-selection-toggle"); label.htmlFor = toggle.id; label.append(toggle); row.append(label);
+                    }
+                    row.append(ux.icon("hide"), el("span", "", "Hidden card"));
+                    return row;
+                }
                 let selection;
                 if (picking) {
                     const control = nativeItem ? nativeSelectionCheckbox(nativeItem, nativeView, true) : selectionCheckbox(scenario, true);
@@ -8579,6 +8720,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function renderSavedReader() {
         const publication = api.publicationToken();
         if (!publication || !workspaceState.evidence) return;
+        if (hiddenCards.any()) {
+            clearSavedReader();
+            $("savedReportReader").replaceChildren(button("Back to Reports", backSaved, "quiet"),
+                empty("Saved file kept closed", "While a card is hidden, WIRE keeps all saved reports and comparisons closed. A file can quote a card it didn’t count. Restore hidden cards in Analyze to open saved files again."));
+            return;
+        }
         if (savedReportView?.bundleId === workspaceState.route.bundle && savedReportView.entryKey === workspaceState.route.savedEntry) return;
         clearSavedReader();
         const entry = savedEntries.get(workspaceState.route.savedEntry), bundle = workspaceState.evidence.exports?.find(item => item.bundleId === workspaceState.route.bundle);
@@ -10186,7 +10333,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function previewExport({ contentOnly = false, focus = !contentOnly } = {}) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
-        const blocked = nativeReportBlock();
+        const blocked = nativeReportBlock() || hiddenReportBlock();
         if (blocked) {
             updateSelection();
             const issue = [$("reportPrepareIssue"), $("reportReviewBody")?.querySelector(".rebuild-preview")].find(node => node?.checkVisibility());
@@ -10226,7 +10373,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.pending(progress, true);
         body.append(progress);
         try {
-            const refused = nativeReportBlock();
+            const refused = nativeReportBlock() || hiddenReportBlock();
             if (refused) { body.replaceChildren(); reportJourney.failed(refused); return; }
             const reportView = !rebuilding && !periodReport && !nativeRequest && reportScope === "current" && draft.options().reportFocus ? {
                 analytics: workspaceState.scope,
@@ -10566,12 +10713,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         review.dataset.reviewControl = "";
         checkbox.addEventListener("change", () => { if (api.isCurrent(publication)) review.disabled = !checkbox.checked || !draft.current(operation); });
         const confirm = button("Save report", async () => {
-            if (!api.isCurrent(publication) || exportWriting || !draft.current(operation) || !activePreview) return;
+            if (!api.isCurrent(publication) || exportWriting || !draft.current(operation) || !activePreview || hiddenReportBlock()) return;
             let keepChatDetailsConfirmed = false;
             if (localSave && activePreview.promptMode === "original") {
                 confirm.disabled = true;
                 const choice = await reportSaveWarning.choose(activePreview.formats.map(format => assessmentFactories.reportFileChoices[format].name));
-                if (!api.isCurrent(publication) || !draft.current(operation) || !activePreview || !confirm.isConnected) return;
+                if (!api.isCurrent(publication) || !draft.current(operation) || !activePreview || !confirm.isConnected || hiddenReportBlock()) return;
                 confirm.disabled = false;
                 if (!choice) return;
                 if (choice === "masked") {
@@ -11356,6 +11503,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             timeContext: viewerTime, options: draft.options(),
             resumePreset: (activePreview && reportJourney.snapshot().hasPreview || reportRebuildFrom) ? reportPreset : null,
             explicitScope: reportBaseExplicit, scopeIssue: reportJourney.reason(2),
+            hiddenCardIssue: hiddenReportBlock(reportBaseExplicit ? reportScope : "all"),
             prepared: assessmentFactories.reportWorkspacePresentation(workspaceState.route, reportJourney.snapshot()).prepared,
             saved: ["saved", "unavailable"].includes(reportJourney.snapshot().phase),
             paired: Boolean(periodReport), locked: exportWriting || reportJourney.snapshot().saveUnconfirmed,
@@ -11537,6 +11685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
+        hiddenCards.bind(null); undoCard = null; closeHiddenDialog(); $("cardVisibilityActions")?.remove();
         homepage.leave();
         analyzeDatesPicker.close(false); analyzeDatesPicker.showRange("");
         analyzeCalendar.clear();

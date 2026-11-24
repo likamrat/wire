@@ -189,7 +189,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, authorship, presentHit, serviceIcon, nativeSearch }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, authorship, presentHit, serviceIcon, nativeSearch, showHit = () => true }) {
     if (typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function" || typeof api.accessState !== "function") {
         throw new TypeError("Search requires the shared access publication fence.");
     }
@@ -382,7 +382,9 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     function paint() {
         const authority = publication();
         if (inactive() || !authority) return;
-        const current = state.snapshot(), status = current.status;
+        const raw = state.snapshot(), status = raw.status;
+        const hits = raw.matches.hits.filter(showHit), omitted = raw.matches.hits.length - hits.length;
+        const current = omitted ? { ...raw, matches: { ...raw.matches, hits, total: hits.length } } : raw;
         panel.dataset.searchState = current.state;
         const partial = Boolean(current.matches.receipt && !contract.completeCoverage(status?.corpus, current.matches.receipt.queryTypes));
         const coverage = coverageMessage(status?.corpus, current.matches.receipt?.queryTypes ?? types());
@@ -395,7 +397,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             disconnected: failure || "Search disconnected. Reconnect to read current items.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
             incomplete: coverage,
             "no-match": nativeSearch?.active() ? "No GitHub, saved or navigation matches. Microsoft results are separate." : "No matches. Try different words." };
-        replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
+        replaceSearchText($("wireSearchStatus"), !input.value.trim() ? "" : omitted && !hits.length ? "No visible matches. Hidden cards and saved-file text are not shown."
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
                 : partial ? (nativeSearch?.active() ? coverage : "No matches in the items WIRE could search. " + coverage) : labels["no-match"]
@@ -406,7 +408,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         $("wireSearchRetry").hidden = !input.value.trim() || !["disconnected", "stale", "unavailable", "closed", "changing"].includes(current.state);
         $("wireSearchRetry").textContent = connected ? "Retry search" : "Reconnect search";
         $("wireSearchMatches").hidden = !current.matches.total;
-        replaceSearchText($("wireSearchCount"), `${current.matches.total} ${nativeSearch?.active() ? "GitHub / saved / navigation " : ""}match${current.matches.total === 1 ? "" : "es"}`);
+        replaceSearchText($("wireSearchCount"), `${current.matches.total} ${omitted ? "visible " : ""}${nativeSearch?.active() ? "GitHub / saved / navigation " : ""}match${current.matches.total === 1 ? "" : "es"}`);
         paintSet("matches", current.matches, authority);
         if (!isPublished(authority)) return;
         restoreResultFocus();
@@ -415,7 +417,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         if (!isPublished(authority)) return;
         const hits = value?.hits ?? [], size = 20, pageCount = Math.ceil(hits.length / size);
         if (value?.receipt) pages[key] = Math.min(pages[key], Math.max(0, pageCount - 1));
-        const draw = JSON.stringify([value?.receipt ?? null, pages[key]]);
+        const draw = JSON.stringify([value?.receipt ?? null, pages[key], hits.map(hit => hit.id)]);
         if (draw === drawnKeys[key]) return;
         drawnKeys[key] = draw;
         const list = lists[key], paging = pagers[key];
@@ -658,7 +660,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         const authority = publication();
         if (!authority) return;
         const receipt = state.snapshot()[set]?.receipt, id = ++openId;
-        if (!receipt || !connected) return;
+        const hit = state.snapshot()[set]?.hits.find(item => item.id === hitId);
+        if (!receipt || !connected || !hit || !showHit(hit)) return;
         remember(authority);
         replaceSearchText($("wireSearchStatus"), "Opening the exact current item...");
         void api("/api/search/open", { id: hitId, receipt, openId: id }, { signal: stream.signal }).catch(error => {
@@ -821,6 +824,12 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     paint();
     return {
         hide,
+        visibilityChanged() {
+            openId++; returns.clear(); restore = suspendedPresentation = null; clearPreparations();
+            drawnKeys.matches = null; eraseLists(); hide();
+            if (scope.value !== "analysis" && (input.value || queryActive)) { input.value = ""; field.sync(""); schedule(); }
+            else paint();
+        },
         invalidate: fail,
         withdrawAccess,
         resumeAccess() {

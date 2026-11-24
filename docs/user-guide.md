@@ -315,6 +315,22 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 ## Inspect an interaction
 
+For a demo, choose **Hide** beside **Add to report** on a local Copilot card.
+The card disappears immediately. **Undo hide** brings it back; **Hidden cards**
+lets you restore one or all later without showing their prompts in the list.
+In **Settings → Analyze**, choose whether a new hide lasts until you restore
+it or only in this tab. Changing the default leaves existing hides alone.
+
+Trends and Compare still count the calls, but their detail lists don’t show
+the hidden interaction. Search leaves its excerpts out. A report draft keeps
+its selection; WIRE holds back a preview that could display hidden text.
+
+While a card is hidden in this tab, **no saved report or saved comparison
+opens in WIRE or appears in Search results**, even one about different work.
+A saved report can quote a neighboring interaction that it didn’t count.
+Restore the hidden cards to read saved files in WIRE again. The files themselves
+and copies you’ve already shared are unchanged.
+
 The count above the cards follows your filters. **Collection status** shows
 the contributing chats, projects and source coverage. An actual coverage
 warning stays beside the affected activity.

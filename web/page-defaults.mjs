@@ -2,6 +2,9 @@ const recentDays = ["7", "14", "30"];
 const rollingPeriods = recentDays.map(days => [days, `Last ${days} days`]);
 
 export const pageDefaultSpecs = {
+    cardHideDuration: { id: "defaultCardHideDuration", label: "Keep hidden cards out of view", initial: "manual",
+        help: "Applies the next time you hide a card. Cards already hidden keep their setting.",
+        choices: [["manual", "Until I restore them"], ["tab", "Only in this tab"]] },
     analyzeRange: { id: "defaultAnalyzeRange", label: "Default date range", help: "Filters saved activity. It doesn’t collect more history.", initial: "capture",
         choices: [["capture", "All dates"], ...rollingPeriods] },
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",

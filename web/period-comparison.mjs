@@ -281,7 +281,7 @@ export function createPeriodComparisonPresentation(time) {
 }
 
 export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState,
-    assessmentFactories, getContext, navigate, open, useAnalyze, ux, onSearch, recordLink, syncFilters, createReport, openSearch, onAccepted, onPairChange }) {
+    assessmentFactories, getContext, navigate, open, useAnalyze, ux, onSearch, recordLink, syncFilters, createReport, openSearch, onAccepted, onPairChange, hiddenInteraction = () => false }) {
     const doc = root.ownerDocument;
     const presentation = assessmentFactories.periodComparison.createPresentation(time);
     let machine, metricSlotKey, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
@@ -1038,6 +1038,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const exact = table(`${names[index].label}: ${number(side.rowIds.length)} exact ${results.columnUnit(value.definitions.layer, side.rowIds.length)}`,
                     [value.definitions.layer === "tool" ? "Call and interaction" : "Record and interaction", "Started", "Result", value.definitions.layer === "tool" ? "Latency" : "Duration"],
                     side.analytics.rows.map((row, rowIndex) => {
+                        if (hiddenInteraction(row.scenarioId)) return ["Hidden card", "", "", ""];
                         const nameCell = el("div", undefined, "compare-record-identity"), link = recordLink(row, side, value);
                         const title = records.get(row.scenarioId)?.title, startedAt = time.formatTime(row.startedAt, value.timeContext);
                         const knownTool = typeof row.tool === "string" && row.tool.length > 0;
@@ -1526,7 +1527,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     }
     const workspace = doc.getElementById("workspace");
     if (workspace) new MutationObserver(() => { if (shown) update(); }).observe(workspace, { attributes: true, attributeFilter: ["aria-busy"] });
-    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, stop, withdrawAccess, resumeAccess };
+    return { update, consumer, observe, acceptedPair, recordsTarget, showRecords, closeInspection, stop, withdrawAccess, resumeAccess };
 }
 
 export const periodComparisonStyles = `
