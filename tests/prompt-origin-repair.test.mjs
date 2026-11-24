@@ -14,8 +14,9 @@ import { assessmentSource } from "../lib/assessment-read-model.mjs";
 import { maintenanceStateGuard } from "../lib/historical-maintenance.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { createCollector } from "../lib/collector.mjs";
-import { completionReferenceStore } from "../lib/checkpoint-references.mjs";
-import { inspectPromptOriginRepair, runPromptOriginRepair, reviewPromptOriginClass } from "../lib/prompt-origin-repair.mjs";
+import { completionReferenceStore, referencedCheckpoint } from "../lib/checkpoint-references.mjs";
+import { inspectPromptOriginRepair, inspectRetainedInitiatorLinks, runPromptOriginRepair, reviewPromptOriginClass } from "../lib/prompt-origin-repair.mjs";
+import { eventIdentity } from "../lib/deletion-identities.mjs";
 import { chromium, expect } from "@playwright/test";
 
 const digest = value => hash(JSON.stringify(value));
@@ -494,6 +495,95 @@ test("reviewed v12 missing-sender and shell origins repair both actors, copies a
     const counts = await reviewPromptOriginClass({ ...scope, countsOnly: true });
     assert.deepEqual([counts.interactions, counts.calls, counts.authors], [10, 10, { user: 2, agent: 5, unknown: 3 }]);
     for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, pin.path))), pin.sha256);
+});
+
+async function listedOrigin(dataDir, origin) {
+    const list = await reviewPromptOriginClass({ dataDir, originatingOnly: true });
+    const batch = list.batches.find(b => b.origins.includes(origin));
+    return list.cases.find(c => c.batch === batch.batch && batch.origins[c.position - 1] === origin);
+}
+
+test("retained links identify each canonical call without reading originals, changing senders or writing files", async t => {
+    const f = await setup(t, "v10-linked-pair"), dataDir = f.app.context.dataDir;
+    await rename(f.app.config.appDbPath, f.app.config.appDbPath + ".offline");
+    await rename(f.app.config.sessionRoot, f.app.config.sessionRoot + ".offline");
+    const origin = f.target.prompt.sourceEventId, select = () => listedOrigin(dataDir, origin);
+    const { linkCheck, caseRef } = await select(), inspect = () => inspectRetainedInitiatorLinks({ dataDir, linkCheck });
+    const before = await manifest(dataDir);
+    const cli = spawnSync(process.execPath, [path.resolve("scripts", "maintain-prompt-origins.mjs"), "--data-dir", dataDir,
+        "--mode", "links", "--link-check", linkCheck], { encoding: "utf8" });
+    assert.equal(cli.status, 0, cli.stderr);
+    const first = JSON.parse(cli.stdout), { links } = first;
+    assert.equal(first.caseRef, caseRef);
+    assert.deepEqual([first.prepared, first.authorized, first.revision], [false, false, f.state.revision]);
+    assert.deepEqual(links.map(({ callRef, ...rest }) => rest), Array(2).fill({ linkedOnBoard: true, checkpoint: "same-origin", checkpointOriginRef: caseRef,
+        retainedSender: { actor: "unknown", basis: "unsupported-source" } }));
+    assert.equal(new Set(links.map(l => l.callRef)).size, 2);
+    assert.ok(links.every(l => /^[a-f0-9]{64}$/.test(l.callRef)));
+    assert.doesNotMatch(cli.stdout, /Invented|request-invented|invented-second-call/);
+    assert.ok(!cli.stdout.includes(origin) && !cli.stdout.includes(f.app.child));
+    assert.deepEqual(await manifest(dataDir), before);
+
+    const checkpoint = JSON.parse(await readFile(f.checkpointFile)), other = f.app.cases.find(c => c.name === "kickoff");
+    const message = checkpoint.events.find(e => e.id === other.promptId);
+    const second = checkpoint.events.find(e => e.id === "request-invented-second-call");
+    second.data.originatingMessageId = message.data.messageId;
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.equal((await inspect()).links.find(l => l.checkpoint !== "same-origin").checkpoint, "board-checkpoint-disagreement");
+    const records = structuredClone(f.state.evidence), record = records.find(r => r.userPrompt.sourceEventId === origin);
+    for (const call of record.toolCalls) delete call.promptLink;
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    await assert.rejects(inspect(), /stale/);
+    const selected = await select(), check = () => inspectRetainedInitiatorLinks({ dataDir, linkCheck: selected.linkCheck });
+    assert.equal(selected.caseRef, caseRef);
+    const different = (await check()).links;
+    assert.deepEqual(different.map(l => l.callRef), links.map(l => l.callRef));
+    assert.equal(records.find(r => r.userPrompt.sourceEventId === other.promptId).userPrompt.authorship.actor, "agent");
+    const alternate = different.find(l => l.checkpoint === "different-origin");
+    assert.match(alternate.checkpointOriginRef, /^[a-f0-9]{64}$/);
+    assert.notEqual(alternate.checkpointOriginRef, caseRef);
+    assert.deepEqual(alternate.retainedSender,
+        { actor: "unknown", basis: "missing-source" }, "A different origin cannot borrow its board's later kickoff qualification.");
+    assert.ok(different.every(l => !l.linkedOnBoard));
+    const competing = { ...second, id: "other-claim", data: { ...second.data,
+        originatingMessageId: checkpoint.events.find(e => e.id === origin).data.messageId } };
+    checkpoint.events.push(competing);
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.ok((await check()).links.some(l => l.checkpoint === "competing-links" && !l.retainedSender));
+    checkpoint.events = checkpoint.events.filter(e => e !== second && e !== competing && !(e.type === "tool.execution_start"
+        && e.data.toolCallId !== "invented-second-call"));
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.deepEqual((await check()).links.map(l => l.checkpoint).sort(), ["no-explicit-request-link", "start-not-retained"]);
+    assert.deepEqual((await loadBoardState(f.app.context, { readOnly: true })).evidence, records);
+});
+
+test("retained linkage checks refuse stale cursors, foreign owners and deleted request context", async t => {
+    const f = await setup(t, "v10-linked-pair"), dataDir = f.app.context.dataDir;
+    const select = async () => (await listedOrigin(dataDir, f.target.prompt.sourceEventId)).linkCheck;
+    const check = linkCheck => inspectRetainedInitiatorLinks({ dataDir, linkCheck });
+    const first = await select(), bytes = await readFile(f.indexFile), index = JSON.parse(bytes);
+    index.sources[f.app.child].cursor.offset--;
+    await atomicJson(f.indexFile, index);
+    await assert.rejects(check(first), /stale/);
+    await assert.rejects(check(await select()), /checkpoint is not current/);
+    index.ownerHost.machine = "0".repeat(64);
+    await atomicJson(f.indexFile, index);
+    await assert.rejects(check(await select()), /another or unqualified host/);
+    const registered = JSON.parse(bytes);
+    Object.assign(registered, { schemaVersion: 4, completionReferenceVersion: 1,
+        completionReferenceStore: completionReferenceStore(f.state, dataDir),
+        completionReferenceSources: [{ fingerprint: registered.fingerprint, sourceSessionId: f.app.child }] });
+    await atomicJson(f.indexFile, registered);
+    const pinned = await select();
+    await assert.rejects(check(pinned), /checkpoint is unavailable/);
+    const checkpoint = referencedCheckpoint(JSON.parse(await readFile(f.checkpointFile)), registered, f.app.child);
+    await atomicJson(f.checkpointFile, checkpoint);
+    assert.ok((await check(pinned)).links.every(l => l.checkpoint === "same-origin"));
+    const file = path.join(dataDir, `${f.state.boardId}.state.json`), state = JSON.parse(await readFile(file));
+    state.deletion = { schemaVersion: 1, identities: [], contextCalls: [], events: [eventIdentity(f.app.child, "request-invented-second-call")] };
+    await atomicJson(file, state);
+    await assert.rejects(check(pinned), /stale/);
+    await assert.rejects(check(await select()), /deleted context/);
 });
 
 test("origin-case inventory joins all canonical unknowns to exact bounded review slots without unrelated follow-ups", async t => {

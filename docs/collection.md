@@ -329,6 +329,9 @@ This does not keep extra reply text. A uniquely linked Work IQ call keeps
 its prompt and assistant-request event references. A group-level link from
 an older record is not evidence for each call in it. Reading old records
 does not reopen history or assign a requester from a skill or system message.
+Two distinct retained starts for the same invocation cannot prove a direct link.
+If copies of a single message name conflicting senders, the sender stays
+unclear even when the timestamp and original text agree.
 
 The host can append a direct-message source reference after the original text.
 WIRE recognizes the supported UUID/revision envelope and fixed footer only at
@@ -474,6 +477,18 @@ counted, but follow-up-only originals do not enter these batches. Use the
 same `--originating-only` and time/archive choices with `--mode review`;
 a general batch cannot be substituted. The list needs no journal or
 checkpoint read. It is not a proposal, permission or persistent index.
+
+For one eligible listed case, `--mode links --link-check <linkCheck>` with
+the same `--data-dir` reads only its retained store and one compact checkpoint,
+not the Copilot database or original journal. It returns the case reference and
+one opaque reference per selected Analyze call. `same-origin` or
+`different-origin` means a unique retained start and assistant request name a
+logical message. `checkpointOriginRef` identifies that message without exposing
+its source ID; `retainedSender` describes only that message's saved checkpoint
+metadata. A missing start or request is a limit of the checkpoint, not proof
+that the journal lacks it. A disagreement with a board link is not resolved by
+preferring either copy. The check cannot prepare, apply or authorize a repair.
+
 Between pages of that exact source, a new check time, cycle counter or
 another chat's cursor alone does not invalidate already verified bytes.
 The selected source and cursor, compact checkpoint preimage, original

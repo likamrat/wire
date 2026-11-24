@@ -234,6 +234,38 @@ test("the recent-event cutoff cannot discard a competing request and manufacture
     assert.equal(record.toolCalls[0].promptLink, undefined);
 });
 
+test("two recorded starts for one invocation cannot establish a unique initiating request", async t => {
+    const call = start(), competing = { ...call, id: "other-start", data: { ...call.data, turnId: "other-turn" } };
+    const app = await installation(t, [
+        prompt("Invented request", { messageId: "one" }),
+        event("request", "assistant.message", { originatingMessageId: "one", turnId: "turn-one",
+            toolRequests: [{ toolCallId: "call" }] }, 1),
+        call, competing,
+    ]);
+    await app.collect();
+    await app.restart();
+    const state = await app.collect(), [record] = state.evidence;
+    assert.equal(record.toolCalls.length, 1);
+    assert.equal(record.userPrompt.capture.reason, "ambiguous-link");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+    assert.equal([...buildAssessmentModel(state).details.values()][0].interaction.message.association, "unverified");
+});
+
+test("same event, time and text cannot erase a conflicting sender before the first call", async t => {
+    const human = prompt("Invented request", { messageId: "one" });
+    const agent = { ...human, data: { ...human.data, source: "agent-invented" } };
+    const app = await installation(t, [human, agent]);
+    await app.collect();
+    await app.restart();
+    await app.append([human, start()]);
+    const state = await app.collect(), [record] = state.evidence;
+    assert.deepEqual(record.userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
+    assert.deepEqual((await app.checkpoint()).events.find(e => e.id === human.id).data.wirePromptAuthorship,
+        record.userPrompt.authorship);
+    assert.equal(createPercentageCharts({ authorship: promptAuthorship }).authorUsage(state.evidence)
+        .rows.find(row => row.id === "unknown").count, 1);
+});
+
 test("hard checkpoint bounds leave a pruned competing request unlinked", async t => {
     const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "origin",
         turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
