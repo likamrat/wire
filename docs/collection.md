@@ -455,6 +455,15 @@ Follow-ups do not add interactions. All unverified interactions count, even
 if they have no reviewable event. The reason/version groups describe retained
 evidence, not what a new original lookup would find. The time/archive choices
 below affect review eligibility, not this all-retained denominator.
+Use `--mode list --originating-only` for a private case list on **one** verified
+retained revision. Each unverified canonical interaction has a store-bound
+case reference and either its batch/one-based position or an exclusion. A
+listed source's `consumedBytes` is its retained fully consumed cursor (or
+null), not a live file check. Follow-up copies of selected originals are
+counted, but follow-up-only originals do not enter these batches. Use the
+same `--originating-only` and time/archive choices with `--mode review`;
+a general batch cannot be substituted. The list needs no journal or
+checkpoint read. It is not a proposal, permission or persistent index.
 The default is the current window and active sources. To review older dates or
 archived local chats, explicitly add `--include-older` or `--include-archived`
 to both commands. These options do not change collection settings.

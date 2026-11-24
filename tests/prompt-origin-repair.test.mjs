@@ -462,6 +462,45 @@ test("reviewed v12 missing-sender and shell origins repair both actors, copies a
     for (const pin of f.plan.preservedFiles) assert.equal(hash(await readFile(path.join(scope.dataDir, pin.path))), pin.sha256);
 });
 
+test("origin-case inventory joins all canonical unknowns to exact bounded review slots without unrelated follow-ups", async t => {
+    const f = await setup(t, "v12-sender-pair"), scope = { dataDir: f.app.context.dataDir, includeOlder: true };
+    const records = structuredClone(f.state.evidence), extra = randomUUID();
+    records.find(r => r.sourceSessionId === f.app.child).followUpPrompts.push({
+        text: "Invented follow-up without a call", status: "full", sourceEventId: extra, sourceTimestamp: f.target.prompt.sourceTimestamp,
+        authorship: { actor: "unknown", basis: "missing-source" }, authorshipVersion: 12,
+    });
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const ordinary = await reviewPromptOriginClass(scope), input = { ...scope, originatingOnly: true };
+    const inventory = await reviewPromptOriginClass(input);
+    assert.deepEqual([inventory.interactions, inventory.calls, inventory.cases.length, inventory.authors.unknown], [10, 10, 5, 5]);
+    assert.equal(new Set(inventory.cases.map(c => c.caseRef)).size, 5);
+    assert.deepEqual(ordinary.batches.flatMap(b => b.origins).length, 3);
+    assert.equal(inventory.batches.length, 1);
+    const [b] = inventory.batches;
+    assert.deepEqual(b.origins.toSorted(), f.origins.map(o => o.sourceEventId).toSorted());
+    assert.equal(b.consumedBytes, f.sourceBytes[1].length);
+    const candidates = inventory.cases.filter(c => c.batch);
+    assert.deepEqual(candidates.map(c => c.position).sort(), [1, 2]);
+    for (const c of candidates) {
+        assert.equal(c.batch, b.batch);
+        const id = b.origins[c.position - 1];
+        assert.equal(c.followUpCopies, records.flatMap(r => r.followUpPrompts).filter(p => p.sourceEventId === id).length);
+    }
+    assert.ok(inventory.cases.filter(c => !c.batch).every(c => c.blockedCopies?.length && c.position === undefined));
+    assert.ok(!JSON.stringify(inventory).includes(extra));
+    await assert.rejects(reviewPromptOriginClass({ ...scope, batch: b.batch }), /stale or unavailable/);
+    const reviewed = await reviewPromptOriginClass({ ...input, batch: b.batch });
+    assert.deepEqual(reviewed.targets.map(r => r.prompt.sourceEventId).toSorted(), b.origins.toSorted());
+    assert.ok(reviewed.targets.every(r => r.aliases.some(a => a.field === "origin")));
+    records[0].title = "Invented new cut";
+    await replaceEvidence(f.app.context, () => ({ records, importCoverage: f.state.importCoverage }));
+    const fresh = await reviewPromptOriginClass(input);
+    assert.notEqual(fresh.revision, inventory.revision);
+    assert.notEqual(fresh.batches[0].batch, b.batch);
+    assert.deepEqual(fresh.cases.map(c => c.caseRef), inventory.cases.map(c => c.caseRef));
+    await assert.rejects(reviewPromptOriginClass({ ...input, batch: b.batch }), /stale or unavailable/);
+});
+
 test("later pages locate a candidate and disqualify a competing original; source drift invalidates the review", async t => {
     const f = await setup(t, "paged-review"), dataDir = f.app.context.dataDir, file = f.app.sourceFiles[1];
     await rename(file, file + ".absent");
