@@ -740,8 +740,9 @@ action after confirmed first approval.
 
 ### Categories and setting search
 
-Settings opens in **General**, with the installed WIRE build, last check and
-**Check for updates** together above the automatic-check switch. The check button
+Settings opens in **General**. One card shows the running package version,
+the update result and the time of the last successful check when known.
+**Check for updates** sits beside the result; the automatic-check switch is below it. The check button
 turns green when an update is available, even after the notice is dismissed.
 It still only checks; **Update** installs the build. Below updates,
 show the current theme with a miniature WIRE screen, its name and mode,

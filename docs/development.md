@@ -24,8 +24,9 @@ that terminal to stop WIRE; closing the browser tab leaves it running.
 On Windows or WSL, in-app updates require a clean standalone clone of the
 official WIRE repository on `main`, with the updater already included.
 Use `npm start` with the usual port and data folder, without development flags.
-In your browser, open **Settings > General** and choose **Check for updates**.
-This works with automatic checks off. When WIRE offers a build, **Update**
+Automatic checks are on by default. To check now, open **Settings > General**
+and choose **Check for updates**. This works even if you turned automatic checks
+off. When WIRE offers a build, **Update**
 installs it and restarts at the same address. **Dismiss** hides that notice;
 you can still choose **Update** in General.
 
@@ -36,9 +37,10 @@ stop only its own WIRE process. In that same clone, run `git pull --ff-only orig
 data-folder override and port. Do not switch a development copy to `main`.
 A conflict is a reason to stop, not to rebase or discard someone's edits.
 
-Automatic checks run on opening and daily while in use. Checking may fetch
-Git objects, including documentation. Changes to docs, tests or CI alone
-do not create an app-update notice. Git uses the current
+WIRE checks when first opened after launch and daily while in use. It compares
+the running app with the official `main` branch, so an app change can be offered
+even if the version still reads **WIRE v1.0.0**. Changes to contributor docs,
+tests or CI alone do not create an update notice. Git uses the current
 user's repository access; no source approval or Copilot sign-in is requested.
 
 Finish any report, close other WIRE panels, and resolve unconfirmed saves or
@@ -50,11 +52,11 @@ The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
-Contributor worktrees, forks, modified clones and special development launch
-modes stay manual. Do not use a new data folder to resolve an update problem.
-For a directly launched runtime, **General** shows the local package version,
-not a verified Git build. WIRE cannot check or restart this copy. Keep its usual
-update and restart process rather than changing how it runs to enable the button.
+Archives without `.git`, contributor worktrees, forks, modified clones and special
+development launch modes stay manual. Do not use a new data folder to resolve an update problem.
+For a directly launched runtime, **General** shows the package version and
+**Update instructions**. WIRE cannot check or restart this copy. Keep its usual
+update and restart process.
 One-click activation is qualified on Windows and WSL. Standalone Linux and
 macOS use the same-folder manual path until their cutover tests pass natively.
 Special modes cannot bypass an active staged build or unresolved handoff.
@@ -87,8 +89,8 @@ Remove-Item Env:WIRE_UPDATE_BROWSER
 Open the printed **Disposable update simulation** address in one tab. In
 **Settings > General**, choose **Check for updates**. Checking does not
 install anything. Try **Dismiss**, then choose **Update** in General.
-When the same page says **WIRE updated**, compare its build to the one in
-the terminal. Open **Reports** to read the saved example. No GitHub release,
+When the same page says **WIRE updated**, open **Reports** to read the saved
+example. The simulation verifies the running revision. No GitHub release,
 account connection or change to your usual WIRE installation is involved.
 The simulation waits up to 20 minutes for the update, then stays open two
 minutes after verification so you can inspect the result.

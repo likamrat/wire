@@ -209,6 +209,9 @@ activationTest("special modes cannot bypass an active slot or an unresolved orig
 
 activationTest("owned replacement retains a single writer, port, settings and original checkout; unknown child close cannot restart", { timeout: 90000 }, async t => {
     const f = await fixture(t), app = f.launch(), url = await app.ready();
+    const initial = await request(url, "status");
+    assert.equal(initial.automatic, true);
+    assert.equal(initial.lastChecked, null);
     const competing = f.launch();
     assert.equal((await competing.done).code, 1);
     assert.match(competing.stderr, /already has a launcher/);
@@ -222,11 +225,13 @@ activationTest("owned replacement retains a single writer, port, settings and or
     assert.match((await phase(url, "error")).message, /busy/);
     assert.equal((await f.events()).length, 1);
     await rm(path.join(f.store, "busy"));
-    assert.equal((await request(url, "check")).candidate, candidate);
+    const rechecked = await request(url, "check");
+    assert.equal(rechecked.candidate, candidate);
     assert.equal((await request(url, "apply", { candidate })).phase, "preparing");
     const status = await phase(url, "current");
     assert.equal(status.installed, candidate);
     assert.equal(status.automatic, false);
+    assert.equal(status.lastChecked, rechecked.lastChecked);
     const health = await (await fetch(url + "health")).json();
     assert.equal(health.build, candidate); assert.equal(health.clientEntry, status.clientEntry);
     assert.equal(f.git(f.root, "rev-parse", "HEAD"), f.original);

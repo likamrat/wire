@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, fork } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -11,6 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fixture } from "./helpers.mjs";
 import { replaceEvidence, loadBoardState } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
+import pkg from "../package.json" with { type: "json" };
 
 const exec = promisify(execFile);
 const project = fileURLToPath(new URL("../", import.meta.url));
@@ -171,16 +172,35 @@ test("full WIRE clone updates on the original address and reopens the same saved
             await page.goto(url + "settings?section=general");
             const check = page.getByRole("button", { name: "Check for updates" });
             await expect(check).toBeEnabled({ timeout: 30000 });
-            await writeFile(path.join(origin, "lib", "update-proof-marker.mjs"), "export const marker = 'browser update';\n");
+            const heading = page.locator("#appUpdateVersion"), status = page.locator("#appUpdateStatus");
+            const before = await health();
+            await expect(heading).toHaveText(`WIRE v${pkg.version}`);
+            await expect(page.getByRole("switch", { name: "Automatically check for updates" })).toBeChecked();
+            await appendFile(path.join(origin, "web", "browser-entry.mjs"), '\ndocument.documentElement.dataset.wireFixtureBuild = "updated";\n');
             await git(origin, "commit", "-qam", "Fixture update from browser");
             const tip = await git(origin, "rev-parse", "HEAD");
+            const checked = page.waitForResponse(response => response.url() === url + "api/app-update"
+                && response.request().postDataJSON().action === "check");
             await check.click();
+            const offer = await (await checked).json();
+            assert.equal(offer.installed, before.build); assert.equal(offer.candidate, tip);
+            await expect(status).toContainText("Update available. Last checked");
+            const applied = page.waitForRequest(request => request.url() === url + "api/app-update" && request.postDataJSON().action === "apply");
             await page.locator("#appUpdateApply").click({ timeout: 30000 });
+            assert.equal((await applied).postDataJSON().candidate, tip);
             await expect(page.locator("#appUpdateHeading")).toHaveText("WIRE updated", { timeout: 120000 });
-            await expect(page.locator("#appUpdateDetail")).toContainText(tip.slice(0, 8));
-            assert.equal((await health()).build, tip);
+            await expect(page.locator("#appUpdateDetail")).toHaveText(`WIRE v${pkg.version} is running.`);
+            const after = await health();
+            assert.equal(after.build, tip); assert.notEqual(after.runtimeId, before.runtimeId);
+            assert.notEqual(after.clientEntry, before.clientEntry);
+            await expect(heading).toHaveText(`WIRE v${pkg.version}`);
+            await expect(status).toContainText("Up to date. Last checked");
+            assert.equal(await page.locator("html").getAttribute("data-wire-fixture-build"), "updated");
             assert.equal(new URL(page.url()).origin, new URL(url).origin);
+            t.diagnostic(`Settings: ${before.build} → offered/applied ${offer.candidate} → running ${after.build} at ${new URL(url).origin}`);
         } finally { await browser.close(); }
+        cap = await getPage();
+        assert.ok(await post("api/report/open", { bundleId: bundle.bundleId }));
     }
     await verifyPreserved();
 });

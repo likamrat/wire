@@ -9,13 +9,14 @@ function decode(value) {
     if (!value || typeof value.supported !== "boolean" || typeof value.automatic !== "boolean"
         || !phases.includes(value.phase) || typeof value.message !== "string"
         || ![value.installed, value.candidate, value.dismissed].every(id => id === null || sha(id))
-        || value.lastChecked !== null && !Number.isFinite(value.lastChecked)
+        || value.lastChecked !== null && (!Number.isFinite(value.lastChecked) || !Number.isFinite(new Date(value.lastChecked).getTime()))
+        || value.packageVersion !== undefined && typeof value.packageVersion !== "string"
         || value.clientEntry !== undefined && !asset(value.clientEntry)) throw new Error("WIRE returned an unreadable update status.");
     return value;
 }
 
 /** Page-owned controls never renew a capability or replay an update command. */
-export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) {
+export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, formatChecked }) {
     const $ = id => document.getElementById(id);
     const dialog = $("appUpdateFence"), notice = $("appUpdateNotice"), manual = $("appUpdateCheck"), automatic = $("appUpdateAuto");
     const entry = new URL(loadedEntry);
@@ -41,21 +42,24 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         for (const id of ["appUpdateApply", "settingsAppUpdate", "appUpdateDismiss"]) $(id).disabled = busy || Boolean(expected);
         const updating = ["preparing", "restarting", "checking"].includes(state?.phase);
         const manualMode = Boolean(manualOnly(state));
-        $("appUpdateAutoHelp").hidden = !state?.supported || manualMode;
-        automatic.setAttribute("aria-describedby", manualMode || !state?.supported ? "appUpdateStatus" : "appUpdateAutoHelp");
+        manual.hidden = manualMode;
+        $("appUpdateGuide").hidden = !manualMode;
+        $("appUpdateAutoRow").hidden = !state?.supported || manualMode;
         manual.disabled = busy || Boolean(expected) || updating || manualMode;
         automatic.disabled = manual.disabled || !state?.supported;
         automatic.checked = !manualMode && (pendingPreference ?? state?.automatic === true);
-        const status = feedback || success || result || state?.message || "Reading update status…";
-        $("appUpdateStatus").textContent = state?.lastChecked != null
-            ? `${status} Last checked ${new Date(state.lastChecked).toLocaleString()}.` : status;
-        $("appUpdateVersion").textContent = state?.installed ? `WIRE · Build ${state.installed.slice(0, 8)}`
-            : typeof state?.packageVersion === "string" ? `WIRE · Package version ${state.packageVersion}` : "WIRE";
+        const status = feedback || result || (manualMode ? "" : state?.message ?? "Reading update status…");
+        const lastCheck = state?.lastChecked == null ? "" : `${state.phase === "error" ? "Last successful check" : "Last checked"} ${formatChecked(state.lastChecked)}.`;
+        const summary = [status, lastCheck].filter(Boolean).join(" "), line = $("appUpdateStatus");
+        if (line.textContent !== summary) line.textContent = summary;
+        line.hidden = !summary;
+        $("appUpdateVersion").textContent = state?.packageVersion ? `WIRE v${state.packageVersion}` : "WIRE";
     }
     async function post(action, fields = {}) {
         const response = await fetch("/api/app-update", { ...fixed, method: "POST",
             headers: { "Content-Type": "application/json", "X-Board-Capability": capability },
-            body: JSON.stringify({ action, ...fields }), signal: AbortSignal.timeout(action === "apply" ? 20000 : 15000) });
+            body: JSON.stringify({ action, ...fields }), signal: AbortSignal.timeout(
+                ["check", "auto-check"].includes(action) ? 100000 : action === "apply" ? 20000 : 15000) });
         const value = await response.json();
         if (!response.ok) {
             const error = new Error(typeof value.error === "string" ? value.error : value.message || "WIRE could not complete this update request.");
@@ -74,7 +78,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
     async function run(action, fields) {
         if (busy || expected || action === "auto-check" && (!state?.supported || !state.automatic || manualOnly(state))) return;
         const generation = lifetime;
-        busy = true; feedback = ["check", "auto-check"].includes(action) ? "Checking for WIRE updates…" : "";
+        busy = true; feedback = ["check", "auto-check"].includes(action) ? "Checking for updates…" : "";
         if (action === "preferences") { pendingPreference = fields.enabled; feedback = "Saving update preferences…"; }
         clearTimeout(scheduleTimer); render();
         try {
@@ -89,7 +93,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
             feedback = error.refused ? error.message : "Update status could not be confirmed. Check again when WIRE is available.";
         } finally {
             pendingPreference = undefined;
-            if (feedback === "Checking for WIRE updates…" || feedback === "Saving update preferences…") feedback = "";
+            if (feedback === "Checking for updates…" || feedback === "Saving update preferences…") feedback = "";
             busy = false;
             if (restoring) { restoring = false; state = null; void run("status"); }
             else { render(); schedule(); }
@@ -140,7 +144,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
                         fence("Update status does not confirm the running build. Check restart status before continuing.", true); return;
                     }
                     state = confirmed; panelVerified = true;
-                    finish(`This panel is running build ${confirmed.installed.slice(0, 8)}.`, true);
+                    finish(confirmed.packageVersion ? `WIRE v${confirmed.packageVersion} is running.` : "Restart complete.", true);
                     return;
                 }
                 const file = await fetch(health.clientEntry, { ...fixed, signal: AbortSignal.timeout(4000) });
@@ -252,6 +256,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId }) 
         if (state?.supported && state.automatic) void run("auto-check");
     });
     return {
+        render,
         locked: () => Boolean(expected),
         beforeOwnerRetirement() { unfinishedAtSuspension ||= Boolean(reason()); },
     };

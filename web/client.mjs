@@ -1744,6 +1744,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || id === "collect-now" && !historyStatus.persistence(collection));
     }
     function settingsTarget(entry) {
+        if (["app-update", "automatic-updates"].includes(entry.id) && !$("appUpdateGuide").hidden) return "appUpdateGuide";
         if (entry.id === "palette") {
             const checked = document.querySelector("input[name=screenPalette]:checked");
             return checked?.parentElement.hidden ? "paletteQuery" : checked?.id ?? entry.target;
@@ -2192,8 +2193,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (JSON.stringify(nextTime) !== JSON.stringify(viewerTime)) {
             deletionUI?.invalidate();
             recollectionUI?.invalidate();
+            viewerTime = nextTime;
+            appUpdate?.render();
         }
-        viewerTime = nextTime;
         const preset = time.preset(workspaceState.route.range, viewerTime.timeZone);
         if (preset) {
             workspaceState.route = { ...workspaceState.route, ...preset };
@@ -11859,7 +11861,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         pollTimer = setTimeout(pollCollection, 250);
     });
     api.startAccess();
-    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, blocked() {
+    const formatChecked = value => time.formatMoment(new Date(value).toISOString(), viewerTime);
+    appUpdate = assessmentFactories.mountAppUpdate?.({ capability, formatChecked, blocked() {
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || sourceSettings?.hasDraft() || assessmentUI?.hasUnfinishedChange()) {
             return "Save or cancel your Settings changes and resolve any unconfirmed changes before updating.";

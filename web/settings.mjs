@@ -31,16 +31,15 @@ export const settingsMarkup = `
   <button id="settingsGeneralBack" type="button" class="quiet" hidden>${uxIcons.back} Back to General</button>
   <section class="settings-section" data-settings-section="general" aria-labelledby="generalTitle" hidden>
     <h2 id="generalTitle" tabindex="-1">General</h2>
-    <p class="settings-intro">View WIRE’s update status or change your theme and time zone.</p>
     <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
       <p id="appUpdateStatus" role="status">Reading update status…</p>
       </div>
       <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
+        <a id="appUpdateGuide" class="button-link" href="https://github.com/likamrat/wire/blob/main/docs/development.md#updating-wire" target="_blank" rel="noopener noreferrer" hidden>Update instructions</a>
         <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
     </div>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3 id="appUpdateAutoLabel">Automatically check for updates</h3>
-      <p id="appUpdateAutoHelp" hidden>On opening WIRE, then daily. Updates are never installed automatically.</p></div>
-      <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+    <div class="settings-task-row" id="appUpdateAutoRow" hidden><div class="settings-row-copy"><h3><label for="appUpdateAuto">Automatically check for updates</label></h3></div>
+      <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
     </div>
     <section class="general-appearance" aria-labelledby="generalThemeTitle">
       <h3 id="generalThemeTitle">Current theme</h3>

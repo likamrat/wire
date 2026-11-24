@@ -144,8 +144,9 @@ test("General identifies a directly launched manual copy by package version with
         assert.equal(data.installed, null);
         assert.equal(data.phase, "manual");
         await expect(page.locator("#generalTitle")).toBeVisible();
-        await expect(page.locator("#appUpdateVersion")).toHaveText(`WIRE · Package version ${pkg.version}`);
-        await expect(page.locator("#appUpdateStatus")).toContainText("managed manually");
+        await expect(page.locator("#appUpdateVersion")).toHaveText(`WIRE v${pkg.version}`);
+        await expect(page.getByRole("link", { name: "Update instructions" })).toBeVisible();
+        await expect(page.locator("#appUpdateStatus")).toBeHidden();
         await expect(page.locator("#appUpdateNotice")).toBeHidden();
         await expect(page.locator("#settingsAppUpdate")).toBeHidden();
         await expect(page.locator("#appUpdateCheck")).toBeDisabled();

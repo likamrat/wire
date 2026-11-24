@@ -23,6 +23,8 @@ test("a skipped app change among docs and tests qualifies once; edited installs 
     const installed = await commit("lib/example.mjs", "export const version=1;");
     git(tmp, "clone", origin, root);
     const source = createUpdateSource({ fixtureRemote: origin });
+    // The branch is still refs/heads/main even when Git abbreviates it as heads/main.
+    git(root, "tag", "main", installed);
     assert.equal((await source.inspectInstallation(root)).installed, installed);
     await commit("docs/manual.md", "Read the updated manual.");
     await commit("CHANGELOG.md", "Documentation outside the docs directory.");
@@ -46,6 +48,11 @@ test("a skipped app change among docs and tests qualifies once; edited installs 
     assert.equal((await source.checkMain(root, helpTip)).candidate, depsTip);
     const startTip = await commit("scripts/start.mjs", "// changed launcher");
     assert.equal((await source.checkMain(root, depsTip)).candidate, startTip);
+    git(root, "remote", "set-url", "origin", "https://github.com/likamrat/wire.git/");
+    assert.equal((await createUpdateSource().inspectInstallation(root)).installed, installed);
+    git(root, "remote", "set-url", "origin", "https://github.com/another-owner/wire.git/");
+    await assert.rejects(source.inspectInstallation(root), /official WIRE repository/);
+    git(root, "remote", "set-url", "origin", origin);
     await writeFile(path.join(root, "lib", "example.mjs"), "// user edit");
     await assert.rejects(source.checkMain(root, installed), /local changes/i);
     assert.equal(git(root, "rev-parse", "HEAD"), installed);

@@ -22,7 +22,7 @@ async function workspace(t, { renderer = "react", automatic = false, supported =
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.setDefaultTimeout(6000);
     const actions = [], releases = [], errors = [], healthReads = [], pages = [];
-    const state = { supported, automatic, installed: supported ? old : null, ...(supported ? {} : { packageVersion: "1.0.0" }),
+    const state = { supported, automatic, installed: supported ? old : null, packageVersion: "1.0.0",
         candidate: manual ? null : next, lastChecked: manual ? null : Date.UTC(2026, 10, 20, 20, 45), dismissed: null,
         phase: manual ? "manual" : "available", message: manual ? "Updates are managed manually." : "A newer build is available." };
     const setup = { entry: assets.entry, runtimeId: originalRuntime, capability, health: { service: "workiq-evidence", protocol: 1, runtimeId: originalRuntime, build: old, clientEntry: assets.entry },
@@ -111,7 +111,8 @@ test("General owns the update card, legacy links and searchable controls without
     await expect(page.locator("#generalTitle")).toBeVisible();
     const check = page.getByRole("button", { name: "Check for updates" });
     await expect(check).toBeVisible();
-    await expect(page.locator("#appUpdateVersion")).toContainText(old.slice(0, 8));
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.0");
+    await expect(page.locator("#appUpdateVersion")).not.toHaveAttribute("title");
     await expect(page.locator("#appUpdateStatus")).toContainText("Last checked");
     await expect.poll(() => page.locator(".app-version-card img").evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
     await page.locator("#settingsCategoryNav [data-category=themes]").click();
@@ -133,12 +134,10 @@ test("General owns the update card, legacy links and searchable controls without
 
 test("unsupported bundled runtime reads status only, even if a saved automatic preference is on", async t => {
     const { page, actions } = await workspace(t, { renderer: "bundled", automatic: true, supported: false });
-    await expect(page.locator(".app-version-card .settings-row-copy")).toHaveText(/^\s*WIRE · Package version 1\.0\.0\s*Updates are managed manually\.\s*$/);
-    await expect(page.locator("#appUpdateVersion")).toHaveText(/Package version 1\.0\.0/);
-    await expect(page.locator("#appUpdateAutoHelp")).toBeHidden();
-    await expect(page.locator("#appUpdateCheck")).toBeDisabled();
-    await expect(page.locator("#appUpdateAuto")).not.toBeChecked();
-    await expect(page.locator("#appUpdateAuto")).toHaveAccessibleDescription("Updates are managed manually.");
+    await expect(page.locator(".app-version-card .settings-row-copy")).toHaveText(/^\s*WIRE v1\.0\.0\s*$/);
+    await expect(page.getByRole("link", { name: "Update instructions" })).toBeVisible();
+    await expect(page.locator("#appUpdateCheck")).toBeHidden();
+    await expect(page.locator("#appUpdateAuto")).toBeHidden();
     await expect(page.locator("#settingsAppUpdate")).toBeHidden(); await expect(page.locator("#appUpdateApply")).toBeHidden();
     await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#appUpdateNotice")).toBeHidden();
     assert.deepEqual(actions, [{ action: "status" }]);
@@ -288,9 +287,11 @@ test("General shows the actual fallback zone and panel-only palette at narrow en
     assert.ok(actions.every(({ action }) => action === "status"));
 });
 
-test("a managed launcher reporting manual-only keeps its build ID and never schedules or offers installation", async t => {
+test("manual-only launcher shows instructions without printing its build ID or offering installation", async t => {
     const { page, actions } = await workspace(t, { automatic: true, manual: true });
-    await expect(page.locator("#appUpdateVersion")).toContainText(`Build ${old.slice(0, 8)}`);
+    await expect(page.locator("#appUpdateVersion")).toHaveText("WIRE v1.0.0");
+    await expect(page.locator("#appUpdateVersion")).not.toHaveAttribute("title");
+    await expect(page.locator("#appUpdateGuide")).toBeVisible();
     await expect(page.locator("#appUpdateAuto")).toBeDisabled(); await expect(page.locator("#settingsAppUpdate")).toBeHidden();
     await expect(page.locator("#appUpdateApply")).toBeHidden();
     assert.deepEqual(actions, [{ action: "status" }]);
@@ -336,8 +337,13 @@ test("Check for updates signals availability in both themes and stays check-only
         Object.assign(state, { phase, message: `Fixture ${phase}` });
         await check.click();
         await page.mouse.move(0, 0);
-        await expect(page.locator("#appUpdateStatus")).toContainText(state.message);
-        await expect.poll(() => fill(check)).not.toBe(availableFill);
+        if (phase === "manual") {
+            await expect(page.locator("#appUpdateGuide")).toBeVisible();
+            await expect(check).toBeHidden();
+        } else {
+            await expect(page.locator("#appUpdateStatus")).toContainText(state.message);
+            await expect.poll(() => fill(check)).not.toBe(availableFill);
+        }
     }
     assert.deepEqual(actions.map(a => a.action), ["status", "dismiss", "check", "check", "check", "check"]);
 });
@@ -392,24 +398,24 @@ test("manual reload releases a clean page without releasing a suspended page or 
     const browser = await chromium.launch(); cleanup.push(() => browser.close());
     const page = await browser.newPage();
     await page.goto(runtime.url + "settings");
-    await expect(page.locator("#appUpdateStatus")).toHaveText("Updates are managed manually.");
+    await expect(page.locator("#appUpdateGuide")).toBeVisible();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => {
         window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
         window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
     });
-    await expect(page.locator("#appUpdateStatus")).toHaveText("Updates are managed manually.");
+    await expect(page.locator("#appUpdateGuide")).toBeVisible();
     assert.deepEqual(responses, []);
     await page.reload();
     await expect.poll(() => responses).toEqual([["/api/session/release", 200]]);
-    await expect(page.locator("#appUpdateStatus")).toHaveText("Updates are managed manually.");
+    await expect(page.locator("#appUpdateGuide")).toBeVisible();
     const pendingPage = await browser.newPage();
     await pendingPage.addInitScript(() => sessionStorage.setItem("workiq-evidence.source-check.v1", "pending"));
     await pendingPage.goto(runtime.url + "settings");
-    await expect(pendingPage.locator("#appUpdateStatus")).toHaveText("Updates are managed manually.");
+    await expect(pendingPage.locator("#appUpdateGuide")).toBeVisible();
     await expect(pendingPage.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await pendingPage.reload();
-    await expect(pendingPage.locator("#appUpdateStatus")).toHaveText("Updates are managed manually.");
+    await expect(pendingPage.locator("#appUpdateGuide")).toBeVisible();
     assert.deepEqual(responses, [["/api/session/release", 200]]);
 });
 
