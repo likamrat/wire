@@ -335,8 +335,9 @@ matching records, not the current account: exact tools, recorded targets,
 operations and applicable gaps. The reader keeps complete-parent ordinals.
 When a legacy interaction and full history refer to the same recorded call,
 keep the legacy prompt for context. Show the call's input, timing and returned
-entries from the canonical owner together. If that call cannot be identified
-uniquely, say so instead of borrowing details from the legacy copy.
+entries from the canonical owner together. Identical copies of the same call
+in that interaction count once. If copies with the same identity disagree,
+leave the call details unavailable instead of choosing one by order.
 The outcome and its trailing arrow form one link to the right-hand reader.
 The arrow's tip also appears on keyboard focus. Close, Escape or Back returns
 to the link. The failed-call count opens the matching failure or set of failures,

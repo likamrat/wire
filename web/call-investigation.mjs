@@ -15,8 +15,12 @@ export function createCallInvestigation(compareEntries) {
         if (!scenario?.sourceSessionId || scenario.scenarioId !== row?.scenarioId
             || row.sourceSessionId != null && row.sourceSessionId !== scenario.sourceSessionId) return null;
         const id = row.parentCallId ?? row.id;
-        return only(scenario.toolCalls?.filter(call => row.toolCallId ? call.toolCallId === row.toolCallId
-            : call.startEventId && id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`));
+        const matches = scenario.toolCalls?.filter(call => row.toolCallId ? call.toolCallId === row.toolCallId
+            : call.startEventId && id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`);
+        if (!matches || matches.length < 2) return only(matches);
+        // A repeated copy of the full retained JSON is still one observation.
+        const retained = JSON.stringify(matches[0]);
+        return matches.every((call, index) => index === 0 || JSON.stringify(call) === retained) ? matches[0] : null;
     }
     function resolve(activity, records, route, revision) {
         if (route.call === undefined) return { status: "none" };
