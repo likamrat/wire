@@ -114,7 +114,7 @@ test("Harbor widgets share row edges without fixed heights or clipped content", 
                 }));
         assert.deepEqual(clipping, [], "All outcome, tool and service text stays inside its widget without clipping");
         measurements.push({ theme, width, textSize, geometry, clipping });
-        for (const [left, right] of [["outcomes", "chart"], ["tools", "services"]]) {
+        for (const [left, right] of [["chart", "outcomes"], ["tools", "services"]]) {
             const a = geometry[left], b = geometry[right];
             if (Math.abs(a.y - b.y) < 2 && a.right > b.x + 1) {
                 failures.push(`${theme}/${width}: ${left} overlaps ${right}`);

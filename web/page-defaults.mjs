@@ -10,7 +10,7 @@ export const pageDefaultSpecs = {
     guideStart: { id: "defaultGuideStart", label: "Open Guide to", help: "Choose the first topic to read. This does not change the charts.", initial: "outcomes",
         choices: [["outcomes", "Recorded outcomes"], ["last", "Last topic read in this tab"]] },
     analyzeLayout: { id: "analyzeLayout", ordered: true, label: "Homepage layout",
-        help: "Move sections up or down to change their order in Analyze.",
+        help: "Move a section to see where it will appear in Analyze.",
         initial: ["time", "outcomes", "interactions", "tools", "services", "models", "authors"],
         choices: [["time", "Work IQ tool calls over time"], ["outcomes", "Tool call results"], ["interactions", "Interactions"],
             ["tools", "Work IQ tool calls"], ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"]] },
@@ -82,11 +82,12 @@ export function createPageDefaults(specs, host = window) {
     };
 }
 
-export function bindPageDefaults(prefs, specs, syncSelects) {
+export function bindPageDefaults(prefs, specs, syncSelects, rowsFor) {
     function render(key) {
         const { id, initial, ordered } = specs[key], value = prefs.get(key);
         if (ordered) {
-            const list = document.getElementById(id).querySelector("ol");
+            const field = document.getElementById(id), list = field.querySelector("ol");
+            const preview = field.querySelector(".layout-preview-grid");
             const focus = list.contains(document.activeElement) ? document.activeElement : null;
             const rows = new Map([...list.children].map(row => [row.dataset.section, row]));
             value.forEach((section, i) => {
@@ -98,6 +99,14 @@ export function bindPageDefaults(prefs, specs, syncSelects) {
                 row.querySelector('[data-step="-1"]').disabled = i === 0;
                 row.querySelector('[data-step="1"]').disabled = i === value.length - 1;
             });
+            const tiles = new Map([...preview.children].map(tile => [tile.dataset.tile, tile]));
+            for (const row of rowsFor(value)) for (const section of row) {
+                const tile = tiles.get(section);
+                tile.toggleAttribute("data-full-row", row.length === 1);
+                tile.removeAttribute("data-moved");
+                preview.append(tile);
+            }
+            preview.toggleAttribute("data-standard", value.every((section, i) => section === initial[i]));
             if (focus) (focus.disabled ? focus.parentNode.querySelector("button:enabled") : focus)?.focus({ preventScroll: true });
         } else if (Array.isArray(initial)) {
             for (const input of document.getElementById(id).querySelectorAll("input")) input.checked = value.includes(input.value);
@@ -119,6 +128,7 @@ export function bindPageDefaults(prefs, specs, syncSelects) {
                 if (dest < 0 || dest >= value.length) return;
                 [value[i], value[dest]] = [value[dest], value[i]];
                 prefs.set(key, value);
+                element.querySelector(`[data-tile="${section}"]`).toggleAttribute("data-moved", true);
                 message = `${choices.find(([k]) => k === section)[1]} moved to position ${dest + 1} of ${value.length}.`;
             }
             document.getElementById(id + "Announcement").textContent = message;
@@ -130,14 +140,29 @@ export function bindPageDefaults(prefs, specs, syncSelects) {
     prefs.subscribe(key => { render(key); syncSelects(); });
 }
 
+function layoutPreview() {
+    // Static silhouettes only: no chart renderer, evidence, or source connection.
+    const columns = '<path d="M2 23v-8h5v8zm9 0V6h5v17zm9 0V11h5v12zm9 0V2h5v21zm9 0V9h5v14z"/>';
+    const ring = '<g fill="none" stroke="currentColor" stroke-width="4"><circle cx="13" cy="13" r="9" opacity=".25"/><circle cx="13" cy="13" r="9" pathLength="100" stroke-dasharray="69 31" transform="rotate(-90 13 13)"/></g><path opacity=".55" d="M30 8h13v3H30zm0 7h9v3h-9z"/>';
+    const entries = '<path d="M2 3h54v3H2zm0 11h41v3H2z"/><path opacity=".45" d="M2 8h37v2H2zm0 11h28v2H2z"/>';
+    const bars = '<path d="M2 5h39v3H2zm0 7h28v3H2zm0 7h16v3H2z"/>';
+    const labels = { time:"Activity over time", tools:"Tool calls", services:"Services" };
+    const marks = { time:columns, outcomes:ring, interactions:entries };
+    const tiles = pageDefaultSpecs.analyzeLayout.choices.map(([key,name]) => {
+        const box = key === "interactions" ? 'viewBox="0 0 60 26" preserveAspectRatio="none"' : 'viewBox="0 0 46 26"';
+        return `<div data-tile="${key}"><span>${labels[key] ?? name}</span><svg ${box} aria-hidden="true" focusable="false">${marks[key] ?? bars}</svg></div>`;
+    });
+    return `<figure class="layout-preview" aria-hidden="true"><figcaption>Layout preview</figcaption><div class="layout-preview-grid">${tiles.join("")}</div></figure>`;
+}
+
 export function defaultField(key, icons) {
     const { id, label, choices, initial, help } = pageDefaultSpecs[key];
     const described = `${id}Help ${id}Status`, hint = `<p class="settings-help" id="${id}Help">${help}</p>`;
     const status = `<p class="settings-help" role="status" id="${id}Status" hidden></p>`;
     if (pageDefaultSpecs[key].ordered) return `<fieldset class="page-default-field analyze-layout-field" id="${id}" tabindex="-1" aria-describedby="${described}">
-      <legend>${label}</legend>${hint}<ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
+      <legend>${label}</legend>${hint}<div class="analyze-layout-editor"><ol>${choices.map(([k, name]) => `<li data-section="${k}"><div><span>${name}</span>
         <button type="button" class="quiet icon-only" data-step="-1" aria-label="Move ${name} up">${icons["chart-collapse"]}</button>
-        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>
+        <button type="button" class="quiet icon-only" data-step="1" aria-label="Move ${name} down">${icons.chevron}</button></div></li>`).join("")}</ol>${layoutPreview()}</div>
       <div class="analyze-layout-actions"><button type="button" class="quiet" data-restore>Restore WIRE layout</button>
       <a href="/" data-settings-link>View Analyze</a></div><p class="visually-hidden" role="status" id="${id}Announcement"></p>${status}</fieldset>`;
     if (Array.isArray(initial)) return `<fieldset id="${id}" class="page-default-field" aria-describedby="${described}">
