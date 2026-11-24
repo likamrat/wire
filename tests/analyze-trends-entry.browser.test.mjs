@@ -291,6 +291,7 @@ for (const frontend of ["react", "bundled"]) {
                 const box = n => {const b=n.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height};};
                 const range = document.createRange(); range.selectNodeContents(heading);
                 return {id:link.id, text:link.innerText, accessible:link.getAttribute("aria-label"),
+                    font:parseFloat(getComputedStyle(link).fontSize),rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
                     title:box(heading), link:box(link), header:box(link.parentElement),
                     card:box(link.closest(".percentage-card,.chart-panel")), titleLines:range.getClientRects().length};
             }));
@@ -300,10 +301,21 @@ for (const frontend of ["react", "bundled"]) {
                 if (Math.abs(activity.link.y-result.link.y)>1) issues.push(`${width}: adjacent action tops differ by ${activity.link.y-result.link.y}px`);
             for (const row of rows) {
                 if (row.text !== "View trend" || !row.accessible?.startsWith("View trend: ")) issues.push(`${row.id} wording: ${row.text}`);
+                if (row.font < row.rootFont) issues.push(`${width} ${row.id}: ${row.font}px link below reading size`);
                 if (row.link.h<44 || row.link.x<row.header.x-1 || row.link.x+row.link.w>row.header.x+row.header.w+1)
                     issues.push(`${width} ${row.id}: action outside header or less than 44px tall`);
                 if (row.title.x+row.title.w>row.link.x+1 && row.title.y+row.title.h>row.link.y+1 && row.link.y+row.link.h>row.title.y+1)
                     issues.push(`${width} ${row.id}: overlapping title/action`);
+            }
+            if (width===1600) {
+                const link=links.first();
+                await link.hover(); await expect(link).toHaveCSS("text-decoration-line","underline");
+                const box=await link.boundingBox();
+                await page.mouse.down(); await expect(link).toHaveCSS("text-decoration-thickness","2px");
+                assert.deepEqual(await link.boundingBox(),box);
+                await page.mouse.move(0,0); await page.mouse.up();
+                await link.press("Tab"); await page.keyboard.press("Shift+Tab"); await expect(link).toBeFocused();
+                await expect(link).toHaveCSS("text-decoration-line","underline");
             }
             if (proof) {
                 await mkdir(proof,{recursive:true});

@@ -134,7 +134,9 @@ export const analyzeLayoutStyles = `
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0 12px}
 :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link)>:is(h2,h3){grid-area:1 / 1;margin:0;min-width:0;overflow-wrap:anywhere;line-height:var(--leading-section)}
 .percentage-card-heading:has(>.analyze-trend-link)>.percentage-denominator{grid-column:1/-1;grid-row:2}
-.analyze-trend-link:not([hidden]){grid-area:1 / 2;align-self:start;justify-self:end;display:inline-flex;align-items:center;min-height:44px;font-size:var(--type-caption);white-space:nowrap}
+.analyze-trend-link:not([hidden]){grid-area:1 / 2;align-self:start;justify-self:end;display:inline-flex;align-items:center;min-height:44px;font-size:var(--type-reading);line-height:var(--leading-control);white-space:nowrap}
+.analyze-trend-link:is(:hover,:focus-visible){text-decoration:underline;text-underline-offset:.16em}
+.analyze-trend-link:active{color:var(--ink);text-decoration-thickness:2px}
 @container (max-width:16rem){
  :is(.chart-heading,.percentage-card-heading):has(>.analyze-trend-link:not([hidden])){grid-template-columns:minmax(0,1fr)}
  .analyze-trend-link:not([hidden]){grid-area:2 / 1;justify-self:start}
@@ -158,9 +160,9 @@ export const analyzeLayoutStyles = `
 #percentageCharts .percentage-legend {gap:4px}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row {position:relative;border-radius:var(--radius-small)}
 :is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]::after {content:"";position:absolute;inset:0;z-index:1}
-:is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
-:is(#outcomeChart,#percentageCharts) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
-:is(#outcomeChart,#percentageCharts) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
+:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row:has(.percentage-label[href]):is(:hover,:focus-within) {background:var(--hover)}
+:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row:has(.percentage-label:focus-visible) {outline:2px solid var(--focus)}
+:is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-legend-row .percentage-label[href]:focus-visible {outline:none}
 #activityList .widget-record {display:grid;grid-template-columns:minmax(0,1fr) minmax(12rem,auto);gap:4px 24px;align-items:center;padding:8px 16px;overflow-wrap:anywhere}
 .widget-record>.text-link,.widget-record-exit {display:inline-flex;align-items:center;justify-self:start;min-height:44px}
 .widget-record-meta {display:grid;gap:2px;min-width:0;font-size:var(--type-small)}
@@ -168,8 +170,8 @@ export const analyzeLayoutStyles = `
 .widget-record-exit {padding-inline:16px}
 @container (max-width:34rem){#activityList .widget-record {grid-template-columns:minmax(0,1fr)}}
 @media (hover:none) {
- :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]::before {content:attr(aria-description);display:block;font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);order:1}
- :is(#outcomeChart,#percentageCharts) .percentage-label[aria-description]:not(.author-option-value) {display:flex;flex-direction:column;justify-content:center}
+ :is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-label[aria-description]::before {content:attr(aria-description);display:block;font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);order:1}
+ :is(#outcomeChart,#percentageCharts) .percentage-content:not(.outcome-hybrid) .percentage-label[aria-description]:not(.author-option-value) {display:flex;flex-direction:column;justify-content:center}
 }
 #percentageCharts .percentage-gap-list {margin:4px 0 0;padding-inline-start:28px;font-size:var(--type-caption);color:var(--muted)}
 #percentageCharts .percentage-gap-list>div {padding-block:2px}
@@ -408,14 +410,23 @@ export const analyzeLayoutStyles = `
 .outcome-distribution {min-width:0}
 .outcome-share-strip {display:flex;height:clamp(18px,1.8cqi,32px);margin-block-end:var(--space-md)}
 .outcome-share-strip>span {flex-basis:0;background:var(--column-label)}
-#outcomeChart .outcome-hybrid .percentage-legend {grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:4px clamp(8px,1.5cqi,24px)}
+#outcomeChart .outcome-hybrid .percentage-legend {display:flex;flex-wrap:wrap;gap:4px clamp(20px,4cqi,64px)}
 #outcomeChart .outcome-hybrid .percentage-legend-row {grid-template-columns:auto minmax(0,1fr);gap:0 6px;align-items:center;align-content:start;justify-items:start}
 #outcomeChart .outcome-hybrid .percentage-label {font-size:clamp(1rem,1.25cqi,1.25rem)}
+#outcomeChart .outcome-hybrid .percentage-legend-row .percentage-label[href]:is(:hover,:focus-visible,:active) {background:none;text-decoration-line:underline;text-underline-offset:.16em}
+#outcomeChart .outcome-hybrid .percentage-legend-row .percentage-label[href]:active {text-decoration-thickness:2px;color:var(--ink)}
 #outcomeChart .outcome-hybrid .percentage-value {grid-column:2;justify-self:start;padding-inline:6px;font-size:clamp(1.35rem,2.05cqi,2rem);line-height:1.2}
 #outcomeChart .outcome-hybrid .percentage-value>span {font-size:.75em}
+#outcomeChart .outcome-distribution>.outcome-zeros {margin-block-start:var(--space-xs);gap:0 var(--space-lg)}
+#outcomeChart .outcome-distribution>.outcome-zeros .percentage-legend-row {display:flex;align-items:center;gap:4px}
+#outcomeChart .outcome-distribution>.outcome-zeros :is(.percentage-label,.percentage-value) {padding-inline:2px;font-size:var(--type-small);color:var(--muted)}
+#outcomeChart .outcome-distribution>.outcome-zeros .percentage-value :is(strong,span) {font-size:inherit;font-weight:var(--weight-regular)}
+@container outcome-card (min-width:48.001rem) {
+ #outcomeChart .outcome-distribution>.percentage-legend:not(.outcome-zeros):has(>:nth-child(3)) {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-items:start;gap:var(--space-sm) var(--space-lg)}
+}
 @container outcome-card (max-width:48rem) {
  .analyze-outcome-summary #outcomeChart .percentage-content.outcome-hybrid {--hybrid-wheel:clamp(9rem,23cqi,11rem);column-gap:var(--space-lg)}
- #outcomeChart .percentage-content.outcome-hybrid .percentage-legend {grid-template-columns:minmax(0,1fr);gap:0}
+ #outcomeChart .percentage-content.outcome-hybrid .percentage-legend:not(.outcome-zeros) {display:grid;grid-template-columns:minmax(0,1fr);gap:0}
  #outcomeChart .percentage-content.outcome-hybrid .percentage-legend-row {grid-template-columns:18px minmax(0,1fr) auto;gap:4px}
  #outcomeChart .percentage-content.outcome-hybrid .percentage-value {grid-column:3;grid-row:1;justify-self:end;padding:0;font-size:1rem}
  #outcomeChart .outcome-hybrid .percentage-value>span {font-size:.9em}

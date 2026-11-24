@@ -260,6 +260,11 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     const label = page.locator('#outcomeChart [data-category="failure"] .percentage-label');
     const slice = page.locator('#outcomeChart .percentage-slice[data-category="failure"]');
     await label.hover(); await expect(slice).toHaveClass(/percentage-active/);
+    const row=label.locator("..");
+    await expect(row).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+    await expect(label).toHaveCSS("text-decoration-line","underline");
+    await page.mouse.down(); await expect(label).toHaveCSS("text-decoration-thickness","2px");
+    await page.mouse.move(0,0); await page.mouse.up();
     await page.mouse.move(0, 0); await label.focus();
     assert.ok(await label.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth) >= 2));
     await page.keyboard.press("Enter"); await ready(page);
@@ -277,6 +282,8 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     await selectActivityOption(page, "outcomeFilter", "unknown"); await closeAnalyzeFilters(page); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("1");
     await expect(page.locator("#outcomeChart .percentage-total-unit")).toHaveText("tool call");
+    await expect(page.locator("#outcomeChart .outcome-share-strip>span")).toHaveCount(1);
+    await expect(page.locator("#outcomeChart .outcome-zeros li")).toHaveCount(2);
     await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     await expect(page.locator("#outcomeChart .percentage-slice")).toHaveAttribute("data-exact-fraction", "1");
     await expect(page.locator("#analyzeScopeCaption")).toHaveText("Outcome: No result recorded");
@@ -284,6 +291,7 @@ test("outcome scope, hover, keyboard, slices and zero/missing states retain thei
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#activityListSummary")).toHaveText("0 interactions · 0 matching tool calls");
     assert.equal(await page.locator("#outcomeChart .percentage-slice").count(), 0);
+    await expect(page.locator("#outcomeChart .outcome-share-strip")).toHaveCount(0);
     await expect(page.locator("#activityList article")).toHaveCount(0);
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Partial completion");
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);

@@ -332,6 +332,9 @@ test("a positive outcome opens its matching evidence; zero opens a definition", 
     await expect(page.locator("#periodResult")).toHaveAttribute("data-revision", String(revision));
     const outcomes = page.getByRole("region", { name: "Tool call results", exact: true });
     await expect(outcomes.getByRole("img")).toHaveAccessibleName(/2 Work IQ tool calls/);
+    await expect(outcomes.locator(".outcome-share-strip>span")).toHaveCount(2);
+    await expect(outcomes.locator(".outcome-distribution>.percentage-legend:not(.outcome-zeros)>li")).toHaveCount(2);
+    await expect(outcomes.locator(".outcome-zeros .percentage-value")).toHaveText("0% (0)");
     const failure = outcomes.getByRole("link", { name: /Tool failed: 1 of 2 Work IQ tool calls \(50%\). View matching records/ });
     const origin = page.url();
     await failure.press("Enter");
