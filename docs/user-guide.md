@@ -265,7 +265,9 @@ correlation describes that page's paired daily values, not causation or
 individual calls. **Compare periods** instead compares this period with the
 preceding period of equal length. Review the dates and scope before opening
 Compare; **Back to Trends** returns to the pair and selected day.
-On grouped columns, one zero under a date means all **shown** series are zero.
+Grouped columns sit above the date they belong to. Their colors match the
+legend. Select a column for its name and exact reading. One zero under a date
+means all **shown** series are zero.
 Unavailable measurements use a dash instead. If none of the matching interactions has a token count, WIRE shows the coverage instead of an empty plot.
 To investigate a high-use day, select it on **Token usage**. Open a matching call
 to see the token count for its whole interaction. **View daily values** includes daily numbers and period

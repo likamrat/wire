@@ -372,8 +372,10 @@ Keep the dated population
 beside the measure name. An incomplete service name is a limit on that count,
 not a general warning below every chart. Put the counting details in View daily values.
 Named legend controls change what is drawn without changing the population.
-Columns use a zero baseline and a separate bar for each series, even when
-services or models overlap. Straight lines use the same observations; a missing
+Columns use a zero baseline. Center each day's bars together above its date,
+in legend order; a service with no bar must not leave a hole between its
+neighbors. Keep numeric labels on their bars, with names in the legend and
+exact reading. Straight lines use the same observations; a missing
 measurement breaks the line. Chart type, unit, population and selection are
 independent. Select a value to reach its exact calls without maximizing.
 

@@ -46,6 +46,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         field.addEventListener("change", () => change(field.value)); return { label, field };
     };
     const number = value => new Intl.NumberFormat(data?.timeContext.locale ?? "en-US", { maximumFractionDigits: 1 }).format(value);
+    const quantity = (value, singular) => `${number(value)} ${singular}${value === 1 ? "" : "s"}`;
     const rate = value => value === null ? "Unavailable" : `${number(value)}%`;
     const axisDate = date => date === time.day(new Date().toISOString(), data.timeContext.timeZone) ? "Today" : time.formatDate(date, data.timeContext);
     const fullDate = date => `${axisDate(date) === "Today" ? "Today · " : ""}${time.formatDate(date, data.timeContext, true)}`;
@@ -534,7 +535,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         if (card.id === "services") {
             const { missingServices, partialServices, preparationCalls } = data.totals;
             dialogBody.append(el("h3", "", "How services are counted"),
-                el("p", "muted", `Each call counts once per named service; a call can appear under several services. ${number(data.totals.calls)} dated calls are in the period denominator.`));
+                el("p", "muted", `Each call counts once per named service; a call can appear under several services. Period denominator: ${quantity(data.totals.calls,"dated call")}.`));
             if (missingServices > partialServices) dialogBody.append(el("p", "", `No service identified: ${number(missingServices - partialServices)} calls.`));
             if (partialServices) dialogBody.append(el("p", "", `Some service names known, others missing: ${number(partialServices)} calls.`));
             if (preparationCalls) dialogBody.append(el("p", "", `Preparation only (not service use): ${number(preparationCalls)} calls.`));
@@ -722,7 +723,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         card.fold.textContent = card.indexCollapsed ? "Expand chart" : "Collapse chart";
         card.fold.setAttribute("aria-expanded",String(!card.indexCollapsed));
         card.totals.hidden = collapsed || !allCharts;
-        const noCalls = !totals.calls, noMeasure = !allCharts && totals.calls && (
+        const noCalls = !totals.calls, noMeasure = totals.calls && (!allCharts || !source.definitions[id].length) && (
             id === "timing" && !totals.timedCalls || id === "models" && totals.missingModels === totals.interactions
             || id === "services" && !totals.values.services.some(value => value.calls));
         const usage = totals.usagePopulation;
@@ -820,10 +821,10 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             }
         }
         const shown = definitions.filter(definition => !hidden.has(definition.id)).length;
-        const seriesSubset = shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
+        const seriesSubset = shown > 0 && shown < definitions.length ? `${shown} of ${definitions.length} series shown` : "";
         if (allCharts && seriesSubset) limits.push(seriesSubset);
         if (id === "services") {
-            if (allCharts && totals.missingServices) limits.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
+            if (allCharts && totals.missingServices) limits.push(`Service names incomplete for ${quantity(totals.missingServices,"call")}`);
             if (allCharts && totals.preparationCalls) limits.push(`${number(totals.preparationCalls)} preparation calls`);
         } else if (id === "models") {
             if (totals.missingModels) limits.push(`Model not recorded: ${rate(totals.modelMissingShare)} (${number(totals.missingModels)})`);
@@ -835,12 +836,13 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             limits.push("Underlined weeks include only the selected dates.");
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         const unitIsInteraction = ["authors", "models", "problems"].includes(id) || mode === "reach";
-        const summary = id === "timing" ? `${number(totals.timedCalls)} of ${number(totals.calls)} calls timed`
-            : `${number(unitIsInteraction ? totals.interactions : totals.calls)} ${unitIsInteraction ? "originating interactions" : "dated calls"}`;
+        const population = unitIsInteraction ? totals.interactions : totals.calls;
+        const summary = id === "timing" ? `${number(totals.timedCalls)} of ${quantity(totals.calls,"call")} timed`
+            : quantity(population,unitIsInteraction ? "originating interaction" : "dated call");
         const captions = id === "usage" ? [] : [summary + " in this period"];
         if (seriesSubset) captions.push(seriesSubset);
         if (id === "timing") captions.push("milliseconds");
-        if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${number(totals.missingServices)} calls`);
+        if (id === "services" && totals.missingServices) captions.push(`Service names incomplete for ${quantity(totals.missingServices,"call")}`);
         if (source.coverage.undatedCalls && id === activeMeasure) captions.push(`${number(source.coverage.undatedCalls)} undated excluded`);
         if (Object.keys(filters).length) captions.push(restrictionText.textContent);
         card.indexScope.textContent = captions.join(" · ");
@@ -904,15 +906,15 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             card.point.hidden = !card.selection;
             if (!card.selection) return;
             const ids = new Set(evidenceValues(day, card).flatMap(value => value.rowIds));
-            const unit = ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? "interactions" : "calls";
-            let measure = `${number(ids.size)} matching calls`;
+            const unit = ["authors", "models", "problems"].includes(card.id) || card.mode === "reach" ? "interaction" : "call";
+            let measure = quantity(ids.size,"matching call");
             if (selected) {
                 if (card.id === "usage") measure = `${valueText(selected, card)} · ${usageCoverage(selected)}`;
-                else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${number(day.calls)} calls timed`;
-                else if (card.mode === "count") measure = `${number(selected.count)} ${unit}`;
+                else if (card.id === "timing") measure = `${valueText(selected, card)} · ${number(day.timedCalls)} of ${quantity(day.calls,"call")} timed`;
+                else if (card.mode === "count") measure = quantity(selected.count,unit);
                 else {
                     const reach = card.mode === "reach", share = reach ? selected.reach : selected.percent;
-                    measure = `${rate(share)} (${number(reach ? selected.interactions : selected.count)} of ${number(reach ? selected.reachEligible : selected.eligible)} ${unit})`;
+                    measure = `${rate(share)} (${number(reach ? selected.interactions : selected.count)} of ${quantity(reach ? selected.reachEligible : selected.eligible,unit)})`;
                     if (card.id === "rhythm") measure += ` · ${weekContext(day).detail}`;
                 }
             }
@@ -957,7 +959,7 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
             name.append(sample(value.id, family), el("span", "trends-series-label", value.label));
             const track = el("span", "trends-value-track"), fill = el("span", "trends-value-fill");
             fill.style.background = color(value.id, family); fill.style.width = `${card.chart.barPercent(value)}%`; track.append(fill);
-            if (family === "timing") track.style.visibility = "hidden";
+            if (family === "timing" || card.chart.metric(value,family,card.mode) === null) track.style.visibility = "hidden";
             row.append(name, track, el("span", "trends-value", valueText(value, card))); inspectionBody.append(row);
         }
         inspectionBody.style.minHeight = `${Math.max(prior, inspectionBody.getBoundingClientRect().height)}px`;
@@ -1090,7 +1092,8 @@ export function mountTrends({ root, api, time, ux, authorship, questionControls,
         datePicker.showRange(`${period === "latest" ? "Latest activity · " : ""}${time.formatCivilRange(range.from,range.to,data.timeContext)}`);
         const filterName = (key, value) => (data.definitions[key === "author" ? "authors" : key === "tool" ? "tools" : "services"].find(row => row.id === value)?.label
             ?? ({ Discovery: "Discovery / preparation", missing: "Missing service detail" }[value]) ?? value);
-        restrictionText.textContent = Object.entries(filters).map(([key, value]) => filterName(key, value)).join(" · ");
+        restrictionText.textContent = Object.entries(filters).map(([key, value]) =>
+            `${({author:"Prompt author",tool:"Tool",service:"Service"})[key]}: ${filterName(key,value)}`).join(" · ");
         restrictions.hidden = !allCharts || !Object.keys(filters).length;
         if (!Object.keys(filters).length && doc.activeElement === clearFilters) filtersButton.focus({ preventScroll: true });
         clearFilters.disabled = !Object.keys(filters).length;
@@ -1300,7 +1303,8 @@ export const trendsStyles = `
 .trends-plot svg{display:block;max-width:none}.trends-plot text{fill:var(--muted);font:var(--type-small) var(--font)}
 .trends-grid{stroke:var(--screen-grid);stroke-width:1}.trends-baseline{stroke:var(--muted)}.trends-plot [data-trend-mark]{outline:none;cursor:pointer}
 .trends-plot [data-trend-mark]:focus-visible{stroke:var(--focus);stroke-width:2}
-.trends-chart-empty{position:absolute;inset:30px auto auto 70px;background:var(--paper);padding:8px;max-width:calc(100% - 80px)}
+.trends-chart-empty{margin:var(--space-sm) 0;color:var(--muted)}
+.trends-plot:has(>.trends-chart-empty){height:auto;align-self:start}
 .trends-legend{display:grid;gap:0;min-width:0;margin:0}
 .trends-legend-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;min-width:0;padding-bottom:6px}
 .trends-series{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-content:center;align-items:start;flex:1 1 auto;width:max-content;gap:6px;min-height:44px;min-width:0;max-width:100%;padding:var(--space-xs) var(--space-sm);border-radius:var(--radius-small);cursor:pointer}
