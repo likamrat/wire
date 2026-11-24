@@ -401,6 +401,19 @@ sender and kickoff checks apply. Both fields are defined in the
 Older versioned `missing-source` entries are eligible for the bounded review
 below. A review that still finds no supported sender proposes no change.
 
+### Prompt origin reader compatibility
+
+Once `host-agent-authored` is written, both the active
+reader and the fallback must recognize it in retained prompts, interaction
+validation and JSON-only saved reports (v13 origin support or a verified
+reader backport). A v12 reader can open the saved JSON yet render the Agent
+prompt as unverified. An unchanged file hash or a healthy server does not
+prove compatible reading. Before first collection or offline repair on the
+real store, verify the intended primary and fallback on an invented marked
+prompt and its JSON-only saved report, as well as a previously saved report.
+Do not use a v12 fallback after a marked origin is written. The existing
+collector schema-4 guard is separate and does not establish this compatibility.
+
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up
 copy and its checkpoint preimage. Its read-only inspector proposes changes but

@@ -153,7 +153,8 @@ async function fixture(t, host) {
     }
     async function commit(behavior, incompatible = false) {
         await writeFile(path.join(origin, "lib", "behavior.txt"), behavior);
-        if (incompatible) await writeFile(path.join(origin, "lib", "update-compatibility.json"), '{"launcherProtocol":2}');
+        if (incompatible) await writeFile(path.join(origin, "lib", "update-compatibility.json"),
+            '{"launcherProtocol":1,"storeReadWriteProtocol":1,"canvasAdapterProtocol":1}\n');
         git(origin, "commit", "-qam", "Invented next build");
         return git(origin, "rev-parse", "HEAD");
     }

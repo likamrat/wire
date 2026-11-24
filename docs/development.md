@@ -52,6 +52,12 @@ The updater never restores a previous copy of your store or takes over a port.
 If it cannot verify a clean shutdown or compatible reader, leave the store and
 lock intact and inspect the original launcher error.
 
+Store read/write protocol 2 includes the explicit agent-authored origin. The
+managed updater refuses a protocol-1/protocol-2 transition before stopping
+the current writer. Qualify both the primary and fallback for the new retained
+and saved-report vocabulary before a manual transition or author repair;
+see [prompt origin reader compatibility](collection.md#prompt-origin-reader-compatibility).
+
 Archives without `.git`, contributor worktrees, forks, modified clones and special
 development launch modes stay manual. Do not use a new data folder to resolve an update problem.
 For a directly launched runtime, **General** shows the package version and
