@@ -2168,9 +2168,9 @@ test("sidebar reflow keeps all chart nodes, evidence text, selection and reading
         const plot = page.locator(`#trendsPlot-${id}`);
         // A middle date stays in the drawable area at both widths. The first
         // date can be visually covered by the pinned y axis when scrolled.
-        const marks = plot.locator("[data-trend-mark]");
+        const marks = plot.locator("[data-trend-mark]:has(rect[data-trend-bar])");
         const mark = marks.nth(Math.floor(await marks.count() / 2));
-        const glyph = mark.locator("rect[data-trend-bar], circle").first();
+        const glyph = mark.locator("rect[data-trend-bar]");
         await plot.scrollIntoViewIfNeeded(); await settle(page);
         const prior = await plot.boundingBox();
         await page.locator("#navigationCollapse").click(); await settle(page);
