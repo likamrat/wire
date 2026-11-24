@@ -343,8 +343,10 @@ for baseline and selected dates, missing values, and the calls behind a change.
 
 Choose **Most tokens** above the Analyze list to find the interactions that
 used the most. Each metered card shows its total. Open it for fresh input, cache reads, cache writes and
-output. The reader separately estimates how many tokens Work IQ returned
-from the size of the tool responses.
+output. To inspect a particular invocation, open **Call details** for its
+numbered row. **Tool operation tokens** shows what the tool service reported
+for that call, when available. **Returned text (estimate)** describes the size
+of its response. Neither figure is a share of the model's token total.
 In **Response models**, choose **Token share** to compare each model's share
 of the recorded tokens.
 
