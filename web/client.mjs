@@ -9366,19 +9366,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             workspaceState.stale || Boolean(search.trim()) || Boolean(workspaceState.route.withinServices));
         const references = chatCopy.references(workspaceState.evidence.sessions, workspaceState.evidence.scenarios);
         renderTimeContext();
-        renderControls(references); renderNavigation(references); renderViewingContext();
+        renderControls(references); renderNavigation(references); renderFilterChips(); renderViewingContext();
         const sourceCoverage = renderSessionAnalysis();
         analyzeControls.sourceCoverage(sourceCoverage);
         chartReferenceSourceCoverage = sourceCoverage?.textContent || "";
+        const acceptedDescription = renderPeriodFeedback();
         detailOwner = workspaceState.route.view;
         if (workspaceState.route.view === "analyze") {
             if (sourceCollection.active) seedBoundedNative();
             renderHome();
-        }
-        // The widget owns its accepted membership. Read its labels only after it has updated.
-        renderFilterChips();
-        const acceptedDescription = renderPeriodFeedback();
-        if (workspaceState.route.view === "analyze") {
+            if (workspaceState.route.widget && workspaceState.route.widget !== "all") {
+                renderFilterChips();
+                renderAnalyzeScope();
+            }
             renderActivity();
             publishAcceptedListScope(acceptedDescription);
             if (sourceCollection.active) renderBoundedAnalyze();
