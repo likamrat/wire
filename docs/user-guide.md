@@ -75,7 +75,8 @@ returns to the interaction list.
 
 In **Settings > Analyze > Homepage layout**, use the arrows to move a widget or the
 **Interactions** list. The preview outlines the section you moved and shows which
-widgets share a row. It uses sample charts instead of your saved activity.
+breakdowns share a row. The time chart, tool call results, token usage and
+Interactions each keep their own row.
 Your browser remembers each move. Choose **View Analyze** to open the homepage.
 **Restore WIRE Default Layout** returns the sections to their original order.
 An older custom layout keeps its order and adds the usage widget at the end.
@@ -176,7 +177,7 @@ outcome on the individual call rather than inferring them from the interaction s
 
 The **Work IQ tool calls over time** chart shows individual calendar days by
 default, even with All dates or a long range. If the days don't fit across the
-chart, check its date range below the plot and scroll horizontally. Long timelines show up to 90
+chart, scroll horizontally to see the other days. Long timelines show up to 90
 intervals at a time, starting with the latest dates. Scroll within that window,
 or use **Earlier dates**, **Later dates**, **First dates** and **Latest dates**
 to reach the rest. The window names its dates; totals and filters still cover

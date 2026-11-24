@@ -131,7 +131,7 @@ test("chart hover placement preserves neighboring count labels and native data",
     await expect(page.getByRole("tooltip")).toBeVisible();
     const overlap = await page.evaluate(() => {
         const tip = document.querySelector('[role="tooltip"]').getBoundingClientRect();
-        return [...document.querySelectorAll(".dimensional-count,.dimensional-time-labels>a,.flat-time-axis>span")]
+        return [...document.querySelectorAll(".dimensional-count,.dimensional-time-labels>a")]
             .filter(node => node.checkVisibility()).flatMap(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 const box = range.getBoundingClientRect();

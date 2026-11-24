@@ -70,9 +70,10 @@ Lead with accepted recorded outcomes and activity patterns. The outcome ring
 and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
-The time chart, tool results, token and cost widget, four breakdowns and Interactions can each move in **Settings >
+The time chart, tool results, token usage, four breakdowns and Interactions can each move in **Settings >
 Analyze**. The original layout is the default. Follow the chosen order in both
-the painted layout and keyboard navigation; Interactions always occupies its own row.
+the painted layout and keyboard navigation. The time chart, tool results,
+token usage, and Interactions each occupy a full row, even after reordering.
 In the Settings editor, pairing or separating charts changes the miniature,
 without moving the surrounding controls or scrolling the page. Focus follows
 the section's arrow, switching direction when it reaches an end.

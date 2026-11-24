@@ -144,7 +144,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         }).sort((a,b)=>a.y-b.y || a.x-b.x));
         assert.deepEqual(tiles.map(tile=>tile.key),await settingsOrder(),`${stage}: preview updates in place`);
         const left = Math.min(...tiles.map(tile=>tile.x)), right = Math.max(...tiles.map(tile=>tile.x+tile.width));
-        for (const tile of tiles.filter(tile=>width===390 || tile.key==="interactions")) {
+        for (const tile of tiles.filter(tile=>width===390 || ["time","outcomes","usage","interactions"].includes(tile.key))) {
             assert.equal(tile.x,left); assert.ok(Math.abs(tile.x+tile.width-right)<=1,`${stage}: full-width ${tile.key}`);
         }
         previewColumns.set(stage,tiles.map(tile=>[tile.key,tile.x > left+1,tile.width >= right-left-1]));
@@ -180,7 +180,6 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
     const reads = snapshots.length;
     await steadyMove("unpair",up("Interactions"), control => control.press("Enter")); await expect(up("Interactions")).toBeFocused();
     const intermediate = await samplePreview("one-move");
-    if (width===1440) assert.ok(intermediate[2].width > intermediate[0].width*2-1,"Interactions spans both preview columns");
     await expect(preview.locator("[data-moved]")).toHaveAttribute("data-tile","interactions");
     assert.equal(snapshots.length,reads,"moving a section does not read evidence");
     await field.getByRole("link",{name:"View Analyze"}).tap();
@@ -197,7 +196,7 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         })),"enlarged labels, tiles and actions must fit");
         await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
     }
-    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Tokens & estimated cost down",exact:true}), control => control.tap());
+    await steadyMove("usage-tile",field.getByRole("button",{name:"Move Token usage down",exact:true}), control => control.tap());
     const authorIndex = (await settingsOrder()).indexOf("authors");
     for (let i=3; i<authorIndex; i++) await up("Prompt authors").tap();
     const chosen = await settingsOrder();
@@ -246,17 +245,11 @@ test(`Analyze paints the Settings layout on entry, reorder, reload and Restore (
         assert.deepEqual(painted.map(card=>[card.key,card.x > left+1,card.x <= left+1 && card.x+card.width >= right-1]),
             previewColumns.get(previewStage),`${stage}: each section occupies the column or full row shown in Settings`);
         const list = cards.find(card=>card.key==="interactions");
-        if (width===1440) {
-            const time = cards.find(card=>card.key==="time"), outcomes = cards.find(card=>card.key==="outcomes");
-            if (Math.abs(time.y-outcomes.y)<=1) assert.ok(Math.abs(time.width-outcomes.width)<=1
-                && Math.abs(time.height-outcomes.height)<=1,`${stage}: time and results share equal chart frames`);
-        }
         for (const card of cards) if (card !== list) {
             assert.ok(card.y+card.height <= list.y+1 || list.y+list.height <= card.y+1,`${stage}: Interactions has its own row`);
         }
-        const [first,second] = painted.filter(card=>card!==list);
         if (width===390) assert.ok(painted.every((card,i)=>!i || card.y>=painted[i-1].y+painted[i-1].height-1),`${stage}: stacked`);
-        else if (stage!=="one-move") assert.ok(second.x>=first.x+first.width-1 && Math.abs(second.y-first.y)<=1,`${stage}: side by side`);
+        else assert.ok(painted.some((card,i)=>i && Math.abs(painted[i-1].y-card.y)<=1),`${stage}: neighboring breakdowns can still pair`);
     }
 });
 test("moving the pointer tints just its stationary interaction in every appearance",async t=>{

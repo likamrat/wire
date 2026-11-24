@@ -63,8 +63,6 @@ ${dimensionalColumnStyles}
 .time-column .dimensional-count {pointer-events:auto;color:var(--accent);text-decoration:none;cursor:pointer;border-radius:var(--radius-small)}
 .time-column:is(:hover,:active) .dimensional-count {background:transparent;color:var(--ink)}
 .time-column:focus-visible .dimensional-count {outline:2px solid var(--focus);outline-offset:2px}
-#chartFooter:has(.chart-size-note) {flex-wrap:wrap}
-#chartFooter>.chart-size-note {flex:1 1 28ch;min-width:0;white-space:normal}
 .chart-details {margin-top:0;min-width:0}
 .chart-details>summary {min-height:44px;align-content:center;color:var(--accent);font-size:var(--type-small);cursor:pointer}
 #chartReadingNotes p {max-width:80ch}
@@ -73,8 +71,8 @@ ${dimensionalColumnStyles}
 .dimensional-time-labels>span {padding-inline:8px;overflow-wrap:anywhere;min-width:0}
 .dimensional-time-labels>a {padding:4px;min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-small);color:var(--accent);text-decoration:none}
 .dimensional-time-labels>a:is(:hover,:focus-visible) {background:var(--hover);text-decoration:underline}
-.flat-time-plot {position:relative;min-width:100%;--time-gutter:40px}
-.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0 0 0 var(--time-gutter);padding:0;border:0;border-bottom:1px solid var(--control)}
+.flat-time-plot {position:relative;min-width:100%}
+.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}
 .flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
 .flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
@@ -89,11 +87,7 @@ ${dimensionalColumnStyles}
 .time-zero[href]:focus-visible .dimensional-count {outline:2px solid var(--focus)}
 .time-segment-link {position:absolute;left:50%;transform:translateX(-50%)}
 .time-segment-link:is(:hover,:focus-visible) {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
-.flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;margin-left:var(--time-gutter);font-size:var(--type-small);min-height:44px}
-.flat-time-axis {position:absolute;bottom:0;left:calc(-1 * var(--time-gutter));height:var(--time-height);width:calc(var(--time-gutter) - 12px);display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;color:var(--muted);font-size:var(--type-small);font-variant-numeric:tabular-nums;pointer-events:none}
-.flat-time-axis>span {line-height:1}
-.flat-time-axis>span:first-child {transform:translateY(-50%)}
-.flat-time-axis>span:last-child {transform:translateY(50%)}
+.flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;font-size:var(--type-small);min-height:44px}
 #chart:has(.flat-time-plot)+#chartFooter {justify-content:flex-start;gap:8px 24px}
 #chart:has(.flat-time-plot)+#chartFooter>span {white-space:normal;min-width:0}
 @media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}}

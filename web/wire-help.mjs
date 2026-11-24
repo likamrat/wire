@@ -5,7 +5,7 @@ const topics = [
         <li>Select <strong>Prepare preview</strong>. Review the result, then select <strong>Save report</strong> to keep it.</li></ol>
         <h3>Where does it go?</h3><p>Save writes the files on this device. Open <strong>Reports → Saved library</strong> to find them again.</p>`],
     ["history", "Find missing activity", `<ol><li>In <strong>Analyze → Filters</strong>, choose <strong>All dates</strong> and clear other restrictions. This shows more saved activity without reading more history.</li>
-        <li>If only a few dates fit on the time chart, scroll across it. The dates below the plot show how far it extends. Choose <strong>First dates</strong> when available to reach the earliest days.</li>
+        <li>Scroll across the time chart for more days. On long timelines, choose <strong>First dates</strong> to reach the earliest days.</li>
         <li>If you hid a card, open <strong>Hidden cards</strong> above the interaction list and choose <strong>Restore</strong> beside it.</li>
         <li>If the interaction is still missing from the list, check the approved source in <strong>Settings → Source access</strong> and the history window in <strong>Collection</strong>.</li></ol>
         <h3>Missing text in Search</h3><p>Search looks in saved activity and reports. It can’t find reply text that wasn’t retained.</p>`],

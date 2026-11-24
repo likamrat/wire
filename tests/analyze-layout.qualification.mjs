@@ -50,9 +50,10 @@ function verify(actual, order, narrow) {
     assert.deepEqual(actual.paint.map(([key]) => key), order);
     assert.deepEqual(actual.overlaps, []);
     assert.equal(actual.overflow, false);
+    const full = ["time","outcomes","usage","interactions"];
     let index = 0;
     while (index < order.length) {
-        if (narrow || order[index] === "interactions" || !order[index + 1] || order[index + 1] === "interactions") {
+        if (narrow || full.includes(order[index]) || !order[index + 1] || full.includes(order[index+1])) {
             assert.equal(actual.paint[index++][1], "full");
         } else {
             assert.equal(actual.paint[index++][1], "left");
