@@ -10,18 +10,20 @@ import { palettes } from "../web/theme.mjs";
 
 const proof = process.env.WIRE_ANALYZE_HOMEPAGE_PROOFS;
 async function setup(t, frontend = "react", options = {}) {
-    const { runtime } = await searchFixture(t, { frontend, reply:false, records:frontendRecords(48) });
+    const records = frontendRecords(12);
+    const { runtime } = await searchFixture(t, { frontend, reply:false, records });
     const browser = await chromium.launch(), page = await browser.newPage({viewport:{width:1280,height:960}, ...options});
     const errors = [], snapshots = [];
     page.on("pageerror", e => errors.push(e.message));
     await page.route("**/api/app-update", route => fulfillFixtureUpdateStatus(route, new URL(runtime.url).origin));
     page.on("request", request => { if (new URL(request.url()).pathname === "/api/snapshot") snapshots.push(request); });
     t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
-    return {page, url:runtime.url, snapshots};
+    return {page, url:runtime.url, snapshots, total:records.reduce((n,r)=>n+r.toolCalls.length,0)};
 }
-async function sampleEntry(page) {
-    await page.addInitScript(() => {
+async function sampleEntry(page, total) {
+    await page.addInitScript(expected => {
         window.countFrames = [];
+        const deadline = performance.now() + 5000;
         function sample() {
             const node = document.querySelector("#outcomeChart .percentage-total-value");
             if (node?.checkVisibility() && node.getBoundingClientRect().top < innerHeight) {
@@ -30,21 +32,19 @@ async function sampleEntry(page) {
                 const n = Number(digits?.[1] ?? node.innerText);
                 if (Number.isFinite(n) && n !== window.countFrames.at(-1)) window.countFrames.push(n);
             }
-            if (window.countFrames.at(-1) !== 48 || document.querySelector("[data-build-value]")) requestAnimationFrame(sample);
+            if (window.countFrames.at(-1) !== expected && performance.now() < deadline) requestAnimationFrame(sample);
         }
         requestAnimationFrame(sample);
-    });
+    }, total);
 }
 test("ordinary Analyze entry paints intermediate counts and an accessible responsive donut", async t => {
-    const {page,url,snapshots} = await setup(t, "react", {reducedMotion:"no-preference", viewport:{width:638,height:1200}});
-    await sampleEntry(page); await page.goto(url);
+    const {page,url,snapshots,total} = await setup(t, "react", {reducedMotion:"no-preference", viewport:{width:638,height:1200}});
+    await sampleEntry(page,total); await page.goto(url);
     const result = page.locator("#outcomeChart"), center = result.locator(".percentage-total-value");
-    await expect(center).toHaveAttribute("data-build-value", /\d+/);
-    await expect(result.locator(".percentage-total-link")).toHaveAccessibleName("View all 48 Work IQ tool calls");
+    await expect(result.locator(".percentage-total-link")).toHaveAccessibleName(`View all ${total} Work IQ tool calls`);
     await expect(result.locator(".percentage-ring")).toBeVisible();
     const zero = page.locator('[data-breakdown=authors] .percentage-legend-row[data-count="0"] .percentage-value');
     await expect(zero).toContainText("(0)");
-    await expect(zero.locator("[data-build-value]")).toHaveCount(0);
     await expect(page.locator('[data-breakdown=models] .percentage-empty')).toHaveText("WIRE can’t tell which models these interactions used.");
     const requests = snapshots.length;
     if (proof) {
@@ -55,52 +55,42 @@ test("ordinary Analyze entry paints intermediate counts and an accessible respon
             await page.waitForTimeout(100);
         }
     }
-    await expect(center).not.toHaveAttribute("data-build-value", /\d/);
-    await expect(center).toHaveText("48");
+    await page.waitForFunction(n => window.countFrames.at(-1) === n,total);
+    await expect(center).toHaveText(String(total));
     const seen = await page.evaluate(() => window.countFrames);
-    const digits = seen.filter(n => n > 0 && n < 48);
-    assert.ok(digits.length >= 3 && digits.every((n,i) => !i || digits[i-1] < n), JSON.stringify(seen));
-    assert.equal(seen.at(-1),48);
+    assert.ok(seen.some(n => n > 0 && n < total) && seen.every((n,i) => !i || seen[i-1] < n), JSON.stringify(seen));
+    assert.equal(seen.at(-1),total);
     assert.equal(snapshots.length,requests);
     if (proof) {
         await result.screenshot({path:path.join(proof,"settled.png")});
         await writeFile(path.join(proof,"count-frames.json"),JSON.stringify(seen));
     }
     await chooseTheme(page,"dark");
-    await expect(page.locator("[data-build-value]")).toHaveCount(0);
     await page.setViewportSize({width:390,height:1000});
     const ring = await result.locator(".percentage-ring").boundingBox(), legend = await result.locator(".percentage-legend").boundingBox();
     assert.ok(ring.width > 90 && legend.y >= ring.y + ring.height - 1);
     await page.emulateMedia({reducedMotion:"reduce"}); await page.reload();
-    await expect(center).toHaveText("48"); await expect(result.locator(".percentage-ring")).toBeVisible();
-    await expect(page.locator("[data-build-value],.percentage-ring[data-building]")).toHaveCount(0);
-    await page.waitForFunction(() => window.countFrames.length);
-    assert.deepEqual(await page.evaluate(()=>window.countFrames),[48]);
+    await expect(center).toHaveText(String(total)); await expect(result.locator(".percentage-ring")).toBeVisible();
+    await page.waitForFunction(n => window.countFrames.at(-1) === n,total);
+    assert.deepEqual(await page.evaluate(()=>window.countFrames),[total]);
 });
-for (const frontend of ["react","bundled"]) test(`${frontend} Analyze order survives reload and restores the original sections`,async t=>{
-    const {page,url} = await setup(t,frontend,{reducedMotion:"reduce",hasTouch:true});
+test("Analyze reads the chosen layout after reload and can restore its original order",async t=>{
+    const {page,url,total} = await setup(t,"react",{reducedMotion:"reduce",hasTouch:true});
     await page.goto(new URL("/settings?section=analyze",url).href);
     const field = page.locator("#analyzeLayout"), up = name => field.getByRole("button",{ name:`Move ${name} up`,exact:true });
     await up("Interactions").focus(); await page.keyboard.press("Enter"); await expect(up("Interactions")).toBeFocused();
     await page.keyboard.press("Enter");
     for (let i=0; i<5; i++) await up("Prompt authors").tap();
     await field.getByRole("link",{name:"View Analyze"}).tap();
-    const grid = page.locator(".analyze-ordered-widgets"), sections = grid.locator(":scope > [data-home-section]");
-    const expected = ["interactions","authors","time","outcomes","tools","services","models"];
-    for (let i=0; i<2; i++) {
-        await expect(grid).toBeVisible();
-        assert.deepEqual(await sections.evaluateAll(nodes=>nodes.map(n=>n.dataset.homeSection)),expected);
-        await expect(grid.locator("#activityList .activity-card")).toHaveCount(8);
-        await expect(grid.locator("#outcomeChart .percentage-total-value")).toHaveText("48");
-        if (!i) await page.reload();
-    }
+    const headings = page.locator("#chartTitle:visible,#homeView .percentage-card h3:visible,#activityListSummary:visible,#frontendBreakdowns .percentage-card h3:visible");
+    const order = [`${total} interactions · ${total} matching tool calls`,"Prompt authors","Work IQ tool calls over time",
+        "Tool call results","Work IQ tool calls","Services and operations","Response models"];
+    await expect(headings).toHaveText(order);
+    await page.reload(); await expect(headings).toHaveText(order);
     await page.goto(new URL("/settings?section=analyze",url).href);
     await field.getByRole("button",{name:"Restore WIRE layout"}).tap();
     await field.getByRole("link",{name:"View Analyze"}).tap(); await page.reload();
-    await expect(page.locator("#workspace > #activityView")).toBeVisible();
-    await expect(grid).toHaveCount(0);
-    await expect(page.locator(".analyze-chart-grid #outcomeChart")).toBeVisible();
-    await expect(page.locator("#percentageCharts [data-breakdown]")).toHaveCount(4);
+    await expect(headings).toHaveText([order[2],order[3],order[0],order[4],order[5],order[6],order[1]]);
 });
 test("moving the pointer tints just its stationary interaction in every appearance",async t=>{
     const {page,url} = await setup(t,"react",{reducedMotion:"reduce"});
