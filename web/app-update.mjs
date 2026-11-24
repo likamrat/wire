@@ -139,7 +139,7 @@ export function mountAppUpdate({ capability, blocked, loadedEntry, runtimeId, fo
         const generation = lifetime, wanted = expected;
         checkingRestart = true; clearTimeout(recoveryTimer);
         if (restoredReceipt) fence("Checking version");
-        else if (attempt === 0) fence(state?.phase === "preparing" ? "Preparing update" : "Checking update status");
+        else if (attempt === 0) fence(state?.phase === "preparing" ? "WIRE is updating" : "Checking update status");
         try {
             const response = await fetch("/health", { ...fixed, signal: AbortSignal.timeout(4000) });
             const health = response.ok && await response.json();
