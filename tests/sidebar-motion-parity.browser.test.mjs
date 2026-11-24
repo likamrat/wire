@@ -39,7 +39,7 @@ test(`Filters glide like the sidebars while the Analyze Guide stays in-page (${w
                 run.samples.push({ progress, x: box.x, width: box.width, visible: node.checkVisibility() });
                 if (animation.playState === "running") requestAnimationFrame(sample);
             }
-            requestAnimationFrame(sample);
+            sample();
             return animation;
         };
     });
@@ -81,9 +81,11 @@ test(`Filters glide like the sidebars while the Analyze Guide stays in-page (${w
         assert.equal(animations.length, 2, `${id}: explicit opening and closing follow the reference policy`);
         for (const run of animations) {
             assert.equal(run.duration, 320); assert.equal(run.easing, "cubic-bezier(0.2, 0, 0, 1)");
-            const interior = run.samples.filter(sample => sample.visible && sample.progress > .02 && sample.progress < .98);
-            assert.ok(interior.length >= 2, `${id}: intermediate painted frames, not just animate() calls`);
-            const values = interior.map(sample => id === "sidebar" ? sample.width : sample.x);
+            const visible = run.samples.filter(sample => sample.visible && sample.width > 0);
+            const coordinate = sample => Math.round(id === "sidebar" ? sample.width : sample.x);
+            const interior = visible.filter(sample => sample.progress > 0 && sample.progress < 1);
+            assert.ok(new Set(interior.map(coordinate)).size >= 2, `${id}: distinct intermediate positions, not just animate() calls`);
+            const values = visible.map(coordinate);
             assert.ok(Math.max(...values) - Math.min(...values) > 40, `${id}: visible horizontal travel matches the reference sidebars`);
         }
     }

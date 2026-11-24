@@ -873,15 +873,10 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
     }
 });
 
-test("a host reduced-motion change does not cancel built-in contextual glide", { timeout: 20000 }, async t => {
-    const { page } = await setup(t);
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await revealAnalyzeRecords(page);
-    const link = page.locator(".request-card-open").first();
-    await link.scrollIntoViewIfNeeded();
-    const box = await link.boundingBox();
-    // Acquire the real entrance before a busy test host can miss its frames.
-    await page.locator("#contextSidebar").evaluate(node => {
+async function holdReaderGlide(page, attribute) {
+    // Acquire the actual glide before a driver round trip can outlast it.
+    await page.locator("#contextSidebar").evaluate((node, attribute) => {
+        window.ongoingGlide = null;
         const observer = new MutationObserver(() => {
             const glide = node.getAnimations().find(animation =>
                 animation.effect.getKeyframes().some(frame => frame.transform));
@@ -891,8 +886,18 @@ test("a host reduced-motion change does not cancel built-in contextual glide", {
             glide.currentTime = Number(glide.effect.getTiming().duration) / 4;
             window.ongoingGlide = glide;
         });
-        observer.observe(node, { attributes: true, attributeFilter: ["open"] });
-    });
+        observer.observe(node, { attributes: true, attributeFilter: [attribute] });
+    }, attribute);
+}
+
+test("a host reduced-motion change does not cancel built-in contextual glide", { timeout: 20000 }, async t => {
+    const { page } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await revealAnalyzeRecords(page);
+    const link = page.locator(".request-card-open").first();
+    await link.scrollIntoViewIfNeeded();
+    const box = await link.boundingBox();
+    await holdReaderGlide(page, "open");
     await page.mouse.click(box.x + box.width / 2, box.y + 20);
     await page.waitForFunction(() => window.ongoingGlide?.playState === "paused");
     const panel = page.locator("#contextSidebar");
@@ -1030,18 +1035,27 @@ test("resizing during entry or exit settles the latest layout without a stale ov
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await revealAnalyzeRecords(page);
-    await page.locator(".request-card-open").first().click();
-    assert.ok(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length > 0));
+    const origin = page.locator(".request-card-open").first();
+    const inTransit = () => page.waitForFunction(() => {
+        const panel = document.querySelector("#contextSidebar");
+        if (window.ongoingGlide?.playState !== "paused") return false;
+        const dx = new DOMMatrixReadOnly(getComputedStyle(panel).transform).m41;
+        return dx > 0 && dx < panel.getBoundingClientRect().width;
+    });
+    await holdReaderGlide(page, "open");
+    await origin.click();
+    await inTransit();
     await page.setViewportSize({ width: 375, height: 820 });
     await expect.poll(() => page.locator("#contextSidebar").evaluate(node => node.matches(":modal") && node.getAnimations().length === 0)).toBe(true);
     await expect(page.locator("#closeContextSidebar")).toBeInViewport();
+    await holdReaderGlide(page, "inert");
     await page.locator("#closeContextSidebar").click();
-    assert.ok(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length > 0));
+    await inTransit();
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);
     assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert || node.matches(":modal")), false);
-    await expect(page.locator(".request-card-open").first()).toBeFocused();
+    await expect(origin).toBeFocused();
 });
 
 test("removing retained activity clears the open reader and its detached Copy action", async t => {
