@@ -238,6 +238,13 @@ in the verified run can link its tool ID to one exact start. WIRE can then
 include that call's returned text size without changing prompt authorship.
 Older receipts without that link are not rewritten.
 
+For a separately metered tool, the [Copilot completion contract](https://github.com/github/copilot-sdk/blob/03056de9b9f21203c14037536097c0e1a8774822/nodejs/src/generated/session-events.ts#L10775-L10781)
+can supply `tool.execution_complete.data.toolUsage` even on failure. Ordinary
+collection keeps token counts only for a uniquely matched Work IQ invocation.
+The tool's operation ID is digested for conflict detection; no quota, charge,
+provider detail or additional result text is retained. Input or output can be
+missing independently. These counts do not enter conversation model totals.
+
 The journal mapping follows the
 [public Copilot reader](https://github.com/markrussinovich/agent-session-insights/blob/d65c0119b31cea27743e4f4ec21be158977e06aa/sources.py)
 and the [SDK per-call/aggregate distinction](https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/usage-and-billing).

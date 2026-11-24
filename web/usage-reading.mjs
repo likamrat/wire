@@ -29,8 +29,23 @@ function questionControls(doc, prefix, change, { filters = false } = {}) {
     sync(); return { host, sync };
 }
 const usageChip = u => `${number(u.total)} tokens`;
-function usageReading(el, host, scenario, formatTime) {
+function textSize(bytes) {
+    if (bytes === 0) return "0 bytes";
+    const estimate = Math.round(bytes / 4);
+    return estimate === 0 ? "<1 token" : `~${number(estimate)} ${estimate === 1 ? "token" : "tokens"}`;
+}
+function toolTokenFields(call) {
+    const u = call.toolTokens;
+    const split = u && [u.input === null ? "input not recorded" : `${number(u.input)} input`,
+        u.output === null ? "output not recorded" : `${number(u.output)} output`].join(", ");
+    const usage = !u ? "No verified count for this call. Model counts cover the model request."
+        : u.total === null ? split : `${number(u.total)} tokens (${split})`;
+    return [["Tool operation tokens",usage], ["Returned text (estimate)", Number.isSafeInteger(call.returnedTextBytes) && call.returnedTextBytes >= 0
+        ? textSize(call.returnedTextBytes) : "Size not recorded"]];
+}
+function usageReading(el, host, scenario, formatTime, callLabel) {
     const u = scenario?.usage;
+    const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
     if (!u) {
         const reasons = {
             "interaction-link-or-boundary":"The prompt and final response could not be linked.",
@@ -43,9 +58,28 @@ function usageReading(el, host, scenario, formatTime) {
             "partial-receipts":"Some model calls have no token counts.",
             "no-linked-receipt":"No token counts matched this prompt's model calls.",
         };
-        host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts were recorded.")); return;
+        host.append(el("p", "", reasons[scenario?.usageGap] ?? "No token counts were recorded."));
+        if (!sized.length) return;
+    } else {
+        renderModelCounts(el, host, u);
     }
     host.classList.add("usage-reading");
+    if (sized.length !== 1 || tools.length !== 1) {
+        host.append(el("p", "usage-context", sized.length ? `Work IQ returned ${textSize(sized.reduce((n,c) => n + c.returnedTextBytes,0))}${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
+            : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
+            : "Work IQ return size was not recorded."));
+    }
+    const steps = [...(u?.steps ?? []).map(s => ({ at: s.at, label: s.model, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out` })),
+        ...sized.map(c => ({ at: c.completedAt, label: `${callLabel(c)} · ${c.tool}`, detail: `${textSize(c.returnedTextBytes)} of returned text` }))];
+    const timeline = el("ol", "usage-timeline");
+    for (const step of steps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
+        const row = el("li"), label = el("strong", "", step.label), detail = el("span", "", step.detail);
+        const clock = el("time", "muted", formatTime(step.at)); clock.dateTime = step.at;
+        row.append(label, detail, clock); timeline.append(row);
+    }
+    host.append(el("h3", "", u && sized.length ? "Model receipts and tool completions" : u ? "Model receipts" : "Tool completions"), timeline);
+}
+function renderModelCounts(el, host, u) {
     host.append(el("p", "usage-headline", `${number(u.total)} tokens · ${u.steps.length} model ${u.steps.length === 1 ? "call" : "calls"}`));
     const bar = el("div", "usage-bar"); bar.setAttribute("aria-hidden", "true");
     const table = el("table", "usage-table"), head = table.createTHead().insertRow();
@@ -57,22 +91,6 @@ function usageReading(el, host, scenario, formatTime) {
     }
     if (tokenKinds.every(k => u.tokens[k] !== null)) host.append(bar);
     host.append(table);
-    const tools = scenario.toolCalls ?? [], sized = tools.filter(c => c.usageContextLinked && Number.isSafeInteger(c.returnedTextBytes) && c.returnedTextBytes >= 0);
-    const footprint = Math.round(sized.reduce((n, c) => n + c.returnedTextBytes, 0) / 4);
-    if (sized.length !== 1 || tools.length !== 1) {
-        host.append(el("p", "usage-context", sized.length ? `Work IQ returned ~${number(footprint)} tokens${sized.length < tools.length ? ` (${sized.length} of ${tools.length} calls measured)` : ""}.`
-            : tools.some(c=>Number.isSafeInteger(c.returnedTextBytes)) ? "Returned text could not be linked to this prompt."
-            : "Work IQ return size was not recorded."));
-    }
-    const steps = [...u.steps.map(s => ({ at: s.at, label: s.model, detail: `${number(s.total - s.tokens.output)} in / ${number(s.tokens.output)} out` })),
-        ...sized.map(c => ({ at: c.completedAt, label: c.tool, detail: `~${number(Math.round(c.returnedTextBytes / 4))} tokens returned` }))];
-    const timeline = el("ol", "usage-timeline");
-    for (const step of steps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
-        const row = el("li"), label = el("strong", "", step.label), detail = el("span", "", step.detail);
-        const clock = el("time", "muted", formatTime(step.at)); clock.dateTime = step.at;
-        row.append(label, detail, clock); timeline.append(row);
-    }
-    host.append(el("h3", "", "Model receipts and tool completions"), timeline);
 }
 function modelShareReading(el, host, s, nativeCount) {
     for (const row of s.models) {
@@ -110,5 +128,5 @@ function homepageUsage(el, host, summary, nativeCount) {
             composition.append(legend);
             host.replaceChildren(facts, composition);
 }
-return { usageChip, usageReading, modelShareReading, homepageUsage, usageSummary, questionControls };
+return { usageChip, usageReading, toolTokenFields, modelShareReading, homepageUsage, usageSummary, questionControls };
 }

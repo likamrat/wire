@@ -81,6 +81,18 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await expect(missing.locator(".usage-chip")).toHaveCount(0);
     await missing.locator(".request-card-open").first().click();
     await expect(page.locator("[data-reader-section=usage]")).toContainText("No token counts matched this prompt's model calls.");
+    const tokenReader=page.locator("[data-reader-section=usage]");
+    await expect(tokenReader.locator(".usage-timeline li").filter({hasText:"Call #1"})).toContainText("~257 tokens of returned text");
+    async function callDetails(ordinal) {
+        const call=page.locator("[data-reader-section=activity] .reader-call-row").filter({has:page.locator(".reader-entry-label",{hasText:`Call #${ordinal}`})});
+        const toggle=call.locator(".reader-call-toggle");
+        if (await toggle.getAttribute("aria-expanded")!=="true") await toggle.press("Enter");
+        return call.locator(".technical-detail");
+    }
+    const failedCall=await callDetails(2);
+    await expect(failedCall).toContainText("11 input");
+    await expect(failedCall).toContainText("output not recorded");
+    await expect(failedCall).toContainText("Size not recorded");
     await page.keyboard.press("Escape"); await expect(missing.locator(".request-card-open").first()).toBeFocused();
     await expect(page.locator("#activityUsageSort")).toHaveValue("recent");
     await page.reload(); await expect(cards.first()).toContainText("Draft next steps");
@@ -93,9 +105,23 @@ for (const [frontend,width] of [["react",1360],["bundled",390]]) test(`${fronten
     await page.keyboard.press("Escape");
     await expect(outline.locator(".request-card-open").first()).toBeFocused();
     const direct = cards.filter({hasText:"Find review owners"}).locator(".request-card-open").first();
-    await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens returned");
+    await direct.click(); await expect(reader.locator(".usage-timeline li").filter({hasText:"workiq-retrieve"})).toContainText("~8,500 tokens of returned text");
     await expect(reader.locator(".usage-context")).toHaveCount(0);
     await page.keyboard.press("Escape"); await expect(direct).toBeFocused();
+    const launchOpen=cards.filter({hasText:"Launch notes"}).locator(".request-card-open").first();
+    await launchOpen.click();
+    await expect(reader).toContainText("30,000 tokens · 2 model calls");
+    const fetchDetails=await callDetails(2);
+    await expect(fetchDetails).toContainText("27 tokens");
+    await expect(fetchDetails).toContainText("0 input");
+    await expect(fetchDetails).toContainText("27 output");
+    await expect(fetchDetails).toContainText("~4,000 tokens");
+    await capture("call-tokens",fetchDetails);
+    const repeat=await callDetails(3);
+    await expect(repeat).toContainText("No verified count for this call");
+    await expect(repeat).toContainText("~1,000 tokens");
+    await expect(repeat).not.toContainText(/30,000|27 output/);
+    await page.keyboard.press("Escape"); await expect(launchOpen).toBeFocused();
     await widget.getByRole("link",{name:/View trend/}).press("Enter");
     const panel=page.locator(".trends-panel[data-family=usage]");
     await expect(panel).toContainText("342,000 tokens");

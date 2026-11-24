@@ -6843,8 +6843,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + workspaceState.route.request, collapsible: false });
         const activitySection = sections.add("activity", countedTitle || "Recorded activity", { key: sectionKey("activity"), collapsible: false });
         const usageSection = sections.add("usage", "Token usage", { key: sectionKey("usage"), collapsible: false });
-        assessmentFactories.usageReading(el, usageSection.body, context.groups.find(group => group.relation === "selected").scenario,
-            at => time.formatTime(at, workspaceState.scope.timeContext));
+        const selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
+        const selectedOrdinals = requestContext.actionOrdinals(selectedScenario);
+        assessmentFactories.usageReading(el, usageSection.body, selectedScenario, at => time.formatTime(at, workspaceState.scope.timeContext),
+            call => results.callLabel(selectedOrdinals.get(call)));
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         const jumps = el("nav", "wire-section-nav reader-section-jumps");
@@ -6901,7 +6903,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sourceSection.visibility.subscribe(updateLinked);
         const entries = [], seen = new Set(), rendered = [], responseHosts = [], sourceHomes = new Map(), entryLabels = new Map();
         let commonToolTiming = false;
-        const timeContext = workspaceState.scope.timeContext, selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
+        const timeContext = workspaceState.scope.timeContext;
         function moment(value) {
             if (value === null || value === undefined || value === "") return el("span", "muted", "Not recorded");
             try { time.instant(value); }
@@ -7333,7 +7335,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const actions = quickReport ? null : reportReaderActions(scenario.scenarioId);
         const entryStart = entries.length;
-        const ordinals = requestContext.actionOrdinals(scenario);
+        const ordinals = isSelected ? selectedOrdinals : requestContext.actionOrdinals(scenario);
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (workspaceState.scope.layer === "tool" ? rows : undefined);
         for (const [toolIndex, member] of (scenario.toolCalls || []).entries()) {
             const matches = canonical?.filter(item => {
@@ -7381,8 +7383,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length, omitCallKind: explainedBadRequest ? "http-400" : undefined });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
-            if (!(scenario.usage && tool.usageContextLinked) && Number.isSafeInteger(tool.returnedTextBytes)) heading.querySelector(".reader-tool-meta").append(el("span", "reader-call-duration",
-                `~${count(Math.round(tool.returnedTextBytes / 4))} returned context tokens`));
             item.append(heading);
             const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];
             explanations.forEach(node => node.remove());
@@ -7423,7 +7423,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             callDetails(item, heading, key, groupVisibility, row?.id, visibility => {
             const expert = el("div");
             expert.append(fields([["Recorded start", moment(tool.startedAt)],
-                ["Recorded end", tool.completedAt == null ? null : moment(tool.completedAt)]]));
+                ["Recorded end", tool.completedAt == null ? null : moment(tool.completedAt)],
+                ...(tool.tool?.startsWith("workiq-") ? assessmentFactories.toolTokenFields(tool) : [])]));
             const input = recordedInput(tool, visibility);
             if (!input.targets) {
                 const targets = actionFields(tool, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });

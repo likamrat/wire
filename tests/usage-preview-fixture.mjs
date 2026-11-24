@@ -21,7 +21,7 @@ export async function usagePreview(t, frontend = "react") {
         ["Find review owners",18,"user",["retrieve"],"gpt-4.1",[[10000,20000,0,3000]],[8500]],
         ["Consolidate changes",18,"agent",["retrieve","ask"],"claude-sonnet-5-5",[[18000,53000,7000,4000]],[9000,4000]],
         ["Meeting outline",19,null,["ask"],"preview-model",[[7000,21000,1000,1500]],[6000]],
-        ["Search for notes",19,"user",["retrieve"],null,[],[null]],
+        ["Search for notes",19,"user",["retrieve","retrieve"],null,[],[257,null]],
         ["Draft next steps",20,"agent",["fetch","ask"],"claude-opus-5-5",[[12000,72000,4000,4500]],[12500,6200]],
         ["Read project brief",20,"user",["fetch"],"gpt-4.1",[[4000,7000,0,1000]],[2500]],
     ];
@@ -42,7 +42,10 @@ export async function usagePreview(t, frontend = "react") {
             tools.forEach((tool,i)=>{
                 event("tool.execution_start",{toolName:`workiq-${tool}`,mcpToolName:tool,mcpServerName:"workiq",toolCallId:toolIds[i],turnId,
                     arguments:tool==="fetch"?{entityUrls:["/me/calendarView"]}:tool==="retrieve"?{query:title,capabilities:[{name:"Email"}]}:{question:title}});
-                event("tool.execution_complete",{toolCallId:toolIds[i],success:true,...(sizes[i]!==null?{result:{content:"a".repeat(sizes[i]*4)}}:{})});
+                const toolUsage = index === 0 && i === 1 ? {requestId:randomUUID(),model:"tool-service",inputTokens:0,outputTokens:27,totalTokens:27}
+                    : index === 5 && i === 1 ? {requestId:randomUUID(),model:"tool-service",inputTokens:11} : null;
+                event("tool.execution_complete",{toolCallId:toolIds[i],success:!(index === 5 && i === 1),
+                    ...(toolUsage ? {toolUsage} : {}), ...(sizes[i]!==null?{result:{content:"a".repeat(sizes[i]*4)}}:{})});
             });
             const finalId=calls.length>1?randomUUID():apiCallId;
             if(calls.length>1) receipts.push(finalId);
