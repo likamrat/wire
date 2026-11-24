@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { privateFixture, restoreLegacySearch } from "./helpers.mjs";
+import { compareAnalyzePeriods } from "./analytics-date-picker.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
@@ -30,7 +31,7 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        const allowed = ["/api/session", "/api/report-artifacts/list", "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/privacy-review", "/api/cancel-preview"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
@@ -40,39 +41,55 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
     await page.goto(server.url + "#analyze?services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await restoreLegacySearch(page, periodQuery);
-    await page.locator("#comparePeriods").click();
-    for (const [label, value] of [
-        ["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
-        ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"],
-    ]) await page.getByLabel(label, { exact: true }).fill(value);
-    const compared = page.waitForResponse(response => response.url().endsWith("/api/period-comparison"));
-    await page.locator("#applyPeriodComparison").click();
-    const value = await (await compared).json();
-    await expect(page.locator("#createPeriodReport")).toBeEnabled();
-    await page.locator("#createPeriodReport").click();
-    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
-    await page.locator("#reportRecordedContext").check();
-    await expect(page.locator("#exportBtn")).toBeEnabled();
-    const pair = value.comparison;
+    const value = await compareAnalyzePeriods(page, ["2026-03-07","2026-03-07"], ["2026-03-08","2026-03-09"]);
+    const prepare = async action => {
+        const [response] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/preview")), action()]);
+        const preview = await response.json();
+        assert.ok(response.ok(), preview.error);
+        try {
+            await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase","ready");
+        } catch (error) {
+            const sent = response.request().postDataJSON().options;
+            t.diagnostic(JSON.stringify({
+                request: { mode: sent.promptMode, linkedContext: sent.recordedContext === true },
+                response: { mode: preview.privacy.promptMode, linkedContext: Boolean(preview.snapshot.recordedContext) },
+                phase: await page.locator("#reportsView").getAttribute("data-report-phase"),
+                notice: await page.locator("#reportJourneyError").allTextContents(),
+                saveControls: await page.getByRole("button", { name: "Save report", exact: true }).evaluateAll(nodes => nodes.map(node => ({ disabled: node.disabled }))),
+            }));
+            throw error;
+        }
+        return preview;
+    };
+    let preview = await prepare(() => page.locator("#createPeriodReport").click());
+    const original = preview.snapshot.periodComparison;
+    assert.deepEqual(original.comparison, value.comparison);
+    assert.deepEqual([original.periods.baseline.rows.length, original.periods.later.rows.length], [3,4]);
     for (const [mode, contextEnabled] of [["masked", true], ["none", false], ["original", true], ["masked", false]]) {
-        await page.locator(`[name=promptMode][value=${mode}]`).check();
-        if (mode !== "none") await page.locator("#reportRecordedContext").setChecked(contextEnabled);
-        await expect(page.locator("#exportBtn")).toBeEnabled();
-        const scanned = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-        await page.locator("#exportBtn").click();
-        const preview = await (await scanned).json();
-        assert.equal(preview.error, undefined, preview.error);
-        assert.deepEqual(preview.snapshot.periodComparison.comparison, pair);
+        if (preview.privacy.promptMode !== mode) {
+            await page.locator("#reportPrivacyChoice").click();
+            preview = await prepare(() => page.locator(`#reportPrivacyOptions input[value=${mode}]`).check());
+            await page.locator("#reportPrivacyOptions").getByRole("button",{name:"Done",exact:true}).click();
+        }
+        await page.getByRole("button",{name:"Change what's included",exact:true}).click();
+        const contextControl = page.locator("#reportRecordedContext");
+        if (mode === "none") await expect(contextControl).toBeDisabled();
+        else if (await contextControl.isChecked() !== contextEnabled) preview = await prepare(() => contextControl.setChecked(contextEnabled));
+        await page.locator("#reportIncludeOptions").getByRole("button",{name:"Done",exact:true}).click();
+        assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
+        for (const key of ["baseline","later"]) assert.deepEqual(preview.snapshot.periodComparison.periods[key].rows, original.periods[key].rows);
+        assert.equal(preview.privacy.promptMode, mode);
         assert.equal(Boolean(preview.snapshot.recordedContext), contextEnabled);
         assert.equal(preview.privacy.reviewerConfirmed, false);
-        await page.locator("input[data-review-control]").check();
-        await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
-        await page.getByRole("button", { name: "Back to contents", exact: true }).click();
+        if (mode === "none") assert.ok(preview.records.every(record => record.prompts.every(copy => !copy.text)));
+        if (mode === "original") {
+            assert.ok(preview.records.some(record => record.prompts.some(copy => copy.text?.includes(periodQuery))));
+            await page.getByRole("button",{name:"Save report",exact:true}).click();
+            await expect(page.getByRole("button",{name:"Save with chat details",exact:true})).toBeVisible();
+            await page.getByRole("button",{name:"Go back",exact:true}).click();
+        }
     }
-    await page.locator("#reportRecordedContext").check();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "draft");
-    await expect(page.locator("#exportBtn")).toBeEnabled();
+    await expect(page.getByRole("button",{name:"Save with chat details",exact:true})).toBeHidden();
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
 });

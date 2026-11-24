@@ -9,11 +9,17 @@ import { createFixtureRuntimeAccess } from "../lib/runtime-access.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { fixture, privateFixture, restoreLegacySearch, revealStoredRefresh, selectActivityOption } from "./helpers.mjs";
-import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+import { prepareReportPreview } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
 async function setup(t, { signedIn = false, unbound = false, records } = {}) {
     const cleanup = [];
+    if (!records) {
+        const current = fixture();
+        current.toolCalls[0].startedAt = current.capturedAt = new Date().toISOString();
+        records = [current];
+    }
     const { context } = await privateFixture({ after: work => cleanup.push(work) }, records);
     const lifecycle = await createMicrosoftSession(context, { collection: { paused: true, windowDays: 30 } });
     const access = unbound ? undefined : await createFixtureRuntimeAccess(context, { lifecycle });
@@ -71,19 +77,18 @@ async function setup(t, { signedIn = false, unbound = false, records } = {}) {
     };
 }
 
-async function approveReport(page) {
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator("#reportTitle").fill("Synthetic retained save");
-    const previewResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
-    const preview = await previewResponse;
-    assert.equal(preview.status(), 200, (await preview.json()).error);
-    await page.waitForFunction(() => document.getElementById("reportsView").dataset.reportPhase !== "scanning");
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "ready", await page.locator("#reportJourneyError").textContent());
-    await page.locator("#reportApproval input").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+async function regenerate(page, action) {
+    const [reply] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/preview")), action()]);
+    const preview = await reply.json();
+    assert.equal(reply.status(), 200, preview.error);
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    return preview;
+}
+async function prepareNamedReport(page) {
+    await regenerate(page, () => prepareReportPreview(page));
+    const preview = await regenerate(page, () => page.getByLabel("Report name", { exact: true }).fill("Synthetic retained save"));
     await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
+    return preview;
 }
 
 async function gate(page, text) {
@@ -153,7 +158,7 @@ test("normal refresh preserves an actionable nonprivate shell through access che
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.locator('[data-nav="settings"]').click();
-    const navigatedWithoutGrant = new URL(page.url()).hash.startsWith("#settings");
+    const navigatedWithoutGrant = new URL(page.url()).pathname === "/settings";
     await capture("04-settings-without-private-access");
     hold = null; later.resolve();
     await page.goto(app.url + "#settings?section=connection");
@@ -254,6 +259,7 @@ test("idle revocation erases private activity and fresh access resolves the cano
 
 test("access revocation retires a maximized reader and active resize without retained text or geometry replay", { timeout: 30000 }, async t => {
     const record = fixture("combined-reader-withdrawal");
+    record.toolCalls[0].startedAt = record.capturedAt;
     record.userPrompt.text += " Keep the invented release notes and unresolved decisions separate.".repeat(80);
     const app = await setup(t, { signedIn: true, records: [record] }), { page } = app;
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -263,7 +269,8 @@ test("access revocation retires a maximized reader and active resize without ret
     const heldPlotLink = await plotLink.elementHandle();
     await page.locator(".request-card-open").first().click();
     await expect(page.locator("#contextSidebar")).toBeVisible();
-    const heldSourceLink = await page.locator("#requestContent .card-chat a").elementHandle();
+    await page.getByRole("button", { name: "Source", exact: true }).click();
+    const heldSourceLink = await page.getByRole("link", { name: /^Filter to chat:/ }).elementHandle();
     assert.ok(heldSourceLink);
     async function staleLinksCannotNavigate() {
         const url = page.url(), reads = app.requests.filter(path => path === "/api/snapshot").length;
@@ -275,6 +282,7 @@ test("access revocation retires a maximized reader and active resize without ret
         assert.equal(page.url(), url, "A fresh access grant cannot authorize a held data link.");
         assert.equal(app.requests.filter(path => path === "/api/snapshot").length, reads);
     }
+    const initialWidth = await page.locator("#readerResize").getAttribute("aria-valuenow");
     await page.locator("#widenInteraction").click();
     await page.locator("#expandInteraction").click();
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "expanded");
@@ -287,7 +295,12 @@ test("access revocation retires a maximized reader and active resize without ret
     assert.equal(await page.locator("#main").evaluate(node => node.inert), false);
     assert.equal(await page.evaluate(() => document.body.hasAttribute("data-reader-expanded")), false);
     await app.command("wire-sign-in");
-    await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
+    // The outcome link was private to the old grant. Sign-in does not replay it.
+    await page.getByRole("button", { name: "Open this view without the private selection" }).click();
+    await expect(page.locator("#contextSidebar")).toBeHidden();
+    await page.locator(".request-card-open").first().click();
+    await expect(page.locator("#contextSidebar[open]")).toHaveAttribute("data-mode", "docked");
+    await expect(page.locator("#readerResize")).toHaveAttribute("aria-valuenow", initialWidth);
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await staleLinksCannotNavigate();
     const handle = await page.locator("#readerResize").boundingBox();
@@ -340,8 +353,7 @@ test("real shared watch clears an idle guide's exact rows and source notes befor
     await expect(reader.locator("#workspace")).toBeVisible();
     const openExact = async () => {
         await reader.locator("#openChartReference").click();
-        await reader.locator("#chartReferenceAllTopics").click();
-        await reader.locator('button[data-reference-topic="services"]').click();
+        await reader.locator('#chartReferenceTopics button[data-reference-topic="services"]').click();
         await reader.locator("#chartReferenceShowData").click();
         await expect(reader.locator("#chartReferenceData tbody tr").first()).toBeVisible();
     };
@@ -370,6 +382,7 @@ test("real shared watch clears an idle guide's exact rows and source notes befor
 for (const emptyB of [false, true]) test(`real shared watch preserves selected ${emptyB ? "empty B" : "B"} drafts while retiring the old pair and resolving a fresh comparison`, async t => {
     const earlier = fixture("test-earlier"), later = fixture("test-later");
     later.capturedAt = "2026-10-01T12:00:00.000Z";
+    for (const record of [earlier, later]) record.toolCalls[0].startedAt = record.capturedAt;
     const bDate = emptyB ? "2026-10-02" : "2026-10-01";
     const app = await setup(t, { records: [earlier, later] }), controller = app.page, reader = await app.newPanel();
     await controller.goto(app.url + "#analyze?scope=all");
@@ -377,33 +390,41 @@ for (const emptyB of [false, true]) test(`real shared watch preserves selected $
     await gate(controller, "Sign in to WIRE");
     await expect(reader.locator("#workspace")).toBeVisible();
     await reader.locator("#comparePeriods").click();
+    await openDatePicker(reader, "compare", "Custom dates");
     for (const [id, value] of [["comparisonAFrom", "2026-09-30"], ["comparisonATo", "2026-09-30"],
         ["comparisonBFrom", bDate], ["comparisonBTo", bDate]]) await reader.locator("#" + id).fill(value);
     await reader.locator("#applyPeriodComparison").click();
     await expect(reader.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await reader.locator("#viewComparisonCalls").click();
     await reader.locator("#comparisonRecordsB").click();
     await expect(reader.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(emptyB ? 0 : 1);
-    if (emptyB) await expect(reader.locator("#comparisonExactRecordsB")).toContainText("No matching activity");
+    if (emptyB) await expect(reader.locator("#comparisonExactRecordsB")).toContainText("0 calls across 0 interactions");
     const oldLink = await reader.locator("#comparisonExactRecordsA a").first().elementHandle();
     const oldTarget = await oldLink.evaluateHandle(node => node.getAttributeNode("href"));
-    const oldCaption = await reader.locator("#comparisonAcceptedScope").elementHandle();
+    const oldCaption = await reader.locator("#comparisonExactRecordsA .compare-record-context").first().elementHandle();
     assert.ok((await oldCaption.textContent()).length > 0);
-    assert.ok((await oldTarget.evaluate(attribute => attribute.value)).includes("test-earlier"));
+    assert.equal(new URL(await oldTarget.evaluate(attribute => attribute.value), app.url).searchParams.get("privateView"), "required");
     const canonical = reader.url();
     const before = app.calls.filter(call => call.page === reader && call.path === "/api/period-comparison").length;
     await gate(controller, "Sign out of this instance");
     await expect(reader.locator("#message")).toBeVisible();
     await expect(reader.locator("#periodComparisonResults")).toBeEmpty();
     assert.equal(await oldCaption.textContent(), "");
-    await expect(reader.locator("#comparisonBFrom")).toHaveValue(bDate);
-    await expect(reader.locator("#comparisonBTo")).toHaveValue(bDate);
+    assert.equal(reader.url(), canonical);
     assert.equal(await oldTarget.evaluate(attribute => attribute.value), "");
     await privateContentAbsent(reader);
     await gate(controller, "Sign in to WIRE");
     await expect(reader.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    const fresh = app.calls.filter(call => call.page === reader && call.path === "/api/period-comparison").at(-1);
+    assert.deepEqual(fresh.input.periods.later, { from: bDate, to: bDate });
+    await reader.locator("#viewComparisonCalls").click();
+    if (emptyB) {
+        await expect(reader.locator("#comparisonRecordsA")).toHaveAttribute("aria-selected", "true");
+        await reader.locator("#comparisonRecordsB").click();
+    }
     await expect(reader.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     await expect(reader.locator("#comparisonExactRecordsB tbody tr")).toHaveCount(emptyB ? 0 : 1);
-    if (emptyB) await expect(reader.locator("#comparisonExactRecordsB")).toContainText("No matching activity");
+    if (emptyB) await expect(reader.locator("#comparisonExactRecordsB")).toContainText("0 calls across 0 interactions");
     assert.equal(app.calls.filter(call => call.page === reader && call.path === "/api/period-comparison").length, before + 1);
     await oldLink.evaluate(node => node.click());
     assert.equal(reader.url(), canonical);
@@ -412,7 +433,7 @@ for (const emptyB of [false, true]) test(`real shared watch preserves selected $
 test("real shared watch erases idle Settings source drafts but preserves an unsent history preference without collection", async t => {
     const app = await setup(t), controller = app.page, reader = await app.newPanel();
     await controller.goto(app.url + "#analyze?scope=all");
-    await reader.goto(app.url + "#settings?section=connection");
+    await reader.goto(app.url + "settings?section=source-access");
     await gate(controller, "Sign in to WIRE");
     await expect(reader.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await reader.locator("#reviewSource").click();
@@ -445,7 +466,9 @@ test("a real private cross-tab handoff waits for recipient authority and cannot 
     await expect(source.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await restoreLegacySearch(source, "SYNTHETIC_PRIVATE_PROMPT");
     await expect(source.locator("#activityList .request-card-open")).toHaveCount(1);
-    const target = source.locator("#outcomeChart").getByRole("link", { name: /^Worked:/ });
+    await source.locator("#openChartReference").click();
+    await source.locator("#chartReferenceShowData").click();
+    const target = source.locator('#chartReferenceData a[href*="result=success"]');
     await expect(target).toHaveAttribute("href", /privateView=required/);
     assert.equal((await target.getAttribute("href")).includes("SYNTHETIC_PRIVATE_PROMPT"), false);
     await source.evaluate(() => {
@@ -485,19 +508,22 @@ test("a real private cross-tab handoff waits for recipient authority and cannot 
         await expect(recipient.locator("#activityListSummary")).toBeHidden();
         assert.equal(await source.evaluate(() => window.fixtureHandoffClaims), 1);
         assert.equal(await recipient.evaluate(() => window.opener), null);
-        assert.equal(recipient.url().includes("privateView"), false);
+        assert.equal(new URL(recipient.url()).searchParams.get("privateView"), "required");
         assert.equal(recipient.url().includes("SYNTHETIC_PRIVATE_PROMPT"), false);
     } finally { deliverWatch.resolve(); }
 });
 
-test("the shared save callback uses the report owner's verified original identity through a real export", async t => {
-    const { page, requests, url } = await setup(t, { signedIn: true });
+test("Save sends the identity and content hash of the preview that was prepared", async t => {
+    const { page, calls, url } = await setup(t, { signedIn: true });
     await page.goto(url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await approveReport(page);
+    const preview = await prepareNamedReport(page);
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportSaveBody")).toContainText("Saved on this device.");
-    assert.equal(requests.filter(path => path === "/api/export").length, 1);
+    const exports = calls.filter(call => call.path === "/api/export").map(call => call.input);
+    assert.equal(exports.length, 1);
+    assert.equal(exports[0].previewId, preview.previewId);
+    assert.deepEqual(exports[0].localSave, { ...preview.localSaveRequest, keepChatDetailsConfirmed: false });
 });
 
 test("actual lifecycle Pause changes control state without clearing retained reading or reloading its snapshot", async t => {
@@ -565,14 +591,14 @@ test("explicit unbound capability renewal settles the original rejected save wit
     const app = await setup(t, { unbound: true }), page = app.page;
     await page.goto(app.url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await approveReport(page);
+    await prepareNamedReport(page);
     await page.route("**/api/export", async route => {
         await app.release(route.request().headers()["x-board-capability"]);
         await route.continue();
     });
     await page.getByRole("button", { name: "Save report", exact: true }).click();
-    await expect(page.locator("#reportJourneyError")).toContainText("save was rejected before dispatch");
-    await expect(page.getByRole("button", { name: "Back to contents", exact: true })).toBeEnabled();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "blocked");
+    await expect(page.locator("#reportJourneyError")).toContainText(/not replayed|No report was saved/);
     await expect(page.getByRole("button", { name: "Check save status", exact: true })).toHaveCount(0);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     assert.equal(app.requests.filter(path => path === "/api/export").length, 1);
@@ -584,7 +610,7 @@ test("explicit unbound lost export delivery remains unknown and recovers the ori
     const app = await setup(t, { unbound: true }), page = app.page;
     await page.goto(app.url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await approveReport(page);
+    await prepareNamedReport(page);
     await page.route("**/api/export", async route => {
         assert.equal((await route.fetch()).status(), 200);
         await route.abort("connectionfailed");
@@ -599,49 +625,53 @@ test("explicit unbound lost export delivery remains unknown and recovers the ori
     assert.equal(app.requests.filter(path => path === "/api/export").length, 1);
 });
 
-test("a retired preview's detached edit cannot invalidate a successor review or cancel its preview", async t => {
+test("an edit from a retired preview cannot change or cancel its replacement", async t => {
     const app = await setup(t, { unbound: true }), page = app.page;
     await page.goto(app.url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await approveReport(page);
-    const oldEdit = await page.locator(".prompt-report textarea").first().elementHandle();
+    await prepareNamedReport(page);
+    await selectActivityOption(page, "preparedReportView", "text");
+    await page.getByText("Edit or omit this report copy", { exact: true }).first().click();
+    const oldEdit = await page.locator(".report-copy-controls textarea").first().elementHandle();
     assert.ok(oldEdit);
-    await approveReport(page);
+    const successor = await regenerate(page, () => page.getByLabel("Report name", { exact: true }).fill("Successor report"));
     assert.equal(await oldEdit.evaluate(node => node.isConnected), false);
     const cancels = app.requests.filter(path => path === "/api/cancel-preview").length;
     await oldEdit.evaluate(node => {
         node.value = "STALE_OVERRIDE";
         node.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    assert.equal(app.calls.filter(call => call.path === "/api/preview").at(-1).input.options.title, successor.title);
     assert.equal(app.requests.filter(path => path === "/api/cancel-preview").length, cancels);
     assert.equal(app.requests.filter(path => path === "/api/export").length, 0);
 });
 
-test("real sign-out clears a private report draft while preserving unsent formats and reusable Contents controls", async t => {
+test("sign-out clears the report name and masking terms while keeping the chosen output formats", async t => {
     const app = await setup(t, { signedIn: true }), page = app.page;
     await page.goto(app.url + "#reports?task=create&scope=all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator("#reportTitle").fill("Synthetic retained save");
-    await page.locator("#formatOptions input[value=json]").check();
+    await prepareNamedReport(page);
+    await page.getByRole("button", { name: /^Formats:/ }).click();
+    await regenerate(page, () => page.locator("#formatOptions input[value=json]").check());
+    await page.keyboard.press("Escape");
+    await page.locator("#reportPrivacyChoice").click();
     await page.locator("#additionalMasking > summary").click();
     await page.locator("#manualTerms").fill("PRIVATE_MASKING_TERM");
-    await gate(page, "Sign out of this instance");
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    const cancelsBefore = app.requests.filter(path => path === "/api/cancel-preview").length;
+    await app.command("wire-sign-out");
     await expect(page.locator("#message")).toBeVisible();
     await privateContentAbsent(page);
     assert.equal(await page.locator("#manualTerms").inputValue(), "");
+    assert.equal(app.requests.filter(path => path === "/api/cancel-preview").length, cancelsBefore);
     await gate(page, "Sign in to WIRE");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await expect(page.locator("#reportTitle")).toHaveValue("");
+    await expect(page.locator("#reportTitle")).not.toHaveValue("Synthetic retained save");
     await expect(page.locator("#manualTerms")).toHaveValue("");
     await expect(page.locator("#formatOptions input[value=json]")).toBeChecked();
-    await expect(page.locator("#contextSidebarFooter").getByRole("button", { name: "Back to activity", exact: true })).toBeVisible();
-    await expect(page.locator("#exportBtn")).toBeVisible();
-    assert.equal(app.requests.filter(path => ["/api/preview", "/api/export", "/api/cancel-preview"].includes(path)).length, 0);
+    await expect(page.locator("#prepareReportPreview")).toBeVisible();
+    assert.equal(app.requests.filter(path => path === "/api/export").length, 0);
 });
 
 test("real WIRE Sign out clears active and idle panels, preserves an original unknown save and permits only fresh recovery", { timeout: 60000 }, async t => {
@@ -669,9 +699,12 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
     await gate(active, "Sign in to WIRE");
     await expect(active.locator("#workspace")).toBeVisible();
     await expect(idle.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-    await idle.locator(".request-card-open").first().click();
+    // The Analyze outcome link is a tab-private call selection, not a renewable record bookmark.
+    const openBookmark = () => idle.goto(app.url + "#request?request=test-scenario");
+    await openBookmark();
     await expect(idle.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-    const canonical = new URL(idle.url()).hash;
+    const canonical = idle.url();
+    assert.ok(new URL(canonical).searchParams.get("record"));
     await idle.evaluate(() => {
         window.fixtureCopyWrites = 0;
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
@@ -690,10 +723,12 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
         const selected = getSelection(); selected.removeAllRanges(); selected.addRange(range);
         return selected.toString().includes("SYNTHETIC_PRIVATE_PROMPT");
     }), true);
-    await approveReport(active);
+    await prepareNamedReport(active);
     await capture("01-signed-in", { active: "Signed in; report approved for saving.",
         idle: "Signed in; private interaction visible with selection and a pending copy." });
-    const oldTitleText = await active.locator("#pageTitle").evaluateHandle(node => node.firstChild);
+    const oldTitleText = await active.locator(".report-exact-text").filter({ hasText: "Synthetic retained save" }).first()
+        .evaluateHandle(node => node.firstChild);
+    assert.ok(await oldTitleText.evaluate(node => node.data.includes("Synthetic retained save")));
     const committed = Promise.withResolvers(), deliver = Promise.withResolvers();
     await active.route("**/api/export", async route => {
         const response = await route.fetch();
@@ -717,7 +752,7 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
             await privateContentAbsent(panel);
             await expect(panel.locator("iframe")).toHaveCount(0);
         }
-        assert.equal(new URL(idle.url()).hash, canonical);
+        assert.equal(idle.url(), canonical);
         assert.equal(await idle.evaluate(() => getSelection().toString()), "");
         assert.equal(await oldTitleText.evaluate(node => node.data), "");
         assert.equal(await oldProjectText.evaluate(node => node.data), "");
@@ -726,12 +761,15 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
             idle: "Signed out; private reader, selection and held Text/Attr handles cleared." });
         const originalCapability = app.calls.find(call => call.page === idle && call.path === "/api/snapshot").capability;
         await app.denied(originalCapability);
+        const account = idle.locator("#wireAccountTrigger");
+        await account.focus(); await expect(account).toBeFocused();
         deliver.resolve();
         await idle.evaluate(async () => { window.finishFixtureCopy(); await Promise.resolve(); });
         await oldCopy.evaluate(node => node.click());
         assert.equal(await idle.evaluate(() => window.fixtureCopyWrites), 1);
         assert.equal(await oldCopy.getAttribute("data-copy-state"), null);
         assert.equal((await idle.locator("body").innerText()).includes("Copied to clipboard."), false);
+        await expect(account).toBeFocused();
         await privateContentAbsent(active);
         await privateContentAbsent(idle);
         assert.equal(app.requests.filter(path => path === "/api/snapshot").length, readsBefore);
@@ -752,14 +790,23 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
         await expect(active.locator("#reportSaveBody")).toContainText("Saved on this device.");
         await expect(active.locator("#closeDialog")).toBeEnabled();
         await expect(active.locator("#clearPreviewSelection")).toBeEnabled();
-        await idle.goto(app.url + canonical);
-        const beforeCanonicalRead = app.requests.filter(path => path === "/api/snapshot").length;
-        await idle.reload();
-        await expect(idle.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-        assert.equal(app.requests.filter(path => path === "/api/snapshot").length, beforeCanonicalRead + 1);
+        await idle.goto(canonical);
+        await expect(idle.locator("#requestContent")).toContainText("This interaction is unavailable");
+        await expect(idle.locator("#requestContent")).not.toContainText("SYNTHETIC_PRIVATE_PROMPT");
+        await openBookmark();
+        await expect(idle.locator("#requestContent")).toHaveAttribute("data-view-key", "request:test-scenario");
+        const currentRecord = new URL(idle.url()).searchParams.get("record");
+        assert.ok(currentRecord);
+        assert.notEqual(currentRecord, new URL(canonical).searchParams.get("record"));
+        const freshRead = idle.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok());
+        await idle.reload(); await freshRead;
+        await expect(idle.locator("#requestContent")).toHaveAttribute("data-view-key", "request:test-scenario");
+        await expect(idle.locator(".request-original")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
         await capture("03-fresh-recovery", { active: "Signed in again; original save verified without another export.",
             idle: "Signed in again; canonical interaction loaded by a fresh request." });
         await active.getByRole("button", { name: "Open saved report", exact: true }).click();
+        await expect(active.locator("#savedReportReader").getByRole("heading", { name: "Synthetic retained save", exact: true })).toBeVisible();
+        await selectActivityOption(active, "savedReaderFormat", "html");
         await expect(active.locator("#savedReportReader iframe")).toBeVisible();
         const frozen = await active.locator("#savedReportReader iframe").elementHandle();
         await gate(idle, "Sign out of this instance");

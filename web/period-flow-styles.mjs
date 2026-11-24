@@ -26,12 +26,11 @@ export const periodFlowStyles = `
 #filters .period-controls .filter-clear-slot {grid-area:2/2;justify-self:end;align-self:start}
 #filters .period-controls .filter-clear-slot:has(>button[hidden]) {display:none}
 #filters .period-controls .select-control {grid-column:1;grid-row:2;width:100%;max-width:none}
-#filters .period-controls .select-trigger {grid-template-columns:minmax(0,1fr) 16px;padding:8px var(--select-value-inset);justify-content:space-between}
 #filters .period-controls .select-value,#filters .period-controls .result-option-label {overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
 .more-filters {margin:4px;padding:0;border:0;background:transparent}
 .more-filters>summary {min-height:44px;width:fit-content;padding:10px 4px;color:var(--accent);font-size:var(--type-control)}
 .secondary-filters {padding-block:4px 8px}
-#filterChips {--pill-fill:var(--paper);--pill-hover:var(--paper);--pill-pressed:var(--paper);display:flex;flex-wrap:wrap;gap:4px 8px}
+#filterChips {--pill-fill:var(--paper);--pill-hover:var(--hover);--pill-pressed:var(--accent-soft);display:flex;flex-wrap:wrap;gap:4px 8px}
 #filterChips .filter-chip {max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}
 #filterChips .filter-chip .wire-icon {flex:none}
 .service-focus {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0;font-size:var(--type-small)}
@@ -40,11 +39,7 @@ export const periodFlowStyles = `
 .service-context-label {font-size:var(--type-small);color:var(--muted)}
 #filters:has(#resultSummary[data-unavailable=true])>#resultFilterScope {position:static;width:auto;height:auto;padding:0;margin:8px 4px;overflow:visible;clip-path:none;white-space:normal}
 #dateFields {display:grid;margin-top:8px;grid-template-columns:repeat(2,minmax(10em,10.5rem)) auto;width:max-content;max-width:100%;gap:8px 12px;align-items:end}
-#dateFields label {display:grid;grid-template-rows:auto auto;gap:4px;min-width:0}
-#dateFields label>span {display:flex;align-items:center;padding-inline:12px}
-#dateFields input {min-height:44px;min-width:0;width:100%}
 #dateFields button {min-height:44px}
-#dateHint {grid-column:1/-1;margin:0;font-size:var(--type-caption);color:var(--muted)}
 .date-actions {display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 #dateError {grid-column:1/-1;margin:0;font-size:.875rem;overflow-wrap:anywhere}
 #dateError {color:var(--danger)}
@@ -58,7 +53,7 @@ export const periodFlowStyles = `
 #homeView>.insight-header {padding:0 0 12px;justify-content:flex-start}
 #periodResult {font-size:1rem;font-weight:600}
 #periodHint {font-size:1rem;color:var(--muted);margin-top:4px}
-.period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding:4px 16px;border-left:3px solid var(--warning);background:var(--paper);border-radius:var(--radius-small)}
+.period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding-block:4px;color:var(--muted)}
 .period-coverage p {font-size:1rem;margin:0;max-width:100%;overflow-wrap:anywhere}
 .period-coverage a {display:inline-flex;min-height:44px;max-width:100%;align-items:center;white-space:normal;overflow-wrap:anywhere}
 .fresh-activity {margin:0 0 16px;container:fresh-activity / inline-size}

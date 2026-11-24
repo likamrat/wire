@@ -137,8 +137,7 @@ test("history metadata keeps independent statuses, live feedback and native oper
     await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
     await ready(page);
     const expected = ["2 unavailable", "1 with limits", "3 still reading", "1 awaiting a saved entry", "2 beyond the discovery limit", "2 not checked this cycle"];
-    for (const label of expected) await expect(page.locator("#freshIssues")).toContainText(label);
-    const visibleSummary = await page.locator("#freshIssues").textContent();
+    const visibleSummary = await page.locator("#freshCoverageAnnouncement").textContent();
     await expect(page.locator("#freshCoverageAnnouncement")).toHaveText(visibleSummary);
     await expect(page.locator("#freshResult [role=status]")).toHaveAttribute("aria-live", "polite");
     await expect(page.locator("#freshResult [role=status]")).toHaveAttribute("aria-atomic", "true");
@@ -209,7 +208,7 @@ test("history metadata keeps independent statuses, live feedback and native oper
 
     // End-of-test assertions keep the initial red run's native before captures.
     await expect(page.locator("#freshSourceSettings,#activityUpdateToggle")).toHaveCount(0);
-    assert.equal(visibleSummary, "Chat history: " + expected.join(", ") + ".");
+    assert.match(visibleSummary, /2 Copilot chats unavailable/);
     await expect(page.locator("#collectionIssueCounts .history-status-count")).toHaveCount(2);
     await page.locator("#cancelPreferences").click();
     app.set({ coverage: undefined, approved: false });

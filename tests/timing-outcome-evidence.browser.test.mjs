@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
@@ -8,8 +9,8 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { readSavedArtifactFile, loadSavedReportSource, readSavedComparison } from "../lib/report-artifacts.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
-import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
+import { privateFixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { timeoutRecord } from "./timing-outcome-fixture.mjs";
 
 test("retained timeout cause stays with its tool across reader, new files, saved reading and Compare", { timeout: 90000 }, async t => {
@@ -53,23 +54,27 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     });
     await page.goto(runtime.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    const card = page.locator(".request-card-open").filter({ hasText: "invented timeout request" });
-    await expect(card).toContainText("The tool did not respond in time");
+    const card = page.locator("#activityList article").filter({ hasText: "invented timeout request" }).locator(".request-card-open");
+    await expect(card).toHaveText("1 tool call failed");
+    await expect(card).not.toContainText("The tool did not respond in time");
     await card.click();
     const call = page.locator('[data-tool-call-id="timeout-call"]');
     await expect(call).toContainText("workiq-retrieve");
-    await expect(call).toContainText("180,024 ms (180.024 s)");
+    await expect(call.locator(".call-duration")).toHaveAttribute("value", "180024");
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
     await expect(call).toContainText("The tool did not respond in time");
     await expect(call).toContainText("allowed waiting interval");
     await page.locator("#closeContextSidebar").click();
     for (const [name, outcome] of [["slow-completed", "success"], ["missing-completion", "unknown"]]) {
-        const control = page.locator(".request-card-open").filter({ hasText: `invented ${name} request` });
-        await expect(control.locator(".request-card-problem")).toHaveAttribute("data-outcome", outcome);
+        const control = page.locator("#activityList article").filter({ hasText: `invented ${name} request` }).locator(".request-card-open");
+        if (outcome === "success") await expect(control).toContainText("1 tool call completed");
+        else await expect(control.locator("xpath=ancestor::article[1]")).toContainText(/no result recorded/i);
         await expect(control).not.toContainText(/timed out|did not respond in time|MCP -32001/);
     }
     await navigateMain(page, "reports");
     const preparedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const response = await preparedResponse, prepared = await response.json();
     assert.equal(response.status(), 200, prepared.error);
     assert.equal(prepared.records.length, 1);
@@ -91,13 +96,13 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         }
     }
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const rebuilt = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
         assert.equal((await rebuilt).status(), 200);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const savedState = await loadBoardState(context), newBundle = savedState.exports.at(-1);
@@ -114,29 +119,28 @@ test("retained timeout cause stays with its tool across reader, new files, saved
             assert.match(text, /allowed waiting interval/, format);
         }
     }
-    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Request timed out (MCP -32001)");
+    const [opened] = await Promise.all([page.waitForResponse(r => r.url().endsWith("/api/report/open")
+        && r.request().postDataJSON().view === true), page.getByRole("button", { name: "Open saved report", exact: true }).click()]);
+    assert.ok(opened.ok());
+    assert.equal((await opened.json()).artifact.bundleId, newBundle.bundleId);
+    // Verified Open adds the full-document choice when the brief is ready.
+    const reader = page.locator("#savedReportReader");
+    await expect(reader.getByRole("article", { name: "Report brief" })).toBeVisible();
+    await selectActivityOption(page, "savedReaderFormat", "html");
+    const savedCall = reader.frameLocator(".saved-file-preview:visible iframe").locator(`[id="${saved.resultFacts.calls[0].ref}"]`);
+    await expect(savedCall.getByRole("heading")).toContainText("workiq-retrieve");
+    await expect(savedCall).toContainText("Request timed out (MCP -32001)");
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
-    await openReportComparison(page);
-    for (const [name, id] of [["Earlier report", oldBundle.bundleId], ["Later report", newBundle.bundleId]]) {
-        await page.getByRole("combobox", { name, exact: true }).click();
-        await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
-    }
-    const comparison = page.locator("#comparisonWorkspace");
-    await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("Request timed out (MCP -32001)");
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("allowed waiting interval");
-    await expect(comparison.locator(".comparison-result-evidence")).toContainText("These differences do not establish new executions");
-    const paired = await controller.previewComparison(owner, oldBundle.bundleId, newBundle.bundleId,
+    const paired = await historicalComparison(context, oldBundle.bundleId, newBundle.bundleId,
         { formats: ["html", "markdown", "json", "pdf"] });
     assert.equal(paired.comparison.resultComparison.shared.changedTypedFacts, 1);
     for (const [name, content] of Object.entries(paired.files)) {
-        const text = name.endsWith(".pdf") ? (await pdfDocumentText(Buffer.from(content.data, "base64"))).content
+        const text = name.endsWith(".pdf") ? (await pdfDocumentText(Buffer.from(content.data, "base64"))).content.replace(/\s+/g, " ")
             : String(content).replaceAll("\\", "");
         assert.match(text, name.endsWith(".json") ? /timingFailure/ : /Request timed out \(MCP -32001\)/, name);
     }
-    await controller.reviewComparison(owner, paired.previewId, true);
-    const savedPair = await controller.confirmComparison(owner, paired.previewId, true);
+
+    const savedPair = paired;
     const reopened = await readSavedComparison(context, await loadBoardState(context), savedPair.bundle.bundleId);
     assert.equal(reopened.comparison.resultComparison.changes[0].later[0].timingFailure.kind, "request-timeout");
     assert.deepEqual((await loadBoardState(context)).evidence, retainedBefore);

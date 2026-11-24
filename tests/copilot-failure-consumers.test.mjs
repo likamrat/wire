@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -94,7 +95,7 @@ test("reviewed report, saved Compare and period Compare freeze partial returned 
         assert.doesNotMatch(text, /EXCLUDED_/, format);
         if (format !== "json") assert.match(text, /total entry count is unknown/, format);
     }
-    const preview = await reports.previewComparison(owner, earlier, later, { formats, resultText: true });
+    const preview = await historicalComparison(context, earlier, later, { formats, resultText: true });
     assert.equal(preview.comparison.resultComparison.shared.changedTypedFacts, 1);
     assert.match(comparisonDocumentText(preview.comparison), /Editing is disabled/);
     for (const [name, value] of Object.entries(preview.files)) {
@@ -103,8 +104,8 @@ test("reviewed report, saved Compare and period Compare freeze partial returned 
         assert.match(text, /partial/);
         if (!name.endsWith(".json")) assert.match(text, /total entry count unknown/);
     }
-    await reports.reviewComparison(owner, preview.previewId, true);
-    const comparison = await reports.confirmComparison(owner, preview.previewId, true);
+
+    const comparison = preview;
     const reopened = await readSavedComparison(context, await loadBoardState(context), comparison.bundle.bundleId);
     assert.match(JSON.stringify(reopened.comparison.resultTextSources), /Editing is disabled/);
     assert.deepEqual((await readSavedArtifactFile(context, await loadBoardState(context), earlier, "report", "json")).bytes, original.bytes);

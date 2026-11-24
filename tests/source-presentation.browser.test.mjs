@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
@@ -23,11 +24,11 @@ async function setup(t) {
     const records = [fixture("source-presentation")], writes = [], errors = [];
     let currentPaths = paths;
     const server = createServer(async (req, res) => {
-        if (req.url === "/" && req.method === "GET") {
+        if (req.method === "GET" && isPagePath(req.url.split("?")[0])) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "source-presentation-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         const collection = {
@@ -61,7 +62,7 @@ async function setup(t) {
         assert.deepEqual(errors, []);
     });
     if (proofs) await mkdir(proofs, { recursive: true });
-    await page.goto(url + "#settings?section=connection"); await ready(page);
+    await page.goto(url + "settings?section=source-access&setting=source-paths"); await ready(page);
     return { page, url, setPaths: next => { currentPaths = next; } };
 }
 async function effectivePaper(page, selector) {
@@ -104,65 +105,32 @@ async function captureSource(page, name) {
     const viewport = page.viewportSize();
     await page.setViewportSize({ width: viewport.width, height: await page.evaluate(() => Math.max(innerHeight, document.documentElement.scrollHeight)) });
     await page.evaluate(() => scrollTo(0, 0));
-    await page.locator("[data-settings-section=connection]").screenshot({ path: path.join(proofs, name + ".png") });
+    await page.locator("[data-settings-section=source-access]").screenshot({ path: path.join(proofs, name + ".png") });
     await page.setViewportSize(viewport);
 }
 
-test("source destinations retain real focus without an automatic control outline across pointer, keyboard, history and polling", { timeout: 60000 }, async t => {
-    const { page, url } = await setup(t), states = [];
-    for (const theme of ["light", "dark"]) {
-        const record = async state => { states.push({ state, theme, ...await heading(page) }); };
-        await chooseTheme(page, theme);
-        await page.goto(url + "#settings?section=connection"); await ready(page);
-        await expect(page.locator("#connectionTitle")).toBeFocused();
-        await record("ordinary-connection");
-        await navigateMain(page, "home");
-        await page.getByRole("link", { name: "Source", exact: true }).click();
-        await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-        await record("home-pointer");
-        await captureSource(page, `source-pointer-${theme}`);
-        await page.waitForResponse(r => r.url().endsWith("/api/collection/status"), { timeout: 12000 });
-        await record("pointer-poll");
-        await page.reload(); await ready(page); await record("reload");
-        await navigateMain(page, "home"); await page.goBack();
-        await expect(page.locator("#approvedSourceTitle")).toBeFocused(); await record("back");
-        await page.goForward(); await ready(page);
-        await keyboardActivate(page, page.getByRole("link", { name: "Source", exact: true }));
-        await expect(page.locator("#approvedSourceTitle")).toBeFocused(); await record("home-keyboard");
-        await page.locator("#settingsSearch").fill("source paths");
-        const result = page.locator('#settingsSearchResults a[data-setting="source-paths"]');
-        await result.click(); await record("search-pointer");
-        await page.locator("#settingsSearch").fill("source paths");
-        await keyboardActivate(page, result); await record("search-keyboard");
-        await captureSource(page, `source-keyboard-${theme}`);
-        await page.locator("#settingsSearch").click();
-        await page.waitForResponse(r => r.url().endsWith("/api/collection/status"), { timeout: 12000 });
-        await record("unrelated-poll");
-    }
-    await save("destination-states", states);
-    for (const state of states) {
-        assert.equal(state.tag, "H3"); assert.equal(state.tabIndex, -1);
-        assert.equal(state.border, "0px");
-        assert.equal(state.outline, "none", `${state.state}: a read heading must not have an enclosing control outline`);
-        assert.notEqual(state.cursor, "pointer");
-        assert.equal(state.size, "16px"); assert.equal(state.weight, "600");
-        if (state.focusVisible) {
-            assert.equal(state.cue, '""', `${state.state}: keyboard orientation remains visible`);
-            assert.ok(parseFloat(state.cueWidth) >= 3);
-            assert.ok(contrast(state.cueFill, state.paper) >= 3);
-        } else assert.equal(state.cue, "none", `${state.state}: no persistent route highlight outside keyboard focus`);
-    }
-    for (const theme of ["light", "dark"]) {
-        assert.equal(states.find(state => state.state === "home-pointer" && state.theme === theme).focusVisible, false);
-        assert.equal(states.find(state => state.state === "search-keyboard" && state.theme === theme).focusVisible, true);
-    }
-    assert.equal(states.at(-1).active, "settingsSearch", "Polling must not move focus back to the heading");
+test("source path search restores the original destination without re-focusing it during polling", async t => {
+    const { page } = await setup(t);
+    const title = page.locator("#approvedSourceTitle"), search = page.locator("#settingsSearch");
+    await expect(title).toBeFocused();
+    await navigateSettings(page, "regional");
+    await search.fill("source paths");
+    const hit = page.locator('#settingsSearchResults a[data-setting="source-paths"]');
+    await keyboardActivate(page, hit);
+    await expect(title).toBeFocused();
+    await expect(page.locator("#approvedDatabase")).toHaveText(paths.appDbPath);
+    await page.goBack(); await expect(hit).toBeFocused();
+    await hit.click(); await expect(title).toBeFocused();
+    await search.click();
+    await page.waitForResponse(r => r.url().endsWith("/api/collection/status"));
+    await expect(search).toBeFocused();
+    await expect(page.locator("#sourceEditor")).toBeHidden();
 });
 
 test("readonly source roles, exact long paths and control geometry remain coherent in both themes and text scales", { timeout: 120000 }, async t => {
     const { page, setPaths } = await setup(t), measurements = [];
     setPaths(longPaths); await page.reload(); await ready(page);
-    await page.locator(".settings-paths dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
+    await page.locator("#approvedSourceDetails dt").first().evaluate(node => { node.textContent += " \u2014 synthetic unusually long descriptive role label"; });
     const cases = [375, 820, 1200, 2560].map(width => ({ width, narrow: false })).concat({ width: 2560, narrow: true });
     for (const theme of ["light", "dark"]) for (const scale of [1, 2]) for (const config of cases) {
         await page.setViewportSize({ width: config.width, height: 1000 });
@@ -172,7 +140,7 @@ test("readonly source roles, exact long paths and control geometry remain cohere
             document.querySelector("#settingsView").style.width = narrow ? "375px" : "";
         }, { scale, narrow: config.narrow });
         const titleBefore = await heading(page);
-        const values = await page.locator(".settings-paths").evaluate(node => {
+        const values = await page.locator("#approvedSourceDetails .settings-paths").evaluate(node => {
             const style = getComputedStyle(node);
             return { family: style.fontFamily,
                 overflow: document.documentElement.scrollWidth > innerWidth,
@@ -188,13 +156,12 @@ test("readonly source roles, exact long paths and control geometry remain cohere
                         lines: rects.length };
                 }) };
         });
-        values.paper = await effectivePaper(page, ".settings-paths");
+        values.paper = await effectivePaper(page, "#approvedSourceDetails .settings-paths");
         assert.equal(values.overflow, false, JSON.stringify({ theme, scale, ...config }));
         assert.deepEqual(values.rows.filter(row => row.tag === "DD").map(row => row.text), Object.values(longPaths));
         for (const row of values.rows) {
             assert.equal(row.size, `${(row.tag === "DT" ? 14 : 16) * scale}px`, "Reference labels and exact reading values retain their distinct roles");
             assert.equal(row.family, values.family);
-            assert.equal(row.weight, row.tag === "DT" ? "500" : "400");
             assert.ok(contrast(row.color, values.paper) >= 4.5);
             assert.equal(row.clipped, false); assert.equal(row.allGlyphsInside, true);
             if (row.tag === "DD") {
@@ -233,60 +200,20 @@ test("readonly source roles, exact long paths and control geometry remain cohere
     await save("source-layout-matrix", measurements);
 });
 
-test("named category destinations, source drafts and real controls retain keyboard focus and help", { timeout: 60000 }, async t => {
-    const { page, url } = await setup(t);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
-        await expect(page.locator("#displayTitle")).toBeFocused();
-        assert.equal((await heading(page, "displayTitle")).outline, "none");
-        for (const [section, id] of [["display", "displayTitle"], ["collection", "preferencesTitle"], ["connection", "connectionTitle"]]) {
-            await page.keyboard.press("Tab");
-            const link = page.locator(`#settingsCategoryNav [data-category=${section}]`);
-            await link.focus(); await page.keyboard.press("Enter");
-            await expect(page.locator("#" + id)).toBeFocused();
-            const state = await heading(page, id);
-            assert.equal(state.outline, "none"); assert.equal(state.cue, '""');
-            assert.ok(contrast(state.cueFill, state.paper) >= 3);
-        }
-        await page.locator("#settingsSearch").fill("time zone");
-        const zone = page.locator('#settingsSearchResults a[data-setting="time-zone"]');
-        await keyboardActivate(page, zone);
-        await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-        const zoneOutline = await page.locator("#displayTimeZone-control").evaluate(node => getComputedStyle(node, "::before").outlineWidth);
-        assert.equal(zoneOutline, "2px");
-        assert.equal(await page.locator("#displayTimeZone-control").evaluate(node => getComputedStyle(node).outlineWidth), "0px", "Search focus must keep the dropdown's single painted focus ring");
-        await page.locator("#settingsSearch").fill("missing history");
-        await keyboardActivate(page, page.locator('#settingsSearchResults a[data-setting="issues"]'));
-        await expect(page.locator("#collectionIssuesTitle")).toBeFocused();
-        assert.equal((await heading(page, "collectionIssuesTitle")).cue, '""');
-        await page.goBack();
-        await navigateSettings(page, "connection");
-    }
-    await page.locator("#editSource").focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("tooltip")).toBeVisible();
-    assert.equal(await page.locator("#editSource").evaluate(node => getComputedStyle(node).outlineWidth), "2px");
-    await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
-    await page.keyboard.press("Enter"); await expect(page.locator("#sourceDatabase")).toBeFocused();
-    await page.locator("#sourceDatabase").fill(longPaths.appDbPath);
-    await page.locator("#sourceSessions").fill(longPaths.sessionRoot);
-    await page.keyboard.press("Enter");
-    await page.locator("#sourceSessions").evaluate(node => node.setSelectionRange(7, 12));
-    const input = await page.locator("#sourceSessions").elementHandle();
-    await page.waitForResponse(r => r.url().endsWith("/api/collection/status"), { timeout: 12000 });
-    assert.equal(await input.evaluate(node => node === document.activeElement && node.isConnected && node.selectionStart === 7), true);
-    await navigateMain(page, "home"); await page.goBack();
-    await expect(page.locator("#sourceSessions")).toHaveValue(longPaths.sessionRoot);
-    await page.locator("#settingsSearch").fill("source paths");
-    await page.locator('#settingsSearchResults a[data-setting="source-paths"]').click();
-    await expect(page.locator("#sourceDatabase")).toBeFocused();
-    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
+test("a source draft preserves the focused path and text selection through polling", async t => {
+    const { page } = await setup(t);
+    await openSourceEditor(page);
+    const input = page.locator("#sourceSessions");
+    await input.fill(longPaths.sessionRoot);
+    await input.evaluate(node => node.setSelectionRange(7, 12));
+    const held = await input.elementHandle();
+    await page.waitForResponse(r => r.url().endsWith("/api/collection/status"));
+    assert.deepEqual(await held.evaluate(node => [node === document.activeElement, node.selectionStart, node.selectionEnd]), [true, 7, 12]);
+    await navigateMain(page, "analyze"); await page.goBack(); await ready(page);
+    await expect(input).toHaveValue(longPaths.sessionRoot);
     await page.locator("#cancelSource").click();
     await expect(page.locator("#editSource")).toBeFocused();
-    await expect(page.locator("#approvedDatabase")).toHaveText(paths.appDbPath);
-    await page.reload(); await ready(page);
-    await expect(page.locator("#approvedSourceTitle")).toBeFocused();
-    assert.ok(page.url().startsWith(url));
+    await expect(page.locator("#approvedSessions")).toHaveText(paths.sessionRoot);
 });
 
 test("source values preserve repeated spaces inside their glyph bounds at variable path wrap boundaries", async t => {

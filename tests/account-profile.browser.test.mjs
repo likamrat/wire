@@ -15,7 +15,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createBoardTransport } from "../lib/client-transport.mjs";
 import { mountAccountSettingsPresentation } from "../web/account-settings-presentation.mjs";
-import { privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, chooseTheme, selectActivityOption, navigateSettings } from "./helpers.mjs";
 
 function syntheticImage() {
     const chunk = (type, data) => {
@@ -100,7 +100,7 @@ async function setup(t, { qualified = true, sourceAware = false, copilotOnly = f
         });
         await page.route(url => url.origin !== origin, route => { external.push(route.request().url()); return route.abort(); });
         if (beforeNavigate) await beforeNavigate(page);
-        await page.goto(runtime.url + "#settings?section=connection");
+        await page.goto(new URL(`/settings?section=${copilotOnly ? "source-access" : "connection"}`, runtime.url).href);
         await expect(page.locator(copilotOnly ? "#connectionSourceTitle" : "#wireMicrosoftConnection")).toBeVisible();
         return page;
     }
@@ -161,7 +161,8 @@ test("the ordinary account menu keeps a neutral fallback and action without a de
     await expect(page.locator("#wireAccountProfileMessage")).toBeHidden();
     await expect(page.locator("#wireAccountMenu > p:visible")).toHaveCount(1);
     await expect(page.locator(".wire-account-identity")).toHaveText("Local WIRE access", { useInnerText: true });
-    await expect(page.locator("#wireAccountTrigger")).toContainText("This instance");
+    await expect(page.locator("#wireAccountTrigger")).toHaveText("Account");
+    await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName("WIRE account: Local WIRE access, This instance");
     await expect(page.locator("#wireAccountGate")).toHaveAccessibleDescription(
         "Stops collection and hides saved activity. Does not delete data or sign out of GitHub or Copilot.");
     await expect(page.locator("#wireAccountProfileRetry")).toBeHidden();
@@ -285,7 +286,7 @@ test("withdrawal during the second Connect preflight retires the continuation ev
     let armed = false, preflights = 0, connections = 0;
     const app = await setup(t, { sourceAware: true, qualified: false, connect: async () => { connections++; } });
     const page = await app.panel(async page => {
-        await page.route(url => url.pathname === "/", async route => {
+        await page.route(url => url.pathname === "/settings", async route => {
             const response = await route.fetch();
             let html = await response.text();
             const transport = createBoardTransport.toString(), presenter = mountAccountSettingsPresentation.toString();
@@ -844,6 +845,7 @@ test("first-account readiness waits for the actual source draft and reads after 
     await entered.promise;
     await expect(page.locator("#wireMicrosoftAction")).toHaveText("Cancel sign-in");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await navigateSettings(page, "source-access");
     await page.locator("#reviewSource").click();
     const draftPath = "C:\\synthetic-held-source\\data.db";
     await page.locator("#sourceDatabase").fill(draftPath);
@@ -912,7 +914,7 @@ for (const boundary of ["withdrawal", "owner-replacement"]) test(`automatic Conn
         throw new MicrosoftSessionError("transport-failed");
     } });
     const page = await app.panel(async page => {
-        await page.route(url => url.pathname === "/", async route => {
+        await page.route(url => url.pathname === "/settings", async route => {
             const response = await route.fetch(), html = await response.text(), transport = createBoardTransport.toString();
             assert.equal(html.split(transport).length, 2);
             await route.fulfill({ response, body: html.replace(transport,

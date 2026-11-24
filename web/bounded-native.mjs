@@ -54,7 +54,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
     searchHost.id = "wireNativeSearch"; $("wireSearchPanel").append(searchHost);
     searchHost.hidden = true;
     const number = value => value.toLocaleString();
-    const targetKey = target => JSON.stringify([target.conversationId, target.sourceId, target.revision, target.sourceRevision, target.ordinal ?? null]);
+    const targetKey = target => JSON.stringify([target.conversationId, target.sourceId, target.revision, target.sourceRevision,
+        target.ordinal ?? null, target.completedRef ?? null]);
+    const hash = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+    const completedCard = (view, item) => view.aggregates?.layer === "tool" && hash(view.viewId) && hash(view.selectionRef)
+        && item?.completedRef === view.selectionRef && item.selectedRows > 0 && item.selectedRows === item.outcomes.success;
     function authorityBasis(value) {
         const current = value?.readback?.current ?? value?.current, deletion = value?.readback?.deletionVersion ?? value?.deletionVersion;
         if (!current || !Number.isSafeInteger(deletion) || deletion < 0 || !Number.isSafeInteger(current.generation)
@@ -85,12 +89,16 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         if (value?.revision !== target.revision || value?.sourceRevision !== target.sourceRevision
             || !state.sourceIds.includes(target.sourceId) || !/^[a-f0-9]{64}$/.test(target.conversationId)
             || !authorityBasis(value)) return false;
+        const scoped = target.completedRef !== undefined;
+        const item = scoped && value.page?.items.find(item => item.id === target.conversationId && item.sourceId === target.sourceId);
+        if (scoped && (target.ordinal !== undefined || target.completedRef !== value.selectionRef || !completedCard(value, item))) return false;
         state.readback(value.readback);
         observeReaderAuthority(value);
         const owner = api.publicationToken(), authority = authorityBasis(value);
         if (!owner || readingAuthority?.owner !== owner || readingAuthority.basis !== authority) return false;
         const key = targetKey(target);
-        readingOrigins.delete(key); readingOrigins.set(key, { owner, authority });
+        readingOrigins.delete(key); readingOrigins.set(key, { owner, authority,
+            ...(scoped ? { viewId: value.viewId, count: item.selectedRows } : {}) });
         while (readingOrigins.size > 8) readingOrigins.delete(readingOrigins.keys().next().value);
         return true;
     }
@@ -203,6 +211,8 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         const grouped = category && ["workload", "service"].includes(value.grouping.groupBy) || path && value.grouping.groupBy === "endpoint";
         const groups = timed ? value.timeSeries.points ?? [] : [...value.grouping.groups,
             ...(value.grouping.other ? [{ ...value.grouping.other, id: "group:other", label: "Other groups" }] : [])];
+        if (timed && value.timeSeries.window?.total > value.timeSeries.window.count) details.append(node("p",
+            `${value.timeSeries.window.count ? `Visible dates: ${formatDate(value.timeSeries.window.from)} to ${formatDate(value.timeSeries.window.to)}` : "No dated records in this window"}. ${number(value.timeSeries.datedRows)} dated records across the selected period. Use Timeline dates below the chart for other dates.`, "settings-help"));
         if (timed || grouped) tableFor(timed ? "Dated calls and results" : path ? "Selected paths" : "Selected categories", groups.map(group => ({
             ...group, label: timed ? formatDate(group.date) : group.label,
             action: group.count && group.id !== "group:other" ? button(timed ? formatDate(group.date) : group.label,
@@ -221,30 +231,52 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         onPage();
     }
     function card({ item, view, onOpen = openConversation, selection = null }) {
-        const owner = api.publicationToken(), events = new AbortController(), article = node("article", undefined, "request-row activity-card");
+        const owner = api.publicationToken(), events = new AbortController(), article = node("article", undefined, "request-row activity-card read-in-place");
         let retired = false;
         article.dataset.sourceId = item.sourceId; article.dataset.viewKey = "request:" + item.id;
         let target = { conversationId: item.id, sourceId: item.sourceId, revision: view.revision, sourceRevision: view.sourceRevision };
-        const action = node("a", undefined, "request-card-open");
-        action.href = conversationHref(target); action.setAttribute("aria-controls", "contextSidebar");
-        action.addEventListener("click", event => {
-            if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
-            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-            if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
-            event.preventDefault(); acceptReaderTarget(target, view); onOpen(target);
-        }, { signal: events.signal });
-        const kind = item.presentation?.kind, author = node("p", sourceLabel(item.sourceId) + " \u00b7 "
-            + ({ prompt: "My prompt", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation"),
-        "request-card-origin request-card-author");
-        author.dataset.promptActor = kind === "prompt" ? "user" : "unknown";
-        const recognition = item.presentation ? [...renderText(item.title).children].map(child => child.textContent).join(" ")
-            : "Message preview unavailable";
-        action.append(author, node("p", recognition, "request-card-prompt"));
-        const tools = (item.presentation?.tools ?? []).slice(0, 2);
-        if (item.selectedRows) action.append(node("p", tools.length ? "Tools: " + tools.join(", ")
-            + (item.presentation.toolCount > tools.length ? " / More tools" : "") : "Tool name unavailable", "request-card-categories"));
+        function link(className, focus) {
+            const action = node("a", undefined, className);
+            const destination = () => focus ? { ...target, completedRef: view.selectionRef } : target;
+            action.href = conversationHref(destination(), action, focus); action.setAttribute("aria-controls", "contextSidebar");
+            if (focus) action.dataset.cardFocus = focus;
+            action.addEventListener("click", event => {
+                if (retired || !action.isConnected || !api.isCurrent(owner)) { event.preventDefault(); return; }
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                if (!window.getSelection()?.isCollapsed && article.contains(window.getSelection()?.anchorNode)) return;
+                const exact = destination();
+                if (!acceptReaderTarget(exact, view)) return;
+                article.querySelector("[data-card-origin]")?.removeAttribute("data-card-origin");
+                action.dataset.cardOrigin = "";
+                onOpen(exact, focus);
+            }, { signal: events.signal });
+            return action;
+        }
+        const action = link("request-card-open recognition-row");
+        const kind = item.presentation?.kind, author = node("span",
+            { prompt: "Recorded user message", reply: "Assistant reply", context: "Recorded context" }[kind] ?? "Conversation", "request-card-author");
+        author.prepend(ux.icon("search-interaction"));
+        // This paged source deliberately supplies recognition text, not an unrestricted
+        // conversation body. Don't shorten or Markdown-rewrite it again in the browser.
+        action.append(node("p", item.presentation ? item.title : "Message preview unavailable", "request-card-prompt"), ux.icon("read"));
+        const tools = item.presentation?.tools ?? [];
+        const body = node("div", undefined, "card-reading-body"), context = node("div", undefined, "card-request-context");
+        const key = node("dl", undefined, "card-identities");
+        if (item.selectedRows) {
+            const toolValues = tools.length ? [ux.cardToolList(tools.map(name => ({ name })))] : [node("span", "Not recorded")];
+            if (tools.length && item.presentation.toolCount > tools.length)
+                toolValues.push(node("span", `${number(item.presentation.toolCount - tools.length)} more in the reader`, "muted"));
+            for (const [label, values] of [["Tools", toolValues], ["Service", [node("span", "Not identified in this record")]]]) {
+                const line = node("div", undefined, "card-identity-field"), items = node("dd", undefined, "card-identity-values");
+                items.append(...values);
+                line.append(node("dt", label), items); key.append(line);
+            }
+        }
         const problem = node("p", undefined, "request-card-problem"), labels = outcomeLabels(view.aggregates.layer);
-        for (const [key, count] of Object.entries(item.outcomes).filter(([, count]) => count)) {
+        const recorded = Object.entries(item.outcomes).filter(([, count]) => count);
+        const toolOutcome = view.aggregates.layer === "tool" && results.toolCardOutcome({ ...item.outcomes, count: item.selectedRows });
+        for (const [key, count] of recorded.filter(([key]) => !toolOutcome && (key !== "success" || recorded.length === 1))) {
             const label = view.aggregates.layer === "tool" ? ({ failure: "failed", unknown: "unverified" }[key] ?? labels[key].toLowerCase())
                 : labels[key].toLowerCase();
             const part = node("span", `${number(count)} ${label}`, "result-tone-" + key
@@ -254,38 +286,54 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         if (!item.selectedRows) problem.textContent = item.presentation?.contextDateBasis
             ? "Message in the selected dates; call dates unavailable." : "No recorded calls in this selection.";
-        action.append(problem);
         const facts = node("div", undefined, "request-card-summary");
         const dates = item.presentation?.activityDateRange, dated = dates?.datedRows > 0;
         const dateLabel = view.aggregates.layer === "reported-api" ? "Result recorded" : "Call started";
         const date = dated ? dateLabel + ": " + formatDate(dates.firstAt)
             + (formatDate(dates.lastAt) !== formatDate(dates.firstAt) ? " - " + formatDate(dates.lastAt) : "")
             + (dates.undatedRows ? ` / ${number(dates.undatedRows)} undated` : "") : "Activity date unavailable";
-        facts.append(node("span", date, "request-card-time"));
+        const header = ux.cardMetadata(author, node("span", date, "request-card-time"), node("span", "Source: " + sourceLabel(item.sourceId), "request-card-source"));
         if (item.selectedRows) facts.append(node("span", `${number(item.selectedRows)} ${callUnit(view.aggregates.layer, item.selectedRows)}`, "request-card-count"));
-        action.append(facts);
+        const orientation = node("div", undefined, "card-orientation");
+        if (toolOutcome) orientation.append(ux.cardOutcome(toolOutcome, toolOutcome.key === "success" && completedCard(view, item)
+            && view.page.items.includes(item) ? link("card-evidence-link", "completed") : undefined));
+        context.append(header, action, facts, orientation);
+        body.append(context, key);
         if (selection) article.append(selection);
-        article.append(action);
-        cardNodes.set(article, () => {
+        const foot = node("div", undefined, "card-reading-actions");
+        foot.append(problem);
+        article.append(body);
+        if (problem.textContent) article.append(foot);
+        const release = () => {
             if (retired) return;
             retired = true; events.abort();
             item = view = onOpen = selection = target = null;
             clear(article);
             for (const attribute of [...article.attributes]) { attribute.value = ""; article.removeAttributeNode(attribute); }
             cardNodes.delete(article);
-        });
+        };
+        cardNodes.set(article, { get item() { return item; }, get view() { return view; }, owner, release, rebind(next) {
+            // The browser completes the press on the original anchor, not a replayed click.
+            const basis = authorityBasis(view);
+            if (retired || selection || !basis || owner !== next.owner || !api.isCurrent(owner)
+                || view.revision !== next.view.revision || view.sourceRevision !== next.view.sourceRevision
+                || view.selectionRef !== next.view.selectionRef || basis !== authorityBasis(next.view)
+                || JSON.stringify(item) !== JSON.stringify(next.item)) return false;
+            item = next.item; view = next.view;
+            return true;
+        } });
         return article;
     }
     function clearCards(root = $("activityList")) {
         if (!root || typeof root.contains !== "function") throw new TypeError("Card retirement requires its consumer root.");
         let retired = 0;
-        for (const [card, release] of cardNodes) if (card === root || root.contains(card)) { release(); retired++; }
+        for (const [card, binding] of cardNodes) if (card === root || root.contains(card)) { binding.release(); retired++; }
         return retired;
     }
     function seed(snapshot, analytics, restriction = "", group, view = {}) {
         chartType = view.chartType ?? "time";
-        const key = JSON.stringify([snapshot?.revision, snapshot?.sourceRevision, snapshot?.selectionRef, snapshot?.status, snapshot?.reason, analytics, restriction]);
-        if (seedKey === key) return;
+        const key = JSON.stringify([snapshot?.revision, snapshot?.sourceRevision, snapshot?.selectionRef, authorityBasis(snapshot), snapshot?.status, snapshot?.reason, analytics, restriction]);
+        if (seedKey === key && (frame === snapshot || JSON.stringify(frame?.page?.items) === JSON.stringify(snapshot?.page?.items))) return;
         seedKey = key;
         for (const reference of references) clear(reference);
         references.clear();
@@ -333,19 +381,29 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         requests.get(model)?.abort(); requests.delete(model); model.withdraw();
         inventoryPaint(dimension);
     }
-    function mountReader({ root, conversationId, sourceId, revision, sourceRevision, ordinal, scope, isCurrent }) {
+    function mountReader({ root, conversationId, sourceId, revision, sourceRevision, ordinal, completedRef, scope, isCurrent }) {
         for (const dimension of inventories.keys()) cancelInventory(dimension);
         const owner = api.publicationToken(), held = [], releases = [];
         let disposed = false, rawTarget = ordinal;
         const current = () => !disposed && root.isConnected && api.isCurrent(owner) && isCurrent();
         const sections = createReaderSections({ root, presentation, ux, isCurrent: current });
-        const key = name => JSON.stringify(["native-reader", sourceRevision, conversationId, name]);
+        const target = { conversationId, sourceId, revision, sourceRevision, ordinal, completedRef };
+        const completed = completedRef !== undefined;
+        const origin = completed && hasReaderTarget(target) && readingOrigins.get(targetKey(target));
+        if (completed && (!origin?.viewId || !hash(completedRef) || ordinal !== undefined)) {
+            root.append(node("p", "These exact completed calls are unavailable. Reopen them from a current activity card.", "reader-state"));
+            const dispose = () => { disposed = true; sections.dispose(); clear(root); readers.delete(dispose); };
+            readers.add(dispose);
+            return { ...sections, dispose, retains: () => false, revealTarget: () => null };
+        }
+        const key = name => JSON.stringify(["native-reader", sourceRevision, conversationId, ...(completed ? [completedRef] : []), name]);
         const memoryKey = key(JSON.stringify([revision, ordinal ?? null]));
         for (const [identity, saved] of readerPages) if (saved.owner !== owner || saved.sourceRevision !== sourceRevision) {
             forgetReading(saved); readerPages.delete(identity);
         }
-        const remembered = readerPages.get(memoryKey);
+        let remembered = readerPages.get(memoryKey);
         readerPages.delete(memoryKey);
+        if (completed && remembered && remembered.viewId !== origin.viewId) { forgetReading(remembered); remembered = null; }
         if (ordinal === undefined) rawTarget = remembered?.rawTarget ?? rawTarget;
         else if (remembered?.pages.observations) {
             const { model } = remembered.pages.observations;
@@ -353,23 +411,29 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             delete remembered.pages.observations;
         }
         const prompt = sections.add("prompt", "Messages", { key: key("prompt"), collapsible: false });
-        const activity = sections.add("activity", "Recorded activity", { key: key("activity"), collapsible: false, metadata: "Call order unverified" });
+        const activity = sections.add("activity", completed ? "Completed calls in this selection" : "Recorded activity",
+            { key: key("activity"), collapsible: false, metadata: "Call order unverified" });
+        const completedHeading = completed ? activity.element.querySelector(".reader-section-heading") : null;
+        if (completed) completedHeading.tabIndex = -1;
         const callOrder = activity.element.querySelector(".reader-section-context");
         callOrder.hidden = true;
         const context = sections.add("context", "Context", { key: key("context"), initialOpen: false });
         const source = sections.add("source", "Source details", { key: key("source"), initialOpen: ordinal !== undefined });
-        root.append(prompt.element, activity.element, context.element, source.element);
+        if (completed) root.append(activity.element);
+        else root.append(prompt.element, activity.element, context.element, source.element);
         // An exact target owns the reveal; set it before subscriptions can start a read.
         if (ordinal !== undefined) source.apply(true, false);
         const request = section => ({ schemaVersion: 1, revision, sources: [sourceId], conversationId,
-            sourceRevision, section, page: { limit: 10, after: null } });
+            sourceRevision, section, page: { limit: completed && section === "observations" ? 1 : 10, after: null },
+            ...(section === "completed" ? { completedRef, viewId: origin.viewId } : {}) });
         const restoreModel = name => remembered?.pages[name]?.model ?? createState();
         const messages = restoreModel("messages"), calls = restoreModel("calls"), contextual = restoreModel("context"), raw = restoreModel("observations");
         for (const model of [messages, calls, contextual, raw]) { held.push(model); models.add(model); }
         const syncBusy = () => root.setAttribute("aria-busy", String(held.some(model => model.snapshot().loading)));
         function verified(model, error) {
             const state = model.snapshot(), value = state.value;
-            if (value && (value.revision !== revision || value.sourceRevision !== sourceRevision)) {
+            if (value && (value.revision !== revision || value.sourceRevision !== sourceRevision
+                || completed && model === calls && (value.section !== "completed" || value.sectionCount !== origin.count))) {
                 model.withdraw(); return { value: null, loading: false, error: "The saved conversation changed. Reopen its current activity card." };
             }
             return error ? { ...state, error: error.message } : state;
@@ -407,6 +471,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         }
         function inspect(at) {
             rawTarget = at;
+            if (completed && !source.element.isConnected) root.append(source.element);
             if (!source.isOpen()) source.apply(true, false);
             else void loadRaw(at);
             source.element.scrollIntoView({ block: "nearest", behavior: "auto" });
@@ -418,7 +483,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             const message = item.fields.message, author = message?.value?.author;
             const partsLabel = `Text fragment${item.messageParts.length === 1 ? "" : "s"} (author unverified)`;
             const partsOnly = !message && !item.outcomes.task && item.messageParts.length > 0;
-            const label = author === "user" ? message.value.representation === "follow-up" ? "Follow-up" : "My prompt"
+            const label = author === "user" ? message.value.representation === "follow-up" ? "Follow-up" : "Recorded user message"
                 : author === "assistant" ? "Assistant reply" : item.outcomes.task ? "Task: " + item.outcomes.task.state
                     : partsOnly ? partsLabel : "Recorded context";
             const block = node("section", undefined, "reader-message"), heading = node("header", undefined, "reader-message-header");
@@ -521,7 +586,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             callOrder.hidden = !state.value || state.value.sectionCount < 2;
             if (!state.value) { status(activity.body, state, loadCalls); return; }
             const list = node("ol", undefined, "reader-call-list");
-            list.setAttribute("aria-label", "Recorded calls in this conversation");
+            list.setAttribute("aria-label", completed ? "Completed calls in this selection" : "Recorded calls in this conversation");
             for (const [index, item] of state.value.page.items.entries()) {
                 const call = item.callSummaries[0], row = node("li", undefined, "reader-call reader-call-row");
                 row.dataset.nativeCallId = call.id;
@@ -529,11 +594,12 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                 toggle.type = "button";
                 const line = node("span", undefined, "reader-call-identity-line");
                 const chevron = ux.icon("disclosure"); chevron.classList.add("reader-call-disclosure");
-                line.append(node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
-                const callNumber = calls.snapshot().pageOffset + index + 1;
-                const outcome = node("span", `Call ${number(callNumber)}: ` + {
-                    success: results.labels("tool").success, failure: "failed", unknown: "result unverified" }[call.outcome],
-                    "reader-call-summary result-tone-" + call.outcome + (call.outcome === "failure" ? " request-card-failure-text" : ""));
+                const callNumber = item.callNumber ?? state.pageOffset + index + 1;
+                line.append(node("span", `Call ${number(callNumber)}`, "reader-entry-label"), node("span", call.tool ?? "Tool name unavailable", "reader-call-identity"), chevron);
+                const outcome = node("span", undefined, "reader-call-summary result-tone-" + call.outcome);
+                const execution = results.countedExecution(call.outcome, 1);
+                if (execution) outcome.append(ux.cardOutcome(execution));
+                else outcome.append(ux.icon(results.icon(call.outcome)), document.createTextNode(" result unverified"));
                 toggle.append(line, outcome); heading.append(toggle); row.append(heading);
                 const body = node("div", undefined, "reader-call-detail");
                 let open = presentation.isOpen(key("call:" + call.id), false);
@@ -638,7 +704,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                     queueMicrotask(() => { if (current() && source.isOpen() && block.isConnected) { block.focus({ preventScroll: true }); block.scrollIntoView({ block: "nearest" }); } });
                 }
             }
-            pager(source.body, raw, "/api/retained/microsoft/detail", request("observations"), paintRaw, state.value.aggregates.variants);
+            if (!completed) pager(source.body, raw, "/api/retained/microsoft/detail", request("observations"), paintRaw, state.value.aggregates.variants);
         }
         function loadSection(name, model, paint, input = request(name)) {
             const resume = remembered?.pages[name]?.receipt;
@@ -646,7 +712,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             return read(model, "/api/retained/microsoft/detail", input, paint, undefined, false, resume);
         }
         const loadMessages = () => loadSection("messages", messages, paintMessages);
-        const loadCalls = () => loadSection("calls", calls, paintCalls);
+        const loadCalls = () => loadSection("calls", calls, paintCalls, request(completed ? "completed" : "calls"));
         const loadContext = () => loadSection("context", contextual, paintContext);
         function loadRaw(at) {
             const body = request("observations");
@@ -654,19 +720,20 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             return loadSection("observations", raw, paintRaw, body);
         }
         releases.push(source.visibility.subscribe(open => {
-            if (open && !raw.snapshot().value && !raw.snapshot().loading) void loadRaw(rawTarget);
+            if (open && (!completed || rawTarget !== undefined) && !raw.snapshot().value && !raw.snapshot().loading) void loadRaw(rawTarget);
             else if (!open) { requests.get(raw)?.abort(); raw.withdraw(); clear(source.body); syncBusy(); }
         }));
         releases.push(context.visibility.subscribe(() => paintContext()));
-        void loadMessages(); void loadCalls(); void loadContext();
-        if (source.isOpen()) void loadRaw(rawTarget);
+        if (!completed) { void loadMessages(); void loadContext(); }
+        void loadCalls();
+        if (source.isOpen() && !completed) void loadRaw(rawTarget);
         function dispose(remember = true) {
             if (disposed) return;
             disposed = true; releases.forEach(release => release()); sections.dispose();
             const pages = {};
             for (const [name, model] of Object.entries({ messages, calls, context: contextual, observations: raw })) {
                 requests.get(model)?.abort(); requests.delete(model);
-                const receipt = remember && api.isCurrent(owner) ? model.suspend(owner) : null;
+                const receipt = remember && (!completed || name === "calls") && api.isCurrent(owner) ? model.suspend(owner) : null;
                 if (receipt) pages[name] = { model, receipt };
                 else { model.withdraw(); models.delete(model); }
             }
@@ -675,14 +742,13 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
                     const [identity, saved] = readerPages.entries().next().value;
                     forgetReading(saved); readerPages.delete(identity);
                 }
-                readerPages.set(memoryKey, { owner, sourceRevision, rawTarget, pages });
+                readerPages.set(memoryKey, { owner, sourceRevision, rawTarget, pages, ...(completed ? { viewId: origin.viewId } : {}) });
             }
             clear(root); root.removeAttribute("aria-busy"); readers.delete(dispose);
         }
         readers.add(dispose);
-        return { ...sections, dispose, revealTarget: () => null,
-            retains: nextScope => nextScope === scope && current()
-                && hasReaderTarget({ conversationId, sourceId, revision, sourceRevision, ordinal }) };
+        return { ...sections, dispose, revealTarget: focus => focus === "completed" && current() ? completedHeading : null,
+            retains: nextScope => nextScope === scope && current() && hasReaderTarget(target) };
     }
     function paintSearch(error) {
         clear(searchHost);
@@ -785,6 +851,11 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
         acceptReaderTarget, hasReaderTarget, observeReaderAuthority, retireReaderAuthority,
         readerRevision: () => readingAuthority?.revision ?? null,
         clearCards,
+        reuseCard(previous, replacement) {
+            const old = cardNodes.get(previous), next = cardNodes.get(replacement);
+            return Boolean(old && next && old.rebind(next));
+        },
+        releaseCard(card) { cardNodes.get(card)?.release(); },
         presentation: () => ({ ...state.snapshot(), error: restricted || state.snapshot().error, selected: selectedSources.length > 0,
             savedSummary: frame?.status === "bounded" ? savedSummary(frame) : "" }),
         async pageAt(index) {
@@ -820,7 +891,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             seedKey = "";
             for (const reference of references) clear(reference);
             references.clear();
-            for (const release of cardNodes.values()) release();
+            for (const binding of cardNodes.values()) binding.release();
             requests.get(state)?.abort(); state.withdraw(); restricted = reason; paintQuery();
         },
         withdrawAccess() {
@@ -838,7 +909,7 @@ export function mountBoundedNative({ api, ux, results, createState, sourceLabel,
             clear(searchHost); searchHost.hidden = true;
             for (const reference of references) clear(reference);
             references.clear();
-            for (const release of cardNodes.values()) release();
+            for (const binding of cardNodes.values()) binding.release();
         },
         resumeAccess() {},
     };

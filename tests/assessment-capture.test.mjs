@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -6,16 +7,17 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID, randomBytes } from "node:crypto";
 import { createCollector } from "../lib/collector.mjs";
-import { loadBoardState, exclusiveBoard } from "../lib/store.mjs";
+import { loadBoardState } from "../lib/store.mjs";
 import { executeAssessmentAction } from "../lib/assessment.mjs";
-import { buildAssessmentModel, assessmentBasis, assessmentDependencies, assessmentRef } from "../lib/assessment-read-model.mjs";
+import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { assessmentHash } from "../lib/assessment-read-model.mjs";
 import { finalizePersonalEvaluationCleanup } from "../lib/assessment-read-model.mjs";
-import { selectPersonalEvaluationCleanup, defaultPersonalEvaluation, validatePersonalEvaluation } from "../lib/personal-evaluation.mjs";
+import { selectPersonalEvaluationCleanup } from "../lib/personal-evaluation.mjs";
+import { seedHistoricalFeedback } from "./historical-feedback-fixture.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { inspectComparisonPair } from "../lib/comparison-export.mjs";
+import { inspectComparisonPair } from "./historical-comparison-fixture.mjs";
 
 function invalidJsonPaths(value, prefix = "$", parents = new Set()) {
     if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)) return [];
@@ -25,36 +27,6 @@ function invalidJsonPaths(value, prefix = "$", parents = new Set()) {
     const paths = Object.entries(value).flatMap(([key, child]) => invalidJsonPaths(child, `${prefix}.${key}`, parents));
     parents.delete(value);
     return paths;
-}
-
-// Invented pre-retirement state, not a current product write path.
-async function seedHistoricalFeedback(context, input) {
-    return exclusiveBoard(context, async (state, save) => {
-        const view = buildAssessmentModel(state).details.get(input.interactionRef);
-        assert.deepEqual(view.basis, input.expectedBasis);
-        state.personalEvaluation ??= defaultPersonalEvaluation();
-        const personal = state.personalEvaluation;
-        const previous = personal.feedback.records.filter(item => item.assessment.interactionRef === input.interactionRef
-            && item.assessment.checkId === input.checkId).at(-1)?.assessment;
-        personal.overrideRevision++; personal.feedback.revision++;
-        const basis = assessmentBasis(state), assessment = {
-            schemaVersion: 1, interactionRef: input.interactionRef, basis, createdAt: new Date().toISOString(),
-            evidenceRefs: [...new Set(view.observations.flatMap(item => item.evidenceRefs))],
-            assessmentRef: assessmentRef(state, "assessment", [input.mutationRef, input.checkId]), checkId: input.checkId, checkVersion: 1,
-            dimension: { "semantic-answer-correctness": "accuracy", "answer-support-validity": "answer-trust",
-                "action-authorization-compliance": "action-trust" }[input.checkId],
-            unitRef: input.interactionRef, origin: "user-personal", rubricVersion: 1, verdict: input.verdict, reason: "user-verdict",
-            revision: (previous?.revision ?? 0) + 1, supersedes: previous?.assessmentRef ?? null, withdrawn: false,
-        };
-        const dependencies = { ...assessmentDependencies(view), basis };
-        personal.feedback.records.push({ schemaVersion: 1, assessment, dependencies });
-        personal.mutations[input.mutationRef] = {
-            ownerHash: assessmentHash(["assessment-owner", "owner"]), inputHash: assessmentHash(["set_personal_assessment", input]), dependencies,
-            receipt: { schemaVersion: 1, mutationRef: input.mutationRef, phase: "complete", basis, data: { assessment } },
-        };
-        validatePersonalEvaluation(personal);
-        state.revision++; await save(state);
-    });
 }
 
 test("synthetic: collector, consent, historical annotations, frozen reports and deletion remain consistent", async t => {
@@ -146,9 +118,7 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
     const baseline = await saveReport(["json", "html", "markdown"]), later = await saveReport(["pdf"]);
     const pair = await inspectComparisonPair(context, await loadBoardState(context), baseline.bundleId, later.bundleId);
     assert.deepEqual(invalidJsonPaths([pair.sourceFacts, pair.comparison]), [], "Frozen comparison projection must contain only explicit JSON values");
-    const comparisonPreview = await reports.previewComparison("owner", baseline.bundleId, later.bundleId, { formats: ["json"] });
-    await reports.reviewComparison("owner", comparisonPreview.previewId, true);
-    const comparison = (await reports.confirmComparison("owner", comparisonPreview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, baseline.bundleId, later.bundleId, { formats: ["json"] });
     const frozenFiles = [baseline, later, comparison].flatMap(bundle => Object.values(bundle.files));
     const frozenHashes = await Promise.all(frozenFiles.map(async file => assessmentHash(await readFile(file))));
     state = await loadBoardState(context);
@@ -243,12 +213,6 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: freshModel.overview.interactionRefs[0],
         expectedBasis: freshModel.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
     }, capability)).status, 410);
-    const stalePreviewResponse = await post("/api/report-comparison/preview", {
-        baselineId: baseline.bundleId, laterId: later.bundleId, formats: ["json"],
-    }, capability);
-    assert.equal(stalePreviewResponse.status, 200, await stalePreviewResponse.clone().text());
-    const stalePreview = await stalePreviewResponse.json();
-    assert.equal((await post("/api/report-comparison/review", { previewId: stalePreview.previewId, disclosureReviewed: true }, capability)).status, 200);
     const beforeObject = await loadBoardState(context), sourceBeforeObject = await readFile(file);
     const survivorFiles = [later, comparison].flatMap(bundle => Object.values(bundle.files));
     const survivorHashes = await Promise.all(survivorFiles.map(async file => assessmentHash(await readFile(file))));
@@ -267,7 +231,6 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
     assert.deepEqual(await Promise.all(survivorFiles.map(async file => assessmentHash(await readFile(file)))), survivorHashes);
     for (const target of Object.values(baseline.files)) await assert.rejects(readFile(target), error => error.code === "ENOENT");
     assert.equal((await post("/api/report-file", { bundleId: baseline.bundleId, name: "product-report.json" }, capability)).status, 404);
-    assert.ok([409, 410].includes((await post("/api/report-comparison/save", { previewId: stalePreview.previewId, confirmed: true }, capability)).status));
     const opened = await (await post("/api/report-comparison/open", { bundleId: comparison.bundleId }, capability)).json();
     assert.equal(opened.sources[0].available, false);
     assert.equal(opened.sources[1].available, true);

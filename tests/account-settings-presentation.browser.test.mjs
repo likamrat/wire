@@ -43,7 +43,7 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: false });
 }
 
-async function setup(t, options = {}) {
+async function setup(t, options = {}, section = "connection") {
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, ...options });
     const errors = [], external = [], warnings = [];
@@ -51,7 +51,7 @@ async function setup(t, options = {}) {
     page.on("console", message => { if (message.type() === "warning") warnings.push(message.text()); });
     await page.route("https://wire.example.invalid/**", route => {
         if (new URL(route.request().url()).pathname === "/") return route.fulfill({
-            contentType: "text/html", body: renderAccountSettingsFixture(),
+            contentType: "text/html", body: renderAccountSettingsFixture(section),
         });
         external.push(route.request().url());
         return route.abort();
@@ -73,7 +73,7 @@ async function setup(t, options = {}) {
 test("unqualified real-shell presentation is neutral and all account operations are unavailable", async t => {
     const { page } = await setup(t);
     await expect(page.locator("#wireAccountTrigger .wire-account-copy>span")).toHaveText("Account");
-    await expect(page.locator("#wireAccountTrigger")).toContainText("This instance");
+    await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName(/This instance/);
     await expect(page.locator("#wireMicrosoftStatus")).toHaveText("Unavailable");
     await expect(page.locator("#wireMicrosoftAction")).toBeDisabled();
     await expect(page.locator("#connectionSourceTitle")).toHaveText("GitHub Copilot app");
@@ -130,7 +130,11 @@ test("documented lifecycle fixtures cannot activate commands or replace Settings
     await expect(page.locator("#connectionStatus")).toHaveText("Paused");
     assert.equal(await draft.evaluate(node => node.value), "7");
     await capture(page, "light-paused-draft");
-    await page.locator("#cancelPreferences").click();
+    assert.deepEqual(await page.evaluate(() => window.fixtureWrites), []);
+});
+
+test("account presentation updates preserve an unsaved draft on Source access", async t => {
+    const { page } = await setup(t, {}, "source-access");
     await page.locator("#editSource").click();
     await page.locator("#sourceDatabase").fill("C:\\synthetic\\edited.db");
     const sourceDraft = await page.locator("#sourceDatabase").elementHandle();
@@ -278,18 +282,20 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
         await receive(page, presentationFixture("disconnected", profile));
         if (!process.env.WIRE_ACCOUNT_RENDERER_PIN) {
             const footer = await page.locator("#navigationFooter").evaluate(node => {
-                const rect = node.getBoundingClientRect(), rail = node.closest("aside").getBoundingClientRect();
+                const rect = node.getBoundingClientRect(), rail = node.closest("aside");
                 const settings = node.querySelector('[data-nav="settings"]').getBoundingClientRect();
                 const account = node.querySelector("#wireAccountTrigger").getBoundingClientRect();
-                return { bottom: rect.bottom, railBottom: rail.bottom, settings: settings.toJSON(), account: account.toJSON() };
+                return { bottom: rect.bottom, contentBottom: rail.getBoundingClientRect().bottom - parseFloat(getComputedStyle(rail).paddingBottom),
+                    settings: settings.toJSON(), account: account.toJSON() };
             });
-            assert.equal(footer.bottom, footer.railBottom - 16);
-            assert.ok(footer.settings.left >= footer.account.right + 8, "Settings has its own target to the right of the account");
-            assert.ok(Math.abs(footer.settings.top + footer.settings.height / 2 - footer.account.top - footer.account.height / 2) < 1);
+            assert.equal(footer.bottom, footer.contentBottom, "The footer anchors to the padded rail, not the viewport edge");
+            assert.equal(footer.settings.top, footer.account.top);
+            assert.ok(footer.account.right <= footer.settings.left, "Account and Settings share one row without overlapping");
         }
         await capture(page, theme + "-account-footer");
         await page.locator("#wireAccountTrigger").click();
         await expect(page.locator("#wireAccountMenu")).toBeFocused();
+        await expect(page.locator("#wireAccountMenu .wire-account-identity p")).toHaveText(profile.displayName.value);
         await capture(page, theme + "-account-expanded");
         const scroll = await page.evaluate(() => scrollY);
         await page.keyboard.press("ArrowDown");
@@ -306,8 +312,7 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
         await capture(page, theme + "-account-collapsed");
         await page.keyboard.press("Escape");
         await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-        await page.locator('.primary-navigation [data-nav="settings"]').click();
-        assert.match(page.url(), /#settings$/);
+        await expect(page.locator('nav [data-nav="settings"]')).toHaveAttribute("href", "/settings");
         await page.locator("#navigationCollapse").click();
     }
     await page.setViewportSize({ width: 390, height: 1000 });
@@ -324,6 +329,10 @@ test("native drawer, collapsed menu and focus remain usable across themes and en
     await page.keyboard.press("Escape");
     await expect(page.locator("#wireAccountTrigger")).toBeFocused();
     await expect(page.locator("#navigationDrawer")).toBeVisible();
+    await receive(page, presentationFixture("disconnected"));
+    const name = page.locator("#wireAccountTrigger .wire-account-copy>span");
+    await expect(name).toHaveText("Account");
+    assert.ok(await name.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "The Account label fits at 200% text");
     await page.keyboard.press("Escape");
     await expect(page.locator("#navigationDrawer")).toBeHidden();
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -348,13 +357,15 @@ test("compact footer keeps account and Settings independent through identity, ra
     }
     await expect(settings).toHaveAccessibleName("Settings");
     await expect(page.locator('[data-nav="settings"]')).toHaveCount(1);
-    await settings.hover();
-    await expect(page.getByRole("tooltip", { name: "Settings", exact: true })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(settings).toHaveText("");
     await page.locator("#wireAccountTrigger").focus();
-    await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
-    await page.keyboard.press("Enter");
-    assert.match(page.url(), /#settings$/);
+    const tabThroughUtilities = async () => {
+        for (const control of [page.locator("#openEvidenceHelp"), page.locator("#wireFeedback"), settings]) {
+            await page.keyboard.press("Tab"); await expect(control).toBeFocused();
+        }
+    };
+    await tabThroughUtilities();
+    await expect(settings).toHaveAttribute("href", "/settings");
     for (const [width, scale] of [[1440, 1], [768, 2], [390, 1], [390, 2]]) {
         await page.setViewportSize({ width, height: 900 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
@@ -374,22 +385,24 @@ test("compact footer keeps account and Settings independent through identity, ra
                         footer: rect("#navigationFooter"), parent: rect(matchMedia("(max-width:699px)").matches ? "#navigationDrawer" : "#sidebar") };
                 });
                 for (const target of [geometry.account, geometry.settings]) {
-                    assert.ok(target.width >= 44 && target.height >= 44);
+                    if (target === geometry.settings) assert.equal(target.width, mode === "collapsed" ? 44 : 32);
+                    else assert.ok(target.width >= 44);
+                    assert.ok(target.height >= 44);
                     assert.ok(target.left >= geometry.parent.left && target.right <= geometry.parent.right);
                 }
                 if (mode === "collapsed") {
-                    assert.ok(geometry.account.bottom + 8 <= geometry.settings.top);
+                    assert.ok(geometry.account.bottom <= geometry.settings.top);
                     assert.equal(geometry.account.left, geometry.settings.left);
                 } else {
-                    assert.ok(geometry.account.right + 8 <= geometry.settings.left);
-                    assert.ok(Math.abs(geometry.account.top + geometry.account.height / 2 - geometry.settings.top - geometry.settings.height / 2) < 1);
+                    assert.equal(geometry.account.top, geometry.settings.top);
+                    assert.ok(geometry.account.right <= geometry.settings.left);
                 }
                 assert.equal(await host.evaluate(node => node === document.querySelector("#navigationFooter #wireAccountEntry")), true);
                 assert.equal(await trigger.evaluate(node => node === document.getElementById("wireAccountTrigger")), true);
                 await page.locator("#wireAccountTrigger").click();
                 await expect(page.locator("#wireAccountMenu")).toBeFocused();
                 await page.keyboard.press("Escape"); await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-                await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
+                await tabThroughUtilities();
                 const overflow = await page.locator(width < 700 ? "#navigationDrawer" : "#sidebar").evaluate(node => ({
                     client: node.clientWidth, scroll: node.scrollWidth, left: node.scrollLeft,
                 }));
@@ -397,7 +410,7 @@ test("compact footer keeps account and Settings independent through identity, ra
                 await capture(page, `compact-${theme}-${width}-${scale}x-${mode}`);
             }
             if (width < 700) {
-                await page.keyboard.press("Escape");
+                await page.getByRole("button", { name: "Close navigation", exact: true }).click();
                 await expect(page.locator("#navigationToggle")).toBeFocused();
             }
         }
@@ -405,8 +418,8 @@ test("compact footer keeps account and Settings independent through identity, ra
     await page.evaluate(() => fixturePresentation.dispose());
     await expect(page.locator("#wireAccountEntry")).toBeHidden();
     await page.locator("#navigationToggle").click();
-    await settings.click();
-    assert.match(page.url(), /#settings$/, "Settings is independent of a mounted account presenter");
+    await expect(settings).toBeVisible();
+    await expect(settings).toHaveAttribute("href", "/settings");
 });
 
 test("compact footer glides and reverses without overlapping account and Settings targets", async t => {
@@ -454,7 +467,7 @@ test("compact footer glides and reverses without overlapping account and Setting
                 `${scale}x/${after.phase}/${target}: no initial ${key} snap`);
         }
         for (const { phase, account, settings, footer, rail } of result.samples) {
-            assert.ok(account.width >= 43.9 && account.height >= 43.9 && settings.width >= 43.9 && settings.height >= 43.9);
+            assert.ok(account.width >= 43.9 && account.height >= 43.9 && settings.width >= 31.9 && settings.height >= 43.9);
             assert.ok(account.right <= settings.left + 1 || account.bottom <= settings.top + 1 || settings.bottom <= account.top + 1,
                 `${scale}x/${phase}: separate full-sized targets ${JSON.stringify({ account, settings })}`);
             assert.ok(account.left >= rail.left - 1 && settings.left >= rail.left - 1);
@@ -508,19 +521,26 @@ test("account activation during expansion, collapse and reversal settles its rea
         await page.waitForFunction(() => !document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
         if (activation !== "pointer") await trigger.focus();
         const expected = phase === "collapse" ? "collapsed" : "expanded";
-        await page.evaluate(async phase => {
+        await page.evaluate(phase => {
             const toggle = document.getElementById("navigationCollapse");
-            const frames = async () => {
-                for (let i = 0; i < 3; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+            // Hold a real intermediate frame so native input lands on the moving
+            // button, not coordinates it vacated between automation commands.
+            const glideToFrame = () => {
+                toggle.click();
+                for (const id of ["sidebar", "shellBrand"]) {
+                    for (const animation of document.getElementById(id).getAnimations({ subtree: true })) {
+                        animation.pause(); animation.currentTime = 80;
+                    }
+                }
             };
-            toggle.click(); await frames();
-            if (phase === "reverse") { toggle.click(); await frames(); }
+            glideToFrame();
+            if (phase === "reverse") glideToFrame();
         }, phase);
         if (activation === "pointer") {
-            await trigger.hover({ force: true });
+            await trigger.hover();
             assert.equal(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")), true,
                 "Hover does not settle the glide");
-            await trigger.click({ force: true });
+            await trigger.click();
         } else await trigger.press(activation);
         await expect(menu).toBeFocused();
         const geometry = await page.evaluate(() => ({
@@ -609,13 +629,14 @@ test("withdrawal clears captured profile presentation and focus cannot restore t
     await expect(page.locator("#wireAccountTrigger")).not.toContainText("Riley");
     await expect(page.locator("#wireAccountMenu")).not.toContainText("riley-chen");
     await expect(page.locator("#wireAccountTrigger img")).toHaveCount(0);
-    assert.equal(await page.evaluate(() => profileBefore.text.length), 6);
+    const retained = await page.evaluate(() => profileBefore.text);
+    assert.ok(retained.includes("Riley Chen") && retained.some(text => text.includes("riley-chen")));
     assert.match(await page.evaluate(() => profileBefore.label), /Riley Chen/);
-    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), ["", "", "", "", "", ""]);
+    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), retained.map(() => ""));
     assert.equal(await page.evaluate(() => heldProfileLabel.value), "");
     await receive(page, presentationFixture("connected", verifiedGitHubProfile));
     await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Chen");
-    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), ["", "", "", "", "", ""]);
+    assert.deepEqual(await page.evaluate(() => heldProfileText.map(node => node.data)), retained.map(() => ""));
     assert.equal(await page.evaluate(() => heldProfileLabel.value), "");
     const replacement = structuredClone(verifiedGitHubProfile);
     replacement.generation = "fixture-newer";

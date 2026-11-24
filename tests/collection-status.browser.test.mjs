@@ -12,7 +12,7 @@ import { createCollector, collectionSummary } from "../lib/collector.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain } from "./helpers.mjs";
-import { selectAnalyzeRequest } from "./report-journey-helpers.mjs";
+import { prepareLandingReport, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 async function statusFixture(t) {
     const sourceSessionId = randomUUID(), retained = fixture(), timestamp = new Date(Date.now() - 1000).toISOString();
@@ -132,7 +132,7 @@ for (const late of ["failure", "success", "transport-error", "composite-failure"
     if (late === "failure") {
         await navigateMain(page, "reports");
         const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-        await page.locator("#reportPreset-all").click();
+        await prepareLandingReport(page, "all");
         assert.equal((await prepared).status(), 200);
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
         await navigateMain(page, "analyze");

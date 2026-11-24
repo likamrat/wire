@@ -8,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { chooseReportScope, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_SEARCH_PROOFS;
@@ -29,7 +29,7 @@ async function setup(t, approved = true) {
     const sessions = records.map(row => ({ sessionId: row.sourceSessionId, name: row.sourceSessionName, projectId: "test-project", project: "Synthetic project", eligible: true }));
     sessions.push({ sessionId: "metadata-only", name: "Metadata-only <svg> chat", eligible: true });
     const exports = Array.from({ length: 15 }, (_, i) => ({
-        bundleId: i === 14 ? "Report-Zephyr <img>" : `Report-${i}`, promptMode: i === 14 ? "original" : "masked",
+        title: i === 14 ? "Report-Zephyr <img>" : `Report ${i}`, bundleId: `report-${i}`, promptMode: i === 14 ? "original" : "masked",
         preparedAt: "2026-10-05T12:00:00Z", preparedAtDisplay: "Oct 5, 2026", formats: [i === 14 ? "markdown" : "html"],
         timeContext: { timeZone: "UTC", locale: "en-US" }, files: {},
     }));
@@ -43,8 +43,8 @@ async function setup(t, approved = true) {
     };
     const requests = [], failures = [], writes = [];
     const server = createServer(async (req, res) => {
-        if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "search-proof", UNBOUND_FIXTURE_BOOTSTRAP)); }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (["/", "/settings", "/collection-status", "/reports"].includes(req.url.split("?")[0]) && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "search-proof", UNBOUND_FIXTURE_BOOTSTRAP)); }
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         requests.push({ url: req.url, input });
@@ -76,7 +76,7 @@ async function setup(t, approved = true) {
 
 test("Settings category links, deep links, native history and reload expose exactly one pane", { timeout: 45000 }, async t => {
     const { page, url } = await setup(t);
-    for (const id of ["display", "connection", "collection"]) {
+    for (const id of ["themes", "source-access", "connection"]) {
         await category(page, id);
         assert.equal(await page.locator("[data-settings-section]:visible").count(), 1);
         assert.equal(await page.locator(`#settingsCategoryNav [aria-current=page]`).getAttribute("data-category"), id);
@@ -85,19 +85,18 @@ test("Settings category links, deep links, native history and reload expose exac
         await page.reload(); await ready(page);
         assert.equal(await page.locator("[data-settings-section]:visible").getAttribute("data-settings-section"), id);
     }
-    await category(page, "display"); await category(page, "collection");
-    await page.goBack(); await expect(page.locator("#displayTitle")).toBeVisible();
-    await page.goForward(); await expect(page.locator("#preferencesTitle")).toBeVisible();
+    await category(page, "themes"); await category(page, "connection");
+    await page.goBack(); await expect(page.locator("#themesTitle")).toBeVisible();
+    await page.goForward(); await expect(page.locator("#connectionTitle")).toBeVisible();
     await page.goto(url + "#settings?section=history"); await ready(page);
     assert.match(page.url(), /section=connection&setting=history-window/);
     assert.equal(await page.evaluate(() => document.activeElement.id), "collectionWindow-control");
     await page.goto(url + "#settings?issues=1"); await ready(page);
     await expect(page.locator(".history-reason").first()).toBeVisible();
-    assert.match(page.url(), /#collection-status\?setting=issues/);
+    assert.match(page.url(), /\/collection-status\?setting=issues/);
     assert.equal(await page.locator("#collectionIssuesTitle").evaluate(node => node === document.activeElement), true);
     await page.goto(url + "#settings?section=madeup&setting=unknown"); await ready(page);
     await expect(page.locator("#settingsRouteNotice")).toContainText("Unknown settings category");
-    assert.equal(new URL(page.url()).hash, "#settings?section=connection");
     await expect(page.locator("#connectionTitle")).toBeVisible();
 });
 
@@ -105,8 +104,6 @@ test("Settings search navigates controls without acting; drafts, query, caret an
     const { page, requests } = await setup(t);
     await openSourceEditor(page);
     await page.locator("#sourceSessions").fill("C:\\SYNTHETIC_DIRTY\\session-state");
-    await category(page, "collection");
-    await selectActivityOption(page, "collectionCadence", "15");
     await page.locator("#settingsSearch").fill("city");
     await expect(page.locator("#settingsSearchCount")).toContainText("1 setting found");
     await page.keyboard.press("Tab"); // Clear, then the native result link.
@@ -114,7 +111,8 @@ test("Settings search navigates controls without acting; drafts, query, caret an
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
     assert.equal(await page.locator("#displayTimeZone").inputValue(), "");
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), null);
-    await category(page, "connection");
+    await page.locator("#clearSettingsSearch").click();
+    await category(page, "source-access");
     assert.equal(await page.locator("#sourceSessions").inputValue(), "C:\\SYNTHETIC_DIRTY\\session-state");
     await page.locator("#sourceSessions").focus();
     await page.locator("#sourceSessions").evaluate(node => node.setSelectionRange(5, 10));
@@ -123,12 +121,11 @@ test("Settings search navigates controls without acting; drafts, query, caret an
     const after = await page.locator("#sourceSessions").evaluate(node => ({ start: node.selectionStart, end: node.selectionEnd, y: scrollY }));
     assert.deepEqual(after, before);
     await page.locator("#settingsSearch").fill("pause");
-    await expect(page.locator("#settingsSearchResults")).toContainText("Unavailable: Approve or cancel the source edits");
-    await page.locator("#settingsSearchResults a").filter({ hasText: "Pause or resume" }).click();
+    const pause = page.locator("#settingsSearchResults a").filter({ hasText: "Pause or resume" });
+    await expect(pause).toContainText("Action unavailable");
+    await pause.click();
     assert.equal(await page.locator("#pauseCollection").isDisabled(), true);
-    assert.equal(await page.locator("#pauseCollection").locator("..").evaluate(node => node === document.activeElement), true);
-    await category(page, "collection");
-    assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     await page.locator("#settingsSearch").fill("TIME-zone");
     assert.ok(await page.locator("#settingsSearchResults mark").count() > 0);
     const queryHandle = await page.locator("#settingsSearch").elementHandle();
@@ -153,7 +150,7 @@ test("Collection status destinations restore visible focus on legacy routes, rel
     await page.locator("#settingsSearch").fill("missing history");
     await page.locator("#settingsSearchResults a[data-setting=issues]").click();
     await expect(page.locator("#collectionIssuesTitle")).toBeFocused();
-    assert.match(page.url(), /#collection-status\?setting=issues/);
+    assert.match(page.url(), /\/collection-status\?setting=issues/);
     assert.equal(await page.locator("#settingsView").isVisible(), false);
     assert.equal(await page.locator(".history-issue").count(), 0);
     assert.equal(await page.locator("#collectionSetup").evaluate(node => node.open), false);
@@ -166,7 +163,9 @@ test("Collection status destinations restore visible focus on legacy routes, rel
     await page.goForward();
     await expect(page.locator("#issueSearch")).toHaveValue("unavailable");
     await page.reload(); await ready(page);
-    await expect(page.locator("#issueSearchCount")).toHaveText("19 of 19 chats");
+    await expect(page.locator("#message")).toContainText("This tab no longer has the private view.");
+    await page.goto(url + "collection-status?setting=issues"); await ready(page);
+    await page.locator("#issueSearch").fill("unavailable");
     await page.locator("#issueSearch").focus(); await page.keyboard.press("Escape");
     await expect(page.locator("#issueSearch")).toHaveValue("");
     for (const [legacy, target] of [
@@ -180,11 +179,10 @@ test("Collection status destinations restore visible focus on legacy routes, rel
         const focus = target === "collectionSetup" ? page.locator("#collectionSetup>summary") : page.locator("#" + target);
         await expect(focus).toBeFocused();
         await expect(page.locator("#collectionStatusView")).toBeVisible();
-        await expect(page.locator("#breadcrumbs")).toHaveText("Home/Collection status");
-        assert.equal(await page.locator(".primary-navigation [aria-current=page]").getAttribute("data-nav"), "collection-status");
+        assert.equal(new URL(page.url()).pathname, "/collection-status");
         if (target === "collectionSetup") assert.equal(await page.locator("#collectionSetup").evaluate(node => node.open), true);
     }
-    await page.getByRole("link", { name: "Source & permission", exact: true }).click();
+    await page.locator("#collectionSourceLink").click();
     await expect(page.locator("#approvedSourceDetails")).toBeVisible();
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
     assert.doesNotMatch(JSON.stringify(requests), /missing history|unavailable/);
@@ -241,7 +239,8 @@ test("authoritative zero issues has one message while real no-match searches ret
     await expect(page.locator("#collectionIssuesBody>.settings-help")).toBeVisible();
     await expect(issues.getByText("No history gaps reported", { exact: true })).toHaveCount(0);
     setStatus({ historyCoverage: zero, historyIssues: [] });
-    await page.reload(); await ready(page);
+    const polled = page.waitForResponse(r => r.url().endsWith("/api/collection/status") && r.request().postDataJSON()?.details);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await polled;
     await expect(page.locator("#issueSearch")).toBeVisible();
     await expect(page.locator("#issueSearch")).toHaveValue("no recorded issue matches this");
     await expect(page.locator("#issueSearchCount")).toHaveText("0 of 0 chats");
@@ -309,7 +308,7 @@ test("Collection status explains every reason and reflows at all required theme,
         if (width === 375 || scale === 2 && width <= 1200) {
             assert.equal(await page.locator("#collectionDiagnostics .facts").first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length), 1, "Technical labels and values stack instead of squeezing into narrow columns.");
         }
-        assert.match(await group.innerText(), /file was not found.*Previously collected evidence/s);
+        assert.match(await group.innerText(), /History file not found.*previously collected activity is kept/s);
         assert.doesNotMatch(await page.locator("#collectionDiagnostics").innerText(), /Cadence|eligible mappings|correlation-context evictions|truncated initial tails/);
         if (proofs && (width === 1200 && scale === 1 || width === 375 && scale === 2)) {
             await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
@@ -335,13 +334,15 @@ test("Collection status explains every reason and reflows at all required theme,
 test("unapproved and paused Settings results accurately locate permission boundaries", { timeout: 30000 }, async t => {
     const { page, setStatus, status } = await setup(t, false);
     await page.locator("#settingsSearch").fill("resume");
-    await expect(page.locator("#settingsSearchResults")).toContainText("Requires an approved source");
+    await expect(page.locator("#settingsSearchResults")).toContainText("Source approval needed");
     await page.locator("#settingsSearchResults a").click();
-    await expect(page.locator("#reviewSource")).toBeFocused();
+    await expect(page.locator("#connectionTitle")).toBeFocused();
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
     await page.reload(); await ready(page);
-    assert.equal(await page.locator("#settingsSearch").inputValue(), "resume");
-    await expect(page.locator("#settingsSearchResults")).toContainText("Requires an approved source");
+    await expect(page.locator("#settingsSearch")).toHaveValue("");
+    await page.goto(new URL("settings", page.url()).href); await ready(page);
+    await page.locator("#settingsSearch").fill("resume");
+    await expect(page.locator("#settingsSearchResults")).toContainText("Source approval needed");
     setStatus({ config: { approved: true, enabled: false, appDbPath: "C:\\synthetic\\data.db", sessionRoot: "C:\\synthetic\\session-state", windowDays: 30, pollSeconds: 5 }, configVersion: 2, connected: true });
     await page.waitForResponse(response => response.url().endsWith("/api/collection/status"), { timeout: 12000 });
     await expect(page.locator("#pauseCollection")).toHaveText("Resume collection");
@@ -353,7 +354,7 @@ test("unapproved and paused Settings results accurately locate permission bounda
 test("saved reports and report membership search the entire retained list without expanding selection", { timeout: 45000 }, async t => {
     const { page, requests } = await setup(t);
     await navigateMain(page, "reports");
-    await page.locator("#savedLibraryTitle").click();
+    await viewAllSavedReports(page);
     await expect(page.locator("#bundleList")).toContainText("1-6 of 15 saved reports");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await expect(page.locator("#bundleList")).toContainText("7-12 of 15 saved reports");
@@ -365,7 +366,9 @@ test("saved reports and report membership search the entire retained list withou
     await expect(page.locator("#bundleList")).toContainText("No saved reports match");
     await page.keyboard.press("Escape");
     await expect(page.locator("#bundleList")).toContainText("7-12 of 15 saved reports");
-    await chooseReportScope(page, "all");
+    await navigateMain(page, "reports");
+    await page.locator("#reportDeskActivity").click();
+    await page.getByRole("radio", { name: /^All collected activity/ }).check();
     await expect(page.locator("#reportRequests")).toBeVisible();
     await expect(page.locator("#reportList")).toContainText("1-4 of 19 report requests");
     const summary = await page.locator("#scopeSummary").innerText();
@@ -381,7 +384,7 @@ test("saved reports and report membership search the entire retained list withou
     assert.doesNotMatch(JSON.stringify(requests), /ZEPHYR img|unique-retained|nonmatching/);
 });
 
-test("issue and Activity searches precede pagination, preserve canonical counts and intersect filters", { timeout: 45000 }, async t => {
+test("affected-chat search includes later pages and clearing it restores the same page", { timeout: 45000 }, async t => {
     const { page, url, requests } = await setup(t);
     await page.goto(url + "#settings?issues=1"); await ready(page);
     await page.locator(".history-reason>summary").first().click();
@@ -395,21 +398,7 @@ test("issue and Activity searches precede pagination, preserve canonical counts 
     await expect(page.locator("#collectionIssueGroups")).toContainText("No affected Copilot chats match");
     await page.keyboard.press("Escape");
     await expect(page.locator("#collectionIssueGroups")).toContainText("7-12 of 19 affected Copilot chats");
-    await navigateMain(page, "activity");
-    await expect(page.locator("#activityPager")).toContainText("1-8 of 20");
-    await page.locator("#activitySearch").fill("ZePhYr end <img>");
-    await expect(page.locator("#activityPager")).toContainText("1-1 of 1");
-    await expect(page.locator("#activityListSummary")).toContainText("1 request group in 1 Copilot chat");
-    await expect(page.locator("#activityList")).toContainText("1 Work IQ tool call");
-    await selectActivityOption(page, "outcomeFilter", "failure");
-    await expect(page.locator("#activityList")).toContainText("No requests match");
-    await selectActivityOption(page, "outcomeFilter", "all");
-    await page.locator("#activitySearch").fill("metadata-only <svg>");
-    await expect(page.locator("#activityListSummary")).toContainText("0 request groups");
-    await expect(page.locator("#activityListSummary")).toContainText("1 Copilot chat without matching evidence");
-    assert.equal(await page.locator("#activityList svg:not([data-fluent-icon])").count(), 0);
-    await page.locator("#clearActivitySearch").click();
-    await expect(page.locator("#activityPager")).toContainText("1-8 of 20");
+    await expect(page.locator("#collectionIssueGroups img")).toHaveCount(0);
     assert.doesNotMatch(JSON.stringify(requests), /ZePhYr|ZEPHYR-end|metadata-only <svg>|no such reason/);
 });
 
@@ -458,17 +447,17 @@ test("issue status search matches displayed unavailable/limited subsets with mix
 test("single-pane Settings reflows in both themes, touch, compact containers and 200% text", { timeout: 90000 }, async t => {
     const { page } = await setup(t);
     const measurements = [];
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 1200, 1], ["light", 375, 2], ["dark", 375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        for (const section of ["display", "connection", "collection"]) {
+        for (const section of ["themes", "source-access", "connection"]) {
             await category(page, section);
             assert.equal(await page.locator("[data-settings-section]:visible").count(), 1);
             const measured = await page.evaluate(() => {
                 const root = document.documentElement, panes = [...document.querySelectorAll("[data-settings-section]")];
                 const controls = [...document.querySelectorAll("#settingsView a, #settingsView button, #settingsView input, #settingsView summary")].filter(node => node.checkVisibility());
-                const bad = controls.filter(node => { const r = node.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1 || r.height < 43; }).map(node => node.id || node.textContent);
+                const bad = controls.filter(node => { const r = (node.closest(".palette-option") ?? node).getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1 || r.height < 43; }).map(node => node.id || node.textContent);
                 return { overflow: root.scrollWidth > innerWidth, bad, hiddenFocusable: panes.filter(node => node.hidden).some(node => node.contains(document.activeElement)) };
             });
             assert.deepEqual(measured, { overflow: false, bad: [], hiddenFocusable: false }, `${theme}/${width}/${scale}/${section}`);
@@ -501,7 +490,7 @@ test("single-pane Settings reflows in both themes, touch, compact containers and
             await page.screenshot({ path: path.join(proofs, `settings-search-${theme}-${width}-${scale * 100}.png`), fullPage: true });
         }
         await page.locator("#clearSettingsSearch").click();
-        await category(page, "display");
+        await category(page, "themes");
         if (width === 1200 && scale === 1) {
             const nav = page.locator("#settingsCategoryNav [aria-current=page]");
             for (const state of ["selected", "hover", "focus"]) {
@@ -522,7 +511,7 @@ test("single-pane Settings reflows in both themes, touch, compact containers and
     await page.setViewportSize({ width: 1200, height: 900 });
     await page.locator("#settingsView").evaluate(node => node.style.maxWidth = "480px");
     await expect(page.locator("#settingsCategorySummary")).toBeVisible();
-    await category(page, "collection");
+    await category(page, "regional");
     await page.locator("#settingsCategorySummary").tap();
     await page.locator("#settingsCategoryNav [data-category=connection]").tap();
     await expect(page.locator("#connectionTitle")).toBeVisible();

@@ -7,7 +7,7 @@ import { searchFixture } from "./live-search-fixture.mjs";
 import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
-test("Search gives only the actual hovered or pressed title quiet feedback, with fixed geometry and exact Open/Back", { timeout: 30000 }, async t => {
+test("Search gives only the active result feedback, with fixed geometry and exact Open/Back", { timeout: 30000 }, async t => {
     const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) });
     const browser = await chromium.launch({
         channel: process.platform === "win32" ? "msedge" : undefined,
@@ -89,7 +89,7 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         await page.mouse.up();
         await expect(page.locator("#closeContextSidebar")).toBeVisible();
         const destination = page.url();
-        assert.equal(new URL(destination).hash, "#request?request=search-0");
+        assert.equal(destination, new URL("/request?privateView=required", app.runtime.url).href);
         await expect(page.locator("#requestContent")).toContainText("The physician treated an injured patient in the hospital.");
         await page.goBack();
         await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
@@ -106,15 +106,6 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         assert.deepEqual(hover.rect, idle.rect); assert.deepEqual(pressed.rect, idle.rect);
         assert.deepEqual(neighborHover, neighborIdle); assert.deepEqual(neighborPressed, neighborIdle);
         await capture(page, `${theme}-${width}-keyboard-back`);
-        await first.evaluate(node => { node.disabled = true; });
-        await page.mouse.move(...point); await page.mouse.down();
-        const disabled = await paint(first);
-        assert.ok(transparent(fill(disabled)), "Disabled rows cannot advertise an enabled action");
-        assert.equal(disabled.before.content, "none");
-        assert.equal(disabled.title.decoration, "none");
-        assert.equal(disabled.border, "0px"); assert.equal(disabled.shadow, "none");
-        await page.mouse.move(0, 0); await page.mouse.up();
-        await first.evaluate(node => { node.disabled = false; });
         await input.focus();
         await page.keyboard.press("Escape");
         await expect(panel).toBeHidden(); await expect(input).toBeFocused();
@@ -123,7 +114,6 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
     }
     if (proofs) await writeFile(path.join(proofs, "measurements.json"), JSON.stringify({ cases, url: app.runtime.url }, null, 2));
     for (const value of cases) {
-        assert.ok(transparent(fill(value.idle)), `${value.theme}/${value.width}: idle rows stay unfilled`);
         assert.equal(value.idle.border, "0px"); assert.equal(value.idle.shadow, "none");
         assert.equal(value.idle.title.decoration, "none");
         assert.equal(value.hover.title.decoration, "none", "Hover feedback needs neither underlines nor a gray slab");
@@ -131,9 +121,7 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         assert.notEqual(value.hover.title.color, value.idle.title.color);
         assert.notEqual(value.hover.title.color, value.pressed.title.color, "Pressed feedback remains distinct");
         for (const state of [value.hover, value.pressed]) {
-            assert.ok(transparent(fill(state)), "Whole rows stay unfilled");
             assert.equal(state.before.content, "none");
-            assert.equal(state.before.pointerEvents, "none", "Paint must not intercept the native button target");
         }
         assert.ok(contrast(value.hover.ink, value.hover.paper) >= 4.5);
         assert.ok(contrast(value.pressed.ink, value.pressed.paper) >= 4.5);

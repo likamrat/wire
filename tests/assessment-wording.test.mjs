@@ -2,8 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAssessmentWording, createAssessmentPresentation } from "../web/assessment-presentation.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
-import { createControlHelp } from "../lib/control-help.mjs";
-import { serviceCategories } from "../lib/service-categories.mjs";
 import { adaptReportMetric } from "../lib/report-facts.mjs";
 import { normalizeMetricFact } from "../lib/report-metric-comparison.mjs";
 import { contract, quality } from "./assessment-ui-fixtures.mjs";
@@ -174,6 +172,8 @@ test("F13 one serializable resolver distinguishes matching from permission in al
         { ...identity, origin: "automatic-local", checkId: "action-authorization-compliance" }];
     assert.deepEqual(input.map(item => wording.resolve(item).label), ["Tool use vs. request", "Permission for tool use", "Permission for tool use"]);
     assert.deepEqual(input.map(item => wording.resolve(item).pass), ["Matched request", "Given", "Passed"]);
+    assert.match(wording.resolve(input[0]).explanation, /recorded tool use fit what was asked.*does not establish permission/);
+    assert.match(wording.resolve(input[1]).explanation, /does not grant or revoke permission/);
     for (const item of input) {
         const before = structuredClone(item);
         const report = { metric: item.dimension, basis: { "model-assessed": "model-assessment", "user-personal": "user-assessment", "automatic-local": "automatic-assessment" }[item.origin],
@@ -280,15 +280,4 @@ test("F13 period warning and coverage language preserves distinct facts and unkn
     assert.equal(format.absentPeerLabel({ kind: "pass-rate" }), "No comparable saved review on this side");
     for (const kind of ["duration", "cost"]) assert.equal(format.absentPeerLabel({ kind }), "No comparable saved measure on this side");
     assert.equal(JSON.stringify(codes), before);
-});
-
-test("F13 help gives separate concise questions without changing the service and layer vocabulary", () => {
-    const help = createControlHelp(serviceCategories, wording);
-    assert.equal(help.glossary["action-trust"].label, "Tool use vs. request");
-    assert.equal(help.glossary.permission.label, "Permission for tool use");
-    assert.match(help.glossary["action-trust"].definition, /recorded tool use fit what was asked/);
-    assert.match(help.glossary.permission.definition, /does not grant or revoke/);
-    assert.match(help.layers["code-reference"], /references alone do not establish.*request ran/);
-    assert.match(help.layers["reported-api"], /not directly observed/);
-    assert.doesNotMatch(JSON.stringify(help.glossary), /AI action|Action trust/);
 });

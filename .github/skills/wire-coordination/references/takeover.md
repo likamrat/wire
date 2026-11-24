@@ -30,10 +30,11 @@ Keep one compact private handoff:
 
 ## Activate without losing work
 
-On explicit activation, refresh changed facts and new intake, then redirect
-relevant owners exclusively here with one cutover message. Preserve existing
-assignments and WIP unless the user requested fresh owners. Verify observable
-routing once; native parentage need not change and delivery is not execution.
+On explicit activation, refresh changed facts and new intake. Follow the
+user's ownership decision: redirect existing owners only when permitted, or
+preserve their work and give it to fresh owners. Check who can actually direct
+each worker; a sidebar relationship or accepted message does not transfer
+control. Fence conflicting writes before the successor starts them.
 
 Ask about an inaccessible queue only when preserving it is necessary before a
 proposed stop. An idle session does not prove its queue or unsaved drafts empty.

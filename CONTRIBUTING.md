@@ -19,7 +19,8 @@ If you use Copilot, the repository includes eight optional
 [WIRE development skills](.github/skills/README.md).
 Contributions do not require an AI tool.
 
-1. Follow [Development](docs/development.md) to run WIRE and find the relevant code.
+1. Follow [Run a feature checkout beside main](docs/development.md#run-a-feature-checkout-beside-main)
+   for a normal WIRE instance with its own store, account access and source approval.
 2. Keep the change focused. Preserve source permissions, evidence meaning and
    saved report bytes; read the [relevant contract](docs/README.md#contributor-references).
 3. Add regression coverage for changed behavior and run the

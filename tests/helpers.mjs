@@ -5,6 +5,18 @@ import { replaceEvidence } from "../lib/store.mjs";
 import { buildExportCatalog } from "../lib/export-selection.mjs";
 import { collectorFor } from "../lib/collector.mjs";
 import { AUTOMATIC_SCORE_METHOD, planAutomaticScore } from "../lib/automatic-score-policy.mjs";
+import { createUpdateBridge } from "../lib/update-bridge.mjs";
+
+// Exercise the normal startup status read without connecting a fixture to an updater.
+const unmanagedUpdates = createUpdateBridge({ channel: {} });
+export async function fulfillFixtureUpdateStatus(route, origin) {
+    const request = route.request();
+    if (request.method() !== "POST" || request.url() !== `${origin}/api/app-update`) return false;
+    const body = request.postDataJSON();
+    if (body?.action !== "status" || Object.keys(body).length !== 1) return false;
+    await route.fulfill({ json: await unmanagedUpdates.request(body) });
+    return true;
+}
 
 // Fake-HTTP UI fixtures only; real runtimes must provide their own handshake descriptor.
 export const UNBOUND_FIXTURE_BOOTSTRAP = Object.freeze({
@@ -53,12 +65,12 @@ export async function navigateMain(page, view) {
         if (await trigger.isVisible() && await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
     }
     if (view === "collection-status") {
-        const link = page.locator('a[href^="#collection-status"]:visible').first();
+        const link = page.locator('a[href^="/collection-status"]:visible').first();
         if (await link.count()) await link.click();
         else {
             await revealNavigation();
             await page.locator('nav [data-nav="settings"]').click();
-            await page.locator('a[href^="#collection-status"]:visible').first().click();
+            await page.locator('a[href^="/collection-status"]:visible').first().click();
         }
         return;
     }
@@ -80,7 +92,7 @@ export async function revealStoredRefresh(page) {
 
 export async function restoreLegacySearch(page, search) {
     await page.evaluate(search => {
-        history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, url: location.hash, search } }, "");
+        history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, url: location.pathname + location.search, search } }, "");
         dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     }, search);
     await page.waitForFunction(search => document.querySelector("#activitySearch").value === search
@@ -88,7 +100,13 @@ export async function restoreLegacySearch(page, search) {
 }
 
 export async function navigateSettings(page, category) {
-    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy" }[category] || category;
+    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy", display: "themes" }[category] || category;
+    if (category === "troubleshooting") {
+        if (!await page.locator("#openEvidenceHelp").isVisible()) await page.locator("#navigationToggle").click();
+        await page.locator("#openEvidenceHelp").click();
+        await page.locator("#wireHelpView").waitFor({ state: "visible" });
+        return;
+    }
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const link = page.locator(`#settingsCategoryNav [data-category=${category}]`);
     if (!await link.isVisible()) await page.locator("#settingsCategorySummary").click();
@@ -97,8 +115,7 @@ export async function navigateSettings(page, category) {
 }
 
 export async function openSourceEditor(page) {
-    const inspect = page.locator("#viewApprovedSource");
-    if (await inspect.isVisible()) await inspect.click();
+    if (!await page.locator('[data-settings-section="source-access"]').isVisible()) await navigateSettings(page, "source-access");
     await page.locator("#editSource").click();
 }
 
@@ -116,7 +133,14 @@ export async function chooseTheme(page, value) {
     const filterOpen = await page.locator("#analyzeFilterDialog").count() && await page.locator("#analyzeFilterDialog").evaluate(node => node.open);
     if (filterOpen) await closeAnalyzeFilters(page);
     if (await page.locator("html").getAttribute("data-evidence-theme") !== theme) {
-        await page.getByRole("switch", { name: "Dark theme", exact: true }).click();
+        if (await page.locator("#reportPreviewDrawer:modal").count()) {
+            // On narrow screens the report owns focus. Change the shared preference in a second tab.
+            const other = await page.context().newPage();
+            try {
+                await other.goto(new URL("/reports", page.url()).href);
+                await other.getByRole("switch", { name: "Dark theme", exact: true }).click();
+            } finally { await other.close(); }
+        } else await page.getByRole("switch", { name: "Dark theme", exact: true }).click();
     }
     await page.waitForFunction((expected) => document.documentElement.dataset.evidenceTheme === expected, theme);
     if (filterOpen) await openAnalyzeFilters(page);
@@ -170,6 +194,11 @@ export async function selectActivityOption(page, id, value) {
     if (!await trigger.isVisible() && await page.locator("#filters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await openAnalyzeFilters(page);
     if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
     if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "connection");
+    if (id === "dateFilter") {
+        if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+        await page.locator(`#analyzeDates [data-date-preset=${JSON.stringify(String(value))}]`).click();
+        return;
+    }
     await trigger.click();
     if (await page.locator(`#${id}`).evaluate(node => node.multiple)) {
         const values = await page.locator(`#${id} option`).evaluateAll(nodes => nodes.map(node => node.value));

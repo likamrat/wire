@@ -38,7 +38,7 @@ export const percentageChartStyles = `
 .percentage-value>* {min-width:0;max-width:100%}
 .percentage-value span {color:var(--muted)}
 .percentage-value strong {font-weight:var(--weight-strong)}
-.percentage-bar-track {grid-column:2/-1;height:8px;background:var(--canvas);border-radius:var(--radius-pill);overflow:hidden}
+.percentage-bar-track {grid-column:2/-1;height:8px;background:color-mix(in srgb,var(--accent) 8%,var(--track-base));box-shadow:inset 0 0 0 1px var(--surface-edge);border-radius:var(--radius-pill);overflow:hidden}
 .percentage-tool-list .percentage-bar-track {grid-column:1/-1}
 .percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));background-image:linear-gradient(90deg,var(--chart-mark-low),var(--chart-mark-high));border-radius:var(--radius-pill);min-width:0}
 .percentage-legend-row:has(a) .percentage-bar-track {cursor:pointer}

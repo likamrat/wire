@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectOversizedCompletion, COMPLETION_PROJECTION_LIMITS } from "../lib/completion-projection.mjs";
+import { projectOversizedCompletion, projectVerifiedSourceEvent, COMPLETION_PROJECTION_LIMITS } from "../lib/completion-projection.mjs";
 
 const limits = { maxInputBytes: 4 * 1024 ** 2, maxOutputBytes: 1024 ** 2 };
 const entry = data => Buffer.from(JSON.stringify({
@@ -62,8 +62,8 @@ test("leaves failures and unqualified outcomes as gaps rather than inventing sou
     assert.equal(forged.reason, "unsupported-fields");
 });
 
-test("uses final keys and whole data replacements without borrowing nested payload fields", () => {
-    const bytes = Buffer.from(String.raw`{"id":"old","\u0069d":"completion-event","type":"tool.execution_complete","timestamp":"2026-10-23T12:00:00.000Z","parentId":"previous-event","agentId":"agent-a","data":{"unknownScope":"discarded"},"data":{"toolCallId":"old-call","success":false},"data":{"result":{"toolCallId":"spoofed","success":false,"data":{"agentId":"spoofed"}},"toolCallId":"final-call","success":false,"success":true,"parentToolCallId":"parent-call","turnId":"turn-a","model":"final-model"}}` + "\n");
+test("projects unique envelope fields without borrowing nested payload fields or accepting replacement data", () => {
+    const bytes = Buffer.from(String.raw`{"\u0069d":"completion-event","type":"tool.execution_complete","timestamp":"2026-10-23T12:00:00.000Z","parentId":"previous-event","agentId":"agent-a","data":{"result":{"toolCallId":"spoofed","success":false,"data":{"agentId":"spoofed"}},"toolCallId":"final-call","success":true,"parentToolCallId":"parent-call","turnId":"turn-a","model":"final-model"}}` + "\n");
     const source = JSON.parse(bytes.toString("utf8"));
     const projected = projectOversizedCompletion(bytes, limits);
     assert.equal(projected.kind, "projected");
@@ -73,12 +73,14 @@ test("uses final keys and whole data replacements without borrowing nested paylo
             turnId: source.data.turnId, model: source.data.model },
     });
 
-    for (const replacement of ["null", "[]", '"not-an-object"']) {
+    for (const replacement of ["null", "[]", '"not-an-object"', '{"toolCallId":"different","success":true}']) {
         const changed = Buffer.from(bytes.toString("utf8").trimEnd().slice(0, -1) + `,"data":${replacement}}\n`);
-        assert.equal(projectOversizedCompletion(changed, limits).kind, "unavailable");
+        assert.equal(projectOversizedCompletion(changed, limits).reason, "unsupported-fields");
     }
-    const falseLast = Buffer.from(bytes.toString("utf8").replace('"success":false,"success":true', '"success":true,"success":false'));
-    assert.equal(projectOversizedCompletion(falseLast, limits).reason, "outcome-not-projected");
+    for (const pair of ['"success":true,"success":false', '"success":false,"success":true']) {
+        const conflicting = Buffer.from(bytes.toString("utf8").replace('"success":true', pair));
+        assert.equal(projectOversizedCompletion(conflicting, limits).reason, "unsupported-fields");
+    }
 });
 
 test("rejects excess depth before tokenizer allocation, including in discarded payloads", () => {
@@ -168,6 +170,25 @@ test("validates escape-heavy discarded strings without allocating their discarde
         const damaged = Buffer.from(text.trimEnd() + tail + "\n");
         assert.equal(projectOversizedCompletion(damaged, limits).reason, "invalid-json");
     }
+});
+
+test("exact parser continuation requires a fresh page and validates the remainder before returning metadata", async () => {
+    const raw = entry({ toolCallId: "call", success: true, result: Array(80000).fill(0) });
+    assert.equal(projectOversizedCompletion(raw, limits).reason, "token-limit");
+    let pages = 0;
+    const complete = await projectVerifiedSourceEvent(raw, limits, async () => ++pages <= 2);
+    assert.equal(pages, 2);
+    assert.equal(complete.event.data.toolCallId, "call");
+    assert.equal(complete.work.generatedTokens, complete.work.consumedTokens);
+    const limited = await projectVerifiedSourceEvent(raw, limits, async () => false);
+    assert.equal(limited.reason, "token-limit");
+    assert.equal(limited.event, undefined);
+    const changed = new Error("access changed");
+    await assert.rejects(projectVerifiedSourceEvent(raw, limits, async () => { throw changed; }), e => e === changed);
+    const badTail = Buffer.from(raw.toString().replace(/\]\}\}\n$/, '],"toolCallId":"different"}}\n'));
+    assert.equal((await projectVerifiedSourceEvent(badTail, limits, async () => true)).kind, "unavailable");
+    const malformed = Buffer.from(raw.toString().replace(/\]\}\}\n$/, ",]}}\n"));
+    assert.equal((await projectVerifiedSourceEvent(malformed, limits, async () => true)).reason, "invalid-json");
 });
 
 test("bounds giant discarded keys, strings and numbers without relying on a 256-character chunk assumption", () => {
@@ -371,7 +392,7 @@ test("preserves UTF-8 and escaped Unicode across slices without publishing inval
     }
 });
 
-test("validates only final decoded envelope fields while charging all overwritten content", () => {
+test("rejects repeated decoded envelope fields while charging all overwritten content", () => {
     const text = rawEnvelope("null");
     for (const key of ["id", "agentId", "parentId", "toolCallId", "turnId", "parentToolCallId", "type", "timestamp", "model"]) {
         const pair = new RegExp(`"${key}":("[^"]*")`);
@@ -380,8 +401,8 @@ test("validates only final decoded envelope fields while charging all overwritte
             const changed = text.replace(pair, (_, value) => `"${key}":${old},"${escapedKey}":${value}`);
             const bytes = align(changed, `"${escapedKey}"`, 4093);
             const result = projectOversizedCompletion(bytes, limits);
-            assert.equal(result.kind, "projected");
-            assert.deepEqual(result.event, nativeProjection(bytes));
+            assert.equal(result.reason, "unsupported-fields", key);
+            assert.equal(Object.hasOwn(result, "event"), false);
         }
     }
     const replacedData = text.replace('"data":', `"data":{"unknown":"PRIVATE_OLD","result":[${"0,".repeat(34000)}0]},"data":`);

@@ -17,12 +17,17 @@ async function settle(page) {
         animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
-async function setup(t, { completeSearch = false, disputedOrigin = false, qualifiedIssues = false } = {}) {
+async function setup(t, { completeSearch = false, disputedOrigin = false, qualifiedIssues = false, mixedLinks = false } = {}) {
     const records = promptWidgetRecords(), cleanups = [];
     if (disputedOrigin) records[1].userPrompt.sourceEventId = records[0].userPrompt.sourceEventId;
     if (qualifiedIssues) {
         records[14].userPrompt.authorship.issue = "body-boundary-v1";
         records[11].userPrompt.authorship.issue = "host-wrapper-v1";
+    }
+    if (mixedLinks) {
+        const record = records[2];
+        record.promptAssociationEvidence = { version: 1, method: "explicit-message" };
+        record.toolCalls[0].promptLink = { version: 1, promptEventId: record.userPrompt.sourceEventId, requestEventId: "invented-request" };
     }
     if (completeSearch) records[3].userPrompt = { ...records[3].userPrompt, status: "full", text: "Harbor review: read the mailbox updates." };
     const app = await searchFixture({ after: fn => cleanups.push(fn) }, { records, reply: completeSearch });
@@ -55,24 +60,27 @@ async function exact(page, widget, counts, calls) {
     await settle(page);
     const total = counts.reduce((sum, count) => sum + count, 0);
     await expect(widget).toHaveAttribute("data-total", String(total));
-    await expect(widget.locator(".percentage-denominator")).toHaveText(`${total} matching ${total === 1 ? "interaction" : "interactions"}`);
+    if (total) await expect(widget).toHaveAccessibleDescription(`${total} matching ${total === 1 ? "interaction" : "interactions"}`);
+    await expect(widget.locator(".percentage-denominator")).toBeHidden();
     await expect(page.locator("#activityCount")).toHaveText(String(calls));
     const rows = await widget.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
         actor: node.dataset.promptActor, count: Number(node.dataset.count), value: node.querySelector(".percentage-value").textContent,
         fraction: Number(node.querySelector(".percentage-bar").dataset.fraction), width: parseFloat(node.querySelector(".percentage-bar").style.width),
-        label: node.querySelector(".percentage-label").textContent,
+        label: node.querySelector(".percentage-label").textContent.trim(),
     })));
     if (total) {
         assert.deepEqual(rows.map(row => row.actor), ["user", "agent", "unknown"]);
         assert.deepEqual(rows.map(row => row.count), counts);
-        assert.deepEqual(rows.map(row => row.label), ["My prompts", "Agent prompts", "Author unverified"]);
+        assert.deepEqual(rows.map(row => row.label), ["Human prompts", "Agent prompts", "Author unverified"]);
         for (const row of rows) {
             assert.equal(row.value, `${Number((row.count / total * 100).toFixed(1))}% (${row.count})`);
             assert.equal(row.fraction, row.count / total);
             assert.ok(Math.abs(row.width - row.fraction * 100) < .0001, "CSS percentage serialization keeps its available precision");
         }
     } else assert.deepEqual(rows, []);
-    assert.equal(await widget.locator("a,button,svg").count(), 0, "Compact static facts do not invent a drilldown or pie");
+    assert.equal(await widget.locator(".percentage-content a").count(), rows.length);
+    assert.equal(await widget.locator(".percentage-content :is(button,svg:not([aria-hidden=true]))").count(), 0);
+    if (total) await expect(widget.getByRole("link", { name: "View trend: Prompt authors" })).toBeVisible();
     return rows;
 }
 async function reset(page) {
@@ -125,12 +133,26 @@ test("retained origin causes reach the reader without changing author shares or 
         await page.locator(`[data-view-key="request:prompt-widget-${index}"] .request-card-open`).click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator("#contextSidebar .reader-state")).toContainText(reason);
-        await expect(page.locator("#contextSidebar")).toContainText(index === 14 ? "Call #1 completed" : "Call #1 failed");
+        const firstCall = page.locator("#contextSidebar .reader-call-toggle").first();
+        await expect(firstCall).toContainText("Call #1");
+        await expect(firstCall).toContainText(index === 14 ? "1 tool call completed" : "1 tool call failed");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await capture(page, `origin-issue-${index}-${width}`);
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
     }
+});
+
+test("a direct link for one call does not verify the sender or the other calls in the group", async t => {
+    const { page } = await setup(t, { mixedLinks: true });
+    await selectActivityOption(page, "promptAuthorFilter", "unknown"); await closeAnalyzeFilters(page);
+    await page.locator('[data-view-key="request:prompt-widget-2"] .request-card-open').click();
+    const reader = page.locator("#contextSidebar");
+    await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+    await expect(reader.locator(".reader-record-limits").first()).toContainText("Copilot linked 1 of 3 tool calls directly to the prompt.");
+    await expect(reader.locator(".reader-record-limits").first()).toContainText("No direct link was retained for the others.");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator('[data-view-key="request:prompt-widget-2"] .request-card-author')).toHaveText("Author unverified");
 });
 
 test("ordinary Analyze shows complete prompt origins through filters, paging, guide and composed layouts", { timeout: 120000 }, async t => {
@@ -162,19 +184,18 @@ test("ordinary Analyze shows complete prompt origins through filters, paging, gu
     await capture(page, "unverified-light");
     await reset(page);
     await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    const topic = page.locator('[data-reference-topic="authors"]');
+    const topic = page.locator('#chartReferenceTopics button[data-reference-topic="authors"]');
     await topic.hover();
     await topic.focus();
     await expect(topic).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("One originating prompt per matching interaction, across all pages.");
     await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["My prompts", "Agent prompts", "Author unverified"]);
+    await expect(page.locator("#chartReferenceData tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
     await expect(page.locator("#chartReferenceData tbody td")).toHaveText(["6", "33.3%", "6", "33.3%", "6", "33.3%"]);
     await page.locator("#chartReferenceData summary").click();
     await expect(page.locator("#chartReferenceData")).toContainText("missing text alone does not change authorship");
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
     await expect(page.locator("#meaning")).toBeHidden();
     await expect(page.locator("#openChartReference")).toBeFocused();
     let release;

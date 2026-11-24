@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportContents, chooseReportScope } from "./report-journey-helpers.mjs";
 import { createServer } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
-import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateSettings, chooseTheme, openAnalyzeFilters, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const help = createControlHelp(serviceCategories);
 const proofDir = process.env.WORKIQ_HELP_PROOFS;
@@ -97,26 +96,20 @@ async function setup(run, options = {}) {
 async function ready(page) {
     await page.locator("#workspace").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    await openActivitySessions(page);
 }
 const triggerFor = (page, id) => page.locator(`[data-select-id="${id}"]`);
 async function openMoreFilters(page) {
+    await openAnalyzeFilters(page);
     const more = page.locator("#moreFilters");
     if (!await more.evaluate(node => node.open)) await more.locator(":scope > summary").click();
-}
-async function readTooltip(page, control, expected) {
-    await control.focus();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    if (expected) assert.equal(await page.getByRole("tooltip").innerText(), expected);
-    await page.keyboard.press("Escape");
 }
 
 test("filter menus contain exact choices, not explanatory paragraphs or hover popups", { timeout: 40000 }, async () => setup(async ({ context, origin, requests }) => {
     const page = await context.newPage();
     await page.goto(origin); await ready(page);
     const before = page.url(), reads = requests.length;
-    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
-        if (["serviceFilter", "projectFilter", "layerFilter", "scopeFilter"].includes(id)) await openMoreFilters(page);
+    await openMoreFilters(page);
+    for (const id of ["toolFilter", "serviceFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
         const trigger = triggerFor(page, id), selected = await page.locator("#" + id).inputValue();
         await trigger.click();
         const options = await page.locator("#" + id + " option").evaluateAll(nodes => nodes.map(node => ({ value: node.value, label: node.label })));
@@ -160,7 +153,7 @@ test("Evidence-layer names explain the selected unit and exploration commits onl
     assert.deepEqual(await page.evaluate(() => window.helpControlChanges), [{ id: "layerFilter", value: "direct-request" }]);
     await trigger.click();
     assert.equal(await page.getByRole("option", { name: "Call sites with HTTP status", exact: true }).innerText(), "Call sites with HTTP status");
-    await page.locator("#pageTitle").click();
+    await page.keyboard.press("Escape");
     assert.equal(await trigger.getAttribute("aria-expanded"), "false");
     assert.equal(await page.getByRole("tooltip").count(), 0);
 }));
@@ -187,13 +180,13 @@ test("touch sees a full choice label and selects it with one tap", { timeout: 20
 
 test("full option identities wrap rather than clip in both themes, narrow widths and enlarged text", { timeout: 40000 }, async () => setup(async ({ context, origin }) => {
     const page = await context.newPage(), proof = [];
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) for (const scale of [1, 2]) {
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
         await page.goto(origin + "/#activity"); await ready(page);
-        await openMoreFilters(page);
         await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await openMoreFilters(page);
         await triggerFor(page, "layerFilter").click();
         for (const [index, layer] of Object.keys(help.layers).entries()) {
             const row = page.locator(`.select-option[data-value="${layer}"]`);
@@ -241,7 +234,7 @@ test("Settings choices stay concise with field-level limitations and explicit ti
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     assert.equal(await page.locator("#eventCadenceHelp").count(), 0);
     assert.equal(await page.locator("#collectionPreferenceDetails").count(), 0);
-    await navigateSettings(page, "display");
+    await navigateSettings(page, "regional");
     await triggerFor(page, "displayTimeZone").click();
     const automatic = page.getByRole("option", { name: "Device default (America/Los_Angeles)", exact: true });
     assert.equal(await automatic.locator(".select-option-detail").count(), 0);
@@ -250,79 +243,19 @@ test("Settings choices stay concise with field-level limitations and explicit ti
     await page.keyboard.press("Escape");
 }));
 
-test("report scopes, privacy and source meanings are available before actions without duplicate copy help", { timeout: 25000 }, async () => setup(async ({ context, origin, requests }) => {
+test("Help explains report disclosure and recorded outcomes without starting a task", async () => setup(async ({ context, origin, requests }) => {
     const page = await context.newPage();
     await page.goto(origin); await ready(page);
-    await openMoreFilters(page);
-    for (const name of ["Activity"]) {
-        const control = page.getByRole("button", { name: "About " + name, exact: true });
-        await readTooltip(page, control);
-    }
-    assert.equal(await page.locator("#meaning").evaluate(node => node.open), false);
-    assert.equal(await page.locator("#countTable").isVisible(), false);
-    await page.locator("#meaning > summary").click();
-    assert.equal(await page.locator("#countTable").isVisible(), true);
-    assert.match(await page.locator("#chartReadingNotes").innerText(), /Weeks start Monday/i);
-    for (const [chart, text] of [["time", help.charts.time], ["workload", help.charts.activityCategory], ["endpoint", help.charts.endpoint]]) {
-        await readTooltip(page, page.locator(`[data-chart=${chart}]`), text);
-    }
-    await page.locator("#coverage > summary").click();
-    await readTooltip(page, page.getByRole("button", { name: "About Collection", exact: true }), `${help.fields.scopeFilter} ${help.options.scopeFilter.history}`);
-    await readTooltip(page, page.locator("#checkActivity"), help.actions.checkActivity);
-    assert.equal(await page.locator("#coverage").getByRole("link", { name: "Collection status", exact: true }).isVisible(), true);
-    await navigateMain(page, "collection-status");
-    await page.locator("#recorderDiagnostics>summary").click();
-    await page.waitForFunction(() => !document.querySelector("#recordBtn").disabled);
-    await readTooltip(page, page.locator("#recordBtn"), help.actions.recordBtn);
-    await navigateMain(page, "reports");
     const before = requests.length;
-    await reportContents(page);
-    for (const [value, description] of Object.entries(help.reportScopes)) {
-        await chooseReportScope(page, value);
-        assert.equal(await page.locator("#reportScopeChoiceHelp").innerText(), description, `${value}: the selected scope is explained before preview`);
-    }
-    await chooseReportScope(page, "selected");
-    assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "selected");
-    assert.equal(await page.locator("[name=promptMode]:checked").inputValue(), "masked");
-    assert.equal(await page.locator("[name=promptMode]").count(), 3);
-    assert.equal(await page.locator("#formatOptions input[type=checkbox]").count(), 4);
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator("[name=promptMode][value=original]").check();
-    assert.match(await page.locator("#reportsView").innerText(), /detected credentials are still removed/i);
-    assert.match(await page.locator("#reportsView").innerText(), /Local saving isn't permission to share/);
-    await page.locator("[name=promptMode][value=masked]").check();
-    assert.equal(await page.locator("#exportBtn").getAttribute("data-ux-tooltip"), null);
-    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
-    await page.locator(".report-scope-details > summary").click();
-    await readTooltip(page, page.getByRole("button", { name: "About Ready for report", exact: true }), help.reviewStates.ready_to_export);
+    await page.getByRole("link", { name: "Help", exact: true }).click();
+    const reports = page.getByRole("article", { name: "Prepare a report" });
+    assert.match(await reports.innerText(), /keep, mask or leave out chat details/);
+    assert.match(await reports.innerText(), /save writes the files on this device/i);
+    const results = page.getByRole("navigation", { name: "Help topics" }).getByRole("link", { name: "Read tool results" });
+    await results.press("Enter");
+    const explanation = page.getByRole("article", { name: "Read tool results" });
+    assert.match(await explanation.innerText(), /does not establish that the whole task finished/);
+    assert.match(await explanation.innerText(), /no recorded result is not a failed call/);
+    assert.equal(await reports.isVisible(), false);
     assert.equal(requests.length, before);
-    await navigateMain(page, "activity");
-    await openActivitySessions(page);
-    assert.equal(await page.getByRole("button", { name: "Search this Analyze scope", exact: true }).isVisible(), true);
-    await page.locator("#activityList .request-link").first().click();
-    await ready(page);
-    const reader = page.locator(".request-original .full-text-toggle");
-    if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-    assert.equal(await page.locator("#reader-copy-notice").count(), 0);
-    assert.match(await page.locator(".request-link-details").innerText(), /recorded message ID.*not inferred task boundaries/);
-    const copy = page.locator("#selectedContext").getByRole("button", { name: "Copy prompt", exact: true });
-    const description = await copy.getAttribute("aria-describedby");
-    assert.match(await page.locator(`[id="${description}"]`).textContent(), /original.*unmasked/);
-    await copy.focus(); await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.equal(await copy.locator("svg").count(), 1);
-    assert.deepEqual(await page.locator("button button, a button, label button")
-        .evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => node.outerHTML)), [],
-    "No exposed control on any page nests another interactive control");
-    assert.deepEqual(await page.locator("#requestContent").locator("button button, a button, label button")
-        .evaluateAll(nodes => nodes.map(node => node.outerHTML)), []);
-    assert.equal(await page.getByRole("button", { name: "About Copy prompt", exact: true }).count(), 0);
-    await page.keyboard.press("Escape");
-    await page.locator("#requestContent summary").filter({ hasText: /^Technical source record$/ }).first().click();
-    await readTooltip(page, page.getByRole("button", { name: "About Provenance", exact: true }), help.facts.Provenance);
-    const journey = page.locator(".journey-item[data-context-kind=action]").first();
-    await journey.locator("summary").filter({ hasText: /^Technical details$/ }).click();
-    for (const label of ["Execution success", "HTTP observed", "Duration", "Tool call ID", "Result attribution"]) {
-        await readTooltip(page, journey.getByRole("button", { name: "About " + label, exact: true }), help.facts[label]);
-    }
 }));

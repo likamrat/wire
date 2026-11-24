@@ -16,6 +16,27 @@ async function prepare(context, controller, id, options = {}) {
         { kind: "selected", revision: state.revision, scenarioIds: [id], promptAuthors: ["user"] });
 }
 
+test("shared context aliases merge equal choices but reject conflicts and unrelated edit keys", async t => {
+    const { context } = await reportContextFixture(t), controller = createExportController(context);
+    const state = await loadBoardState(context), selection = { kind: "all", revision: state.revision };
+    const options = { formats: ["json"], saveMode: "local", dateSelection: { range: "capture" },
+        reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } };
+    const ordinary = await controller.preview("alias-owner", undefined, options, selection);
+    const followup = ordinary.records[0].prompts.find(copy => copy.kind === "followup");
+    const origin = ordinary.records[1].prompts.find(copy => copy.kind === "origin");
+    assert.equal(followup.text, origin.text);
+    const shared = await controller.preview("alias-owner", undefined, { ...options, recordedContext: true,
+        overrides: [{ key: followup.key, omit: true }, { key: origin.key, omit: true }] }, selection);
+    assert.ok(shared.records[0].prompts.find(copy => copy.kind === "followup").omitted);
+    assert.ok(shared.records[1].prompts.find(copy => copy.kind === "origin").omitted);
+    await assert.rejects(controller.preview("alias-owner", undefined, { ...options, recordedContext: true,
+        overrides: [{ key: followup.key, omit: true }, { key: origin.key, text: "Conflicting included wording" }] }, selection),
+    /conflicting edits or omissions/);
+    await assert.rejects(controller.preview("alias-owner", undefined, { ...options, recordedContext: true,
+        overrides: [{ key: "outside-current-copy-set", omit: true }] }, selection), /no longer belongs to the selection/);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+});
+
 test("context edits and omissions rebuild all real formats, freeze saved bytes and preserve analytical scopes", { timeout: 30000 }, async t => {
     const { context, records } = await reportContextFixture(t), controller = createExportController(context);
     const original = await loadBoardState(context);

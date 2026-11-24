@@ -50,13 +50,12 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     const openModelData = async () => {
         await closeAnalyzeFilters(page);
         await page.locator("#openChartReference").click();
-        await page.locator("#chartReferenceAllTopics").click();
-        await page.locator('button[data-reference-topic="models"]').click();
+        await page.locator('#chartReferenceTopics button[data-reference-topic="models"]').click();
         await page.locator("#chartReferenceShowData").click();
         await guideData.locator(".percentage-reference-notes>summary").click();
     };
     const closeModelData = async () => {
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
         await expect(page.locator("#meaning")).toBeHidden();
     };
     const reset = async () => {
@@ -99,7 +98,8 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     const allDefinitions = "Share of all matching interactions, including those with missing model names; an interaction may use more than one model."
         + " 1 partial / 2 not recorded / 2 not verified / 1 conflicting.";
     await expect(data.locator(".percentage-note")).toHaveText(allDefinitions);
-    assert.equal(await widget.locator("a,button,svg").count(), 0, "No inexact drilldown or overlapping pie");
+    assert.equal(await widget.locator(".percentage-content a").count(), Object.keys(allCounts).length);
+    assert.equal(await widget.locator(".percentage-content :is(button,svg)").count(), 0, "No overlapping pie");
     assert.equal(await page.locator("#dateFilter").count(), 1);
     for (const [value, total, counts, calls] of [
         ["day", 4, { [modelNames[0]]: 2, [modelNames[1]]: 1 }, 6],
@@ -114,11 +114,12 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await page.locator("#toFilter").fill("2026-10-12");
     await page.locator("#applyDates").click();
     await exact("custom", 1, { [modelNames[2]]: 1 }, 1);
+    await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-09-30");
     await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click();
     await exact("historical absence is coverage", 1, {}, 1);
-    await expect(widget.locator(".percentage-empty")).toHaveText("Model names unavailable.");
+    await expect(widget.locator(".percentage-empty")).toHaveText("WIRE can’t tell which models these interactions used.");
     await openModelData();
     await expect(guideData.locator(".percentage-note")).toBeVisible();
     await expect(guideData.locator(".percentage-note")).toContainText("1 not recorded.");
@@ -135,6 +136,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await reset();
     await restoreLegacySearch(page, "Invented model instruction 1");
     await exact("one multi-model interaction", 1, { [modelNames[1]]: 1, [modelNames[0]]: 1 }, 1);
+    await reset();
     await restoreLegacySearch(page, "no-invented-model-match");
     await ready();
     await expect(page.locator("#homeView")).toHaveAttribute("data-empty", "true");

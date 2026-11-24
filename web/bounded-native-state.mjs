@@ -61,6 +61,7 @@ export function createBoundedNativeState() {
             ...(hasViews ? ["viewId", "allViewId"] : []), ...(drilldown || analysis && context?.original?.groupId ? ["groupId"] : []),
             ...(analysis || drilldown && context?.original?.textSelection ? ["textSelection"] : [])]
             : kind === "native-retained-detail" ? ["conversationId", "sourceId", "aggregates", "focusOrdinal",
+                ...(input.section === "completed" ? ["completedRef"] : []),
                 ...(input.section && input.section !== "observations" ? ["section", "sectionCount"] : [])]
                 : ["aggregates", "coverage", "matchPolicyId"];
         if (!input || !Array.isArray(sources) || !sources.length
@@ -160,7 +161,11 @@ export function createBoundedNativeState() {
                 return true;
             }
             const section = input.section ?? "observations";
-            if (!["observations", "messages", "context", "calls"].includes(section) || section !== "observations"
+            const completed = section === "completed", callPage = completed || section === "calls";
+            if (completed && (!reference(input.completedRef) || input.completedRef !== value.completedRef
+                || !reference(input.viewId) || !reference(input.sourceRevision) || !integer(input.revision) || sources.length !== 1
+                || !value.sectionCount || !value.page.items.length)) throw invalid();
+            if (!["observations", "messages", "context", "calls", "completed"].includes(section) || section !== "observations"
                 && (value.section !== section || !integer(value.sectionCount) || input.at !== undefined)) throw invalid();
             if (value.conversationId !== input.conversationId || !reference(value.conversationId)
                 || !input.sources.includes(value.sourceId)
@@ -174,9 +179,12 @@ export function createBoundedNativeState() {
             const ids = new Set();
             for (const item of value.page.items) {
                 if (!exact(item, ["id", "ordinal", "fields", "outcomes", "messageParts", "callFacts", "sourceFacts", "retention",
-                    ...(Object.hasOwn(item, "callSummaries") ? ["callSummaries"] : []), ...(section === "calls" ? ["inputFacts", "evidenceFacts"] : []),
+                    ...(Object.hasOwn(item, "callSummaries") ? ["callSummaries"] : []), ...(callPage ? ["inputFacts", "evidenceFacts"] : []),
+                    ...(completed ? ["callNumber"] : []),
                     ...(["messages", "context"].includes(section) ? ["messageIdentity"] : [])])
-                    || !reference(item.id) || ids.has(item.id) || !integer(item.ordinal) || section !== "calls" && item.ordinal <= previous
+                    || !reference(item.id) || ids.has(item.id) || !integer(item.ordinal) || !callPage && item.ordinal <= previous
+                    || completed && (!integer(item.callNumber) || item.callNumber < 1 || item.callNumber <= previous
+                        || item.callSummaries?.[0]?.outcome !== "success")
                     || !fields(item.fields) || !result(item.outcomes) || !Array.isArray(item.messageParts)
                     || item.messageParts.some(part => !message(part))
                     || !Array.isArray(item.callFacts) || !Array.isArray(item.sourceFacts)
@@ -188,7 +196,7 @@ export function createBoundedNativeState() {
                     || item.callSummaries.some(call => !exact(call, ["id", "tool", "outcome"]) || !reference(call.id)
                         || call.tool !== null && (typeof call.tool !== "string" || !call.tool)
                         || !["success", "failure", "unknown"].includes(call.outcome)))) throw invalid();
-                if (section === "calls" && (item.callSummaries?.length !== 1 || item.callSummaries[0].id !== item.id
+                if (callPage && (item.callSummaries?.length !== 1 || item.callSummaries[0].id !== item.id
                     || !Array.isArray(item.inputFacts)
                     || new Set(item.inputFacts.map(fact => fact.ordinal)).size !== item.inputFacts.length
                     || item.inputFacts.some(entry => !exact(entry, ["ordinal", "input"]) || !integer(entry.ordinal) || !fact(entry.input))
@@ -199,7 +207,7 @@ export function createBoundedNativeState() {
                     || !item.evidenceFacts.some(fact => fact.ordinal === item.ordinal)
                     || item.inputFacts.some(fact => !item.evidenceFacts.some(entry => entry.ordinal === fact.ordinal
                         && JSON.stringify(entry.fields.input) === JSON.stringify(fact.input))))) throw invalid();
-                previous = item.ordinal; ids.add(item.id);
+                previous = completed ? item.callNumber : item.ordinal; ids.add(item.id);
             }
             if (input.at !== undefined && value.page.items[0]?.ordinal !== input.at) throw invalid();
             return structuredClone(value);
@@ -245,7 +253,8 @@ export function createBoundedNativeState() {
             || value.resultFacet.count < a.selectedRows
             || resultKeys.some(key => value.resultFacet.outcomes[key] < a.outcomes[key])) throw invalid();
         const series = value.timeSeries, timed = Object.hasOwn(series ?? {}, "points");
-        if (!exact(series, ["qualification", "datedRows", "undatedRows", ...(timed ? ["bucket", "timeZone", "points"] : [])])
+        const windowed = Object.hasOwn(series ?? {}, "window");
+        if (!exact(series, ["qualification", "datedRows", "undatedRows", ...(timed ? ["bucket", "timeZone", "points"] : []), ...(windowed ? ["window"] : [])])
             || !integer(series.datedRows) || !integer(series.undatedRows)
             || series.datedRows + series.undatedRows !== a.selectedRows
             || series.qualification !== (series.datedRows ? "source-observation-qualified" : "unqualified")
@@ -253,7 +262,17 @@ export function createBoundedNativeState() {
         if (timed) {
             if (series.bucket !== (analytics?.bucket ?? "day") || !["day", "week", "month"].includes(series.bucket)
                 || series.timeZone !== (analytics?.timeContext?.timeZone ?? "UTC")
-                || !Array.isArray(series.points) || series.points.length > 400) throw invalid();
+                || !Array.isArray(series.points) || series.points.length > (windowed ? 90 : 400)) throw invalid();
+            if (windowed) {
+                const window = series.window;
+                if (window === null ? series.points.length || series.datedRows : !exact(window, ["first", "last", "from", "to", "offset", "count", "total", "limit"])
+                    || !["first", "last"].every(key => typeof window[key] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(window[key]))
+                    || window.first > window.last || window.limit !== 90 || !integer(window.total) || !window.total
+                    || !integer(window.offset) || window.offset > window.total || !integer(window.count)
+                    || window.count !== series.points.length || window.offset + window.count > window.total
+                    || window.count && (window.from !== series.points[0].date || window.to !== series.points.at(-1).endDate)
+                    || !window.count && (window.from !== null || window.to !== null)) throw invalid();
+            }
             let previous = "", total = 0;
             const sums = Object.fromEntries(resultKeys.map(key => [key, 0]));
             for (const point of series.points) {
@@ -267,7 +286,9 @@ export function createBoundedNativeState() {
                 previous = point.endDate; total += point.count;
                 for (const key of resultKeys) sums[key] += point.outcomes[key];
             }
-            if (total !== series.datedRows || resultKeys.some(key => sums[key] > a.outcomes[key])) throw invalid();
+            if ((windowed ? total > series.datedRows : total !== series.datedRows)
+                || windowed && series.window?.count === series.window?.total && total !== series.datedRows
+                || resultKeys.some(key => sums[key] > a.outcomes[key])) throw invalid();
         }
         function validateGrouping(g, by) {
         if (!exact(g, ["complete", "groupBy", "groupCount", "groups", "other"]) || g.complete !== true
@@ -300,6 +321,7 @@ export function createBoundedNativeState() {
         const ids = new Set();
         for (const item of value.page.items) {
             if (!exact(item, ["id", "sourceId", "title", "counts", "selectedRows", "outcomes",
+                ...(Object.hasOwn(item, "completedRef") ? ["completedRef"] : []),
                 ...(Object.hasOwn(item, "presentation") ? ["presentation"] : [])])
                 || !reference(item.id) || ids.has(item.id) || !sources.includes(item.sourceId)
                 || analytics?.filters?.sources?.length && !analytics.filters.sources.includes(item.sourceId)
@@ -308,6 +330,8 @@ export function createBoundedNativeState() {
                 || !integer(item.selectedRows) || !outcomes(item.outcomes, item.selectedRows)
                 || item.selectedRows !== (a.layer === "tool" ? item.counts.calls : a.layer === "reported-api" ? item.counts.returnedResults : 0)
                 || item.selectedRows > a.selectedRows) throw invalid();
+            if (Object.hasOwn(item, "completedRef") && (!hasViews || item.completedRef !== value.selectionRef || a.layer !== "tool"
+                || !item.selectedRows || item.selectedRows !== item.outcomes.success)) throw invalid();
             if (Object.hasOwn(item, "presentation")) {
                 const p = item.presentation;
                 if (!exact(p, ["kind", "tools", "toolCount", ...(Object.hasOwn(p, "contextDateBasis") ? ["contextDateBasis"] : []),
@@ -380,6 +404,10 @@ export function createBoundedNativeState() {
             try {
                 const next = decode(response, ticket.input, ticket.context);
                 if (ticket.expected !== null && ticket.expected !== identity(next)) throw invalid();
+                if (next.section === "completed") {
+                    const end = ticket.pageOffset + next.page.items.length;
+                    if (end > next.sectionCount || Boolean(next.page.nextCursor) !== (end < next.sectionCount)) throw invalid();
+                }
                 value = next; acceptedInput = ticket.input; acceptedContext = ticket.context; acceptedOwner = owner;
                 pageIndex = ticket.pageIndex; pageOffset = ticket.pageOffset;
                 pageCount = value.page.items.length; hasNext = Boolean(value.page.nextCursor);

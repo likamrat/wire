@@ -24,7 +24,7 @@ Those real interactions can become the basis for better synthetic eval cases.
 Product teams and customers building agents on Work IQ APIs and MCP can use
 that evidence to test the behaviors people rely on and improve their agents.
 
-[![WIRE showing activity and prompt-author breakdowns beside a compact prompt preview and recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![Analyze with matching interactions and an open reader showing the prompt and its recorded call results.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
@@ -58,7 +58,7 @@ Follow README.md and docs/development.md for this machine. Check for
 Node.js 24+ and a running WIRE instance before installing or starting
 anything. Preserve existing work and data.
 
-Use npm ci and npm start for a new installation. Open the printed local
+Use npm ci, npm run build and npm start for a new installation. Open the printed local
 URL and verify that WIRE loads. Leave it running and tell me how to
 reopen it. Ask me when setup choices need my input. Leave source
 approval and reply-saving consent to me in WIRE.
@@ -72,18 +72,23 @@ approval and reply-saving consent to me in WIRE.
 git clone https://github.com/likamrat/wire.git
 cd wire
 npm ci
+npm run build
 npm start
 ```
 
 The default browser address is `localhost:4000`. Keep the terminal running
 while you use WIRE.
 
+On Windows or WSL, choose **Update** when offered to restart this installation at the
+same address with your settings and reports. **Dismiss** hides that build's
+notice; **Settings > General** lets you check or install it later. Older
+installs, macOS and standalone Linux use the [same-clone update instructions](docs/development.md#updating-wire).
+
 ### Connect your history
 
-WIRE prompts you to connect on first use. Choose **Review and connect**, check
-the local paths and history window, then approve collection. **Not now** leaves
-the connection prompt in Analyze; settings remain in **Settings > Connection & updates**.
-Follow the [first-run guide](docs/user-guide.md#connect-local-history) for details.
+Choose **Review and connect**, check the local paths and history window, then
+approve collection. **Not now** leaves the prompt in Analyze.
+See [Connect local history](docs/user-guide.md#connect-local-history) to connect later.
 
 ### Your data
 
@@ -102,13 +107,13 @@ rerunning its calls, then keeps local evidence for inspection and reports.
 <a href="docs/images/wire-evidence-flow-dark.png#gh-dark-mode-only">
   <picture>
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
-    <img src="docs/images/wire-evidence-flow-dark.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+    <img src="docs/images/wire-evidence-flow-dark.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends and locally saved reports." width="800">
   </picture>
 </a>
 <a href="docs/images/wire-evidence-flow.png#gh-light-mode-only">
   <picture>
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
-    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends, Compare, literal Search and locally saved reports." width="800">
+    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved local history into its own evidence store for Analyze, Trends and locally saved reports." width="800">
   </picture>
 </a>
 
@@ -116,28 +121,20 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 ## Trends
 
-See which Work IQ tools appear in your recorded activity and how their use
-varies by day. **Trends** gives each daily chart the full workspace width:
-tool usage, prompt authors, tool calls, services, errors, response models
-and call duration. Every widget has its own measure controls.
+Follow changes in daily tool use, errors or timing. Select a day to inspect
+the calls behind it, or compare two measures over the same dates.
+See [Trends](docs/user-guide.md#trends) for the seven measures and what each counts.
 
-[![Full-width Trends charts with measure controls in every header.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
-
-Choose 7, 14, 30 or custom days and select a dated point in place. Maximize its
-chart to open the supporting calls. The [Trends guide](docs/user-guide.md#trends)
-explains reach versus call share, overlapping services and evidence gaps.
+[![Trends Overview showing daily interactions with errors and the option to compare two measures.](docs/images/trends-overview.png)](docs/user-guide.md#trends)
 
 ## Reports
 
-Reports give you a shareable view of working patterns, backed by recorded
-prompts, Work IQ calls and results. Ready-made templates preserve those
-findings for review and for building eval cases.
-**Report text** starts at **Mask detected details**. Change it before opening
-a template or while reading the report.
-The [reporting guide](docs/reporting.md) explains which template fits your
-purpose and what the saved copy includes.
+In Analyze, choose **Add to report** on an interaction card or in the reader to
+[add it to a named draft](docs/reporting.md#keep-interactions-in-a-draft).
+You can also start in Reports with a focus such as **Errors & failures**.
+[Preview the report](docs/reporting.md) before saving a local copy.
 
-[![Reports homepage with ready-made templates, period controls and saved reports.](docs/images/report-choices.png)](docs/reporting.md)
+[![Report setup beside recently saved reports.](docs/images/report-choices.png)](docs/reporting.md)
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
@@ -145,10 +142,8 @@ purpose and what the saved copy includes.
 
 ## Compare
 
-Compare shows how Work IQ activity, call outcomes and timing differ
-[between periods or saved reports](docs/reporting.md#compare).
-That evidence helps you assess changes
-to your agents and investigate possible regressions.
+Compare a selected period with a baseline. Open either period's count to see
+the calls it includes. See [Compare two periods](docs/reporting.md#compare).
 
 [![Compare with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
@@ -156,7 +151,7 @@ to your agents and investigate possible regressions.
 
 - [Use WIRE](docs/user-guide.md)
 - [Read Trends and inspect supporting calls](docs/user-guide.md#trends)
-- [Create and compare reports](docs/reporting.md)
+- [Create and read reports](docs/reporting.md)
 - [Develop and troubleshoot](docs/development.md)
 - [Technical documentation](docs/README.md)
 

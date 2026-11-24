@@ -1,7 +1,7 @@
 # Architecture
 
 WIRE reads recorded Work IQ activity from the **GitHub Copilot app**. It does
-not rerun those calls or collect from Microsoft Copilot, Microsoft 365 Chat
+not rerun those calls. Normal startup does not connect Microsoft 365 Chat
 or Cowork. The [README overview](../README.md#how-wire-fits) shows how that
 history becomes evidence for inspection and reports.
 

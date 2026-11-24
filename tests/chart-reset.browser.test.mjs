@@ -1,350 +1,233 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reportContents, chooseReportScope } from "./report-journey-helpers.mjs";
-import { createServer } from "node:http";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import { chromium } from "@playwright/test";
-import { renderHtmlShell } from "../lib/render.mjs";
-import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, selectActivityOption, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { chromium, expect } from "@playwright/test";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState } from "../lib/store.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters,
+    closeAnalyzeFilters, restoreLegacySearch, navigateMain } from "./helpers.mjs";
 
-const proofDir = process.env.WORKIQ_CHART_PROOF_DIR;
-function recordsFor(days) {
-    return days.flatMap(([day, count]) => Array.from({ length: count }, (_, index) => ({
-        scenarioId: `synthetic-${day}-${index}`, sourceSessionId: "synthetic-session", sourceHost: "copilot-app",
-        sourceSessionName: "Synthetic chart requests", projectId: "synthetic-project", project: "Synthetic project",
-        capturedAt: `2026-09-${day}T12:00:00Z`, workflowState: "ready_to_export",
-        userPrompt: { text: `SYNTHETIC ONLY request ${day} ${index}`, status: "full" },
-        toolCalls: [{
-            tool: "workiq-fetch", toolCallId: `synthetic-call-${day}-${index}`,
-            startedAt: `2026-09-${day}T12:00:00Z`, requestedApiPath: "/me/events",
-            requestArgs: { entityUrls: ["/me/events"] }, toolSucceeded: index % 6 !== 0,
-            reportedOutcome: index % 6 !== 0 ? "succeeded" : "failed", apiResults: [],
-        }],
-    })));
-}
-async function fixture(days, run) {
-    const records = recordsFor(days), requests = [], errors = [];
-    let releasePreview;
-    const state = { boardId: "synthetic-chart", revision: 1, scenarios: records, exports: [], coverage: { since: "2026-09-01", until: "2026-09-30", notes: [] } };
-    const server = createServer(async (req, res) => {
-        if (req.method === "GET") {
-            res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "synthetic-chart-nonce", UNBOUND_FIXTURE_BOOTSTRAP)); return;
-        }
-        let body = ""; for await (const chunk of req) body += chunk;
-        const input = JSON.parse(body);
-        requests.push({ path: req.url, input });
-        res.setHeader("Content-Type", "application/json");
-        if (req.url === "/api/snapshot") {
-            res.end(JSON.stringify({ ...state, exportCatalog: exportCatalogFor(records), analytics: { ...buildActivityAnalytics(records, input), revision: 1 } })); return;
-        }
-        if (req.url === "/api/preview") {
-            await new Promise(resolve => { releasePreview = resolve; });
-            res.end(JSON.stringify({
-                previewId: "synthetic-preview", records: [{}], files: { "product-report.md": "# Synthetic only" },
-                privacy: { allSelectedFieldsScanned: true, reviewerConfirmed: false, categories: {}, limitations: [] },
-            })); return;
-        }
-        if (req.url === "/api/cancel-preview") { res.end(JSON.stringify({ cancelled: true })); return; }
-        if (req.url === "/api/evaluation/automatic/summary") { res.end(JSON.stringify(automaticScoreOffSummary())); return; }
-        res.statusCode = 403;
-        res.end(JSON.stringify({ error: "Synthetic fixture permits snapshot reads only." }));
+const recordsFor = days => days.flatMap(([day, count]) => Array.from({ length: count }, (_, index) => {
+    const record = fixture(`synthetic-${day}-${index}`), date = `2026-09-${day}T12:00:00Z`;
+    record.sourceSessionId = "synthetic-session";
+    record.userPrompt.text = `Synthetic chart request ${day} ${index}`;
+    record.capturedAt = record.userPrompt.sourceTimestamp = record.toolCalls[0].startedAt = date;
+    record.toolCalls[0].toolSucceeded = index % 6 !== 0;
+    record.toolCalls[0].reportedOutcome = index % 6 === 0 ? "failed" : "succeeded";
+    return record;
+}));
+const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+async function setup(t, days, address = "/") {
+    let remove;
+    const { context } = await privateFixture({ after: fn => { remove = fn; } }, recordsFor(days));
+    const before = await loadBoardState(context), requests = [], errors = [];
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => {
+        try {
+            await browser.close(); await runtime.close();
+            assert.deepEqual(errors, []); assert.deepEqual(await loadBoardState(context), before);
+        } finally { await remove(); }
     });
-    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-    const browser = await chromium.launch({ headless: true });
-    try {
-        const context = await browser.newContext({ viewport: { width: 1200, height: 960 }, reducedMotion: "reduce" });
-        context.setDefaultTimeout(5000);
-        context.on("page", page => page.on("pageerror", error => errors.push(error.message)));
-        if (proofDir) await mkdir(proofDir, { recursive: true });
-        await run({ context, requests, releasePreview: () => releasePreview?.(), url: `http://127.0.0.1:${server.address().port}` });
-        assert.deepEqual(errors, []);
-        assert.ok(requests.every(request => ["/api/snapshot", "/api/preview", "/api/cancel-preview", "/api/evaluation/automatic/summary"].includes(request.path)), "Navigation never mutates the evidence store");
-    } finally {
-        releasePreview?.();
-        await browser.close();
-        await new Promise(resolve => server.close(resolve));
-    }
-}
-async function ready(page) {
-    await page.locator("#workspace").waitFor({ state: "visible" });
-    await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    await openActivitySessions(page);
-}
-async function screenshot(page, name) {
-    if (proofDir) await page.locator(".chart-panel").screenshot({ path: path.join(proofDir, `${name}.png`) });
-}
-async function geometry(page, index = 0) {
-    return page.locator(".time-stack").nth(index).evaluate(stack => {
-        const action = stack.closest("button,a");
-        const box = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
-        return { stack: box(stack), action: box(action), plot: box(stack.closest(".time-chart")), background: getComputedStyle(action).backgroundColor };
+    const page = await browser.newPage({ viewport: { width: 1200, height: 960 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(5000);
+    page.on("pageerror", e => errors.push(e.message));
+    page.on("request", request => {
+        if (request.method() === "POST") requests.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});
     });
+    await page.route("**/*", route => {
+        const request = route.request(), url = new URL(request.url());
+        if (url.origin !== new URL(runtime.url).origin) { errors.push("Unexpected external request"); return route.abort(); }
+        return route.continue();
+    });
+    await page.goto(new URL(address, runtime.url).href); await ready(page);
+    return { page, requests, url: runtime.url, snapshot: () => requests.filter(r => r.path === "/api/snapshot").at(-1).body };
+}
+async function reset(page) {
+    await openAnalyzeFilters(page);
+    await page.getByRole("button", { name: "Reset filters", exact: true }).click();
+    await ready(page); await closeAnalyzeFilters(page);
 }
 
-test("single weekly column bounds hover and pointer action to the visible column", async () => fixture([["14", 17]], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url); await ready(page);
-    await page.locator(".time-stack").hover();
-    const measured = await geometry(page);
-    console.log("Single column measured geometry:", JSON.stringify(measured));
-    await screenshot(page, "single-column-hover");
-    assert.ok(measured.action.width <= measured.stack.width + 8, `Hit width ${measured.action.width} exceeds painted width ${measured.stack.width} plus 8px padding`);
-    assert.ok(measured.action.height <= Math.max(24, measured.stack.height + 8));
-    assert.equal(measured.background, "rgba(0, 0, 0, 0)", "Hover must not paint a selection slab");
-    await page.mouse.click(measured.plot.x + 10, measured.plot.y + measured.plot.height / 2);
-    assert.equal(new URL(page.url()).hash, "", "Empty plot space never filters");
-    await page.locator(".time-stack .failure").click();
-    await page.locator("#activityView").waitFor({ state: "visible" }); await ready(page);
-    assert.match(new URL(page.url()).hash, /^#activity\?range=custom&from=2026-09-14/);
-    await page.goBack(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "", "One stacked-column activation produces exactly one history entry");
-}));
+test("weekly column and outcome segment reach different exact populations and Back returns to the mark", async t => {
+    const { page } = await setup(t, [["14",17]], "/?bucket=week");
+    const col = page.locator(".time-column");
+    await expect(col).toHaveAccessibleName(/17 Work IQ tool calls/);
+    const plot = await page.locator(".time-chart").boundingBox(), stack = await col.boundingBox();
+    assert.ok(stack.width <= 84);
+    const address = page.url();
+    await page.mouse.click(plot.x + 2, plot.y + 2);
+    assert.equal(page.url(), address);
+    const failed = page.locator("a.time-segment-link[data-segment=failure]");
+    await failed.click(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("3");
+    const prompts = page.locator("#activityList .request-card-prompt");
+    assert.deepEqual((await prompts.allTextContents()).sort(), [0,6,12].map(i => `Synthetic chart request 14 ${i}`).sort());
+    assert.equal(new URL(page.url()).searchParams.get("from"), "2026-09-14");
+    assert.equal(new URL(page.url()).searchParams.get("to"), "2026-09-20");
+    await page.goBack(); await ready(page); await expect(failed).toBeFocused();
+    await col.focus(); await col.press("Enter"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("17");
+    assert.equal(new URL(page.url()).searchParams.has("result"), false);
+});
 
-test("pointer section inspection survives a small scroll without stealing keyboard focus", async () => fixture([["14", 17]], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await page.goto(url); await ready(page);
-    const column = page.locator(".time-column").first();
-    await column.hover();
-    await page.mouse.wheel(0, 1);
-    assert.equal(await page.getByRole("tooltip").isVisible(), true);
-    assert.match(await page.getByRole("tooltip").innerText(), /Tool completed: 14 of 17 Work IQ tool calls/);
-    assert.match(await column.getAttribute("aria-label"), /17 Work IQ tool calls/);
-    assert.equal(await column.evaluate(node => node.matches(":hover")), true);
-    assert.equal(await column.evaluate(node => node === document.activeElement), false, "Pointer inspection never steals keyboard focus");
-}));
+test("inspecting a segment on a narrow screen does not steal keyboard focus", async t => {
+    const { page } = await setup(t, [["14",17]]);
+    await page.setViewportSize({ width:375,height:1000 });
+    const success = page.locator("a.time-segment-link[data-segment=success]");
+    await success.hover(); await page.mouse.wheel(0,1);
+    await expect(page.getByRole("tooltip")).toContainText("14 tool completed");
+    await expect(success).not.toBeFocused();
+    await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
+});
 
-test("Reset to Home is one visible affordance for chart-only deviation and restores canonical Home", async () => fixture([["14", 17]], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url + "/#home?chart=endpoint&bucket=month"); await ready(page);
-    const reset = page.getByRole("button", { name: "Reset to Home", exact: true });
-    assert.equal(await reset.count(), 1, "Chart/timescale deviations must expose the same obvious reset");
-    await reset.click(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home");
-    assert.equal(await page.locator("#dateFilter").inputValue(), "capture");
-    assert.equal(await page.locator('[data-chart="time"]').getAttribute("aria-pressed"), "true");
-    assert.equal(await reset.isVisible(), false);
-    await page.goBack(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home?chart=endpoint&bucket=month");
-    await page.goForward(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home");
-    await selectActivityOption(page, "dateFilter", "custom");
-    assert.equal(await reset.isVisible(), true, "Unsubmitted custom date mode also has an escape route");
-    await reset.click(); await ready(page);
-    assert.equal(await page.locator("#dateFields").isVisible(), false);
-    await page.goBack(); await ready(page);
-    assert.equal(await page.locator("#dateFields").isVisible(), true);
-}));
+test("Reset filters restores the time chart; grouping survives and a cancelled date draft does not enter history", async t => {
+    const { page, snapshot } = await setup(t,[["14",17]],"/?chart=endpoint&bucket=month");
+    const previous = page.url(); await reset(page);
+    assert.equal(snapshot().bucket,"month");
+    assert.equal(new URL(page.url()).searchParams.has("chart"),false);
+    await expect(page.locator("#activityCount")).toHaveText("17");
+    await page.goBack(); await ready(page); assert.equal(page.url(),previous);
+    await openAnalyzeFilters(page); await expect(page.locator('[data-chart=endpoint]')).toHaveAttribute("aria-pressed","true");
+    await selectActivityOption(page,"dateFilter","custom");
+    await page.locator("#fromFilter").fill("2026-09-01");
+    await page.locator("#analyzeDates").getByRole("button",{name:"Cancel",exact:true}).click();
+    assert.equal(page.url(),previous); await expect(page.locator("#dateFilter-control")).toBeFocused();
+});
 
-for (const shape of ["single", "multiple"]) test(`${shape} columns: both themes at 375/820/1200, bounded hit geometry, gaps, keyboard and exact-data alternative`, { timeout: 60000 }, async () => fixture(shape === "single" ? [["14", 17]] : [["14", 200], ["15", 1], ["17", 3]], async ({ context, url }) => {
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
-        const page = await context.newPage();
-        await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(url + "/#home?bucket=day"); await ready(page);
-        await chooseTheme(page, theme);
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+for (const multiple of [false,true]) test(`${multiple ? "unequal columns and a gap" : "single column"} retain bounded paint, keyboard controls and exact zero meaning`, async t => {
+    const { page } = await setup(t,multiple ? [["14",200],["15",1],["17",3]] : [["14",17]],"/?bucket=day");
+    const counts = multiple ? [200,1,3] : [17];
+    for (const [theme,width] of [["light",1200],["dark",375],["light",820]]) {
+        await page.setViewportSize({width,height:960}); await chooseTheme(page,theme);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         const columns = page.locator(".time-column");
-        assert.equal(await columns.count(), shape === "single" ? 1 : 3);
-        for (let index = 0; index < await columns.count(); index++) {
-            const column = columns.nth(index);
-            await page.keyboard.press("Tab");
-            await column.focus();
-            const tooltip = page.getByRole("tooltip");
-            await tooltip.waitFor({ state: "hidden" });
-            const measured = await geometry(page, index);
-            assert.equal(measured.action.width, measured.stack.width);
-            assert.ok(Math.abs(measured.action.height - measured.stack.height) < 1, "Only a subpixel viewport remainder is unpainted");
-            assert.ok(measured.action.width <= 84, "Only affected time scenes use the bounded 84px projected footprint");
-            assert.equal(await column.locator("button,a").count(), 0, "One button owns the entire stack");
-            assert.equal(await column.locator(".dimensional-count").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
-            const before = new URL(page.url()).hash;
-            await page.keyboard.press("Escape");
-            assert.equal(await tooltip.isVisible(), false);
-            if (measured.action.height < measured.plot.height - 20) {
-                await page.mouse.click(measured.plot.x + 8, measured.plot.y + 10);
-                assert.equal(new URL(page.url()).hash, before, "Empty space above a short column is inert");
-            }
+        await expect(columns).toHaveCount(counts.length);
+        const height = (await columns.first().boundingBox()).height;
+        for (const [i,count] of counts.entries()) {
+            const col = columns.nth(i), bounds = await col.boundingBox(), stack = await col.locator(".time-stack").boundingBox();
+            assert.ok(Math.abs(bounds.height - height * count / counts[0]) < 0.1);
+            assert.ok(Math.abs(stack.width - bounds.width) < 1 && bounds.width <= 84);
+            await expect(col.locator(".dimensional-count")).toHaveText(`${count} ${count === 1 ? "call" : "calls"}`);
+            assert.ok((await col.locator(".dimensional-count").boundingBox()).height >= 44);
         }
-        await page.locator(".chart-panel").scrollIntoViewIfNeeded();
-        await columns.first().hover();
-        assert.equal(await page.getByRole("tooltip").isVisible(), true, "Painted sections retain the user's requested inspection");
-        await screenshot(page, `${shape}-${theme}-${width}-hover`);
-        await page.keyboard.press("Escape");
-        if (shape === "multiple") {
-            const zero = page.locator(".time-zero");
-            assert.equal(await zero.count(), 1);
-            assert.match(await zero.getAttribute("aria-label"), /0 Work IQ tool calls/);
-            assert.equal(await zero.evaluate(node => Boolean(node.closest("button,a"))), false);
-            await zero.click();
-            assert.equal(new URL(page.url()).hash, "#home?bucket=day");
-            await page.keyboard.press("Escape");
-            assert.equal(await page.locator("#tableDisclosure").evaluate(node => node.open), false);
-            await page.locator("#tableDisclosure>summary").click();
-            const data = page.locator("#countTable tbody tr");
-            assert.equal(await data.count(), 4);
-            assert.deepEqual(await data.locator("td:nth-child(2)").allTextContents(), ["200", "1", "0", "3"]);
-            const shortAction = data.nth(1).getByRole("button");
-            assert.ok((await shortAction.boundingBox()).height >= 24);
-            await shortAction.focus(); await page.keyboard.press("Enter"); await ready(page);
-            assert.match(new URL(page.url()).hash, /^#activity\?bucket=day&range=custom&from=2026-09-15/);
-            assert.equal(await page.locator("#activityList .request-row").count(), 1);
-            await page.locator("#activityList .request-link").click();
-            assert.match(new URL(page.url()).hash, /^#request/);
-            await page.goBack(); await ready(page);
-            assert.equal(await page.locator("#activityList .request-row").count(), 1);
-            await page.goBack(); await ready(page);
-        }
-        await columns.first().focus(); await page.keyboard.press("Enter"); await ready(page);
-        assert.match(new URL(page.url()).hash, /^#activity/);
-        await page.goBack(); await ready(page);
-        assert.match(new URL(page.url()).hash, /^#home/);
-        await page.close();
     }
-}));
+    if (multiple) {
+        const zero = page.locator(".time-zero");
+        await expect(zero).toHaveAccessibleName(/0 Work IQ tool calls.*Not applicable.*Read date definition/);
+        await zero.focus(); await zero.press("Enter"); await expect(page.locator("#meaning")).toBeVisible();
+        await page.locator("#chartReferenceShowData").click();
+        const rows = page.locator("#chartReferenceExact tbody tr");
+        await expect(rows.locator("td:nth-child(2)")).toHaveText(["200","1","0","3"]);
+        await expect(rows.nth(2).getByRole("link")).toHaveCount(0);
+        const short = rows.nth(1).locator("td").first().getByRole("link");
+        await short.focus(); await short.press("Enter"); await ready(page);
+        await expect(page.locator("#activityList .request-card-prompt")).toHaveText("Synthetic chart request 15 0");
+        await page.goBack(); await expect(short).toBeFocused();
+    }
+});
 
-test("Reset clears all navigation scope, search and pagination; Back restores them without resetting theme/report choices", async () => fixture([["14", 17], ["17", 3]], async ({ context, url, requests }) => {
-    const page = await context.newPage();
-    await page.addInitScript(() => localStorage.setItem("workiq-evidence.theme", "dark"));
-    const previous = "#activity?chart=endpoint&bucket=month&range=custom&from=2026-09-14&to=2026-09-17&project=synthetic-project&service=Calendar&result=failure&scope=all&session=synthetic-session&page=2&expanded=true&layer=direct-request&endpoint=synthetic-path";
-    await page.goto(url + "/" + previous); await ready(page);
-    await page.locator("#activitySearch").fill("SYNTHETIC PRIVATE SEARCH");
-    assert.equal(page.url().includes("PRIVATE"), false, "Search text is never put in the URL");
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("scope"), "all");
-    const slice = new URL(page.url()).hash;
-    await page.locator("nav [data-nav=reports]").click();
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await page.locator('[name=promptMode][value=original]').check();
-    await page.locator('#formatOptions input[value=json]').check();
-    await page.locator("nav [data-nav=activity]").click(); await ready(page);
-    const beforeReset = new URL(page.url()).hash;
-    await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home");
-    assert.equal(await page.locator("#activitySearch").inputValue(), "");
-    const timeContext = await page.evaluate(() => ({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: Intl.DateTimeFormat().resolvedOptions().locale, timeZoneFallback: false, localeFallback: false }));
-    assert.deepEqual(requests.filter(request => request.path === "/api/snapshot").at(-1).input, { layer: "tool", groupBy: "workload", bucket: "week", filters: { scope: "history", includeMetadata: false }, limit: 8, timeContext });
-    assert.equal(await page.locator("#message").isVisible(), false, "A successful Reset needs no routine narration.");
-    assert.equal(await page.locator("#dateFilter").inputValue(), "capture");
-    for (const id of ["projectFilter", "serviceFilter"]) assert.equal(await page.locator("#" + id).inputValue(), "all");
-    assert.deepEqual(await page.locator("#outcomeFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)),
-        await page.locator("#outcomeFilter option").evaluateAll(nodes => nodes.map(node => node.value)));
-    assert.equal(await page.locator('[name=promptMode][value=original]').isChecked(), true);
-    assert.equal(await page.locator('#formatOptions input[value=json]').isChecked(), true);
-    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.theme")), "dark");
-    assert.equal(await page.locator("#filterChips").innerText(), "");
-    assert.equal(await page.locator("#resetView").count(), 1, "There is only one reset node, not competing empty-state resets");
-    assert.equal(await page.getByRole("button", { name: /^Reset/ }).count(), 0, "The reset is hidden at canonical Home");
-    await page.goBack(); await ready(page);
-    assert.equal(new URL(page.url()).hash, beforeReset);
-    assert.equal(await page.locator("#activitySearch").inputValue(), "SYNTHETIC PRIVATE SEARCH");
-    assert.equal(requests.filter(request => request.path === "/api/snapshot").at(-1).input.filters.scope, "all", "Both collections survives reset and Back");
-    await page.goForward(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home");
-    assert.equal(await page.locator("#activitySearch").inputValue(), "");
-    await page.goto(url + "/" + slice); await ready(page);
-    assert.equal(await page.locator("#activitySearch").inputValue(), "", "A copied deep link does not recover private search text");
-}));
+test("Reset clears applied filters and private Search; browser Back restores scope without leaking its text", async t => {
+    const { page, snapshot } = await setup(t,[["14",17],["17",3]],"/?bucket=month&scope=all&result=failure&range=custom&from=2026-09-14&to=2026-09-17");
+    await chooseTheme(page,"dark");
+    const query = "Synthetic chart request 14";
+    await restoreLegacySearch(page,query);
+    const before = page.url(); assert.ok(!decodeURI(before).includes(query));
+    await reset(page);
+    assert.deepEqual(snapshot().filters, { scope:"history", includeMetadata:false });
+    assert.equal(snapshot().bucket,"month");
+    await expect(page.locator("#activitySearch")).toHaveValue("");
+    await expect(page.locator("#activityCount")).toHaveText("20");
+    const cleared = page.url();
+    await page.goBack(); await ready(page); assert.equal(page.url(),before);
+    await expect(page.locator("#activitySearch")).toHaveValue(query);
+    await expect(page.locator("#activityCount")).toHaveText("3");
+    assert.equal(snapshot().filters.scope,"all");
+    await page.goForward(); await ready(page); assert.equal(page.url(),cleared);
+    await expect(page.locator("html")).toHaveAttribute("data-evidence-theme","dark");
+});
 
-test("Both collections is a meaningful route scope and reset restores Current activity", async () => fixture([["14", 17]], async ({ context, url, requests }) => {
-    const page = await context.newPage();
-    await page.goto(url); await ready(page);
-    await page.locator("#coverage > summary").click();
-    await selectActivityOption(page, "scopeFilter", "all"); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home?scope=all");
-    assert.equal(requests.filter(row => row.path === "/api/snapshot").at(-1).input.filters.scope, "all");
-    await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-    assert.equal(requests.filter(row => row.path === "/api/snapshot").at(-1).input.filters.scope, "history");
+test("Resetting Both collections returns to the saved collection and Back restores both", async t => {
+    const { page,snapshot } = await setup(t,[["14",17]]);
+    await selectActivityOption(page,"scopeFilter","all"); await ready(page);
+    assert.equal(snapshot().filters.scope,"all"); const before = page.url();
+    await reset(page); assert.equal(snapshot().filters.scope,"history");
     await page.goBack(); await ready(page);
-    assert.equal(await page.locator("#scopeFilter").inputValue(), "all");
-    assert.equal(requests.filter(row => row.path === "/api/snapshot").at(-1).input.filters.scope, "all");
-}));
+    assert.equal(page.url(),before); assert.equal(snapshot().filters.scope,"all");
+});
 
-test("reset preserves report selection and invalidates a pending preview without late resurrection or writes", async () => fixture([["14", 17]], async ({ context, url, requests, releasePreview }) => {
-    const page = await context.newPage();
-    await page.goto(url + "/#activity"); await ready(page);
-    await page.locator("#activityList input").first().check();
-    await page.locator("nav [data-nav=reports]").click();
-    const response = page.waitForResponse("**/api/preview");
-    await reportContents(page);
-    await page.locator("#exportBtn").click();
-    await page.getByText("Scanning selected evidence locally. No files are being written.", { exact: true }).waitFor();
-    await page.goBack(); await ready(page);
-    await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-    releasePreview(); await response;
-    assert.equal(await page.locator("#overlay").evaluate(node => node.open), false);
-    assert.equal(new URL(page.url()).hash, "#home");
-    await page.locator("nav [data-nav=reports]").click();
-    assert.equal(await page.locator("#exportBtn").isEnabled(), true, "Selection remains ready; reset only changed navigation");
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1/);
-    assert.equal(requests.filter(request => request.path === "/api/preview").length, 1);
-}));
+test("empty evidence has no invented time column or active filter", async t => {
+    const {page} = await setup(t,[]);
+    await expect(page.locator(".time-column,.time-zero")).toHaveCount(0);
+    await expect(page.locator("#activityListSummary")).toContainText("0 interactions");
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#filterChips")).toBeEmpty();
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
+    await expect(page.locator("#resetView")).toBeDisabled();
+});
 
-test("empty captured data has no fake zero column or redundant reset", async () => fixture([], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url); await ready(page);
-    assert.equal(await page.locator(".time-column,.time-zero").count(), 0);
-    assert.equal(await page.getByRole("button", { name: /^Reset/ }).count(), 0);
-    await page.locator('[data-chart=endpoint]').click();
-    await ready(page);
-    assert.equal(await page.getByRole("button", { name: "Reset to Home", exact: true }).count(), 1);
-}));
+test("reset and Back restore the filtered record page and its exact reader target", async t => {
+    const { page } = await setup(t, [["14",26]], "/?result=success");
+    const pager = page.getByRole("navigation",{name:"Analyze result pages"});
+    await pager.getByRole("button",{name:"Next",exact:true}).click();
+    await expect(pager).toContainText("9-16 of 21 interactions");
+    const pageRoute = page.url(), links = page.locator("#activityList .request-card-open");
+    const prompts = await links.allTextContents(), first = links.first();
+    await first.click(); await expect(page.locator("#contextSidebar")).toBeVisible();
+    await page.goBack(); await expect(first).toBeFocused(); await expect(pager).toContainText("9-16");
+    await reset(page); await expect(pager).toContainText("1-8 of 26");
+    await page.goBack(); await ready(page);
+    assert.equal(page.url(),pageRoute);
+    await expect(pager).toContainText("9-16 of 21");
+    await expect(links).toHaveText(prompts);
+});
 
-test("reset from paginated Activity and request deep links preserves the prior entry for Back", async () => fixture([["14", 26]], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url + "/#activity?page=1"); await ready(page);
-    await page.getByRole("button", { name: "Next request groups", exact: true }).click();
-    assert.match(await page.locator(".session-requests .pager").innerText(), /7-12 of 26/);
-    await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-    await page.goBack(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#activity?page=1");
-    assert.match(await page.locator(".session-requests .pager").innerText(), /7-12 of 26/);
-    await page.locator("#activityList .request-link").first().click();
-    const requestRoute = new URL(page.url()).hash;
-    assert.match(requestRoute, /^#request.*request=/);
-    await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-    assert.equal(new URL(page.url()).hash, "#home");
-    await page.goBack(); await ready(page);
-    assert.equal(new URL(page.url()).hash, requestRoute);
-    assert.equal(await page.locator("#requestView").isVisible(), true);
-    await page.goBack(); await ready(page);
-    assert.match(await page.locator(".session-requests .pager").innerText(), /7-12 of 26/);
-}));
+test("reset keeps an interaction selected for a report without publishing a late preview or saving files", async t => {
+    const {page,requests} = await setup(t,[["14",17]],"/?result=failure");
+    await page.clock.setFixedTime(new Date("2026-09-18T12:00:00Z"));
+    await navigateMain(page,"reports");
+    const chosen = page.getByRole("checkbox",{name:"Select request for report: Synthetic chart request 14 0",exact:true});
+    const enter = Promise.withResolvers(), release = Promise.withResolvers();
+    await page.route("**/api/preview",async route => {
+        const response = await route.fetch(); assert.ok(response.ok()); enter.resolve(); await release.promise;
+        await route.fulfill({response});
+    },{times:1});
+    try {
+        await page.getByRole("button",{name:/^Activity source:/}).click();
+        await page.getByRole("radio",{name:/^Selected interactions/}).check();
+        await chosen.check();
+        await page.keyboard.press("Escape");
+        await page.locator("#prepareReportPreview").click(); await enter.promise;
+        await page.goBack(); await navigateMain(page,"analyze"); await ready(page);
+        await reset(page);
+        const late = page.waitForResponse(r=>r.url().endsWith("/api/preview"));
+        release.resolve(); await (await late).finished();
+        await expect(page.locator("#reportPreviewDrawer")).toBeHidden();
+        assert.equal(requests.filter(r=>r.path==="/api/export").length,0);
+        await navigateMain(page,"reports");
+        await page.getByRole("button",{name:/^Activity source:/}).click();
+        await expect(chosen).toBeChecked();
+        const previews = requests.filter(r=>r.path==="/api/preview");
+        assert.equal(previews.length,1);
+        assert.deepEqual(previews[0].body.selection.scenarioIds,["synthetic-14-0"]);
+    } finally { release.resolve(); }
+});
 
-test("Reset stays usable during a pending slice read and its snapshot wins over the late response", async () => fixture([["14", 17]], async ({ context, url }) => {
-    const page = await context.newPage();
-    await page.goto(url); await ready(page);
-    let release;
-    const held = new Promise(resolve => { release = resolve; });
-    let received;
-    const receivedSlice = new Promise(resolve => { received = resolve; });
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch();
-        if (route.request().postDataJSON().filters.outcomes?.[0] === "failure") {
-            received(); await held;
-        }
-        await route.fulfill({ response });
+test("a pending slice cannot replace reset scope with stale results", async t => {
+    const {page,snapshot} = await setup(t,[["14",17],["17",3]]);
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    await page.route("**/api/snapshot",async route => {
+        const res = await route.fetch();
+        if (route.request().postDataJSON().filters.from === "2026-09-14") { entered.resolve(); await release.promise; }
+        await route.fulfill({response:res});
     });
     try {
-        await selectActivityOption(page, "outcomeFilter", "failure");
-        await receivedSlice;
-        assert.equal(await page.getByRole("button", { name: "Reset to Home", exact: true }).isVisible(), true);
-        await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
-        assert.equal(new URL(page.url()).hash, "#home");
-        assert.equal(await page.locator("#activityCount").textContent(), "17");
-        const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.outcomes?.[0] === "failure");
-        release(); await late;
-        await page.locator("nav [data-nav=activity]").click();
-        await openActivitySessions(page);
-        assert.equal(await page.locator("#activityList .request-row").count(), 6);
-        const resultDefaults = await page.locator("#outcomeFilter").evaluate(node => ({
-            selected: [...node.selectedOptions].map(option => option.value),
-            available: [...node.options].map(option => option.value),
-        }));
-        assert.deepEqual(resultDefaults.selected, resultDefaults.available, "Reset retains all canonical result options after the late response");
-        assert.match(await page.locator(".session-requests .pager").textContent(), /of 17 request groups/);
-    } finally { release(); }
-}));
+        await page.locator("a.time-segment-link[data-segment=failure]").first().click(); await entered.promise;
+        await reset(page);
+        const late = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.request().postDataJSON().filters.from === "2026-09-14");
+        release.resolve(); await (await late).finished();
+        await expect(page.locator("#activityCount")).toHaveText("20");
+        assert.deepEqual(snapshot().filters,{scope:"history",includeMetadata:false});
+        await expect(page.locator("#activityListSummary")).toHaveText("20 interactions · 20 matching tool calls");
+    } finally { release.resolve(); }
+});

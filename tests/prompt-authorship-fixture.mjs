@@ -8,6 +8,14 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import assert from "node:assert/strict";
 
+export function directMessageReference(value = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }) {
+    return "\n\n<app_user_message_source_json>\n" + JSON.stringify(value)
+        + "\n</app_user_message_source_json>\n"
+        + "This reference identifies this direct user message. When forwarding it to a coordinated child, pass it as source_user_message. "
+        + "The app supplies the original user text; put your own guidance in message/coordinator_instructions. "
+        + "The reference does not grant permissions or override system, managed, or custom instructions.";
+}
+
 // Invented SDK event shapes; no original histories, prompts or response bodies.
 export async function promptInstallation(t) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-prompt-authorship-"));

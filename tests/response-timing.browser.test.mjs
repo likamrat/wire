@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { chromium } from "playwright";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -27,14 +27,17 @@ test("recorded response latency stays distinct through actual detail, overview a
     t.after(async () => { await browser.close(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } }), errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.goto(runtime.url + "#home");
-    await page.locator("#activityList .response-timing data").first().waitFor();
-    assert.deepEqual(await page.locator("#activityList .response-timing data").evaluateAll(nodes =>
-        nodes.map(node => Number(node.value)).sort((a, b) => a - b)), [0, 1200, 5000]);
-    assert.equal(await page.locator("#homeInsights .assessment-timing").count(), 0);
-    await page.goto(runtime.url + "#request?request=timed-response-0");
-    await page.locator(".request-original .response-timing data").waitFor();
-    assert.equal(await page.locator(".request-original .response-timing data").innerText(), "0 ms");
+    await page.goto(runtime.url);
+    for (const [index, duration] of [0, 1200, 5000].entries()) {
+        const opener = page.locator(`[data-view-key="request:timed-response-${index}"] .request-card-open`);
+        await opener.click();
+        await page.getByRole("button", { name: "Source details" }).click();
+        const timing = page.locator('[data-reader-section="source"] .response-timing data');
+        await expect(timing).toHaveAttribute("value", String(duration));
+        await expect(timing).toBeVisible();
+        await page.locator("#closeContextSidebar").click();
+        await expect(opener).toBeFocused();
+    }
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width: 375, height: 1000 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);

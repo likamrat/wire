@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 
 for (const [width, reducedMotion] of [[1920, "reduce"], [676, "reduce"], [1920, "no-preference"]])
-test(`Filters and guide visibly glide like both reference sidebars (${width}px, ${reducedMotion})`, { timeout: 30000 }, async t => {
+test(`Filters glide like the sidebars while the Analyze Guide stays in-page (${width}px, ${reducedMotion})`, { timeout: 30000 }, async t => {
     const app = await authorFilterFixture(t, { serviceCases: true });
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
     const page = await browser.newPage({ viewport: { width, height: 1080 }, reducedMotion });
@@ -39,7 +39,7 @@ test(`Filters and guide visibly glide like both reference sidebars (${width}px, 
                 run.samples.push({ progress, x: box.x, width: box.width, visible: node.checkVisibility() });
                 if (animation.playState === "running") requestAnimationFrame(sample);
             }
-            requestAnimationFrame(sample);
+            sample();
             return animation;
         };
     });
@@ -61,7 +61,7 @@ test(`Filters and guide visibly glide like both reference sidebars (${width}px, 
     await expect(page.locator("#contextSidebar")).toBeHidden(); await settle();
     for (const [trigger, panel, close] of [
         ["#openAnalyzeFilters", "#analyzeFilterDialog", "#closeAnalyzeFilters"],
-        ["#openChartReference", "#meaning", "#closeChartReference"],
+        ["#openChartReference", "#meaning", "#analyzeResultsSection"],
     ]) {
         await page.locator(trigger).click();
         await expect(page.locator(panel)).toBeVisible(); await settle();
@@ -75,14 +75,17 @@ test(`Filters and guide visibly glide like both reference sidebars (${width}px, 
         await writeFile(path.join(process.env.WIRE_MOTION_PARITY_PROOFS, `motion-${width}-${reducedMotion}.json`),
             JSON.stringify({ width, reducedMotion: reducedMotion === "reduce", runs }, null, 2));
     }
-    for (const id of [width >= 700 ? "sidebar" : "navigationDrawer", "contextSidebar", "analyzeFilterDialog", "meaning"]) {
+    assert.equal(runs.filter(run => run.id === "meaning").length, 0, "The Analyze reader has no opening or closing glide");
+    for (const id of [width >= 700 ? "sidebar" : "navigationDrawer", "contextSidebar", "analyzeFilterDialog"]) {
         const animations = runs.filter(run => run.id === id);
         assert.equal(animations.length, 2, `${id}: explicit opening and closing follow the reference policy`);
         for (const run of animations) {
             assert.equal(run.duration, 320); assert.equal(run.easing, "cubic-bezier(0.2, 0, 0, 1)");
-            const interior = run.samples.filter(sample => sample.visible && sample.progress > .02 && sample.progress < .98);
-            assert.ok(interior.length >= 2, `${id}: intermediate painted frames, not just animate() calls`);
-            const values = interior.map(sample => id === "sidebar" ? sample.width : sample.x);
+            const visible = run.samples.filter(sample => sample.visible && sample.width > 0);
+            const coordinate = sample => Math.round(id === "sidebar" ? sample.width : sample.x);
+            const interior = visible.filter(sample => sample.progress > 0 && sample.progress < 1);
+            assert.ok(new Set(interior.map(coordinate)).size >= 2, `${id}: distinct intermediate positions, not just animate() calls`);
+            const values = visible.map(coordinate);
             assert.ok(Math.max(...values) - Math.min(...values) > 40, `${id}: visible horizontal travel matches the reference sidebars`);
         }
     }

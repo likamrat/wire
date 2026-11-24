@@ -82,6 +82,8 @@ for (const [theme, width, scale] of [["light", 1440, 100], ["dark", 375, 200]]) 
         await page.getByRole("button", { name: "Turn off and delete responses", exact: true }).click();
         await page.locator("#assessmentSetup form[aria-busy=true]").waitFor();
         assert.equal(await choice.isDisabled(), true);
+        assert.equal(await choice.isChecked(), true, "Turning saving off does not confirm revocation");
+        assert.equal(await page.locator("#assessmentSetup .assessment-applied").innerText(), "Turning off reply saving. Last confirmed setting: on.");
         const proof = process.env.WIRE_DECISION_PROOF_DIR;
         if (proof) await mkdir(proof, { recursive: true });
         async function capture(phase) {

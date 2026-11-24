@@ -1,8 +1,24 @@
 export function initializeNavigationPreference() {
-    const key = "workiq-evidence.navigation";
+    const key = "workiq-evidence.navigation", widthKey = key + "-width";
     const root = document.documentElement, listeners = new Set();
     const valid = value => value === "expanded" || value === "collapsed";
-    let preference = "expanded", storage, storageUnavailable = false;
+    let preference = "expanded", width = null, storage, storageUnavailable = false;
+    const validWidth = value => Number.isInteger(value) && value >= 216 && value <= 520;
+    function readWidth(raw) {
+        if (raw === null) return null;
+        if (/^\d{3}$/.test(raw) && validWidth(Number(raw))) return Number(raw);
+        console.warn("Unrecognized navigation width. Using the default width.");
+        return null;
+    }
+    function paintWidth(value) {
+        if (value === null) {
+            delete root.dataset.navigationSized;
+            root.style.removeProperty("--navigation-preferred-width");
+        } else {
+            root.dataset.navigationSized = "";
+            root.style.setProperty("--navigation-preferred-width", value + "px");
+        }
+    }
     function storageFailure(error) {
         if (!["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
         storageUnavailable = true;
@@ -13,13 +29,17 @@ export function initializeNavigationPreference() {
         const stored = storage.getItem(key);
         if (valid(stored)) preference = stored;
         else if (stored !== null) console.warn("Unrecognized saved navigation preference. Keeping navigation expanded.");
+        width = readWidth(storage.getItem(widthKey));
     } catch (error) { storageFailure(error); }
     function apply() {
         root.dataset.navigation = preference;
-        for (const listener of listeners) listener({ preference, storageUnavailable });
+        paintWidth(width);
+        for (const listener of listeners) listener({ preference, width, storageUnavailable });
     }
     window.addEventListener("storage", event => {
-        if (storageUnavailable || event.storageArea !== storage || (event.key !== key && event.key !== null)) return;
+        if (storageUnavailable || event.storageArea !== storage) return;
+        if (event.key === widthKey) { width = readWidth(event.newValue); apply(); return; }
+        if (event.key !== key && event.key !== null) return;
         if (!valid(event.newValue)) {
             console.warn("Unrecognized navigation preference from another panel. Keeping the current navigation.");
             return;
@@ -29,7 +49,19 @@ export function initializeNavigationPreference() {
     });
     apply();
     return {
-        subscribe(listener) { listeners.add(listener); listener({ preference, storageUnavailable }); },
+        subscribe(listener) { listeners.add(listener); listener({ preference, width, storageUnavailable }); },
+        previewWidth: paintWidth,
+        setWidth(value) {
+            if (value !== null && !validWidth(value)) throw new RangeError("Choose a supported navigation width.");
+            width = value;
+            try {
+                storage = window.localStorage;
+                if (value === null) storage.removeItem(widthKey);
+                else storage.setItem(widthKey, String(value));
+                storageUnavailable = false;
+            } catch (error) { storageFailure(error); }
+            apply();
+        },
         setPreference(value) {
             if (!valid(value)) throw new Error("Choose expanded or collapsed navigation.");
             preference = value;
@@ -53,15 +85,83 @@ export function mountSidebarNavigation(ux, preference) {
     const collapse = $("navigationCollapse");
     const header = document.querySelector(".app-header");
     const brand = $("shellBrand");
+    const divider = document.createElement("div");
+    divider.className = "navigation-resize";
+    divider.tabIndex = 0;
+    divider.setAttribute("role", "separator");
+    divider.setAttribute("aria-label", "Navigation width");
+    divider.setAttribute("aria-orientation", "vertical");
+    divider.setAttribute("aria-controls", rail.id);
+    rail.append(divider);
+    const minWidth = () => $("wireAccountEntry").hidden ? 216 : 248;
+    // Match the CSS viewport after space is reserved for a native scrollbar.
+    const maxWidth = () => Math.min(520, Math.floor(document.documentElement.getBoundingClientRect().width * .45));
+    const bounded = value => Math.max(minWidth(), Math.min(maxWidth(), Math.round(value)));
     function measure() {
         document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
-        if (!media.matches) document.documentElement.style.setProperty("--app-sidebar-width", rail.getBoundingClientRect().width + "px");
+        if (!media.matches) {
+            const current = rail.getBoundingClientRect().width;
+            document.documentElement.style.setProperty("--app-sidebar-width", current + "px");
+            if (!collapsed && !rail.hasAttribute("data-navigation-moving")) {
+                divider.setAttribute("aria-valuemin", String(minWidth()));
+                divider.setAttribute("aria-valuemax", String(maxWidth()));
+                divider.setAttribute("aria-valuenow", String(Math.round(current)));
+                divider.setAttribute("aria-valuetext", `${Math.round(current)} pixels wide`);
+            }
+        }
     }
     const headerSize = new ResizeObserver(measure);
     headerSize.observe(header);
     headerSize.observe(rail);
     let restoreFocus = true, collapsed = false, navigationFocus = null;
     let animations = [], motionOrigin = null, drawerAnimation = null, drawerClosing = false;
+    let savedWidth = null, drag = null, frame = 0;
+    function endDrag(commit) {
+        if (!drag) return;
+        const { id, width, start } = drag;
+        drag = null;
+        cancelAnimationFrame(frame); frame = 0;
+        rail.removeAttribute("data-resizing");
+        if (divider.hasPointerCapture(id)) divider.releasePointerCapture(id);
+        if (commit && width !== start) preference.setWidth(width);
+        else preference.previewWidth(savedWidth);
+    }
+    ux.tooltip(divider, () => drag ? "" : "Drag or use arrow keys to resize. Double-click or press Enter to reset.", { placement: "right" });
+    divider.addEventListener("pointerdown", event => {
+        if (!event.isPrimary || event.button !== 0 || collapsed || media.matches) return;
+        ux.hideTooltip();
+        const start = Math.round(rail.getBoundingClientRect().width);
+        drag = { id: event.pointerId, x: event.clientX, start, width: start };
+        rail.dataset.resizing = "";
+        divider.setPointerCapture(event.pointerId);
+    });
+    divider.addEventListener("pointermove", event => {
+        if (drag?.id !== event.pointerId) return;
+        drag.width = bounded(drag.start + event.clientX - drag.x);
+        if (!frame) frame = requestAnimationFrame(() => { frame = 0; preference.previewWidth(drag.width); });
+    });
+    divider.addEventListener("pointerup", event => {
+        if (drag?.id === event.pointerId) {
+            drag.width = bounded(drag.start + event.clientX - drag.x);
+            endDrag(true);
+        }
+    });
+    for (const type of ["pointercancel", "lostpointercapture"]) divider.addEventListener(type, event => {
+        if (drag?.id === event.pointerId) endDrag(false);
+    });
+    divider.addEventListener("dblclick", () => preference.setWidth(null));
+    divider.addEventListener("keydown", event => {
+        if (drag) {
+            if (event.key === "Escape") { event.preventDefault(); endDrag(false); }
+            return;
+        }
+        const width = rail.getBoundingClientRect().width;
+        const next = { ArrowLeft: width - 16, ArrowRight: width + 16, Home: minWidth(), End: maxWidth(), Enter: null }[event.key];
+        if (next === undefined || event.altKey || event.ctrlKey || event.metaKey) return;
+        event.preventDefault(); ux.hideTooltip();
+        preference.setWidth(next === null ? null : bounded(next));
+    });
+    window.addEventListener("blur", () => endDrag(false));
     function captureBrand() {
         const link = brand.querySelector(".brand-home"), bounds = link.getBoundingClientRect();
         return {
@@ -72,18 +172,11 @@ export function mountSidebarNavigation(ux, preference) {
             })),
         };
     }
-    function captureFooter() {
-        const footer = $("navigationFooter");
-        const capture = node => node?.checkVisibility() ? { node, bounds: node.getBoundingClientRect() } : null;
-        return { ...capture(footer), account: capture($("wireAccountTrigger")),
-            utility: capture(footer.querySelector("[data-nav]")), gap: parseFloat(getComputedStyle(footer).columnGap) };
-    }
     function captureGeometry() {
         return {
             width: rail.getBoundingClientRect().width,
             brand: captureBrand(),
-            footer: captureFooter(),
-            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label,.wire-account-copy,.wire-account-trigger>svg")].map(node => {
+            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label,.wire-account-copy")].map(node => {
                 const style = getComputedStyle(node), bounds = node.getBoundingClientRect();
                 return { node, width: bounds.width, height: bounds.height, opacity: style.opacity,
                     paddingTop: style.paddingTop, paddingBottom: style.paddingBottom };
@@ -100,7 +193,7 @@ export function mountSidebarNavigation(ux, preference) {
     }
     content.addEventListener("click", event => {
         if (rail.hasAttribute("data-navigation-moving") && event.target instanceof Element
-            && event.target.closest("#wireAccountTrigger")) finishMotion();
+            && event.target.closest("#wireAccountTrigger,#wireFeedback")) finishMotion();
     }, { capture: true });
     function glide(from) {
         const to = captureGeometry();
@@ -112,26 +205,6 @@ export function mountSidebarNavigation(ux, preference) {
         };
         rail.dataset.navigationMoving = "";
         const width = animate(rail, [{ width: from.width + "px", minWidth: "0px" }, { width: to.width + "px", minWidth: "0px" }]);
-        const originFooter = from.footer, targetFooter = to.footer;
-        const placed = (item, footer) => ({ position: "absolute", left: item.bounds.x - footer.bounds.x + "px",
-            bottom: footer.bounds.bottom - item.bounds.bottom + "px", width: item.bounds.width + "px",
-            height: item.bounds.height + "px", maxWidth: "none", overflow: "hidden" });
-        let split = null;
-        if (originFooter.account && targetFooter.account && originFooter.account.node === targetFooter.account.node) {
-            const start = originFooter.utility.bounds.x - originFooter.account.bounds.x;
-            const end = targetFooter.utility.bounds.x - targetFooter.account.bounds.x;
-            const clearance = Math.min(originFooter.account.bounds.width, targetFooter.account.bounds.width) + targetFooter.gap;
-            split = Math.max(0, Math.min(1, (clearance - start) / (end - start)));
-            const first = placed(originFooter.account, originFooter), last = placed(targetFooter.account, targetFooter);
-            // Keep the account above Settings until the rail has room for two full targets.
-            animate(targetFooter.account.node, [{ ...first, offset: 0 },
-                { ...(collapsed ? last : first), offset: split }, { ...last, offset: 1 }]);
-        }
-        const firstFooter = { height: originFooter.bounds.height + "px" }, lastFooter = { height: targetFooter.bounds.height + "px" };
-        animate(targetFooter.node, split === null ? [firstFooter, lastFooter] : [
-            { ...firstFooter, offset: 0 }, { ...(collapsed ? lastFooter : firstFooter), offset: split }, { ...lastFooter, offset: 1 },
-        ]);
-        animate(targetFooter.utility.node, [placed(originFooter.utility, originFooter), placed(targetFooter.utility, targetFooter)]);
         const originBrand = from.brand, targetBrand = to.brand;
         animate(targetBrand.link, [
             { width: originBrand.bounds.width + "px", marginLeft: originBrand.inset + "px",
@@ -183,17 +256,66 @@ export function mountSidebarNavigation(ux, preference) {
     const headerHelpAvoid = () => [...content.querySelectorAll("[data-nav]"),
         ...(media.matches ? [$("closeNavigation")] : [$("wireSearch"), $("themePreference"),
             $("openChartReference"), $("openAnalyzeFilters"), $("refreshBtn")])].filter(Boolean);
-    ux.tooltip(brand.querySelector(".brand-home"), "WorkIQ Request Explorer", {
+    ux.tooltip(brand.querySelector(".brand-home"), "Work IQ Request Explorer", {
         anchor: brand, placement: "right", tone: "contrast", avoid: headerHelpAvoid,
     });
     ux.tooltip(collapse, label, { placement: "right", tone: "contrast", avoid: headerHelpAvoid });
-    for (const node of content.querySelectorAll("[data-nav]")) {
+    for (const node of content.querySelectorAll(".primary-navigation [data-nav]")) {
         const name = node.textContent.trim();
         node.setAttribute("aria-label", name);
-        const utility = Boolean(node.closest(".navigation-footer"));
-        ux.tooltip(node, () => utility || !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
+        ux.tooltip(node, () => !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
     }
+    const feedback = $("wireFeedback");
+    const panel = document.createElement("section");
+    panel.id = "wireFeedbackPanel";
+    panel.className = "wire-feedback-panel";
+    panel.popover = "auto";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-labelledby", "wireFeedbackTitle");
+    panel.innerHTML = `<h2 id="wireFeedbackTitle">Report a bug or suggest a feature</h2>
+        <label for="wireIssueTitle">Title</label>
+        <input id="wireIssueTitle" type="text" required maxlength="256" placeholder="Summarize the issue" autofocus>
+        <label for="wireFeedbackText">Description <span>(optional)</span></label>
+        <textarea id="wireFeedbackText" placeholder="Add details about the bug or feature"></textarea>
+        <p id="wireFeedbackNotice">Review on GitHub. The issue is public only after you submit it.</p>
+        <p id="wireFeedbackError" role="alert" hidden></p>
+        <div class="wire-feedback-actions"><button type="button" id="wireFeedbackCancel">Cancel</button><button type="button" id="wireFeedbackOpen" class="primary" aria-describedby="wireFeedbackNotice" disabled>Open on GitHub</button></div>`;
+    feedback.parentElement.after(panel);
+    const title = $("wireIssueTitle"), description = $("wireFeedbackText"), openIssue = $("wireFeedbackOpen"), error = $("wireFeedbackError");
+    let toggling = false;
+    for (const node of content.querySelectorAll(".footer-utilities > *")) {
+        ux.tooltip(node, () => !toggling && !panel.matches(":popover-open") ? node.getAttribute("aria-label") : "", {
+            placement: "top", tone: "contrast", avoid: () => [...node.parentElement.children].filter(sibling => sibling !== node),
+        });
+    }
+    panel.addEventListener("beforetoggle", event => {
+        toggling = true;
+        ux.hideTooltip();
+        if (event.newState === "closed") {
+            title.value = description.value = "";
+            openIssue.disabled = true;
+            error.hidden = true;
+        }
+    });
+    panel.addEventListener("toggle", () => { toggling = false; });
+    panel.addEventListener("input", () => { openIssue.disabled = !title.value.trim(); error.hidden = true; });
+    $("wireFeedbackCancel").addEventListener("click", () => { panel.hidePopover(); ux.restoreFocus(feedback); });
+    openIssue.addEventListener("click", () => {
+        if (!title.value.trim()) return;
+        const url = new URL("https://github.com/likamrat/wire/issues/new");
+        url.searchParams.set("title", title.value.trim());
+        if (description.value) url.searchParams.set("body", description.value);
+        if (url.href.length > 8192) {
+            error.textContent = "The description is too long for a link. Shorten it and add the rest on GitHub.";
+            error.hidden = false;
+            return;
+        }
+        // Keep both fields intact if the host blocks opening a new tab.
+        window.open(url.href, "_blank", "noopener,noreferrer");
+    });
     preference.subscribe(state => {
+        savedWidth = state.width;
+        endDrag(false);
         ux.hideTooltip();
         finishMotion();
         collapsed = state.preference === "collapsed";
@@ -267,12 +389,12 @@ export function mountSidebarNavigation(ux, preference) {
     drawer.addEventListener("cancel", event => { event.preventDefault(); close(); });
     window.addEventListener("keydown", event => {
         if (!drawer.open || event.key !== "Escape") return;
-        if (event.defaultPrevented || drawer.querySelector("#wireAccountMenu:popover-open")) return;
+        if (event.defaultPrevented || drawer.querySelector("#wireAccountMenu:popover-open,#wireFeedbackPanel:popover-open")) return;
         ux.hideTooltip();
         event.preventDefault();
         event.stopPropagation();
         close();
-    }, { capture: true });
+    });
     drawer.addEventListener("click", (event) => {
         if (event.target !== drawer) return;
         const bounds = drawer.getBoundingClientRect();
@@ -285,6 +407,7 @@ export function mountSidebarNavigation(ux, preference) {
         restoreFocus = true;
     });
     function settleMotion() {
+        endDrag(false);
         finishMotion();
         finishDrawerMotion();
     }

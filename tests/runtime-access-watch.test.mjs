@@ -1,10 +1,10 @@
+import { request as httpRequest } from "node:http";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate } from "node:timers/promises";
-import { request as httpRequest } from "node:http";
 import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
 import { sessionStorage } from "../lib/microsoft-session-state.mjs";
 import { createFixtureRuntimeAccess } from "../lib/runtime-access.mjs";
@@ -334,29 +334,19 @@ test("a change during body parsing is in the first snapshot, not lost between a 
 test("watch notification preserves committed mutation uncertainty and original same-owner control receipts", async t => {
     const app = await fixture(t), a = await app.panel(), b = await app.panel();
     const signedIn = await app.command(a.capability, "wire-sign-in");
-    const bundles = [];
-    for (let index = 0; index < 2; index++) {
-        const preview = await app.api(a.capability, "/api/preview", { options: { formats: ["html", "json"] },
-            selection: { kind: "all", revision: (await loadBoardState(app.context)).revision } });
-        assert.equal(preview.code, 200);
-        await app.api(a.capability, "/api/privacy-review", { previewId: preview.body.previewId, disclosureReviewed: true });
-        const saved = await app.api(a.capability, "/api/export", { previewId: preview.body.previewId, confirmed: true });
-        assert.equal(saved.code, 200); bundles.push(saved.body.bundle);
-    }
-    const preview = await app.api(a.capability, "/api/report-comparison/preview", {
-        baselineId: bundles[0].bundleId, laterId: bundles[1].bundleId, formats: ["html"],
-    });
+    const preview = await app.api(a.capability, "/api/preview", { options: { formats: ["html"] },
+        selection: { kind: "all", revision: (await loadBoardState(app.context)).revision } });
     assert.equal(preview.code, 200);
-    await app.api(a.capability, "/api/report-comparison/review", { previewId: preview.body.previewId, disclosureReviewed: true });
+    await app.api(a.capability, "/api/privacy-review", { previewId: preview.body.previewId, disclosureReviewed: true });
     const entered = Promise.withResolvers(), resume = Promise.withResolvers(), original = app.runtime.collector.status.bind(app.runtime.collector);
     t.mock.method(app.runtime.collector, "status", async (...args) => {
         const result = await original(...args); entered.resolve(); await resume.promise; return result;
     });
     const seed = (await app.watch(a.capability)).body;
     const { pending: watching } = await startWatch(app, a.capability, cursor(seed));
-    const save = app.api(a.capability, "/api/report-comparison/save", { previewId: preview.body.previewId, confirmed: true });
+    const save = app.api(a.capability, "/api/export", { previewId: preview.body.previewId, confirmed: true });
     await entered.promise;
-    assert.equal((await loadBoardState(app.context)).exports.length, 3);
+    assert.equal((await loadBoardState(app.context)).exports.length, 1);
     await app.command(b.capability, "wire-sign-out");
     assert.equal((await watching).body.retained, false);
     resume.resolve();
@@ -368,7 +358,7 @@ test("watch notification preserves committed mutation uncertainty and original s
     const receiptInput = { schemaVersion: 1, operationId: signedIn.operation.operationId };
     assert.deepEqual((await app.api(a.capability, "/api/access/receipt", receiptInput)).body, signedIn.body);
     assert.equal((await app.api(b.capability, "/api/access/receipt", receiptInput)).code, 403);
-    assert.equal((await loadBoardState(app.context)).exports.length, 3);
+    assert.equal((await loadBoardState(app.context)).exports.length, 1);
     assert.equal((await app.api(a.capability, "/api/report-artifacts/list", {})).code, 403);
 });
 

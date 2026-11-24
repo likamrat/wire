@@ -28,7 +28,7 @@ test("prompt shares partition complete canonical origins, not calls, aliases, fo
     assert.equal(input.analytics.totals.count, 36);
     assert.equal(input.analytics.visibleGroups.length, 1);
     assert.equal(model.total, 18);
-    assert.deepEqual(model.rows.map(row => row.label), ["My prompts", "Agent prompts", "Author unverified"]);
+    assert.deepEqual(model.rows.map(row => row.label), ["Human prompts", "Agent prompts", "Author unverified"]);
     assert.deepEqual(counts(model), [6, 6, 6]);
     assert.deepEqual(model.rows.map(row => row.percentage), ["33.3%", "33.3%", "33.3%"]);
     assert.equal(model.rows.reduce((sum, row) => sum + row.fraction, 0), 1);

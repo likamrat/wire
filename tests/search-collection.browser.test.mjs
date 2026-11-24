@@ -17,9 +17,8 @@ import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-tran
 import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
 import { createNativePersistence } from "../lib/native-persistence.mjs";
 import { createNativeRuntimeAccess } from "../lib/runtime-access.mjs";
-import { openReportComparison } from "./report-journey-helpers.mjs";
 
-test("literal Search follows real collection advances while saved-report Compare stays frozen", { timeout: 45000 }, async t => {
+test("literal Search follows real collection advances while the saved report stays frozen", { timeout: 45000 }, async t => {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) }, []);
     const appDbPath = path.join(root, "data.db"), sessionRoot = path.join(root, "session-state"), sourceId = randomUUID();
     const db = new DatabaseSync(appDbPath);
@@ -142,17 +141,15 @@ test("literal Search follows real collection advances while saved-report Compare
     page.on("response", response => {
         if (response.url().endsWith("/api/retained/microsoft/search") && response.ok()) void response.json().then(value => nativeSearch.push(value));
     });
-    await page.goto(runtime.url + "#reports");
+    await page.goto(runtime.url + "reports?task=library");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await openReportComparison(page);
-    const compare = page.locator("#comparisonWorkspace");
-    for (const [index, label] of ["Earlier report", "Later report"].entries()) {
-        await compare.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup [data-value="${saved[index].bundleId}"]`).click();
-    }
-    await compare.getByRole("button", { name: "Compare reports", exact: true }).click();
-    await expect(compare.locator(".comparison-native-results")).toBeVisible();
-    const frozen = await compare.locator(".comparison-native-results").innerText(), before = await loadBoardState(context);
+    const row = page.locator(`[data-bundle-id="${saved[0].bundleId}"]`);
+    await row.locator(".saved-report-title").click();
+    const savedReportReader = page.locator("#savedReportReader");
+    await expect(savedReportReader).toBeVisible();
+    const document = savedReportReader.frameLocator("iframe").locator("body");
+    await expect(document).toContainText("Invented earlier report");
+    const frozen = await document.innerText(), before = await loadBoardState(context);
     await page.locator("#wireSearch").fill("invented");
     await expect(page.locator("#wireSearchResults button").first()).toBeVisible();
     await expect(page.locator("#wireNativeSearch .wire-search-hit").first()).toBeVisible();
@@ -187,7 +184,7 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(page.locator("#wireNativeSearch")).toContainText("1 match across saved dates.");
     await expect(page.locator("#wireNativeSearch")).not.toContainText("0 unavailable text");
     await expect(page.locator("#wireSearchCoverage")).toBeHidden();
-    assert.equal(await compare.locator(".comparison-native-results").innerText(), frozen);
+    assert.equal(await document.innerText(), frozen);
     assert.ok(nativeSearch.at(-1).revision > before.revision);
     assert.equal((await loadBoardState(context)).nativeRetention.settings.paused, false);
     assert.ok(searchReads.length < 8, "Known read refreshes must stay bounded rather than loop.");
@@ -196,7 +193,7 @@ test("literal Search follows real collection advances while saved-report Compare
         await page.screenshot({ path: path.join(proof, "search-after-collection.png") });
         await fs.writeFile(path.join(proof, "search-advance.json"), JSON.stringify({
             beforeRevision: before.revision, afterRevision: nativeSearch.at(-1).revision,
-            captures, queryRequests: searchReads.length, comparisonUnchanged: true, ordinaryMatches: 0, microsoftMatches: 1,
+            captures, queryRequests: searchReads.length, reportUnchanged: true, ordinaryMatches: 0, microsoftMatches: 1,
             nativeTarget: nativeSearch.at(-1).page.items[0].target,
             nativeSourceRevision: nativeSearch.at(-1).sourceRevision,
         }, null, 2));
@@ -214,7 +211,10 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(original).toContainText("Read the invented records.");
     await expect(original).toBeFocused();
     const readingUrl = page.url();
-    assert.equal(new URLSearchParams(new URL(readingUrl).hash.split("?")[1]).get("nativeRevision"), String(acceptedSearch.revision));
+    const nativeAddress = new URL(readingUrl);
+    assert.equal(nativeAddress.pathname, "/request");
+    assert.equal(nativeAddress.hash, "");
+    assert.deepEqual([...nativeAddress.searchParams].sort(), [["origin", "reports"], ["privateView", "required"]]);
     const expandedCall = reader.locator(".reader-call").filter({ hasText: "mcp__graph__CallGraph" });
     await expandedCall.locator(".reader-call-toggle").click();
     await expect(expandedCall.getByRole("button", { name: "Copy input", exact: true })).toBeVisible();
@@ -233,7 +233,7 @@ test("literal Search follows real collection advances while saved-report Compare
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
-    assert.equal(await compare.locator(".comparison-native-results").innerText(), frozen);
+    assert.equal(await document.innerText(), frozen);
     await page.locator("#wireSearch").fill("No invented record matches this phrase");
     await expect(page.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.");
     await expect(page.locator("#wireSearchRetry")).toBeHidden();
@@ -358,16 +358,29 @@ test("normal Search survives quiet automatic collection and fences real source c
     const changed = (await api("/api/search/status")).body;
     assert.equal(changed.indexId, null);
     releaseRead();
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+    // A collected fence retires the old response and automatically reissues visible navigation
+    // Search. The empty intermediate DOM can be gone before the next browser sample.
+    await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });
+    const refreshed = (await api("/api/search/status")).body;
+    assert.notEqual(refreshed.indexId, ready.indexId);
+    assert.ok(refreshed.corpus.generation > ready.corpus.generation);
     assert.ok((await loadBoardState(context)).evidenceRevision > before.evidenceRevision);
     await input.fill("workiq-retriev");
     await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });
     const rebuilt = (await api("/api/search/status")).body;
     assert.notEqual(rebuilt.indexId, ready.indexId);
-    await page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]').first().click();
-    await expect(page).toHaveURL(/#request\?.*call=/);
+    const chosen = page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]').first();
+    const searchId = await chosen.getAttribute("data-search-id");
+    assert.ok(searchId);
+    await chosen.click();
+    await expect(page.locator("#selectedCall")).toContainText("workiq-retrieve");
+    const address = new URL(page.url());
+    assert.equal(address.pathname, "/request");
+    assert.deepEqual([...address.searchParams].sort(), [["layer", "tool"], ["privateView", "required"]]);
+    assert.equal(address.hash, "");
     await page.goBack();
     await expect(input).toHaveValue("workiq-retriev");
+    await expect(page.locator(`#wireSearchResults button[data-search-id="${searchId}"]`)).toBeFocused();
 
     db.prepare("UPDATE sessions SET archived_at=? WHERE id=?").run(new Date().toISOString(), sourceId);
     await runtime.collector.collectNow();
@@ -384,12 +397,47 @@ test("normal Search survives quiet automatic collection and fences real source c
     assert.equal((await api("/api/search/status")).body.indexId, null, "An approved source-window change must invalidate membership.");
     await input.fill("workiq-retriev");
     await expect(page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]')).toHaveCount(2, { timeout: 20000 });
-    await runtime.collector.close();
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(0, { timeout: 5000 });
-    assert.equal((await api("/api/search/status")).body.indexId, null);
+    const lastHit = page.locator('#wireSearchResults button[aria-label^="Open recorded call:"]').first();
+    const held = await lastHit.evaluateHandle(node => ({
+        node, id: node.getAttributeNode("data-search-id"), label: node.getAttributeNode("aria-label"),
+        text: node.querySelector("mark").firstChild,
+    }));
+    const opening = Promise.withResolvers(), release = Promise.withResolvers();
+    await page.route("**/api/search/open", async route => {
+        opening.resolve(route.request());
+        await release.promise;
+        await route.continue();
+    }, {times: 1});
+    try {
+        await lastHit.click();
+        const original = await opening.promise;
+        assert.ok(await held.evaluate(({node, id, label, text}, expected) =>
+            node.isConnected && id.value === expected && label.value && text.data, original.postDataJSON().id));
+        await runtime.collector.close();
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+        assert.deepEqual(await held.evaluate(({node, id, label, text}) =>
+            [node.isConnected, id.value, label.value, text.data]), [false, "", "", ""]);
+        const status = await api("/api/search/status");
+        if (status.status === 200) assert.equal(status.body.indexId, null);
+        else assert.deepEqual([status.status, status.body.code], [428, "search-disconnected"]);
+        release.resolve();
+        const response = await original.response();
+        if (response) {
+            const { code } = await response.json();
+            assert.ok(response.status() === 409 && code === "stale-search-target"
+                || response.status() === 428 && code === "search-disconnected",
+            `Held Open must be refused, got ${response.status()} ${code}`);
+        } else {
+            assert.equal(original.failure()?.errorText, "net::ERR_ABORTED");
+        }
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+        await expect(page.locator("#selectedCall")).toHaveCount(0);
+    } finally { release.resolve(); }
     assert.deepEqual(errors, []);
     assert.equal((await api("/api/search/close")).body.state, "closed");
     assert.equal(runtime.search.status().panels, 0);
+    const retired = await api("/api/search/status");
+    assert.deepEqual([retired.status, retired.body.code], [428, "search-disconnected"]);
     t.diagnostic(JSON.stringify({ quietBuildChecks: 3, quietReadyChecks: 2, quietQueryChecks: 1,
         queryRequests: requests.length, initialItems: ready.items,
         realChange: "new call during query, archive eligibility, source window and source closure", mode: ready.mode }));

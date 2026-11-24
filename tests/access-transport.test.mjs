@@ -22,7 +22,7 @@ test("lost action responses never advise repeating Save, collection or settings 
     const api = createBoardTransport(capability, () => {}, unbound);
     for (const invalid of [false, true]) {
         unreadable = invalid;
-        for (const path of ["/api/export", "/api/collection/now", "/api/collection/configure", "/api/report-comparison/save"]) {
+        for (const path of ["/api/export", "/api/collection/now", "/api/collection/configure", "/api/artifact-deletion/confirm"]) {
             const count = calls.length;
             await assert.rejects(api(path, {}), error => {
                 assert.equal(error.code, "request_outcome_unknown");
@@ -114,6 +114,30 @@ test("native save refusal requires the exact original request and never override
     await assert.rejects(app.api("/api/preview", { previewId: refusal.previewId }), error => error.reportSave === undefined);
     await app.respond(seed({ retained: false }));
     await assert.rejects(app.api("/api/export", { previewId: refusal.previewId, confirmed: true }), error => error.reportSave === undefined);
+});
+
+test("only matching exact-record refusals with a qualified HTTP status establish no save", async t => {
+    const descriptor = { ...bootstrap, collectionMode: "copilot-only" };
+    const input = { mode: "verified-records-only", confirmed: true, operationId: runtimeId };
+    const refusal = { operationId: input.operationId, outcome: "not-saved" };
+    let response, status;
+    const app = watched(t, () => Promise.resolve(Response.json(response,
+        { status, headers: { "X-Wire-Runtime": runtimeId, "X-Wire-Generation": "0" } })), descriptor);
+    await app.respond(seed({ retained: true, wire: "signed-in", collectionMode: "copilot-only" }));
+    for (const [http, changes, request, trusted] of [
+        [409, {}, input, true], [413, {}, input, true], [422, {}, input, true],
+        [500, {}, input, false], [422, { outcome: "unknown" }, input, false],
+        [409, { recollection: { ...refusal, operationId: "00000000-0000-4000-8000-000000000002" } }, input, false],
+        [422, { code: "RECOLLECTION_BASIS_CHANGED" }, input, false],
+        [422, {}, { operationId: input.operationId, confirmed: true }, false],
+    ]) {
+        status = http; response = { code: "RECOLLECTION_NOT_QUALIFIED", recollection: refusal, ...changes };
+        await assert.rejects(app.api("/api/recollection/confirm", request), error => {
+            assert.deepEqual(error.recollection, trusted ? refusal : undefined);
+            if (response.outcome === "unknown") assert.equal(error.outcome, "unknown");
+            return true;
+        });
+    }
 });
 
 test("source-aware collection activates only from an enforced bootstrap and matching watch", async t => {

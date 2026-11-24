@@ -9,16 +9,19 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { readSavedReportFile, loadSavedReportSource, createSavedArtifactDescriptor } from "../lib/report-artifacts.mjs";
 import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
+import { reportContextRef } from "../lib/report-context.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
+import { compareAnalyzePeriods } from "./analytics-date-picker.mjs";
 import { privateFixture, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
-import { reportContents, reportActivityActionGeometry } from "./report-journey-helpers.mjs";
+import { reportActivityActionGeometry } from "./report-journey-helpers.mjs";
 
 for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     ? "paired report recovers its lost Save reply without replay and reopens exact HTML/JSON"
     : "normal paired report, all formats and frozen reopen", { timeout: 120000 }, async t => {
     const formats = lostSaveResponse ? ["html", "json"] : ["html", "pdf", "json", "markdown"];
+    const promptMode = lostSaveResponse ? "original" : "none";
     const fixture = periodFixture();
     fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
     const assessed = qualityDisplayFixture({ records: fixture.records, judgments: ["pass", "fail", "pass", "unassessed", "error"], finalDuration: null }).state;
@@ -41,42 +44,68 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     const server = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await server.close(); });
-    const page = await browser.newPage({ viewport: { width: 1365, height: 1000 }, timezoneId: "America/New_York", reducedMotion: "reduce" });
+    const profile = await browser.newContext({ viewport: { width: 1365, height: 1000 }, timezoneId: "America/New_York", reducedMotion: "reduce" });
+    const page = await profile.newPage();
     page.setDefaultTimeout(12000);
-    const errors = [], denied = [], requests = [], comparisons = [];
+    const errors = [], denied = [], requests = [], saves = [];
     page.on("pageerror", error => errors.push(error.message));
-    page.on("response", async response => {
-        if (response.url().endsWith("/api/period-comparison") && response.ok()) comparisons.push(await response.json());
-    });
-    await page.route("**/*", route => {
+    let saved;
+    await profile.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         const allowed = ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/report-artifacts/list",
-            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview", "/api/report/open"];
+            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/export", "/api/cancel-preview", "/api/report/open"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
         }
-        requests.push(url.pathname); return route.continue();
+        requests.push(url.pathname);
+        if (url.pathname === "/api/export") {
+            saves.push(request.postDataJSON());
+            if (lostSaveResponse && saves.length === 1) {
+                saved = await (await route.fetch()).json();
+                return route.abort("failed");
+            }
+        }
+        return route.continue();
     });
     await page.goto(server.url + "#analyze?services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await restoreLegacySearch(page, periodQuery);
-    await page.locator("#comparePeriods").click();
-    for (const [label, value] of [
-        ["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
-        ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"],
-    ]) await page.getByLabel(label, { exact: true }).fill(value);
-    await page.locator("#applyPeriodComparison").click();
-    await expect(page.locator("#createPeriodReport")).toBeEnabled();
+    const live = await compareAnalyzePeriods(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    assert.deepEqual([live.periods.baseline.rowIds.length, live.periods.later.rowIds.length], [3, 4]);
+    assert.deepEqual([...live.periods.baseline.scenarioIds].sort(), ["period-request-0", "period-request-1"]);
+    assert.deepEqual([...live.periods.later.scenarioIds].sort(), ["period-request-2", "period-request-3", "period-request-4", "period-request-5"]);
+    await page.getByRole("button", { name: "View 4 calls", exact: true }).click();
     await expect(page.locator('[data-period-side="baseline"]')).toContainText("3 calls across 2 interactions");
     await expect(page.locator('[data-period-side="later"]')).toContainText("4 calls across 4 interactions");
-    const live = comparisons.at(-1);
-    assert.ok(live);
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    const compareUrl = page.url();
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.ok((await page.locator("#createPeriodReport").boundingBox()).height >= 44);
-    await page.locator("#createPeriodReport").focus();
-    await page.keyboard.press("Space");
-    await expect(page.locator("#reportStage1")).toBeVisible();
+    async function prepareWith(action) {
+        const response = page.waitForResponse(r => r.url().endsWith("/api/preview"), { timeout: 60000 });
+        await action();
+        const value = await (await response).json();
+        assert.equal(value.error, undefined, value.error);
+        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+        assert.deepEqual(value.snapshot.periodComparison.comparison, live.comparison);
+        for (const key of ["baseline", "later"]) {
+            const frozen = value.snapshot.periodComparison.periods[key], accepted = live.periods[key];
+            assert.deepEqual(frozen.range, accepted.range);
+            assert.deepEqual(frozen.rows.map(row => row.id), accepted.rowIds.map(id => reportContextRef(assessed.pseudonymKey, "row", id)));
+            assert.deepEqual(frozen.scenarioRefs, accepted.scenarioIds.map(id => reportContextRef(assessed.pseudonymKey, "scenario", id)));
+        }
+        return value;
+    }
+    await prepareWith(() => page.locator("#createPeriodReport").press("Space"));
+    await expect(page.locator("#reportDeskDates")).toBeHidden();
+    const activity = page.locator("#reportActivityOptions");
+    const openActivity = async () => {
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+        await expect(activity).toBeVisible();
+    };
+    await openActivity();
     await expect(page.locator("#periodReportScope")).toContainText("Authors and matching records are fixed");
     await expect(page.locator("#reportPromptAuthorFilter")).toBeDisabled();
     await expect(page.locator("#reportPromptAuthorFilter-control")).toBeHidden();
@@ -85,14 +114,16 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("3 matching Work IQ tool calls");
     await expect(page.locator('[data-period-report-side="later"]')).toContainText("Mar 8, 2026 to Mar 9, 2026");
     await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
-    assert.ok((await page.getByRole("button", { name: "Change comparison in Analyze", exact: true }).boundingBox()).height >= 44);
+    assert.ok((await activity.getByRole("button", { name: "Back to comparison", exact: true }).boundingBox()).height >= 44);
     await expect(page.locator("#reportPopulationNote")).toHaveText("Copy text does not combine the measured activity in the two periods.");
     const footerMeasurements = [];
     if (!lostSaveResponse) for (const theme of ["light", "dark"]) for (const [width, text] of [[1365, 100], [375, 200]]) {
+        await activity.getByRole("button", { name: "Close", exact: true }).click();
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
         await page.evaluate(() => document.fonts.ready);
+        await openActivity();
         const footer = await reportActivityActionGeometry(page);
         footerMeasurements.push({ theme, width, text, ...footer });
         if (process.env.WIRE_REPORT_FOOTER_PROOFS) {
@@ -128,25 +159,27 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     }
     await page.setViewportSize({ width: 1365, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    await reportContents(page);
-    await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
     await expect(page.locator("#reportList input")).toHaveCount(0);
-    await page.locator("#reportList .request-card-open").first().click();
+    const interaction = activity.locator("#reportList .request-card-open").first();
+    await interaction.click();
     await expect(page.locator("#requestReportToggle")).toBeHidden();
     await expect(page.locator("#requestReportTitle")).toContainText("fixed paired periods");
-    await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
-    await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
-    await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("3 matching Work IQ tool calls");
-    await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
-    for (const format of formats.filter(format => format !== "html")) await page.locator(`#formatOptions input[value=${format}]`).check();
+    await page.goBack();
+    await expect(activity).toBeVisible();
+    await expect(interaction).toBeFocused();
+    await activity.getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator("#reportPrivacyChoice").click();
+    let preview = await prepareWith(() => page.locator(`[name=promptMode][value=${promptMode}]`).check());
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    for (const format of formats.slice(1)) preview = await prepareWith(() => page.locator(`#formatOptions input[value=${format}]`).check());
+    await page.keyboard.press("Escape");
+    assert.equal(preview.promptMode, promptMode);
+    const copies = preview.records.flatMap(record => record.prompts);
+    if (promptMode === "none") assert.ok(copies.every(copy => copy.text === null), "Omitted text stays out of prepared copies");
+    else assert.deepEqual(copies.filter(copy => copy.kind === "origin").map(copy => copy.text).sort(),
+        fixture.records.slice(0, 6).map(record => record.userPrompt.text).sort());
     assert.deepEqual(errors, []);
-    await expect(page.locator("#exportBtn")).toBeEnabled();
-    const previewResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"), { timeout: 60000 });
-    await page.locator("#exportBtn").click();
-    const preview = await (await previewResponse).json();
-    assert.equal(preview.error, undefined, preview.error);
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    assert.deepEqual(preview.snapshot.periodComparison.comparison, live.comparison);
     assert.equal(live.definitions.metricProjectionVersion, 4);
     assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).metric === "speed"), "Current reports retain timing, not historical feedback lanes");
     assert.equal(preview.snapshot.evaluationFacts, undefined);
@@ -191,20 +224,16 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
         await zoom.evaluate(node => node.remove());
     }
     await page.setViewportSize({ width: 1365, height: 1000 });
-    await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
-    assert.equal((await loadBoardState(context)).exports.length, 0, "review does not save");
+    assert.equal((await loadBoardState(context)).exports.length, 0, "preparation and reading do not save");
     await updateBoardState(context, state => { state.cards["period-request-9"].workflowState = "reviewing"; });
-    let saved;
-    if (lostSaveResponse) await page.route("**/api/export", async route => {
-        requests.push("/api/export");
-        saved = await (await route.fetch()).json();
-        await route.abort("failed");
-    });
     const savedResponse = lostSaveResponse ? null : page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     if (lostSaveResponse) {
+        const warning = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Save with chat details", exact: true }) });
+        await expect(warning).toContainText("HTML");
+        await expect(warning).toContainText("JSON");
+        assert.equal(saves.length, 0, "Keeping chat details requires a decision for these files");
+        await warning.getByRole("button", { name: "Save with chat details", exact: true }).click();
         await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
         const entered = Promise.withResolvers(), release = Promise.withResolvers();
         let heldRequest;
@@ -242,8 +271,18 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     const state = await loadBoardState(context), entry = state.exports[0];
     assert.equal(state.exports.length, 1);
     assert.equal(entry.bundleId, preview.bundleId, "Recovery identifies the original prepared report, not a new Save.");
+    assert.equal(entry.privacyReview.localSave.contentHash, preview.localSaveRequest.contentHash);
+    assert.equal(entry.privacyReview.localSave.keepChatDetailsConfirmed, lostSaveResponse);
+    assert.equal(entry.privacyReview.reviewerConfirmed, false);
+    assert.deepEqual(saves.map(({ previewId, localSave }) => [previewId, localSave]),
+        [[preview.previewId, { ...preview.localSaveRequest, keepChatDetailsConfirmed: lostSaveResponse }]]);
     assert.equal(entry.kind, "report"); assert.equal(entry.reportType, "period-comparison");
     const filesBefore = new Map(await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, await readFile(file)])));
+    for (const [name, bytes] of filesBefore) if (name !== "coverage-and-redaction-manifest.json") {
+        const prepared = preview.files[name];
+        assert.deepEqual(bytes, typeof prepared === "string" ? Buffer.from(prepared) : Buffer.from(prepared.data, "base64"), name);
+    }
+    const preparations = requests.filter(route => route === "/api/preview").length;
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.locator("#savedReportReader")).toBeVisible();
     await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: entry.title, level: 1, exact: true })).toBeVisible();
@@ -254,11 +293,14 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
     for (const format of formats) {
         const document = await readSavedReportFile(context, state, entry.bundleId, format);
         const text = (await extractReportFile(document)).content;
+        if (format === "json") assert.deepEqual(document.snapshot.periodComparison, preview.snapshot.periodComparison);
         extracted[format] = text;
         assert.match(text, /Period A/); assert.match(text, /Period B/);
         assert.match(text, /3/); assert.match(text, /4/);
         assert.match(text, /33\.33/); assert.match(text, /25/);
         assert.match(text, /America\/New_York|New York/);
+        assert.equal(text.includes(periodQuery), promptMode === "original", `${format} must respect the chosen text treatment`);
+        assert.doesNotMatch(text, /Outside query request 9/);
     }
     const fonts = [];
     if (!lostSaveResponse) {
@@ -279,6 +321,14 @@ for (const lostSaveResponse of [false, true]) test(lostSaveResponse
             }
         } finally { await task.destroy(); }
     }
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await expect(page).toHaveURL(compareUrl);
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await page.getByRole("button", { name: "View 4 calls", exact: true }).click();
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("3 calls across 2 interactions");
+    await expect(page.locator('[data-period-side="later"]')).toContainText("4 calls across 4 interactions");
+    assert.equal(requests.filter(route => route === "/api/preview").length, preparations, "Open and return never reprepare");
+    assert.equal(saves.length, 1, "Open and return never replay Save");
     for (const [name, file] of Object.entries(entry.files)) assert.deepEqual(await readFile(file), filesBefore.get(name), "reopen/corpus never rewrites saved bytes");
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
     if (process.env.WIRE_PERIOD_REPORT_PROOFS) {

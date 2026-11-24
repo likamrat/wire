@@ -54,8 +54,8 @@ test("seconds are display-only and preserve zero, tiny positive times and exact 
         assert.deepEqual(metric, before);
     }
 });
-test("single-interaction details separate missing coverage from true zero and failed reviews", () => {
-    const unavailable = currentView().metrics.find(metric => metric.dimension === "accuracy");
+test("historical single-interaction details separate missing coverage from true zero and failed reviews", () => {
+    const unavailable = quality("accuracy");
     const unreviewed = presentation.singleDetail(unavailable);
     assert.equal(unreviewed.value, "Not reviewed");
     assert.equal(unreviewed.tone, "neutral");
@@ -99,14 +99,14 @@ test("single-interaction model verdicts retain the actual evaluator and reason m
     assert.equal(shown.value, "Not correct");
     assert.deepEqual(shown.evaluator, metric.evaluator);
     assert.notEqual(shown.evaluator, metric.evaluator);
-    const local = currentView().metrics.find(metric => metric.dimension === "accuracy");
+    const local = quality("accuracy");
     local.unassessedReasons = [{ reason: "missing-evidence", count: 1 }];
     contract.validateMetric(local);
     assert.deepEqual(presentation.singleDetail(local).unassessedReasons, local.unassessedReasons);
     assert.deepEqual(metric, before);
 });
-test("current adapter summary omits Cost and retains distinct answer/action trust", () => {
-    const model = presentation.summarize(currentView().metrics);
+test("historical summaries omit Cost and retain distinct answer/action trust", () => {
+    const model = presentation.summarize([samples.makeDuration(), ...["accuracy", "answer-trust", "action-trust"].map(d => quality(d))]);
     assert.deepEqual(Object.keys(model.groups), ["accuracy", "speed", "answer-trust", "action-trust"]);
     assert.equal(row(model, "accuracy").value, "Not checked automatically");
     assert.equal(row(model, "answer-trust").label, "Answer support");
@@ -298,10 +298,17 @@ test("different timing boundaries remain separate with units and explicit measur
     assert.equal(model.groups.speed[1].value, "40 ms");
     assert.equal(model.groups.speed[1].qualification, "Dispatch to response headers");
 });
-test("missing whole-interaction boundaries stay unavailable even when call timings exist", () => {
-    const model = presentation.summarize(currentView().metrics);
-    assert.equal(model.groups.speed[1].label, "Whole-interaction latency");
-    assert.equal(model.groups.speed[1].value, "Not measured");
+test("current adapter exposes measured call time, not an inferred final-response duration or rating", () => {
+    const { metrics, assessments } = currentView();
+    assert.deepEqual(assessments, []);
+    assert.ok(metrics.every(m => m.dimension === "speed" && m.origin === "automatic-local"));
+    const byId = Object.fromEntries(metrics.map(m => [m.definitionId, presentation.format(m)]));
+    assert.equal(byId["tool-duration"].value, "1,042 ms");
+    assert.equal(byId["recorded-response-duration"].label, "Time to recorded final response");
+    assert.equal(byId["recorded-response-duration"].value, "Not measured");
+    const legacy = presentation.format(samples.metricBase("interaction-latency"));
+    assert.equal(legacy.label, "Whole-interaction latency");
+    assert.equal(legacy.value, "Not measured");
 });
 test("partial and conflicting membership lead with retained-scope limits", () => {
     for (const membershipStatus of ["partial", "unverified"]) {
@@ -309,12 +316,6 @@ test("partial and conflicting membership lead with retained-scope limits", () =>
         assert.match(model.takeaway, /Only some recorded actions.*linked to this request/);
         assert.match(model.takeaway, /results cover that saved evidence/);
     }
-});
-test("summary projection never mutates source facts and needs no answer text", () => {
-    const view = currentView(), before = structuredClone(view);
-    presentation.summarize(view.metrics);
-    assert.deepEqual(view, before);
-    assert.ok(view.observations.every(observation => observation.kind !== "answer"));
 });
 test("mixed aggregate fixture is valid but not passed off as an interaction", () => {
     const metrics = mixedOverview();

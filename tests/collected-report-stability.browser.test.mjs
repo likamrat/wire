@@ -6,8 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { loadBoardState } from "../lib/store.mjs";
 import { collectedReportSource } from "./collected-report-fixture.mjs";
-import { navigateMain } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
+import { navigateMain, selectActivityOption } from "./helpers.mjs";
 
 for (const recordedContext of [false, true]) test(`ordinary launch keeps the reviewed GitHub report${recordedContext ? " and edited reply context" : ""} frozen during automatic same-chat collection`,
     { timeout: 90000 }, async t => {
@@ -60,38 +59,47 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         await page.goto(url);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await navigateMain(page, "reports");
-        await chooseReportScope(page, "all");
-        await reportContents(page);
-        await page.locator("#reportTitle").fill("Stable collected GitHub report");
         await page.locator(`[name=promptMode][value=${recordedContext ? "original" : "none"}]`).check();
-        await page.locator("#reportRecordedContext").setChecked(recordedContext);
-        for (const format of ["html", "json", "pdf", "markdown"]) {
-            await page.locator(`#formatOptions input[value=${format}]`).setChecked(["html", "json"].includes(format));
+        await page.getByRole("button", { name: /^Formats:/ }).click();
+        await page.locator("#formatOptions input[value=json]").check();
+        await page.keyboard.press("Escape");
+        assert.equal(previews.length, 0);
+        const prepare = async action => {
+            const result = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+            await action();
+            const response = await result, copy = await response.json();
+            assert.equal(response.status(), 200, copy.error);
+            await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
+            return copy;
+        };
+        let preview = await prepare(() => page.locator("#prepareReportPreview").click());
+        preview = await prepare(() => page.locator("#reportTitle").fill("Stable collected GitHub report"));
+        if (recordedContext) {
+            await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+            preview = await prepare(() => page.locator("#reportRecordedContext").check());
+            await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done" }).click();
         }
-        let preview = await scanReport(page);
         assert.equal(preview.collectedSourceFrozen, true);
         assert.equal(preview.snapshot.selectionScope.requestGroups, 1);
         if (recordedContext) {
-            const copy = await findReportCopy(page, "Recorded reply to Original reviewed request.");
+            await selectActivityOption(page, "preparedReportView", "text");
+            const key = preview.contextReview.find(copy => copy.kind === "response" && copy.original !== null)?.key;
+            assert.ok(key);
+            const copy = page.locator(`.prompt-comparison[data-copy-key="${key}"]`);
+            while (!await copy.count()) await page.getByRole("button", { name: "Next report copies", exact: true }).click();
             await copy.getByText("Edit or omit this report copy", { exact: true }).click();
             await copy.locator(".report-copy-controls textarea").fill("The reply edit I reviewed stays unchanged.");
-            const rebuilt = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-            await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
-            preview = await (await rebuilt).json();
-            await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+            preview = await prepare(() => copy.getByRole("button", { name: "Update report copy" }).click());
+            assert.ok(preview.contextReview.some(copy => copy.edited && copy.text === "The reply edit I reviewed stays unchanged."));
         }
-        await page.locator(".attestation input[data-review-control]").check();
-        const reviewing = page.waitForResponse(response => response.url().endsWith("/api/privacy-review"));
-        await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        const reviewed = await (await reviewing).json();
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
-        if (recordedContext) assert.ok(reviewed.contextReview.some(copy => copy.edited && copy.text === "The reply edit I reviewed stays unchanged."));
         const preparedCount = previews.length;
         await app.appendOnly();
         await expect.poll(async () => (await loadBoardState(app.context, { readOnly: true })).evidence.length, { timeout: 20000 }).toBe(2);
-        await expect(page.locator("#newDataNotice")).toContainText("preview stays frozen", { timeout: 15000 });
-        await expect(page.locator("#newDataNotice")).toBeVisible();
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
+        const previewNotice = page.locator("#reportPreviewDrawer #reportPreviewActivityNotice");
+        await expect(previewNotice).toBeVisible({ timeout: 15000 });
+        await expect(previewNotice).toContainText("This preview still shows the activity it was prepared with.");
+        await expect(page.locator("#newDataNotice")).toBeHidden();
+        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
         assert.equal(previews.length, preparedCount);
         if (process.env.WIRE_REPORT_PROOFS) {
@@ -102,6 +110,7 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         }
         const saving = page.waitForResponse(response => response.url().endsWith("/api/export"));
         await page.getByRole("button", { name: "Save report", exact: true }).click();
+        if (recordedContext) await page.getByRole("button", { name: "Save with chat details", exact: true }).click();
         const response = await saving, saved = await response.json();
         assert.equal(response.status(), 200, saved.error);
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
@@ -109,16 +118,20 @@ for (const recordedContext of [false, true]) test(`ordinary launch keeps the rev
         assert.equal(state.evidence.length, 2, "Publication cannot write its pinned source back over newer collection.");
         const entry = state.exports.find(item => item.bundleId === saved.bundle.bundleId);
         assert.equal(entry.selectionScope.requestGroups, 1);
-        for (const [name, contents] of Object.entries(reviewed.files)) {
+        for (const [name, contents] of Object.entries(preview.files)) {
+            if (name === "coverage-and-redaction-manifest.json") continue; // Save binds the manifest to its receipt.
             assert.deepEqual(await readFile(entry.files[name]), Buffer.from(contents));
         }
+        assert.equal(entry.privacyReview.localSave.contentHash, preview.localSaveRequest.contentHash);
         assert.deepEqual(await readFile(configFile), config, "No hidden Pause or collection reconfiguration.");
         assert.deepEqual(mutations, ["/api/export"]);
         await navigateMain(page, "analyze");
         await expect(page.locator("#activityList .activity-card")).toHaveCount(2);
         await navigateMain(page, "reports");
-        await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-        await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Stable collected GitHub report");
+        await page.locator(".saved-shelf .saved-report-title").first().click();
+        const reader = page.locator("#savedReportReader");
+        await expect(reader.getByRole("heading", { level: 1 })).toHaveText("Stable collected GitHub report");
+        await expect(reader.getByRole("article", { name: "Report brief" })).toContainText(/1 interaction\b/);
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
     });

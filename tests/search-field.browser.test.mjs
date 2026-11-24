@@ -7,8 +7,8 @@ import { searchFieldMarkup, createSearchFields } from "../web/search-field.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
+import { chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { selectReportFocus, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 
 const proofs = process.env.WIRE_SEARCH_FIELD_PROOFS;
@@ -80,8 +80,13 @@ test("search-field Interface escapes markup, keeps native input, owns one clear 
 
 async function setup(t) {
     const cleanup = [];
+    const records = searchRecords(19);
+    for (const record of records) {
+        record.capturedAt = new Date().toISOString();
+        record.toolCalls[0].startedAt = record.capturedAt;
+    }
     const app = await searchFixture({ after: action => cleanup.push(action) }, {
-        records: searchRecords(19), formats: ["html", "json"], reportTitles: ["Hospital workflow", "Garage workflow"],
+        records, formats: ["html", "json"], reportTitles: ["Hospital workflow", "Garage workflow"],
     });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "no-preference" });
     const errors = [], requests = [], nonlocal = [];
@@ -134,6 +139,13 @@ async function geometry(input) {
     });
 }
 
+async function openReportPicker(page) {
+    await page.getByRole("navigation", { name: "Report sections" }).getByRole("link", { name: "Overview", exact: true }).click();
+    await selectReportFocus(page, "all");
+    await page.locator("#reportDeskActivity").click();
+    await page.locator('#reportActivityOptions [name=reportScope][value=all]').check();
+}
+
 test("search entries keep their corpus and Escape while Settings uses compact field paint", { timeout: 120000 }, async t => {
     const { page, requests, bundles } = await setup(t), evidence = [];
     const global = page.locator("#wireSearch");
@@ -160,9 +172,12 @@ test("search entries keep their corpus and Escape while Settings uses compact fi
         await global.press("Escape");
         for (const [id, query, open, matched] of [
             ["settingsSearch", "theme", () => navigateMain(page, "settings"), () => expect(page.locator("#settingsSearchResults a[data-setting=theme]")).toBeVisible()],
-            ["issueSearch", "Orchard", () => navigateMain(page, "collection-status"), () => expect(page.locator("#issueSearchCount")).toHaveText("1 of 19 chats")],
-            ["savedReportSearch", "Hospital workflow", () => navigateMain(page, "reports"), () => expect(page.locator(".saved-library-row")).toHaveAttribute("data-bundle-id", bundles[0].bundleId)],
-            ["reportRequestSearch", "physician", () => chooseReportScope(page, "all"), () => expect(page.locator("#reportRequestSearchCount")).toContainText("All 19 remain included")],
+            ["issueSearch", "Orchard", async () => {
+                await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+                await page.locator("#settingsStatusLink a").click();
+            }, () => expect(page.locator("#issueSearchCount")).toHaveText("1 of 19 chats")],
+            ["savedReportSearch", "Hospital workflow", async () => { await navigateMain(page, "reports"); await viewAllSavedReports(page); }, () => expect(page.locator(".saved-library-row")).toHaveAttribute("data-bundle-id", bundles[0].bundleId)],
+            ["reportRequestSearch", "physician", () => openReportPicker(page), () => expect(page.locator("#reportRequestSearchCount")).toContainText("All 19 remain included")],
             ["recollectSearch", "Orchard", async () => { await navigateMain(page, "settings"); await navigateSettings(page, "data"); await page.locator("#recollectActivity").click(); },
                 () => expect(page.locator("#recollectSources input")).toHaveCount(1)],
         ]) {
@@ -235,10 +250,12 @@ test("search entries keep their corpus and Escape while Settings uses compact fi
                 await page.locator("#recollectActivity").click();
                 await expect(input).toHaveValue(""); await expect(clear).toBeHidden();
                 await page.locator("#recollectClose").click();
+            } else if (id === "reportRequestSearch") {
+                await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
             } else if (id === "settingsSearch") {
                 await input.fill("theme");
                 await page.locator("#settingsSearchResults a[data-setting=theme]").click();
-                await expect(page.locator("[data-settings-section=display]")).toBeVisible();
+                await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
                 await page.goBack(); await expect(input).toHaveValue("theme");
                 await clear.click();
             }
@@ -248,7 +265,9 @@ test("search entries keep their corpus and Escape while Settings uses compact fi
     }
     await navigateMain(page, "home");
     await page.locator("#comparePeriods").click();
-    await page.getByRole("button", { name: "Search this comparison", exact: true }).click();
+    await global.fill("physician");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await global.focus();
     await expect(global).toBeFocused();
     await expect(page.locator("#wireSearchScope")).toHaveValue("analysis");
     await expect(page.locator("#comparisonSearch")).toBeHidden();
@@ -263,8 +282,9 @@ test("clearing local library and picker fields preserves other queries, history 
     await navigateMain(page, "settings");
     await page.locator("#settingsSearch").fill("theme");
     await navigateMain(page, "reports");
+    await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Hospital");
-    await chooseReportScope(page, "all");
+    await openReportPicker(page);
     const summary = await page.locator("#scopeSummary").innerText();
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
     const pageText = await page.locator("#reportList .list-pager").innerText();
@@ -275,7 +295,8 @@ test("clearing local library and picker fields preserves other queries, history 
     assert.equal(await page.locator("#reportList .list-pager").innerText(), pageText);
     await expect(page.locator("#savedReportSearch")).toHaveValue("Hospital");
     await expect(page.locator("#settingsSearch")).toHaveValue("theme");
-    await navigateMain(page, "reports");
+    await page.locator("#reportActivityOptions").getByRole("button", { name: "Close", exact: true }).click();
+    await viewAllSavedReports(page);
     await page.locator("#clearSavedReportSearch").click();
     await expect(page.locator("#settingsSearch")).toHaveValue("theme");
     await navigateMain(page, "settings");

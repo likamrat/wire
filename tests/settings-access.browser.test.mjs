@@ -39,7 +39,11 @@ window.fixtureUI=fixtureMount({
  onDraftChange:dirty=>fixtureEvents.push("draft:"+dirty)
 });
 fixtureUI.receive(fixtureStatus(),fixtureApi.publicationToken());
-fixtureUI.setSection("connection","source-paths");
+window.fixtureSection=(section,setting)=>{
+ for(const pane of document.querySelectorAll("[data-settings-section]"))pane.hidden=pane.dataset.settingsSection!==section;
+ fixtureUI.setSection(section,setting);
+};
+fixtureSection("connection");
 document.body.dataset.fixtureReady="true";
 `;
     return html.replace("</body>", `<script nonce="${nonce}">${script}</script></body>`);
@@ -52,6 +56,7 @@ async function setup(t) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         if (route.request().url() === "http://settings.fixture.invalid/") return route.fulfill({ contentType: "text/html", body: fixtureHtml() });
+        if (route.request().method() === "GET" && route.request().url() === "http://settings.fixture.invalid/favicon.svg") return route.fulfill({ status: 204 });
         requests.push(route.request().url()); return route.abort();
     });
     t.after(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(requests, []); });
@@ -86,6 +91,7 @@ test("withdrawal synchronously clears private source presentation but retains sa
     await safeDraft(page);
     await page.locator("#themePreference").focus();
     await page.evaluate(() => {
+        fixtureSection("source-access","source-paths");
         fixtureUI.unavailable("SECRET_ALPHA_READ_ERROR", fixtureApi.publicationToken());
         window.heldSourceText = ["approvedDatabase", "approvedSessions", "settingsConnectionError"].map(id => document.getElementById(id).firstChild);
         window.heldSourceBefore = heldSourceText.map(node => node.data);
@@ -112,6 +118,8 @@ test("withdrawal synchronously clears private source presentation but retains sa
     await assertNoAlpha(page);
     await page.evaluate(() => fixtureGrant());
     await expect(page.locator("#sourceDatabase")).toHaveValue("");
+    // Another access cycle before any accepted status must not discard these safe drafts.
+    await page.evaluate(() => { fixtureRevoke(); fixtureUI.withdrawAccess(); fixtureGrant(); });
     await fresh(page);
     assert.deepEqual(await page.evaluate(() => heldSourceText.map(node => node.data)), ["", "", ""]);
     await assertNoAlpha(page);
@@ -119,6 +127,7 @@ test("withdrawal synchronously clears private source presentation but retains sa
     await expect(page.locator("#collectionWindow")).toHaveValue("7");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
     await expect(page.locator("#saveCollection")).toBeEnabled();
+    assert.equal(await page.evaluate(() => fixtureUI.hasDraft()), true);
 });
 
 for (const result of ["success", "error"]) test(`old read ${result} and finalizer cannot repaint or unlock a newer read`, async t => {
@@ -253,21 +262,10 @@ test("unqualified delivery is explicit and readiness alone restores no source da
     assert.equal(await page.evaluate(()=>fixtureWrites.length),0);
 });
 
-test("repeated withdrawal before a fresh status cannot erase the original safe preference draft", async t => {
-    const page = await setup(t);
-    await safeDraft(page);
-    await page.evaluate(()=>{fixtureRevoke();fixtureGrant();fixtureRevoke();fixtureUI.withdrawAccess();fixtureGrant();});
-    await fresh(page);
-    await assertNoAlpha(page);
-    await expect(page.locator("#collectionWindow")).toHaveValue("7");
-    await expect(page.locator("#collectionCadence")).toHaveValue("15");
-    await expect(page.locator("#saveCollection")).toBeEnabled();
-    assert.equal(await page.evaluate(()=>fixtureUI.hasDraft()),true);
-});
-
 test("suggested and edited source paths are erased without retaining a private source draft", async t => {
     const page = await setup(t);
     await page.evaluate(()=>{
+        fixtureSection("source-access");
         const status=fixtureStatus();
         status.suggestedSource={...status.config,error:"SECRET_ALPHA_SUGGESTION"};
         status.config=null;

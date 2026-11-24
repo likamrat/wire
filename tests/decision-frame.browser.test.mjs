@@ -5,6 +5,8 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { styles } from "../web/styles.mjs";
 import { deletionStyles } from "../web/deletion-styles.mjs";
 import { createDeletionFlow, mountDeletion } from "../web/deletion-flow.mjs";
+import { createDateRangeCalendar } from "../web/date-range-calendar.mjs";
+import { createTimeContext } from "../lib/time.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { mkdir } from "node:fs/promises";
@@ -96,6 +98,8 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
         window.mountFlow=${mountDeletion.toString()};
         window.createFlow=${createDeletionFlow.toString()};
         window.createUx=${createEvidenceUX.toString()};
+        window.createCalendar=${createDateRangeCalendar.toString()};
+        window.time=(${createTimeContext.toString()})();
     ` });
     await page.evaluate(({ icons, theme }) => {
         document.documentElement.dataset.evidenceTheme = theme;
@@ -107,7 +111,7 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
         api.isCurrent = value => value === token;
         window.mountFlow({
             api,
-            flow: window.createFlow(), timeContext: () => ({ timeZone: "UTC", locale: "en-US" }),
+            flow: window.createFlow(), createCalendar: window.createCalendar, time: window.time, timeContext: () => ({ timeZone: "UTC", locale: "en-US" }),
             ux: window.createUx(icons), onCommitted: async () => { window.refreshes++; return true; },
         });
     }, { icons: uxIcons, theme });
@@ -127,9 +131,8 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
     assert.equal(await page.locator("#deleteCancel").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#deleteDialog").evaluate(node => node.scrollTop), 0);
     assert.match(await page.locator("#deleteSummary").textContent(), /3 records across 2/);
-    assert.equal(await page.locator("#deleteBoundary").isVisible(), false, "The exact scope, not the selection explainer, leads confirmation.");
-    const scopeOffset = await page.locator("#deleteSummary").evaluate(node => node.getBoundingClientRect().top - node.closest(".decision-body").getBoundingClientRect().top);
-    assert.ok(scopeOffset <= 17, "Exact scope starts at the scrolling body's normal inset.");
+    assert.equal(await dialog.getAttribute("aria-describedby"), "deleteSummary");
+    assert.match(await page.locator("#deleteBoundary").innerText(), /not your Copilot chats or source files/);
     assert.equal(await page.locator(".decision-scope #deleteChangeScope").isVisible(), true);
     await capture("confirm");
     await page.locator("#deleteChangeScope").click();
@@ -150,6 +153,7 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
     assert.deepEqual(await actions.allTextContents(), ["Close", "Check deletion result"]);
     assert.equal(await page.locator("#deleteConfirm").isVisible(), false);
     const stored = await page.evaluate(() => sessionStorage.getItem("workiq-evidence.deletion-operation"));
+    assert.equal(stored, operationId);
     await page.locator("#deleteCancel").focus();
     await page.keyboard.press("Tab");
     assert.equal(await page.locator("#deleteCheck").evaluate(node => node === document.activeElement), true);
@@ -175,7 +179,7 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
     assert.equal(await page.evaluate(() => window.refreshes), 1);
 });
 
-test("shared native frame stays neutral without an explicit destructive kind and permits unavailable recovery scope", async t => {
+test("only a destructive confirmation uses a danger heading; checking its receipt stays neutral", async t => {
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 375, height: 1000 } });
@@ -191,13 +195,19 @@ test("shared native frame stays neutral without an explicit destructive kind and
             const button = dialog.querySelector("[data-decision-action]"), heading = dialog.querySelector(".delete-heading");
             const style = getComputedStyle(button), normal = getComputedStyle(heading).backgroundColor;
             dialog.dataset.decisionKind = "destructive";
+            const unknown = getComputedStyle(heading).backgroundColor;
+            dialog.dataset.decisionPhase = "confirm";
             const destructive = getComputedStyle(heading).backgroundColor;
             delete dialog.dataset.decisionKind;
-            return { neutral: normal !== destructive, fill: style.getPropertyValue("--pill-fill").trim(),
+            const neutralConfirm = getComputedStyle(heading).backgroundColor;
+            dialog.dataset.decisionPhase = "unknown";
+            return { normal, unknown, destructive, neutralConfirm, fill: style.getPropertyValue("--pill-fill").trim(),
                 expected: style.getPropertyValue("--accent-fill").trim(),
                 overflow: dialog.scrollWidth - dialog.clientWidth, scopeText: dialog.querySelector(".decision-body").textContent };
         }, theme);
-        assert.equal(result.neutral, true);
+        assert.equal(result.unknown, result.normal);
+        assert.equal(result.neutralConfirm, result.normal);
+        assert.notEqual(result.destructive, result.normal);
         assert.equal(result.fill, result.expected);
         assert.ok(result.overflow <= 1);
         assert.match(result.scopeText, /scope is unavailable/);

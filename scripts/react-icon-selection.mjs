@@ -1,0 +1,23 @@
+// Only these React Icons components may contribute artwork to the local package.
+export {
+    LuGroup, LuUsers, LuFileChartColumn, LuMessageCircleMore, LuChartBar, LuFolderArchive, LuUserRoundCheck,
+    LuListCollapse, LuFileCheck2, LuMessageCircleReply, LuFilePlus2, LuLockKeyholeOpen, LuListEnd,
+    LuAlarmClock, LuArchive, LuArchiveRestore, LuBadge, LuBellMinus, LuBellOff, LuBellPlus, LuBinary,
+    LuCalculator, LuCalendarCheck, LuCalendarClock, LuCalendarMinus, LuCalendarSearch, LuCalendarX,
+    LuFileInput, LuFolderInput, LuForward, LuInbox, LuKey, LuKeyRound, LuKeySquare, LuLink, LuListChecks,
+    LuListFilter, LuLogIn, LuLogOut, LuMailOpen, LuMailPlus, LuMailQuestion, LuMailSearch, LuMonitor, LuPlay,
+    LuReply, LuReplyAll, LuRoute, LuScanSearch, LuSend, LuSendHorizontal, LuSquareFunction, LuSquareMinus,
+    LuSquarePen, LuSquarePlus, LuSquareX, LuTag, LuTags, LuTrash2, LuUpload, LuUserPlus, LuVideo,
+    LuArrowLeft, LuArrowRight, LuArrowRightLeft, LuBookOpen, LuBot, LuCalendar, LuCalendarDays, LuChartColumn,
+    LuChartNoAxesCombined, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp,
+    LuCircleCheck, LuCircleDashed, LuCircleHelp, LuCircleX, LuClipboardCheck, LuClipboardList,
+    LuClipboardMinus, LuClipboardPlus, LuClock, LuCodeXml,
+    LuColumns2, LuCopy, LuDatabase, LuDownload, LuEllipsis, LuEye, LuEyeOff, LuFileCode, LuFileOutput,
+    LuFileSearch, LuFileText, LuFiles, LuFilter, LuFoldVertical, LuFolder, LuGlobe, LuGrid2X2,
+    LuHistory, LuHouse, LuInfo, LuLayers, LuLayoutGrid, LuListTodo, LuListTree, LuLoaderCircle, LuMail,
+    LuMaximize2, LuMenu, LuMessageCircle, LuMessageCircleHeart, LuMessageSquare, LuMessageSquareOff, LuMessageSquareReply,
+    LuMessagesSquare, LuMinimize2, LuMinus, LuMoon, LuNetwork, LuNotebook, LuPalette, LuPanelLeft,
+    LuPanelRightClose, LuPanelRightOpen, LuPanelsTopLeft, LuPlug, LuPlus, LuRefreshCw, LuRotateCcw,
+    LuScale, LuSearch, LuSettings, LuShield, LuSun, LuTriangleAlert,
+    LuUnfoldVertical, LuUnplug, LuUserRound, LuUsersRound, LuWorkflow, LuWrench, LuX,
+} from "react-icons/lu";

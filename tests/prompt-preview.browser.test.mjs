@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, chooseTheme } from "./helpers.mjs";
+import { fixture, chooseTheme, fulfillFixtureUpdateStatus } from "./helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -36,7 +36,7 @@ async function settled(page) {
 
 async function setup(t, records, { frozen = false } = {}) {
     const cleanup = [];
-    const app = await searchFixture({ after: action => cleanup.push(action) }, { records, formats: frozen ? ["html"] : [], reply: false });
+    const app = await searchFixture({ after: action => cleanup.push(action) }, { records, formats: frozen ? ["html"] : [], reply: false, frontend: "react" });
     const before = await loadBoardState(app.context);
     const frozenFiles = new Map();
     for (const bundle of app.bundles) for (const file of Object.values(bundle.files)) frozenFiles.set(file, await readFile(file));
@@ -45,10 +45,11 @@ async function setup(t, records, { frozen = false } = {}) {
     const errors = [], denied = [];
     page.setDefaultTimeout(10000);
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("**/*", route => {
+    await page.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
+        if (await fulfillFixtureUpdateStatus(route, new URL(app.runtime.url).origin)) return;
         const reads = ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/detail",
-            "/api/assessment/overview", "/api/search/query", "/api/search/status", "/api/search/events",
+            "/api/evaluation/automatic/summary", "/api/assessment/overview", "/api/search/query", "/api/search/status", "/api/search/events",
             "/api/search/cancel", "/api/search/open", "/api/search/membership"];
         if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && !reads.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
@@ -79,11 +80,12 @@ async function setup(t, records, { frozen = false } = {}) {
 
 const prompt = page => page.locator('[data-reader-section="prompt"]');
 const content = page => prompt(page).locator(".full-text-content");
-const bottomToggle = page => prompt(page).locator(".full-text-body > .prompt-preview-toggle");
-const topToggle = page => prompt(page).locator(".full-text-reader-actions > .prompt-preview-toggle");
-const card = (page, id) => page.locator(`.request-card-open[href*="request=${id}"]`);
+const promptToggle = page => prompt(page).locator(".reader-section-heading .prompt-preview-toggle");
+const card = (page, id) => page.locator(`#activityList [data-view-key="request:${id}"] .request-card-open`);
+const cardTime = (page, id) => page.locator(`#activityList [data-view-key="request:${id}"] .request-card-time`);
 
 async function open(page, id) {
+    if (await page.locator("#contextSidebar[open]").count()) await page.locator("#closeContextSidebar").click();
     await card(page, id).click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await settled(page);
@@ -99,9 +101,9 @@ async function geometry(page) {
 }
 
 async function collapsed(page) {
-    await expect(bottomToggle(page)).toHaveText("Show full prompt");
-    await expect(bottomToggle(page)).toHaveAttribute("aria-expanded", "false");
-    await expect(topToggle(page)).toBeHidden();
+    await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(promptToggle(page).locator('[data-icon-role=disclosure]')).toHaveCount(1);
+    await expect(prompt(page).locator(".prompt-preview-toggle")).toHaveCount(1);
     const size = await geometry(page);
     assert.ok(Math.abs(size.height - size.lineHeight * 6) <= 1, JSON.stringify(size));
     assert.ok(size.fullHeight > size.height);
@@ -130,32 +132,35 @@ test("long prompt previews preserve exact text, author, Copy and accessible repe
             await open(page, id);
             measurements.push({ theme, actor, ...await collapsed(page) });
             await expect(prompt(page).locator(".reader-section-title")).toHaveText(
-                { user: "My prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+                { user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
             await expect(prompt(page).locator(".reader-interaction-time")).toHaveText(
-                await card(page, id).locator(".request-card-time").textContent());
+                await cardTime(page, id).textContent());
             await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();
             assert.equal(await content(page).textContent(), exactPrompt);
             await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeInViewport();
             if (actor === "agent") await capture(page, "prompt-" + theme + "-collapsed");
-            await prompt(page).getByRole("button", { name: "Copy prompt", exact: true }).click();
+            await promptToggle(page).focus(); await page.keyboard.press("Tab");
+            const copyButton = prompt(page).getByRole("button", { name: "Copy prompt", exact: true });
+            await expect(copyButton).toBeFocused();
+            await page.keyboard.press("Enter");
             assert.equal(await page.evaluate(() => window.promptCopies.at(-1)), exactPrompt);
             const copy = await prompt(page).getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
-            await bottomToggle(page).focus();
+            const toggle = promptToggle(page);
+            const handle = await toggle.elementHandle();
+            await toggle.focus();
             for (let iteration = 0; iteration < 2; iteration++) {
                 await page.keyboard.press(iteration ? "Space" : "Enter");
-                await expect(topToggle(page)).toBeFocused();
-                await expect(topToggle(page)).toHaveAttribute("aria-expanded", "true");
+                await expect(toggle).toBeFocused();
+                await expect(toggle).toHaveAttribute("aria-expanded", "true");
                 assert.equal(await content(page).textContent(), exactPrompt);
                 const expanded = await geometry(page);
                 assert.ok(Math.abs(expanded.height - expanded.fullHeight) <= 1);
                 if (actor === "agent" && iteration === 0) await capture(page, "prompt-" + theme + "-expanded");
                 if (iteration === 0) {
-                    await bottomToggle(page).scrollIntoViewIfNeeded();
-                    await bottomToggle(page).focus();
-                    assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) > 500);
+                    assert(await handle.evaluate(node => node === document.activeElement), "The same header remains focused.");
                 }
                 await page.keyboard.press("Enter");
-                await expect(bottomToggle(page)).toBeFocused();
+                await expect(toggle).toBeFocused();
                 await collapsed(page);
                 assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) <= 12);
                 await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeInViewport();
@@ -194,7 +199,7 @@ test("reader date matches its card in the chosen zone and keeps missing-message 
         await open(page, id);
         const date = prompt(page).locator(".reader-interaction-time");
         await expect(date).toHaveText(expected);
-        await expect(date).toHaveText(await card(page, id).locator(".request-card-time").textContent());
+        await expect(date).toHaveText(await cardTime(page, id).textContent());
         await expect(date).toBeInViewport();
         await expect(page.locator('[data-reader-section="source"]')).toHaveAttribute("data-open", "false");
         const placement = await date.evaluate(node => ({
@@ -211,9 +216,12 @@ test("reader date matches its card in the chosen zone and keeps missing-message 
     await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();
     assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
     await capture(page, "reader-date-narrow");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await page.evaluate(() => localStorage.setItem("workiq-evidence.time-zone", "UTC"));
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await open(page, "dated");
     await expect(prompt(page).locator(".reader-interaction-time")).toHaveText("Oct 1, 2026, 6:59 AM");
 });
 
@@ -224,21 +232,21 @@ test("overflow is six actual lines, rechecks width and text size, and does not l
         record("other-long"), record("resize", "Review the invented Cedar workshop notes and preserve the original source references. ".repeat(6))];
     const { page } = await setup(t, records);
     await open(page, "six-lines");
-    await expect(bottomToggle(page)).toBeHidden();
+    await expect(promptToggle(page)).toHaveCount(0);
     assert.equal(await content(page).textContent(), six);
     await capture(page, "prompt-six-lines-no-toggle");
     await open(page, "seven-lines"); await collapsed(page);
-    await bottomToggle(page).click();
-    await expect(topToggle(page)).toBeVisible();
+    await promptToggle(page).click();
+    await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "true");
     await open(page, "other-long"); await collapsed(page);
     await open(page, "seven-lines");
-    await expect(topToggle(page)).toHaveAttribute("aria-expanded", "true");
-    await topToggle(page).click();
+    await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await promptToggle(page).click();
     await open(page, "resize");
     await collapsed(page);
     await page.locator("#expandInteraction").click();
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "expanded");
-    await expect(bottomToggle(page)).toBeHidden();
+    await expect(promptToggle(page)).toHaveCount(0);
     await page.locator("#expandInteraction").click();
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
     await collapsed(page);
@@ -251,13 +259,14 @@ test("overflow is six actual lines, rechecks width and text size, and does not l
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "overlay");
     await settled(page);
     await collapsed(page);
-    await expect(bottomToggle(page)).toBeInViewport();
+    await promptToggle(page).scrollIntoViewIfNeeded();
+    await expect(promptToggle(page)).toBeInViewport();
     await capture(page, "prompt-dark-narrow-enlarged");
-    await bottomToggle(page).click();
-    await expect(topToggle(page)).toBeFocused();
+    await promptToggle(page).click();
+    await expect(promptToggle(page)).toBeFocused();
     await page.keyboard.press("Enter");
     await collapsed(page);
-    await expect(bottomToggle(page)).toBeFocused();
+    await expect(promptToggle(page)).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
 });
@@ -271,17 +280,26 @@ test("Search opens the full long prompt and Back preserves the literal result an
     const hit = page.locator('.wire-search-hit[data-search-type="interaction"]');
     await expect(hit).toHaveCount(1);
     await expect(hit.locator("mark")).toHaveText("violet-lantern");
+    const hitId = await hit.getAttribute("data-search-id");
+    assert.ok(hitId);
+    const verified = page.waitForResponse(response => response.url().endsWith("/api/search/open"));
     await hit.focus(); await page.keyboard.press("Enter");
+    const opened = await verified;
+    assert.equal(opened.status(), 200);
+    assert.equal(opened.request().postDataJSON().id, hitId);
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-    await expect(topToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:search-long");
+    await expect(promptToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(content(page)).toBeFocused();
     assert.equal(await content(page).textContent(), exactPrompt);
     const expanded = await geometry(page);
     assert.ok(Math.abs(expanded.height - expanded.fullHeight) <= 1, "The Search destination is not clipped");
-    await bottomToggle(page).scrollIntoViewIfNeeded();
+    await content(page).evaluate(n => n.scrollIntoView({ block: "end" }));
     await capture(page, "prompt-search-ending");
     await page.goBack();
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#wireSearch")).toHaveValue("violet-lantern");
+    await expect(hit).toHaveAttribute("data-search-id", hitId);
     await expect(hit).toBeFocused();
     await capture(page, "prompt-search-return");
     assert.ok(!page.url().includes("violet"));

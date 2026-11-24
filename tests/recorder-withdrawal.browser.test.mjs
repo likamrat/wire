@@ -32,7 +32,7 @@ async function setup(t, grant = "current") {
             const held = gate; gate = null; held.enter(); await held.promise;
             if (held.failure) return { fixtureError: "PRIVATE_REVOKED_STATUS_ERROR" };
         }
-        return result;
+        return path === "/api/record/status" ? { ...result, canStart: true } : result;
     });
     await page.goto("https://wire.invalid/");
     await page.addScriptTag({ content: `window.mountRecorder=${mountRecorderDiagnostics};` });

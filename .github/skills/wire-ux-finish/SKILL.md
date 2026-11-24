@@ -1,6 +1,6 @@
 ---
 name: wire-ux-finish
-description: Finish WIRE interfaces against established human-reading and interaction principles. Use for UI changes, repeated design feedback, cross-surface inconsistencies or user-facing readiness review. Inspect affected real journeys and transitions without launching a redesign or broad test campaign.
+description: Reviews WIRE screens through the user's actual journey. Use for control layout, wording, repeated design feedback, hover, motion, focus or return-position changes.
 license: MIT
 ---
 
@@ -42,8 +42,13 @@ surfaces actually affected. Keep unrelated redesign opportunities out of scope.
   hierarchy through alignment, regular typography and purposeful spacing.
 - Use concise, concrete wording. Retain necessary uncertainty and exact evidence
   without exposing every stored field, repeated heading or engineering recital.
-- Preserve the current Asta Sans, Lucide, theme and sidebar conventions in the
-  design contract; derive current values there rather than copying old palettes.
+- For user-facing copy, use `humanizer` when available. Read the
+  label with its heading, neighboring rows and destination. Could someone explain
+  what happened or what to do next without knowing how WIRE stores the data?
+  Put the answer first. If a detail is unknown and it matters to the decision,
+  say what WIRE cannot tell. Keep original diagnostic text available as evidence.
+- Compare the control with a [shipped peer](../../../docs/design.md#one-coherent-workspace)
+  in its full screen. Use the design contract for type, icon and color roles.
 - Share author, service and outcome meaning across surfaces. Labels/icons support
   color; service identity is not success and missing evidence is not failure.
 - Inspect painted glyphs, baselines, line boxes, padding and hit areas together.
@@ -52,16 +57,18 @@ surfaces actually affected. Keep unrelated redesign opportunities out of scope.
   recovery actions keep their effects and boundaries even when prose is reduced.
 - Preserve screen/report style isolation and the current shared Search behavior.
 
-Use existing WIRE components and browser automation for observation. This
-workflow needs no personal design skill, new design system, reference hunt
-or component framework.
+Use existing WIRE components and observe them in the browser. Personal design
+tools are optional unless the user requests one for this task.
 
 **Ready:** the candidate fixes the shared cause while preserving meaning, exact
 content, accessibility and existing product behavior.
 
 ## 3. Operate the affected journey
 
-Use the normal renderer on the exact candidate with realistic invented data:
+Use the renderer from the reported entry on the exact candidate. If React
+and standalone markup both implement the changed control, exercise that
+control in both; a shared controller does not prove identical layout or focus.
+Use realistic invented data:
 plural tools/services, long content, missing facts or failures where relevant.
 Follow the affected path into and back out of its contextual surfaces.
 Inspect the composed screen, not only crops or computed style values.
@@ -83,8 +90,10 @@ obviously confusing layout. Fix observed defects with the existing owner and
 retest that scenario; do not commission another review team or broad campaign.
 Respect permission gates for private data, clipboard effects and live operations.
 
-**Ready:** the relevant user action works and the resulting information is
-readable without new clutter, layout shifts or broken return behavior.
+**Ready:** say what someone can learn on first opening the view, before choosing
+controls. Follow one visible summary or chart value to its exact authorized
+evidence and back when that is part of the task. Changing what is visible must
+remain distinguishable from changing the measured population.
 
 ## 4. Finish honestly
 

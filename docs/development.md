@@ -12,15 +12,86 @@ use native Linux Node and install dependencies there; do not reuse a Windows
 
 ```text
 npm ci
+npm run build
 npm start
 ```
 
 Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
 that terminal to stop WIRE; closing the browser tab leaves it running.
 
-To update an existing checkout, stop its WIRE process, pull the changes, run
-`npm ci` and restart. If the port is already in use, check whether WIRE is
-already running rather than stopping an unfamiliar process.
+### Updating WIRE
+
+On Windows or WSL, in-app updates require a clean standalone clone of the
+official WIRE repository on `main`, with the updater already included.
+Use `npm start` with the usual port and data folder, without development flags.
+In your browser, open **Settings > General** and choose **Check for updates**.
+This works with automatic checks off. When WIRE offers a build, **Update**
+installs it and restarts at the same address. **Dismiss** hides that notice;
+you can still choose **Update** in General.
+
+For a clean official `main` clone, use the manual path on macOS or standalone
+Linux, or if the installed version predates the updater. Finish open work and
+stop only its own WIRE process. In that same clone, run `git pull --ff-only origin main`,
+`npm ci`, `npm run build` and `npm start` with the original OS user,
+data-folder override and port. Do not switch a development copy to `main`.
+A conflict is a reason to stop, not to rebase or discard someone's edits.
+
+Automatic checks run on opening and daily while in use. Checking may fetch
+Git objects, including documentation. Changes to docs, tests or CI alone
+do not create an app-update notice. Git uses the current
+user's repository access; no source approval or Copilot sign-in is requested.
+
+Finish any report, close other WIRE panels, and resolve unconfirmed saves or
+deletions before updating. Keep the terminal open while WIRE prepares its
+replacement. App versions and the activation record stay inside this clone’s
+Git directory, separate from evidence. A failed check is not “up to date.”
+On restart, return to the same address and reopen an old canvas if needed.
+The updater never restores a previous copy of your store or takes over a port.
+If it cannot verify a clean shutdown or compatible reader, leave the store and
+lock intact and inspect the original launcher error.
+
+Contributor worktrees, forks, modified clones and special development launch
+modes stay manual. Do not use a new data folder to resolve an update problem.
+For a directly launched runtime, **General** shows the local package version,
+not a verified Git build. WIRE cannot check or restart this copy. Keep its usual
+update and restart process rather than changing how it runs to enable the button.
+One-click activation is qualified on Windows and WSL. Standalone Linux and
+macOS use the same-folder manual path until their cutover tests pass natively.
+Special modes cannot bypass an active staged build or unresolved handoff.
+When a candidate changes the registered canvas adapter or its dependencies,
+WIRE declines the switch rather than silently running the old adapter.
+An expired tab can lose data access without resolving its draft or Save.
+If WIRE cannot confirm that all panels finished, resolve their original
+operations before manually restarting; do not replay them from a new tab.
+When adding a document consumed at runtime, list its tracked path in
+`lib/update-runtime-docs.json` so changes to that document qualify. An
+incompatible store, launcher or canvas change must update the compatibility
+contract rather than silently treating older readers as compatible.
+
+`npm run test:update-runtime` builds and updates a disposable clone using
+the platform's own Git, Node and npm, then reopens a saved report at the
+original address and verifies its bytes. It does not update your installation.
+With the project's Playwright Chromium installed, set `WIRE_UPDATE_BROWSER=1`
+to exercise the green **Update** button through restart and verify that the
+reloaded browser is executing the new build.
+
+To try the update yourself on Windows or WSL, set `WIRE_UPDATE_BROWSER=manual`
+and run `npm run test:update-runtime`. In PowerShell:
+
+```powershell
+$env:WIRE_UPDATE_BROWSER = 'manual'
+npm run test:update-runtime
+Remove-Item Env:WIRE_UPDATE_BROWSER
+```
+
+Open the printed **Disposable update simulation** address in one tab. In
+**Settings > General**, choose **Check for updates**. Checking does not
+install anything. Try **Dismiss**, then choose **Update** in General.
+When the same page says **WIRE updated**, compare its build to the one in
+the terminal. Open **Reports** to read the saved example. No GitHub release,
+account connection or change to your usual WIRE installation is involved.
+The simulation waits up to 20 minutes for the update, then stays open two
+minutes after verification so you can inspect the result.
 
 ## Windows, WSL and Linux
 
@@ -38,7 +109,7 @@ Installing Node or running WIRE on an OS does not by itself make a supported
 Copilot source available.
 
 If Windows WIRE is already on port 4000, run a second instance from a separate
-WSL checkout. Run `npm ci` there, then choose a separate data folder and unused port:
+WSL checkout. Run `npm ci` and `npm run build` there, then choose a separate data folder and unused port:
 
 ```sh
 WORKIQ_EVIDENCE_DATA_DIR="$HOME/.local/share/wire-wsl/data" npm start -- --port 4001
@@ -68,11 +139,48 @@ An occupied explicit port is an error. The port does not isolate or move data;
 `WORKIQ_EVIDENCE_DATA_DIR` selects the store.
 
 Before restarting on a different port, finish drafts and resolve unconfirmed
-operations in the current tab. Browser preferences, drafts and recovery markers
-belong to that address and do not transfer. Never repeat an uncertain operation
-at a new address.
+operations in the current tab. Browser preferences and recovery markers belong
+to that address; unfinished previews belong to their panel. Named report
+drafts are stored with the instance. A new port does not create a new store.
+Never repeat an uncertain operation at a new address.
 
 ## Keep development data separate
+
+### Run a feature checkout beside main
+
+From the feature checkout, install dependencies with `npm ci`, then run:
+
+```text
+npm run dev
+```
+
+This builds the checkout and starts the normal access-bound WIRE server with
+the React renderer on loopback port 4100. Its private store is outside Git,
+keyed to the checkout's physical directory. Reopening the same checkout keeps
+its store; moving the checkout creates a new one. Different branches switched
+in the **same directory** share a store: use separate worktrees to isolate them.
+This launcher refuses an inherited `WORKIQ_EVIDENCE_DATA_DIR`. Unset it in the
+contributor shell; do not copy main's store or approvals.
+
+Open the **printed URL**, not main's port or a restricted preview. Choose an
+unused port with `npm run dev -- --port 4101`; keep it stable for browser
+preferences and pending operations. For the other renderer use
+`npm run dev -- --development-frontend bundled`. The renderer does not select
+an account, approve a source or change permission. **Review and connect**
+lets you independently approve supported local Copilot history. Before approval
+the Account menu is neutral; a verified profile comes from that instance's
+approved source, not a copied avatar or the branch name.
+
+If using the optional WIRE canvas, its adapter accepts
+`{"boardId":"workiq-evidence-board-v1","runtimePort":4100}` at open. Use the
+actual printed port and a distinct canvas instance; omitting the port selects
+main's default 4000. If the canvas does not offer `runtimePort`, use the
+browser URL or run `npm run install:canvas` in this checkout and reload
+extensions. This points your personal canvas launcher at this checkout's
+adapter for future sessions. It does not start
+a writer or grant source access. A closed or replaced runtime requires a
+fresh canvas; resolve uncertain operations in the original instance, never
+replay them on another.
 
 A disposable fixture needs an explicit owned data directory outside source,
 disabled collection timers and invented source paths. Never point it at a
@@ -97,6 +205,140 @@ node --test tests/search-text.test.mjs
 input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
+
+Use `npm run test:packaging` for the production-only installation check. It
+builds the browser assets, then checks the packaged browser and local Search
+against the same disposable install.
+
+For changes to native report selection, saving or recovery, run `npm run build`
+followed by `node --test tests/native-report-save.qualification.mjs`. This
+browser check uses invented Microsoft activity and a disposable store. It
+needs no live Microsoft account or separate backend checkout. It runs
+separately from `npm test`.
+
+Two other checks need an explicit environment. Use a fresh PowerShell session
+for each:
+
+- **Browser zoom:** With Chrome installed and the client built, set
+  `$env:WIRE_CHART_NATIVE_ZOOM = '1'`. Run
+  `node --test --test-concurrency=1 --test-name-pattern="actual 200% browser zoom|complete filter qualifications until reset \(native zoom\)" tests/analyze-entry-layout.browser.test.mjs tests/chart-reference-integration.browser.test.mjs`.
+  These checks zoom the browser itself, not just the page font.
+- **Offline operator and transport:** On a clean Windows checkout, set
+  `$env:WIRE_HISTORY_TEST_COMMIT = (git rev-parse HEAD)`. Run
+  `node --test --test-concurrency=1 --test-name-pattern="offline clean candidate:" tests/microsoft-engineering-admission.test.mjs tests/microsoft-native-transport.test.mjs`.
+  This exercises startup, cancellation and cleanup without launching a live provider.
+
+### Changing a Copilot journal format
+
+Run `npm run test:history-compatibility` when changing source recognition,
+retention or historical recovery. It uses invented journals and disposable
+stores. It compares normal collection with recovery from the **same original
+events** after the connector mapping arrives late. Compare the originating
+prompt, author, call, start, completion and outcome, not just the count.
+A start without an end can be retained as unknown by collection; it is not
+independently recoverable as a completed call.
+
+For a newly observed layout, add the smallest invented example to the
+existing fixtures. Keep an older layout in the comparison and include a
+counterexample that would change attribution or exclusions. A new field is
+not safe merely because the current collector ignores it. An unfamiliar
+record after a valid call must not produce an empty-success response or
+leave the earlier call available for confirmation. No test should require
+someone's real history or permission to replay it.
+
+### Browser build and React evaluation
+
+`npm run build` creates local, content-hashed browser modules in `dist/client`.
+Normal startup serves these assets from the existing Node server; it does not
+run a Vite server or require development dependencies at runtime. The panel
+bootstrap remains private and uncached. A missing build or a source/build
+mismatch fails explicitly; rebuild rather than falling back to older code.
+Pre-paint theme/navigation preferences stay in the small inline bootstrap.
+
+`lib/page-path.mjs` lists the shell's exact GET paths. `/` is Analyze;
+`/analyze` and a single trailing slash are accepted aliases. A recognized
+legacy route fragment is replaced in the same history entry; ordinary document
+anchors are not routes. Do not add a catch-all SPA fallback: assets, APIs, saved
+files and unknown paths must retain their own handling and access checks.
+The bundled and React clients use the same route controller. Its public query
+projection admits known choices and dates, never record IDs, free text, source
+paths or operation receipts. A `privateView=required` marker carries no data
+or authority. Private state and a modified-click handoff live only in the
+authorized page; copying the marker cannot recover them. An ordinary saved
+report link names the saved bundle, not permission to read it.
+
+An ordinary retained interaction may use `/request?record=…`. Its locator
+is a purpose-separated HMAC using the store's existing pseudonym key, access
+generation, source binding, deletion epoch and exact record identity. Resolve
+it only in the currently admitted snapshot, with no lookup API, separate
+registry, or write. A missing or ambiguous match is unavailable. Search-owned
+reads, exact calls and other private scopes do not become ordinary bookmarks.
+
+For React evaluation, use the [feature checkout launcher](#run-a-feature-checkout-beside-main).
+For an already managed, explicitly owned evaluation store, set
+`WORKIQ_EVIDENCE_DATA_DIR` to its absolute path and use
+`npm start -- --development-frontend react --port <unused-port>`.
+Without an explicit store, this lower-level React command refuses startup;
+it never silently adopts the normal default store.
+To offer **Verified records only (day incomplete)** on one Copilot-only
+runtime, append `--verified-record-recovery` to its startup command. The
+option lasts only for that process; it does not change the store, approval,
+collection policy or default strict selection. Omitting it leaves
+verified-record recovery unavailable. See [explicit recollection](collection.md#explicit-recollection).
+
+The single React shell composes the header/navigation, Analyze overview and
+activity, filter panel, Search and contextual reader. Existing chart, evidence,
+select-control and Search controllers are explicit native DOM adapters, not
+parallel authorities. React-owned structure and native-owned content do not
+replace each other's children.
+
+`web/frontend/workspace-state.ts` owns accepted evidence/scope, pending reads,
+navigation and reading generations, date drafts and return positions for both
+entries. Only public destination/readiness metadata enters the shell's React
+subscription; private content remains fenced by the shared transport and its
+owned presenters. Reader exit releases response hosts as well as text readers.
+
+The compact Analyze hierarchy shares one accepted period, keeps actual scope
+qualifications visible and retains complete breakdowns below full-width evidence.
+Trends, Reports, Compare and Settings still use their existing feature
+controllers. Omitting the flag retains the bundled established renderer; this
+development selection is not authorization to replace a live runtime.
+
+For an isolated synthetic check without starting a normal store, install the
+Chromium build for this checkout's Playwright version if it is missing:
+
+```text
+npx playwright install chromium
+npm run test:frontend
+```
+
+This type-checks, builds and exercises both entries, including exact Search
+Open/Back, accepted/failed/held filter reads, later navigation intent, retired
+actions and cross-panel withdrawal with the reader, Search and filters present.
+Repeated complete journeys check mounted-shell identity, released response hosts
+and stable connected DOM/listener counts. Raw heap/DOM-counter samples are also
+recorded; browser-native input edit history is not application-owned DOM leakage.
+`WIRE_FRONTEND_PROOFS` can name a private output directory for screenshots and
+delivery measurements. `WIRE_FRONTEND_BROWSER=msedge` selects an already installed
+Edge for the evaluation fixture only; the bundle test still uses Playwright's
+Chromium. Neither test downloads a browser. Measurements are samples,
+not proof that adding React is faster. Numerical acceptance budgets remain
+separate from the existing behavioral checks.
+
+The `startServer` library retains its inline compatibility entry when `frontend`
+is omitted, for existing serialization-based fixtures. New frontend proof must
+explicitly use `frontend: "bundled"` or `"react"` and the real build. Do not treat
+an inline fixture as proof of the packaged browser entry.
+
+To compare Analyze counts with main, prepare this checkout and a separate
+trusted reference checkout for their respective normal startup (`npm ci` and
+`npm run build --if-present` in each). Set
+`WIRE_COUNT_REFERENCE_ROOT` to the reference checkout's absolute path, then run
+`node --test tests/count-parity.qualification.mjs` here. It launches the
+reference normally and this checkout in contributor mode on ephemeral ports,
+approves the same invented source in two disposable stores, and checks call
+and interaction identities as well as the counts shown across pages and filters.
+It does not connect to either running installation or copy personal history.
 
 For source-reader changes, the opt-in
 `tests/wsl-portability.qualification.mjs` suite runs from Windows against
@@ -139,12 +381,15 @@ with capture evidence, and add a visible caption only when it helps explain the 
 Application screenshots in Markdown use Light theme and the browser's light
 color scheme. Theme-aware diagrams and brand assets keep their light/dark variants.
 
+### Capture documentation screenshots
+
 [`tests/documentation-screenshots.mjs`](../tests/documentation-screenshots.mjs)
-captures Analyze, Search, reporting, comparisons and Settings with invented
+captures Analyze, Trends, Search, reporting, comparisons and Settings with invented
 activity and disposable saved reports. Set `WIRE_DOC_OUTPUT` to an owned image
 directory and `WIRE_DOC_PROOF` to a separate private evidence directory, then run:
 
 ```text
+npm run build
 node --test tests/documentation-screenshots.mjs
 ```
 
@@ -154,15 +399,20 @@ Search over Analyze and live period comparison without unrelated report journeys
 or screen captures. One synthetic saved report supplies the Search example.
 Set `WIRE_DOC_CAPTURE=reports` for report choices, reading, copy inspection,
 file views and Save/Open without recapturing Analyze, comparisons or Settings.
-Set `WIRE_DOC_CAPTURE=analyze` for only Analyze and the README overview, without
+Set `WIRE_DOC_CAPTURE=analyze` for Analyze, the outcome link and reader, and the README overview, without
 creating saved-report fixtures or visiting unrelated destinations.
 
-The capture requires committed product source, uses an available loopback port
+The capture uses the feature checkout's compiled React renderer and requires
+committed product source. It uses an available loopback port
 with collection timers disabled, and closes its browser/runtime and temporary
 store. It records source and fixture hashes, image hashes and inspected file
 formats in the private evidence directory. Inspect the captures before copying
 the applicable PNGs into `docs/images`; keep receipts and extra proof images out
 of source.
+
+Capture the maximized reader separately. In Analyze, open an invented interaction
+with a returned entry and a separate failed call. Choose **Maximize interaction**
+and keep both calls and the recorded reason in view for `interaction-maximized.png`.
 
 For first-use connection, run `tests/first-connection.browser.test.mjs` with
 `WIRE_FIRST_CONNECTION_PROOFS` set to an owned private directory. It exercises
@@ -170,57 +420,21 @@ the welcome, deliberate source approval and first retained activity using
 invented Copilot metadata and history. Only the welcome image is used in the
 guide; source-review captures include temporary local paths and stay private.
 
-Shared-control proofs use `tests/appwide-controls.browser.test.mjs` with
-`WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
-and saved reports also exercise keyboard paging and frozen-file preservation.
-Focused Settings-search proofs use `tests/settings-search.browser.test.mjs` with
-`WIRE_SETTINGS_SEARCH_PROOFS` set to an owned capture directory. It starts
-the normal runtime on an ephemeral port with invented Cedar activity and source
-paths, disables collection timers, rejects action requests and checks that
-retained data and collection configuration stay unchanged.
+For a change to an individual control, use its existing browser test rather
+than rebuilding every documentation image. These tests take a private output directory:
 
-For Trends, `tests/trends.browser.test.mjs` uses invented requests and the normal
-renderer, with collection timers and provider work disabled. Set
-`WIRE_TRENDS_PROOFS` to an owned private capture directory. The overview, daily
-axes, exact-evidence reading, filters, sizing and heading-icon journeys share
-that fixture; screenshots are not evidence of live collection or deployment.
-The widget-layout regression operates every chart in overview, maximized,
-collapsed and restored states at 3440px landscape, 1080px portrait and enlarged
-narrow text. It checks full-width rows, visible measure controls, whole labels
-and the absence of accidental vertical chart scrolling.
-The control matrix also exercises every measure and series toggle, sizing,
-exact evidence, numbers and guide controls for all seven widgets over
-7/14/30/custom periods. Separate hover captures verify centered, nonoverlapping
-targets and uniform collapsed rows in both themes and enlarged text.
-Date-context cases verify every widget header after presets and custom Apply,
-including month/year boundaries, one-day ranges, Cancel, held/failed reads and
-access withdrawal. Source-wide coverage metadata remains separate from the
-chart-specific limits shown in Trends.
-Point-selection cases compare all widget bounds and scroll positions before
-and after actual data clicks across the seven-widget/four-period matrix.
-Touch and keyboard also select in place; explicit sizing must retain the
-selected point and its exact evidence.
+| What changed | Browser test | Output variable |
+| --- | --- | --- |
+| Keyboard paging or file controls | `tests/appwide-controls.browser.test.mjs` | `WIRE_VISUAL_PROOFS` |
+| Settings search | `tests/settings-search.browser.test.mjs` | `WIRE_SETTINGS_SEARCH_PROOFS` |
+| Daily charts, sizing, dates or the return from a call | `tests/trends.browser.test.mjs` | `WIRE_TRENDS_PROOFS` |
+| Brand, navigation or avatar | `tests/branding.browser.test.mjs` | `WIRE_BRAND_PROOFS` |
 
-The sidebar performance case compares native collapse/expand motion on populated
-7- and 30-day Trends with Analyze and Reports in the same browser. It measures
-input-to-motion, completion, frame gaps, long tasks and full SVG rebuilds, with
-repeated reversal and a portrait layout. Width-only changes must reposition
-mounted chart nodes, not reformat dates or rebuild the evidence scene.
-Both latest-date and earlier-date anchors must survive reversal; deliberate
-horizontal scrolling during the glide must replace the old anchor.
-Run it with `node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
-Set `WIRE_TRENDS_PERFORMANCE` to an owned JSON file for measurements; optional
-`WIRE_TRENDS_PROFILE` writes the 30-day Chromium CPU profile. Keep these private.
-Timing uses invented activity, disabled collection timers and the unchanged
-320ms sidebar animation; an empty chart or shorter animation is not a substitute.
-
-For the brand and navigation header, `tests/branding.browser.test.mjs` uses
-invented Cedar activity and a synthetic selected profile in the normal renderer.
-Set `WIRE_BRAND_PROOFS` to an owned private directory for theme/layout captures
-and unpaused frame traces. It checks full-name help, separate navigation help,
-header alignment, repeated reversal, the mounted avatar and the narrow drawer
-under native and explicitly reduced-motion preferences. Providers and action
-requests are blocked; its disposable runtime and store are closed afterward.
+For sidebar motion on populated charts, run
+`node --test --test-name-pattern="populated Trends sidebar motion" tests/trends.browser.test.mjs`.
+Set `WIRE_TRENDS_PERFORMANCE` to a private JSON file for timings, or
+`WIRE_TRENDS_PROFILE` for the Chromium CPU profile. For an actual divider
+drag, build first and run `node --test tests/sidebar-resize.qualification.mjs`.
 
 ## Troubleshoot a local run
 
@@ -262,4 +476,9 @@ Read the contract for the boundary you change. Use source and tests for exact
 schemas rather than copying them into another guide.
 
 When changing bundled assets, keep their license notices intact, including the
-[Asta Sans OFL](../assets/fonts/OFL.txt) and Lucide ISC/Feather MIT notices.
+[Asta Sans OFL](../assets/fonts/OFL.txt), React Icons MIT and Lucide ISC/Feather MIT notices.
+Add icon roles to `web/icon-roles.mjs` and named `react-icons/lu` exports to
+`scripts/react-icon-selection.mjs`. Run `npm run icons:generate` and commit the
+generated SVG catalog; `npm run build` checks it against the installed package.
+The packaged DOM and native renderers use this catalog without React roots,
+an icon font, an external request, or a development dependency at startup.

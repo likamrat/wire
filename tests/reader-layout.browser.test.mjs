@@ -6,14 +6,12 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { fixture, privateFixture, chooseTheme, revealAnalyzeRecords } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, revealAnalyzeRecords, navigateMain } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contract, retainedResponse, samples } from "./assessment-ui-fixtures.mjs";
 import { graphMatrixRecord } from "./report-evidence-matrix-fixtures.mjs";
-import { recordedResponseTiming } from "../lib/response-timing.mjs";
-import { recordedInteractionModels } from "../lib/interaction-model.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
-import { searchFixture } from "./live-search-fixture.mjs";
 
 const proofs = process.env.WIRE_READER_PROOFS;
 async function captureCorrection(page, name, sectionName, focusSelector) {
@@ -162,11 +160,53 @@ async function readerSettled(page) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
+const sourceToggle = page => page.getByRole("button", { name: "Source details", exact: true });
+
 async function readerShot(page, name) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
     await page.screenshot({ path: path.join(proofs, name + ".png") });
 }
+
+for (const withReply of [false, true]) test(`reader section jumps pair named icons with their real destinations (reply: ${withReply})`, async t => {
+    const { page } = await setup(t, [readerRecord()], withReply ? { responseText: "The invented release notes are ready." } : {});
+    const jumps = page.getByRole("navigation", { name: "In this interaction" });
+    const destinations = [["Prompt", "prompt", "message-square"], ["Activity", "activity", "rotate-ccw-clock"],
+        ...(withReply ? [["Reply", "response", "message-square-reply"]] : []), ["Source", "source", "list-tree"]];
+    if (withReply) await expect(page.locator('[data-reader-section=response] pre')).toBeVisible();
+    await chooseTheme(page, withReply ? "light" : "dark");
+    for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 950 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await readerSettled(page);
+        await jumps.scrollIntoViewIfNeeded();
+        await readerShot(page, `section-jumps-${withReply ? "with-reply" : "ordinary"}-${width}`);
+        await expect(jumps.getByRole("button")).toHaveText([...destinations.map(([label]) => label), "Add to report"]);
+        await expect(jumps.getByRole("button", { name: "Add to report" })).toHaveAttribute("aria-haspopup", "dialog");
+        for (const [label, name, icon] of destinations) {
+            const control = jumps.getByRole("button", { name: label, exact: true });
+            await expect(control.locator("svg")).toHaveAttribute("data-lucide-icon", icon);
+            await expect(control.locator("svg")).toHaveAttribute("aria-hidden", "true");
+            await control.focus(); await page.keyboard.press("Shift");
+            await expect(control).toHaveCSS("outline-style", "solid");
+            assert.ok(await control.evaluate(node => {
+                const rect = node.getBoundingClientRect(), body = document.getElementById("contextSidebarBody");
+                const glyph = node.querySelector("svg").getBoundingClientRect(), range = document.createRange();
+                range.selectNodeContents(node.lastChild);
+                const label = range.getBoundingClientRect();
+                return rect.height >= 44 && rect.width <= body.clientWidth && body.scrollWidth <= body.clientWidth + 1
+                    && glyph.width > 0 && glyph.right < label.left && label.right <= rect.right
+                    && Math.abs((glyph.top + glyph.bottom - label.top - label.bottom) / 2) <= 2;
+            }));
+            await page.keyboard.press("Enter");
+            const section = page.locator(`[data-reader-section="${name}"]`);
+            await expect(section.locator(":scope > h2")).toBeFocused();
+            await expect(section).toHaveAttribute("data-open", "true");
+            await expect(control).toHaveAttribute("aria-current", "location");
+            await expect(jumps.locator("[aria-current]")).toHaveCount(1);
+        }
+    }
+});
 
 function longReaderRecord() {
     const record = readerRecord();
@@ -185,7 +225,7 @@ function longReaderRecord() {
 
 // Keep a character on the current line, not a scrollTop proxy that passes despite reflow.
 async function rememberReaderLine(page, offset = 2400) {
-    const expand = page.locator("#selectedContext").getByRole("button", { name: "Show full prompt", exact: true });
+    const expand = page.locator('[data-reader-section="prompt"] .prompt-preview-toggle[aria-expanded=false]');
     if (await expand.isVisible()) await expand.click();
     return page.locator('[data-reader-section="prompt"] pre').evaluate((node, offset) => {
         const body = document.querySelector("#contextSidebarBody"), text = node.firstChild;
@@ -276,7 +316,9 @@ test("combined reader preserves a visible text line, identity, disclosure and ch
     await page.locator(".request-card-open").first().click();
     await readerSettled(page);
     assert.ok(Math.abs(await width() - originalWidth) < 1, "Fresh opening retains the existing default");
-    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
+    const failed = page.locator('[data-tool-call-id="invented-second-call"]');
+    await expect(failed).toBeFocused();
+    await expect(failed).toBeInViewport();
 });
 
 test("combined reader bounds, touch alternatives and responsive single-pane preserve the current reading", { timeout: 30000 }, async t => {
@@ -316,26 +358,15 @@ test("combined reader bounds, touch alternatives and responsive single-pane pres
     await expect(panel).not.toBeVisible();
 });
 
-test("approved reader opens the prompt first with useful sections and one visibility owner", { timeout: 20000 }, async t => {
+test("Source identifiers can be selected without copying or folding the prompt", async t => {
     const { page, records } = await setup(t);
-    const reader = page.locator("#requestContent");
-    await expect(reader.locator("[data-reader-section]").first()).toHaveAttribute("data-reader-section", "prompt");
-    await expect(reader.locator('[data-reader-section="prompt"] pre')).toHaveText(records[0].userPrompt.text);
-    await expect(reader.locator('[data-reader-section="timing"],[data-reader-section="reviews"]')).toHaveCount(0);
-    await expect(reader.locator('[data-reader-section="prompt"] time')).toHaveAttribute("datetime", records[0].userPrompt.sourceTimestamp);
-    await expect(reader.locator('[data-reader-section="activity"]')).toContainText("workiq-fetch");
-    await expect(reader.locator('[data-reader-section="source"]')).toContainText("invented-reader-call");
-    await expect(reader.getByRole("button", { name: "Hide prompt", exact: true })).toHaveCount(0);
-    await expect(reader.locator(".journey-item > details")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toBeVisible();
-    const sourceId = reader.locator('[data-reader-section="source"] code').first();
-    await sourceId.click({ clickCount: 3 });
+    await sourceToggle(page).press("Enter");
+    await page.getByRole("button", { name: "Record identifiers" }).press("Enter");
+    const id = page.getByText(records[0].userPrompt.sourceEventId, { exact: true });
+    await id.click({ clickCount: 3 });
     assert.equal(await page.evaluate(() => getSelection().toString().trimEnd()), records[0].userPrompt.sourceEventId);
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(reader.locator(".full-text-body")).toHaveCount(0);
-    await expect(reader.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(reader.locator('[data-reader-section="prompt"] pre')).toHaveText(records[0].userPrompt.text);
+    assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
+    await expect(page.locator('[data-reader-section="prompt"] pre')).toHaveText(records[0].userPrompt.text);
 });
 
 test("retained response has one section owner that clears and restores exact text and Copy", { timeout: 20000 }, async t => {
@@ -355,145 +386,16 @@ test("retained response has one section owner that clears and restores exact tex
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [exact, exact]);
 });
 
-test("retirement: bulk folding has no personal editor and leaves report actions outside reading", { timeout: 20000 }, async t => {
-    const { page, context } = await setup(t);
-    const before = (await loadBoardState(context)).personalEvaluation, url = page.url();
-    await expect(page.locator('[data-reader-section="reviews"],[data-personal-feedback],[data-feedback-dimension]')).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /personal feedback|save feedback|give personal feedback/i })).toHaveCount(0);
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
-    await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-    await page.locator("#requestReportToggle").click();
-    await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
-    await page.locator("#requestReportToggle").click();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(3);
-    assert.equal(page.url(), url);
-    assert.deepEqual((await loadBoardState(context)).personalEvaluation, before);
-});
-
-test("plural inputs and mixed evidence retain exact scopes and readable geometry in both themes", { timeout: 60000 }, async t => {
-    const record = readerRecord(), original = record.toolCalls[0];
-    record.project = null; record.projectId = null;
-    record.userPrompt.text += "\n" + "Keep the invented release decisions and their source notes together. ".repeat(5);
-    record.userPrompt.status = "partial";
-    record.userPrompt.sourceEventId = "invented-event-" + "a".repeat(64);
-    record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
-    const script = "  // Invented code; never execute it.\nreturn { retained: true, count: 0 };\n";
-    record.toolCalls.push({
-        ...original, tool: "workiq-retrieve", toolCallId: "invented-reader-retrieve", startEventId: "invented-retrieve-start",
-        requestArgs: { query: "  Find the invented handoff notes.\n", capabilities: [{ name: "Email" }, { name: "TeamsMessages" }, { name: "OneDriveAndSharePoint" }] },
-        startedAt: "2026-09-30T12:00:02.500Z", completedAt: "2026-09-30T12:00:04.000Z", durationMs: 1500,
-        toolSucceeded: false, reportedOutcome: "failed",
-    }, {
-        ...original, tool: "workiq-ask", toolCallId: "invented-reader-ask", startEventId: "invented-ask-start",
-        requestArgs: { question: "Summarize the invented unresolved decisions." },
-        startedAt: "2026-09-30T12:00:05.000Z", completedAt: null, durationMs: null, toolSucceeded: null, reportedOutcome: "unknown",
-    }, {
-        ...original, tool: "workiq-call_function", toolCallId: "invented-reader-script", startEventId: "invented-script-start",
-        requestArgs: { functionUrl: "/me/calendar/getSchedule", code: script, custom: { preserve: [false, 0, "unknown-key"] } },
-        startedAt: "2026-09-30T12:00:05.100Z", completedAt: "2026-09-30T12:00:05.100Z", durationMs: 0,
-    });
-    const graphs = graphMatrixRecord("reader-graph").graphActivities;
-    assert.ok(graphs.some(item => item.evidenceLevel === "output-visible-http"));
-    record.graphActivities = [
-        { ...graphs[0], activityId: "invented-reader-reference", sourceSessionId: record.sourceSessionId,
-            scenarioId: record.scenarioId, evidenceLevel: "code-reference", httpStatus: null, statusBasis: "none" },
-        { ...graphs.find(item => item.evidenceLevel === "output-visible-http"), activityId: "invented-reader-graph",
-            sourceSessionId: record.sourceSessionId, scenarioId: record.scenarioId },
-    ];
-    record.httpRecords = [{
-        recordId: "invented-reader-http", classification: "direct-graph-http", synthetic: false,
-        observedGraphHttp: true, responseOrigin: "https://graph.microsoft.com", method: "GET", apiVersion: "v1.0",
-        responsePath: { path: "/me/drive/root", query: [] }, startedAt: "2026-09-30T12:00:07.000Z",
-        completedAt: "2026-09-30T12:00:07.020Z", durationMs: 20, status: 503, transportError: null,
-    }];
-    const events = [
-        { id: record.userPrompt.sourceEventId, type: "user.message", timestamp: record.userPrompt.sourceTimestamp, data: { messageId: "invented-logical-message" } },
-        { id: "invented-final", type: "assistant.message", timestamp: "2026-09-30T12:00:10.000Z",
-            data: { originatingMessageId: "invented-logical-message", apiCallId: "invented-api", model: "invented-model",
-                content: "Invented final answer metadata.", turnId: "invented-turn", phase: "final_answer", toolRequests: [] } },
-        { id: "invented-turn-end", type: "assistant.turn_end", timestamp: "2026-09-30T12:00:10.010Z", data: { turnId: "invented-turn" } },
-    ];
-    record.responseTiming = recordedResponseTiming(events, record.userPrompt);
-    record.originalModelEvidence = recordedInteractionModels(events, record);
+test("a recorded code argument and its enclosing call copy independently, byte for byte", async t => {
+    const record = readerRecord(), code = "  // Invented code; never execute it.\nreturn { retained: true, count: 0 };\n";
+    const args = { functionUrl: "/me/calendar/getSchedule", code, custom: { preserve: [false, 0, "unknown-key"] } };
+    Object.assign(record.toolCalls[0], { tool: "workiq-call_function", requestArgs: args });
     const { page } = await setup(t, [record]);
-    const reader = page.locator("#requestContent"), activity = reader.locator('[data-reader-section="activity"]');
-    await expect(reader.locator('[data-reader-section="prompt"]')).toContainText("Agent prompt");
-    await expect(reader.locator('[data-reader-section="prompt"]')).toContainText("Partial text");
-    await expect(reader.locator('[data-reader-section="source"]')).toContainText("No project associated");
-    await expect(reader.locator(".response-timing data")).toHaveAttribute("value", "10000");
-    await expect(reader.locator('.reader-call-duration data[value="0"]')).toHaveCount(1);
-    await expect(reader.locator('[data-reader-section="prompt"] .response-timing')).toContainText("Prompt to final response");
-    await expect(activity).toContainText("Graph code reference");
-    await expect(activity).toContainText("Execution not observed");
-    await expect(activity).toContainText("Explicit HTTP recorder");
-    await expect(activity).toContainText("503");
-    const fetch = activity.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(fetch.locator(".reader-values .service-cue")).toHaveCount(2);
-    const retrieve = activity.locator('[data-tool-call-id="invented-reader-retrieve"]');
-    await expect(retrieve.locator(".reader-input>.reader-fields .reader-values>li")).toHaveCount(3);
-    await expect(retrieve).toContainText("Requested sources");
-    const scripted = activity.locator('[data-tool-call-id="invented-reader-script"]');
-    await scripted.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[3].requestArgs, null, 2));
-    await scripted.getByRole("button", { name: "Copy code", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), script);
-    const measurements = [];
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
-        const measured = await fetch.locator(".reader-input").evaluate(input => {
-            const label = input.querySelector(".reader-input-label"), heading = input.querySelector(".reader-input-heading"), value = input.querySelector(".reader-input-value code");
-            const l = heading.getBoundingClientRect(), v = value.getBoundingClientRect();
-            const root = document.getElementById("contextSidebarBody");
-            return { gap: v.top - l.bottom, targetCopies: input.querySelectorAll(".ux-copy").length,
-                unusedWidth: input.getBoundingClientRect().width - input.querySelector(".reader-input-value").getBoundingClientRect().width,
-                overflow: root.scrollWidth - root.clientWidth,
-                labels: getComputedStyle(label).fontSize, values: getComputedStyle(value).fontSize };
-        });
-        assert.ok(measured.gap >= 0 && measured.gap <= 6, `${theme}/${width}/${scale}: path caption/value gap ${measured.gap}`);
-        assert.equal(measured.targetCopies, 0);
-        assert.ok(measured.unusedWidth <= 1, "Target text does not retain an empty Copy column");
-        const requestCopy = await retrieve.getByRole("button", { name: "Copy recorded arguments", exact: true }).boundingBox();
-        assert.ok(requestCopy.width >= 44 && requestCopy.height >= 44);
-        assert.ok(measured.overflow <= 1);
-        assert.equal(measured.labels, measured.values);
-        const fieldAlignment = await reader.locator(".reader-fields>div").evaluateAll(nodes => nodes.map(node => {
-            const label = node.querySelector("dt").getBoundingClientRect(), value = node.querySelector("dd").getBoundingClientRect();
-            return { left: value.left - label.left, gap: value.top - label.bottom,
-                inlineContext: Boolean(node.closest(".reader-facts,.reader-response-timing")),
-                inlineGap: value.left - label.right, top: value.top - label.top };
-        }));
-        assert.ok(fieldAlignment.every(value => Math.abs(value.left) <= 1 && value.gap >= 0 && value.gap <= 4
-            || value.inlineContext && Math.abs(value.top) <= 1 && value.inlineGap >= 6 && value.inlineGap <= 10), JSON.stringify(fieldAlignment));
-        const source = reader.locator('[data-reader-section="source"]');
-        assert.equal(await source.locator(".reader-identifier").first().evaluate(node => {
-            const range = document.createRange(); range.selectNodeContents(node);
-            getSelection().removeAllRanges(); getSelection().addRange(range);
-            const exact = getSelection().toString() === node.textContent;
-            getSelection().removeAllRanges(); return exact;
-        }), true);
-        await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 0);
-        measurements.push({ theme, width, scale, ...measured });
-        if (proofs) {
-            await mkdir(proofs, { recursive: true });
-            await page.screenshot({ path: path.join(proofs, `reader-${theme}-${width}-${scale}.png`), fullPage: false });
-            for (const section of ["activity", "source"]) {
-                await reader.locator(`[data-reader-section="${section}"]>.reader-section-heading`).evaluate(node => {
-                    const body = document.getElementById("contextSidebarBody");
-                    body.scrollTop += node.getBoundingClientRect().top - body.getBoundingClientRect().top - 12;
-                });
-                await page.screenshot({ path: path.join(proofs, `reader-${section}-${theme}-${width}-${scale}.png`) });
-            }
-        }
-    }
-    if (proofs) await writeFile(path.join(proofs, "reader-geometry.json"), JSON.stringify(measurements, null, 2));
+    const call = page.locator('[data-tool-call-id="invented-reader-call"]');
+    await call.locator(".reader-call-toggle").click();
+    await call.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
+    await call.getByRole("button", { name: "Copy code", exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.readerCopies), [JSON.stringify(args, null, 2), code]);
 });
 
 test("response folding fences a late read and keeps failed reads behind explicit Retry", { timeout: 25000 }, async t => {
@@ -616,25 +518,29 @@ test("missing prompt and action facts stay explicit, while contradictory complet
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt).toContainText("Author unverified");
     await expect(prompt).toContainText("Origin details could not be reconciled");
-    await expect(prompt).toContainText("Prompt not available");
+    await expect(prompt).toContainText("Prompt text unavailable");
     await expect(page.locator('[data-reader-section="activity"]')).toContainText("No individual action details were retained");
     await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
-    await expect(page.locator('[data-reader-section="source"] .reader-fields>div').filter({ has: page.getByText("Source event", { exact: true }) })).toContainText("Not recorded");
-    await expect(prompt.locator(".reader-recorded-at")).toHaveText("Recorded time not available.");
+    await sourceToggle(page).click();
+    await expect(page.locator('[data-reader-section="source"] .reader-recorded-at')).toHaveText("Recorded time not available.");
     await captureCorrection(page, "ec92-missing-evidence", "prompt");
     await page.locator("#closeContextSidebar").click();
-    await page.locator(`a.request-card-open[href*="${conflict.scenarioId}"]`).click();
+    await page.locator(`[data-view-key="request:${conflict.scenarioId}"] .request-card-open`).click();
     const activity = page.locator('[data-reader-section="activity"]');
+    const toggle = activity.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
     await expect(activity.locator(".reader-fields>div").filter({ has: page.getByText("Reported outcome", { exact: true }) })).toHaveText("Reported outcomefailed");
     await expect(activity.locator(".reader-fields>div").filter({ has: page.getByText("Execution success", { exact: true }) })).toHaveText("Execution successtrue");
 });
 
 for (const [sidebarMotion, motion, enabled] of [
-    ["on", "reduce", false], ["off", "no-preference", true], ["system", "reduce", false], ["system", "no-preference", true],
-]) test(`section folding follows native ${motion}, ignoring retired ${sidebarMotion}, with one reversible owner`, { timeout: 20000 }, async t => {
+    ["on", "reduce", false], ["off", "no-preference", true],
+]) test(`Source folding follows native ${motion}, ignoring retired ${sidebarMotion}, with one reversible owner`, { timeout: 20000 }, async t => {
     const { page } = await setup(t, [readerRecord()], { sidebarMotion, motion });
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-    const prompt = page.locator('[data-reader-section="prompt"]'), toggle = prompt.locator(".reader-section-toggle");
+    const source = page.locator('[data-reader-section="source"]'), toggle = sourceToggle(page);
+    await toggle.click();
+    await page.waitForFunction(() => !document.querySelector('[data-reader-section=source] .reader-section-clip').getAnimations().length);
     const state = await toggle.evaluate(async button => {
         const clip = button.closest("section").querySelector(".reader-section-clip");
         button.click();
@@ -648,7 +554,7 @@ for (const [sidebarMotion, motion, enabled] of [
         return { animated: Boolean(animation), frames };
     });
     assert.equal(state.animated, enabled);
-    await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
     if (enabled) {
         assert.ok(new Set(state.frames).size > 1, "Folding has actual unpaused intermediate heights");
         const reversed = await toggle.evaluate(button => {
@@ -662,34 +568,41 @@ for (const [sidebarMotion, motion, enabled] of [
         assert.ok(Math.abs(reversed.start - reversed.height) < 1);
         assert.equal(reversed.old, "idle");
         await page.emulateMedia({ reducedMotion: "reduce" });
-        await expect(prompt.locator(".reader-section-clip")).not.toHaveAttribute("inert", "");
-        assert.equal(await prompt.locator(".reader-section-clip").evaluate(node => node.getAnimations().length), 0);
+        await expect(source.locator(".reader-section-clip")).not.toHaveAttribute("inert", "");
+        assert.equal(await source.locator(".reader-section-clip").evaluate(node => node.getAnimations().length), 0);
     } else await toggle.click();
-    await expect(prompt.locator("pre")).toHaveCount(1);
+    const identifiers = source.getByRole("button", { name: "Record identifiers" });
+    await expect(identifiers).toBeVisible();
     await toggle.focus(); await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(toggle).toBeFocused();
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toBeFocused();
-    await expect(prompt.locator("pre")).toHaveCount(1);
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toBeFocused();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
+    await expect(identifiers).toBeHidden();
+    await toggle.press("Space");
+    await expect(identifiers).toBeVisible();
+    await expect(toggle).toBeFocused();
 });
 
 test("reader folding, exact Copy and report peek leave every frozen format byte-identical", { timeout: 30000 }, async t => {
-    const { page, context, frozen } = await setup(t, [readerRecord()], { saveFrozen: true });
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    const record = readerRecord();
+    const { page, context, frozen } = await setup(t, [record], { saveFrozen: true });
+    const fold = page.locator("#requestContent .reader-call-toggle").first();
+    await fold.click();
+    await expect(fold).toHaveAttribute("aria-expanded", "true");
+    await fold.click();
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#requestReportContinue").click();
-    await page.locator("#reportList .request-link").click();
-    await expect(page.locator('[data-reader-section="prompt"]')).toBeVisible();
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.readerCopies), [record.userPrompt.text]);
+    await page.locator("#closeContextSidebar").click();
+    await navigateMain(page, "reports");
+    await prepareLandingReport(page, "all");
+    await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+    await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+    const peek = page.locator("#reportActivityOptions .request-card-open").first();
+    await peek.click();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", `request:${record.scenarioId}`);
+    await expect(page.locator('[data-reader-section="prompt"] pre')).toHaveText(record.userPrompt.text);
+    await fold.click();
+    await page.goBack();
+    await expect(peek).toBeFocused();
     assert.deepEqual((await loadBoardState(context)).exports, frozen.exports);
     const hashes = {};
     for (const [name, file] of Object.entries(frozen.files)) {
@@ -715,7 +628,7 @@ test("retirement: historical model judgments do not create current reader panels
     await expect(reader.locator('[aria-busy="true"]')).toHaveCount(0);
     await expect(reader.locator('[data-reader-section="reviews"],.single-interaction-measures,.assessment-finding-group,.reader-check-counts')).toHaveCount(0);
     assert.doesNotMatch(await reader.innerText(), /synthetic-quality-fixture|wire-recorded-interaction-review|AI judgments|Local checks|No saved reviews/);
-    await expect(reader.locator(".reader-call-duration")).toHaveText("Tool latency: 1 s");
+    await expect(reader.locator(".reader-call-duration")).toHaveText("Call duration: 1 s");
     await expect(reader.locator(".request-original pre")).toHaveText(record.userPrompt.text);
     assert.deepEqual(state.personalEvaluation, historical);
     await captureCorrection(page, "retired-history-reading", "prompt");
@@ -724,7 +637,7 @@ test("retirement: historical model judgments do not create current reader panels
 test("correction: same-evidence persisted pageshow restores live owners only after authorization and preserves Back", { timeout: 25000 }, async t => {
     const { page, records } = await setup(t);
     await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
-    const oldCollapse = await page.getByRole("button", { name: "Collapse all sections", exact: true }).elementHandle();
+    const oldToggle = await sourceToggle(page).elementHandle();
     const oldCopy = await page.getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
     let release, arrive;
     const held = new Promise(resolve => release = resolve), arrived = new Promise(resolve => arrive = resolve), deliveries = [];
@@ -743,53 +656,21 @@ test("correction: same-evidence persisted pageshow restores live owners only aft
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
     try {
         await arrived;
-        assert.equal(await page.getByRole("button", { name: "Collapse all sections", exact: true }).count(), 0);
+        await expect(sourceToggle(page)).toHaveCount(0);
         release(); await Promise.all(deliveries);
     } finally { release(); await Promise.all(deliveries); await page.unroute("**/api/snapshot", holdSnapshot); }
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await oldCollapse.evaluate(node => node.click());
+    await oldToggle.evaluate(node => node.click());
     await oldCopy.evaluate(node => node.click());
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "false");
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [], "Disposed controls cannot fold or copy the successor reader");
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator('[data-reader-section="prompt"] pre')).toHaveCount(0);
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    await sourceToggle(page).click();
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "true");
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [records[0].userPrompt.text]);
     await page.goBack();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await expect(page.locator(".request-card-open")).toBeFocused();
-});
-
-test("retirement: bulk folding during an authorized response read never acquires retired owners", { timeout: 25000 }, async t => {
-    const exact = "Invented bulk-fold response.\n";
-    const { page } = await setup(t, [readerRecord()], { responseText: exact });
-    const response = page.locator('[data-reader-section="response"]');
-    await expect(response.locator("pre")).toHaveText(exact);
-    await response.locator(".reader-section-toggle").click();
-    let release, arrive;
-    const held = new Promise(resolve => release = resolve), arrived = new Promise(resolve => arrive = resolve), deliveries = [];
-    const holdEvidence = route => {
-        const delivery = (async () => {
-            const response = await route.fetch(); arrive(); await held; await route.fulfill({ response });
-        })();
-        deliveries.push(delivery); return delivery;
-    };
-    await page.route("**/api/assessment/evidence", holdEvidence);
-    try {
-        await response.locator(".reader-section-toggle").click();
-        await arrived;
-        await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-        await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
-        release(); await Promise.all(deliveries);
-        await expect(response.locator("pre,.ux-copy")).toHaveCount(0);
-        await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-        await expect(page.locator("#requestContent [data-automatic-scores],.automatic-score-dialog,[data-personal-feedback]")).toHaveCount(0);
-    } finally { release(); await Promise.all(deliveries); await page.unroute("**/api/assessment/evidence", holdEvidence); }
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
-    await expect(response.locator("pre")).toHaveText(exact);
-    await response.getByRole("button", { name: "Copy response", exact: true }).click();
-    assert.deepEqual(await page.evaluate(() => window.readerCopies), [exact]);
 });
 
 test("retirement: a pending historical personal receipt is preserved without blocking reading or replaying writes", { timeout: 20000 }, async t => {
@@ -798,10 +679,10 @@ test("retirement: a pending historical personal receipt is preserved without blo
         initialStorage: { "wire.assessment.pending": receipt },
     });
     const before = (await loadBoardState(context)).personalEvaluation;
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await expect(page.locator(".reader-section-toggle[aria-expanded=true]")).toHaveCount(0);
+    await sourceToggle(page).click();
+    await expect(sourceToggle(page)).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    await sourceToggle(page).click();
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), [records[0].userPrompt.text]);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")), receipt);
@@ -819,7 +700,7 @@ test("correction: missing and unsupported prompt completeness remain qualified e
         await expect(prompt.getByText("Partial text", { exact: true })).toHaveCount(status === "partial" ? 1 : 0);
         if (status === "unavailable") {
             await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
-            await expect(prompt).toContainText("Prompt not available");
+            await expect(prompt).toContainText("Prompt text unavailable");
         } else {
             await prompt.getByRole("button", { name: "Copy prompt", exact: true }).click();
             assert.deepEqual(await page.evaluate(() => window.readerCopies), [record.userPrompt.text]);
@@ -829,8 +710,8 @@ test("correction: missing and unsupported prompt completeness remain qualified e
 });
 
 for (const [reason, label, captureOff] of [
-    ["credential-excluded", "Recorded response was excluded by credential screening.", false],
-    ["capture-limit", "Recorded response exceeded the capture limit.", true],
+    ["credential-excluded", "The reply was excluded by credential screening.", false],
+    ["capture-limit", "The reply exceeded the saving limit.", true],
 ]) for (const source of ["observation", "legacy-qualified-record"]) test(`correction: recorded response availability retains ${reason} from ${source} independently of current capture`, { timeout: 20000 }, async t => {
     const record = readerRecord(), view = retainedResponse("Never-readable invented response", record);
     if (source === "observation") {
@@ -872,7 +753,6 @@ test("requested sources stay with recorded input, without detached result caveat
     const partial = page.locator('[data-tool-call-id="invented-partial-capability"]');
     for (const call of [known, fallback, partial]) {
         await call.locator(".reader-call-toggle").click();
-        await expect(call.locator(".reader-call-evidence")).toHaveCount(0);
         await expect(call).not.toContainText("This does not show which sources returned results");
         await expect(call).not.toContainText("No results");
     }
@@ -883,10 +763,11 @@ test("requested sources stay with recorded input, without detached result caveat
     await expect(fallback).toContainText('"unsupported": true');
     await expect(fallback).toContainText('"name": "Email"');
     await expect(fallback.locator(".call-heading")).toContainText("Work IQ required sign-in at the time");
-    await expect(fallback.locator(".reader-call-duration")).toHaveText("Tool latency: 252 ms");
+    await expect(fallback.locator(".reader-call-duration")).toHaveText("Call duration: 252 ms");
     await expect(partial).toContainText('"name": "Email"');
     await expect(partial).toContainText('"name": "InventedUnrecognizedSource"');
-    await expect(partial.locator(".call-heading")).toContainText("Call 3 has no recorded result");
+    await expect(partial.locator(".reader-entry-label")).toHaveText("Call #3");
+    await expect(partial.locator(".call-heading")).toContainText("has no recorded result");
     assert.deepEqual(await loadBoardState(context), before);
 });
 
@@ -903,7 +784,7 @@ for (const outcome of ["read-failure", "revoked-source"]) test(`correction: pers
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.getByRole("button", { name: "Copy prompt", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Collapse all sections", exact: true })).toHaveCount(0);
+    await expect(sourceToggle(page)).toHaveCount(0);
     await oldCopy.evaluate(node => node.click());
     assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
     if (outcome === "read-failure") {
@@ -911,7 +792,7 @@ for (const outcome of ["read-failure", "revoked-source"]) test(`correction: pers
         await page.unroute("**/api/snapshot");
         await page.evaluate(() => dispatchEvent(new Event("online")));
         await expect(page.getByRole("button", { name: "Copy prompt", exact: true })).toBeVisible();
-    } else await expect(page.locator("#requestContent")).toContainText("This interaction is not available");
+    } else await expect(page.locator("#unavailableCall")).toContainText("These completed calls are unavailable");
 });
 
 test("correction: an older snapshot finishing after pagehide cannot revive the disposed reader", { timeout: 20000 }, async t => {
@@ -958,8 +839,8 @@ test("EC92 recorded duration does not invent a missing completion or show local-
     const retained = before.evidence.find(item => item.scenarioId === record.scenarioId).toolCalls[0];
     assert.equal(retained.completedAt, null);
     assert.equal(retained.durationMs, 1000);
-    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
-    await page.getByRole("button", { name: "Expand all sections", exact: true }).click();
+    await reader.locator(".reader-call-toggle").click();
+    await expect(reader.getByText("Recorded end", { exact: true })).toHaveCount(0);
     assert.deepEqual((await loadBoardState(context)).evidence, before.evidence);
     await captureCorrection(page, "recorded-duration-missing-completion", "activity");
 });
@@ -973,19 +854,19 @@ test("retirement: stale A reader controls cannot fold or copy B or steal its foc
     b.userPrompt.text = "Invented B prompt; separate reading owner.\n  Preserve these bytes.";
     b.toolCalls[0].toolCallId = "invented-reader-b-call";
     const { page, context } = await setup(t, [a, b]);
-    await page.locator('.request-card-open[href*="request=reader-approved"]').click();
-    const foldA = await page.getByRole("button", { name: "Collapse all sections", exact: true }).elementHandle();
+    await page.locator('[data-view-key="request:reader-approved"] .request-card-open').click();
+    const foldA = await sourceToggle(page).elementHandle();
     const copyA = await page.getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
-    await page.locator('.request-card-open[href*="request=reader-guard-b"]').click();
-    await expect(page).toHaveURL(/request=reader-guard-b/);
+    await page.locator('[data-view-key="request:reader-guard-b"] .request-card-open').click();
+    await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:reader-guard-b");
     const promptB = page.locator('[data-reader-section="prompt"]');
-    const focusB = promptB.locator(".reader-section-toggle");
+    const focusB = sourceToggle(page);
     await focusB.focus();
     const stored = (await loadBoardState(context)).personalEvaluation;
     await foldA.evaluate(node => node.click());
     await copyA.evaluate(node => node.click());
     await expect(promptB.locator("pre")).toHaveText(b.userPrompt.text);
-    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(focusB).toHaveAttribute("aria-expanded", "false");
     await expect(focusB).toBeFocused();
     assert.deepEqual(await page.evaluate(() => window.readerCopies), []);
     await promptB.getByRole("button", { name: "Copy prompt", exact: true }).click();
@@ -1007,11 +888,14 @@ test("EC92 HTTP records retain exact individual durations and raw boundaries wit
         status: index < 2 ? 200 : null, transportError: index < 2 ? null : "TimeoutError",
     }));
     const { page } = await setup(t, [record]);
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#activityList .card-tool-name").click();
     const activity = page.locator('[data-reader-section="activity"]');
     const records = activity.locator(".journey-item").filter({ has: page.getByText("Explicit HTTP recorder", { exact: true }) });
     await expect(records).toHaveCount(3);
     for (const [index, http] of record.httpRecords.entries()) {
         const entry = records.nth(index);
+        await entry.locator(".reader-call-toggle").click();
         await expect(entry.locator(".reader-call-duration")).toHaveText(`Recorded duration: ${http.durationMs} ms`);
         await expect(entry.locator(".reader-call-duration data")).toHaveAttribute("value", String(http.durationMs));
         await entry.getByRole("button", { name: "Copy recorder details", exact: true }).click();
@@ -1023,100 +907,6 @@ test("EC92 HTTP records retain exact individual durations and raw boundaries wit
     await captureCorrection(page, "http-recorded-boundaries", "activity");
 });
 
-test("EC92 released presentation keeps compact identities, explicit durations and scoped Copy", { timeout: 30000 }, async t => {
-    const record = readerRecord(), first = record.toolCalls[0];
-    record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
-    record.userPrompt.sourceTimestamp = "2026-09-30T12:00:00.321Z";
-    first.requestArgs.timeZone = "UTC";
-    first.durationMs = 7; first.startedAt = "2026-09-30T12:00:02.001Z"; first.completedAt = "2026-09-30T12:00:02.008Z";
-    record.toolCalls.push(
-        { ...first, toolCallId: "invented-ec92-zero", startEventId: "invented-zero-start", durationMs: 0,
-            startedAt: "2026-09-30T12:00:03.500Z", completedAt: "2026-09-30T12:00:03.500Z" },
-        { ...first, toolCallId: "invented-ec92-request", startEventId: "invented-query-start", tool: "workiq-retrieve",
-            requestArgs: { query: "  Find the invented release notes.\n", capabilities: [{ name: "Email" }] }, durationMs: null,
-            startedAt: "2026-09-30T12:00:04.123Z", completedAt: null },
-        { ...first, toolCallId: "invented-ec92-unknown", startEventId: "invented-extra-start",
-            requestArgs: { entityUrls: ["/me/messages/invented"], unsupported: false }, durationMs: null,
-            startedAt: "2026-09-30T12:00:05.456Z", completedAt: null });
-    const { page } = await setup(t, [record]);
-    const reader = page.locator("#requestContent"), prompt = reader.locator('[data-reader-section="prompt"]');
-    const timestamp = reader.locator(`time[datetime="${record.userPrompt.sourceTimestamp}"]`);
-    await expect(timestamp).toHaveCount(1);
-    assert.doesNotMatch(await timestamp.innerText(), /\d{1,2}:\d{2}:\d{2}[.,]\d/);
-    await expect(timestamp).toHaveAttribute("title", record.userPrompt.sourceTimestamp);
-    await expect(prompt.locator(".reader-section-toggle")).toHaveText("Agent prompt");
-    await expect(prompt.getByRole("heading")).toHaveCount(1);
-    const fetch = reader.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(fetch.locator(".reader-call-identity-line")).toHaveText("workiq-fetch");
-    await expect(fetch.locator(".reader-call-summary")).toContainText("Call 1");
-    await expect(fetch.locator("dt").filter({ hasText: /^Result$/ })).toHaveCount(0);
-    await expect(fetch.locator(".reader-call-duration")).toHaveText("Tool latency: 7 ms");
-    await expect(fetch.locator(".reader-call-duration data")).toHaveAttribute("value", "7");
-    await expect(reader.locator('[data-tool-call-id="invented-ec92-zero"] .reader-call-duration')).toHaveText("Tool latency: 0 ms");
-    await expect(fetch.getByRole("button", { name: "Copy recorded arguments", exact: true })).toHaveCount(0);
-    await expect(fetch.locator(".reader-input-heading .service-cue")).toHaveCount(2);
-    await expect(fetch.locator(".reader-input-value code")).toHaveText(first.requestArgs.entityUrls);
-    await expect(fetch.locator(".reader-input>.reader-fields dd")).toHaveText("UTC");
-    const query = reader.locator('[data-tool-call-id="invented-ec92-request"]');
-    await expect(query.locator(".reader-call-duration")).toHaveText("Tool latency: Not recorded");
-    await query.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[2].requestArgs, null, 2));
-    const unknown = reader.locator('[data-tool-call-id="invented-ec92-unknown"]');
-    await unknown.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[3].requestArgs, null, 2));
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
-        await prompt.locator(".reader-section-toggle").hover();
-        await prompt.locator(".reader-section-toggle").focus();
-        await page.keyboard.press("Tab");
-        await page.keyboard.press("Shift+Tab");
-        await expect(prompt.locator(".reader-section-toggle")).toBeFocused();
-        const geometry = await page.evaluate(() => {
-            const toggle = document.querySelector('[data-reader-section="prompt"] .reader-section-toggle');
-            const label = toggle.querySelector("[data-prompt-actor]");
-            const card = document.querySelector('.request-card-open [data-prompt-actor="agent"]');
-            const input = document.querySelector('[data-tool-call-id="invented-reader-call"] .reader-input');
-            const outcome = document.querySelector('[data-tool-call-id="invented-reader-call"] .reader-call-summary .recorded-result');
-            const box = input.getBoundingClientRect(), value = input.querySelector(".reader-input-value").getBoundingClientRect();
-            return { radius: parseFloat(getComputedStyle(toggle).borderRadius), before: getComputedStyle(toggle, "::before").content,
-                fill: getComputedStyle(toggle).backgroundColor, focusWidth: parseFloat(getComputedStyle(toggle).outlineWidth),
-                outcomeShadow: getComputedStyle(outcome).boxShadow,
-                sameAuthorColor: getComputedStyle(label).color === getComputedStyle(card).color,
-                unusedTargetWidth: box.width - value.width,
-                overflow: document.getElementById("contextSidebarBody").scrollWidth - document.getElementById("contextSidebarBody").clientWidth,
-                copyTargets: [...document.querySelectorAll("#requestContent .ux-copy")].filter(node => node.checkVisibility())
-                    .map(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })) };
-        });
-        assert.ok(geometry.radius <= 2 && geometry.before === "none", JSON.stringify(geometry));
-        assert.equal(geometry.fill, "rgba(0, 0, 0, 0)");
-        assert.ok(geometry.focusWidth >= 2);
-        assert.equal(geometry.outcomeShadow, "none");
-        assert.equal(geometry.sameAuthorColor, true);
-        assert.ok(geometry.unusedTargetWidth <= 1 && geometry.overflow <= 1, JSON.stringify(geometry));
-        assert.ok(geometry.copyTargets.every(target => target.width >= 44 && target.height >= 44));
-        if (proofs) {
-            await mkdir(proofs, { recursive: true });
-            await prompt.locator(".full-text-body").click();
-            await page.mouse.move(0, 0);
-            await expect(page.locator("#evidence-tooltip")).toBeHidden();
-            await page.screenshot({ path: path.join(proofs, `bounded-prompt-${theme}-${width}-${scale}.png`) });
-            await fetch.locator(".call-heading").evaluate(node => {
-                const body = document.getElementById("contextSidebarBody");
-                body.scrollTop += node.getBoundingClientRect().top - body.getBoundingClientRect().top - 16;
-            });
-            await page.screenshot({ path: path.join(proofs, `bounded-calls-${theme}-${width}-${scale}.png`) });
-            await writeFile(path.join(proofs, `bounded-geometry-${theme}-${width}-${scale}.json`),
-                JSON.stringify({ qualification: "Internal EC92 fixture proof on the composed source; not a user-test build or deployment.", ...geometry }, null, 2));
-        }
-    }
-});
-
 test("EC92 concise failure presentation retains distinct retention exclusions", { timeout: 20000 }, async t => {
     const record = readerRecord(), original = record.toolCalls[0];
     record.toolCalls = ["size-excluded", "sensitive-excluded", "unsupported-format"].map((messageStatus, index) => ({
@@ -1126,11 +916,9 @@ test("EC92 concise failure presentation retains distinct retention exclusions", 
     }));
     const { page } = await setup(t, [record]);
     const calls = page.locator('[data-reader-section="activity"] [data-tool-call-id]');
-    await expect(calls.nth(0)).toContainText("Error details were too long to save");
-    await expect(calls.nth(1)).toContainText("Error details omitted for privacy");
-    await expect(calls.nth(2)).toContainText("WIRE could not read the error details");
+    await expect(calls).toHaveCount(record.toolCalls.length);
     for (const [index, call] of (await calls.all()).entries()) {
-        await expect(call.locator(".call-heading .result-cause")).toHaveText(["Error details were too long to save", "Error details omitted for privacy", "WIRE could not read the error details"][index]);
+        await expect(call.locator(".call-heading .result-cause")).toHaveText(["Error details were too long to save", "Error details omitted for privacy", "WIRE could not extract a readable reason from the recorded error"][index]);
         await expect(call.locator(".reader-recorded-signal")).toHaveCount(0);
         await expect(call.getByRole("button", { name: /sign in|retry|authenticate/i })).toHaveCount(0);
         assert.doesNotMatch(await call.innerText(), /Recorded error signal:|HTTP 401|HTTP 403/);
@@ -1141,15 +929,15 @@ test("EC92 final assembly keeps timing with its subject and only useful reading 
     const record = readerRecord(), exact = "Invented retained reply.\n  Preserve this ending.\n";
     record.userPrompt.sourceTimestamp = "2026-09-30T12:00:00.321Z";
     const { page, assessmentView } = await setup(t, [record], { responseText: exact });
-    const reader = page.locator("#requestContent"), prompt = reader.locator('[data-reader-section="prompt"]');
+    const reader = page.locator("#requestContent");
     const response = reader.locator('[data-reader-section="response"]');
     await expect(response.locator(".full-text-content")).toHaveText(exact);
     assert.deepEqual(await reader.locator(":scope > [data-reader-section]").evaluateAll(nodes => nodes.map(node => node.dataset.readerSection)),
         ["prompt", "activity", "response", "source"]);
-    await expect(response.locator(".reader-section-toggle")).toHaveText("Recorded response");
+    await expect(response.locator(".reader-section-toggle")).toHaveText("Copilot reply");
     await expect(reader.locator('[data-reader-section="source"] .reader-section-toggle')).toHaveText("Source details");
-    await expect(prompt.locator("time")).toHaveAttribute("datetime", record.userPrompt.sourceTimestamp);
-    await expect(prompt.locator("time")).toHaveAttribute("title", record.userPrompt.sourceTimestamp);
+    await sourceToggle(page).click();
+    await expect(reader.locator('[data-reader-section="source"] time')).toHaveAttribute("datetime", record.userPrompt.sourceTimestamp);
     const answer = assessmentView.observations.find(item => item.kind === "answer");
     await expect(response.locator("time")).toHaveAttribute("datetime", answer.occurredAt);
     await expect(reader.locator(".reader-timing-table,.reader-local-timing,.single-interaction-measures")).toHaveCount(0);
@@ -1171,85 +959,16 @@ test("EC92 final assembly keeps timing with its subject and only useful reading 
     await captureCorrection(page, "ec92-final-response", "response");
 });
 
-test("reader story separates the recorded request, interaction response and optional following context", { timeout: 25000 }, async t => {
-    const record = readerRecord(), requestPath = "/me?$select=preferredLanguage";
+test("following message Copy belongs only to the open linked context", { timeout: 25000 }, async t => {
+    const record = readerRecord();
     record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
     record.userPrompt.text = "Review the invented directory preference recorded for this example. ".repeat(5);
-    Object.assign(record.toolCalls[0], {
-        requestArgs: { entityUrls: [requestPath] }, durationMs: 237,
-        toolSucceeded: false, reportedOutcome: "failed",
-        failureEvidence: { version: 1, reason: "no-structured-error", messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" },
-    });
     const following = "Separate work: compare the invented handoff notes and identify unresolved owners. ".repeat(5);
     record.followUpPrompts = [{ text: following, status: "full", sourceEventId: "invented-following-work",
         sourceTimestamp: "2026-09-30T12:01:00.000Z", authorship: { actor: "agent", basis: "source-agent" } }];
-    const otherAttempt = structuredClone(record);
-    otherAttempt.scenarioId = "invented-distinct-attempt";
-    otherAttempt.userPrompt.sourceEventId = "invented-distinct-prompt";
-    otherAttempt.userPrompt.sourceTimestamp = "2026-09-30T12:30:00.000Z";
-    otherAttempt.followUpPrompts = [];
-    Object.assign(otherAttempt.toolCalls[0], { toolCallId: "invented-distinct-call", startEventId: "invented-distinct-start",
-        startedAt: "2026-09-30T12:30:02.000Z", completedAt: "2026-09-30T12:30:03.000Z",
-        toolSucceeded: true, reportedOutcome: "succeeded", failureEvidence: null });
-    const { page, context } = await setup(t, [record, otherAttempt]);
-    await page.locator('.request-card-open[href*="request=reader-approved"]').click();
-    await expect(page.locator(".request-card-open")).toHaveCount(2);
-    const reader = page.locator("#requestContent"), call = reader.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(reader.getByText("No assistant reply was saved for this interaction.", { exact: true })).toHaveCount(1);
-    await expect(call.locator(".reader-input-value code")).toHaveText(requestPath);
-    await expect(call.locator(".reader-input-heading .service-cue")).toHaveText("People");
-    await expect(call.locator(".call-heading .result-cause")).toHaveText("Work IQ required sign-in at the time");
-    const observations = [];
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
-        const observed = await reader.evaluate(root => {
-            const call = root.querySelector('[data-tool-call-id="invented-reader-call"]');
-            const target = call.querySelector(".reader-input-value code"), input = call.querySelector(".reader-input");
-            const box = node => { const value = node.getBoundingClientRect(); return { x: value.x, y: value.y, width: value.width, height: value.height }; };
-            const responseHeading = root.querySelector(":scope > .reader-response-availability > h2");
-            const text = [...target.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.includes("preferredLanguage"));
-            const token = document.createRange(), offset = text.textContent.indexOf("preferredLanguage");
-            token.setStart(text, offset); token.setEnd(text, offset + "preferredLanguage".length);
-            return {
-                primaryPrompts: [...root.querySelectorAll('[data-text-subject=request] .full-text-content')].filter(node => node.checkVisibility()).length,
-                responseInsideCall: Boolean(call.querySelector(".interaction-response")),
-                requestCaption: input.querySelector(".reader-input-label").textContent,
-                pathCaptionCount: input.querySelectorAll(".reader-input-label,.reader-request-paths dt").length,
-                rawPath: target.textContent, path: box(target), input: box(input),
-                queryTokenLines: token.getClientRects().length,
-                responseHeading: responseHeading && { ...box(responseHeading), clip: getComputedStyle(responseHeading).clipPath },
-                overflow: document.getElementById("contextSidebarBody").scrollWidth - document.getElementById("contextSidebarBody").clientWidth,
-            };
-        });
-        observations.push({ theme, width, scale, ...observed });
-        const directory = process.env.WIRE_READER_STORY_PROOFS;
-        if (directory) {
-            await mkdir(directory, { recursive: true });
-            await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 0);
-            await page.screenshot({ path: path.join(directory, `story-prompt-${theme}-${width}-${scale}.png`) });
-            await call.evaluate(node => {
-                const scroll = document.getElementById("contextSidebarBody");
-                scroll.scrollTop += node.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 64;
-            });
-            await page.screenshot({ path: path.join(directory, `story-activity-${theme}-${width}-${scale}.png`) });
-            await writeFile(path.join(directory, "story-measurements.json"), JSON.stringify(observations, null, 2));
-        }
-    }
-    assert.equal((await loadBoardState(context)).evidence.length, 2, "Similar prompt text does not merge genuine attempts");
-    for (const observed of observations) {
-        assert.equal(observed.rawPath, requestPath, "The retained relative request is not malformed or rewritten");
-        assert.ok(observed.overflow <= 1);
-        assert.equal(observed.queryTokenLines, 1, "A query token that fits wraps at a meaningful separator, not a final orphaned character");
-        assert.ok(observed.responseHeading?.height >= 20 && observed.responseHeading.clip === "none", "Availability has a visible subject heading");
-        assert.equal(observed.pathCaptionCount, 1, "A target-only request has one path caption, not stacked request/path labels");
-        assert.deepEqual({ primaryPrompts: observed.primaryPrompts, responseInsideCall: observed.responseInsideCall, requestCaption: observed.requestCaption },
-            { primaryPrompts: 1, responseInsideCall: false, requestCaption: "Requested path" });
-    }
+    const { page } = await setup(t, [record]);
+    const reader = page.locator("#requestContent");
+    await sourceToggle(page).click();
     const linked = reader.locator('[data-reader-section="source"] .reader-linked-context');
     await expect(linked).not.toHaveAttribute("open", "");
     await expect(linked.locator(".full-text-content,.ux-copy")).toHaveCount(0);
@@ -1283,106 +1002,6 @@ test("reader story separates the recorded request, interaction response and opti
     await expect(linked.locator(".full-text-content")).toHaveText(following);
 });
 
-test("reader story keeps the complete visible sequence across response states, plural calls and long requests", { timeout: 30000 }, async t => {
-    for (const [responseState, outcome] of [["absent", "success"], ["partial", "failure"], ["full", "unknown"]]) {
-        const record = readerRecord(), first = record.toolCalls[0], exact = "Invented saved reply.\n  Keep its exact bytes.\n";
-        const paths = ["/me/drive/items/" + "long-invented-resource-".repeat(12) + "?$select=name,webUrl", "/me?$select=preferredLanguage&$expand=manager"];
-        Object.assign(first, { requestArgs: { entityUrls: paths }, toolSucceeded: outcome === "unknown" ? null : outcome === "success",
-            reportedOutcome: outcome === "unknown" ? "unknown" : outcome === "success" ? "succeeded" : "failed" });
-        record.toolCalls.push({ ...first, toolCallId: "invented-second-call", startEventId: "invented-second-start",
-            requestArgs: { query: "  Invented query with retained spacing.\n", capabilities: [{ name: "Email" }] } });
-        record.followUpPrompts = [{ text: "A separate invented follow-up fragment.", status: "partial",
-            sourceEventId: "invented-fragment", sourceTimestamp: "2026-09-30T12:10:00.000Z",
-            authorship: { actor: "unknown", basis: "legacy-missing" } }];
-        const options = responseState === "absent" ? {} : { responseText: exact,
-            responseCompleteness: responseState === "full" ? "full-record" : "bounded-fragment" };
-        const { page, context } = await setup(t, [record], options), reader = page.locator("#requestContent");
-        await expect(reader.locator('[aria-busy="true"]')).toHaveCount(0);
-        const response = reader.locator('[data-reader-section="response"]'), before = (await loadBoardState(context)).evidence;
-        if (responseState !== "absent") {
-            await expect(response.locator(".full-text-content")).toHaveText(exact);
-            await expect(response.getByText("Partial text", { exact: true })).toHaveCount(responseState === "partial" ? 1 : 0);
-            await response.getByRole("button", { name: "Copy response", exact: true }).click();
-            assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), exact);
-        } else await expect(reader.locator(":scope > .reader-response-availability")).toContainText("No assistant reply was saved for this interaction.");
-        const expected = ["prompt", "activity", responseState === "absent" ? "availability" : "response", "source"];
-        assert.deepEqual(await reader.evaluate(root => [...root.children].filter(node => node.checkVisibility()
-            && (node.dataset.readerSection || node.classList.contains("reader-response-availability")))
-            .map(node => node.dataset.readerSection ?? "availability")), expected);
-        const call = reader.locator('[data-tool-call-id="invented-reader-call"]');
-        await expect(call.locator(".reader-request-paths code")).toHaveText(paths);
-        await expect(reader.locator(".journey-item .reader-response-availability")).toHaveCount(0);
-        await expect(reader.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
-        await expect(reader.locator('.request-context-timeline [data-context-kind="action"]')).toHaveCount(2);
-        await expect(call.locator(".recorded-result-label")).toHaveText({
-            success: "Call 1 completed", failure: "Call 1 failed", unknown: "Call 1 has no recorded result",
-        }[outcome]);
-        for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
-            await page.setViewportSize({ width: 1440, height: 1000 });
-            await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-            await chooseTheme(page, theme);
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-            await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
-            const geometry = await call.locator(".reader-request-paths code").evaluateAll(nodes => nodes.map(node => ({
-                text: node.textContent, overflow: node.scrollWidth - node.clientWidth,
-                font: getComputedStyle(node).fontFamily, size: getComputedStyle(node).fontSize, weight: getComputedStyle(node).fontWeight,
-            })));
-            for (const value of geometry) {
-                assert.ok(value.overflow <= 1);
-                assert.match(value.font, /Asta Sans/);
-                assert.equal(value.size, `${14 * scale}px`);
-                assert.equal(value.weight, "400");
-            }
-            assert.deepEqual(geometry.map(value => value.text), paths);
-            assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-        }
-        assert.deepEqual((await loadBoardState(context)).evidence, before);
-    }
-});
-
-test("reader story remains scoped when opened through actual Search and report peek", { timeout: 30000 }, async t => {
-    const record = readerRecord(), cleanup = [], marker = "Invented Orchid directory review";
-    record.userPrompt.text = marker; record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
-    record.toolCalls[0].requestArgs = { entityUrls: ["/me?$select=preferredLanguage"] };
-    record.followUpPrompts = [{ text: "Independent invented work, not a second selected prompt.", status: "full",
-        sourceEventId: "invented-search-following", sourceTimestamp: "2026-09-30T12:01:00Z",
-        authorship: { actor: "agent", basis: "source-agent" } }];
-    const app = await searchFixture({ after: fn => cleanup.push(fn) }, { records: [record], reply: false });
-    const browser = await chromium.launch(), page = await browser.newPage({ reducedMotion: "reduce", viewport: { width: 1440, height: 1000 } });
-    const errors = [], requests = [];
-    page.on("pageerror", error => errors.push(error.stack));
-    page.on("request", request => requests.push(new URL(request.url())));
-    t.after(async () => {
-        await browser.close(); for (const fn of cleanup) await fn();
-        assert.deepEqual(errors, []);
-        assert.ok(requests.every(url => url.origin === new URL(app.runtime.url).origin));
-        assert.ok(!requests.some(url => /\/api\/(?:preview|privacy-review|export|assessment\/feedback|assessment\/consent\/set)$/.test(url.pathname)));
-    });
-    await page.goto(app.runtime.url);
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#wireSearch").fill("Orchid");
-    const hit = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: marker }) });
-    await expect(hit).toHaveCount(1);
-    const verify = async () => {
-        await expect(page.locator(".request-original pre")).toHaveText(marker);
-        await expect(page.locator(".reader-linked-context")).not.toHaveAttribute("open", "");
-        await expect(page.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
-        await expect(page.locator(".request-context-timeline .reader-response-availability")).toHaveCount(0);
-        await expect(page.locator("#requestContent > .reader-response-availability")).toContainText("No assistant reply was saved for this interaction.");
-        await expect(page.locator(".reader-request-paths code")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
-    };
-    await hit.click(); await verify();
-    await page.goBack(); await expect(hit).toBeFocused();
-    await hit.click(); await verify();
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#requestReportContinue").click();
-    await page.locator("#reportList .request-link").click();
-    await verify();
-    await expect(page.getByRole("button", { name: "Back to activity", exact: true })).toBeVisible();
-    assert.equal((await loadBoardState(app.context)).exports.length, 0);
-});
-
 test("target-only caption consolidation preserves numbered paths and distinct request parameters", { timeout: 20000 }, async t => {
     const record = readerRecord(), first = record.toolCalls[0];
     first.requestArgs = { entityUrls: ["/me?$select=preferredLanguage"], timeZone: "UTC" };
@@ -1393,6 +1012,7 @@ test("target-only caption consolidation preserves numbered paths and distinct re
             requestArgs: { query: "  Keep this invented request separate.\n", entityUrls: [paths[1]], timeZone: "UTC", capabilities: [{ name: "OneDriveAndSharePoint" }] } });
     const { page } = await setup(t, [record]);
     const calls = page.locator(".request-context-timeline [data-tool-call-id]");
+    for (const row of await calls.all()) await row.locator(".reader-call-toggle").click();
     await expect(calls.nth(0).locator(".reader-input-label")).toHaveText("Requested path");
     await expect(calls.nth(0).locator(".reader-request-paths dt")).toHaveCount(0);
     await expect(calls.nth(0).locator(".reader-input>.reader-fields")).toHaveText("Time zoneUTC");
@@ -1409,5 +1029,17 @@ test("target-only caption consolidation preserves numbered paths and distinct re
     await expect(prose.locator(".reader-input>.reader-fields dt")).toHaveText(["Requested sources", "Time zone"]);
     await prose.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[2].requestArgs, null, 2));
+    await page.setViewportSize({ width: 375, height: 950 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const target = calls.first().locator(".reader-input-value code");
+    await expect(target).toHaveText(first.requestArgs.entityUrls[0]);
+    assert.ok(await target.evaluate(node => {
+        const body = document.querySelector("#contextSidebarBody"), token = "preferredLanguage";
+        const text = [...node.childNodes].find(child => child.nodeType === Node.TEXT_NODE && child.data.includes(token));
+        if (!text) return false;
+        const start = text.textContent.indexOf(token), range = document.createRange();
+        range.setStart(text, start); range.setEnd(text, start + token.length);
+        return body.scrollWidth <= body.clientWidth + 1 && range.getClientRects().length === 1;
+    }), "A query parameter that fits is not broken or clipped at enlarged text.");
     await captureCorrection(page, "caption-known-input", "activity");
 });

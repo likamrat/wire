@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { fixture, privateFixture, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch, closeAnalyzeFilters } from "./helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { chooseReportScope, reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const sorted = values => [...values].sort();
@@ -68,7 +68,7 @@ async function setup(t, source = records(), now = "2026-03-09T06:00:00Z") {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(runtime.url).origin || request.method() !== "GET" && ![
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
-            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/cancel-preview",
+            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/cancel-preview", "/api/report-artifacts/list",
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
         if (request.method() === "POST") inputs.push({ path: url.pathname, input: request.postDataJSON() });
         return route.continue();
@@ -82,38 +82,30 @@ test("one visible calendar range changes every widget, headline, row and current
     const app = await setup(t), { page, inputs } = app;
     const choose = async value => {
         await selectActivityOption(page, "dateFilter", value); await ready(page);
-        const captions = { capture: "All dates", day: "Mar 8, 2026", week: "Mar 2 - Mar 8, 2026", month: "Mar 1 - Mar 31, 2026" };
+        const captions = { capture: "All dates", day: "Mar 8, 2026", week: "Mar 2–8, 2026", month: "Mar 1–8, 2026" };
         if (captions[value]) await expect(page.locator("#periodResult")).toContainText(`(${captions[value]})`);
     };
     async function scope(ids, interactions, chats, undated = 0) {
         const total = ids.length;
         await expect(page.locator("#activityCount")).toHaveText(String(total));
-        await expect(page.locator("#periodHint")).toHaveText(`${interactions} interaction${interactions === 1 ? "" : "s"} · ${chats} Copilot chat${chats === 1 ? "" : "s"}`);
+        assert.equal(new Set(app.snapshot().analytics.rows.map(row => row.sourceSessionId)).size, chats);
+        await expect(page.locator("#activityListSummary")).toHaveText(`${interactions} interaction${interactions === 1 ? "" : "s"} · ${total} matching tool call${total === 1 ? "" : "s"}`);
         await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", String(total));
-        await expect(page.locator(".percentage-denominator")).toHaveText([
-            ...Array(3).fill(`${total} Work IQ tool call${total === 1 ? "" : "s"}`),
-            `${interactions} matching interaction${interactions === 1 ? "" : "s"}`,
-        ]);
+        for (const key of ["tools", "outcomes", "services"]) await expect(page.locator(`[data-percentage-card="${key}"] .percentage-denominator`))
+            .toHaveText(`${total} Work IQ tool call${total === 1 ? "" : "s"}`);
         await expect(page.locator('[data-percentage-card="models"]')).toHaveAttribute("data-total", String(interactions));
         assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((n, node) => n + Number(node.dataset.total), 0)), total - undated);
         assert.deepEqual(sorted(app.snapshot().analytics.rows.map(row => row.toolCallId)), sorted(ids));
-        await expect(page.locator("#scopeCount-current")).toHaveText(`${interactions} request group${interactions === 1 ? "" : "s"}`);
         if (interactions <= 8) {
-            const shown = await page.locator(".request-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey.slice(8)));
+            const shown = await page.locator("#activityList .request-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey.slice(8)));
             assert.deepEqual(sorted(shown), sorted([...new Set(ids.map(id => `unified-${id[0]}`))]));
         }
-        await expect(page.locator("#meaningMatched")).toHaveText(`${total} Work IQ tool call${total === 1 ? "" : "s"}`);
-        await page.locator("#meaning > summary").click();
-        await expect(page.locator("#countTable tfoot td").first()).toHaveText(String(total - undated));
-        await page.locator("#meaning > summary").click();
     }
     const all = ["a-0", "a-1", "b-0", "c-0", "d-0", "e-0", "f-0", "g-0", "h-0", "i-0", "j-0"];
     await scope(all, 10, 8, 1);
     await expect(page.locator("#periodResult")).toHaveText("11 Work IQ tool calls (All dates)");
     await expect(page.locator("#dateFilter")).toHaveCount(1);
     await expect(page.locator("#bucketControl, #bucketFilter")).toHaveCount(0);
-    await expect(page.getByRole("combobox", { name: "Dates", exact: true })).toBeVisible();
-    await page.locator('.request-row[data-view-key="request:unified-j"] input').check();
     await choose("day");
     await expect(page.locator("#dateFilter-control")).toBeFocused();
     await scope(["a-0", "a-1"], 1, 1);
@@ -121,17 +113,16 @@ test("one visible calendar range changes every widget, headline, row and current
         from: "2026-03-08T08:00:00.000Z", to: "2026-03-09T07:00:00.000Z", toExclusive: true,
     });
     assert.equal(inputs.findLast(row => row.path === "/api/snapshot").input.bucket, "day");
-    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
-    assert.deepEqual(sorted(await page.locator(".matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId))),
-        ['call:["unified-chat-A","a-0"]', 'call:["unified-chat-A","a-1"]']);
-    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
-    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await closeAnalyzeFilters(page);
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional");
+    const utc = page.waitForResponse(r => r.ok() && r.url().endsWith("/api/snapshot")
+        && r.request().postDataJSON().timeContext.timeZone === "UTC");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
-    assert.deepEqual(sorted(app.snapshot().analytics.rows.map(row => row.toolCallId)), ["a-1", "h-0"],
+    assert.deepEqual(sorted((await (await utc).json()).analytics.rows.map(row => row.toolCallId)), ["a-1", "h-0"],
         "An equal-size cohort in another zone must still replace exact membership.");
     await navigateMain(page, "home"); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("2 Work IQ tool calls (Mar 9, 2026)");
-    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await navigateMain(page, "settings"); await navigateSettings(page, "regional");
     await selectActivityOption(page, "displayTimeZone", ""); await ready(page);
     await navigateMain(page, "home"); await ready(page);
     await scope(["a-0", "a-1"], 1, 1);
@@ -140,16 +131,16 @@ test("one visible calendar range changes every widget, headline, row and current
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
     const weekUrl = page.url();
     await choose("month");
-    await scope(["a-0", "a-1", "b-0", "c-0", "d-0", "e-0", "h-0", "i-0"], 7, 5);
-    assert.match(page.url(), /to=2026-03-31/);
+    await scope(["a-0", "a-1", "b-0", "c-0", "d-0", "i-0"], 5, 4);
+    assert.match(page.url(), /to=2026-03-08/);
     await page.goBack(); await ready(page);
     assert.equal(page.url(), weekUrl);
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
-    await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (Mar 2 - Mar 8, 2026)");
-    await expect(page.locator("#scopeCount-selected")).toHaveText("1 request group");
-    await page.reload(); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("5 Work IQ tool calls (Mar 2–8, 2026)");
+    // A date-only address is reloadable; the preceding Back entry can include a tab-local handoff.
+    const publicWeek = new URL("/?range=custom&from=2026-03-02&to=2026-03-08", page.url());
+    await page.goto(publicWeek.href); await ready(page); await page.reload(); await ready(page);
     await scope(["a-0", "a-1", "b-0", "c-0", "i-0"], 4, 3);
-    await page.locator('.request-row[data-view-key="request:unified-c"] input').check();
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     await scope(["b-0"], 1, 1);
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
@@ -157,7 +148,7 @@ test("one visible calendar range changes every widget, headline, row and current
     await expect(page.locator("#activityCount")).toHaveText("3");
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
-    await expect(page.locator("#activityListSummary")).toContainText("1 interaction with 1 matching Work IQ tool call");
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 1 matching tool call");
     await selectActivityOption(page, "promptAuthorFilter", "agent"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
     await page.locator("#resetView").click(); await ready(page);
@@ -169,50 +160,40 @@ test("one visible calendar range changes every widget, headline, row and current
     await scope(["a-0", "a-1"], 1, 1);
     await expect(page.locator("#periodResult")).toHaveText("2 Work IQ tool calls (Mar 8, 2026)");
     await choose("day");
-    await navigateMain(page, "reports"); await chooseReportScope(page, "current");
-    await expect(page.locator("#scopeCount-current")).toHaveText("1 request group");
-    await expect(page.locator("#scopeCount-selected")).toHaveText("1 request group");
-    await reportContents(page);
+    await closeAnalyzeFilters(page); await navigateMain(page, "reports");
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
+    await page.locator("#prepareReportPreview").click();
     assert.equal((await response).status(), 200);
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    await expect(page.locator("#reportPreviewDrawer")).toBeVisible();
     const preview = inputs.findLast(row => row.path === "/api/preview").input;
     assert.deepEqual(preview.selection.scenarioIds, ["unified-a"]);
     assert.deepEqual(preview.options.dateSelection, { range: "day", from: "2026-03-08", to: "2026-03-08" });
-    await cancelReportPreview(page);
+    await page.keyboard.press("Escape");
     await navigateMain(page, "home");
     await choose("day");
-    await page.locator("#comparePeriods").click();
-    for (const [label, value] of [["Period A from", "2026-02-28"], ["Period A to", "2026-02-28"],
-        ["Period B from", "2026-03-01"], ["Period B to", "2026-03-01"]]) await page.getByLabel(label, { exact: true }).fill(value);
+    await closeAnalyzeFilters(page); await navigateMain(page, "compare");
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    const periods = await openDatePicker(page, "compare", "Custom dates");
+    for (const [side, value] of [["A", "2026-02-28"], ["B", "2026-03-01"]]) {
+        await periods.getByLabel(`Period ${side} from`, { exact: true }).fill(value);
+        await periods.getByLabel(`Period ${side} to`, { exact: true }).fill(value);
+    }
     const compared = page.waitForResponse(response => response.url().endsWith("/api/period-comparison") && response.ok());
-    await page.locator("#applyPeriodComparison").click();
+    await periods.getByRole("button", { name: "Apply dates", exact: true }).click();
     const comparison = await (await compared).json();
     assert.deepEqual(comparison.periods.baseline.analytics.rows.map(row => row.toolCallId), ["f-0"]);
     assert.deepEqual(comparison.periods.later.analytics.rows.map(row => row.toolCallId), ["d-0"]);
-    await page.locator('.primary-navigation [data-nav="analyze"]').click(); await ready(page);
+    await navigateMain(page, "analyze"); await ready(page);
     await scope(["a-0", "a-1"], 1, 1);
     await choose("custom");
     await page.locator("#fromFilter").fill("2026-04-02"); await page.locator("#toFilter").fill("2026-04-02");
-    await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#activityCount")).toHaveText("0");
-    await expect(page.locator("#activityListSummary")).toContainText("0 interactions with 0 matching Work IQ tool calls");
-    await expect(page.locator("#scopeCount-current")).toHaveText("0 request groups");
+    await expect(page.locator("#applyDates")).toBeDisabled();
+    await scope(["a-0", "a-1"], 1, 1);
     await choose("capture"); await scope(all, 10, 8, 1);
-    for (const [width, scale, theme] of [[1440, 1, "dark"], [375, 2, "light"]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await choose("week");
-        await expect(page.locator("#dateFilter-control")).toHaveText(/This week/);
-        const geometry = await page.locator("#dateFilter-control").evaluate(node => ({
-            height: node.getBoundingClientRect().height,
-            clipped: node.querySelector(".select-value").scrollWidth > node.querySelector(".select-value").clientWidth + 1,
-            overflow: document.documentElement.scrollWidth > innerWidth + 1,
-        }));
-        assert.ok(geometry.height >= 44); assert.equal(geometry.clipped, false); assert.equal(geometry.overflow, false);
-        if (process.env.WIRE_TIME_SCOPE_PROOF) await page.screenshot({ path: `${process.env.WIRE_TIME_SCOPE_PROOF}\\time-scope-${width}.png`, fullPage: true });
-    }
 });
 
 test("Today follows a 25-hour civil day and refreshes its range after local midnight", async t => {
@@ -222,9 +203,7 @@ test("Today follows a 25-hour civil day and refreshes its range after local midn
         const record = fixture(`fall-${i}`); record.toolCalls[0].startedAt = startedAt; return record;
     });
     const app = await setup(t, source, "2026-11-02T07:00:00Z"), { page } = app;
-    const trigger = page.locator("#dateFilter-control");
-    await trigger.focus(); await trigger.press("ArrowDown"); await trigger.press("Home");
-    await trigger.press("ArrowDown"); await trigger.press("Enter");
+    await selectActivityOption(page, "dateFilter", "day");
     await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("4");
     await expect(page.locator("#periodResult")).toHaveText("4 Work IQ tool calls (Nov 1, 2026)");
@@ -259,13 +238,15 @@ test("pending, superseded and failed date reads never mix accepted widget cohort
     release(); await (await late).finished();
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "2");
-    await expect(page.locator("#scopeCount-current")).toHaveText("1 request group");
+    await expect(page.locator("#activityListSummary")).toHaveText("1 interaction · 2 matching tool calls");
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:unified-a");
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503,
         contentType: "application/json", body: '{"error":"Invented date read failure"}' }), { times: 1 });
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("Previous results: 2 Work IQ tool calls (Mar 8, 2026)");
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "2");
-    await expect(page.locator("#exportBtn")).toBeDisabled();
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:unified-a");
+    assert.equal(app.inputs.filter(input => input.path === "/api/preview").length, 0);
     await page.locator("#resetView").click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("11");
     await expect(page.locator("#periodResult")).toHaveText("11 Work IQ tool calls (All dates)");

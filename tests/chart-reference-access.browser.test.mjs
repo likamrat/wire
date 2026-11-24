@@ -45,12 +45,12 @@ async function setup(t, { reducedMotion = "reduce" } = {}) {
         // Only the publication boundary and test handle are supplied here. The guide,
         // caller, data reads, native controls and exact-table renderer remain real.
         const options = "publicationToken: () => api.publicationToken(), isCurrent: token => api.isCurrent(token),";
-        const handle = "let readingIntent = 0;";
+        const handle = "const chartReferenceUI =";
         assert.equal(html.split(options).length, 2);
         assert.equal(html.split(handle).length, 2);
         html = html.replace(options, `publicationToken: () => window.guidePublicationFixture.publicationToken(),
         isCurrent: token => window.guidePublicationFixture.isCurrent(token),`);
-        html = html.replace(handle, `window.guideAccessFixture = chartReferenceUI; ${handle}`);
+        html = html.replace(handle, `${handle} window.guideAccessFixture =`);
         await route.fulfill({ response, body: html });
     });
     t.after(async () => {
@@ -65,17 +65,17 @@ async function setup(t, { reducedMotion = "reduce" } = {}) {
     return { page, requests };
 }
 
-test("publication withdrawal cancels a native guide glide and retires its completion synchronously", { timeout: 30000 }, async t => {
+test("publication withdrawal retires the in-page reader and its exact return synchronously", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { reducedMotion: "no-preference" });
     await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     const result = await page.evaluate(() => {
         const root = document.getElementById("meaning"), held = [];
         const walker = document.createTreeWalker(document.getElementById("chartReferenceData"), NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) held.push(walker.currentNode);
-        window.guideAccessFixture.close();
-        const motion = root.getAnimations()[0], finish = motion.onfinish;
-        const before = { texts: held.map(node => node.data), moving: Boolean(motion), closing: root.hasAttribute("data-closing") };
+        const saved = window.guideAccessFixture.capture();
+        const before = { texts: held.map(node => node.data), animations: root.getAnimations().length, modal: root.matches(":modal"), view: saved.view };
         window.guidePublicationFixture.withdraw();
         const focused = [], observe = event => focused.push(event.target.id);
         document.addEventListener("focusin", observe);
@@ -84,13 +84,20 @@ test("publication withdrawal cancels a native guide glide and retires its comple
         const after = { texts: held.map(node => node.data), open: root.open, animations: root.getAnimations().length,
             rows: document.querySelectorAll("#chartReferenceData tr").length, focused };
         window.guidePublicationFixture.fresh();
-        window.guideAccessFixture.open();
-        finish();
-        return { before, after, freshOpen: root.open, freshCapture: Boolean(window.guideAccessFixture.capture()) };
+        // Withdrawing just the reader did not navigate away from the Guide section.
+        document.getElementById("analyzeResultsSection").click();
+        document.getElementById("openChartReference").click();
+        const restored = window.guideAccessFixture.restore(saved);
+        return { before, after, restored, freshOpen: root.open, freshView: window.guideAccessFixture.capture()?.view };
     });
-    assert.ok(result.before.moving && result.before.closing && result.before.texts.some(text => text.trim()));
+    assert.equal(result.before.modal, false);
+    assert.equal(result.before.animations, 0);
+    assert.equal(result.before.view, "data");
+    assert.ok(result.before.texts.some(text => text.trim()));
     assert.deepEqual(result.after, { texts: result.before.texts.map(() => ""), open: false, animations: 0, rows: 0, focused: [] });
-    assert.ok(result.freshOpen && result.freshCapture, "Retired motion completion cannot close a fresh publication");
+    assert.equal(result.restored, false);
+    assert.ok(result.freshOpen);
+    assert.equal(result.freshView, "guide", "Retired exact return cannot replace a newly authorized article");
 });
 
 for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/find/source state locally (${initiallyOpen ? "open" : "already closed"})`, { timeout: 30000 }, async t => {
@@ -99,8 +106,7 @@ for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/fi
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await closeAnalyzeFilters(page);
     await page.locator("#openChartReference").click();
-    await page.locator("#chartReferenceAllTopics").click();
-    await page.locator('button[data-reference-topic="paths"]').click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData")).toContainText("calendarView");
     await page.locator("#chartReferenceFindInput").fill("PRIVATE_GUIDE_FIND");
@@ -120,7 +126,7 @@ for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/fi
         };
     });
     assert.equal(await page.evaluate(() => window.retiredGuideFixtureCapture.rowQuery), "PRIVATE_GUIDE_FIND");
-    if (!initiallyOpen) await page.locator("#closeChartReference").click();
+    if (!initiallyOpen) await page.locator("#analyzeResultsSection").click();
     const result = await page.evaluate(() => {
         const fetches = window.guideFixtureFetches, href = location.href, length = history.length, focused = [];
         const observe = event => focused.push(event.target.id);
@@ -164,6 +170,7 @@ for (const initiallyOpen of [true, false]) test(`native guide withdraws exact/fi
     assert.ok(requests.filter(path => path === "/api/snapshot").length > snapshots, "Recovery uses a fresh existing-owner stored read");
     assert.equal(await page.evaluate(() => window.guideAccessFixture.restore(window.retiredGuideFixtureCapture)), false);
     await page.locator("#openChartReference").click();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="paths"]').click();
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceFindInput")).toHaveValue("");
     await expect(page.locator("#chartReferenceData")).toContainText("calendarView");

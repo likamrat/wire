@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recollectionFixture } from "./recollection-fixture.mjs";
+import { stoppedRuntimePid } from "./stopped-runtime-fixture.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { atomicJson, readJson } from "../lib/collector-io.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -42,7 +43,7 @@ async function sourceManifest() {
 }
 
 async function fixture(t) {
-    const f = await recollectionFixture(t);
+    const f = await recollectionFixture(t, { collectInitially: false });
     for (const file of f.files) {
         const original = (await readFile(file, "utf8")).trim().split("\n").map(JSON.parse);
         for (const event of original) {
@@ -104,13 +105,12 @@ async function fixture(t) {
     for (const entry of state.exports) for (const file of Object.values(entry.files)) {
         preservedFiles.push({ path: path.relative(f.context.dataDir, file), sha256: hash(await readFile(file)) });
     }
-    const exited = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
-    assert.equal(exited.status, 0);
+    const stoppedPid = await stoppedRuntimePid(t);
     const plan = {
         schemaVersion: 1, operationId: randomUUID(),
         attestation: {
             packetSha256: hash("synthetic sealed packet"), recheckSha256: hash("synthetic consumed predicate proof"),
-            stoppedRuntimePid: exited.pid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true,
+            stoppedRuntimePid: stoppedPid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true,
         },
         source: {
             configSha256: hash(await readFile(path.join(f.context.dataDir, "collector", "config.json"))),

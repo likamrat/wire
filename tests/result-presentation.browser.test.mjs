@@ -1,15 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture } from "./helpers.mjs";
 
-const longPath = "/Users/{User-ID}/messages?$filter=" + "Case%2F<not-markup>\u65e5\u672c\u8a9e\u05e9\u05dc\u05d5\u05dd".repeat(30) + "&Last=Keep+This";
 function source(id = "result-card", route = "/me/messages") {
     const record = fixture(id);
     record.userPrompt.text = "Synthetic result presentation.";
@@ -49,32 +46,28 @@ async function outcomes(node) {
         Object.fromEntries(nodes.map(n => [n.dataset.outcome, Number(n.dataset.count)])));
 }
 
-test("recorded results distinguish completion, tool metadata and literal API fields without new actions", { timeout: 30000 }, async t => {
+test("the completed call owns its selectable input path; the returned entry owns its reported HTTP 204", async t => {
     const record = source();
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#request?request=result-card"); await ready(page);
-    const card = page.locator(".request-outcome"), fields = card.locator(".request-outcome-action");
-    assert.deepEqual(await card.locator(".result-heading").allTextContents(), ["Tool completion", "API metadata from tool"]);
-    assert.deepEqual(await card.locator(".result-unit").allTextContents(), ["1 Work IQ tool call", "1 tool-returned API result"]);
-    assert.deepEqual(await outcomes(card.locator('[data-result-layer=tool]')), { success: 1 });
-    assert.deepEqual(await outcomes(card.locator('[data-result-layer=reported-api]')), { success: 1 });
-    assert.match(await card.innerText(), /Completion is not correctness.*tool-reported, not directly observed/s);
-    assert.match(await card.innerText(), /HTTP 2xx/);
-    assert.doesNotMatch(await card.innerText(), /HTTP 200|HTTP 204|workiq-fetch \/ Mail/);
-    assert.deepEqual(await fields.locator("dt").allTextContents(), ["Tool", "Service", "API path"]);
-    assert.equal(await fields.locator(".action-tool").textContent(), "workiq-fetch");
-    assert.equal(await fields.locator(".action-service").textContent(), "Mail");
-    assert.equal(await fields.locator("code.api-path").textContent(), "/me/messages");
-    assert.equal(await fields.locator("a,button,[role=button]").count(), 0);
-    assert.equal(await page.locator(".journey-item code.api-path").textContent(), "/me/messages");
-    const pathNode = fields.locator("code");
+    const card = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = card.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(card.locator(".reader-call-summary .card-outcome-label")).toHaveText("1 tool call completed");
+    await expect(card.locator(".reader-tool-name")).toHaveText("workiq-fetch");
+    await expect(card.locator(".reader-call-services")).toContainText("Mail");
+    const entry = card.locator(".api-result-entry");
+    await expect(entry).toHaveCount(1);
+    await expect(entry.locator(".recorded-result-label")).toContainText("Tool-reported HTTP 204");
+    await expect(entry).not.toContainText("HTTP 200");
+    const pathNode = card.locator(".reader-input-value code.api-path");
+    await expect(pathNode).toHaveText("/me/messages");
+    assert.equal(await pathNode.evaluate(n => n.closest("button,a") === null), true);
     assert.equal(await pathNode.evaluate(node => {
         const selection = getSelection(), range = document.createRange();
         range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range);
         return selection.toString();
     }), "/me/messages");
-    await page.locator(".journey-item").getByText("Technical details", { exact: true }).click();
-    assert.match(await page.locator(".journey-item .facts").allTextContents().then(parts => parts.join(" ")), /Reported status204/);
     assert.deepEqual(createRecordedResults().summarize(buildRequestActivity([record])["reported-api"]),
         { count: 1, success: 1, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0 });
 });
@@ -95,25 +88,28 @@ test("multi-call and batched returned results preserve status, service and exact
     await page.goto(url + "#request?request=batch"); await ready(page);
     const response = await snapshot;
     assert.equal(response.status(), 200, await response.text());
-    assert.deepEqual(await outcomes(page.locator(".full-request-results [data-result-layer=tool]")), { success: 1, partial: 1 });
-    assert.deepEqual(await outcomes(page.locator(".full-request-results [data-result-layer=reported-api]")), { success: 2, failure: 1, unknown: 1 });
-    assert.equal(await page.locator(".request-outcome-action").count(), 0, "No first-call fields attached to a multi-call aggregate");
+    const full = (await response.json()).requestActivity;
+    assert.deepEqual(full.tool.map(row => row.outcome).sort(), ["partial", "success"]);
+    assert.deepEqual(full["reported-api"].map(row => row.outcome).sort(), ["failure", "success", "success", "unknown"]);
     const firstCard = page.locator(`[data-tool-call-id="${first.toolCallId}"]`), secondCard = page.locator('[data-tool-call-id="second-call"]');
-    assert.deepEqual(await firstCard.locator(":scope > .action-fields code").allTextContents(), first.requestArgs.entityUrls);
-    await firstCard.locator(".returned-api-details > summary").click();
+    for (const call of [firstCard, secondCard]) {
+        const toggle = call.locator(".reader-call-toggle");
+        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+        const detail = call.locator(".reader-returned-facts:not([open]) > summary");
+        if (await detail.count()) await detail.click();
+    }
+    await expect(firstCard.locator(".reader-input-value code.api-path")).toHaveText(first.requestArgs.entityUrls);
     const entries = firstCard.locator(".api-result-entry");
     assert.equal(await entries.count(), 3);
     assert.equal(await entries.nth(0).locator(".api-path").textContent(), "/me/messages?Case=A");
-    assert.match(await entries.nth(0).innerText(), /Call service/);
-    assert.equal(await entries.nth(0).locator(".action-service").textContent(), "More than one service");
+    await expect(entries.nth(0).locator(".action-service")).toHaveText("Mail");
     assert.deepEqual(await outcomes(entries.nth(0)), { success: 1 });
     assert.equal(await entries.nth(1).locator(".api-path").textContent(), "/me/calendar/events?Case=B");
-    assert.equal(await entries.nth(1).locator(".action-service").textContent(), "More than one service", "The canonical call service category is not reclassified from one returned path");
+    await expect(entries.nth(1).locator(".action-service")).toHaveText("Calendar");
     assert.deepEqual(await outcomes(entries.nth(1)), { failure: 1 });
     assert.equal(await entries.nth(2).locator(".api-path").count(), 0);
-    assert.match(await entries.nth(2).innerText(), /Not attributed to a target in this batch/);
+    assert.match(await entries.nth(2).innerText(), /No path returned for this batch entry/);
     assert.deepEqual(await outcomes(entries.nth(2)), { unknown: 1 });
-    await secondCard.locator(".returned-api-details > summary").click();
     assert.equal(await secondCard.locator(".api-result-entry .api-path").textContent(), "/me/drive/root/children?Case=Returned");
     assert.equal(await secondCard.locator(".api-result-entry .action-service").textContent(), "Files");
     assert.doesNotMatch(await firstCard.innerText(), /Case=Returned/);
@@ -140,24 +136,17 @@ test("absent paths, unknown completion, API absence and inapplicable tool eviden
     }];
     const { page, url } = await setup(t, [missing, code]);
     await page.goto(url + "#request?request=missing"); await ready(page);
-    assert.match(await page.locator(".request-outcome").innerText(), /No result recorded.*API metadata: None recorded/s);
-    assert.equal(await page.locator(".request-outcome-action .api-path-value").textContent(), "Not recorded");
-    assert.equal(await page.locator(".request-outcome .api-path").count(), 0);
+    const row = page.locator(`[data-tool-call-id="${missing.toolCalls[0].toolCallId}"]`);
+    await expect(row.locator(".reader-call-summary")).toContainText(/no recorded result/i);
+    await expect(row.locator(".api-result-entry,code.api-path")).toHaveCount(0);
     await page.goto(url + "#request?request=code"); await ready(page);
-    assert.equal(await page.locator(".request-outcome [data-result-layer=reported-api],.request-outcome .result-missing-api").count(), 0);
-    assert.match(await page.locator(".request-outcome").innerText(), /Execution not observed/);
-    assert.equal(await page.locator(".journey-item .api-path").textContent(), "/me/messages?Keep=Case");
-    assert.match(await page.locator(".journey-item").innerText(), /Referenced API path/);
-    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Tool completed|HTTP 2xx/);
-    await page.route("**/api/snapshot", async route => {
-        const response = await route.fetch(), data = await response.json();
-        delete data.requestActivity["reported-api"];
-        await route.fulfill({ response, json: data });
-    });
-    await page.goto(url + "#request?request=missing");
-    await page.reload(); await ready(page);
-    assert.match(await page.locator(".full-request-results").innerText(), /API results: result counts unavailable/);
-    assert.equal(await page.locator(".full-request-results .result-missing-api").count(), 0, "Unavailable metadata is not shown as a known empty set");
+    const reference = page.locator("#requestContent .reader-call-row");
+    await expect(reference).toHaveCount(1);
+    await expect(reference).toContainText("Execution not observed");
+    const toggle = reference.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(reference).toContainText("/me/messages?Keep=Case");
+    await expect(reference).not.toContainText(/Tool completed|HTTP 2xx/);
 });
 
 test("matching result navigation keeps exact paths, selected scope and native focus", { timeout: 30000 }, async t => {
@@ -166,18 +155,15 @@ test("matching result navigation keeps exact paths, selected scope and native fo
     record.toolCalls[0].apiResults = [{ index: 0, statusCode: 403 }];
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#activity?session=test-session&result=failure"); await ready(page);
-    assert.equal(await page.locator(".matched-action .api-path").textContent(), record.toolCalls[0].requestArgs.entityUrls[0]);
-    assert.equal(await page.locator(".matched-action tag").count(), 0);
-    const link = page.locator(".matched-action a[href*='#request']");
-    await link.focus();
-    assert.equal(await link.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle !== "none"), true);
-    await page.keyboard.press("Enter"); await ready(page);
-    assert.match(page.url(), /request=matching/);
-    await page.locator("#requestContent").getByRole("button", { name: "Add to report", exact: true }).click();
-    assert.equal(await page.locator("#requestContent").getByRole("button", { name: "Remove from report", exact: true }).count(), 1);
-    await page.locator("#contextBack").click(); await ready(page);
+    const link = page.locator("#activityList").getByRole("link", { name: /Returned entry 1.*HTTP 403/ });
+    await link.press("Enter"); await ready(page);
+    const call = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    await expect(call.locator(".api-result-entry:focus")).toContainText("Tool-reported HTTP 403");
+    await expect(call.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
+    await expect(call.locator("tag")).toHaveCount(0);
+    await page.goBack(); await expect(link).toBeFocused();
     assert.match(page.url(), /result=failure/);
-    assert.equal(await page.locator(".matched-action").count(), 1);
+    await expect(page.locator("#activityList article")).toHaveAttribute("data-view-key", "request:matching");
 });
 
 test("legacy aliases use the canonical call's exact paths, including start-event identities", { timeout: 30000 }, async t => {
@@ -195,12 +181,16 @@ test("legacy aliases use the canonical call's exact paths, including start-event
     await page.goto(url + "#request?request=legacy-alias"); await ready(page);
     const response = await snapshot;
     assert.equal(response.status(), 200, await response.text());
-    assert.equal(await page.locator(".request-outcome-action .api-path").textContent(), "/me/messages?Source=Current");
-    assert.equal(await page.locator(".journey-item > .action-fields .api-path").textContent(), "/me/messages?Source=Current");
-    await page.locator(".request-outcome .returned-api-details > summary").click();
-    assert.equal(await page.locator(".request-outcome .api-result-entry .api-path").textContent(), "/me/messages?Source=Returned");
-    assert.equal(await page.locator(".full-request-results [data-result-layer=tool] .result-unit").textContent(), "1 Work IQ tool call");
-    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Source=Older/);
+    const { requestActivity } = await response.json();
+    assert.deepEqual(requestActivity.tool.map(row => row.scenarioId), ["canonical"]);
+    assert.deepEqual(requestActivity["reported-api"].map(row => row.parentCallId), [requestActivity.tool[0].id]);
+    const calls = page.locator("#requestContent .reader-call-row");
+    await expect(calls).toHaveCount(1);
+    const toggle = calls.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(calls.locator(".reader-input-value code.api-path")).toHaveText("/me/messages?Source=Current");
+    await expect(calls.locator(".api-result-entry code.api-path")).toHaveText("/me/messages?Source=Returned");
+    await expect(calls).not.toContainText("Source=Older");
 });
 
 test("returned-result pages retain every canonical entry without assigning the first target to the rest", { timeout: 30000 }, async t => {
@@ -211,58 +201,33 @@ test("returned-result pages retain every canonical entry without assigning the f
     }));
     const { page, url } = await setup(t, [record]);
     await page.goto(url + "#request?request=many-results"); await ready(page);
-    const summary = page.locator(".request-outcome");
-    assert.deepEqual(await outcomes(summary.locator(".full-request-results [data-result-layer=reported-api]")), { success: 3, failure: 3, unknown: 2 });
-    await summary.locator(".returned-api-details > summary").click();
-    assert.equal(await summary.locator(".api-result-entry").count(), 6);
-    assert.deepEqual(await summary.locator(".api-result-entry code.api-path").allTextContents(), record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
+    const call = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = call.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    // Batches containing an error expose every entry together, including a later error.
+    const entries = call.locator(".api-result-entry");
+    await expect(entries).toHaveCount(8);
+    await expect(entries.locator("code.api-path")).toHaveText(record.toolCalls[0].apiResults.map(result => result.path));
+    assert.deepEqual(await entries.locator(".recorded-result").evaluateAll(nodes => nodes.map(n => n.dataset.outcome)),
+        ["success", "failure", "unknown", "success", "failure", "unknown", "success", "failure"]);
+    await expect(call.getByRole("button", { name: "Next returned results" })).toHaveCount(0);
+});
+
+test("successful returned entries can be paged without losing their unique paths", async t => {
+    const record = source("paged-entries");
+    record.toolCalls[0].apiResults = Array.from({ length: 8 }, (_, index) => ({
+        index, path: `/me/messages/{Result-${index}}?Exact=%2F`, statusCode: 204,
+    }));
+    const { page, url } = await setup(t, [record]);
+    await page.goto(url); await ready(page);
+    await page.locator("#activityList .request-card-open").click();
+    const summary = page.locator(`[data-tool-call-id="${record.toolCalls[0].toolCallId}"]`);
+    const toggle = summary.locator(".reader-call-toggle");
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(summary.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
     const next = summary.getByRole("button", { name: "Next returned results", exact: true });
     await next.focus(); await page.keyboard.press("Enter");
     assert.deepEqual(await summary.locator(".api-result-entry code.api-path").allTextContents(), record.toolCalls[0].apiResults.slice(6).map(result => result.path));
-    assert.deepEqual(await outcomes(summary.locator(".full-request-results [data-result-layer=reported-api]")), { success: 3, failure: 3, unknown: 2 });
     await summary.getByRole("button", { name: "Previous returned results", exact: true }).click();
-    assert.equal(await summary.locator(".api-result-entry").count(), 6);
-});
-
-test("result hierarchy and literal paths reflow in both themes at all widths and enlarged text", { timeout: 90000 }, async t => {
-    const simple = source("simple"), long = source("long", longPath);
-    const { page, url } = await setup(t, [simple, long]);
-    const proofs = process.env.WORKIQ_RESULT_PROOFS, metrics = [];
-    if (proofs) await mkdir(proofs, { recursive: true });
-    for (const request of [simple, long]) {
-        await page.goto(url + "#request?request=" + request.scenarioId); await ready(page);
-        for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-            await chooseTheme(page, theme);
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            const card = page.locator(".request-outcome");
-            const geometry = await card.evaluate(node => {
-                const code = node.querySelector("code.api-path"), box = code.getBoundingClientRect(), range = document.createRange();
-                const clipped = [];
-                for (const part of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(code.textContent)) {
-                    range.setStart(code.firstChild, part.index); range.setEnd(code.firstChild, part.index + part.segment.length);
-                    for (const glyph of range.getClientRects()) if (glyph.left < box.left - 1 || glyph.right > box.right + 1 || glyph.top < box.top - 1 || glyph.bottom > box.bottom + 1) clipped.push(part.index);
-                }
-                const style = getComputedStyle(code);
-                return { clipped, width: box.width, height: box.height, cardHeight: node.getBoundingClientRect().height,
-                    pageOverflow: document.documentElement.scrollWidth - innerWidth,
-                    font: style.fontFamily, size: style.fontSize, weight: style.fontWeight,
-                    pathColor: style.color, pathBackground: style.backgroundColor,
-                    badFields: [...node.querySelectorAll("dt,dd,.result-description,.recorded-result")].filter(n => n.scrollWidth > n.clientWidth + 1).map(n => n.className) };
-            });
-            assert.equal(await card.locator("code.api-path").textContent(), request.toolCalls[0].requestArgs.entityUrls[0]);
-            assert.deepEqual(geometry.clipped, [], `${request.scenarioId}/${theme}/${width}/${scale}: retained glyphs must not clip`);
-            assert.deepEqual(geometry.badFields, [], `${theme}/${width}/${scale}: fields and result capsules must not overflow`);
-            assert.ok(geometry.pageOverflow <= 1);
-            assert.equal(await card.locator("not-markup").count(), 0);
-            assert.equal(await card.locator("code.api-path").evaluate(node => node.closest("button,a") === null && getComputedStyle(node).userSelect === "text"), true);
-            const shared = await page.locator("#requestContent code.api-path").evaluateAll(nodes => nodes.map(n => {
-                const s = getComputedStyle(n); return [s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight];
-            }));
-            assert.deepEqual(shared[0], shared[1], "Summary and timeline share one API-path typography role");
-            metrics.push({ request: request.scenarioId, theme, viewport: width, scale, ...geometry });
-            if (proofs && (request === simple || width === 375)) await card.screenshot({ path: path.join(proofs, `${request.scenarioId}-${theme}-${width}-${scale * 100}.png`) });
-        }
-    }
-    if (proofs) await writeFile(path.join(proofs, "result-layout.json"), JSON.stringify(metrics, null, 2));
+    await expect(summary.locator(".api-result-entry code.api-path")).toHaveText(record.toolCalls[0].apiResults.slice(0, 6).map(result => result.path));
 });

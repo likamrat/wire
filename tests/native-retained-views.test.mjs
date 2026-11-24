@@ -11,6 +11,7 @@ import { createExportController } from "../lib/export.mjs";
 import { chatSource } from "./native-chat-source-fixtures.mjs";
 import { decodeNativeChatObservation } from "../lib/native-chat-source.mjs";
 import { retainNativeChatSourceObservations } from "../lib/native-read-model.mjs";
+import { createBoundedNativeState } from "../web/bounded-native-state.mjs";
 
 const input = () => ({ schemaVersion: 1, revision: null,
     sources: ["microsoft-365-chat", "microsoft-365-cowork"],
@@ -68,6 +69,15 @@ test("bounded time charts use current call-start facts, retain undated calls and
     const tool = await views.query({ ...input(), analytics: { ...analytics,
         filters: { from: point.from, to: point.to, tools: ["mcp__graph__CallGraph"] } } }, app.services.nativeReportAdmission);
     assert.equal(tool.aggregates.selectedRows, 1, "Call-specific filters still apply to actual dated call rows.");
+    for (const timelineFrom of ["1900-01-01", "2030-01-01"]) {
+        const outside = await views.query({ ...input(), analytics: { ...analytics, timelineFrom } }, app.services.nativeReportAdmission);
+        assert.equal(outside.timeSeries.window.count, 0);
+        assert.equal(outside.timeSeries.window.total, 1);
+        assert.equal(outside.timeSeries.datedRows, 2);
+        assert.equal(outside.timeSeries.undatedRows, 1);
+        assert.deepEqual(outside.aggregates, result.aggregates);
+        assert.deepEqual(createBoundedNativeState().decode(outside, { ...input(), analytics: { ...analytics, timelineFrom } }), outside);
+    }
 });
 
 test("bounded Dates retain ordinary Chat message context without inventing dated calls", async t => {
@@ -96,6 +106,51 @@ test("bounded Dates retain ordinary Chat message context without inventing dated
             assert.equal(selected.aggregates.conversations, 0);
             assert.equal(selected.aggregates.selectedRows, 0);
         });
+
+    }
+});
+
+for (const dense of [false, true]) test(`bounded daily native timelines preserve long ${dense ? "populated ranges" : "gaps"} and explicit intervals`, async t => {
+    const rows = coworkFixture(), starts = rows.filter(row => row.record.event === "ts");
+    const dated = [[starts[0], 0], [starts[1], 401]];
+    if (dense) for (let day = 1; day <= 400; day++) {
+        const row = envelope("cowork", { id: `daily-event-${day}`, event: "ts",
+            data: { tid: `daily-call-${day}`, tn: "mcp__graph__CallGraph" } },
+        { toolName: recorded("mcp__graph__CallGraph") }, {}, 10 + day);
+        rows.push(row); dated.push([row, day]);
+    }
+    for (const [row, day] of dated) {
+        const value = new Date(Date.UTC(2025, 0, 1 + day, 12)).toISOString();
+        row.record.data.ts = value;
+        row.qualifiedFields.observationTime = { availability: "recorded", scope: "observation",
+            unit: "iso8601", basis: "cowork.data.ts", value };
+        row.evidenceReferences.observationTime = { sourceDocument: "invented-native-response",
+            pointer: `/events/${row.ordering.recordOrdinal}/data/ts`, nativeEventId: row.record.id };
+    }
+    const app = await committedNativeReportFixture(t, { segmented: true, envelopes: rows });
+    const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
+    t.after(() => views.close());
+    const analytics = { layer: "tool", timeContext: { timeZone: "UTC", locale: "en-US" } };
+    const result = await views.query({ ...input(), analytics }, app.services.nativeReportAdmission);
+    assert.equal(result.timeSeries.bucket, "day");
+    assert.equal(result.timeSeries.points.length, 90);
+    assert.equal(result.timeSeries.window.total, 402);
+    assert.deepEqual(createBoundedNativeState().decode(result, { ...input(), analytics }), result);
+    const invalidWindow = structuredClone(result); invalidWindow.timeSeries.window.count++;
+    assert.throws(() => createBoundedNativeState().decode(invalidWindow, { ...input(), analytics }), TypeError);
+    assert.equal(result.timeSeries.datedRows, dated.length);
+    assert.equal(result.timeSeries.undatedRows, 1);
+    assert.equal(result.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dense ? 90 : 1);
+    assert.ok(result.timeSeries.points.slice(1, -1).every(point => point.count === (dense ? 1 : 0)));
+    const first = await views.query({ ...input(), analytics: { ...analytics, timelineFrom: "2025-01-01" } }, app.services.nativeReportAdmission);
+    assert.equal(first.timeSeries.points[0].date, "2025-01-01");
+    assert.equal(first.timeSeries.window.offset, 0);
+    assert.equal(first.timeSeries.datedRows, dated.length);
+    assert.equal(first.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dense ? 90 : 1);
+    for (const bucket of ["week", "month"]) {
+        const grouped = await views.query({ ...input(), analytics: { ...analytics, bucket } }, app.services.nativeReportAdmission);
+        assert.equal(grouped.timeSeries.bucket, bucket);
+        assert.equal(grouped.timeSeries.points.reduce((sum, point) => sum + point.count, 0), dated.length);
     }
 });
 
@@ -142,6 +197,54 @@ for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} bounded pages
     assert.deepEqual(second.aggregates, first.aggregates);
     assert.notEqual(first.page.items[0].id, second.page.items[0].id);
     assert.equal(second.page.nextCursor, null);
+    const model = createBoundedNativeState(), query = input();
+    model.receive(model.begin(query, request), first, request);
+    const continuation = model.next();
+    model.receive(model.begin(continuation, request), second, request);
+    assert.equal(model.snapshot().value.page.items[0].id, second.page.items[0].id);
+    const qualification = await views.readback({ schemaVersion: 1, operationId: first.readback.committed.operationId }, request);
+    const receipt = (await app.persistence.status({ operationId: first.readback.committed.operationId }, { owner: app.owner })).receipt;
+    assert.equal(model.matchesReadback(qualification, first, receipt), true);
+    const inventoryInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        dimension: "tools", page: { limit: 1, after: null } };
+    const inventoryContext = { ...query, original: first };
+    const inventoryModel = createBoundedNativeState();
+    const inventory = await views.inventory(inventoryInput, request);
+    inventoryModel.receive(inventoryModel.begin(inventoryInput, request, inventoryContext), inventory, request);
+    assert.equal(inventory.aggregates.options, 3);
+    assert.equal(inventory.page.items.length, 1);
+    const nextInventoryInput = inventoryModel.next();
+    inventoryModel.receive(inventoryModel.begin(nextInventoryInput, request),
+        await views.inventory(nextInventoryInput, request), request);
+    assert.equal(inventoryModel.snapshot().value.page.items.length, 1);
+    assert.notEqual(inventoryModel.snapshot().value.page.items[0].value, inventory.page.items[0].value);
+    const unknownInput = { ...inventoryInput, dimension: "services" };
+    const unknown = inventoryModel.decode(await views.inventory(unknownInput, request), unknownInput, inventoryContext);
+    assert.equal(unknown.qualification, "unqualified");
+    assert.equal(unknown.aggregates, null);
+    const groupInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        groupId: first.grouping.groups[0].id, page: { limit: 1, after: null } };
+    const group = model.decode(await views.drilldown(groupInput, request), groupInput, inventoryContext);
+    assert.equal(group.aggregates.selectedRows, first.grouping.groups[0].count);
+    assert.notEqual(group.viewId, first.viewId);
+    assert.equal(group.groupId, groupInput.groupId);
+    const analyzeInput = { schemaVersion: 1, revision: first.revision, viewId: first.viewId,
+        query: "CallGraph", types: ["action"], page: { limit: 1, after: null } };
+    const analyzed = model.decode(await views.analyze(analyzeInput, request), analyzeInput, inventoryContext);
+    assert.equal(analyzed.aggregates.calls, 1);
+    assert.equal(analyzed.aggregates.conversations, 1);
+    assert.equal(analyzed.textSelection.reportScope, "complete-matched-conversations");
+    const refinedInventoryInput = { ...inventoryInput, viewId: analyzed.viewId };
+    const refined = model.decode(await views.inventory(refinedInventoryInput, request), refinedInventoryInput,
+        { ...query, original: analyzed });
+    assert.equal(refined.aggregates.options, 1);
+    const refinedGroupInput = { ...groupInput, viewId: analyzed.viewId, groupId: analyzed.grouping.groups[0].id };
+    const refinedGroup = model.decode(await views.drilldown(refinedGroupInput, request), refinedGroupInput,
+        { ...query, original: analyzed });
+    assert.equal(refinedGroup.aggregates.calls, 1);
+    assert.ok(refinedGroup.textSelection);
+    await assert.rejects(views.analyze({ ...analyzeInput, viewId: analyzed.viewId }, request),
+        { code: "NATIVE_VIEW_ANALYSIS_BASE_REQUIRED" });
     for (const layer of ["tool", "reported-api"]) {
         const analytics = { layer, groupBy: "tool", limit: 1, filters: { outcomes: ["success"] } };
         const expected = buildActivityAnalytics(app.services.nativeRecords, analytics);
@@ -164,6 +267,12 @@ for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} bounded pages
     assert.equal(search.aggregates.complete, true);
     assert.ok(search.aggregates.matched > 0);
     assert.equal(search.page.items.length, 1);
+    const finder = { schemaVersion: 1, revision: first.revision, sources: input().sources,
+        query: "Read", types: [], page: { limit: 1, after: null } };
+    const hit = model.decode(search, finder).page.items[0];
+    const at = { schemaVersion: 1, revision: first.revision, sources: [hit.source.sourceId], conversationId: hit.target.conversationId,
+        at: hit.target.ordinal, sourceRevision: first.sourceRevision, page: { limit: 1, after: null } };
+    assert.equal(model.decode(await views.detail(at, request), at).focusOrdinal, hit.target.ordinal);
     const hitIds = new Set(search.page.items.map(hit => hit.id));
     let cursor = search.page.nextCursor;
     while (cursor) {
@@ -260,6 +369,61 @@ test("bounded reader joins a call start to its original complete call outcome wi
     assert.deepEqual(start.callSummaries.map(call => [call.tool, call.outcome]), [["mcp__graph__CallGraph", "success"]]);
     assert.match(start.callSummaries[0].id, /^[a-f0-9]{64}$/);
     assert.equal(query.aggregates.calls, 3);
+});
+
+for (const segmented of [false, true]) test(`v${segmented ? 2 : 1} completed detail pages exactly the successful calls offered by the card, in parent numbering`, async t => {
+    const app = await committedNativeReportFixture(t, { segmented, envelopes: coworkFixture() });
+    const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
+    t.after(() => views.close());
+    const owner = app.services.nativeReportAdmission;
+    const full = await views.query(input(), owner);
+    const conversationId = full.page.items[0].id, sources = [full.page.items[0].sourceId];
+    const base = { schemaVersion: 1, revision: full.revision, sourceRevision: full.sourceRevision,
+        sources, conversationId, page: { limit: 1, after: null } };
+    const complete = await views.detail({ ...base, section: "calls", page: { limit: 100, after: null } }, owner);
+    const expected = complete.page.items.map((row, i) => ({ call: row.callSummaries[0], number: i + 1 }))
+        .filter(row => row.call.outcome === "success");
+    const selected = await views.query({ ...input(), analytics: { layer: "tool", filters: { outcomes: ["success"] } } }, owner);
+    assert.equal(selected.page.items[0].selectedRows, 2);
+    assert.equal(selected.page.items[0].completedRef, selected.selectionRef);
+    assert.equal(full.page.items[0].completedRef, undefined);
+    const scoped = view => ({ ...base, section: "completed", completedRef: view.selectionRef, viewId: view.viewId });
+    const model = createBoundedNativeState();
+    const read = async input => {
+        model.receive(model.begin(input, owner), await views.detail(input, owner), owner);
+        return model.snapshot().value;
+    };
+    const first = await read(scoped(selected));
+    assert.equal(first.sectionCount, 2);
+    const next = await read(model.next());
+    assert.equal(next.page.nextCursor, null);
+    assert.deepEqual([first, next].flatMap(page => page.page.items.map(item => [item.id, item.callNumber])),
+        expected.map(({ call, number }) => [call.id, number]));
+    const text = await views.analyze({ schemaVersion: 1, revision: full.revision, viewId: full.viewId,
+        query: "CallGraph", types: ["action"], page: base.page }, owner);
+    const narrowed = await read(scoped(text));
+    assert.equal(narrowed.sectionCount, 1);
+    assert.equal(narrowed.page.items[0].id, expected.find(row => row.call.tool.includes("CallGraph")).call.id);
+    assert.doesNotMatch(JSON.stringify(narrowed), /viewId|RAW_ERROR_PROSE|UNRELATED_RAW_PAYLOAD|rootHash|tenantId|subjectId|pseudonymKey/);
+    const groupBase = await views.query({ ...input(), analytics: { groupBy: "tool" } }, owner);
+    const group = await views.drilldown({ schemaVersion: 1, revision: full.revision, viewId: groupBase.viewId,
+        groupId: groupBase.grouping.groups.find(group => group.label.includes("SearchM365")).id, page: base.page }, owner);
+    const grouped = await read(scoped(group));
+    assert.equal(grouped.sectionCount, 1);
+    assert.equal(grouped.page.items[0].id, expected.find(row => row.call.tool.includes("SearchM365")).call.id);
+    const wrong = { ...scoped(text), page: { limit: 1, after: first.page.nextCursor } };
+    await assert.rejects(views.detail(wrong, owner), { code: "NATIVE_VIEW_CURSOR_STALE" });
+    for (const [request, guard] of [[scoped(full), owner], [{ ...scoped(text), completedRef: selected.selectionRef }, owner],
+        [{ ...scoped(text), viewId: text.allViewId }, owner], [{ ...scoped(text), revision: text.revision + 1 }, owner],
+        [{ ...scoped(text), sourceRevision: "f".repeat(64) }, owner], [scoped(text), { ...owner, owner: "not-the-view-owner" }]]) {
+        await assert.rejects(views.detail(request, guard), { code: "NATIVE_VIEW_SELECTION_STALE" });
+    }
+    const forged = structuredClone(narrowed);
+    forged.page.items[0].callSummaries[0].outcome = "unknown";
+    assert.throws(() => model.decode(forged, scoped(text)));
+    assert.throws(() => model.decode(narrowed, scoped(selected)));
+    await updateBoardState(app.context, state => { state.nativeRetention.privacyRevision++; });
+    await assert.rejects(views.detail({ ...scoped(selected), page: { ...base.page, after: first.page.nextCursor } }, owner), /STALE/);
 });
 
 test("native Search Open seeks an exact admitted ordinal without loading earlier detail pages", async t => {

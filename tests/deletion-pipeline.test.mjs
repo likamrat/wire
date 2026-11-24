@@ -13,6 +13,7 @@ import { selectPersonalEvaluationCleanup } from "../lib/personal-evaluation.mjs"
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { deletionHash } from "../lib/deletion-identities.mjs";
+import { seedHistoricalFeedback } from "./historical-feedback-fixture.mjs";
 
 test("real range purge follows source call dates through capture, feedback, report review, rotation and restart", { timeout: 20000 }, async t => {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-deletion-pipeline-"));
@@ -59,7 +60,7 @@ test("real range purge follows source call dates through capture, feedback, repo
     for (const verdict of ["pass", "fail"]) {
         state = await loadBoardState(context);
         const model = buildAssessmentModel(state);
-        await executeAssessmentAction(context, "panel", "set_personal_assessment", {
+        await seedHistoricalFeedback(context, {
             schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: model.overview.interactionRefs[0],
             expectedBasis: model.basis, checkId: "semantic-answer-correctness", verdict, withdraw: false,
         });

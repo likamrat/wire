@@ -1,5 +1,5 @@
 // Kept self-contained because the local shell serializes this function into its nonce-authorized script.
-export function createEvidenceUX(icons) {
+export function createEvidenceUX(icons, operations) {
     const descriptions = new WeakMap();
     const tooltipOptions = new WeakMap();
     const disabledReasons = new WeakMap();
@@ -16,6 +16,7 @@ export function createEvidenceUX(icons) {
     const tooltipResize = new ResizeObserver(() => positionTooltip());
     let active = null, hovered = null, focused = null, pinned = null, opening = null, openTimer = null, closeTimer = null;
     let suppressedPointer = null, suppressedFocus = null, pointer = null;
+    let hoverPoint = null;
     let inputSource = "focus", focusSource = null;
     let restoredPage = ["reload", "back_forward"].includes(performance.getEntriesByType("navigation")[0]?.type);
     let restoredPointer = restoredPage;
@@ -136,6 +137,7 @@ export function createEvidenceUX(icons) {
         if (bubble.style.top !== position.top + "px") bubble.style.top = position.top + "px";
     }
     function clearTooltip() {
+        hoverPoint?.disconnect(); hoverPoint = null;
         tooltipResize.disconnect();
         clearTimeout(openTimer);
         clearTimeout(closeTimer);
@@ -175,6 +177,136 @@ export function createEvidenceUX(icons) {
         window.addEventListener("blur", enteredFrame, { signal });
         return () => window.removeEventListener("blur", enteredFrame);
     }
+    // Local choices stay beside their owner; the native popover supplies light
+    // dismissal without making the workspace inert or changing document flow.
+    function anchoredChoices(panel) {
+        let anchor, listeners;
+        panel.popover = "auto";
+        panel.classList.add("wire-local-choices");
+        function place() {
+            if (!panel.matches(":popover-open")) return;
+            if (!anchor?.checkVisibility()) { panel.hidePopover(); return; }
+            const box = anchor.getBoundingClientRect(), gap = 6, pad = 8;
+            // The root's painted width excludes the stable scrollbar gutter even when clientWidth does not.
+            const width = Math.min(document.documentElement.clientWidth, document.documentElement.getBoundingClientRect().width);
+            panel.style.maxWidth = Math.max(0, width - pad * 2) + "px";
+            const availableBelow = innerHeight - box.bottom - gap - pad, availableAbove = box.top - gap - pad;
+            const above = availableBelow < Math.min(panel.scrollHeight, 260) && availableAbove > availableBelow;
+            panel.style.maxHeight = Math.max(64, above ? availableAbove : availableBelow) + "px";
+            panel.style.left = Math.max(pad, Math.min(box.left, width - panel.offsetWidth - pad)) + "px";
+            panel.style.top = Math.max(pad, above ? box.top - gap - panel.offsetHeight : box.bottom + gap) + "px";
+        }
+        panel.addEventListener("beforetoggle", event => {
+            listeners?.abort();
+            if (event.newState === "closed") { anchor?.setAttribute("aria-expanded", "false"); return; }
+            anchor = event.source || anchor;
+            anchor?.setAttribute("aria-expanded", "true");
+            listeners = new AbortController();
+            window.addEventListener("resize", place, {signal:listeners.signal});
+            document.addEventListener("scroll", event => { if (!panel.contains(event.target)) place(); }, {capture:true, passive:true, signal:listeners.signal});
+            const sizes = new ResizeObserver(place);
+            sizes.observe(panel);
+            listeners.signal.addEventListener("abort", () => sizes.disconnect(), {once:true});
+            // Native popover toggles may arrive after paint. A reopened menu must
+            // not spend its first frame at the previous viewport's coordinates.
+            requestAnimationFrame(place);
+        });
+        panel.addEventListener("toggle", place);
+        return {
+            open(trigger) {
+                anchor = trigger;
+                trigger.setAttribute("aria-controls",panel.id);
+                trigger.setAttribute("aria-haspopup","dialog");
+                panel.showPopover({source:trigger}); place();
+            },
+            close(restore = true) {
+                if (!panel.matches(":popover-open")) return;
+                panel.hidePopover();
+                if (restore && anchor?.checkVisibility()) anchor.focus({preventScroll:true});
+            },
+            place,
+        };
+    }
+    // The workspace owns the accepted range. The picker only owns its open editor.
+    function datesPicker({ panel, trigger, editor, current, selected, onPreset, onCustom, onClose,
+        options = [["7", "Last 7 days"], ["14", "Last 14 days"], ["30", "Last 30 days"], ["custom", "Custom dates"]],
+        optionKey, embedded = false }) {
+        const choices = document.createElement("div"), valueLabel = document.createElement("span"), anchor = embedded ? null : anchoredChoices(panel);
+        choices.className = "wire-date-presets";
+        choices.setAttribute("role", "group"); choices.setAttribute("aria-label", "Date ranges");
+        panel.classList.add("wire-dates-picker");
+        panel.setAttribute("role", embedded ? "group" : "dialog"); panel.setAttribute("aria-label", "Dates");
+        trigger.type = "button";
+        trigger.classList.add("wire-dates-trigger", "report-toolbar-choice");
+        trigger.replaceChildren(icon("calendar"), valueLabel, icon("chevron"));
+        trigger.setAttribute("aria-controls", panel.id); trigger.setAttribute("aria-expanded", "false");
+        if (embedded) {
+            panel.hidden = true;
+            trigger.addEventListener("click", () => {
+                if (!current() || trigger.disabled) return;
+                if (isOpen()) close();
+                else { panel.hidden = false; trigger.setAttribute("aria-expanded", "true"); sync(); focusChoice(); }
+            });
+        } else {
+            trigger.setAttribute("aria-haspopup", "dialog"); trigger.setAttribute("popovertarget", panel.id);
+        }
+        panel.prepend(choices);
+        editor.hidden = true;
+        panel.addEventListener("keydown", event => {
+            if (event.key === "Escape" && !event.defaultPrevented && isOpen()) {
+                event.preventDefault(); event.stopPropagation(); close();
+            }
+        });
+        function isOpen() { return embedded ? !panel.hidden : panel.matches(":popover-open"); }
+        function focusChoice() { (choices.querySelector('[aria-pressed="true"]') || choices.firstElementChild)?.focus({ preventScroll: true }); }
+        function reset() { editor.hidden = true; choices.hidden = false; delete panel.dataset.editingDates; }
+        function close(restore = true) {
+            if (!embedded) { anchor.close(restore); return; }
+            if (!isOpen()) return;
+            panel.hidden = true; trigger.setAttribute("aria-expanded", "false"); reset(); onClose?.();
+            if (restore && trigger.checkVisibility()) trigger.focus({ preventScroll: true });
+        }
+        function sync() {
+            const value = editor.hidden ? selected() : "custom";
+            for (const control of choices.children) control.setAttribute("aria-pressed", String(control.dataset.datePreset === value));
+        }
+        function expand(origin = trigger) {
+            if (!current() || trigger.disabled) return;
+            if (!isOpen()) anchor?.open(origin);
+            choices.hidden = origin !== trigger;
+            editor.hidden = false; panel.dataset.editingDates = "true"; sync();
+            onCustom(origin); anchor?.place();
+            [...editor.querySelectorAll('input[type="date"]:enabled')].find(n => n.checkVisibility())?.focus({ preventScroll: true });
+        }
+        for (const [key, name] of options) {
+            const control = document.createElement("button");
+            control.type = "button"; control.className = "quiet"; control.textContent = name;
+            control.dataset.datePreset = key;
+            if (optionKey) control.dataset[optionKey] = key;
+            control.addEventListener("click", () => {
+                if (!current() || trigger.disabled || !isOpen()) return;
+                if (key === "custom") expand();
+                else { close(); onPreset(key); }
+            });
+            choices.append(control);
+        }
+        panel.addEventListener("beforetoggle", event => {
+            if (event.newState === "open" && (!current() || trigger.disabled)) { event.preventDefault(); return; }
+            reset();
+            if (event.newState === "closed") onClose?.();
+            else sync();
+        });
+        panel.addEventListener("toggle", () => {
+            if (panel.matches(":popover-open") && editor.hidden && (document.activeElement === trigger || document.activeElement === document.body))
+                focusChoice();
+        });
+        function showRange(label) {
+            if (valueLabel.textContent !== label) setOwnedText(valueLabel, label);
+            if (label) trigger.setAttribute("aria-label", "Dates: " + label);
+            else removeOwnedAttribute(trigger, "aria-label");
+        }
+        return { sync, expand, close, showRange };
+    }
     // Embedded documents do not bubble pointer/focus events into the shell.
     // Keep native auto-popover dismissal without inspecting or modifying the frame.
     dismissOnFrameFocus(frame => {
@@ -213,6 +345,7 @@ export function createEvidenceUX(icons) {
         if (!registration) return false;
         const key = identity(node);
         if (source !== "help" && (source === "pointer" ? suppressedPointer === key : suppressedFocus === key)) return false;
+        if (source === "pointer" && (!pointer || !node.contains(document.elementFromPoint(pointer.x, pointer.y)))) return false;
         const text = tooltipText(registration);
         if (!currentTooltip(node, registration)) return false;
         if (!text) { hideTooltip(); return false; }
@@ -234,12 +367,34 @@ export function createEvidenceUX(icons) {
         tooltipResize.observe(node);
         const anchor = tooltipOptions.get(node)?.anchor;
         if (anchor && anchor !== node) tooltipResize.observe(anchor);
+        if (source === "pointer") watchHoverPoint(node);
         return active === node && currentTooltip(node, registration);
+    }
+    // A pure layout shift need not resize the owner or move the pointer. Observe
+    // only this visit's two surfaces against a one-pixel region at the pointer.
+    function watchHoverPoint(node) {
+        hoverPoint?.disconnect(); hoverPoint = null;
+        if (!pointer) return;
+        const x = Math.floor(pointer.x), y = Math.floor(pointer.y);
+        const right = Math.max(0, document.documentElement.clientWidth - x - 1);
+        const bottom = Math.max(0, document.documentElement.clientHeight - y - 1);
+        const observer = new IntersectionObserver(() => {
+            if (hoverPoint !== observer || active !== node) return;
+            const hit = pointer && document.elementFromPoint(pointer.x, pointer.y);
+            if (node.contains(hit) || bubble.contains(hit)) return;
+            if (hovered === node) hovered = null;
+            scheduleDeparture();
+        }, { rootMargin: `${-y}px ${-right}px ${-bottom}px ${-x}px` });
+        hoverPoint = observer;
+        observer.observe(node); observer.observe(bubble);
     }
     function scheduleClose() {
         clearTimeout(openTimer);
         openTimer = null;
         opening = null;
+        scheduleDeparture();
+    }
+    function scheduleDeparture() {
         // Outside movement and description refreshes must not extend the transit grace.
         if (closeTimer !== null) return;
         closeTimer = setTimeout(() => {
@@ -251,7 +406,8 @@ export function createEvidenceUX(icons) {
             const owner = liveOwner(active);
             const keyboardVisit = owner && owner === liveOwner(focused) && focusSource === "focus";
             const sameOwnerHover = owner && owner === liveOwner(hovered);
-            if (!bubble.matches(":hover") && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
+            const overTip = bubble.matches(":hover") && pointer && bubble.contains(document.elementFromPoint(pointer.x, pointer.y));
+            if (!overTip && !sameOwnerHover && !keyboardVisit && active !== pinned) clearTooltip();
         }, 120);
     }
     function cancelClose() {
@@ -265,6 +421,7 @@ export function createEvidenceUX(icons) {
         if (event.pointerType === "touch" || !event.isTrusted) return;
         if (pointer?.x === event.clientX && pointer?.y === event.clientY) return;
         pointer = { x: event.clientX, y: event.clientY };
+        if (hoverPoint && (active.contains(event.target) || bubble.contains(event.target))) watchHoverPoint(active);
         restoredPage = false;
         if (bubble.contains(event.target)) { cancelClose(); return; }
         const node = trigger(event.target);
@@ -363,7 +520,10 @@ export function createEvidenceUX(icons) {
         }
     }, { capture: true });
     listen(document, "scroll", positionTooltip, { capture: true });
-    listen(window, "resize", positionTooltip);
+    listen(window, "resize", () => {
+        positionTooltip();
+        if (hoverPoint) watchHoverPoint(active);
+    });
     listen(document, "toggle", (event) => {
         if (active && event.target instanceof HTMLDetailsElement && !event.target.open && event.target.contains(active)) hideTooltip();
     }, { capture: true });
@@ -476,6 +636,52 @@ export function createEvidenceUX(icons) {
         node.setAttribute("focusable", "false");
         node.removeAttribute("id");
         return node;
+    }
+    function cardToolList(tools, actionFor) {
+        const list = document.createElement("ul");
+        list.className = "card-tool-list";
+        list.setAttribute("role", "list"); // Retain list semantics when markers are suppressed in Safari.
+        for (const { name, countLabel } of tools) {
+            const item = document.createElement("li"), label = actionFor?.(name) ?? document.createElement("span");
+            item.className = "card-tool-item";
+            label.className = "card-tool-name";
+            label.textContent = name;
+            const purpose = operations?.toolPurpose?.(name);
+            if (purpose) { tooltip(label, purpose); label.setAttribute("aria-description", purpose); }
+            item.append(label);
+            if (countLabel) {
+                const count = document.createElement("span");
+                count.className = "card-tool-count";
+                count.textContent = `(${countLabel})`;
+                item.append("\u00a0", count);
+            }
+            list.append(item);
+        }
+        return list;
+    }
+    function cardMetadata(author, timestamp, source) {
+        const header = document.createElement("div");
+        header.className = "card-metadata";
+        header.append(author, timestamp);
+        if (source) header.append(source);
+        return header;
+    }
+    function cardOutcome(outcome, target = document.createElement("span")) {
+        target.classList.add("request-card-exception", "card-outcome", `result-tone-${outcome.key}`);
+        if (outcome.key === "failure") target.classList.add("card-failure");
+        const face = document.createElement("span"), label = document.createElement("span");
+        face.className = "card-outcome-face" + (outcome.key === "failure" ? " card-failure-face" : "");
+        label.className = "card-outcome-label";
+        label.textContent = outcome.label;
+        face.append(icon(outcome.icon), label);
+        target.replaceChildren(face);
+        if (target.matches("a[href]")) {
+            target.classList.add("card-evidence-link");
+            const arrow = icon("forward");
+            target.append(arrow);
+            tooltip(target, "View call details", { anchor: arrow });
+        }
+        return target;
     }
     function helpButton(label, text) {
         const control = document.createElement("button");
@@ -691,7 +897,17 @@ export function createEvidenceUX(icons) {
         }
         return value;
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare,
+    // The owner supplies only accepted membership; disclosure is independent of this label.
+    function paintFilterEntry(trigger, count, neutralName = "Filters") {
+        const label = trigger.querySelector(".filter-entry-label");
+        const text = count ? `${count} ${count === 1 ? "filter" : "filters"} applied` : "Filters";
+        if (label.textContent !== text) setOwnedText(label, text);
+        trigger.classList.toggle("has-applied-filters", Boolean(count));
+        if (count || neutralName === text) trigger.removeAttribute("aria-label");
+        else trigger.setAttribute("aria-label", neutralName);
+    }
+
+    return { icon, operations, cardToolList, cardMetadata, cardOutcome, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, anchoredChoices, datesPicker, pending, withdrawAccess, countShare, setOwnedText, removeOwnedAttribute, paintFilterEntry,
         destroy() {
             clearTooltip();
             observer.disconnect();

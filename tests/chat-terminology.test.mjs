@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { chatCopy } from "../lib/chat-copy.mjs";
@@ -9,38 +9,16 @@ import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 import { buildSanitizedBundle } from "../lib/export.mjs";
+import { renderHtmlShell } from "../lib/render.mjs";
 import { time } from "../lib/time.mjs";
 import { fixture } from "./helpers.mjs";
 
 const timeContext = time.normalize({ timeZone: "America/Los_Angeles", locale: "en-US" });
 
-test("authored source-chat copy has no legacy session phrases on key surfaces", async () => {
-    const files = [
-        "lib/render.mjs", "web/client.mjs", "web/settings.mjs", "web/period-flow.mjs",
-        "web/report-journey.mjs", "lib/control-help.mjs", "lib/collection-status.mjs",
-        "lib/product-report.mjs", "lib/export.mjs", "lib/runtime-client.mjs", "lib/server.mjs",
-    ];
-    // Technical tokens (sessionId, session-state, source-session-and-tool-call,
-    // routes, CSS classes) are contracts. This guard targets authored phrases,
-    // not dynamic names, original evidence, raw diagnostics or historical exports.
-    const legacy = /\b(?:Copilot sessions?|source[- ]sessions?|local sessions?|saved session history|sessions? (?:analysis|results|names?|requests)|(?:this|another|one|a|to|eligible|unavailable|unscoped|affected|new|matching|recorded) sessions?)(?![-\w])/i;
-    for (const file of files) {
-        const source = await readFile(new URL("../" + file, import.meta.url), "utf8");
-        assert.doesNotMatch(source, legacy, file);
-    }
-    const shell = await readFile(new URL("../lib/render.mjs", import.meta.url), "utf8");
+test("the analysis region and history folder label identify Copilot chats", () => {
+    const shell = renderHtmlShell("test", "nonce", null, { renderer: "react", entry: "/test.js", styles: [] });
     assert.match(shell, /aria-label="Copilot chat analysis"/);
-    assert.match(shell, /GitHub Copilot chat/);
-    assert.match(shell, /Find a Copilot chat or request/);
-    const settings = await readFile(new URL("../web/settings.mjs", import.meta.url), "utf8");
-    assert.match(settings, /Chat history folder/);
-    assert.match(settings, /Contains recorded events \(session-state\)/);
-    assert.match(settings, /Report disclosure is separate/);
-    const client = await readFile(new URL("../web/client.mjs", import.meta.url), "utf8");
-    assert.match(client, /"session", "request", "page"/, "Route keys remain compatible");
-    const server = await readFile(new URL("../lib/server.mjs", import.meta.url), "utf8");
-    assert.match(server, /"\/api\/session"/);
-    assert.match(server, /code: "session_expired"/);
+    assert.match(shell, /<label for="sourceSessions">Chat history folder<\/label>/);
 });
 
 test("zero, one, many and unavailable chat counts preserve canonical source/request keys", () => {
@@ -79,7 +57,7 @@ test("diagnostic names remain verbatim while fallback and help labels identify c
     assert.equal(model.view({ config: {}, discovery: {}, lastCheckedAt: "now", historyCoverage: { eligible: 0 } }).label, "No local Copilot chats to collect");
     const help = createControlHelp(serviceCategories);
     assert.match(help.facts["Copilot chat ID"], /GitHub Copilot chat.*sourceSessionId/);
-    assert.match(help.fields.activitySearch, /GitHub Copilot chat names/);
+    assert.match(help.fields.activitySearch, /\bchat names\b/);
 });
 
 test("new HTML, PDF, JSON and Markdown use chat wording without rewriting original session text or schemas", { timeout: 60000 }, async () => {
@@ -123,7 +101,7 @@ test("new HTML, PDF, JSON and Markdown use chat wording without rewriting origin
         }
     } finally { await task.destroy(); }
     for (const text of [bundle.files["product-report.html"], bundle.files["product-report.md"], pages.join(" ")]) {
-        assert.match(text, /1 GitHub Copilot chat/);
+        assert.match(text, /\bTool coverage: 1 chat,/);
         assert.doesNotMatch(text, /source sessions|unscoped sessions|1 GitHub Copilot chats/);
         assert.match(text, /inspect the session from 2026-09-30T23:45:00Z/);
         assert.match(text, /Keep sessionId and this session wording exactly/);

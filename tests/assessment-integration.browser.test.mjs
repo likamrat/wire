@@ -5,33 +5,38 @@ import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm } from "node:fs/pro
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
-import { createExportController } from "../lib/export.mjs";
+import { buildSanitizedBundle, createExportController, writeBundle } from "../lib/export.mjs";
 import { createCollector, collectorFor } from "../lib/collector.mjs";
-import { loadBoardState } from "../lib/store.mjs";
-import { executeAssessmentAction } from "../lib/assessment.mjs";
-import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { privateFixture, fixture, openActivitySessions, navigateMain, navigateSettings, chooseTheme, revealStoredRefresh } from "./helpers.mjs";
+import { exclusiveBoard, loadBoardState } from "../lib/store.mjs";
+import { assessmentHash } from "../lib/assessment-read-model.mjs";
+import { freezeEvaluationFacts } from "../lib/report-facts.mjs";
+import { readSavedReportFile } from "../lib/report-artifacts.mjs";
+import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
+import { quality, samples } from "./assessment-ui-fixtures.mjs";
+import { retirementFixture } from "./ai-review-retirement-fixture.mjs";
+import { openReportLibrary } from "./report-journey-helpers.mjs";
 import { contrast, rgb } from "./color-measurements.mjs";
 
 async function settled(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
     await page.evaluate(() => document.fonts.ready);
 }
-async function browserFor(t, runtime) {
+async function browserFor(runtime, extraReads = [], beforeSnapshot) {
     const browser = await chromium.launch(), context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
     const errors = [], forbidden = [], calls = [];
     const allowed = new Set([
         "/api/session", "/api/snapshot", "/api/collection/status",
-        "/api/evaluation/automatic/summary",
-        "/api/assessment/detail", "/api/assessment/overview", "/api/assessment/consent",
-        "/api/assessment/evidence", "/api/assessment/feedback", "/api/assessment/consent/set", "/api/assessment/mutation/status",
+        "/api/assessment/detail", "/api/assessment/consent",
+        "/api/assessment/evidence", "/api/assessment/consent/set", "/api/assessment/mutation/status",
+        ...extraReads,
     ]);
-    await context.route("**/*", route => {
+    await context.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || allowed.has(url.pathname))) {
             if (request.method() === "POST") calls.push(url.pathname);
+            if (beforeSnapshot && url.pathname === "/api/snapshot") await beforeSnapshot();
             return route.continue();
         }
         forbidden.push(url.href); return route.abort();
@@ -40,156 +45,125 @@ async function browserFor(t, runtime) {
     const close = async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(forbidden, []); };
     return { context, page: await context.newPage(), calls, close };
 }
-test("one-click actual interaction read, personal revisions and withdrawal persist through real routes without capture", { timeout: 30000 }, async t => {
-    const record = fixture("interaction-ui");
-    record.userPrompt.sourceEventId = "artificial-message";
-    record.toolCalls[0].completionEventId = "artificial-completion";
-    const cleanup = [];
-    const { context } = await privateFixture({ after: action => cleanup.push(action) }, [record]);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const { page, calls, close } = await browserFor(t, runtime);
-    t.after(async () => {
-        try { await close(); }
-        finally { try { await runtime.close(); } finally { for (const action of cleanup) await action(); } }
-    });
-    const before = await loadBoardState(context);
-    await page.goto(runtime.url + "#activity"); await settled(page); await openActivitySessions(page);
-    await page.getByRole("link", { name: "View interaction", exact: true }).first().click(); await settled(page);
-    await page.locator(".interaction-insights .assessment-grid").waitFor();
-    assert.deepEqual(await page.locator(".interaction-insights .assessment-check .assessment-value").allTextContents(), ["No result", "No result", "No result"]);
-    assert.equal((await loadBoardState(context)).personalEvaluation, undefined);
-    assert.equal(calls.includes("/api/assessment/evidence"), false);
-    assert.equal(calls.includes("/api/assessment/consent/set"), false);
-    await page.locator(".interaction-insights").getByRole("button", { name: "Details and feedback", exact: true }).click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-    let feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });
-    await feedback.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.getByRole("option", { name: "Correct", exact: true }).click();
-    const write = page.waitForResponse(response => response.url().endsWith("/api/assessment/feedback"));
-    await feedback.getByRole("button", { name: "Save feedback", exact: true }).click();
-    assert.equal((await write).status(), 200);
-    await page.waitForFunction(() => document.querySelector(".interaction-insights")?.textContent.includes("Your feedback"));
-    await settled(page);
-    let state = await loadBoardState(context);
-    assert.equal(state.personalEvaluation.feedback.records.length, 1);
-    assert.equal(state.personalEvaluation.feedback.records[0].assessment.verdict, "pass");
-    assert.equal(state.personalEvaluation.consent.state, "off");
-    assert.deepEqual(state.evidence, before.evidence);
-    assert.equal(await page.locator('.interaction-insights [data-dimension="accuracy"]').filter({ hasText: "Your feedback" }).locator(".assessment-value").innerText(), "Correct");
-    await page.locator(".interaction-insights").getByRole("button", { name: "Details and feedback", exact: true }).click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-    feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });
-    assert.match(await feedback.textContent(), /revision 1/);
-    const withdrawal = page.waitForResponse(response => response.url().endsWith("/api/assessment/feedback"));
-    await feedback.getByRole("button", { name: "Withdraw feedback", exact: true }).click();
-    assert.equal((await withdrawal).status(), 200);
-    await settled(page);
-    state = await loadBoardState(context);
-    assert.equal(state.personalEvaluation.feedback.records.length, 2);
-    assert.equal(state.personalEvaluation.feedback.records[1].assessment.withdrawn, true);
-    assert.equal(state.personalEvaluation.feedback.records[0].assessment.verdict, "pass");
-    assert.deepEqual(state.evidence, before.evidence);
-    assert.equal(calls.filter(path => path === "/api/assessment/feedback").length, 2);
-    await page.locator(".interaction-insights").getByRole("button", { name: "Details and feedback", exact: true }).click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-    feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });
-    await feedback.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.getByRole("option", { name: "Not correct", exact: true }).click();
-    const restored = page.waitForResponse(response => response.url().endsWith("/api/assessment/feedback"));
-    await feedback.getByRole("button", { name: "Save feedback", exact: true }).click();
-    const restoredResponse = await restored;
-    assert.equal(restoredResponse.status(), 200, await restoredResponse.text());
-    await page.waitForFunction(() => document.querySelector(".interaction-insights")?.textContent.includes("Your feedback"));
-    state = await loadBoardState(context);
-    assert.equal(state.personalEvaluation.feedback.records[2].assessment.revision, 3);
-    assert.equal(state.personalEvaluation.feedback.records[2].assessment.verdict, "fail");
-    assert.deepEqual(state.evidence, before.evidence);
-    if (process.env.WIRE_ASSESSMENT_PROOFS) {
-        await mkdir(process.env.WIRE_ASSESSMENT_PROOFS, { recursive: true });
-        for (const [theme, width, size] of [["light", 1200, 100], ["dark", 375, 100], ["dark", 320, 200]]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
-            await page.evaluate(() => document.fonts.ready);
-            await page.mouse.move(0, 0);
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-            const trustRowsAligned = await page.locator(".interaction-insights .assessment-fact-unavailable").evaluateAll(nodes =>
-                nodes.filter(node => ["answer-trust", "action-trust"].includes(node.dataset.dimension)).every(node => {
-                    const coverage = node.querySelector(".assessment-coverage").getBoundingClientRect(), value = node.querySelector(".assessment-value").getBoundingClientRect();
-                    return coverage.bottom <= value.top;
-                }));
-            assert.equal(trustRowsAligned, true, "Trust coverage reads before unavailable results.");
-            await page.screenshot({ path: path.join(process.env.WIRE_ASSESSMENT_PROOFS, `interaction-${theme}-${width}-${size}.png`), fullPage: true });
-        }
-    }
-});
 
-test("lost feedback receipt recovers after page renewal without resending the mutation or exposing its token", { timeout: 30000 }, async t => {
-    const cleanup = [], record = fixture("receipt-recovery");
-    const { context } = await privateFixture({ after: action => cleanup.push(action) }, [record]);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const { page, close } = await browserFor(t, runtime);
+test("an uncertain reply-saving change recovers after reload without replaying it or consuming historical personal feedback", async t => {
+    const cleanups = [], f = await retirementFixture({ after: action => cleanups.push(action) });
+    const runtime = await startServer(f.context, createExportController(f.context), { port: 0, collector: { timers: false } });
+    const { page, calls, close } = await browserFor(runtime);
     t.after(async () => {
-        try { await close(); }
-        finally { try { await runtime.close(); } finally { for (const action of cleanup) await action(); } }
+        try { await close(); } finally { try { await runtime.close(); } finally { for (const action of cleanups.reverse()) await action(); } }
     });
-    let writes = 0, receiptToken, committedStatus;
-    await page.route("**/api/assessment/feedback", async route => {
-        writes++;
-        receiptToken = route.request().postDataJSON().receiptToken;
-        const response = await route.fetch();
-        committedStatus = response.status();
+    const before = (await loadBoardState(f.context)).personalEvaluation;
+    const legacy = JSON.stringify({ mutationRef: f.personalMutationRef, receiptToken: f.receiptToken, action: "set_personal_assessment" });
+    await page.goto(runtime.url + "settings?section=privacy"); await settled(page);
+    await page.evaluate(raw => sessionStorage.setItem("wire.assessment.pending", raw), legacy);
+    await page.reload(); await settled(page);
+    let committed, writes = 0, sent;
+    await page.route("**/api/assessment/consent/set", async route => {
+        writes++; sent = route.request().postDataJSON();
+        committed = (await route.fetch()).status();
         await route.abort("connectionreset");
     });
-    await page.goto(runtime.url + "#request?request=receipt-recovery"); await settled(page);
-    await page.locator(".interaction-insights").getByRole("button", { name: "Details and feedback", exact: true }).click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-    const feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });
-    await feedback.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.getByRole("option", { name: "Correct", exact: true }).click();
-    await feedback.getByRole("button", { name: "Save feedback", exact: true }).click();
-    await feedback.getByRole("button", { name: "Check update result", exact: true }).waitFor();
-    assert.equal(committedStatus, 200);
-    assert.equal(/^[a-f0-9]{64}$/.test(receiptToken), true);
-    assert.equal(await page.locator("body").textContent().then(text => text.includes(receiptToken)), false);
-    assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
+    await page.getByRole("switch", { name: "Save Copilot replies locally" }).check();
+    await page.getByRole("button", { name: "Turn on response saving" }).click();
+    const recover = page.getByRole("button", { name: "Check response-saving result", exact: true });
+    await expect(recover).toBeEnabled();
+    assert.equal(committed, 200);
+    const accepted = (await loadBoardState(f.context)).personalEvaluation;
+    assert.equal(accepted.consent.state, "enabled");
     await page.reload(); await settled(page);
-    const recovered = page.waitForResponse(response => response.url().endsWith("/api/assessment/mutation/status"));
-    await page.getByRole("button", { name: "Check earlier update", exact: true }).click();
-    const recoveredResponse = await recovered;
-    assert.equal(recoveredResponse.status(), 200);
-    assert.equal((await recoveredResponse.json()).phase, "complete");
-    await page.waitForFunction(() => sessionStorage.getItem("wire.assessment.pending") === null);
+    const read = page.waitForResponse(r => r.url().endsWith("/api/assessment/mutation/status"));
+    await recover.click();
+    const response = await read;
+    assert.equal(response.status(), 200);
+    assert.deepEqual(response.request().postDataJSON(), { schemaVersion: 1, mutationRef: sent.mutationRef, receiptToken: sent.receiptToken });
+    await page.waitForFunction(() => sessionStorage.getItem("wire.responseCapture.pending") === null);
+    await expect(page.getByRole("switch", { name: "Save Copilot replies locally" })).toBeChecked();
     assert.equal(writes, 1);
-    assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
-    assert.equal(await page.locator("body").textContent().then(text => text.includes(receiptToken)), false);
+    assert.equal(calls.filter(p => p.endsWith("/mutation/status")).length, 1);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")), legacy);
+    assert.ok(!(await page.locator("body").textContent()).includes(sent.receiptToken));
+    assert.deepEqual((await loadBoardState(f.context)).personalEvaluation, accepted);
+    assert.deepEqual(accepted.feedback, before.feedback);
 });
 
-test("actual overview shows two personal ratings over three selected interactions without a rating queue", { timeout: 30000 }, async t => {
-    const cleanup = [], records = ["rated-pass", "rated-fail", "unrated"].map(fixture);
-    const { context } = await privateFixture({ after: action => cleanup.push(action) }, records);
-    for (const [index, verdict] of ["pass", "fail"].entries()) {
-        const state = await loadBoardState(context), model = buildAssessmentModel(state);
-        const interactionRef = model.catalog.find(item => item.scenarioId === records[index].scenarioId).interactionRef;
-        await executeAssessmentAction(context, "synthetic-coverage", "set_personal_assessment", {
-            schemaVersion: 1, mutationRef: "mutation-" + randomUUID().replaceAll("-", ""),
-            interactionRef, expectedBasis: model.basis, checkId: "semantic-answer-correctness", verdict, withdraw: false,
-        });
-    }
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const { page, close, calls } = await browserFor(t, runtime);
-    t.after(async () => {
-        try { await close(); }
-        finally { try { await runtime.close(); } finally { for (const action of cleanup) await action(); } }
+test("verified Open of historical JSON shows one pass and one fail over three interactions without a live rating queue", async t => {
+    const cleanups = [], records = ["rated-pass", "rated-fail", "unrated"].map(id => {
+        const r = fixture(id);
+        r.userPrompt.sourceEventId = `message-${id}`;
+        return r;
     });
-    await page.goto(runtime.url + "#home"); await settled(page);
-    const personal = page.locator('#homeInsights [data-dimension="accuracy"]').filter({ hasText: "Your feedback" });
-    await personal.waitFor();
-    assert.match(await personal.textContent(), /50%/);
-    assert.match(await personal.textContent(), /1 \/ 2 passed; 2 \/ 3 assessed/);
-    assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 2);
-    assert.equal(calls.includes("/api/assessment/feedback"), false, "Overview does not create missing personal verdicts.");
-    assert.equal(await page.getByRole("button", { name: /assess|grade/i }).count(), 0);
+    const { context } = await privateFixture({ after: action => cleanups.push(action) }, records);
+    const state = await loadBoardState(context);
+    // Build an invented JSON-only archive, not a live feedback action or a new report option.
+    const archive = await buildSanitizedBundle(state.evidence, state.pseudonymKey, { promptMode: "none", formats: ["json"] });
+    const facts = structuredClone(archive.snapshot.evaluationFacts), ids = facts.memberships.map(m => m.interactionRef);
+    assert.equal(ids.length, 3);
+    facts.metricProjectionVersion = 3;
+    const assessments = ids.slice(0, 2).map((id, i) => ({
+        ...samples.makeAssessment(true), assessmentRef: samples.id("assessment", i + 1), basis: facts.basis,
+        interactionRef: id, unitRef: id, verdict: i ? "fail" : "pass",
+    }));
+    facts.assessments.push(...assessments);
+    const historical = { ...quality("accuracy", { pass: 1, fail: 1, unassessed: 1, personal: true }),
+        basis: facts.basis, eligibleUnitRefs: ids, coveredUnitRefs: ids.slice(0, 2), evidenceRefs: assessments.map(a => a.assessmentRef),
+        unassessedReasons: [{ reason: "missing-evidence", count: 1 }],
+        observedTime: { state: "withheld", firstAt: null, lastAt: null, datedUnits: 2, undatedUnits: 1 } };
+    facts.metrics.push(historical);
+    archive.snapshot.evaluationFacts = freezeEvaluationFacts(facts);
+    archive.privacy.reviewerConfirmed = true;
+    archive.privacy.confirmedAt = archive.snapshot.preparedAt;
+    const bytes = JSON.stringify(archive.snapshot, null, 2) + "\n", name = "product-report.json", manifestName = "coverage-and-redaction-manifest.json";
+    archive.files[name] = bytes;
+    const manifest = JSON.parse(archive.files[manifestName]);
+    Object.assign(manifest, { evaluationFacts: facts, evaluationFactsHash: assessmentHash(JSON.stringify(facts)),
+        snapshotHash: assessmentHash(JSON.stringify(archive.snapshot)), privacyReview: archive.privacy });
+    manifest.files[name] = { sha256: assessmentHash(bytes), bytes: Buffer.byteLength(bytes) };
+    archive.files[manifestName] = JSON.stringify(manifest, null, 2);
+    const saved = await exclusiveBoard(context, async (state, save) => {
+        const entry = await writeBundle(context, archive, state);
+        state.exports.push(entry); state.revision++; await save(state);
+        return entry;
+    });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const { page, calls, close } = await browserFor(runtime, ["/api/report/open"]);
+    t.after(async () => {
+        try { await close(); } finally { try { await runtime.close(); } finally { for (const action of cleanups.reverse()) await action(); } }
+    });
+    await page.goto(runtime.url); await settled(page);
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(3);
+    await expect(page.locator("#activityList")).not.toContainText(/Your feedback|Personal feedback|rate this/i);
+    await page.locator('#activityList [data-view-key="request:unrated"] .request-card-open').click();
+    await expect(page.locator("#contextSidebar")).toContainText("Saving is off by default");
+    await expect(page.locator("#contextSidebar")).not.toContainText(/Your feedback|Personal feedback/i);
+    assert.ok(!calls.includes("/api/assessment/evidence"));
+    await page.locator("#closeContextSidebar").click();
+    await navigateMain(page, "reports"); await openReportLibrary(page);
+    const entry = page.locator(`#bundleList [data-bundle-id="${saved.bundleId}"]`);
+    const opening = page.waitForResponse(r => r.url().endsWith("/api/report/open"));
+    await entry.locator(".saved-report-title").click();
+    const opened = await opening;
+    assert.equal(opened.status(), 200, await opened.text());
+    assert.equal((await opened.json()).sourceFormat, "json");
+    const qualityTable = page.frameLocator("#savedReportReader iframe").locator("#quality");
+    await expect(qualityTable).toContainText("Personal feedback");
+    await expect(qualityTable).toContainText("50%");
+    await expect(qualityTable).toContainText(/2 (?:of|\/) 3/);
+    const file = await readSavedReportFile(context, await loadBoardState(context), saved.bundleId, "json");
+    const metric = file.snapshot.evaluationFacts.metrics.find(m => m.metricRef === historical.metricRef);
+    assert.deepEqual(metric.unassessedReasons, historical.unassessedReasons);
+    assert.deepEqual(metric.observedTime, historical.observedTime);
+    assert.equal(await readFile(saved.files[name], "utf8"), bytes);
+    assert.equal(await readFile(saved.files[manifestName], "utf8"), archive.files[manifestName]);
+    assert.equal((await loadBoardState(context)).personalEvaluation, undefined);
+    // A syntactically valid but altered file cannot display that same verified interpretation.
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await appendFile(saved.files[name], "\n");
+    const refusing = page.waitForResponse(r => r.url().endsWith("/api/report/open"));
+    await entry.locator(".saved-report-title").click();
+    assert.equal((await refusing).status(), 409);
+    await expect(page.locator("#savedReportReader .error")).toBeVisible();
+    await expect(page.locator("#savedReportReader iframe")).toHaveCount(0);
 });
 
 test("setup enable/cancel and cross-panel revocation operate only on an isolated synthetic source", { timeout: 45000 }, async t => {
@@ -215,7 +189,8 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const reports = createExportController(session);
     const runtime = await startServer(session, reports, { port: 0, collector: { timers: false } });
     collector = collectorFor(session);
-    const { context, page, calls, close } = await browserFor(t, runtime);
+    let readbackGate;
+    const { context, page, calls, close } = await browserFor(runtime, [], () => readbackGate?.promise);
     t.after(async () => {
         try { await close(); }
         finally {
@@ -242,13 +217,31 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     assert.equal(calls.includes("/api/assessment/consent/set"), false);
     await checkbox.check();
-    const enable = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
-    await setup.getByRole("button", { name: "Turn on response saving", exact: true }).click();
-    assert.equal((await enable).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
-    assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
+    // The enable receipt can arrive before the page has applied its refreshed source state.
+    readbackGate = Promise.withResolvers();
+    const turnOff = setup.getByRole("button", { name: "Turn off and delete responses", exact: true });
+    let refreshRequest, consentRevision;
+    try {
+        const [enable, read] = await Promise.all([page.waitForResponse("**/api/assessment/consent/set"),
+            page.waitForRequest("**/api/snapshot"), setup.getByRole("button", { name: "Turn on response saving", exact: true }).click()]);
+        assert.ok(enable.ok());
+        consentRevision = (await enable.json()).basis.consentRevision;
+        refreshRequest = read;
+        await expect(checkbox).toBeChecked();
+        assert.equal(await checkbox.isDisabled(), true, "The confirmed switch must not accept another edit against the pre-write source state.");
+    } finally {
+        readbackGate.resolve();
+        readbackGate = null;
+    }
+    const refreshed = await refreshRequest.response();
+    assert.ok(refreshed?.ok());
+    assert.equal((await refreshed.json()).assessment.basis.consentRevision, consentRevision);
+    await settled(page);
+    await expect(checkbox).toBeEnabled();
     await checkbox.uncheck();
-    assert.equal(await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).isEnabled(), true);
+    await expect(checkbox).not.toBeChecked();
+    await expect(turnOff).toBeEnabled();
+    assert.equal((await loadBoardState(session)).personalEvaluation.consent.state, "enabled", "An unchecked draft is not a revocation.");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const value = await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).evaluate(node => {
@@ -279,6 +272,7 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const other = await context.newPage();
     await other.goto(runtime.url + "#request?request=" + encodeURIComponent(scenarioId)); await settled(other);
     await other.getByText(text, { exact: true }).waitFor();
+    const held = await other.getByText(text, { exact: true }).elementHandle();
     assert.equal(calls.filter(path => path === "/api/assessment/evidence").length, 1);
     const preview = await reports.preview("synthetic-revoke-preservation", undefined, { promptMode: "none", formats: ["json"] },
         { kind: "selected", revision: state.revision, scenarioIds: [scenarioId] });
@@ -296,7 +290,8 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(revokeResponse.status(), 200, await revokeResponse.text());
     await other.bringToFront();
     await other.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await other.waitForFunction(text => !document.querySelector(".interaction-response")?.textContent.includes(text), text, { timeout: 15000 });
+    await expect(other.locator("#contextSidebar")).not.toContainText(text, { timeout: 15000 });
+    assert.ok(!(await held.evaluate(node => node.textContent)).includes(text), "Withdraw even a held, detached reply node.");
     state = await loadBoardState(session);
     assert.equal(state.personalEvaluation.consent.state, "revoked");
     assert.equal(state.personalEvaluation.captures.length, 0);

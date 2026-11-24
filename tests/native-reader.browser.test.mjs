@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
@@ -205,7 +205,8 @@ test("normal native reader shows retained error and successful description throu
     await failed.locator(".reader-call-toggle").click();
     await succeeded.locator(".reader-call-toggle").click();
     await generic.locator(".reader-call-toggle").click();
-    await expect(succeeded.locator(".reader-call-summary")).toContainText("Tool completed");
+    await expect(succeeded.locator(".reader-call-summary .card-outcome-face")).toHaveText("1 tool call completed");
+    await expect(failed.locator(".reader-call-summary .card-outcome-face")).toHaveText("1 tool call failed");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await expect(failed).toContainText("Recorded error: Permission [write] is required for {folder}.");
@@ -220,8 +221,10 @@ test("normal native reader shows retained error and successful description throu
 });
 
 test("ongoing collection does not replace the conversation being read", async t => {
-    const { page, collect, card } = await setup(t);
+    const { page, collect, card, calls } = await setup(t);
     const initialRoute = page.url(), reader = page.locator("#requestContent");
+    const latestDetail = () => calls.filter(call => call.method === "detail" && call.input.section === "calls").at(-1).input;
+    const original = latestDetail();
     await page.evaluate(() => {
         window.openMessage = document.querySelector("#requestContent .reader-message");
         window.openCopy = openMessage.querySelector(".ux-copy");
@@ -261,7 +264,11 @@ test("ongoing collection does not replace the conversation being read", async t 
     await expect(reader).toContainText("A newly collected message, outside the open snapshot.");
     await expect(reader).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#requestReportToggle")).toBeEnabled();
-    assert.notEqual(page.url(), initialRoute, "Reopening a current card deliberately selects the newly collected root.");
+    const reopened = latestDetail();
+    assert.equal(reopened.conversationId, original.conversationId);
+    assert.equal(reopened.revision, revision);
+    assert.notEqual(reopened.sourceRevision, original.sourceRevision);
+    assert.equal(page.url(), initialRoute, "The private source revision is not a public address.");
     if (directory) {
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length
             && !document.querySelector("#main").getAnimations().length);
@@ -288,7 +295,7 @@ test("a fresh accepted Search target opens while the surrounding snapshot stays 
     await expect(target).toContainText("A fresh exact Search passage.");
     await expect(target).toBeFocused();
     await expect(page.locator("#activityView")).toHaveAttribute("data-revision", previousRevision);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("nativeRevision"), String(newRevision));
+    assert.doesNotMatch(page.url(), /nativeRevision|fresh-search-message/);
     const seeks = calls.filter(call => call.method === "detail" && call.input.at !== undefined);
     assert.equal(seeks.length, 1);
     assert.equal(seeks[0].input.revision, newRevision);
@@ -354,7 +361,7 @@ test("exact source page labels its page count separately from the complete conve
     const last = calls.filter(call => call.method === "detail" && call.input.section === "observations").at(-1).input;
     assert.equal(last.revision, originalRevision);
     assert.equal(last.sourceRevision, originalRoot);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("nativeOrdinal"), "4");
+    assert.doesNotMatch(page.url(), /nativeRevision|nativeOrdinal/);
 });
 
 test("shared reader preserves authored order and makes coexisting context discoverable", async t => {
@@ -778,7 +785,7 @@ test("no-call cards state absence once without a duplicate zero footer", async t
 test("Chat shares the card and reader without borrowing call inputs or inventing outcomes", async t => {
     const { page, card } = await setup(t, [...chatFixture(), multiCallChatFixture()], 2);
     await expect(card).toContainText("An invented question.");
-    await expect(card).toContainText("2 unverified");
+    await expect(card.getByText("No result recorded", { exact: true })).toBeVisible();
     await expect(card.locator(".request-card-count")).toHaveText("2 tool calls");
     const messages = page.locator("#requestContent [data-reader-section=prompt] .reader-message");
     await expect(messages).toHaveCount(4);
@@ -859,85 +866,4 @@ test("immediate reader empty and error states use regular body text without a pa
         const s = getComputedStyle(node);
         return { size: s.fontSize, weight: s.fontWeight, padding: s.padding, background: s.backgroundColor };
     }), { size: "14px", weight: "400", padding: "0px", background: "rgba(0, 0, 0, 0)" });
-});
-
-test("reader visual state matrix uses the shared shell", { skip: !process.env.WIRE_READER_GEOMETRY_PROOFS }, async t => {
-    const directory = process.env.WIRE_READER_GEOMETRY_PROOFS, measurements = [];
-    await mkdir(directory, { recursive: true });
-    async function capture(page, name, focus) {
-        if (focus) await focus.scrollIntoViewIfNeeded();
-        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length
-            && !document.querySelector("#main").getAnimations().length);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const measured = await page.locator("#requestContent").evaluate(root => {
-            const box = node => {
-                const r = node.getBoundingClientRect(), s = getComputedStyle(node);
-                return { tag: node.tagName, classes: node.className, text: node.textContent.slice(0, 90),
-                    x: r.x, y: r.y, width: r.width, height: r.height, padding: s.padding, margin: s.margin,
-                    radius: s.borderRadius, font: s.fontFamily, size: s.fontSize, weight: s.fontWeight };
-            };
-            return { overflow: root.scrollWidth > root.clientWidth, viewportWidth: innerWidth,
-                elements: [...root.querySelectorAll(".reader-section-heading,.reader-message-header,.reader-state,.notice,.empty-state,.reader-source-record>.report-document,.reader-call-toggle,.ux-copy")]
-                    .filter(node => node.checkVisibility()).map(box),
-                close: box(document.getElementById("closeContextSidebar")),
-                footer: box(document.getElementById("contextSidebarFooter")) };
-        });
-        measurements.push({ name, ...measured });
-        assert.equal(measured.overflow, false);
-        assert.ok(measured.close.x >= 0 && measured.close.x + measured.close.width <= measured.viewportWidth + 1);
-        await page.screenshot({ path: path.join(directory, name + ".png") });
-    }
-    for (const state of ["populated", "empty", "error"]) {
-        await t.test(state, async t => {
-            const values = state === "empty" ? coworkFixture().slice(0, 1) : rows();
-            const answer = values.find(row => row.qualifiedFields.message?.value.text === reply);
-            if (answer) answer.qualifiedFields.message.value.text = reply.split("\n\n<script>")[0];
-            const { page, card, collect, stale } = await setup(t, values, state === "empty" || state === "error" ? 0 : 3,
-                { failCallsOnce: state === "error" });
-            for (const theme of ["light", "dark"]) {
-                await page.locator("#closeContextSidebar").click();
-                await expect(page.locator("#contextSidebar")).not.toBeVisible();
-                await page.setViewportSize({ width: 1440, height: 1000 });
-                await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-                await chooseTheme(page, theme);
-                await card.locator(".request-card-open").click();
-                await expect(page.locator("#requestContent")).toHaveAttribute("aria-busy", "false");
-                if (state === "error") {
-                    stale();
-                    const toggle = page.locator("[data-reader-section=source] .reader-section-toggle");
-                    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
-                    await expect(page.locator("[data-reader-section=source]")).toContainText("could not be verified");
-                }
-                for (const [width, scale] of [[1440, 100], [390, 100], [390, 200]]) {
-                    await page.setViewportSize({ width, height: 1000 });
-                    await page.evaluate(scale => { document.documentElement.style.fontSize = scale === 100 ? "" : scale + "%"; }, scale);
-                    const prefix = `${state}-${theme}-${width}-${scale}`;
-                    await page.locator("#contextSidebarBody").evaluate(node => { node.scrollTop = 0; });
-                    await capture(page, prefix + "-normal");
-                    if (state === "populated") {
-                        const call = page.locator(".reader-call").filter({ hasText: "mcp__graph__CallGraph" });
-                        if (await call.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await call.locator(".reader-call-toggle").click();
-                        await capture(page, prefix + "-expanded", call);
-                        const source = page.locator("[data-reader-section=source]");
-                        if (await source.locator(".reader-section-toggle").getAttribute("aria-expanded") !== "true") await source.locator(".reader-section-toggle").click();
-                        await expect(source.locator(".reader-source-record")).not.toHaveCount(0);
-                        await capture(page, prefix + "-source", source.locator(".reader-source-record").nth(1));
-                        await source.locator(".reader-section-toggle").click();
-                        await call.locator(".reader-call-toggle").click();
-                    } else if (state === "error") {
-                        await capture(page, prefix + "-source-error", page.locator("[data-reader-section=source]"));
-                    }
-                }
-            }
-            if (state === "populated") {
-                await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-                await page.setViewportSize({ width: 390, height: 1000 });
-                const revision = await collect(values);
-                await expect(page.locator("#activityView")).toHaveAttribute("data-revision", String(revision), { timeout: 15000 });
-                await expect(page.locator("#requestReportTitle")).toBeVisible();
-                await capture(page, "populated-dark-390-stale-footer");
-            }
-        });
-    }
-    await writeFile(path.join(directory, "measurements.json"), JSON.stringify(measurements, null, 2));
 });

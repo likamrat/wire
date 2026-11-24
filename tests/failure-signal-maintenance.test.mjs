@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { evaluationFixture, materializeEvaluationSource, assessed } from "./evaluation-fixture.mjs";
+import { stoppedRuntimePid } from "./stopped-runtime-fixture.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { createCollector } from "../lib/collector.mjs";
 import { completeWorkIqCall } from "../lib/history.mjs";
@@ -73,12 +74,12 @@ async function fixture(t) {
     const checkpoint = await readJson(checkpointFile);
     checkpoint.events.find(event => event.id === first.events[3].id).data.wireFailureEvidence = { ...beforeSignal };
     await atomicJson(checkpointFile, checkpoint);
-    const exited = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+    const stoppedPid = await stoppedRuntimePid(t);
     const directory = path.dirname(f.context.dataDir);
     const plan = {
         schemaVersion: 1, operationId: randomUUID(),
         attestation: { packetSha256: hash("invented bounded evidence"), recheckSha256: hash("invented prior finite sign-in predicate"),
-            stoppedRuntimePid: exited.pid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true },
+            stoppedRuntimePid: stoppedPid, recorderIdle: true, evaluatorIdle: true, noDispatchVerified: true },
         source: { configSha256: hash(await readFile(path.join(f.context.dataDir, "collector", "config.json"))),
             indexSha256: hash(await readFile(indexFile)), ...assessmentSource(state, f.config), windowDays: f.config.windowDays },
         stateGuardSha256: maintenanceStateGuard(state),

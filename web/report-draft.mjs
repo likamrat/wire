@@ -132,8 +132,29 @@ export function createReportDraft({ contextSelector } = {}) {
         }
         return true;
     }
+    function uniqueCopies(edits) {
+        const copies = new Map(), choice = edit => [edit.omit === true, edit.omit === true ? null : edit.text ?? null];
+        for (const edit of edits) {
+            const prior = copies.get(edit.key);
+            if (prior && JSON.stringify(choice(prior)) !== JSON.stringify(choice(edit))) {
+                throw new TypeError("Linked copies of the same recorded message have conflicting edits or omissions.");
+            }
+            if (!prior) copies.set(edit.key, edit);
+        }
+        return [...copies.values()];
+    }
+    function retireContextCopies() {
+        options.overrides = uniqueCopies(options.overrides.flatMap(edit => {
+            const keys = context?.promptKeys.get(edit.key);
+            if (keys) return [...new Set(keys)].map(key => ({ ...edit, key }));
+            return context?.contextKeys.has(edit.key) ? [] : [edit];
+        }));
+    }
     return {
         options: () => structuredClone(options),
+        hasUnsavedChoices: (initialFormats = ["html"]) => Boolean(nativePicks || options.title || options.resultText || options.reportFocus || options.reportNotes?.length
+            || options.recordedContext || options.manualTerms.length || options.overrides.length || options.promptMode !== "masked"
+            || options.formats.length !== initialFormats.length || initialFormats.some(format => !options.formats.includes(format))),
         token: () => version,
         current: (token) => !withdrawn && token === version,
         invalidate: () => { version++; },
@@ -233,6 +254,8 @@ export function createReportDraft({ contextSelector } = {}) {
                 ...(native?.disclosure.copies ?? []).filter(entry => entry.purpose === "context").map(entry => entry.key),
                 ...(preview.snapshot.resultText?.copies ?? []).map(entry => entry.key),
             ]), invalid: false };
+            const aliases = new Map([...promptKeys].flatMap(([key, ordinary]) => ordinary.map(alias => [alias, key])));
+            options.overrides = uniqueCopies(options.overrides.map(edit => ({ ...edit, key: aliases.get(edit.key) ?? edit.key })));
             contextVersion++;
             return true;
         },
@@ -329,14 +352,15 @@ export function createReportDraft({ contextSelector } = {}) {
         changePromptMode(mode) {
             if (withdrawn) return;
             if (!["none", "masked", "original"].includes(mode)) throw new TypeError("Choose a supported report text mode.");
-            if (mode === "none" && options.recordedContext) {
-                options.overrides = options.overrides.flatMap(edit => {
-                    const keys = context?.promptKeys.get(edit.key);
-                    if (keys) return [...new Set(keys)].map(key => ({ ...edit, key }));
-                    return context?.contextKeys.has(edit.key) ? [] : [edit];
-                });
-            }
+            if (mode === "none" && options.recordedContext) retireContextCopies();
             options = { ...options, promptMode: mode, ...(mode === "none" ? { recordedContext: false } : {}) };
+            version++;
+        },
+        changeRecordedContext(enabled) {
+            if (withdrawn) return;
+            if (typeof enabled !== "boolean") throw new TypeError("Choose whether to include linked context.");
+            if (!enabled) retireContextCopies();
+            options = { ...options, recordedContext: enabled };
             version++;
         },
     };

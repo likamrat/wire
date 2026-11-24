@@ -1,6 +1,6 @@
 # Report contract
 
-For the user workflow, see [Create and compare reports](reporting.md). This
+For the user workflow, see [Create and read reports](reporting.md). This
 reference defines evidence membership, disclosure and frozen output for the
 supported GitHub Copilot experience.
 
@@ -25,6 +25,17 @@ Zero and unavailable are different.
 
 ## Evidence and membership
 
+Named drafts are editable local selections, not prepared reports or saved
+artifacts. The Copilot picker binds them to the retained store and, for an
+approved source, its database identity, configured locations and selected
+GitHub account. Without a configured source, a draft belongs to the current
+local WIRE sign-in. Restarting retires access leases, not draft ownership.
+Unverified configured accounts and older generation-only partitions are not
+adopted by guessing. The picker stores membership references, not chat text.
+Prepare checks the exact draft identity, revision and Selected IDs
+against the same state used to build the preview. Later draft edits do not
+modify that preview, any saved files, or the interaction itself.
+
 Count canonical identities once before pagination. Work IQ calls, returned API
 entries, Graph request sites, sites with visible status, owned HTTP captures
 and code references are distinct populations. Visible statuses are a subset
@@ -32,23 +43,31 @@ of sites. A multi-target fetch is one call; response-array position does not
 identify the corresponding requested target. Code references do not establish
 execution.
 
+If two call IDs claim the same start event in one chat, operational activity can
+count that start once, but the report cannot attribute result details or
+operation patterns to either call. It keeps other identifiable calls and
+reports the gap rather than choosing a winner.
+
 | Report scope | Membership rule |
 | --- | --- |
 | Selected | Resolve explicit IDs and known aliases; keep picks hidden by filters/pages. |
 | Current | Resolve the complete accepted analytical membership, then include complete eligible parent interactions. Chart-matching calls and full report counts are different. |
 | All | All retained reportable activity, including eligible preserved records; independent of Analyze filters/Search/paging and never a source scan. |
 
-Fresh creation opens five built-in choices with a Last 7 days period, inclusive
-of today in the selected IANA zone. It does not inherit Analyze restrictions.
+Fresh creation offers five built-in choices. The reporting period defaults
+to Last 7 days unless the browser has a different [Reports default](user-guide.md#wire-defaults).
+These rolling periods include today in the selected IANA zone. A fresh report
+does not inherit Analyze restrictions.
 Explicit Selected and Current entries retain their own membership. Scope and
 author choices remain panel memory, not persisted across reload. **Authors in
-report** filters whole originating interactions; My plus Agent excludes
+report** filters whole originating interactions; Human plus Agent excludes
 unverified. Calls executed by agents stay with their originating interaction.
 Leaving out prompts and replies removes those copies, not membership.
 
 New reports can preserve a closed, versioned author-qualification `issue` on an
-unknown actor/basis pair. It records an observed message-boundary or host-wrapper
-rejection, not an inferred author or a tool-result failure. The reason is carried
+unknown actor/basis pair. It can distinguish an unmatched message boundary,
+unrecognized host framing, workspace details without verified origin, or an
+unsupported sender value. It does not identify an author or a tool failure. The reason is carried
 from retained metadata through normalized facts and included prompt copies.
 Older records without it remain readable and gain no inferred issue. Readers
 predating this extension cannot validate new normalized facts containing it;
@@ -60,6 +79,24 @@ unmarked schema-3 snapshots retain the historical origin explanations, including
 their former conflict wording. Markdown-backed views read the saved Markdown.
 Opening either format must preserve the frozen reading, not only file hashes.
 Report explanation versions are independent of live screen wording.
+
+New ordinary reports declare `presentation.authorLabelVersion: 1` for the
+“Human prompt” vocabulary. Reports without that marker keep their original
+author captions when rendered from JSON. The marker changes neither actor
+classification nor membership; previously saved titles, text and files stay frozen.
+`presentation.iconVersion: 2` selects the frozen React Icons author marks and
+their license notice for new HTML. A report with the earlier Human captions
+and no `iconVersion` keeps its original glyphs; older reports still have none.
+Screen icon upgrades must not change any of these saved presentations.
+
+New focused product reports declare `presentation.productVersion: 1` alongside
+presentation schema 3 and the existing origin/brand versions. This changes
+reading order, repeated definitions and narrow-table layout, not facts, units
+or membership. Outcomes and timing lead; exact call/result details remain
+available. HTML evidence tables scroll locally rather than fragmenting tool
+identifiers. The marker is supported only for ordinary `kind: "report"` snapshots
+with reportPopulation v1. Unmarked saved files and JSON-only rendered readings
+retain their original presentation; unknown marker versions are refused.
 
 Synthetic, diagnostic, unknown-source and unidentifiable records retain
 explicit exclusions; missing project context alone is not exclusion. Counts
@@ -87,6 +124,11 @@ entries use their own qualified path or the explicit single-target fallback,
 not every batch target. Category grouping and service involvement have
 different definitions and must not be substituted for one another.
 
+New report facts containing the Exchange ID conversion path use technical
+pattern v4 and require a compatible reader. Its normalized operation identifies
+no individual mailbox item or named app. Older v3 patterns keep the shapes and
+counts they saved; comparisons do not equate the two pattern definitions.
+
 | Measure | Interpretation |
 | --- | --- |
 | Tool completion | Not application or task success |
@@ -95,6 +137,16 @@ different definitions and must not be substituted for one another.
 | Item/page totals | Arbitrary response bodies do not establish them |
 | Timing | Keep unit, boundary and timed/eligible population; never blend prompt/tool/HTTP intervals or sum concurrent calls |
 | Comparison timing | Compatible raw samples, not means of percentages or medians of medians; nearest-rank median/P95 and one-sample limits stay explicit |
+
+The canonical tool `partial` bucket preserves an explicit retained
+`reportedOutcome: "partial"`; it is not derived from returned statuses,
+`contentStatus: "partial"`, missing completion timing or response truncation.
+HTTP 206 remains a 2xx status in its own evidence layer. The current Copilot
+completion normalizer emits succeeded/failed/unknown from the completion event's
+boolean success field; no partial tool state is synthesized during capture.
+Screen explanations can identify the saved partial flag and absent completion
+provenance without inferring which work completed. Frozen report meanings and
+interpretations do not acquire that screen-only explanation.
 
 Missing timing remains unavailable, not zero.
 
@@ -168,12 +220,28 @@ Mixed interactions qualify. Completed-only requires at least one eligible call,
 every call completed and no recorded errors. Unknown evidence is neither failure
 nor success. Unverified authors remain available through All.
 
-`reportPatterns` v2 binds normalized operations and distinct error channels to
+`reportPatterns` v3 binds normalized operations and distinct error channels to
 their calls and interactions. It does not infer root causes or prompt similarity.
+In a new HTML pattern table, the arrow beside **Interactions** links to one
+example, not a filtered list: its destination is the group's first stored
+interaction reference. The link names the total and the destination's report
+number. The in-app report reader opens that interaction's disclosure. In v3
+error rows, **Calls** links to the individual report call, or expands a list of
+call links when there are several. Plain call totals are not actions. These
+reading controls do not change membership or rewrite earlier saved HTML.
 For conflicting returned statuses with error evidence, patterns preserve both
 the reported and diagnostic sides and label the conflict. Version 1 patterns and
 all saved population flags retain their original frozen meaning; they are not
-recomputed on read. New version 2 patterns require a compatible reader.
+recomputed on read. New observations can include `errorDetailVersion: 1`:
+the typed error field supplied text or a code, independently of whether the
+report may disclose its value. A status disagreement between two non-error
+statuses is not itself an error. Version 3 patterns count these qualified
+signals without copying the message or a withheld code into the pattern. A
+qualified recurring cause, such as sign-in required or an upstream connection
+timeout, is grouped with its operation and attributed to its call, result or
+returned entry. An unexplained marker does not acquire a cause from similar calls.
+Older observations and v1/v2 pattern groups keep their saved meaning; new
+reports with this extension need a compatible reader.
 `reportNotes` v1 contains report-author context scoped to included pseudonymous
 interaction IDs. Notes share privacy treatment and the existing copy budget,
 but never enter metrics. Matching namespace hashes are required in the manifest
@@ -193,16 +261,28 @@ The report controller owns the sequence:
 4. Confirm local Save, then verify saved readback. Keeping chat details requires
    the warning's explicit choice for that save.
 
+Before preparation, a [named draft](reporting.md#keep-interactions-in-a-draft)
+stores references to selected interactions for its owner and source. Adding
+an interaction does not copy its text. Preparing freezes the eligible
+membership at that point: later draft edits cannot add cases to an open
+preview or rewrite a saved file. Deleting a draft removes its selection only.
+
 Qualified GitHub previews pin the original content-addressed evidence file.
 Later collection can add follow-ups without changing prepared copies.
 
 The Reports landing combines choices and saved access. Back is not discard,
-preparation or Save. Selecting the same type with unchanged dates can reopen
+preparation or Save. Resuming the same focus with unchanged dates can reopen
 the authorized in-memory preview, including its edits, without recapturing
 membership. Legacy create URLs and Selected/Current/contextual entry retain
 their scope. An unconfirmed write cannot be hidden behind the landing or
-replayed through a tile. Saved-list menus use the current authorized index;
+replayed through a new preparation. Saved-list menus use the current authorized index;
 withdrawal retires their held text and actions with the existing readers.
+Accepted activity deletion, changed scope and preview replacement use the same
+prepared-copy retirement boundary. It scrubs app-owned mutable Text/Attr nodes,
+editor fields and file/frame payloads before their owners detach them, and
+disables old callbacks. Hidden Local original copies are included. This is not
+erasure of immutable strings copied outside WIRE, and activity deletion does
+not delete or rewrite independently saved report files.
 
 | Change after preparation | Effect |
 | --- | --- |
@@ -222,7 +302,9 @@ invalidate Save. Unpinned preparations must revalidate their live selected facts
 
 New ordinary saved entries retain their snapshot's date selection as `reportPeriod`,
 independently of report presets. When present it must match the frozen manifest
-and participates in the artifact fingerprint. Older entries without it remain
+and participates in the artifact fingerprint. The native publication check
+also binds the new index entry to the reviewed period before registering it.
+Older entries without it remain
 readable; missing index metadata is not evidence that the file has no period.
 Preparation timestamps never substitute for the saved date selection.
 
@@ -252,7 +334,7 @@ inventory. The receipt records `explicit-local-save`, with both reviewer flags
 false. Its keep-chat-details flag is true exactly when original wording was
 chosen. Historical attested bundles keep their existing interpretation.
 
-Hide details and save regenerates masked bytes before binding the save intent.
+Mask detected details and save regenerates masked bytes before binding the save intent.
 Cancellation writes nothing. Later content or authority changes retire that
 intent. A dispatched or uncertain save keeps its original exact-content
 recovery identity rather than preparing or writing another bundle.
@@ -284,9 +366,7 @@ Existing bundles stay unchanged.
 | Later draft invalidation | Does not settle the dispatched Save |
 | Partial files or absent receipt | Not rollback proof |
 
-Ordinary reports and saved comparisons share one preview owner. New Prepare
-retires the other transient preparation and save authorization but preserves
-its ordinary choices. Neither task can replace a dispatched/unconfirmed Save. Withdrawal
+A new report preparation cannot replace a dispatched or unconfirmed Save. Withdrawal
 scrubs private content while retaining only minimal original recovery identity;
 fresh readiness does not restore an old preview or replay its operations.
 
@@ -310,11 +390,24 @@ or corrupted payloads block preparation.
 | Source timestamps | Support ordering; withheld from the text projection |
 | Event/observation references | Pseudonymous; no raw source IDs or paths |
 | Snapshot and manifest | Agree on context copies, `recordedContextHash` and ordinary snapshot/file hashes |
-| Shared message edits | One edit key without merging interactions; conflicts fail |
+| Shared message edits | Source-qualified ordinary aliases reconcile to one shared edit key without merging interactions; equivalent choices survive context on/off/on, conflicting choices fail |
 | Analytical scope | Context adds no membership, metric denominator or period cohort |
 | Revoked reply-copy override | Cannot remain reusable text |
 
 ## Frozen files and saved reading
+
+Focused reports prepared with `presentation.findingVersion: 1` or `2` use a
+finding-first reading. Version 2 changes the explanation of the counts, not
+what is counted. Version 1 keeps its original wording when reopened from JSON.
+HTML/PDF/Markdown and the verified Brief refer to
+the same frozen `reportPopulation.reference` / `included`, `reportPatterns`
+member sets and `resultFacts` observations. The five leading pattern bars use
+distinct interaction counts against the included population; patterns overlap.
+The example follows `reportPatterns.calls[].ref → scenarioRef` and, for
+diagnostic text, the exact `memberRefs`, `observationRef` and `entryIndex` of
+the saved copy. A null entry index does not describe a returned item's reason.
+Neither an improvement hypothesis nor a future evaluation target is a fact
+in the report. Earlier presentations and original downloads are unchanged.
 
 | Format | Saved representation |
 | --- | --- |
@@ -377,6 +470,16 @@ original anchor identities. Color repeats recorded outcome words, never a new
 success judgment. Collapse, navigation and format switching do not change
 membership, facts, file bytes or print/export completeness.
 
+For supported ordinary focused reports, Brief uses the verified manifest's
+pattern membership, call-to-interaction bindings and permitted result copies
+with the corresponding saved document anchors. It never joins a call to a
+prompt by display order or transfers a returned status to the parent outcome.
+For a returned-status finding, quoted entry text must bind to that call,
+observation, entry position and nonconflicting status. A separately labelled
+call-level example is not an entry explanation; other entries' text stays in
+the exact call view.
+The full historical reading and original files remain separate choices.
+
 Saved metadata search does not read prompt/report bodies. Global Search
 extracts only permitted text from independently verified saved files through
 the [corpus contract](search-corpus.md). Its receipt authority is not
@@ -397,8 +500,23 @@ Comparisons use recorded outcomes and timing. Separately selected result copies
 must already be frozen and masked; additional masking is allowed, but fetching
 missing source text is not.
 
-Reading a pair does not save it. Preparation and explicit local Save retain
-their source checks and original-identity recovery.
+Existing saved comparisons are read-only. Some schema-3 files declare
+`presentation.comparisonVersion: 1`. Their two `sourceIdentity` entries bind
+the exact Earlier/Later report references and hashes to manifest-declared
+titles, selected windows, time contexts and included-interaction counts.
+Missing historical metadata is explicitly null, not recovered from current
+activity or an indexed display name. Titles pass the report masking rules.
+The identity is frozen in the comparison hash, snapshot and manifest, and
+is not derived from current activity.
+
+The versioned reading leads with this named pair and recorded measures.
+Selected report windows are not verified per-call coverage. Operation failure
+wording names its evidence layer, and Markdown carries the same saved operation
+paths as HTML/PDF. Earlier/Later values stay adjacent when the layout reflows.
+Unmarked comparisons retain their historical wording, styles and original
+files; they acquire no inferred identity. Unsupported or mismatched new
+markers are refused. Version-marked JSON-only comparisons require the matching reader;
+downgrading is not permission to regenerate them from current history.
 
 ### Report a retained-period comparison
 
@@ -429,8 +547,7 @@ expanding matching-call denominators. `records` supplies those permitted copies,
 not a union metric denominator or third cohort. Undated rows stay outside dated
 cohorts; B-minus-A shares use percentage points, not relative percent.
 
-A saved period report is one artifact with two cohorts, not an ordinary
-single-source input to saved-report comparison. New preparation never
+A saved period report is one artifact with two cohorts. New preparation never
 manufactures two source reports. Changed selected facts/authority invalidate
 preparation; unrelated accepted activity need not.
 Comparison-origin preparation and saved reading return to the accepted
@@ -450,7 +567,7 @@ and original saved files.
 | Deletion | Included / preserved |
 | --- | --- |
 | One report | Remove managed bundle, recognized copies and index entry; preserve source activity and external downloads |
-| Input to a saved comparison | Saved comparison survives with an unavailable input link; dependent unsaved preparations/save authorizations are invalidated |
+| Input to a saved comparison | Saved comparison survives with an unavailable input link |
 | All saved reports | Counted, membership/hash-bound two-minute preview across all pages/search |
 | Excluded from bulk deletion | Later reports, saved comparisons, activity, drafts and external downloads |
 

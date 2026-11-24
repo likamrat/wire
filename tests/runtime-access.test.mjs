@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -32,7 +33,7 @@ test("an occupied runtime endpoint refuses the access factory before any lifecyc
     await assert.rejects(startServer(context, createExportController(context), {
         port: occupied.address().port, collector: { timers: false },
         createAccess: async () => { calls++; throw new Error("must not initialize"); },
-    }), { code: "EADDRINUSE" });
+    }), { code: "EADDRINUSE", wireRefusedBeforeStore: true });
     assert.equal(calls, 0);
     await assert.rejects(readFile(path.join(context.dataDir, "microsoft-session", "session.json")), { code: "ENOENT" });
 });
@@ -242,8 +243,7 @@ test("opt-in gate protects real state, analytics, reader, Search and report rout
         ["/api/period-comparison", {}], ["/api/search/query", {}], ["/api/search/open", {}],
         ["/api/search/status", {}], ["/api/search/events", { schemaVersion: 3 }],
         ["/api/preview", {}], ["/api/privacy-review", {}], ["/api/report-original", {}],
-        ["/api/report-comparison/inspect", {}], ["/api/report-comparison/open", {}],
-        ["/api/report-comparison/preview", {}], ["/api/report-comparison/review", {}],
+        ["/api/report-comparison/open", {}],
         ["/api/record/status", {}], ["/api/deletion/status", { operationId: randomUUID() }],
         ["/api/recollection/status", {}], ["/api/evaluation/status", {}],
     ];
@@ -292,23 +292,20 @@ test("lifecycle operations are owner-bound, protected, schema-closed and never a
     assert.equal((await app.api(await app.panel(), "/api/access/command", operation.input)).code, 403);
 });
 
-test("existing saved-comparison preparation, listing, opening and download share the same gate", async t => {
+test("retired comparison operations cannot write; historical listing, Open and download retain the access gate", async t => {
     const app = await fixture(t), a = await app.panel(), b = await app.panel();
     await app.command(a, "wire-sign-in");
     const baseline = await saveReport(app, a), later = await saveReport(app, a);
     const pair = { baselineId: baseline.bundleId, laterId: later.bundleId };
-    assert.equal((await app.api(a, "/api/report-comparison/inspect", pair)).code, 200);
-    const preview = await app.api(a, "/api/report-comparison/preview", { ...pair, formats: ["html"] });
-    assert.equal(preview.code, 200);
-    assert.equal((await app.api(b, "/api/report-comparison/review", {
-        previewId: preview.body.previewId, disclosureReviewed: true,
-    })).code, 409);
-    assert.equal((await app.api(a, "/api/report-comparison/review", {
-        previewId: preview.body.previewId, disclosureReviewed: true,
-    })).code, 200);
-    const saved = await app.api(a, "/api/report-comparison/save", { previewId: preview.body.previewId, confirmed: true });
-    assert.equal(saved.code, 200);
-    const bundleId = saved.body.bundle.bundleId;
+    const beforeIds = (await loadBoardState(app.context)).exports.map(row => row.bundleId);
+    for (const action of ["inspect", "preview", "review", "save", "cancel"]) {
+        const result = await app.api(a, `/api/report-comparison/${action}`, { ...pair, confirmed: true });
+        assert.equal(result.code, 404, action);
+    }
+    assert.equal((await app.api(a, "/api/preview", pair)).code, 400);
+    assert.equal((await app.api(a, "/api/export", { previewId: "obsolete-comparison", confirmed: true })).code, 409);
+    assert.deepEqual((await loadBoardState(app.context)).exports.map(row => row.bundleId), beforeIds);
+    const { bundleId } = (await historicalComparison(app.context, baseline.bundleId, later.bundleId, { formats: ["html"] })).bundle;
     const download = { bundleId, kind: "comparison", format: "html" };
     const before = await app.api(a, "/api/artifact-file", download);
     assert.equal(before.code, 200);
@@ -316,7 +313,7 @@ test("existing saved-comparison preparation, listing, opening and download share
     assert.equal((await app.api(a, "/api/report-artifacts/list", {})).body.artifacts.length, 3);
     await app.command(b, "wire-sign-out");
     for (const [route, input] of [
-        ["/api/report-comparison/inspect", pair], ["/api/report-comparison/open", { bundleId }],
+        ["/api/report-comparison/open", { bundleId }],
         ["/api/artifact-file", download], ["/api/report-artifacts/list", {}],
     ]) assert.equal((await app.api(a, route, input)).body.code, "wire_access_revoked");
     await app.command(a, "wire-sign-in");
@@ -661,54 +658,6 @@ for (const invalidate of ["release", "expiry"]) {
         assert.equal((await app.lifecycle.status()).wire, "signed-in", "The already-started completion remains durable.");
     });
 }
-
-test("backend committed comparison response stays unknown and recovers by read without repeating the save", { timeout: 15000 }, async t => {
-    const app = await fixture(t), a = await app.panel(), b = await app.panel();
-    await app.command(a, "wire-sign-in");
-    const baseline = await saveReport(app, a), later = await saveReport(app, a);
-    const preview = await app.api(a, "/api/report-comparison/preview", {
-        baselineId: baseline.bundleId, laterId: later.bundleId, formats: ["html"],
-    });
-    assert.equal(preview.code, 200);
-    assert.equal((await app.api(a, "/api/report-comparison/review", {
-        previewId: preview.body.previewId, disclosureReviewed: true,
-    })).code, 200);
-    const entered = deferred(), resume = deferred();
-    const original = app.runtime.collector.status.bind(app.runtime.collector);
-    t.mock.method(app.runtime.collector, "status", async (...args) => {
-        const result = await original(...args);
-        entered.resolve(); await resume.promise; return result;
-    });
-    let saves = 0;
-    const observe = req => { if (req.method === "POST" && req.url === "/api/report-comparison/save") saves++; };
-    app.runtime.server.on("request", observe);
-    t.after(() => app.runtime.server.off("request", observe));
-    const pending = app.api(a, "/api/report-comparison/save", { previewId: preview.body.previewId, confirmed: true });
-    try {
-        await entered.promise;
-        assert.equal((await loadBoardState(app.context)).exports.length, 3, "The real comparison commit already happened.");
-        await app.command(b, "wire-sign-out");
-    } finally { resume.resolve(); }
-    const result = await pending;
-    assert.equal(result.code, 409);
-    assert.equal(result.body.code, "wire_access_outcome_unknown");
-    assert.equal(result.body.outcome, "unknown");
-    assert.equal(result.headers.get("x-wire-generation"), null);
-    assert.equal(result.headers.get("x-wire-runtime"), null);
-    assert.equal(saves, 1);
-    assert.doesNotMatch(JSON.stringify(result.body), /SYNTHETIC_PRIVATE|SYNTHETIC_RETAINED/);
-    assert.equal((await app.api(a, "/api/refresh", {})).body.code, "wire_access_revoked");
-    await app.command(a, "wire-sign-in");
-    const recovery = await app.api(a, "/api/refresh", {});
-    assert.equal(recovery.code, 200);
-    const recovered = recovery.body.exports
-        .find(item => item.bundleId === preview.body.bundleId);
-    assert.equal(recovered.kind, "comparison");
-    assert.equal(recovered.title, preview.body.title);
-    assert.ok(Object.keys(recovered.files).length, "Read-only recovery returns the original registered artifact.");
-    assert.equal(saves, 1, "Recovery must not dispatch another save.");
-    assert.equal((await loadBoardState(app.context)).exports.length, 3);
-});
 
 test("backend pre-dispatch access denial does not create a report or an unknown write outcome", async t => {
     const app = await fixture(t), capability = await app.panel();

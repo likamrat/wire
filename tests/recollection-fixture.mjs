@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { collectorFor } from "../lib/collector.mjs";
 
-export async function recollectionFixture(t) {
+export async function recollectionFixture(t, { collectInitially = true } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-recollection-"));
     const context = { dataDir: path.join(root, "private") };
     const dbPath = path.join(root, "data.db"), sessionRoot = path.join(root, "session-state");
@@ -34,7 +34,7 @@ export async function recollectionFixture(t) {
     db.close();
     let runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     await collectorFor(context).configure({ appDbPath: dbPath, sessionRoot, approved: true, enabled: false, windowDays: 7, pollSeconds: 5 });
-    await collectorFor(context).collectNow();
+    if (collectInitially) await collectorFor(context).collectNow();
     let closeClient;
     t.after(async () => {
         try { await closeClient?.(); }

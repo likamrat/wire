@@ -6,7 +6,6 @@ import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, selectActivityOption, openSearchFilters, setLegacyTimeBucket, revealAnalyzeRecords, navigateMain } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { chooseReportScope } from "./report-journey-helpers.mjs";
 
 async function setup(t, options = {}, browserOptions = {}) {
     const cleanup = [];
@@ -96,9 +95,17 @@ test("search control: capsule and page geometry stay fixed while live results ap
             await input.focus();
             await expect(page.locator("#wireSearchPanel")).toBeHidden();
             assert.deepEqual((await geometry(page)).input, closed.input, "Empty focus must not expand, move or open Search");
-            await input.pressSequentially("Theme");
+            await input.pressSequentially("Color palette");
             await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
             await expect(page.locator("#wireSearchPanel")).toBeVisible();
+            const edges = await page.locator("#wireSearchResults button").evaluate(node => {
+                const left = selector => node.querySelector(selector).getBoundingClientRect().left;
+                return { gutter: left(".wire-search-type-icon") - node.getBoundingClientRect().left,
+                    title: left(".wire-search-body"),
+                    group: node.closest("li").querySelector(".wire-search-group-label").getBoundingClientRect().left };
+            });
+            assert.equal(edges.gutter, 12);
+            assert.equal(edges.title, edges.group, "Group heading stays on the result text axis, not the glyph axis");
             const result = await geometry(page);
             assert.equal(result.associated, true);
             assert.deepEqual(result.input, closed.input, "Typing and results must not change field position or size");
@@ -181,11 +188,11 @@ test("search control: native editing, long query, state feedback and keyboard Op
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/search/query", async route => {
-        if (route.request().postDataJSON().query === "Theme") { entered.resolve(); await release.promise; }
+        if (route.request().postDataJSON().query === "Color palette") { entered.resolve(); await release.promise; }
         await route.continue();
     });
     await input.press("ControlOrMeta+A");
-    await input.pressSequentially("Theme");
+    await input.pressSequentially("Color palette");
     await selectActivityOption(page, "wireSearchType", "setting");
     await entered.promise;
     await expect(page.locator("#wireSearchStatus")).toHaveText("Searching...");
@@ -197,9 +204,10 @@ test("search control: native editing, long query, state feedback and keyboard Op
     await input.press("ArrowDown");
     await expect(page.locator("#wireSearchResults button")).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/setting=theme/);
+    await expect(page).toHaveURL(/section=themes&setting=palette/);
+    await expect(page.locator("#palette-petrol")).toBeFocused();
     await page.goBack();
-    await expect(input).toHaveValue("Theme");
+    await expect(input).toHaveValue("Color palette");
     await expect(page.locator("#wireSearchResults button")).toBeFocused();
     await expect(page.locator("#wireSearchType")).toHaveValue("setting");
     await input.fill("INVENTED_HEADER_NO_MATCH_82791");
@@ -231,7 +239,7 @@ test("compact Search preserves native input identity, caret and page position th
             await clickVisible(page, input);
             await expect(input).toBeFocused();
             await expect(page.locator(".app-header #wireSearch")).toHaveCount(1);
-            await input.fill("Theme");
+            await input.fill("Color palette");
             await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
             assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) < 1, "Typing does not move the page");
             await input.press("Home"); await input.press("ArrowRight");
@@ -289,13 +297,13 @@ test("compact Search exposes held, superseded, disconnected and retry states wit
     await expect(page.locator("#wireSearchStatus")).toHaveText("Searching...");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
     await screenshot(page, "search-composer-held");
-    await input.fill("Theme");
+    await input.fill("Color palette");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
     const oldFinished = page.waitForResponse(response => new URL(response.url()).pathname === "/api/search/query"
         && response.request().postDataJSON().query === "physician");
     release.resolve();
     await oldFinished;
-    await expect(page.locator("#wireSearchResults button")).toContainText("Theme");
+    await expect(page.locator("#wireSearchResults button .wire-search-title")).toHaveText("Color palette");
     await input.press("Escape");
     await expect(panel).toBeHidden();
     await page.waitForTimeout(180);
@@ -600,14 +608,12 @@ test("native compact Search keeps deep typing stationary and restores the readin
 });
 
 test("compact Search keeps actual Analyze membership, local grouping and Settings destinations independent", { timeout: 40000 }, async t => {
-    const records = searchRecords(6).map((row, index) => ({
-        ...row, capturedAt: `2026-10-${index < 3 ? "06" : "07"}T12:00:00.000Z`,
-    }));
+    const records = searchRecords(6);
+    for (const [index, row] of records.entries()) row.toolCalls[0].startedAt = row.capturedAt = `2026-10-${index < 3 ? "06" : "07"}T12:00:00.000Z`;
     const { page, context, runtime } = await setup(t, { records });
     const before = await loadBoardState(context);
     const input = page.locator("#wireSearch");
-    const ids = () => page.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
-        new URLSearchParams(node.hash.split("?")[1]).get("request")).sort());
+    const ids = () => page.locator("#activityList article").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey.slice(8)).sort());
     const allIds = await ids();
     assert.deepEqual(allIds, records.map(row => row.scenarioId).sort());
     await page.locator("#activityList .request-card-open").first().click();
@@ -633,20 +639,11 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     const matchingIds = await ids();
     assert.deepEqual(matchingIds, ["search-0", "search-3"], "Only the two actual physician interactions enter membership");
     await expect(page.locator("#wireSearchType")).toBeDisabled();
-    assert.equal(await page.locator("#wireAnalysisSearchNotice").evaluate(node => node.parentElement.id), "main");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Search applied/i);
     await input.press("Escape");
-    for (const bucket of ["week", "month", "day"]) {
-        await setLegacyTimeBucket(page, bucket);
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-        await expect(page.locator("#homeView")).toBeVisible();
-        await expect(page.locator("#activityCount")).toHaveText("2");
-        await expect.poll(ids).toEqual(matchingIds);
-        assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes =>
-            nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 2);
-        await expect(page.locator("#filterChips")).toBeEmpty();
-        await expect(page.locator("#scopeCount-current > span")).toHaveText(["1 chat", "2 interactions"]);
-    }
-    await page.locator(".time-column").first().click();
+    assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes =>
+        nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 2);
+    await page.locator(".time-column").first().press("Enter");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityCount")).toHaveText("1");
     assert.deepEqual(await ids(), ["search-0"]);
@@ -656,18 +653,20 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect.poll(ids).toEqual(matchingIds);
-    await page.locator("#pageAction").click();
-    await chooseReportScope(page, "current");
+    await navigateMain(page, "reports");
+    await page.locator("#reportDeskActivity").click();
+    await page.getByRole("radio", { name: /^Current Analyze view/ }).check();
     await expect(page.locator("#scopeCount-current > span")).toHaveText(["1 chat", "2 interactions"]);
     await expect(page.locator("#scopeCount-selected")).toHaveText(/^1 /);
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
-    await expect(page.locator("#pageTitle")).toHaveText("Create a report");
+    await page.getByRole("button", { name: "Use activity", exact: true }).click();
+    await expect(page.locator("#pageTitle")).toHaveText("Reports");
     await navigateMain(page, "settings");
     await expect(page.locator("#pageTitle")).toHaveText("Settings");
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
     await expect(input).toHaveValue("physician");
     await page.goBack();
-    await expect(page.locator("#pageTitle")).toHaveText("Create a report");
+    await expect(page.locator("#pageTitle")).toHaveText("Reports");
     await page.goBack();
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator("#activityListScope")).toContainText("Search applied");
@@ -692,7 +691,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
             await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
         } else {
             await expect(page.locator("#connectionPreferences #collectionWindow-control")).toBeVisible();
-            await expect(page.locator("#connectionSource")).toBeVisible();
+            await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
         }
         await page.goBack();
         await expect(result).toBeFocused();

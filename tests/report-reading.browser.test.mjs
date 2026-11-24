@@ -2,12 +2,175 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { resultMetadata } from "../lib/history.mjs";
+
+test("pattern counts lead to one matching interaction and preserve the individual call links", async t => {
+    const records = [403, 403, 403, 403, 404].map((statusCode, index) => {
+        const record = fixture(`pattern-count-${index}`);
+        record.capturedAt = new Date().toISOString();
+        record.userPrompt.text = `Check the calendar for Cedar planning session ${index + 1}.`;
+        record.followUpPrompts = [];
+        Object.assign(record.toolCalls[0], { startedAt: record.capturedAt, toolSucceeded: false,
+            reportedOutcome: "failed", apiResults: [{ index: 0, statusCode }] });
+        Object.assign(record.toolCalls[0], { requestArgs: { entityUrls: ["/me/calendars", "/me/events"] },
+            apiResults: resultMetadata(JSON.stringify({ results: [
+                { status: 200, error: { code: "OtherEntry", message: "The first room supplied a partial listing." } },
+                { status: statusCode, ...(statusCode === 403 ? { error: { code: "AccessDenied",
+                    message: "Calendar access is missing for the planning room." } } : {}) },
+            ] })) });
+        record.toolCalls[0].resultEvidence = {
+            version: 1, source: "sdk-result", applicationError: true, resultCount: 2, statusCode: null,
+            contentStatus: "body-excluded", diagnostic: { version: 1, source: "mcp-result-text",
+                status: "recorded", message: "The tool could not complete the batch." },
+        };
+        return record;
+    });
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
+    let runtime, browser;
+    t.after(async () => { await browser?.close(); await runtime?.close(); for (const fn of cleanup) await fn(); });
+    await updateBoardState(context, state => { state.pseudonymKey = "1".padStart(64, "0"); });
+    runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
+    browser = await chromium.launch();
+    const profile = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await profile.newPage();
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseTheme(page, "light");
+    const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
+    await prepareLandingReport(page, "errors");
+    const prepared = await (await response).json(), frame = page.frameLocator(".report-contained-frame");
+    const [group, single] = prepared.snapshot.reportPatterns.groups.filter(g => g.kind === "errors");
+    assert.deepEqual([group.interactionRefs.length, single.interactionRefs.length], [4, 1]);
+    const expected = group.interactionRefs[0], call = group.callRefs.at(-1);
+    const heading = "Interaction " + (prepared.records.findIndex(record => record.scenarioId === expected) + 1);
+    const row = surface => surface.locator('.report-pattern-table tbody tr').filter({ hasText: "403" });
+    const count = surface => row(surface).locator('[data-label="Interactions"] a');
+    const disclosure = surface => row(surface).locator('[data-label="Calls"] summary');
+    const proofs = process.env.WIRE_PATTERN_COUNT_PROOFS;
+    async function capture(surface, name) {
+        if (!proofs) return;
+        await mkdir(proofs, { recursive: true });
+        await surface.screenshot({ path: path.join(proofs, name + ".png"), animations: "disabled" });
+    }
+    await frame.locator('.report-nav a[href$="#patterns"]').click();
+    await expect(count(frame)).toHaveText("4");
+    await expect(count(frame)).toHaveAttribute("href", `about:srcdoc#${expected}`);
+    await capture(page, "reader");
+    await page.keyboard.press("Tab");
+    await expect(count(frame)).toBeFocused();
+    await expect(count(frame)).toHaveCSS("outline-style", "solid");
+    await expect(count(frame)).toHaveAccessibleName(`4 matching interactions: go to ${heading}`);
+    await capture(page, "keyboard-focus");
+    await page.keyboard.press("Enter");
+    await expect(frame.locator(`[id="${expected}"]`)).toBeFocused();
+    await expect(frame.locator(`[id="${expected}"] > h3`)).toHaveText(heading);
+    await expect(frame.locator(".wire-reading-interaction[open]")).toHaveCount(1);
+    await capture(page, "destination");
+    await frame.locator('.report-nav a[href$="#patterns"]').click();
+    await disclosure(frame).click();
+    await row(frame).locator(`a[href$="#${call}"]`).click();
+    await expect(frame.locator(`[id="${call}"]`)).toBeFocused();
+
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const file = (await loadBoardState(context)).exports[0].files["product-report.html"];
+    const savedHtml = await readFile(file, "utf8");
+    assert.equal(savedHtml, prepared.files["product-report.html"]);
+    if (proofs) await writeFile(path.join(proofs, "synthetic-report.html"), savedHtml);
+    const html = await profile.newPage();
+    await html.goto(pathToFileURL(file).href);
+    await html.locator('.report-nav a[href="#patterns"]').click();
+    await capture(html, "html");
+    await count(html).click();
+    await expect(html.locator(":target")).toHaveAttribute("id", expected);
+    await html.goBack();
+    await disclosure(html).click();
+    await row(html).locator(`a[href="#${call}"]`).click();
+    await expect(html.locator(":target")).toHaveAttribute("id", call);
+    await expect(count(html)).toHaveCSS("text-decoration-line", "none");
+    await expect(count(html)).toHaveAccessibleName(`4 matching interactions: go to ${heading}`);
+
+    await html.close();
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 540, height: 900 });
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    const brief = page.getByRole("article", { name: "Report brief" });
+    await expect(brief.getByRole("heading", { name: /workiq-fetch failed\. A returned result reported HTTP 403/ })).toBeVisible();
+    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await expect(brief.locator("figcaption")).toContainText("returned entry 2");
+    await expect(brief.locator(".brief-facts>div").filter({hasText:"Returned entry 2"})).toContainText("HTTP 403");
+    await brief.getByRole("button", { name: /returned HTTP 404 · 1 interaction/ }).click();
+    await expect(brief.locator("blockquote")).toHaveText("The tool could not complete the batch.");
+    await expect(brief.locator("figcaption")).toContainText("Call-level example · not an entry explanation");
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
+    await capture(page, "brief-narrow-dark");
+    await brief.getByRole("button", { name: "Coverage", exact: true }).click();
+    await expect(brief.getByRole("heading", { name: "Evidence counts" })).toBeVisible();
+    for (const [width, size] of [[1240, "100%"], [390, "125%"]]) {
+        await page.setViewportSize({ width, height: 920 });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
+        const facts = await brief.locator(".brief-facts dd").evaluateAll(values => values.map(n => n.getBoundingClientRect().width));
+        assert.ok(facts.length && facts.every(width => width > 100), `Unreadable Coverage values: ${facts}`);
+    }
+    await brief.getByRole("button", { name: "Findings", exact: true }).click();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await chooseTheme(page, "light");
+    await capture(page, "brief-wide");
+    await brief.getByRole("button", { name: /returned HTTP 403 · 4 interactions/ }).click();
+    const matching = brief.getByRole("button", { name: heading, exact: true });
+    await expect(matching.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
+    await matching.click();
+    const owner = prepared.snapshot.reportPatterns.calls.find(item => item.scenarioRef === expected);
+    const ordinal = prepared.snapshot.resultFacts.calls.findIndex(item => item.ref === owner.ref) + 1;
+    const exact = brief.getByRole("button", { name: new RegExp(`^Report call ${ordinal}:`) });
+    await exact.click();
+    await expect(brief).toContainText("Returned API entry 1: status 200");
+    await expect(brief).toContainText("Returned API entry 2: status 403");
+    for (const message of ["The first room supplied a partial listing.", "Calendar access is missing for the planning room.",
+        "The tool could not complete the batch."]) await expect(brief.locator("blockquote").filter({ hasText: message })).toHaveCount(1);
+    await page.evaluate(() => dispatchEvent(new Event("beforeprint")));
+    await expect(page.locator(".brief-print")).toContainText("Interaction 5");
+    await expect(page.locator(".brief-print")).toContainText("Scope and coverage");
+    await expect(page.locator(".brief-print [href],.brief-print script,.brief-print iframe")).toHaveCount(0);
+    await page.evaluate(() => dispatchEvent(new Event("afterprint")));
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(exact).toBeFocused();
+    await brief.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(matching).toBeFocused();
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 540, height: 900 });
+    await selectActivityOption(page, "savedReaderFormat", "document");
+    const saved = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
+    await saved.locator('.report-nav a[href$="#patterns"]').click();
+    const singleRow = saved.locator(".report-pattern-table tbody tr").filter({ hasText: "404" });
+    const one = singleRow.getByRole("link", { name: /^1 matching interaction:/ });
+    await expect(one.locator('[data-icon-role="forward"]:last-child')).toBeVisible();
+    await expect(saved.locator('.report-nav a[href$="#patterns"] [data-icon-role="section-charts"]')).toBeVisible();
+    await capture(page, "saved-narrow-dark");
+    await one.click();
+    await expect(saved.locator(":target")).toHaveAttribute("id", single.interactionRefs[0]);
+    await expect(saved.locator(".wire-reading-interaction[open]")).toHaveCount(1);
+    await saved.locator('.report-nav a[href$="#patterns"]').click();
+    await singleRow.getByRole("link", { name: /^Report call / }).click();
+    await expect(saved.locator(":target")).toHaveAttribute("id", single.callRefs[0]);
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
+    const reopen = page.locator(".saved-library-row .saved-report-title").first();
+    await reopen.click();
+    await expect(brief.locator("blockquote")).toHaveText("Calendar access is missing for the planning room.");
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await expect(reopen).toBeFocused();
+    assert.equal(await readFile(file, "utf8"), prepared.files["product-report.html"]);
+});
 
 test("edited reports give actual HTML a reading pane without opening text inspection", { timeout: 60000 }, async t => {
     const records = Array.from({ length: 127 }, (_, index) => {
@@ -31,7 +194,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await chooseTheme(page, "light");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const initial = await (await response).json();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByLabel("Report name", { exact: true }).fill("Cedar release call failures");
@@ -52,10 +215,10 @@ test("edited reports give actual HTML a reading pane without opening text inspec
         await page.screenshot({ path: path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.png"), fullPage: true, animations: "disabled" });
         await writeFile(path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.json"), JSON.stringify(geometry));
     }
-    assert.ok(geometry.height >= Math.min(600, geometry.viewport * .6), JSON.stringify(geometry));
+    await expect(file.frameLocator("iframe").locator("h1")).toBeInViewport();
     assert.equal(geometry.inspectionOpen, false, "File reading must not open unrelated text editing.");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#reportPeriodChoices [data-report-range='14']").click();
     const redated = await (await response).json();
@@ -138,6 +301,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     assert.deepEqual(await readFile(saved.files["product-report.html"]), bytes);
+    await viewAllSavedReports(page);
     const row = page.locator(".saved-library-row").filter({ hasText: "Cedar revised report" });
     const title = row.locator(".saved-report-title");
     for (const theme of ["light", "dark"]) {
@@ -196,7 +360,7 @@ test("late regeneration retains the selected file mode and never publishes super
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     const initial = await (await response).json();
     await selectActivityOption(page, "preparedReportView", "product-report.html");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
@@ -218,7 +382,7 @@ test("late regeneration retains the selected file mode and never publishes super
     assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
     assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
     assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=json]").check();
     prepared = await (await response).json();
@@ -227,7 +391,7 @@ test("late regeneration retains the selected file mode and never publishes super
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#formatOptions input[value=html]").uncheck();
     await response;
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(page.locator("#preparedReportView")).toHaveValue("report");
     await selectActivityOption(page, "preparedReportView", "product-report.json");
     await page.locator("#reportPrivacyChoice").click();
@@ -251,51 +415,52 @@ test("report period closes when reading an embedded document and when leaving Re
     record.toolCalls[0].startedAt = record.capturedAt;
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, [record]);
     const access = await createCopilotRuntimeAccess(context);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, access });
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false }, access });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); await access.close(); for (const work of cleanup) await work(); });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
     page.setDefaultTimeout(5000);
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     await expect(page.frameLocator(".report-contained-frame").locator("h1")).toHaveText("All activity");
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await expect(page.locator("#reportPeriodChoices")).toBeVisible();
     await page.frameLocator(".report-contained-frame").locator("h1").click();
     await expect(page.locator("#reportPeriodChoices")).toBeHidden({ timeout: 1000 });
     const period = page.locator("#reportPeriodChoices");
     for (const target of ["chrome", "escape", "trigger"]) {
-        await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+        await page.locator("#reportDeskDates").click();
         if (target === "chrome") await page.getByLabel("Report name", { exact: true }).click();
         else if (target === "escape") await page.keyboard.press("Escape");
-        else await page.locator('[popovertarget="reportPeriodChoices"]').click();
+        else await page.locator("#reportDeskDates").click();
         await expect(period).toBeHidden();
     }
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await period.locator("[data-report-range='14']").click();
     const accepted = await (await response).json();
     await expect(period).toBeHidden();
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    const acceptedPeriod = await page.locator("#reportDeskDates").innerText();
+    await page.locator("#reportDeskDates").click();
     await period.locator("[data-report-range=custom]").click();
     const custom = page.locator("#reportCustomDates");
     await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
     await custom.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(page.locator('[popovertarget="reportPeriodChoices"]')).toContainText("Last 14 days");
-    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await expect(page.locator("#reportDeskDates")).toHaveText(acceptedPeriod);
+    await page.locator("#reportDeskDates").click();
     await period.locator("[data-report-range=custom]").click();
     await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await custom.getByRole("button", { name: "Use dates", exact: true }).click();
+    await custom.getByRole("button", { name: "Apply dates", exact: true }).click();
     const changed = await (await response).json();
     assert.notDeepEqual(changed.snapshot.dateSelection, accepted.snapshot.dateSelection);
     await expect(custom).toBeHidden();
     await selectActivityOption(page, "preparedReportView", "product-report.html");
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await page.frameLocator("#reportFileInspection iframe").locator("h1").click();
     await expect(period).toBeHidden();
-    await page.getByRole("combobox", { name: "Prepared report view", exact: true }).click();
+    await page.getByRole("combobox", { name: "Viewing", exact: true }).click();
     const fileBox = await page.locator("#reportFileInspection iframe").boundingBox();
     await page.mouse.click(fileBox.x + fileBox.width - 20, fileBox.y + 100);
     await expect(page.locator(".select-popup")).toBeHidden({ timeout: 1000 });
@@ -309,13 +474,13 @@ test("report period closes when reading an embedded document and when leaving Re
     await expect(page.locator("#wireSearchPanel")).toBeHidden();
     await expect(page.locator("#wireSearch")).toHaveValue("Reports");
     await page.locator("#wireSearchClear").click();
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(period).toBeHidden();
     await expect(page.locator("#reportGallery")).toBeVisible();
-    await page.locator('[data-report-preset="all"]').click();
+    await prepareLandingReport(page, "all");
     await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     await page.locator('nav [data-nav="analyze"]').click();
     await expect(period).toBeHidden();
     await expect(page.locator("#reportsView")).toBeHidden();
@@ -352,9 +517,10 @@ test("older Activity disclosure owns its following tool and service breakdowns",
     });
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await viewAllSavedReports(page);
     await page.getByRole("button", { name: "Files for Archived activity example", exact: true }).click();
     await page.getByRole("dialog", { name: "Files for Archived activity example", exact: true })
-        .getByRole("button", { name: "HTML", exact: true }).click();
+        .getByRole("button", { name: "Web page (HTML)", exact: true }).click();
     const frame = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
     await expect(frame.locator("#breakdowns")).toBeVisible();
     assert.equal(await frame.locator("#breakdowns").evaluate(node =>
@@ -441,7 +607,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     let prepared = await (await response).json();
     const population = structuredClone(prepared.snapshot.reportPopulation);
     assert.equal(population.reference.length, 52); assert.equal(prepared.records.length, 6);
@@ -449,8 +615,9 @@ test("long reports keep complete evidence behind working navigation and real for
     await expect(report.locator(".wire-reading-interaction")).toHaveCount(6);
     await expect(report.locator(".wire-reading-interaction[open]")).toHaveCount(0);
     await expect(report.locator(".example-calls tbody tr")).toHaveCount(36);
-    assert.doesNotMatch(await report.locator("main>.report-facts").textContent(), /Timezone|Prepared|Prompts|Text/);
-    assert.match(await report.locator(".wire-reading-meta").textContent(), /Timezone/);
+    await expect(report.locator("main>.report-facts")).toHaveCount(0, "Prepared scope is already shown beside its controls.");
+    await expect(page.locator("#reportExperienceScope")).toContainText("All retained activity");
+    assert.match(await report.locator("#coverage>.report-facts").textContent(), /Timezone/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const measured = await report.locator("body").evaluate(body => ({
@@ -500,7 +667,7 @@ test("long reports keep complete evidence behind working navigation and real for
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.setViewportSize({ width: 1800, height: 1100 });
 
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -510,8 +677,10 @@ test("long reports keep complete evidence behind working navigation and real for
         assert.ok(result.request().postDataJSON().options.formats.includes(format));
         assert.ok(prepared.files["product-report." + (format === "markdown" ? "md" : format)]);
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     const previewCount = posts.filter(item => item.path === "/api/preview").length;
+    await expect(report.locator(".wire-reading-section[open]")).toHaveCount(0, "Content-only regeneration retains deliberate collapse.");
+    await report.locator('.report-nav a[href$="#examples"]').click();
     await report.locator(".wire-reading-interaction>summary").first().click();
     const preparedPosition = await report.locator("body").evaluate(() => scrollY);
     for (const format of ["html", "pdf", "json", "markdown"]) {
@@ -561,6 +730,7 @@ test("long reports keep complete evidence behind working navigation and real for
     }
     assert.doesNotMatch(savedBytes.get("product-report.html").toString(), /wire-reading|data-wire-reader/);
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "document");
     const savedFrame = page.locator("#savedReportReader .saved-file-preview:visible").frameLocator("iframe");
     await expect(savedFrame.locator(".wire-reading-interaction")).toHaveCount(6);
     assert.equal(await page.locator("#savedReportReader iframe").getAttribute("sandbox"), "");
@@ -582,13 +752,18 @@ test("long reports keep complete evidence behind working navigation and real for
         proof.push({ savedFormat: format, selected: await page.locator("#savedReaderFormat").inputValue(),
             file: item.suggestedFilename(), bytesMatch: true });
     }
-    await selectActivityOption(page, "savedReaderFormat", "report");
+    await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(savedFrame.locator(".wire-reading-interaction[open]")).toHaveCount(1);
     assert.equal(await originalFrame.evaluate(node => node.isConnected && node.checkVisibility()), true);
-    await page.getByRole("button", { name: "Expand sections", exact: true }).click();
-    await expect(savedFrame.locator(".wire-reading-interaction[open]")).toHaveCount(6);
-    await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await expect(savedFrame.locator(".wire-reading-section[open],.wire-reading-interaction[open]")).toHaveCount(0);
+    const localSummary = savedFrame.locator(".wire-reading-interaction[open] > summary").first();
+    const focused = await localSummary.elementHandle();
+    await focused.click();
+    for (const open of [true, false]) {
+        await focused.press("Enter");
+        assert.equal(await focused.evaluate(node => node.parentElement.open), open);
+        assert.equal(await focused.evaluate(node => node === node.ownerDocument.activeElement), true);
+        assert.equal(await originalFrame.evaluate(node => node.isConnected && node.checkVisibility()), true);
+    }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#reportGallery")).toBeVisible();
     await expect(page.locator(".saved-report-title")).toHaveCount(1);

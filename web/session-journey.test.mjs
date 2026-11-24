@@ -149,5 +149,5 @@ test("peer destinations discard comparison browsing markers without changing exp
     assert.deepEqual(journey.canonical(reader), reader);
     assert.deepEqual(journey.underlying(reader), comparison);
     assert.deepEqual(journey.returnRoute({ ...comparison, view: "reports", task: "compare" }),
-        { ...shared, view: "reports", task: "compare" }, "Saved-report comparison remains a distinct Reports task.");
+        { ...shared, view: "reports", task: "library" }, "Old saved-report comparison entries return to the library.");
 });

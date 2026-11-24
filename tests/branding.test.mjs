@@ -106,7 +106,9 @@ test("README-specific assets use the current identity without a painted descript
 test("application assets use the current identity without a painted descriptor", () => {
     const html = renderHtmlShell("a".repeat(64), "synthetic-branding");
     assert.ok(html.includes(`<link rel="icon" type="image/svg+xml" href="${FAVICON_PATH}">`));
-    assert.ok(html.includes(`${brandLockup}${brandDarkLockup}${brandCompactMark}</a></div>`));
+    const homeLink = html.match(/<a\b[^>]*\bclass="brand-home"[^>]*>([\s\S]*?)<\/a>/);
+    assert.ok(homeLink, "The shell has a home link for its wordmark");
+    assert.equal(homeLink[1], brandLockup + brandDarkLockup + brandCompactMark);
     assert.ok(html.includes(`<template id="reportBrand">${brandMark}${brandDarkMark}</template>`),
         "Historical readers retain their original theme assets");
     assert.ok(html.includes(`<template id="reportBrandV1">${brandV1Mark}${brandV1DarkMark}</template>`),

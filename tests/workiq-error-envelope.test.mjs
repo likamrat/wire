@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { retainEvent, createCollector } from "../lib/collector.mjs";
-import { extractScenarios } from "../lib/history.mjs";
+import { extractScenarios, managedErrorServers } from "../lib/history.mjs";
 import { loadBoardState, replaceEvidence, mergeEvidenceWithState } from "../lib/store.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { privateFixture } from "./helpers.mjs";
@@ -9,6 +9,8 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRequestActivity } from "../lib/activity-analytics.mjs";
+import { buildTrends } from "../lib/trends.mjs";
+import { projectReportResultObservation, reportObservationHasError } from "../lib/report-result-facts.mjs";
 import { buildSanitizedRecord } from "../lib/export.mjs";
 import { createCorpusSources } from "../lib/search-corpus-sources.mjs";
 import { indexSearchText, rankTextSearch } from "../lib/search-text.mjs";
@@ -28,7 +30,55 @@ function events(message) {
             data: { toolCallId: "invented-call", success: false, error: { code: "failure", message } } },
     ];
 }
+
+test("a completed call with a typed result or entry error stays in the error cohort without disclosing custom codes", async t => {
+    for (const tool of ["fetch", "call_function"]) for (const level of ["result", "entry"]) {
+        const source = events(), code = "InventedMissingField", message = "Supply a title for this item.";
+        source[1].data.toolName = "workiq-" + tool;
+        const error = { code, message };
+        source[2].data = { toolCallId: "invented-call", success: true, result: {
+            structuredContent: level === "entry" ? { results: [{ statusCode: 200 }, { error }] } : { error },
+        } };
+        const records = extract(source.map(event => retainEvent(event, { credentialExclusions: 0 })));
+        const { context } = await privateFixture(t, records);
+        const state = await loadBoardState(context), call = mergeEvidenceWithState(state)[0].toolCalls[0];
+        assert.equal(call.toolSucceeded, true);
+        const diagnostic = level === "entry" ? call.apiResults[1].errorDiagnostic : call.resultEvidence.diagnostic;
+        assert.equal(diagnostic.message, message); assert.equal(diagnostic.code, code);
+        const observation = projectReportResultObservation("test", { resultEvidence: call.resultEvidence, returnedEntries: call.apiResults });
+        assert.doesNotMatch(JSON.stringify(observation), /InventedMissingField|Supply a title/);
+        assert.equal(reportObservationHasError(observation), true);
+        const trends = buildTrends(state, { expectedRevision: state.revision, from: "2026-10-01", to: "2026-10-01",
+            timeContext: { timeZone: "UTC", locale: "en-US" }, filters: {} });
+        const point = trends.days[0].values.problems[0];
+        assert.equal(point.count, 1); assert.equal(point.failedCalls, 0); assert.equal(point.apiErrorCalls, 1);
+        assert.deepEqual(point.rowIds, trends.members.map(m => m.id));
+    }
+});
 const extract = rows => extractScenarios(rows, { sessionId: "invented-session" }, rows[0].timestamp, rows.at(-1).timestamp).scenarios;
+
+test("opaque error diagnostics require a unique earlier mapped start and retain the same privacy exclusions", () => {
+    const server = "cc-invented", [, start, end] = events(envelope([failedResult()]).replace("'workiq'", `'${server}'`));
+    Object.assign(start.data, { toolName: server + "-fetch", mcpServerName: server, mcpToolName: "fetch", wireManagedWorkIq: true });
+    const bound = new Set([start.id]), other = new Set(["different-start"]);
+    for (const [incoming, prior, mapping] of [
+        [[start, end], [], other], [[end, start], [], bound], [[end], [], bound],
+        [[end], [start, { ...start, id: "another-start" }], bound],
+        [[end], [start, { ...end, id: "another-completion" }], bound],
+        [[end], [{ ...start, timestamp: "2030-01-01T00:00:00.000Z" }], bound],
+        [[end], [{ ...start, data: { ...start.data, mcpConfigServerName: "cc-other" } }], bound],
+    ]) {
+        assert.deepEqual(retainEvent(end, {}, { managedErrorServers: managedErrorServers(incoming, prior, mapping) })
+            .data.result.structuredContent.results, []);
+    }
+    const sensitive = { ...end, data: { ...end.data, error: { code: "failure", message: end.data.error.message.replace(
+        "Error while processing response.", "This restricted item is unavailable.") } } };
+    const qualified = managedErrorServers([sensitive], [start], bound);
+    assert.equal(qualified.get(sensitive), server);
+    const compact = retainEvent(sensitive, {}, { managedErrorServers: qualified });
+    assert.deepEqual(compact.data.result.structuredContent.results, []);
+    assert.equal(compact.data.wireFailureEvidence.diagnostic.status, "sensitive-excluded");
+});
 
 test("Work IQ ask error envelope retains its supplied reason and code instead of an unreadable-error fallback", () => {
     const message = "The invented source policy is unavailable.";

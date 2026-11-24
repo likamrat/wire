@@ -1,12 +1,31 @@
-export async function openReportLibrary(page) {
-    if (!await page.locator("#savedReportsPanel").isVisible()) await page.locator("#reportLibraryLink").click();
+export async function selectReportFocus(page, preset) {
+    const control = page.locator("#reportDeskFocus-control");
+    if (await control.isDisabled() && await page.locator("#reportDeskFocus").inputValue() === preset) return;
+    await control.click();
+    await page.locator(`.select-popup [role=option][data-value="${preset}"]`).click();
 }
 
-export async function openReportComparison(page) {
-    if (!await page.locator("#comparisonWorkspace").isVisible()) {
-        if (!await page.locator("#reportCompareLink").isVisible()) await openReportLibrary(page);
-        await page.locator("#reportCompareLink").click();
-    }
+export function prepareReportPreview(page) {
+    return page.locator("#prepareReportPreview").click();
+}
+
+export async function prepareLandingReport(page, preset) {
+    await selectReportFocus(page, preset);
+    await prepareReportPreview(page);
+}
+
+export async function chooseLandingReportDates(page, label) {
+    await page.locator("#reportDeskDates").click();
+    await page.locator("#reportPeriodChoices").getByRole("button", { name: label, exact: true }).click();
+}
+
+export async function viewAllSavedReports(page) {
+    await page.locator("#viewAllSavedReports").click();
+}
+
+export async function openReportLibrary(page) {
+    if (!await page.locator("#savedReportsPanel").isVisible()) await page.locator("#reportLibraryLink").click();
+    if (await page.locator("#viewAllSavedReports").isVisible()) await viewAllSavedReports(page);
 }
 
 export async function reportActivityActionGeometry(page) {

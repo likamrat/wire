@@ -6,13 +6,13 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain, navigateSettings, openAnalyzeFilters } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DATE_CLARITY_PROOF;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const now = "2026-10-13T19:00:00Z";
 
-async function setup(t) {
+async function setup(t, pickerJourney = false) {
     const records = Array.from({ length: 26 }, (_, index) => {
         const record = fixture(`date-clarity-${index}`);
         record.sourceSessionId = `invented-chat-${index % 15}`;
@@ -31,7 +31,7 @@ async function setup(t) {
         counts: { includedSessions: 15, includedProjects: 1 }, roster: [],
     } }));
     const before = await loadBoardState(context), errors = [], denied = [];
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, ...(pickerJourney ? { frontend: "react" } : {}), collector: { timers: false },
         evaluation: { evaluatorFactory: () => { throw Error("Provider use forbidden in date clarity proof."); } } });
     const browser = await chromium.launch();
     t.after(async () => {
@@ -47,9 +47,12 @@ async function setup(t) {
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
+        if (pickerJourney && url.origin === new URL(runtime.url).origin && url.pathname === "/api/app-update"
+            && request.method() === "POST" && request.postDataJSON()?.action === "status") return route.continue();
         if (url.origin === new URL(runtime.url).origin && (request.method() === "GET" || [
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/evaluation/automatic/summary",
+            ...(pickerJourney ? ["/api/trends", "/api/period-comparison"] : []),
         ].includes(url.pathname))) return route.continue();
         denied.push(url.pathname); return route.abort();
     });
@@ -57,18 +60,57 @@ async function setup(t) {
     return page;
 }
 
-test("October headline names the applied month and the notice distinguishes unchecked history without competing dates", async t => {
+test("Dates keeps Custom dates beside the same presets across all four workspaces", { timeout: 60000 }, async t => {
+    const page = await setup(t, true);
+    const proofDir = process.env.WIRE_PICKER_PROOF;
+    if (proofDir) await mkdir(proofDir, { recursive: true });
+    for (const [width, scale, theme] of [[1280, 100, "light"], [390, 150, "dark"]]) {
+        await page.setViewportSize({ width, height: 900 }); await chooseTheme(page, theme);
+        await page.evaluate(size => document.documentElement.style.fontSize = size + "%", scale);
+        for (const [view, triggerId] of [["reports","reportDeskDates"],["trends","trendsPeriod"],["compare","comparisonDates"],["analyze","dateFilter-control"]]) {
+            await navigateMain(page, view);
+            if (view === "analyze") await openAnalyzeFilters(page);
+            if (view === "compare") {
+                await page.getByRole("button", { name: "Timeline", exact: true }).click();
+                const timeline = page.locator(".comparison-timeline");
+                await expect(timeline).toContainText("Zero means");
+                await expect(timeline).not.toContainText(/civil dates in|America\/Los_Angeles|time zone/i);
+            }
+            const trigger = page.locator("#" + triggerId);
+            await expect(trigger).toHaveAccessibleName(/^Dates: .+/);
+            const accepted = await trigger.innerText(), url = page.url();
+            await trigger.click();
+            const picker = page.locator("#" + await trigger.getAttribute("aria-controls"));
+            const presets = picker.getByRole("group", { name: "Date ranges" });
+            for (const days of [7,14,30]) await expect(presets.getByRole("button", { name: `Last ${days} days` })).toBeVisible();
+            await presets.getByRole("button", { name: "Custom dates" }).click();
+            await expect(presets).toBeVisible();
+            await expect(picker.locator('input[type=date]:visible')).toHaveCount(view === "compare" ? 4 : 2);
+            const start = picker.locator('input[type=date]:visible').first(); await expect(start).toBeFocused();
+            await start.fill("2026-10-01");
+            assert.equal(await trigger.innerText(), accepted); assert.equal(page.url(), url);
+            await expect(picker).not.toContainText(/inclusive dates|America\/Los_Angeles/);
+            assert(await picker.evaluate(p => p.scrollWidth <= p.clientWidth + 1), `${view} overflows at ${width}px`);
+            if (proofDir) await page.screenshot({ path: path.join(proofDir, `${view}-${width}.png`) });
+            await picker.getByRole("button", { name: "Cancel", exact: true }).click();
+            await expect(picker).toBeHidden(); await expect(trigger).toBeFocused(); assert.equal(await trigger.innerText(), accepted);
+        }
+    }
+});
+
+test("Analyze keeps routine date coverage in Filters, beside the history settings", async t => {
     const page = await setup(t);
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("43");
-    await expect(page.locator("#periodHint")).toHaveText("25 interactions · 15 Copilot chats");
+    await expect(page.locator("#periodHint .analyze-scope-part")).toHaveText([/25 interactions/, "15 Copilot chats"]);
     if (proof) {
         await mkdir(proof, { recursive: true });
         await page.evaluate(async () => { await document.fonts.ready; document.activeElement.blur(); scrollTo(0, 0); });
         await page.screenshot({ path: path.join(proof, "october-desktop.png"), fullPage: true });
     }
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
-    await expect(page.locator("#periodCoverageText")).toHaveText("Some of this period is outside checked history; activity may be missing.");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
+    await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
+    await expect(page.locator("#periodCoverageText")).toHaveText("The last history check covered only part of this period.");
     await expect(page.locator("#periodHistoryLink")).toHaveText("History settings");
     const evidence = [];
     for (const [width, scale, theme] of [[1440, 1, "dark"], [1200, 1, "light"], [390, 2, "light"]]) {
@@ -86,7 +128,7 @@ test("October headline names the applied month and the notice distinguishes unch
             return { lines, textSize: parseFloat(getComputedStyle(text).fontSize),
                 sameRow: Math.abs(textBox.y + textBox.height / 2 - linkBox.y - linkBox.height / 2) < 2,
                 overflow: document.documentElement.scrollWidth > innerWidth + 1,
-                clipped: [node, text, link, document.querySelector("#periodResult")].some(item => item.scrollWidth > item.clientWidth + 1),
+                clipped: [node, text, link].some(item => item.scrollWidth > item.clientWidth + 1),
                 linkHeight: linkBox.height };
         });
         assert.equal(geometry.overflow, false); assert.equal(geometry.clipped, false);
@@ -95,15 +137,15 @@ test("October headline names the applied month and the notice distinguishes unch
         else assert.ok(geometry.lines > 1, "Enlarged narrow text wraps rather than shrinking.");
         evidence.push({ width, scale, theme, ...geometry, headline: await page.locator("#periodResult").textContent(),
             notice: await page.locator("#periodCoverageText").textContent() });
-        if (proof) await page.locator("#periodFeedback").screenshot({ path: path.join(proof, `feedback-${width}-${scale}-${theme}.png`) });
+        if (proof) await page.locator("#periodCoverage").screenshot({ path: path.join(proof, `feedback-${width}-${scale}-${theme}.png`) });
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await page.locator("#periodHistoryLink").click();
-    await expect(page).toHaveURL(/#settings.*section=connection.*setting=history-window/);
+    await expect(page).toHaveURL(/settings.*section=connection.*setting=history-window/);
     await expect(page.locator("#collectionWindow-control")).toBeFocused();
     await page.goBack(); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
     await navigateMain(page, "collection-status"); await ready(page);
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Last checked history");
     await expect(page.locator("#collectionEvidenceDetails")).toContainText("Sep 13, 2026, 11:00:00 AM GMT-7");
@@ -113,13 +155,20 @@ test("October headline names the applied month and the notice distinguishes unch
 
 test("every Dates choice keeps its caption with accepted counts, including unapplied custom drafts and other units", async t => {
     const page = await setup(t);
+    await navigateMain(page, "settings"); await navigateSettings(page, "analyze");
+    await selectActivityOption(page, "defaultAnalyzeRange", "30");
+    await navigateMain(page, "analyze"); await ready(page);
+    await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (Sep 14–Oct 13, 2026)");
+    await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
     for (const [value, calls, caption] of [
-        ["day", 0, "Oct 13, 2026"], ["week", 3, "Oct 12 - Oct 18, 2026"],
-        ["month", 43, "Oct 1 - Oct 31, 2026"], ["7", 18, "Oct 7 - Oct 13, 2026"],
-        ["30", 44, "Sep 14 - Oct 13, 2026"], ["capture", 44, "All dates"],
+        ["day", 0, "Oct 13, 2026"], ["week", 3, "Oct 12–13, 2026"],
+        ["month", 43, "Oct 1–13, 2026"], ["7", 18, "Oct 7–13, 2026"],
+        ["30", 44, "Sep 14–Oct 13, 2026"], ["capture", 44, "All dates"],
     ]) {
         await selectActivityOption(page, "dateFilter", value); await ready(page);
         await expect(page.locator("#periodResult")).toHaveText(`${calls} Work IQ tool calls (${caption})`);
+        if (value === "day") await expect(page.locator("#analyzeScopeStatus")).toContainText("The last history check covered only part of this period.");
+        if (value === "30") await expect(page.locator("#analyzeScopeStatus")).toBeHidden();
     }
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-10-12");
@@ -127,16 +176,18 @@ test("every Dates choice keeps its caption with accepted counts, including unapp
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
     await page.locator("#applyDates").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
+    await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-12-28");
     await page.locator("#toFilter").fill("2027-01-03");
     await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
-    await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("0 Work IQ tool calls (Dec 28, 2026 - Jan 3, 2027)");
+    await expect(page.locator("#applyDates")).toBeDisabled();
+    await expect(page.locator("#analyzeCalendarStatus")).toContainText("today or an earlier date");
+    await expect(page.locator("#periodResult")).toHaveText("3 Work IQ tool calls (Oct 12, 2026)");
     await page.locator("#clearDates").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 tool-returned API results (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 tool-returned API results (Oct 1–13, 2026)");
     await page.locator("#resetView").click(); await ready(page);
     await expect(page.locator("#periodResult")).toHaveText("44 Work IQ tool calls (All dates)");
 });
@@ -156,13 +207,13 @@ test("the accepted checked window, not old imported dates, controls the notice w
         await route.fulfill({ response, json: { ...snapshot, collection: status(snapshot.collection) } });
     });
     await selectActivityOption(page, "dateFilter", "month"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1 - Oct 31, 2026)");
+    await expect(page.locator("#periodResult")).toHaveText("43 Work IQ tool calls (Oct 1–13, 2026)");
     await expect(page.locator("#periodCoverage")).toBeHidden();
     await expect(page.locator("#collectionNotice")).toBeVisible();
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
     checkedWindow = null;
     await selectActivityOption(page, "dateFilter", "week"); await ready(page);
-    await expect(page.locator("#periodCoverageText")).toHaveText("Checked history is unknown; this view uses retained activity.");
+    await expect(page.locator("#periodCoverageText")).toHaveText("The dates of the last history check are unavailable.");
     await expect(page.locator("#collectionNotice")).toBeVisible();
     await expect(page.locator("#collectionNotice")).toHaveAttribute("data-severity", "error");
 });

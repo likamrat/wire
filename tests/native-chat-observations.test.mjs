@@ -46,9 +46,12 @@ test("invocation source facts remain provenance for existing calls, not addition
     assert.equal(typeof native.retainNativeChatSourceObservations, "function");
     const decoded = decodeNativeChatObservation(nativeCallsSource());
     const conversation = native.projectNativeReadModel(native.retainNativeChatSourceObservations(decoded)).conversations[0];
-    assert.equal(conversation.calls.length, 2);
-    assert.equal(conversation.sourceObservations[0].facts.length, 2);
-    assert.equal(conversation.sourceObservations[0].facts[1].fields.input.availability, "recorded-empty");
+    const facts = conversation.sourceObservations[0].facts;
+    assert.deepEqual(facts.map(row => row.kind), ["provider-progress", "native-invocation", "native-invocation"]);
+    const invocations = facts.filter(row => row.kind === "native-invocation");
+    assert.deepEqual(conversation.calls.map(call => call.nativeCallId), ["invented-call-one", "invented-call-two"]);
+    assert.deepEqual(invocations.map(row => row.fields.nativeCallId.value), conversation.calls.map(call => call.nativeCallId));
+    assert.equal(invocations[1].fields.input.availability, "recorded-empty");
     assert.equal(conversation.calls[0].outcome.state, "unknown");
     assert.ok(conversation.calls.every(call => call.observations.every(row => !Object.hasOwn(row, "chatSource"))));
 });
@@ -185,7 +188,8 @@ test("closed source-fact validation rejects authority, generated/default fields,
     const orphan = decodeNativeChatObservation(chatSource({ messageType: "Task", text: JSON.stringify({ type: "task" }) }));
     assert.throws(() => native.retainNativeChatSourceObservations(orphan), { code: "chat-source-carrier-required" });
     const calls = native.retainNativeChatSourceObservations(decodeNativeChatObservation(nativeCallsSource()));
-    calls[0].chatSource.observations[0].fields.input.value = { query: "Another call input" };
+    const firstCall = calls[0].chatSource.observations.find(row => row.fields.nativeCallId?.value === "invented-call-one");
+    firstCall.fields.input.value = { query: "Another call input" };
     assert.throws(() => native.projectNativeReadModel(calls), { code: "input-source-conflict" });
     const duplicate = structuredClone(initial);
     const duplicateFact = structuredClone(duplicate.chatSource.observations[0]);

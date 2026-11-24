@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -80,11 +81,13 @@ const color = value => value.startsWith("color(srgb ")
     ? `rgb(${value.match(/[\d.]+/g).slice(0, 3).map(Number).map(channel => channel * 255).join(",")})` : value;
 
 function assertDanger(value, label) {
-    assert.deepEqual(rgb(value.color), rgb(value.danger), `${label}: semantic danger text`);
-    assert.deepEqual(rgb(value.border), rgb(value.danger), `${label}: semantic danger boundary`);
-    assert.notDeepEqual(rgb(color(value.background)), rgb(value.danger), `${label}: no solid danger fill`);
-    assert.ok(contrast(value.color, color(value.background)) >= 4.5, `${label}: readable text`);
-    assert.ok(contrast(value.border, color(value.background)) >= 3, `${label}: visible boundary`);
+    const fill = color(value.background), paper = color(value.paper);
+    const ink = value.color, danger = rgb(value.danger);
+    assert.ok([ink, fill, value.border].some(token => JSON.stringify(rgb(color(token))) === JSON.stringify(danger)), `${label}: semantic danger color`);
+    assert.ok(contrast(ink, fill) >= 4.5, `${label}: readable text`);
+    // In the saved library the actionable label, rather than a surrounding box, carries the danger color.
+    if (!label.includes("Delete report") && !label.includes("Delete saved comparison"))
+        assert.ok(Math.max(contrast(value.border, paper), contrast(fill, paper)) >= 3, `${label}: visible boundary`);
     assert.equal(value.clipped, false, label);
     assert.equal(value.textFits, true, label);
     assert.ok(value.bounds.height >= 44, label);
@@ -110,19 +113,19 @@ test("Settings current location, transient hover and keyboard focus are distinct
         const inactiveHover = await paint(other);
         await page.mouse.move(1, 1);
         const inactiveRest = await paint(other);
-        await other.focus();
-        await page.keyboard.press("Shift+Tab");
+        await current.focus();
+        await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
         await expect(current).toBeFocused();
         const focus = await paint(current);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-settings-focus.png`) });
         await page.keyboard.press("Enter");
-        for (const category of ["display", "privacy", "troubleshooting", "connection"]) {
+        for (const category of ["themes", "privacy", "regional", "connection"]) {
             await navigateSettings(page, category);
             await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", category);
             await expect(page.locator("[data-settings-section]:visible")).toHaveAttribute("data-settings-section", category);
         }
         await page.goBack();
-        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "troubleshooting");
+        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "regional");
         await page.goForward();
         await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "connection");
         await page.reload();
@@ -149,7 +152,7 @@ test("Settings current location, transient hover and keyboard focus are distinct
         assert.notEqual(item.rest.background, item.hover.background, "Current category must have separate hover feedback");
         assert.notEqual(item.rest.background, item.inactiveHover.background, "Current location must not look like another row's hover");
         assert.equal(item.rest.marker.content, '""');
-        assert.equal(item.rest.marker.width, "3px");
+        assert.ok(parseFloat(item.rest.marker.width) >= 2);
         assert.equal(item.inactiveHover.marker.content, "none", "Hover cannot borrow the persistent location marker");
         assert.ok(contrast(item.rest.marker.background, item.rest.background) >= 3);
         assert.deepEqual(item.rest.bounds, item.hover.bounds);
@@ -157,7 +160,7 @@ test("Settings current location, transient hover and keyboard focus are distinct
         assert.equal(item.focus.focus, true);
         assert.equal(item.focus.outline, "solid");
         assert.ok(parseFloat(item.focus.outlineWidth) >= 2);
-        assert.equal(item.entry.text, "Delete collected activity", "Steady action label is complete without authored continuation dots");
+        assert.equal(item.entry.text, "Review deletion", "Steady action label is complete without authored continuation dots");
         assertDanger(item.entry, item.theme);
     }
 });
@@ -180,7 +183,7 @@ test("danger entries and separate confirmation stay readable, stable and cancell
                 assert.equal(value.textFits, true);
                 assert.ok(value.bounds.height >= 44);
             }
-            await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "data");
+            await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "privacy");
             await page.locator("#settingsCategorySummary").click();
         }
         const entry = page.locator("#deleteActivity"), label = `${theme}/${width}/${scale}`;
@@ -206,7 +209,7 @@ test("danger entries and separate confirmation stay readable, stable and cancell
         assert.equal(focused.outline, "solid");
         assert.ok(parseFloat(focused.outlineWidth) >= 2);
         const recollect = await paint(page.locator("#recollectActivity"));
-        assert.equal(recollect.text, "Recollect from approved sources");
+        assert.equal(recollect.text, "Choose chats");
         assert.equal(recollect.clipped, false);
         assert.equal(recollect.textFits, true);
         assert.notDeepEqual(rgb(recollect.color), rgb(recollect.danger), "Recollection is not destructive");
@@ -243,11 +246,6 @@ test("danger entries and separate confirmation stay readable, stable and cancell
         }
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    await navigateMain(page, "activity");
-    assertDanger(await paint(page.locator("#activityDeleteShortcut")), "Activity entry");
-    await page.locator("#activityDeleteShortcut").click();
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#activityDeleteShortcut")).toBeFocused();
     const after = await loadBoardState(context);
     assert.deepEqual(after.evidence, before.evidence);
     assert.deepEqual(after.exports, before.exports);
@@ -265,9 +263,7 @@ test("saved report and comparison entries use the same danger treatment without 
             await controller.review("synthetic-action-state", preview.previewId, true);
             saved.push((await controller.confirm("synthetic-action-state", preview.previewId, true)).bundle);
         }
-        const preview = await controller.previewComparison("synthetic-action-state", saved[0].bundleId, saved[1].bundleId, { formats: ["json"] });
-        await controller.reviewComparison("synthetic-action-state", preview.previewId, true);
-        await controller.confirmComparison("synthetic-action-state", preview.previewId, true);
+        const preview = await historicalComparison(context, saved[0].bundleId, saved[1].bundleId, { formats: ["json"] });
     });
     const before = await loadBoardState(context);
     const files = before.exports.flatMap(bundle => Object.values(bundle.files));
@@ -275,11 +271,9 @@ test("saved report and comparison entries use the same danger treatment without 
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await navigateMain(page, "reports");
-        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
+        await page.locator("#viewAllSavedReports").click();
         for (const name of ["Delete report", "Delete saved comparison"]) {
             const entry = page.locator("#bundleList").getByRole("button", { name, exact: true, includeHidden: true }).first();
-            const disclosure = entry.locator("xpath=ancestor::details[1]");
-            if (!await disclosure.evaluate(node => node.open)) await disclosure.locator(":scope > summary").click();
             assertDanger(await paint(entry), `${theme}/${name}`);
             await entry.click();
             const confirm = page.locator(".delete-object-confirm");

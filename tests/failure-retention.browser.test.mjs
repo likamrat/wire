@@ -6,6 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { createCollector, retainEvent } from "../lib/collector.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -99,20 +100,20 @@ test("paired ask failures survive incremental collection and reach cards, reader
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
-        await expect(card).toContainText("8 recorded calls / 6 completed / 2 failed");
-        for (const number of [5, 6]) {
-            const reason = card.locator(".request-card-reason").filter({ hasText: `Call #${number} failed` });
-            await expect(reason).toContainText(message);
-            await expect(reason).toContainText("SourcePolicyUnavailable");
-        }
+        await expect(card).toHaveText("2 tool calls failed");
+        await expect(card).not.toContainText("SourcePolicyUnavailable");
+        await expect(card).not.toContainText(message);
         await expect(card).not.toContainText("could not extract");
         if (proofs) await page.screenshot({ path: path.join(proofs, `ask-errors-card-${theme}.png`) });
         await card.click();
         for (const number of [5, 6]) {
             const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="call-${number}"]`);
             await expect(call.locator(".reader-call-summary")).toContainText(message);
+            await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${number}`);
+            await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText("1 tool call failed");
             if (await call.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await call.locator(".reader-call-toggle").click();
             await expect(call.locator(".technical-detail .reader-error-message")).toHaveText(message);
+            await expect(call).toContainText("SourcePolicyUnavailable");
         }
         await expect(page.locator("#requestContent")).not.toContainText("EXCLUDED_");
         if (proofs) await page.screenshot({ path: path.join(proofs, `ask-errors-reader-${theme}.png`) });
@@ -127,12 +128,12 @@ test("paired ask failures survive incremental collection and reach cards, reader
     await expect(page.locator("#requestContent")).toContainText(message);
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#requestContent")).toContainText(message);
-    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#message")).toContainText("This tab no longer has the private view");
+    await expect(page.locator("#requestContent")).not.toContainText(message);
     await chooseTheme(page, "light");
     await navigateMain(page, "reports");
     const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator('[data-report-preset="errors"]').click();
+    await prepareLandingReport(page, "errors");
     const response = await prepared;
     let preview = await response.json();
     assert.equal(response.status(), 200, preview.error);
@@ -140,7 +141,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
     assert.equal(preview.records.length, 1);
     assert.equal(preview.snapshot.reportPopulation.reference.length, 1);
     assert.match(JSON.stringify(preview.snapshot.resultText), /SourcePolicyUnavailable/);
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -148,7 +149,7 @@ test("paired ask failures survive incremental collection and reach cards, reader
         assert.equal(response.status(), 200);
         preview = await response.json();
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     if (proofs) await page.screenshot({ path: path.join(proofs, "ask-errors-report.png") });
     const saving = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).click();
@@ -164,8 +165,10 @@ test("paired ask failures survive incremental collection and reach cards, reader
         assert.match(text, /invented source policy is unavailable/);
         assert.doesNotMatch(text, /EXCLUDED_|could not extract/);
     }
+    const verifiedRead = page.waitForResponse(response => response.url().endsWith("/api/report/open") && response.ok());
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.locator("#savedReportReader").frameLocator("iframe").locator("body")).toContainText(message);
+    await expect(page.locator("#savedReportReader .saved-brief")).toBeVisible();
+    assert.ok(JSON.stringify(await (await verifiedRead).json()).includes(message));
     assert.deepEqual((await loadBoardState(context)).evidence, records);
     assert.deepEqual(await readFile(file), original);
     assert.deepEqual(errors, []);
@@ -188,7 +191,7 @@ test("supported failure families keep their operation, recorded reason and hones
         ["privacy", { error: { code: "AccessDenied", message: "Bearer " + "a".repeat(40) } }, "privacy"],
         ["size", { error: { code: "AccessDenied", message: "x".repeat(8193) } }, "saving limit"],
         ["format", { error: { code: "AccessDenied", message: { text: "UNSUPPORTED_OBJECT_TEXT" } } }, "error format"],
-        ["legacy", {}, "Failure reason was not saved"],
+        ["legacy", {}, "No failure reason was saved."],
         ["retrieval", wrapped({ "application/vnd.ms-workiq.retrieval": {
             markdown: "", retrievalHits: [], resultCount: 0, stoppedReason: "error",
         } }), "source did not supply a reason"],
@@ -235,17 +238,19 @@ test("supported failure families keep their operation, recorded reason and hones
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(".request-card-open");
-    for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {
-        const index = cases.findIndex(entry => entry[0] === id), reason = card.locator(".request-card-reason").filter({ hasText: new RegExp(`Call #${index + 1}\\b`) });
-        await expect(reason).toContainText(expected);
-        await expect(reason.locator(".request-card-operation")).toContainText("workiq-");
-        if (!["retrieval", "blob"].includes(id)) await expect(reason).toContainText("Requested: /me/messages");
-    }
+    await expect(card).toHaveText("16 tool calls failed");
+    await expect(card).not.toContainText(/Call #|Requested:|WIRE interpretation|AccessDenied/);
     await card.click();
+    await page.getByRole("link", { name: "Show full activity" }).click();
     for (const [id, , expected] of cases.filter(([, , expected]) => expected)) {
         const call = page.locator(`[data-reader-section=activity] [data-tool-call-id="${id}"]`);
         await expect(call).toContainText(expected);
         await expect(call.locator(".call-heading")).toContainText("workiq-");
+        if (!["retrieval", "blob"].includes(id)) {
+            const toggle = call.locator(".reader-call-toggle");
+            if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+            await expect(call).toContainText("/me/messages");
+        }
     }
     const completed = page.locator('[data-tool-call-id="completed"]');
     await completed.locator(".reader-call-toggle").click();

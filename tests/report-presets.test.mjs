@@ -6,10 +6,13 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { assertProjectedBundle } from "../lib/privacy.mjs";
 import { normalizeReportOptions } from "../lib/prompt-projection.mjs";
 import { time } from "../lib/time.mjs";
-import { readSavedArtifactFile, loadSavedReportSource } from "../lib/report-artifacts.mjs";
+import { readSavedArtifactFile, loadSavedReportSource, readSavedReportView } from "../lib/report-artifacts.mjs";
 import { inspectSavedReportSnapshot } from "../lib/saved-report-snapshot.mjs";
 import { startServer } from "../lib/server.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
+import { resolveReportView } from "../lib/report-population.mjs";
+import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 function records() {
@@ -31,6 +34,101 @@ const options = () => ({
     dateSelection: { range: "7", from: "2026-11-02", to: "2026-11-08" },
     reportFocus: { version: 1, preset: "errors", outcome: "errors", services: [] },
     saveMode: "local",
+});
+
+test("finding-first selected reports freeze each final member and its own evidence, not a prior selection", async t => {
+    const [x, y] = records();
+    const { context } = await privateFixture(t, [x, y]), controller = createExportController(context);
+    const opts = { ...options(), reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } };
+    async function prepare(ids, owner) {
+        const { revision } = await loadBoardState(context);
+        return controller.preview(owner, undefined, opts, { kind: "selected", scenarioIds: ids, revision });
+    }
+    const both = await prepare([x.scenarioId,y.scenarioId], "both");
+    assert.equal(both.snapshot.reportPopulation.included.length, 2);
+    const readbacks = [];
+    for (const [source, owner] of [[x,"first"],[y,"second"]]) {
+        const preview = await prepare([source.scenarioId], owner);
+        const { bundle } = await controller.confirm(owner, preview.previewId, true, timeContext,
+            { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+        const state = await loadBoardState(context);
+        const saved = await readSavedArtifactFile(context, state, bundle.bundleId, "report", "json");
+        const j = JSON.parse(saved.bytes), expected = both.snapshot.records.find(rec => rec.prompts[0].text === j.records[0].prompts[0].text);
+        assert.ok(expected);
+        assert.equal(j.records[0].prompts[0].text.includes(source.scenarioId.toUpperCase()), true);
+        assert.deepEqual(j.reportPopulation.reference.map(item=>item.ref), [expected.scenarioId]);
+        assert.deepEqual(j.reportPopulation.included, [expected.scenarioId]);
+        assert.deepEqual([...new Set(j.reportPatterns.calls.map(c=>c.scenarioRef))], [expected.scenarioId]);
+        const reopened = await readSavedReportView(context, state, bundle.bundleId);
+        assert.ok(reopened.text.includes('id="finding"') && reopened.text.includes("This report includes 1 interaction."));
+        const prior = structuredClone(j);
+        prior.presentation.findingVersion = 1;
+        for (const render of [renderHtmlReport, renderMarkdownReport]) {
+            assert.match(render(prior.records, { snapshot: prior }), /1 interaction included from 1 eligible interaction\./);
+            assert.match(render(j.records, { snapshot: j }), /This report includes 1 interaction\./);
+        }
+        readbacks.push([bundle.bundleId, reopened.text]);
+    }
+    assert.equal((await readSavedReportView(context, await loadBoardState(context), readbacks[0][0])).text,readbacks[0][1]);
+    assert.equal(both.snapshot.reportPopulation.included.length,2);
+});
+
+test("fresh report membership stays independent of Analyze interval across a long daily range", async t => {
+    const source = records().slice(0, 2);
+    for (const [index, record] of source.entries()) {
+        record.capturedAt = index ? "2026-02-06T12:00:00Z" : "2025-01-01T12:00:00Z";
+        record.toolCalls[0].startedAt = record.capturedAt;
+    }
+    const settings = { ...options(), timeContext: { timeZone: "UTC", locale: "en-US" },
+        dateSelection: { range: "custom", from: "2025-01-01", to: "2026-02-06" },
+        promptMode: "none", formats: ["json"], reportFocus: { version: 1, preset: "all", outcome: "all", services: [] } };
+    for (const bucket of ["day", "week", "month"]) {
+        const selected = resolveReportView(source, { analytics: { layer: "tool", bucket, timelineFrom: "2026-02-01", filters: { scope: "all" } },
+            withinServices: [] }, settings);
+        assert.deepEqual(selected.sort(), source.map(record => record.scenarioId).sort());
+    }
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("daily-report", undefined, settings,
+        { kind: "all", revision: state.revision });
+    assert.equal(preview.snapshot.reportPopulation.included.length, 2);
+    assert.equal(preview.records.length, 2);
+    assert.deepEqual(preview.snapshot.dateSelection, settings.dateSelection);
+    assert.equal(assertProjectedBundle(preview).blockedCategoryCount, 0);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+});
+
+test("new focused reports lead with separate outcomes and timing before patterns and preserve ordinal calls", async t => {
+    const all = reviewRecords(), source = [all[0], all[1], all.at(-1)];
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        ...options(), dateSelection: { range: "capture" }, reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    assert.equal(preview.snapshot.presentation.productVersion, 1);
+    const html = preview.files["product-report.html"], md = preview.files["product-report.md"];
+    assert.ok(html.indexOf('id="overview"') < html.indexOf('id="patterns"'));
+    assert.ok(html.indexOf('id="timing"') < html.indexOf('id="patterns"'));
+    assert.ok(md.indexOf("## Included evidence") < md.indexOf("\n## Patterns\n"));
+    assert.ok(md.indexOf("## Timing") < md.indexOf("\n## Patterns\n"));
+    assert.doesNotMatch(md, /Not an error grouping/);
+    assert.deepEqual([...html.matchAll(/<h3>Report call (\d+):/g)].map(match => Number(match[1])), [1, 2, 3, 4, 5, 6]);
+    assert.match(html, /2 completed \/ 2 failed \/ 1 outcome unknown \/ 1 partial/);
+    assert.match(html, /3 2xx \/ 2 reported failure \/ 1 status unknown/);
+    assert.match(html, /631 ms/);
+    assert.match(html, /2,305 ms/);
+});
+
+test("new product call ordinals follow retained interaction order rather than lexical call IDs", async t => {
+    const record = records()[0], first = record.toolCalls[0];
+    Object.assign(first, { toolCallId: "z-last-lexically", order: 1 });
+    record.toolCalls.push({ ...structuredClone(first), toolCallId: "a-first-lexically", startEventId: "second-start",
+        tool: "workiq-retrieve", order: 2, requestArgs: { query: "Find the release decision." }, requestedApiPath: null });
+    const { context } = await privateFixture(t, [record]), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        ...options(), reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    assert.deepEqual(preview.snapshot.resultFacts.calls.map(call => call.tool), ["workiq-fetch", "workiq-retrieve"]);
+    assert.match(preview.files["product-report.html"], /Report call 1: workiq-fetch/);
+    assert.match(preview.files["product-report.md"], /Report call 2: workiq-retrieve/);
 });
 
 test("normal preparation freezes error membership, the wider total and separately authored masked notes", async t => {

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -134,7 +135,7 @@ async function compare(page, emptyB = false, waitForPair = true) {
     }, emptyB);
     if (waitForPair) {
         await expect.poll(() => page.evaluate(() => Boolean(window.periodComparisonOwner.acceptedPair()))).toBe(true);
-        await page.getByRole("button", { name: "View calls", exact: true }).click();
+        await page.locator("#viewComparisonCalls").click();
     }
 }
 
@@ -190,7 +191,7 @@ test("withdrawal during record construction cannot repopulate private DOM", { ti
     await page.evaluate(() => { window.compareAccess.withdrawDuringPaint = true; });
     await compare(page, false, false);
     await expect.poll(() => page.evaluate(() => Boolean(window.periodComparisonOwner.acceptedPair()))).toBe(true);
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect.poll(() => page.evaluate(() => window.compareAccess.withdrawDuringPaint)).toBe(false);
     assert.deepEqual(await page.evaluate(() => ({
         contents: document.getElementById("periodComparisonResults").textContent,
@@ -212,12 +213,24 @@ for (const emptyB of [false, true]) test(`fresh access keeps safe selected B wit
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()), null);
     await expect(page.locator("#periodComparison")).toBeHidden();
     await page.evaluate(() => window.compareAccess.fresh());
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    // Restore the selected roster using the freshly accepted identity. The
+    // explicit "View baseline calls" button intentionally chooses A if B is empty.
+    assert.equal(await page.evaluate(() => {
+        const owner = window.periodComparisonOwner;
+        return owner.showRecords(owner.acceptedPair())?.tab.id;
+    }), "comparisonRecordsB");
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     assert.equal(await page.evaluate(() => window.compareAccess.calls), before.calls + 1);
     assert.notEqual(await page.evaluate(() => window.periodComparisonOwner.acceptedPair().key), before.key);
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.recordsTarget(window.oldEntry)), null);
-    if (emptyB) await expect(page.locator("#comparisonExactRecordsB")).toContainText("No matching activity");
+    assert.equal(await page.evaluate(() => window.periodComparisonOwner.showRecords(window.oldEntry)), null);
+    if (emptyB) {
+        await expect(page.locator("#comparisonExactRecordsB a")).toHaveCount(0);
+        await expect(page.locator("#comparisonExactRecordsB")).toContainText("0 calls across 0 interactions");
+        await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+        await page.getByRole("button", { name: /^View \d+ baseline calls$/ }).click();
+        await expect(page.locator("#comparisonRecordsA")).toHaveAttribute("aria-selected", "true");
+    }
     await page.evaluate(() => window.oldLink.click());
     assert.equal(page.url(), before.url);
 });
@@ -237,8 +250,8 @@ for (const completion of ["resolve", "reject"]) test(`old decoded ${completion} 
     const page = await setup(t);
     await compare(page);
     await page.evaluate(() => { window.compareAccess.holdNext = true; });
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
-    await page.locator("#applyPeriodComparison").click();
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Boolean(window.compareAccess.pending))).toBe(true);
     await page.evaluate(() => {
         window.oldRead = window.compareAccess.pending; window.oldLease = window.compareAccess.token();
@@ -284,13 +297,18 @@ for (const action of ["expiry", "withdrawal and newer focus"]) test(`late entry 
 test("uncommitted custom dates never replace the accepted pair during withdrawal and fresh reading", { timeout: 30000 }, async t => {
     const page = await setup(t);
     await compare(page);
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await openDatePicker(page, "compare", "Custom dates");
     await page.locator("#comparisonAFrom").fill("2026-03-06");
+    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
     const calls = await page.evaluate(() => window.compareAccess.calls);
     await page.evaluate(async () => { window.compareAccess.withdraw(); window.compareAccess.resume(); await window.compareAccess.fresh(); });
-    await expect(page.locator("#comparisonAFrom")).toHaveValue("2026-03-06");
     assert.equal(await page.evaluate(() => window.compareAccess.calls), calls + 1);
     assert.equal(await page.evaluate(() => window.periodComparisonOwner.acceptedPair()?.comparison.periods.baseline.range.from), "2026-03-07");
+    await expect(page.locator("#comparisonCustomDates")).toBeHidden();
+    await expect(page.locator("#comparisonAFrom")).toHaveValue("");
+    const reopened = await openDatePicker(page, "compare", "Custom dates");
+    await expect(reopened.locator("#comparisonAFrom")).toHaveValue("2026-03-07");
+    assert.equal(await page.evaluate(() => window.compareAccess.calls), calls + 1);
 });
 
 for (const invalidation of ["expire", "removeMethods"]) test(`Compare fails closed when publication checks ${invalidation}`, { timeout: 30000 }, async t => {

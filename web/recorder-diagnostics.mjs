@@ -6,6 +6,7 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     const $ = id => document.getElementById(id);
     const key = "workiq-evidence.recorder-attempt";
     let attemptId, attempt, busy = false, reading = false, uncertain = false, loaded = false, timer;
+    let canStart = false;
     let accessAvailable = true, accessEpoch = 0, confirmationBody, confirmationAction;
     const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
     const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
@@ -28,7 +29,11 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     function render(message) {
         if (!current(publication())) return;
         const pending = busy || attempt?.phase === "pending" && !uncertain;
-        $("recordBtn").disabled = pending || !loaded;
+        const statusOnly = loaded && !canStart;
+        $("recorderPurpose").hidden = !canStart;
+        $("recorderEffect").hidden = !canStart;
+        $("recordBtn").hidden = !canStart && !uncertain;
+        $("recordBtn").disabled = pending || !loaded || !canStart && !uncertain;
         text("recordBtn", reading && (attempt?.phase !== "pending" || uncertain) ? "Reading result..."
             : pending ? "Recording diagnostic..." : uncertain ? "Check saved result" : "Test HTTP recorder");
         $("recordBtn").setAttribute("aria-busy", String(pending));
@@ -44,7 +49,9 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
             interrupted: "The runtime stopped before a final result was saved. The request may have been sent. Inspect retained HTTP recorder evidence before deciding whether to start a new test; it was not replayed.",
             error: "The diagnostic could not complete. Check the local runtime and storage access. No success is claimed and no request was replayed.",
         };
-        text("recorderStatus", message || phases[value?.phase] || "No saved diagnostic yet. This optional test is separate from local history collection.");
+        text("recorderStatus", message || phases[value?.phase] || (statusOnly
+            ? "No saved diagnostic. This instance can read previous results but cannot start a network test."
+            : "No saved diagnostic yet."));
         $("recorderStatus").classList.toggle("error", Boolean(uncertain || value && !["pending", "succeeded"].includes(value.phase)));
         $("recorderEvidence").hidden = !value;
         text("recorderEvidence", value ? `Attempt ${value.attemptId}. ${value.recordSaved
@@ -68,6 +75,7 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
             const result = await api("/api/record/status", attemptId ? { attemptId } : {});
             if (!current(access)) return;
             loaded = true;
+            canStart = result.canStart === true;
             if (result.attempt) {
                 attempt = result.attempt;
                 attemptId = attempt.attemptId;
@@ -88,7 +96,7 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     }
     async function start() {
         const access = publication();
-        if (!current(access) || busy || uncertain || !loaded || attempt?.phase === "pending") return;
+        if (!current(access) || busy || uncertain || !loaded || !canStart || attempt?.phase === "pending") return;
         busy = true; uncertain = false; loaded = true;
         attemptId = crypto.randomUUID();
         storage(attemptId);
@@ -117,6 +125,7 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
         const access = publication();
         if (!current(access) || $("recordBtn").disabled) return;
         if (uncertain) { readResult(); return; }
+        if (!canStart) return;
         const body = openDialog("Test HTTP recorder?");
         confirmationBody = body;
         body.append(el("p", "", "Send one public GET to graph.microsoft.com/v1.0/$metadata and save the result locally. No credentials or response body are logged. This does not check your Copilot collection or workplace data."));
@@ -134,16 +143,19 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     window.addEventListener("pagehide", () => clearTimeout(timer));
     window.addEventListener("pageshow", () => { if (current(publication()) && loaded && !busy) readResult(); });
     return {
+        hasUnfinishedChange: () => Boolean(busy || uncertain || attempt?.phase === "pending" || attemptId && !attempt),
         withdrawAccess() {
             if (!accessAvailable) return;
             accessAvailable = false; accessEpoch++;
             clearTimeout(timer); timer = undefined;
             uncertain = uncertain || Boolean(attemptId); attempt = undefined; busy = false; reading = false; loaded = false;
+            canStart = false;
             if (confirmationAction && confirmationBody?.contains(confirmationAction)) confirmationBody.replaceChildren();
             confirmationBody = undefined; confirmationAction = undefined;
             for (const id of ["recorderStatus", "recorderEvidence", "recorderStorageWarning"]) text(id, "");
             $("recorderEvidence").hidden = true; $("recorderStorageWarning").hidden = true; $("recorderResultLink").hidden = true;
             $("recordBtn").disabled = true; $("recordBtn").setAttribute("aria-busy", "false");
+            $("recordBtn").hidden = $("recorderPurpose").hidden = $("recorderEffect").hidden = true;
             text("recordBtn", "Test HTTP recorder");
             $("recorderDiagnostics").open = false;
         },

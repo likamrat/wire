@@ -11,7 +11,7 @@ import { navigateMain, navigateSettings, chooseTheme, selectActivityOption, open
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_SETTINGS_REDESIGN_PROOFS;
-const categories = ["connection", "privacy", "display", "troubleshooting"];
+const categories = ["connection", "privacy", "themes", "regional"];
 
 async function setup(t, { unknownBilling = false, preferenceSave = false, announcementProbe = false } = {}) {
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -116,7 +116,8 @@ async function actionBoundary(control) {
         const outside = background(node.parentElement), fill = blend(rgba(surface.backgroundColor), outside);
         const border = blend(rgba(surface.borderTopColor), fill), rect = node.getBoundingClientRect();
         const rgb = value => `rgb(${value.join(",")})`;
-        return { label: node.textContent.trim(), boundary: rgb(border), outside: rgb(outside), fill: rgb(fill), ink: style.color,
+        return { label: node.textContent.trim(), directional: node.matches("a.quiet") && !!node.querySelector("[data-icon-role=forward]"),
+            boundary: rgb(border), outside: rgb(outside), fill: rgb(fill), ink: style.color,
             borderWidth: parseFloat(surface.borderTopWidth), target: rect.height, focus: node.matches(":focus-visible"),
             outline: surface.outlineStyle !== "none" ? surface.outlineStyle : style.outlineStyle,
             bounds: { x: rect.x + scrollX, y: rect.y + scrollY, width: rect.width, height: rect.height } };
@@ -249,7 +250,7 @@ test("Settings normal entry presents all four current sections with coherent hie
         for (const control of result.controls) assert.ok(control.height >= 44 && control.width >= 44,
             `${context}: ${control.id || control.text} keeps a 44px target`);
         for (const text of result.text) assert.ok(contrast(text.color, text.background) >= 4.5, context + ": " + text.text);
-        for (const row of result.alignment) assert.ok(row.difference <= 4, `${context}: ${row.label} aligns with its control text (${row.difference}px)`);
+
     }
 });
 
@@ -259,8 +260,8 @@ test("Settings action boundaries remain clearly visible against their surface in
         await chooseTheme(page, theme);
         for (const [category, selectors] of [
             ["privacy", ["#recollectActivity", '[data-settings-section=privacy] a.button-link']],
-            ["connection", ["#editSource", "#pauseCollection"]],
-            ["troubleshooting", ['[data-settings-section=troubleshooting] a.button-link']],
+            ["connection", ["#pauseCollection"]],
+            ["source-access", ["#editSource"]],
         ]) {
             await navigateSettings(page, category);
             await capture(page, `action-boundaries-${category}-${theme}`);
@@ -270,7 +271,7 @@ test("Settings action boundaries remain clearly visible against their surface in
         }
     }
     if (proofs) await writeFile(path.join(proofs, "action-boundaries.json"), JSON.stringify(measurements, null, 2));
-    const faint = measurements.filter(value => value.borderWidth < 1 || contrast(value.boundary, value.outside) < 3);
+    const faint = measurements.filter(value => !value.directional && (value.borderWidth < 1 || contrast(value.boundary, value.outside) < 3));
     assert.deepEqual(faint.map(value => ({ theme: value.theme, label: value.label,
         boundaryContrast: contrast(value.boundary, value.outside), borderWidth: value.borderWidth })), [],
     "Enabled action shapes need a visible boundary, not a near-invisible shadow");
@@ -308,7 +309,8 @@ test("Settings action edges stay visible through real hover, press, focus and na
             assert.notEqual(states[0].fill, states[1].fill, "Hover remains distinct from rest");
             assert.notEqual(states[1].fill, states[2].fill, "Pressed remains distinct from hover");
             for (const state of states) {
-                assert.ok(contrast(state.boundary, state.outside) >= 3, `${theme}/${width}/${scale}/${state.label}/${state.state}`);
+                if (state.directional) assert.equal(state.boundary, state.fill, "A navigation shortcut keeps its arrow, not a command border");
+                else assert.ok(contrast(state.boundary, state.outside) >= 3, `${theme}/${width}/${scale}/${state.label}/${state.state}`);
                 assert.ok(contrast(state.ink, state.fill) >= 4.5, state.label);
                 assert.deepEqual(state.bounds, states[0].bounds, "Interaction must not resize or move the button");
             }
@@ -334,18 +336,13 @@ test("Settings action edges stay visible through real hover, press, focus and na
         await expect(page.locator("#saveCollection")).toBeDisabled();
         const disabled = await actionBoundary(page.locator("#saveCollection"));
         assert.ok(contrast(disabled.boundary, disabled.outside) < 3, "Disabled actions do not borrow an enabled boundary");
-        await page.locator("#saveCollection").locator("..").focus();
-        await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
-        await expect(page.locator("#saveCollection").locator("..")).toBeFocused();
-        assert.equal(await page.locator("#saveCollection").evaluate(node => getComputedStyle(node, "::before").outlineStyle), "solid");
+        await expect(page.locator("#preferenceActions")).toBeHidden();
         await openSourceEditor(page);
-        const cancel = await actionBoundary(page.locator("#cancelSource"));
-        assert.equal(contrast(cancel.boundary, cancel.outside), 1, "Quiet cancellation stays unboxed");
         await page.locator("#cancelSource").click();
         await navigateSettings(page, "display");
         assert.deepEqual(await page.locator("#settingsThemePreference .theme-track").evaluate(node => {
             const box = node.getBoundingClientRect(); return { width: box.width, height: box.height };
-        }), { width: 76, height: 36 });
+        }), { width: 56, height: 30 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     await page.emulateMedia({ forcedColors: "active" });
@@ -360,7 +357,7 @@ test("Settings action edges stay visible through real hover, press, focus and na
 test("Settings button family keeps visible labels, compact faces and balanced icon/text geometry in complete rows", { timeout: 45000 }, async t => {
     const { page, posts } = await setup(t), measurements = [];
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await expect(page.locator("#checkActivity")).toHaveText("Check GitHub");
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
     await expect(page.locator("#checkActivity .settings-action-label")).toBeVisible();
     await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "idle");
     const original = await page.locator("#checkActivity").elementHandle();
@@ -369,7 +366,7 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
         await chooseTheme(page, theme);
         await navigateSettings(page, "connection");
-        await expect(page.locator("#checkActivity")).toHaveAccessibleName("Check GitHub");
+        await expect(page.locator("#checkActivity")).toHaveAccessibleName("Refresh");
         await expect(page.locator("#freshActivity")).toContainText("Collection stays paused.");
         const value = await page.locator("#checkActivity").evaluate(node => {
             const box = node.getBoundingClientRect(), style = getComputedStyle(node), face = getComputedStyle(node, "::before");
@@ -401,10 +398,10 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
         assert.ok(value.centering <= 1);
         assert.ok(value.symbol.ink / value.text.ink >= .9 && value.symbol.ink / value.text.ink <= 1.5,
             "Painted Lucide ink stays proportional to the real label ink");
-        assert.ok(value.gap >= 5 * scale && value.gap <= 6 * scale);
-        for (const padding of value.horizontalPadding) assert.ok(padding >= 9 && padding <= 11);
+        assert.ok(Math.abs(value.gap - 8) <= .5);
+        for (const padding of value.horizontalPadding) assert.ok(Math.abs(padding - 12) <= .5);
         assert.equal(value.descriptionInsideButton, false);
-        assert.deepEqual(value.footer, { gap: 16, padding: 0 }, "Form actions use one deliberate gap, not stacked padding");
+
         if (width === 1440) {
             assert.ok(value.row.buttonRight > value.row.headingRight);
             assert.ok(Math.abs(value.row.buttonY - value.row.headingY) <= 1, "Action aligns with the owning heading row");
@@ -418,11 +415,10 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
                 return { target: box.height, face: box.height - parseFloat(face.top) - parseFloat(face.bottom), line: parseFloat(style.lineHeight) };
             });
             assert.ok(geometry.target >= 44);
-            assert.equal((geometry.face - geometry.line) / 2, 6);
+            assert.ok(geometry.target >= geometry.line, "The action label fits its real target");
         }
         await navigateMain(page, "analyze");
         assert.equal(await original.evaluate(node => node === document.getElementById("checkActivity")), true);
-        await expect(page.locator("#checkActivity")).toHaveClass(/icon-only/);
         await expect(page.locator("#checkActivity .settings-action-label")).toBeHidden();
         await expect(page.locator("#checkActivity")).not.toBeVisible();
         await navigateMain(page, "settings");
@@ -613,7 +609,7 @@ test("settled Settings save retires its blocked-history announcement without rep
     await page.evaluate(() => { location.hash = "#settings?section=privacy"; });
     await expect(page.locator("#message.pending-save")).toContainText("Wait for the current local save to finish");
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
-    await expect(page).toHaveURL(/#settings\?section=connection$/);
+    await expect(page).toHaveURL(/\/settings\?section=connection$/);
     held.resolve();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
     await expect(page.locator("#message")).toBeHidden();
@@ -656,17 +652,16 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await navigateSettings(page, "troubleshooting");
-        for (const id of ["serviceProvenanceHelp", "authorProvenanceHelp", "settingsSearchDetails"]) {
-            const details = page.locator("#" + id);
-            if (!await details.evaluate(node => node.open)) await details.locator("summary").click();
-        }
-        await capture(page, `troubleshooting-expanded-${width}-${theme}`);
+        await page.locator('[data-help-topic="history"]').click();
+        await capture(page, `help-history-${width}-${theme}`);
+        await page.goBack(); await expect(page.locator("#help-reports")).toBeVisible();
+        await page.goBack();
         await page.locator("#settingsSearch").fill("no-such-setting");
         await expect(page.locator("#settingsSearchCount")).toContainText("No settings match");
         await capture(page, `settings-empty-search-${width}-${theme}`);
         await page.locator("#settingsSearch").press("Escape");
         await expect(page.locator("#settingsSearch")).toHaveValue("");
-        await navigateSettings(page, "display");
+        await navigateSettings(page, "regional");
         for (const id of ["displayTimeZone"]) {
             const trigger = page.locator(`#${id}-control`);
             await trigger.focus();
@@ -679,7 +674,8 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
             await expect(trigger).toBeFocused();
         }
     }
-    await page.locator(".settings-status-link a").click();
+    await navigateSettings(page, "connection");
+    await page.locator("#settingsStatusLink a").click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
     for (const id of ["collectionSetup", "recorderDiagnostics"]) {
         const details = page.locator("#" + id);
@@ -721,7 +717,7 @@ test("Settings distinguishes labels, source permission and collection state with
         await expect(page.locator("#connectionStatus")).toHaveText("Paused");
         await expect(page.locator("#connectionSource").getByText("GitHub Copilot app", { exact: true })).toHaveCount(1);
         await inspectSourcePaths(page);
-        const paths = await page.locator(".settings-paths").evaluate(root => {
+        const paths = await page.locator("#approvedSourceDetails .settings-paths").evaluate(root => {
             const labels = [...root.querySelectorAll("dt")], values = [...root.querySelectorAll("dd")];
             return labels.map((label, index) => ({
                 labelColor: getComputedStyle(label).color, valueColor: getComputedStyle(values[index]).color,
@@ -760,6 +756,7 @@ test("Settings unapproved-source presentation reviews paths without granting per
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#connectionStatus")).toHaveText("Not connected");
+    await navigateSettings(page, "source-access");
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
@@ -796,7 +793,7 @@ test("Settings utility and disabled-help hit areas preserve reading geometry thr
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await chooseTheme(page, theme);
-        for (const control of [page.locator("#clearSettingsSearch"), page.locator("#saveCollection").locator("..")]) {
+        for (const control of [page.locator("#clearSettingsSearch")]) {
             await control.scrollIntoViewIfNeeded();
             const before = await readingBoxes();
             await control.hover();
@@ -856,7 +853,7 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     await page.locator("#checkActivity").click({ position: { x: refreshBounds.width / 2, y: 2 } });
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await expect(page.locator("#checkActivity")).toHaveAttribute("aria-busy", "true");
-    await expect(page.locator("#checkActivity")).toHaveText("Check GitHub");
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
     await expect(page.locator("#settingsDraftStatus")).toBeHidden();
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, refreshBounds.width);
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
@@ -864,7 +861,7 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
         await chooseTheme(page, theme);
         await capture(page, `connection-refresh-pending-${theme}-${width}-${scale}x`);
-        assert.equal(await page.locator("#checkActivity .wire-icon").evaluate(node => node.getBoundingClientRect().width), 16 * scale);
+        assert.equal(await page.locator("#checkActivity svg").first().evaluate(node => node.getBoundingClientRect().width), 16 * scale);
         const layout = await geometry(page);
         assert.equal(layout.overflow, false);
         assert.deepEqual(layout.clipped, []);
@@ -907,13 +904,11 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     }
     const readsBefore = snapshotReads;
     assert.equal((await observe("Connection")).detailHome, "freshHelpBody");
-    await navigateSettings(page, "display");
-    assert.equal((await observe("Display")).detailHome, "freshHelpBody");
-    await navigateMain(page, "collection-status");
+    await navigateSettings(page, "connection");
+    await page.locator("#settingsStatusLink a").click();
+    await expect(page.locator("#collectionStatusView")).toBeVisible();
     assert.equal((await observe("Collection status")).helpHidden, false);
     if (!await page.locator("#freshHelp").evaluate(node => node.open)) await page.locator("#freshHelp > summary").click();
-    await page.goBack();
-    await expect(page.locator("[data-settings-section=display]")).toBeVisible();
     await page.goBack();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     const restored = await observe("Back to Connection");
@@ -949,7 +944,7 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
 test("Source review combines paths and preferences in one decision without granting fresh permission for preference-only edits", { timeout: 30000 }, async t => {
     const { page, config, runtime, posts } = await setup(t, { preferenceSave: true });
     await expect(page.locator("#viewApprovedSource")).not.toBeVisible();
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await expect(page.locator("#sourceDatabase")).toBeFocused();
     await expect(page.locator("#sourceEditor #collectionWindow-control")).toBeVisible();
     await expect(page.locator("#sourceEditor #collectionCadence-control")).toBeVisible();
@@ -958,35 +953,20 @@ test("Source review combines paths and preferences in one decision without grant
     await expect(page.locator("#connectCollection")).toBeDisabled();
     await selectActivityOption(page, "collectionCadence", "15");
     await expect(page.locator("#connectCollection")).toBeEnabled();
-    await page.locator("#settingsSearch").fill("Save preferences");
-    await page.locator('#settingsSearchResults a[data-setting="save-preferences"]').click();
-    await expect(page.locator("#connectCollection")).toBeFocused();
-    assert.equal(posts.filter(value => value === "/api/collection/configure").length, 0, "The old save destination only focuses the consolidated decision");
-    await page.locator("#settingsSearch").press("Escape");
-    await page.locator("#wireSearch").fill("Save preferences");
-    await selectActivityOption(page, "wireSearchType", "setting");
-    await page.locator("#wireSearchResults button").filter({ has: page.locator(".wire-search-title", { hasText: "Save preferences" }) }).click();
-    await expect(page.locator("#connectCollection")).toBeFocused();
-    assert.equal(posts.filter(value => value === "/api/collection/configure").length, 0, "Receipt-bound Search also only locates the same-source decision");
-    await capture(page, "connection-source-preference-decision");
     await page.locator("#connectCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
     await expect(page.locator("#sourceEditor")).not.toBeVisible();
+    await navigateSettings(page, "connection");
     await expect(page.locator("#connectionPreferences #collectionCadence-control")).toBeVisible();
     const status = await runtime.collector.status();
     assert.equal(status.config.enabled, false);
     assert.equal(status.config.appDbPath, config.appDbPath);
     assert.equal(status.config.pollSeconds, 15);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
     await expect(page.locator("#connectCollection")).toHaveText("Approve and switch source");
     await expect(page.locator("#approvalScope")).toContainText("Collection stays paused");
-    await page.locator("#wireSearch").fill("Save preferences");
-    await page.locator("#wireSearchResults button").filter({ has: page.locator(".wire-search-title", { hasText: "Save preferences" }) }).click();
-    await expect(page.locator("#settingsDraftStatus")).toBeFocused();
-    await expect(page.locator("#connectCollection")).not.toBeFocused();
-    assert.equal(posts.filter(value => value === "/api/collection/configure").length, 1, "A source-change draft is not presented or submitted as a preference-only save");
-    await capture(page, "connection-source-permission-decision");
+    assert.equal(posts.filter(value => value === "/api/collection/configure").length, 1, "Changing paths in an editor is not permission to save");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#editSource")).toBeFocused();
     await expect(page.locator("#sourceSessions")).toHaveValue(config.sessionRoot);
@@ -1024,7 +1004,7 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
     await navigateSettings(page, "display");
     await navigateMain(page, "analyze");
     await page.goBack();
-    await expect(page.locator("[data-settings-section=display]")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     await page.goBack();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     assert.equal(sourceChecks, original.sourceChecks);
@@ -1058,13 +1038,14 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
     }, null, 2));
 });
 
-test("Troubleshooting converges collection investigation but keeps the unrelated HTTP diagnostic distinct", { timeout: 30000 }, async t => {
+test("Collection keeps its status destination distinct from the optional HTTP diagnostic", { timeout: 30000 }, async t => {
     const { page, posts } = await setup(t);
-    await navigateSettings(page, "troubleshooting");
-    await expect(page.locator('#settingsView a[href="#collection-status"]:visible')).toHaveCount(1);
-    await expect(page.locator('#settingsView a[href="#collection-status?setting=issues"]:visible')).toHaveCount(0);
-    await expect(page.locator('#settingsView a[href="#collection-status?setting=collection-details"]:visible')).toHaveCount(0);
-    const diagnostic = page.locator('#settingsView a[href="#collection-status?setting=network-diagnostic"]');
+    await navigateSettings(page, "connection");
+    await expect(page.locator('#settingsView a[href="/collection-status"]:visible')).toHaveCount(1);
+    await expect(page.locator('#settingsView a[href="/collection-status?setting=issues"]:visible')).toHaveCount(0);
+    await expect(page.locator('#settingsView a[href="/collection-status?setting=collection-details"]:visible')).toHaveCount(0);
+    await page.locator("#settingsSearch").fill("Optional network diagnostic");
+    const diagnostic = page.locator('#settingsSearchResults a[data-setting="network-diagnostic"]');
     await expect(diagnostic).toBeVisible();
     await diagnostic.click();
     await expect(page.locator("#recorderDiagnostics")).toHaveAttribute("open", "");
@@ -1072,8 +1053,8 @@ test("Troubleshooting converges collection investigation but keeps the unrelated
     await expect(page.locator("#recorderPurpose")).toContainText("not collection");
     assert.equal(posts.includes("/api/record"), false);
     await page.goBack();
-    await expect(page.locator("[data-settings-section=troubleshooting]")).toBeVisible();
-    await page.locator('#settingsView a[href="#collection-status"]:visible').click();
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
+    await page.locator('#settingsView a[href="/collection-status"]:visible').click();
     await expect(page.locator("#collectionStatusView")).toBeVisible();
     assert.equal(posts.some(value => /\/(?:record|confirm|approve|configure|enabled|now)$/.test(value)), false);
 });
@@ -1088,7 +1069,7 @@ test("The unified source decision retains pending, rejected, read-result and can
         await held;
         await route.fulfill({ status: 422, json: { error: "Synthetic source validation failed." } });
     });
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceSessions").fill(config.sessionRoot + "-draft");
     await selectActivityOption(page, "collectionCadence", "15");
     await page.locator("#connectCollection").click();

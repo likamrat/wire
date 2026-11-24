@@ -1,21 +1,19 @@
 ---
 name: wire-source-integration
-description: Integrate WIRE sources through approved acquisition, retention and existing product interfaces. Use for local collectors, source adapters, account lifecycle, Windows/WSL source access, pagination, fidelity or acquisition-window changes. Distinguish sample reads and fixture proof from normal end-to-end operation.
+description: Traces approved WIRE sources from discovery to retained readback. Use for collector or adapter changes, Windows/WSL access, journal formats, continuations, checkpoints and account changes.
 license: MIT
 ---
 
 # WIRE source integration
 
-Use the existing collection, storage, reading and account seams. WIRE is a local
-Node server with a browser interface, not a new chat client or an Electron rewrite.
-Read [collection](../../../docs/collection.md) and
-[platform setup](../../../docs/development.md#windows-wsl-and-linux) on the
-actual candidate.
+Start with the [source mapping and read bounds](../../../docs/collection.md#source-mapping-and-bounded-reads).
+For Windows/WSL changes, check [platform setup](../../../docs/development.md#windows-wsl-and-linux).
 
-The supported source is approved local GitHub Copilot app metadata and history.
-Microsoft 365 Chat, Cowork and remote-only provider history are not supported
-sources. An explicitly requested future adapter needs its own qualified contract;
-historical feasibility notes do not establish implementation or permission.
+Normal startup reads approved local GitHub Copilot app metadata and history.
+The development-only Microsoft 365 Chat and Cowork adapters have separate
+configuration and access requirements. Do not advertise them as normal
+sources or turn them on to test the Copilot-only experience. A fixture is not
+evidence of access to a real account.
 
 ## Establish the source contract first
 
@@ -74,7 +72,16 @@ namespaces.
 
 ## Prove the actual requirement
 
+For a bounded reader, put an eligible record beyond the first read budget.
+Follow it through continuation, or show where coverage stops. A completed
+request with unread history cannot establish an empty selection. Cancel or
+withdraw access between reads and check that the stopped operation can neither
+read the next part nor commit.
+
 Use disposable fixtures to prove decoder, lifecycle and integration mechanics.
+When event framing or recognition changes, run the [journal compatibility check](../../../docs/development.md#changing-a-copilot-journal-format).
+Use the same invented originals for ordinary collection and late-mapping
+recovery. Compare the prompt, call and recorded completion, not just the count.
 Where genuine acquisition is required, qualify the normal source path under
 actual permission and read back its committed results. Fixture success,
 authentication or one selected conversation cannot establish complete history.

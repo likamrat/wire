@@ -34,7 +34,17 @@ ${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face =>
 .chart-fade-high {stop-color:var(--chart-mark-high)}
 .chart-fade-low {stop-color:var(--chart-mark-low)}
 `;
+// Screen selection surfaces need brighter identity inks; frozen chart exports stay unchanged.
+const darkServiceInks = Object.values(servicePalette).map(entry =>
+    `--chart-${entry.token}-label:color-mix(in srgb,${entry.dark.label} 70%,#ffffff);`).join("");
+export const screenServiceInkStyles = `
+@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {${darkServiceInks}}}
+:root[data-evidence-theme=dark] {${darkServiceInks}}
+`;
 export const dimensionalChartStyles = `
+.timeline-window{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.timeline-window>p{flex-basis:100%;margin:0;font-size:var(--type-small);line-height:var(--leading-ui)}
+.timeline-window>button[aria-disabled=true]{color:var(--muted);cursor:default}
 ${dimensionalColumnStyles}
 .flat-comparison {display:grid;gap:12px;min-width:0;container-type:inline-size}
 .flat-comparison-row {min-width:0}
@@ -61,6 +71,8 @@ ${dimensionalColumnStyles}
 #chartFooter:has(>span:only-child:empty) {display:none}
 .dimensional-time-labels {display:grid;grid-auto-flow:column;grid-auto-columns:var(--scene-pitch);min-height:48px;margin:0;padding-top:24px;color:var(--muted);font-size:var(--type-small);text-align:center}
 .dimensional-time-labels>span {padding-inline:8px;overflow-wrap:anywhere;min-width:0}
+.dimensional-time-labels>a {padding:4px;min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-small);color:var(--accent);text-decoration:none}
+.dimensional-time-labels>a:is(:hover,:focus-visible) {background:var(--hover);text-decoration:underline}
 .flat-time-plot {position:relative;min-width:100%;--time-gutter:40px}
 .flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0 0 0 var(--time-gutter);padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}
@@ -73,6 +85,10 @@ ${dimensionalColumnStyles}
 .flat-time-plot .time-column:focus-visible {outline:0}
 .flat-time-plot .dimensional-count {font-size:1rem;min-width:44px}
 .flat-time-plot .time-zero {position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:0;background:none}
+.time-zero[href] .dimensional-count {pointer-events:auto;color:var(--accent)}
+.time-zero[href]:focus-visible .dimensional-count {outline:2px solid var(--focus)}
+.time-segment-link {position:absolute;left:50%;transform:translateX(-50%)}
+.time-segment-link:is(:hover,:focus-visible) {outline:2px solid var(--focus);outline-offset:1px;z-index:1}
 .flat-time-plot .dimensional-time-labels {grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));grid-auto-flow:row;grid-auto-columns:auto;padding:12px 0 0;margin-left:var(--time-gutter);font-size:var(--type-small);min-height:44px}
 .flat-time-axis {position:absolute;bottom:0;left:calc(-1 * var(--time-gutter));height:var(--time-height);width:calc(var(--time-gutter) - 12px);display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;color:var(--muted);font-size:var(--type-small);font-variant-numeric:tabular-nums;pointer-events:none}
 .flat-time-axis>span {line-height:1}

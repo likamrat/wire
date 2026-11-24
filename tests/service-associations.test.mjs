@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { buildActivityAnalytics, buildRequestActivity, getActivityDrilldown } from "../lib/activity-analytics.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
+import { adaptEvaluationReport, freezeEvaluationFacts } from "../lib/report-facts.mjs";
+import { buildSanitizedBundle } from "../lib/export.mjs";
 import { serviceCategories, createServiceCategories } from "../lib/service-categories.mjs";
 import { classifyWorkload } from "../lib/graph-history.mjs";
 import { executeAction } from "../lib/server.mjs";
@@ -11,6 +13,41 @@ import { privateFixture } from "./helpers.mjs";
 import { serviceEvidenceFixture } from "./service-evidence-fixtures.mjs";
 import { normalizeEndpoint } from "../lib/analytics.mjs";
 import { routeShape } from "../lib/graph.mjs";
+
+test("retained Exchange ID conversion paths identify the operation but not the mailbox item type", () => {
+    const record = serviceEvidenceFixture();
+    const paths = ["/me/translateExchangeIds", "https://graph.microsoft.com/beta/users/PRIVATE-USER/translateExchangeIds?inputIds=PRIVATE-ITEM",
+        "/me/{id}", "/me/unknownAction", "/users/translateExchangeIds", "https://untrusted.invalid/me/translateExchangeIds"];
+    record.toolCalls = paths.map((actionUrl, i) => ({ ...record.toolCalls[1], toolCallId: `action-${i}`, startEventId: `event-${i}`,
+        tool: "workiq-do_action", requestedApiPath: actionUrl, requestArgs: { actionUrl }, apiResults: [{ index: 0, statusCode: 200 }] }));
+    const before = structuredClone(record);
+    for (const layer of ["tool", "reported-api"]) {
+        const model = buildActivityAnalytics([record], { layer });
+        const rows = model.rows;
+        assert.deepEqual(rows.slice(0, 2).map(r => r.endpoint.path), ["/me/translateExchangeIds", "/users/{id}/translateExchangeIds"]);
+        for (const r of rows.slice(0, 2)) {
+            assert.equal(r.workload, "Unknown");
+            assert.deepEqual(r.serviceAssociation.services, []);
+            assert.equal(r.serviceAssociation.gaps[0].reason, "exchange-item-type");
+            assert.match(serviceCategories.attributionReading(r, layer).text, /Exchange item IDs/);
+            assert.doesNotMatch(JSON.stringify(r.endpoint), /PRIVATE/);
+        }
+        assert.deepEqual(rows.slice(2).map(r => r.serviceAssociation.gaps.map(g => g.reason)),
+            [["unrecognized-path"], ["unrecognized-path"], [], ["unsupported-target"]]);
+    }
+    assert.equal(normalizeEndpoint(routeShape("/users/PRIVATE-USER/translateExchangeIds")).path, "/users/{id}/translateExchangeIds");
+    const state = { revision: 0, pseudonymKey: "e".repeat(64) };
+    const current = buildReportFacts([record], state).facts;
+    assert.ok(current.patterns.length && current.patterns.every(entry => entry.pattern.version === 4));
+    assert.doesNotMatch(JSON.stringify(current), /PRIVATE-(USER|ITEM)/);
+    const downgraded = structuredClone(current);
+    for (const { pattern } of downgraded.patterns) Object.assign(pattern, { version: 3, normalizer: "wire-safe-technical-pattern-v3" });
+    assert.throws(() => freezeEvaluationFacts(downgraded), /category-definition-mismatch/);
+    const historical = buildReportFacts([{ ...record, toolCalls: record.toolCalls.slice(2) }], state).facts;
+    const adapted = facts => adaptEvaluationReport(facts, { bundleId: "export-test", snapshotHash: "9".repeat(64), disclosureReviewed: true });
+    assert.notEqual(adapted(current).patternVersion, adapted(historical).patternVersion);
+    assert.deepEqual(record, before, "Reopening retained calls needs no new collection or evidence rewrite.");
+});
 
 test("People profile relationships share classification across raw, normalized and privacy-projected targets", () => {
     for (const target of [
@@ -78,8 +115,10 @@ test("supported associations deduplicate targets and calls while legacy categori
     record.toolCalls = [record.toolCalls[1]];
     record.toolCalls[0].requestArgs.entityUrls.push("/me/messages", "/me/messages");
     const before = structuredClone(record);
-    const model = buildActivityAnalytics([record, structuredClone(record)]);
+    const alias = { ...structuredClone(record), scenarioId: `${record.scenarioId}-copy` };
+    const model = buildActivityAnalytics([record, alias]);
     const row = model.rows[0], involvement = model.serviceInvolvement;
+    assert.equal(model.exclusions.duplicateRecords, 1);
     assert.deepEqual(row.serviceAssociation.services, ["Mail", "Files"]);
     assert.equal(row.serviceAssociation.status, "identified");
     assert.equal(involvement.definition.id, "wire-service-involvement");
@@ -225,6 +264,26 @@ test("returned results match only their own supported target, never parent multi
     assert.equal(context.apiCoverage.eligibleToolCalls, 2);
     assert.ok(context.apiCoverage.returnedResultUnits >= context.apiCoverage.selectedResultUnits);
     assert.equal(buildActivityAnalytics([record], { layer: "http" }).totals.count, 0);
+});
+
+test("a different returned target rules out the single requested target as a fallback for a pathless sibling", async () => {
+    const record = serviceEvidenceFixture();
+    const call = record.toolCalls[1]; record.toolCalls = [call];
+    call.requestArgs.entityUrls = ["/me/messages"];
+    call.apiResults = [{ index: 0, statusCode: 200, path: "/me/calendarView" }, { index: 1, statusCode: 403 }];
+    const snapshot = buildActivityAnalytics([record], { layer: "reported-api" });
+    assert.deepEqual(snapshot.rows.map(r => [r.status, r.endpoint.path, r.serviceAssociation.services]), [
+        [200, "/me/calendarView", ["Calendar"]], [403, null, []],
+    ]);
+    const report = await buildSanitizedBundle([record], "b".repeat(64), { formats: ["json"], promptMode: "none" });
+    const facts = JSON.parse(report.files["product-report.json"]).evaluationFacts;
+    const patterns = facts.patterns.filter(p => p.pattern.unitKind === "returned-api-entry").map(p => p.pattern.display);
+    assert.equal(patterns.length, 2);
+    assert.deepEqual(patterns.map(p => p.workload).sort(), ["Calendar", "Unknown"]);
+    assert.deepEqual(patterns.flatMap(p => p.endpoints.map(e => e.pathTemplate)), ["/me/calendarView"]);
+    // A legacy response with no differing target can still show the requested path as context.
+    delete call.apiResults[0].path;
+    assert.ok(buildActivityAnalytics([record], { layer: "reported-api" }).rows.every(r => r.endpoint.path === "/me/messages"));
 });
 
 test("association enrichment preserves published category-v3 frozen facts and canonical membership bytes", () => {

@@ -37,7 +37,7 @@ async function pdfText(bytes) {
     } finally { await task.destroy(); }
 }
 
-for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: used-only category definitions travel in all four frozen formats`, { timeout: 60000 }, async () => {
+for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: frozen reports distinguish activity categories from measured service involvement`, { timeout: 60000 }, async () => {
     const original = source(), before = structuredClone(original);
     const bundle = await buildSanitizedBundle([original], "a".repeat(64), {
         promptMode, formats: ["html", "pdf", "json", "markdown"],
@@ -48,14 +48,17 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: us
     const definitions = serviceCategories.used(["Calendar", "Search"]);
     assert.deepEqual(snapshot.serviceCategories, definitions);
     assert.deepEqual(bundle.snapshot.serviceCategories, definitions);
+    const involvement = snapshot.evaluationFacts.serviceInvolvement;
+    assert.equal(involvement.denominator, 2);
+    assert.deepEqual(involvement.groups.map(({ service, count }) => [service, count]), [["Calendar", 1], ["Search", 1]]);
     const html = bundle.files["product-report.html"], markdown = bundle.files["product-report.md"], pdf = await pdfText(bundle.files["product-report.pdf"]);
-    for (const text of [html, markdown, pdf]) {
-        assert.match(text, /Activity categories in this report/);
-        for (const definition of definitions) assert.ok(text.includes(definition.description), definition.id);
-        for (const definition of serviceCategories.entries.filter((entry) => !["Calendar", "Search"].includes(entry.id))) assert.ok(!text.includes(definition.description), definition.id);
+    for (const text of [html.replace(/<[^>]+>/g, " "), markdown.replace(/\|/g, " "), pdf]) {
+        const words = text.replace(/\s+/g, " ");
+        assert.match(words, /2 covered calls\. Each call counts once per service; services overlap/);
+        assert.match(words, /Calendar 1 \/ 2 \(?50%\)? Search and retrieval 1 \/ 2 \(?50%\)?/);
+        assert.match(words, /Service definition: wire-service-involvement v1/);
     }
-    assert.match(html, /<section[^>]*class="service-glossary"/);
-    assert.doesNotMatch(html, /title="Meeting and calendar/);
+    assert.doesNotMatch(html, /<section[^>]*class="service-glossary"|title="Meeting and calendar/);
     assert.equal(manifest.snapshotHash, hash(JSON.stringify(bundle.snapshot)));
     for (const [name, bytes] of Object.entries(bundle.files).filter(([name]) => name !== "coverage-and-redaction-manifest.json")) assert.equal(manifest.files[name].sha256, hash(bytes));
     assert.deepEqual(original, before);
@@ -65,8 +68,8 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: us
 
 test("category glossary does not add unused services, counts, source prose, or synthetic records", async () => {
     await assert.rejects(buildSanitizedBundle([], "a".repeat(64)), /non-empty exact selection/);
-    assert.doesNotMatch(renderHtmlReport([]), /Services in this report/);
-    assert.doesNotMatch(renderMarkdownReport([]), /Services in this report/);
+    assert.doesNotMatch(renderHtmlReport([]), /class="service-glossary"/);
+    assert.doesNotMatch(renderMarkdownReport([]), /Activity categories:/);
     const synthetic = source(); synthetic.sample = true;
     const excluded = await buildSanitizedBundle([synthetic], "a".repeat(64), { formats: ["json"] });
     assert.deepEqual(excluded.snapshot.serviceCategories, []);
@@ -75,11 +78,18 @@ test("category glossary does not add unused services, counts, source prose, or s
     unknown.toolCalls[0].requestArgs = { entityUrls: ["/unclassified"] };
     unknown.toolCalls[0].apiResults = [];
     const bundle = await buildSanitizedBundle([unknown], "a".repeat(64), { formats: ["json", "html", "markdown"] });
-    assert.deepEqual(bundle.snapshot.serviceCategories, serviceCategories.used(["Unknown"]));
-    assert.match(bundle.files["product-report.html"], /does not mean the call failed/);
+    assert.deepEqual(bundle.snapshot.serviceCategories, [serviceCategories.display("Unknown")]);
+    assert.deepEqual(bundle.snapshot.evaluationFacts.serviceInvolvement.groups, []);
+    for (const text of [bundle.files["product-report.html"], bundle.files["product-report.md"]]) {
+        assert.match(text, /1 call with missing or partial service details/);
+        assert.match(text, /No supported service associations/);
+        assert.match(text, /1 completed/);
+    }
     assert.equal(bundle.snapshot.serviceCategories.some((entry) => Object.hasOwn(entry, "count")), false);
     assert.equal(bundle.snapshot.serviceCategories.some((entry) => Object.values(entry).some((text) => text.includes("SYNTHETIC_PRIVATE_PROMPT"))), false);
     const records = bundle.records;
-    assert.ok(renderHtmlReport(records).includes(serviceCategories.describe("Unknown").description));
-    assert.ok(renderMarkdownReport(records).includes(serviceCategories.describe("Unknown").description));
+    for (const text of [renderHtmlReport(records), renderMarkdownReport(records)]) {
+        assert.match(text, /Service involvement was not saved/);
+        for (const entry of serviceCategories.entries) assert.equal(text.includes(entry.description), entry.id === "Unknown", entry.id);
+    }
 });

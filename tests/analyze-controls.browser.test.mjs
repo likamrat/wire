@@ -1,11 +1,12 @@
 import test from "node:test";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, restoreLegacySearch, chooseTheme, navigateMain, navigateSettings, revealAnalyzeRecords } from "./helpers.mjs";
+import { selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters, chooseTheme, navigateMain, navigateSettings, revealAnalyzeRecords } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 
@@ -55,11 +56,10 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     async function shortcut(id, name) {
         const drawer = page.locator("#navigationDrawer");
         if (width < 700 && !await drawer.isVisible()) await page.locator("#navigationToggle").click();
-        await expect(page.locator("#analyzeTools")).toBeVisible();
         await expect(page.locator("#pageAction")).toBeHidden();
         await expect(page.locator("#openAnalyzeFilters")).toBeHidden();
         await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
-        const control = page.locator("#analyzeTools #" + id);
+        const control = page.locator("#navigationContent #" + id);
         await expect(control).toHaveAccessibleName(name);
         await control.focus();
         if (process.env.WIRE_SIDEBAR_PROOFS) {
@@ -80,8 +80,8 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await navigateSettings(page, "display");
     await shortcut("comparePeriods", "Compare");
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-    await expect(page.locator("#comparisonAPreset-control")).toBeFocused();
-    await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#comparisonDates")).toBeVisible();
+    await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     await navigateMain(page, "settings"); await ready(page);
     await navigateMain(page, "analyze"); await ready(page);
     await expect(page.locator("#periodComparisonSetup")).toBeHidden();
@@ -105,7 +105,7 @@ test("Filters and view discloses the same controls without querying, resetting o
     await expect(page.locator("#openAnalyzeFilters")).toBeVisible();
     await expect(page.locator("#filters")).not.toBeVisible();
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("15");
     await page.evaluate(() => {
@@ -206,10 +206,10 @@ test("closed-panel captions keep accepted membership through pending and failed 
     await closeAnalyzeFilters(page);
     await expect(page.locator("#activityCount")).toHaveText("15");
     await expect(page.locator("#analyzeScopeCaption")).not.toContainText("Files");
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Current collection/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/Saved collection/);
     await expect(page.locator("#openAnalyzeFilters")).not.toHaveAccessibleDescription(/Service: Files/);
     await expect(page.locator("#analyzeScopeStatus")).not.toBeVisible();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
     await expect(page.locator("#analyzeScopeError")).not.toBeVisible();
     release(); await ready(page);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("7");
@@ -253,7 +253,7 @@ test("routine pending reads do not add text, a divider or height to Recorded out
     if (proof) await mkdir(proof, { recursive: true });
     const geometry = () => page.locator(".analyze-outcome-summary").evaluate(node => ({
         height: node.getBoundingClientRect().height,
-        footerVisible: document.getElementById("analyzeScopeSummary").checkVisibility(),
+        scopeInWidget: node.contains(document.getElementById("analyzeScopeSummary")),
         total: node.querySelector(".percentage-total-value").textContent,
         caption: document.getElementById("analyzeScopeCaption").textContent,
         revision: document.getElementById("analyzeScopeSummary").dataset.revision,
@@ -353,6 +353,15 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     assert.match(selection, /1 request group included/);
     await openAnalyzeFilters(page);
     const before = snapshots.length, authors = page.locator("#promptAuthorFilter-control");
+    const dialog = page.locator("#analyzeFilterDialog");
+    assert.equal(await dialog.evaluate(n => n.matches(":modal")), false);
+    await authors.click();
+    await page.locator('.select-popup [data-value="agent"]').click();
+    await page.locator("#main h1:visible").first().click({position:{x:2,y:2}});
+    await expect(dialog).toBeHidden();
+    assert.equal(snapshots.length,before);
+    assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(n=>[...n.selectedOptions].map(o=>o.value)),["user","agent","unknown"]);
+    await openAnalyzeFilters(page);
     await authors.click();
     await page.locator('.select-popup [data-value="agent"]').click();
     await page.keyboard.press("Escape");
@@ -370,6 +379,11 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     await expect(page.locator("#analyzeFilterDialog")).not.toBeVisible();
     await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
 
+    await page.setViewportSize({width:390,height:844});
+    await openAnalyzeFilters(page);
+    assert.equal(await dialog.evaluate(n => n.matches(":modal")),true);
+    await page.keyboard.press("Escape"); await expect(page.locator("#openAnalyzeFilters")).toBeFocused();
+    await page.setViewportSize({width:1280,height:900});
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill(olderDay);
     await page.locator("#toFilter").fill(newerDay);
@@ -383,15 +397,16 @@ test("nested draft dismissal and custom dates preserve the native commit and res
     assert.equal(snapshots.at(-1).filters.from, olderDay);
     assert.equal(snapshots.at(-1).filters.to, newerDay);
     await closeAnalyzeFilters(page);
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAttribute("aria-label", /1 active filter/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleName("1 filter applied");
     await expect(page.locator("#analyzeScopeCaption")).not.toContainText("All dates");
     await openAnalyzeFilters(page);
     await page.locator("#resetView").click(); await ready(page);
     await closeAnalyzeFilters(page);
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
-    await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary #periodResult")).toBeVisible();
+    await expect(page.locator("#periodResult")).toContainText("All dates");
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
-    await expect(page.locator("#analyzeFilterCount")).not.toBeVisible();
+    await expect(page.locator("#openAnalyzeFilters")).toHaveText("Filters");
     await expect(page.locator("#activitySelectionSummary")).toHaveText(selection);
     assert.ok(await page.locator("#activityList").evaluate(list => {
         const actions = document.getElementById("analyzeResultActions"), pager = document.getElementById("activityPager");
@@ -402,8 +417,8 @@ test("nested draft dismissal and custom dates preserve the native commit and res
 
 test("an unconfirmed source check stays visible without becoming a red failure or replaying an update", { timeout: 30000 }, async t => {
     const { page, snapshots } = await setup(t, { initialize: () => sessionStorage.setItem("workiq-evidence.source-check.v1", "pending") });
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("unconfirmed");
-    await expect(page.locator("#analyzeScopeStatus")).toContainText("will not be repeated");
+    await expect(page.locator("#analyzeRefreshStatus")).toContainText("source check unconfirmed");
+    await expect(page.locator("#analyzeRefresh")).toHaveAccessibleName("Retry reading saved activity");
     await expect(page.locator("#analyzeScopeError")).not.toBeVisible();
     const reads = snapshots.length;
     await openAnalyzeFilters(page);
@@ -438,47 +453,50 @@ test("scoped-chat detail stays in Filters while material coverage remains beside
 });
 
 test("native chart keyboard links, modified clicks and Back retain exact scoped membership", { timeout: 30000 }, async t => {
-    const { page, snapshot } = await setup(t);
-    await restoreLegacySearch(page, "Invented");
+    const { page, snapshot, chatId } = await setup(t);
+    await selectActivityOption(page, "chatFilter", chatId); await ready(page);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await closeAnalyzeFilters(page);
     const beforeIds = snapshot().analytics.rows.map(row => row.id).sort();
-    const failedIds = snapshot().analytics.rows.filter(row => row.outcome === "failure").map(row => row.id).sort();
+    const failedRows = snapshot().analytics.rows.filter(row => row.outcome === "failure");
     const failed = page.locator("#outcomeChart").getByRole("link", { name: /^Tool failed:/ });
     await failed.focus();
     const key = await failed.getAttribute("data-view-key");
     await failed.press("Enter"); await ready(page);
-    assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), failedIds);
+    await expect(page.locator("#activityCount")).toHaveText(String(failedRows.length));
+    assert.deepEqual(await page.locator("#activityList article").evaluateAll(rows => rows.map(r => r.dataset.viewKey).sort()),
+        [...new Set(failedRows.map(row => "request:" + row.scenarioId))].sort());
     await page.goBack(); await ready(page);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), beforeIds);
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.viewKey), key);
-    await expect(page.locator("#activitySearch")).toHaveValue("Invented");
-    const column = page.locator("#chart .time-column[href]").first();
-    const target = await column.getAttribute("href");
+    await expect(page.locator("#chatFilter")).toHaveValue(chatId);
+    const column = page.locator("#chart .dimensional-time-labels a").first();
+    const target = await column.getAttribute("href"), point = snapshot().analytics.timeSeries.points.find(p => p.drilldownIds.length);
     assert.doesNotMatch(target, /search=|Invented/);
     const [opened] = await Promise.all([page.context().waitForEvent("page"), column.click({ modifiers: ["Control"] })]);
     await ready(opened);
-    const [view, query] = new URL(opened.url()).hash.split("?");
-    const [expectedView, expectedQuery] = target.split("?");
-    assert.equal(view, expectedView);
-    const expectedParameters = new URLSearchParams(expectedQuery);
-    assert.equal(expectedParameters.get("privateView"), "required");
-    expectedParameters.delete("privateView");
-    assert.deepEqual([...new URLSearchParams(query)].sort(), [...expectedParameters].sort());
-    await expect(opened.locator("#activityCount")).toHaveText(String(beforeIds.length));
+    const expected = new URL(target, page.url());
+    assert.equal(expected.searchParams.get("privateView"), "required");
+    assert.equal(new URL(opened.url()).pathname, expected.pathname);
+    await expect(opened.locator("#chatFilter")).toHaveValue(chatId);
+    await expect(opened.locator("#activityCount")).toHaveText(String(point.drilldownIds.length));
     await opened.close();
     await expect(page.locator('[data-analyze-mode="calls"]')).toHaveCount(0);
 });
 
 test("relocated launchers use native records, reference, comparison and update destinations", { timeout: 30000 }, async t => {
-    const { page, snapshots, snapshot, olderDay, newerDay } = await setup(t);
+    const { page, snapshots, olderDay, newerDay } = await setup(t);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill(olderDay); await page.locator("#toFilter").fill(newerDay);
+    const applying = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok()
+        && r.request().postDataJSON().filters.from === olderDay && r.request().postDataJSON().filters.to === newerDay);
     await page.locator("#applyDates").click(); await ready(page);
+    const applied = await applying;
     await closeAnalyzeFilters(page);
-    const before = structuredClone(snapshot().analytics.rows.map(row => row.id).sort());
-    const filters = structuredClone(snapshots.at(-1).filters);
+    const before = (await applied.json()).analytics.rows.map(row => row.id).sort();
+    const filters = applied.request().postDataJSON().filters;
+    assert.deepEqual(filters.services, ["Files"]);
     const reads = snapshots.length;
     await revealAnalyzeRecords(page);
     const focus = page.locator("#activityView :focus");
@@ -489,11 +507,15 @@ test("relocated launchers use native records, reference, comparison and update d
     }), "The records list has visible focus context, never a clipped semantic heading");
     await page.locator("#openChartReference").click();
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
-    await expect(page.locator("#chartReferenceTitle")).toBeFocused();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands")).toBeHidden();
+    await page.locator('#chartReferenceTopics button[data-reference-topic="outcomes"]').click();
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
     assert.equal(snapshots.length, reads, "Opening existing exact data does not read or recollect evidence");
-    await page.locator("#closeChartReference").click();
+    await page.locator("#analyzeResultsSection").click();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeResultCommands #analyzeScopeSummary")).toBeVisible();
 
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
@@ -504,14 +526,14 @@ test("relocated launchers use native records, reference, comparison and update d
     await expect(page.locator("#analyzeToolbar")).toBeHidden();
     await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
-    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    const calendar = await openDatePicker(page, "compare", "Custom dates");
     for (const side of ["A", "B"]) for (const bound of ["From", "To"]) {
-        await page.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
+        await calendar.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
     }
-    await page.locator("#applyPeriodComparison").click();
+    await calendar.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonResults")).toBeVisible();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     let pairedReads = 0;
     page.on("request", request => { if (request.url().endsWith("/api/period-comparison")) pairedReads++; });
@@ -519,13 +541,16 @@ test("relocated launchers use native records, reference, comparison and update d
     await page.getByRole("button", { name: "View numbers", exact: true }).click();
     await expect(page.locator(".compare-inspection table").first()).toBeVisible();
     await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
-    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#viewComparisonCalls").click();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".compare-inspection h2")).toBeFocused();
     assert.equal(pairedReads, 0, "The footer reveals the accepted selected roster without another paired read");
+    const returning = page.waitForResponse(r => r.url().endsWith("/api/snapshot") && r.ok());
     await page.locator('.primary-navigation [data-nav="analyze"]').click(); await ready(page);
-    assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), before);
-    assert.deepEqual(snapshots.at(-1).filters, filters);
+    const returned = await returning;
+    assert.deepEqual(returned.request().postDataJSON().filters, filters);
+    assert.deepEqual((await returned.json()).analytics.rows.map(row => row.id).sort(), before);
+    await expect(page.locator("#activityCount")).toHaveText(String(before.length));
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
     const updateReads = snapshots.length;
     await expect(page.locator("#activityUpdateToggle")).toHaveCount(0);
@@ -567,7 +592,7 @@ test("the integrated dashboard and panel reflow with long names, both themes and
         assert.ok(overview.overflow <= 1, name + " page overflow");
         assert.equal(overview.sidebarOverlap, 0, name + " sidebar must not cover content");
         assert.ok(overview.trigger.width >= 44 && overview.trigger.height >= 44, name + " filter entry");
-        assert.ok(overview.headingHeight <= 1 && overview.titleClip === "inset(50%)", name + " no visual Analyze title band: " + JSON.stringify(overview));
+        await expect(page.locator("#pageTitle")).toHaveText("Analyze");
         assert.ok(overview.scopeClipped <= 1, name + " accepted scope stays readable");
         await openAnalyzeFilters(page);
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
@@ -577,12 +602,13 @@ test("the integrated dashboard and panel reflow with long names, both themes and
         const panel = await page.locator("#analyzeFilterDialog").boundingBox();
         assert.ok(panel.x >= 0 && panel.x + panel.width <= width + 1, name + " panel fits viewport");
         const fields = [];
-        for (const id of ["dateFilter", "sourceFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter",
+        await expect(page.locator("#sourceFilter-control")).toBeHidden();
+        for (const id of ["dateFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter",
             "serviceFilter", "projectFilter", "chatFilter", "layerFilter", "scopeFilter"]) {
             const control = page.locator("#" + id + "-control");
             await control.scrollIntoViewIfNeeded();
             const value = await control.evaluate(node => {
-                const box = node.getBoundingClientRect(), text = node.querySelector(".select-value");
+                const box = node.getBoundingClientRect(), text = node.querySelector(".select-value") || node;
                 return { id: node.id, x: box.x, right: box.right, width: box.width, height: box.height,
                     clipped: text.scrollWidth - text.clientWidth, verticalClip: text.scrollHeight - text.clientHeight };
             });
@@ -600,13 +626,13 @@ test("the integrated dashboard and panel reflow with long names, both themes and
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Invented lighthouse research");
     await expect(page.locator("#analyzeScopeCaption")).toContainText("Invented harbor research");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    const badge = await page.locator("#analyzeFilterCount").evaluate(node => {
+    const label = await page.locator("#openAnalyzeFilters .filter-entry-label").evaluate(node => {
         const range = document.createRange(); range.selectNodeContents(node);
         const text = range.getBoundingClientRect(), bounds = node.getBoundingClientRect();
         return { top: text.top - bounds.top, bottom: bounds.bottom - text.bottom,
             left: text.left - bounds.left, right: bounds.right - text.right };
     });
-    assert.ok(Object.values(badge).every(inset => inset >= -1), "The active-filter count fits its surface at 200%: " + JSON.stringify(badge));
+    assert.ok(Object.values(label).every(inset => inset >= -1), "The applied-filter label fits at 200%: " + JSON.stringify(label));
     if (proof) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.screenshot({ path: path.join(proof, "long-applied-phone-200-overview.png") });

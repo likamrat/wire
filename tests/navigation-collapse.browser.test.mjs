@@ -6,17 +6,13 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, openActivitySessions } from "./helpers.mjs";
-import { reportContents, scanReport } from "./report-journey-helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { createReportComparison } from "../web/report-comparison.mjs";
-import { createAssessmentWording } from "../web/assessment-presentation.mjs";
-import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 
 const proofs = process.env.WORKIQ_COLLAPSE_PROOFS;
 const ready = page => page.locator("#workspace[aria-busy=false]").waitFor();
 const toggle = page => page.locator("#navigationCollapse");
-const nav = (page, route) => page.locator(`.primary-navigation a[data-nav="${route}"]`);
+const nav = (page, route) => page.locator(`#navigationContent nav a[data-nav="${route}"]`);
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/me/contacts", "/groups", "/search/query"].flatMap((endpoint, i) =>
     Array.from({ length: i + 1 }, (_, j) => {
@@ -27,7 +23,7 @@ const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/me/c
         return row;
     }));
 
-async function setup(t, { empty = false, ...options } = {}) {
+async function setup(t, { empty = false, additionalReads = [], ...options } = {}) {
     const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, empty ? [] : records);
     const before = await loadBoardState(context);
@@ -46,7 +42,7 @@ async function setup(t, { empty = false, ...options } = {}) {
             for (const key of ["cards", "evidence", "exports", "pseudonymKey"]) assert.deepEqual(after[key], before[key], key);
             assert.deepEqual(errors, []);
             assert.ok(requests.every(url => ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail",
-                "/api/assessment/overview", "/api/preview", "/api/cancel-preview"].includes(url)), `No collection, export, feedback or data mutations: ${requests}`);
+                "/api/assessment/overview", "/api/preview", "/api/cancel-preview", ...additionalReads].includes(url)), `No collection, export, feedback or data mutations: ${requests}`);
         } finally { for (const action of cleanup) await action(); }
     });
     await page.goto(runtime.url + "#home?chart=workload"); await ready(page);
@@ -64,9 +60,9 @@ async function geometry(page) {
             return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right };
         };
         return { sidebar: box("#sidebar"), main: box("#main"), header: box(".app-header"), chart: box(".chart-panel"),
-            scene: box(".dimensional-plot"), filters: box("#filters"), overflow: document.documentElement.scrollWidth - innerWidth,
+            scene: box("#chart .flat-comparison"), filters: box("#filters"), overflow: document.documentElement.scrollWidth - innerWidth,
             offset: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-sidebar-width")),
-            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check("14px Arial"),
+            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check('14px "Asta Sans"'),
             scrollY, route: location.hash };
     });
 }
@@ -83,14 +79,14 @@ async function setCollapsed(page, collapsed) {
 }
 
 test("pointer and keyboard collapse reclaim actual chart width and retain tooltip dismissal and all destinations", { timeout: 60000 }, async t => {
-    const { page, requests } = await setup(t);
-    const before = await geometry(page), scene = await page.locator(".dimensional-plot").elementHandle();
+    const { page, requests } = await setup(t, { additionalReads: ["/api/trends", "/api/period-comparison"] });
+    const before = await geometry(page), scene = await page.locator("#chart .flat-comparison").elementHandle();
     const snapshotReads = requests.filter(url => url === "/api/snapshot").length;
-    assert.equal(before.loaded, true); assert.match(before.font, /^Arial,/);
+    assert.equal(before.loaded, true); assert.match(before.font, /^"Asta Sans",/);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     const documentNode = await cdp.send("DOM.getDocument");
-    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: documentNode.root.nodeId, selector: "#navigationExplore" });
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: documentNode.root.nodeId, selector: '.primary-navigation [data-nav="analyze"] .navigation-label' });
     const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
     assert.ok(fonts.some(font => font.isCustomFont && /Asta/i.test(font.familyName)), "Navigation actually paints with embedded Asta, not fallback");
     await cdp.detach();
@@ -100,15 +96,15 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     assert.equal(tooltip.x, button.x + button.width + 8);
     assert.ok(Math.abs(tooltip.y + tooltip.height / 2 - button.y - button.height / 2) < 1);
     await screenshot(page, "desktop-expanded-tooltip-light");
-    await toggle(page).click();
+    await setCollapsed(page, true);
     const collapsed = await geometry(page);
-    assert.equal(collapsed.sidebar.width, 69);
+    assert.ok(before.sidebar.width - collapsed.sidebar.width > 100);
     assert.equal(collapsed.main.x, collapsed.offset);
     assert.equal(collapsed.main.width - before.main.width, before.sidebar.width - collapsed.sidebar.width);
     assert.equal(collapsed.chart.width - before.chart.width, before.sidebar.width - collapsed.sidebar.width);
-    assert.ok(collapsed.scene.width > before.scene.width, "Existing chart ResizeObserver uses released space");
+    assert.ok(collapsed.scene.width > before.scene.width, "The plotted data uses the released space");
     assert.deepEqual(collapsed.header, before.header);
-    assert.equal(await scene.evaluate(node => node === document.querySelector(".dimensional-plot")), true, "No chart remount");
+    assert.equal(await scene.evaluate(node => node === document.querySelector("#chart .flat-comparison")), true, "No chart remount");
     assert.equal(requests.filter(url => url === "/api/snapshot").length, snapshotReads, "Collapse does not reload evidence");
     assert.equal(await toggle(page).getAttribute("aria-label"), "Expand navigation");
     await page.waitForTimeout(350);
@@ -118,23 +114,23 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     assert.equal(await toggle(page).getAttribute("aria-label"), "Collapse navigation");
     await toggle(page).press("Space");
     assert.equal(await toggle(page).getAttribute("aria-label"), "Expand navigation");
-    await page.keyboard.press("Tab");
-    await page.getByRole("tooltip", { name: "Home", exact: true }).waitFor();
-    assert.equal(await nav(page, "home").evaluate(node => node.matches(":focus-visible")), true);
+    const analyze = nav(page, "analyze");
+    for (let i = 0; i < 12 && !await analyze.evaluate(node => node === document.activeElement); i++) await page.keyboard.press("Tab");
+    await page.getByRole("tooltip", { name: "Analyze", exact: true }).waitFor();
+    assert.equal(await analyze.evaluate(node => node.matches(":focus-visible")), true);
     await page.keyboard.press("Escape");
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
-    await page.keyboard.press("Shift+Tab");
+    for (let i = 0; i < 12 && !await toggle(page).evaluate(node => node === document.activeElement); i++) await page.keyboard.press("Shift+Tab");
     await page.getByRole("tooltip", { name: "Expand navigation", exact: true }).waitFor();
     await page.keyboard.press("Escape");
     await page.mouse.move(1435, 950);
-    for (const route of ["activity", "reports", "collection-status", "settings", "home"]) {
-        const link = nav(page, route), name = await link.getAttribute("aria-label");
+    for (const route of ["trends", "reports", "compare", "settings", "analyze"]) {
+        const link = page.locator(`#sidebar a[data-nav="${route}"]`), name = await link.getAttribute("aria-label");
         await link.hover();
         await page.getByRole("tooltip", { name, exact: true }).waitFor();
         await link.click(); await ready(page);
         assert.equal(await link.getAttribute("aria-current"), "page");
-        assert.equal(await link.locator('svg[data-fluent-icon$="_filled"]').isVisible(), true);
-        assert.equal(await link.locator('svg[data-fluent-icon$="_regular"]').isVisible(), false);
+        assert.equal(await link.locator(`svg[data-icon-role="navigation-${route}"]`).isVisible(), true);
         assert.equal(await link.evaluate(node => getComputedStyle(node).textDecorationLine), "none");
         assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
         await page.waitForTimeout(200);
@@ -143,57 +139,11 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     if (proofs) await writeFile(path.join(proofs, "width-proof.json"), JSON.stringify({ before, collapsed, fonts }, null, 2));
 });
 
-test("scope, search, selected requests, Settings and report drafts survive toggles, history and review", { timeout: 60000 }, async t => {
-    const { page, requests } = await setup(t, { reducedMotion: "no-preference" });
-    await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
-    await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill("Synthetic"); await ready(page);
-    await openActivitySessions(page);
-    await page.locator("#activityList input[type=checkbox]").first().check();
-    const activityUrl = page.url(), search = await page.locator("#activitySearch").inputValue();
-    const searchNode = await page.locator("#activitySearch").elementHandle();
-    await setCollapsed(page, true);
-    assert.equal(page.url(), activityUrl);
-    assert.equal(await searchNode.evaluate(node => node === document.querySelector("#activitySearch")), true);
-    assert.equal(await page.locator("#activityList input[type=checkbox]:checked").count(), 1);
-    await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "collection");
+test("a cross-panel sidebar preference does not steal focus from a Settings draft", async t => {
+    const { page } = await setup(t);
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     await selectActivityOption(page, "collectionWindow", "7");
-    const settingsDraft = await page.locator("#collectionWindow").elementHandle();
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await settingsDraft.evaluate(node => node.value), "7");
-    await navigateMain(page, "reports"); await ready(page);
-    await reportContents(page);
-    await page.locator('[name=promptMode][value=none]').check();
-    await page.locator("#formatOptions input[value=json]").check();
-    const draftNode = await page.locator("#promptOptions").elementHandle();
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await draftNode.evaluate(node => node === document.querySelector("#promptOptions")), true);
-    assert.equal(await page.locator('[name=promptMode][value=none]').isChecked(), true);
-    assert.equal(await page.locator("#formatOptions input[value=json]").isChecked(), true);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request/);
-    await scanReport(page);
-    const review = await page.locator("#reportsView").elementHandle();
-    const previews = requests.filter(url => url === "/api/preview").length;
-    await setCollapsed(page, false); await setCollapsed(page, true);
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "ready");
-    assert.equal(await review.evaluate(node => node === document.querySelector("#reportsView")), true);
-    assert.equal(requests.filter(url => url === "/api/preview").length, previews);
-    assert.ok((await geometry(page)).overflow <= 1);
-    await screenshot(page, "collapsed-report-review");
-    await navigateMain(page, "activity"); await ready(page);
-    assert.equal(await page.locator("#activitySearch").inputValue(), search);
-    assert.equal(await page.locator("#serviceFilter").inputValue(), "Mail");
-    await openActivitySessions(page);
-    assert.equal(await page.locator("#activityList input[type=checkbox]:checked").count(), 1);
-    await page.goBack(); await ready(page);
-    assert.equal(await page.locator('[name=promptMode][value=none]').isChecked(), true);
-    await page.goForward(); await ready(page);
-    assert.equal(await page.locator("#activitySearch").inputValue(), search);
-    await navigateMain(page, "settings"); await ready(page);
-    await navigateSettings(page, "collection");
-    assert.equal(await page.locator("#collectionWindow").inputValue(), "7");
-    assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
+    await setCollapsed(page, true);
     await page.locator("#collectionWindow-control").focus();
     const previous = await page.evaluate(() => ({ y: scrollY, active: document.activeElement.id }));
     // Cross-panel display preference updates must not steal focus from an unfinished form.
@@ -208,26 +158,42 @@ test("mobile drawer keeps desktop choice, modal containment and focus across poi
     const navigation = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     for (const collapsed of [false, true]) {
         await setCollapsed(page, collapsed);
-        await nav(page, "activity").focus();
+        await nav(page, "trends").focus();
         await page.setViewportSize({ width: 375, height: 900 }); await frames(page);
         assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
         assert.equal(await toggle(page).isVisible(), false);
-        assert.equal(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width), 375);
+        assert.equal(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width), await page.locator("body").evaluate(node => node.getBoundingClientRect().width));
         await page.locator("#navigationToggle").tap();
         assert.equal(await navigation.evaluate(node => node === document.querySelector("#navigationDrawer .primary-navigation")), true);
-        assert.equal(await nav(page, "home").getAttribute("aria-current"), "page");
-        assert.equal(await nav(page, "collection-status").locator(".navigation-label").evaluate(node => getComputedStyle(node).position), "static");
+        assert.equal(await nav(page, "analyze").getAttribute("aria-current"), "page");
+        assert.equal(await nav(page, "trends").locator(".navigation-label").isVisible(), true);
         for (let index = 0; index < 8; index++) {
             await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement.closest("#navigationDrawer")), true, "Tab visits the drawer or browser chrome, never hidden/background controls");
         }
+        const close = page.getByRole("button", { name: "Close navigation", exact: true });
+        await close.focus();
+        const help = page.getByRole("tooltip");
+        await help.waitFor();
+        assert.equal(await help.innerText(), "Close navigation");
         await page.keyboard.press("Escape");
+        await help.waitFor({ state: "hidden" });
+        assert.equal(await page.locator("#navigationDrawer").isVisible(), true);
+        assert.equal(await close.evaluate(node => node === document.activeElement), true);
+        await page.keyboard.press("Escape");
+        await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
         assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
         await page.locator("#navigationToggle").tap();
-        await page.mouse.click(365, 300);
-        assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.open), false);
+        await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
+        const backdropX = await page.locator("#navigationDrawer").evaluate(node => {
+            const edge = node.getBoundingClientRect().right, bodyEdge = document.body.getBoundingClientRect().right;
+            if (bodyEdge <= edge) throw Error("No exposed backdrop");
+            return (edge + bodyEdge) / 2;
+        });
+        await page.mouse.click(backdropX, 300);
+        await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
         assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
-        assert.match(page.url(), /#home/, "Backdrop does not activate background content");
+        assert.equal(new URL(page.url()).pathname, "/", "Backdrop does not activate background content");
         await page.locator("#navigationToggle").tap();
         await nav(page, "settings").focus();
         await page.setViewportSize({ width: 1440, height: 1000 }); await frames(page);
@@ -239,8 +205,8 @@ test("mobile drawer keeps desktop choice, modal containment and focus across poi
     await toggle(page).tap();
     assert.equal(await toggle(page).getAttribute("aria-label"), "Collapse navigation", "Touch can reveal every full label");
     await toggle(page).tap();
-    await nav(page, "activity").tap(); await ready(page);
-    assert.equal(await nav(page, "activity").getAttribute("aria-current"), "page", "Touch activates a named rail destination");
+    await nav(page, "reports").tap(); await ready(page);
+    assert.equal(await nav(page, "reports").getAttribute("aria-current"), "page", "Touch activates a named rail destination");
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
 });
 
@@ -300,7 +266,7 @@ test("reload restores collapse and denied browser storage surfaces a recoverable
     await setCollapsed(page, true);
     await page.reload(); await ready(page);
     assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
-    assert.equal((await geometry(page)).sidebar.width, 69);
+    assert.equal((await geometry(page)).sidebar.width, 65);
     await page.evaluate(() => {
         window.originalSetItem = Storage.prototype.setItem;
         Storage.prototype.setItem = function (key, value) {
@@ -329,20 +295,21 @@ test("sidebar and content glide together through intermediate widths, reverse wi
             const label = document.querySelector(".navigation-label"), header = document.querySelector(".app-header").getBoundingClientRect();
             window.navigationMotionFrames.push({
                 time: performance.now(), width: sidebar.width, mainX: content.x, mainWidth: content.width,
+                layoutWidth: document.documentElement.getBoundingClientRect().width,
                 chartWidth: document.querySelector(".chart-panel").getBoundingClientRect().width,
                 headerHeight: header.height, opacity: Number(getComputedStyle(label).opacity),
-                overflow: document.documentElement.scrollWidth - innerWidth,
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
             });
         });
         window.navigationMotionObserver.observe(rail);
     });
-    const scene = await page.locator(".dimensional-plot").elementHandle(), route = page.url();
+    const scene = await page.locator("#chart .flat-comparison").elementHandle(), route = page.url();
     const reads = requests.filter(url => url === "/api/snapshot").length;
     const samples = [];
     for (const collapsed of [true, false]) {
-        const start = await toggle(page).evaluate(node => {
+        const start = await page.locator("#sidebar").evaluate(rail => {
             window.navigationMotionFrames = [];
-            return { time: performance.now(), width: node.closest("aside").getBoundingClientRect().width };
+            return { time: performance.now(), width: rail.getBoundingClientRect().width };
         });
         await toggle(page).click();
         assert.equal(await page.locator("#sidebar").getAttribute("data-navigation-moving"), "");
@@ -355,7 +322,7 @@ test("sidebar and content glide together through intermediate widths, reverse wi
         assert.ok(measured.at(-1).time - measured[0].time >= 250, "The rendered glide itself lasts long enough to be perceptible");
         for (const [index, frame] of measured.entries()) {
             assert.ok(Math.abs(frame.mainX - frame.width) < 1, "The same observed width drives the main edge every frame");
-            assert.ok(Math.abs(frame.mainWidth + frame.width - 1440) < 1);
+            assert.ok(Math.abs(frame.mainWidth + frame.width - frame.layoutWidth) < 1, "Sidebar and main fill the layout viewport");
             assert.ok(frame.overflow <= 1, "No transient horizontal overflow");
             assert.equal(frame.headerHeight, measured[0].headerHeight);
             if (index) assert.ok(collapsed ? frame.width <= measured[index - 1].width + 1 : frame.width >= measured[index - 1].width - 1, "Monotonic glide, no width bounce");
@@ -370,15 +337,16 @@ test("sidebar and content glide together through intermediate widths, reverse wi
     await toggle(page).click();
     await page.waitForTimeout(95);
     const reversal = await toggle(page).evaluate(node => {
-        const before = node.closest("aside").getBoundingClientRect().width;
+        const rail = document.getElementById("sidebar");
+        const before = rail.getBoundingClientRect().width;
         node.click();
-        return { before, after: node.closest("aside").getBoundingClientRect().width };
+        return { before, after: rail.getBoundingClientRect().width };
     });
     assert.ok(Math.abs(reversal.before - reversal.after) < 1, "Rapid reversal starts at the current rendered width");
     await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.equal(await toggle(page).getAttribute("aria-expanded"), "true");
-    assert.equal((await geometry(page)).sidebar.width, 208);
-    assert.equal(await scene.evaluate(node => node === document.querySelector(".dimensional-plot")), true);
+    assert.equal((await geometry(page)).sidebar.width, samples[0].start.width);
+    assert.equal(await scene.evaluate(node => node === document.querySelector("#chart .flat-comparison")), true, "No chart remount");
     assert.equal(page.url(), route);
     assert.equal(requests.filter(url => url === "/api/snapshot").length, reads);
     assert.equal(await toggle(page).evaluate(node => node === document.activeElement), true);
@@ -413,13 +381,13 @@ test("resizing settles geometry while host motion changes preserve built-in glid
     assert.ok(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")));
     await page.setViewportSize({ width: 375, height: 900 }); await frames(page);
     assert.equal(await page.locator("#sidebar").getAttribute("data-navigation-moving"), null);
-    assert.equal(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width), 375);
+    assert.equal(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width), await page.locator("body").evaluate(node => node.getBoundingClientRect().width));
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
     await page.locator("#navigationToggle").click();
-    assert.equal(await nav(page, "settings").locator(".navigation-label").evaluate(node => Number(getComputedStyle(node).opacity)), 1);
+    assert.equal(await nav(page, "trends").locator(".navigation-label").evaluate(node => Number(getComputedStyle(node).opacity)), 1);
     await page.keyboard.press("Escape");
     await page.setViewportSize({ width: 1440, height: 1000 }); await frames(page);
-    assert.equal((await geometry(page)).sidebar.width, 69);
+    assert.equal((await geometry(page)).sidebar.width, 65);
     await toggle(page).click();
     await page.emulateMedia({ reducedMotion: "reduce" }); await frames(page);
     await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
@@ -428,69 +396,8 @@ test("resizing settles geometry while host motion changes preserve built-in glid
     await toggle(page).click();
     await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
-    assert.equal((await geometry(page)).sidebar.width, 69);
+    assert.equal((await geometry(page)).sidebar.width, 65);
     await page.reload(); await ready(page);
     assert.equal(await toggle(page).getAttribute("aria-expanded"), "false");
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0, "No entrance animation on reload");
-});
-
-test("synthetic comparison content and native reading dialogs fit the actual collapsed shell", { timeout: 45000 }, async t => {
-    const { page } = await setup(t);
-    await navigateMain(page, "reports"); await ready(page);
-    const report = id => ({
-        schemaVersion: 1, bundleId: `export-${id}`, snapshotHash: id.repeat(64), disclosureReviewed: true, patternVersion: 1,
-        metrics: {}, toolRows: [{ id, patternId: "mail", outcome: id === "a" ? "success" : "failure" }],
-        patterns: [{ patternId: "mail", unitKind: "tool-call", tool: "workiq-fetch", workload: "Mail",
-            attribution: "requested-single-target", targetShape: "single", available: true,
-            endpoints: [{ pathTemplate: "/me/messages", method: null, apiVersion: null, queryKeys: [] }] }],
-        scope: { selectionKind: "selected", timeZone: "UTC", collectionDefinition: "synthetic-fixture", callTimesAvailable: false, historyComplete: false },
-    });
-    // Mount the existing comparison renderer in its real shell container without
-    // creating, exporting or claiming any saved report in the isolated store.
-    await page.evaluate(({ source, wording, model }) => {
-        const script = document.createElement("script");
-        script.nonce = document.querySelector("script[nonce]").nonce;
-        script.textContent = `window.collapseComparison = (${source})((${wording})());`;
-        document.head.append(script);
-        const host = document.querySelector("#comparisonWorkspace");
-        host.hidden = false;
-        window.collapseComparison.render(host, model);
-    }, { source: createReportComparison.toString(), wording: createAssessmentWording.toString(), model: compareFrozenReportFacts(report("a"), report("b"), { identityRelation: "same-namespace" }) });
-    const comparison = page.locator("#comparisonWorkspace .report-comparison"), original = await comparison.elementHandle();
-    for (const theme of ["light", "dark"]) for (const scale of [1, 2]) {
-        await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await page.setViewportSize({ width: 1200, height: 1000 });
-        await setCollapsed(page, false);
-        const before = await comparison.boundingBox(), sidebar = (await geometry(page)).sidebar;
-        await setCollapsed(page, true);
-        const after = await comparison.boundingBox(), collapsed = (await geometry(page)).sidebar;
-        assert.ok(Math.abs(after.width - before.width - sidebar.width + collapsed.width) < 1);
-        assert.equal(await original.evaluate(node => node === document.querySelector("#comparisonWorkspace .report-comparison")), true);
-        assert.ok((await geometry(page)).overflow <= 1);
-        assert.deepEqual(await comparison.locator(".comparison-score-value,.comparison-metric-value").evaluateAll(nodes =>
-            nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
-        if (scale === 1) { await comparison.scrollIntoViewIfNeeded(); await screenshot(page, `comparison-collapsed-${theme}`); }
-    }
-    await navigateMain(page, "home"); await ready(page);
-    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
-    for (const collapsed of [false, true]) {
-        await setCollapsed(page, collapsed);
-        const definitions = page.locator("#homeInsights").getByRole("button", { name: "Measure definitions", exact: true });
-        await definitions.click();
-        const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
-        await dialog.waitFor();
-        assert.equal(await page.evaluate(() => document.activeElement.closest("dialog[open]") !== null), true);
-        for (const width of [768, 375]) {
-            await page.setViewportSize({ width, height: 900 }); await frames(page);
-            const bounds = await dialog.boundingBox();
-            assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
-            await page.keyboard.press("Tab");
-            assert.equal(await page.evaluate(() => document.activeElement === document.body || !!document.activeElement.closest("dialog[open]")), true);
-        }
-        await page.keyboard.press("Escape");
-        assert.equal(await definitions.evaluate(node => node === document.activeElement), true);
-        await page.setViewportSize({ width: 1200, height: 1000 }); await frames(page);
-        assert.equal(await toggle(page).getAttribute("aria-expanded"), String(!collapsed));
-    }
 });

@@ -1,5 +1,14 @@
 import { searchFieldMarkup } from "./search-field.mjs";
 import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
+import { currentPaletteSwatches, paletteGallery, palettePreview } from "./palette-gallery.mjs";
+import { uxIcons } from "./ux-icons.mjs";
+import { defaultField } from "./page-defaults.mjs";
+
+function pageSettings(id, title, purpose, fields) {
+    return `<section class="settings-section" data-settings-section="${id}" aria-labelledby="${id}SettingsTitle" hidden>
+      <h2 id="${id}SettingsTitle" tabindex="-1">${title}</h2><p class="settings-intro">${purpose}</p>
+      ${fields.map(key => defaultField(key, uxIcons)).join("")}</section>`;
+}
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -12,23 +21,52 @@ export const settingsMarkup = `
     <p id="settingsSearchCount" class="search-count" role="status" hidden></p>
     <ul id="settingsSearchResults" class="settings-search-results" aria-label="Matching settings" hidden></ul>
   </div>
-  <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Connection &amp; updates</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
-  <p id="settingsStatusLink" class="settings-status-link"><a href="#collection-status" data-settings-link>Collection status</a></p>
+  <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Collection</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
   </aside>
   <div class="settings-content">
   <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
-  <a id="firstCollectionActivity" class="button-link" href="#analyze" data-settings-link hidden>View activity</a>
+  <a id="firstCollectionActivity" class="button-link" href="/" data-settings-link hidden>View activity</a>
   <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
+  <button id="settingsGeneralBack" type="button" class="quiet" hidden>${uxIcons.back} Back to General</button>
+  <section class="settings-section" data-settings-section="general" aria-labelledby="generalTitle" hidden>
+    <h2 id="generalTitle" tabindex="-1">General</h2>
+    <p class="settings-intro">View WIRE’s update status or change your theme and time zone.</p>
+    <div class="settings-task-row app-version-card"><img src="/favicon.svg" width="32" height="32" alt=""><div class="settings-row-copy"><h3 id="appUpdateVersion">WIRE</h3>
+      <p id="appUpdateStatus" role="status">Reading update status…</p>
+      </div>
+      <div class="settings-actions"><button id="appUpdateCheck" type="button" disabled>Check for updates</button>
+        <button id="settingsAppUpdate" class="primary app-update-action" type="button" hidden>Update</button></div>
+    </div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3 id="appUpdateAutoLabel">Automatically check for updates</h3>
+      <p id="appUpdateAutoHelp" hidden>On opening WIRE, then daily. Updates are never installed automatically.</p></div>
+      <label class="settings-switch"><input id="appUpdateAuto" type="checkbox" role="switch" aria-labelledby="appUpdateAutoLabel" aria-describedby="appUpdateAutoHelp" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+    </div>
+    <section class="general-appearance" aria-labelledby="generalThemeTitle">
+      <h3 id="generalThemeTitle">Current theme</h3>
+      <a id="general-themes" class="settings-preference-link" href="/settings?section=themes" data-settings-link data-general-shortcut
+        aria-labelledby="generalThemeAction" aria-describedby="generalThemeValue">
+        ${palettePreview("petrol","light")}
+        <span class="general-palette-summary"><span id="generalThemeValue"><strong id="generalPaletteName"></strong><span id="generalMode">Unavailable</span></span>
+          ${currentPaletteSwatches}</span>
+        <span class="preference-destination" id="generalThemeAction">Change theme ${uxIcons.disclosure}</span>
+      </a>
+    </section>
+    <a id="general-regional" class="settings-preference-link" href="/settings?section=regional" data-settings-link data-general-shortcut>
+      <span><strong>Time zone</strong><span id="generalTimeValue">Unavailable</span></span>
+      <span class="preference-destination">Regional ${uxIcons.disclosure}</span>
+    </a>
+  </section>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
+    <p class="settings-intro">Review what WIRE keeps on this device and what you can remove.</p>
     <section id="assessmentSetupTitle" class="settings-reply-row" aria-label="Recorded replies" tabindex="-1">
       <h3 class="settings-reply-fallback">Save Copilot replies locally</h3>
       <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Collected activity</h3>
-    <p id="deleteActivityHelp">Permanent local deletion. Copilot chats and saved reports stay.</p>
+    <p id="deleteActivityHelp">Delete WIRE’s copy of the activity for good. Your Copilot chats and saved reports stay.</p>
     </div>
     <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Review deletion</button>
     </div>
@@ -37,29 +75,32 @@ export const settingsMarkup = `
     <p id="recollectActivityHelp">Missing history, deleted replies and past annotations aren't restored.</p>
     <p id="recollectionUpdateStatus" role="status" aria-live="polite" hidden></p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link quiet" href="/reports" data-settings-link>Open saved reports ${uxIcons.forward}</a></div>
   </section>
-  <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
-    <h2 id="displayTitle" tabindex="-1">Display</h2>
+  <section class="settings-section" data-settings-section="themes" aria-labelledby="themesTitle" hidden>
+    <h2 id="themesTitle" tabindex="-1">Themes</h2>
+    <p class="settings-intro">Change how WIRE looks in this browser.</p>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
-      <h3>Theme</h3>
+      <h3>Appearance mode</h3><span id="settingsModeLabel"></span>
     </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
+    ${paletteGallery}
+  </section>
+  <section class="settings-section" data-settings-section="regional" aria-labelledby="regionalTitle" hidden>
+    <h2 id="regionalTitle" tabindex="-1">Regional</h2>
+    <p class="settings-intro">Choose how WIRE displays dates and groups activity into days.</p>
     <div class="settings-field settings-display-field display-time-field">
-      <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
+      <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3><p>Saved reports keep their original time zone.</p></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
       <p id="displayTimeHelp" class="settings-help" hidden></p>
       <p id="displayTimeEffective" class="settings-help" role="status" hidden></p>
     </div>
   </section>
   <div id="collectionForm">
-    <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
-      <h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2>
+    <section class="settings-section" data-settings-section="source-access" aria-labelledby="sourceAccessTitle" hidden>
+      <h2 id="sourceAccessTitle" tabindex="-1">Source access</h2>
+      <p class="settings-intro">Review which local files WIRE can read before approving access.</p>
       <section id="connectionSource" class="settings-group" aria-labelledby="connectionSourceTitle">
-      <div class="settings-group-heading"><h3 id="connectionSourceTitle">GitHub Copilot app</h3><div class="settings-source-state"><span id="connectionStatus" class="connection-status">Checking connection</span></div></div>
-      <p id="connectionSourceHelp" class="settings-help" hidden></p>
-      <div id="approvedConnection" hidden>
-        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Review source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" href="#settings?section=connection&setting=source-paths" data-settings-link hidden>View source</a></div>
-      </div>
+      <div class="settings-group-heading"><h3 id="connectionSourceTitle">GitHub Copilot app</h3></div>
       <div id="unapprovedConnection" hidden>
         <p>Collect original prompts and activity from local chats.</p>
         <button id="reviewSource" type="button" class="primary">Review source &amp; connect</button>
@@ -68,6 +109,7 @@ export const settingsMarkup = `
         <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
         <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd></dl>
       </div>
+      <div id="sourceEditAction" class="settings-actions" hidden><button id="editSource" type="button">Review source</button></div>
       <div id="sourceEditor" class="source-editor" hidden>
         <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help" role="status"></p>
@@ -84,6 +126,17 @@ export const settingsMarkup = `
         <p id="firstCollectionWait" class="settings-help" hidden>The first read may take a few minutes.</p>
       </div>
       </section>
+      <p id="registeredSourceNotice" hidden>Local Copilot source paths are not available in this runtime. <a href="/settings" data-settings-link>Open collection</a></p>
+    </section>
+    <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
+      <h2 id="connectionTitle" tabindex="-1">Collection</h2>
+      <p class="settings-intro">Manage what WIRE collects from approved sources and when.</p>
+      <div class="settings-task-row settings-collection-state">
+        <div class="settings-row-copy"><h3 id="automaticCollectionTitle">Automatic collection</h3><p id="connectionStatus" class="connection-status">Checking connection</p><p id="connectionSourceHelp" class="settings-help" hidden></p></div>
+        <div id="approvedConnection" hidden><div class="settings-actions"><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" class="button-link quiet" href="/settings?section=source-access&setting=source-paths" data-settings-link hidden>View source ${uxIcons.forward}</a></div></div>
+        <a id="collectionSourceEntry" class="button-link" href="/settings?section=source-access&setting=source" data-settings-link hidden>Review source access</a>
+      </div>
+      <p id="collectionSourceDraft" class="notice" hidden>Source review is open. <a href="/settings?section=source-access&setting=source" data-settings-link>Return to source review</a></p>
       <div id="microsoftConnectionHost" hidden></div>
       <section id="connectionPreferences" class="settings-group" aria-labelledby="preferencesTitle">
       <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
@@ -97,18 +150,14 @@ export const settingsMarkup = `
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
       </section>
       ${sourceCollectionMarkup}
+      <div id="settingsRefreshSlot"></div>
+      <p id="settingsStatusLink" class="settings-status-link"><a class="button-link quiet" href="/collection-status" data-settings-link>View collection status</a></p>
     </section>
   </div>
-  <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
-    <h2 id="troubleshootingTitle" tabindex="-1">Troubleshooting</h2>
-    <section class="settings-group" aria-labelledby="historyHelpTitle">
-      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
-    </section>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search matches text in saved activity and reports. Missing history may leave results out. Refresh the stored view, then try again.</p></details>
-  </section>
+  ${pageSettings("analyze", "Analyze", "Arrange your homepage and choose the defaults for Analyze.", ["analyzeLayout", "analyzeRange", "guideStart"])}
+  ${pageSettings("trends", "Trends", "Set the chart Trends opens by default.", ["trendChart"])}
+  ${pageSettings("reports", "Reports", "Set defaults for new reports. Existing drafts and saved files stay as they are.", ["reportFormats", "reportPeriod"])}
+  ${pageSettings("compare", "Compare", "Set the default period length for new comparisons.", ["compareDays"])}
   </div>
   </div>
 </section>
@@ -122,7 +171,7 @@ export const settingsMarkup = `
     <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
     <p id="collectionCoveragePending" class="settings-help" hidden></p>
-    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a id="collectionHistoryLink" href="#settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="#settings?section=troubleshooting" data-settings-link>Troubleshooting</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="/settings?section=source-access&setting=source-paths" data-settings-link>Source access</a><a id="collectionHistoryLink" href="/settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="/" data-settings-link>Go to Analyze</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
     <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>
@@ -141,13 +190,13 @@ export const settingsMarkup = `
       <div id="collectionEvidenceDetails"></div>
     </details>
   <details id="recorderDiagnostics" class="settings-advanced"><summary>Optional network diagnostic</summary>
-    <p id="recorderPurpose">Test the HTTP recorder, not collection. This sends one public request to Microsoft Graph and saves its diagnostic result locally. It is not needed to collect your Copilot history.</p>
-    <p id="recorderEffect" class="settings-help">GET graph.microsoft.com/v1.0/$metadata. No sign-in, credentials, response body logging or automatic retries. This cannot verify Work IQ, access to your workplace data or collection health.</p>
-    <button id="recordBtn" type="button" aria-describedby="recorderPurpose recorderEffect recorderStatus" disabled>Test HTTP recorder</button>
-    <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open this section to read the last saved diagnostic. No request is sent until you confirm.</p>
+    <p id="recorderPurpose" hidden>Test the HTTP recorder, not collection. Sends one public request to Microsoft Graph and saves the result locally.</p>
+    <p id="recorderEffect" class="settings-help" hidden>GET graph.microsoft.com/v1.0/$metadata, without credentials, saved response body or retries. This cannot verify Work IQ or access to workplace data.</p>
+    <button id="recordBtn" type="button" aria-describedby="recorderPurpose recorderEffect recorderStatus" hidden disabled>Test HTTP recorder</button>
+    <p id="recorderStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">Open to read the last saved diagnostic.</p>
     <p id="recorderEvidence" class="settings-help" hidden></p>
     <p id="recorderStorageWarning" class="notice error" role="status" hidden></p>
-    <a id="recorderResultLink" class="text-link" href="#home?layer=http" hidden>View HTTP recorder evidence</a>
+    <a id="recorderResultLink" class="text-link" href="/?layer=http" hidden>View HTTP recorder evidence</a>
   </details>
 </section>`;
 
@@ -202,6 +251,8 @@ export function mountDisplayTimeSettings({ time, onChange }) {
         $("displayTimeZone").value = preference ?? "";
         $("displayTimeZone").disabled = busy;
         const changingZone = context.timeZone !== resolve().timeZone;
+        $("generalTimeValue").textContent = changingZone ? `Still using ${time.label(context)}`
+            : preference === null && !context.timeZoneFallback ? `Device default (${time.displayLabel(context)})` : time.label(context);
         $("displayTimeEffective").textContent = changingZone && stale
             ? `The selected zone has not loaded. Still using ${time.label(context)}; retry the view update.`
             : changingZone && state.pending ? `Updating time zone. Still using ${time.label(context)}.` : "";
@@ -321,6 +372,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         $("settingsMessage").setAttribute("role", error ? "alert" : "status");
         $("settingsMessage").hidden = !text;
     }
+    const inConfiguration = () => visibleSection === "connection" || visibleSection === "source-access";
     function reset() {
         baseline = latest;
         guidedReview = editingPaths = false;
@@ -353,14 +405,17 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         for (const id of ["approvedDatabase", "approvedSessions", "sourceChangeImpact",
             "sourceSuggestion", "approvalScope", "settingsDraftStatus"]) setText(id, "");
         setText("connectionSourceTitle", "Microsoft 365 activity");
+        $("connectionSource").hidden = true;
+        $("registeredSourceNotice").hidden = false;
+        $("collectionSourceEntry").hidden = $("collectionSourceDraft").hidden = true;
         setText("connectionSourceHelp", "");
         $("connectionSourceHelp").hidden = true;
         setText("connectionStatus", readError ? "Last known: " + state.label : state.label);
         setText("pauseCollection", control.enabled ? "Pause Microsoft reads" : "Resume Microsoft reads");
         $("pauseCollection").disabled = working || uncertain || Boolean(readError) || !control.retained || !allowed;
         setText("settingsConnectionError", readError ? "Microsoft settings could not be read." : "");
-        $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
-        hideRecovery(!uncertain && (!readError || visibleSection !== "connection"));
+        $("settingsConnectionError").hidden = !readError || !inConfiguration();
+        hideRecovery(!uncertain && (!readError || !inConfiguration()));
         $("reloadSettings").disabled = working;
         explanations.set("pauseCollection", reason);
         explanations.set("collectNow", saved ? working ? "Update in progress."
@@ -458,12 +513,16 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("connectionSourceTitle", "GitHub Copilot app");
         setText("connectionSourceHelp", "");
         $("connectionSourceHelp").hidden = true;
-        const inspectingSource = visibleSection === "connection" && ["source", "source-paths"].includes(visibleSetting);
+        const inspectingSource = visibleSection === "source-access";
         const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot]) !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot]);
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
-        $("sourceEditAction").hidden = editing;
+        $("connectionSource").hidden = false;
+        $("registeredSourceNotice").hidden = true;
+        $("sourceEditAction").hidden = !approved || editing;
+        $("collectionSourceEntry").hidden = approved || editing;
+        $("collectionSourceDraft").hidden = !editing;
         $("sourceEditor").hidden = !editing;
         const pathSummary = editing && guidedReview && !editingPaths;
         $("sourceReviewSummary").hidden = !pathSummary;
@@ -472,8 +531,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setText("reviewSessions", pathSummary ? values().sessionRoot : "");
         $("changeReviewedPaths").disabled = working;
         $("firstCollectionWait").hidden = !editing || approved || uncertain || Boolean(readError);
-        $("firstCollectionActivity").hidden = visibleSection !== "connection" || !firstApprovalConfirmed || !approved || editing || uncertain || Boolean(readError);
-        $("connectionPreferences").hidden = editing || sourceCollection?.active && !approved;
+        $("firstCollectionActivity").hidden = visibleSection !== "source-access" || !firstApprovalConfirmed || !approved || editing || uncertain || Boolean(readError);
+        $("connectionPreferences").hidden = editing || sourceCollection?.controlsActive && !approved;
         const preferenceHome = editing ? $("sourcePreferenceSlot") : $("connectionPreferences");
         if ($("collectionPreferenceFields").parentElement !== preferenceHome) {
             if (editing) preferenceHome.append($("collectionPreferenceFields"));
@@ -486,7 +545,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             : latest.connected ? "Collection on" : "Checking connection";
         setText("connectionStatus", readError ? latest ? `Last known: ${connectionState}` : "Status unavailable" : connectionState);
         setText("settingsConnectionError", readError ? "Collection settings could not be read." : "");
-        $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
+        $("settingsConnectionError").hidden = !readError || !inConfiguration();
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
         setText("sourceEditorTitle", approved ? "Change source paths" : guidedReview ? "Review local history" : "Review this source");
@@ -518,10 +577,10 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             $("pauseCollection").disabled ||= !sources.actions.github.includes("set-interval");
             $("collectNow").disabled ||= !sources.actions.github.includes("collect-now");
         }
-        $("preferenceActions").hidden = !approved || editing;
+        $("preferenceActions").hidden = !approved || editing || !(changed || stale || working || uncertain);
         $("cancelPreferences").disabled = (!changed && !stale) || working;
         $("cancelSource").disabled = working;
-        hideRecovery(!uncertain && (!readError || visibleSection !== "connection"));
+        hideRecovery(!uncertain && (!readError || !inConfiguration()));
         $("reloadSettings").disabled = working;
         const progress = revokedWrite && busy ? "Earlier change pending."
             : busy && !["/api/collection/now", "/api/collection/status"].includes(pendingAction) ? "Saving..." : "Checking...";
@@ -604,8 +663,8 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         message(uncertain ? "Earlier change unconfirmed. Read current connection." : "");
         paint();
         if (!current(stamp)) return;
-        let target = document.querySelector('[data-settings-section="connection"]:not([hidden])')
-            ? $(nativeView()?.present ? "nativeCollectionSurfaces" : latest?.config?.approved ? "editSource" : "reviewSource")
+        let target = visibleSection === "source-access" ? $(latest?.config?.approved ? "editSource" : "reviewSource")
+            : visibleSection === "connection" ? $(nativeView()?.present ? "nativeCollectionSurfaces-control" : "collectionWindow-control")
             : document.querySelector("[data-settings-section]:not([hidden]) h2");
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
         if (current(stamp) && !uncertain) returnToOrigin?.();
@@ -637,12 +696,13 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             reset();
             message(typeof success === "function" ? success(latest) : success, false, origin);
         } catch (error) {
-            if (operation.dispatched) uncertain = true;
+            const refused = endpoint === "/api/collection/configure" && error.configuration === "not-saved" && current(stamp);
+            if (operation.dispatched && !refused) uncertain = true;
             if (!current(stamp)) { revokedWrite ||= operation.dispatched; return; }
             const detail = error.reason === "runtime_unavailable" ? "WIRE is not responding."
                 : error.reason === "invalid_response" ? "The response could not be read."
                 : error.reason === "wire_access_stale" ? "WIRE access changed." : error.message;
-            message(detail + (operation.dispatched ? " Change unconfirmed." : " Change not started."), true);
+            message(detail + (refused ? " Settings were not saved." : operation.dispatched ? " Change unconfirmed." : " Change not started."), true);
         } finally {
             input = null; success = null;
             if (pendingOperation === operation) {
@@ -831,7 +891,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
             "connectionSourceTitle", "connectionSourceHelp", "pauseCollection"]) {
             clearText($(id)); $(id).replaceChildren();
         }
-        for (const id of ["approvedConnection", "unapprovedConnection", "approvedSourceDetails", "sourceEditor",
+        for (const id of ["approvedConnection", "unapprovedConnection", "approvedSourceDetails", "sourceEditor", "sourceEditAction", "collectionSourceEntry", "collectionSourceDraft", "registeredSourceNotice",
             "settingsMessage", "settingsConnectionError", "sourceChangeImpact", "sourceSuggestion", "approvalScope",
             "settingsDraftStatus", "reloadSettings", "sourceReviewSummary", "firstCollectionWait", "firstCollectionActivity"]) $(id).hidden = true;
         for (const id of [...fields, "nativeCollectionSurfaces", "collectNow", "pauseCollection", "editSource", "reviewSource", "connectCollection",
@@ -865,6 +925,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         hasNativeConfiguration: () => nativeView()?.present === true,
         nativeConfigurationIntent: () => nativeView()?.intent ?? null,
         hasDraft: () => Boolean(safeDraft?.changed) || dirty() || editing || nativeView()?.stale === true, isBusy: () => busy,
+        hasUnconfirmedChange: () => uncertain || Boolean(pendingOperation) || checking,
         explain: id => current(capture()) ? explanations.get(id) || "" : "",
         canRefresh() {
             if (!current(capture())) return false;
@@ -879,6 +940,7 @@ export function mountCollectionSettings({ api, ux, write, read, invalidate, onDr
         setSection(section, setting) {
             if (visibleSection === section && visibleSetting === setting) return;
             const sectionChanged = visibleSection !== section;
+            if (section !== "source-access") firstApprovalConfirmed = false;
             visibleSection = section;
             visibleSetting = setting;
             if (sectionChanged && !busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");

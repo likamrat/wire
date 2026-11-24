@@ -2054,22 +2054,20 @@ test("native host scheduling requires a boolean and a source-aware binding", asy
     }
 });
 
+// These normal-entry cases verify the supplied clean revision in the real runner.
+// Set WIRE_HISTORY_TEST_COMMIT and select "offline clean candidate:" to qualify just those boundaries.
+const pinnedNormalEntry = ["runner-normal-entry", "runner-delayed-entry", "runner-preparation-close",
+    "runner-connect-deadline", "runner-startup-cancel", "runner-connect-presentation", "runner-terminal-presentation"];
 for (const scenario of ["initializer", "sections", "sections-old-cohort", "document", "wrong-identity", "generic-entry", "extra-page", "detail", "read-marker",
     "attended-unclassified", "attended-password", "attended-presentation-cancel",
-    "detail-navigation", "unprojected", "runner", "runner-shape", "runner-normal-entry", "runner-delayed-entry",
-    "runner-preparation-close", "runner-connect-deadline", "runner-startup-cancel",
-    "runner-connect-presentation", "runner-terminal-presentation"]) {
-    test(`bounded engineering original transport: ${scenario}`, { timeout: 60000 }, async t => {
-        const normalRunner = ["runner-normal-entry", "runner-delayed-entry", "runner-preparation-close",
-            "runner-connect-deadline", "runner-startup-cancel", "runner-connect-presentation", "runner-terminal-presentation"].includes(scenario);
+    "detail-navigation", "unprojected", "runner", "runner-shape",
+    ...(process.env.WIRE_HISTORY_TEST_COMMIT ? pinnedNormalEntry : [])]) {
+    const normalRunner = pinnedNormalEntry.includes(scenario);
+    test(`${normalRunner ? "offline clean candidate" : "bounded engineering original transport"}: ${scenario}`, { timeout: 60000 }, async t => {
         const experience = ["runner-connect-presentation", "runner-terminal-presentation"].includes(scenario);
         const experienceProof = experience && process.env.WIRE_CONNECT_EXPERIENCE_PROOF_DIR;
         const preparationOnly = ["runner-preparation-close", "runner-startup-cancel"].includes(scenario);
         const connectDeadline = scenario === "runner-connect-deadline";
-        if (normalRunner && !process.env.WIRE_HISTORY_TEST_COMMIT) {
-            t.skip("Run explicitly against the clean committed offline candidate.");
-            return;
-        }
         const sections = ["sections", "sections-old-cohort", "runner-normal-entry", "runner-delayed-entry"].includes(scenario);
         const unclassifiedAttention = scenario === "attended-unclassified";
         const classifiedAttention = scenario === "attended-password";
@@ -2309,7 +2307,7 @@ for (const scenario of ["initializer", "sections", "sections-old-cohort", "docum
                         assert.equal(event.microsoft, "not-started");
                         assert.equal(event.userVisibility, "unconfirmed");
                         assert.equal(event.preparationClose, "owned-ipc");
-                        assert.equal(event.settingsUrl, event.url + "#settings?section=connection&setting=microsoft-connection");
+                        assert.equal(event.settingsUrl, new URL(event.url).origin + "/settings?section=connection&setting=microsoft-connection");
                         const origin = new URL(event.url).origin;
                         const custody = JSON.parse(await readFile(outputFile + ".custody", "utf8"));
                         const emptyCopilot = path.join(custody.root, "empty-copilot"), emptyGitHub = path.join(custody.root, "empty-github");

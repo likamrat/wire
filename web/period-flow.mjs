@@ -14,7 +14,7 @@ export function createPeriodFlow(time, copy = chatCopy) {
         const caption = filters.from && filters.to
             ? filters.from === filters.to ? boundLabel(filters.from)
                 : calendarDate(filters.from) && calendarDate(filters.to)
-                    ? `${time.formatDate(filters.from, timeContext, filters.from.slice(0, 4) !== filters.to.slice(0, 4))} - ${format(filters.to)}`
+                    ? time.formatCivilRange(filters.from, filters.to, timeContext)
                     : `${boundLabel(filters.from)} - ${boundLabel(filters.to)}`
             : filters.from ? `From ${boundLabel(filters.from)}`
                 : filters.to ? `Through ${boundLabel(filters.to)}` : "All dates";
@@ -40,11 +40,12 @@ export function createPeriodFlow(time, copy = chatCopy) {
                 if (Number.isFinite(since) && Number.isFinite(until) && since <= until) {
                     if (from < since || elapsedTo > until) {
                         const outside = from > until || elapsedTo < since;
-                        warning = `${outside ? "This period is" : "Some of this period is"} outside checked history; activity may be missing.`;
+                        warning = outside ? "This period falls outside the dates WIRE last checked."
+                            : "The last history check covered only part of this period.";
                         historyLink = true;
                     }
                 } else {
-                    warning = "Checked history is unknown; this view uses retained activity.";
+                    warning = "The dates of the last history check are unavailable.";
                     historyLink = true;
                 }
             }

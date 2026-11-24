@@ -17,12 +17,34 @@ import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
-import { renderComparisonHtml, renderComparisonMarkdown, reportPresentationStyles } from "../lib/report-presentation.mjs";
+import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
-import { createAssessmentWording } from "../web/assessment-presentation.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
+import { privateFixture } from "./helpers.mjs";
 
 const key = "a".repeat(64), preparedAt = "2026-10-12T02:00:00.000Z";
 const formats = ["html", "pdf", "json", "markdown"];
+test("versioned focused report reading keeps complete saved facts across every compact PDF page", { timeout: 60000 }, async t => {
+    const all = reviewRecords(), source = [all[0], all[1], all.at(-1)];
+    const { context } = await privateFixture(t, source), state = await loadBoardState(context), controller = createExportController(context);
+    const preview = await controller.preview("reading-proof", undefined, {
+        saveMode: "local", promptMode: "masked", formats, timeContext: { timeZone: "America/Los_Angeles", locale: "en-US" },
+        dateSelection: { range: "capture" }, reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    const { bundle } = await controller.confirm("reading-proof", preview.previewId, true, preview.snapshot.timeContext,
+        { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+    const saved = (await loadBoardState(context)).exports.find(entry => entry.bundleId === bundle.bundleId);
+    const files = Object.fromEntries(await Promise.all(Object.entries(saved.files).map(async ([name, file]) =>
+        [name, await readFile(file, name.endsWith(".pdf") ? undefined : "utf8")])));
+    assert.equal(JSON.parse(files["product-report.json"]).presentation.productVersion, 1);
+    assert.equal(JSON.parse(files["coverage-and-redaction-manifest.json"]).presentation.productVersion, 1);
+    for (const [name, bytes] of Object.entries(files)) if (name !== "coverage-and-redaction-manifest.json") {
+        assert.deepEqual(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes), typeof preview.files[name] === "string"
+            ? Buffer.from(preview.files[name]) : Buffer.from(preview.files[name].data, "base64"));
+    }
+    await inspect(t, "focused-product", { ...preview, files, previewHtml: files["product-report.html"] });
+});
+
 async function inspect(t, name, bundle) {
     const files = Object.fromEntries(Object.entries(bundle.files).map(([name, value]) =>
         [name, typeof value === "string" || Buffer.isBuffer(value) ? value : Buffer.from(value.data, "base64")]));
@@ -236,7 +258,7 @@ function changedDefinitionComparison() {
     return { pairs, originals, oldBytes, comparison, before, html, markdown };
 }
 
-test("F13 follow-up renders each changed definition beside its own comparison value in UI HTML and Markdown", async t => {
+test("each changed definition stays beside its own comparison value in saved HTML and Markdown", async t => {
     const { pairs, originals, oldBytes, comparison, before, html, markdown } = changedDefinitionComparison();
     const browser = await chromium.launch();
     t.after(() => browser.close());
@@ -244,15 +266,9 @@ test("F13 follow-up renders each changed definition beside its own comparison va
     await page.route("**/*", route => route.abort());
     await page.setContent(html);
     const directory = process.env.WIRE_READABILITY_PROOFS ? path.join(process.env.WIRE_READABILITY_PROOFS, "F13-side-correction") : null;
-    const current = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-    await current.route("**/*", route => route.abort());
-    await current.setContent(`<html data-evidence-theme="light"><head><style>${reportPresentationStyles}</style></head><body class="comparison-document"><main id="current"></main></body></html>`);
-    await current.addScriptTag({ content: `window.comparison = (${createReportComparison.toString()})((${createAssessmentWording.toString()})());` });
-    await current.evaluate(value => window.comparison.render(document.getElementById("current"), value), comparison);
     const markdownRows = markdown.split("\n").filter(line => line.startsWith("| ") && line.includes("1 of 2 passed")).map(line => line.split("|").slice(1, -1));
     const htmlRows = await page.locator(".comparison-metrics").first().locator("tbody tr").evaluateAll(rows => rows.map(row => [...row.children].map(cell => cell.textContent)));
-    const currentRows = await current.locator(".comparison-metrics").first().locator("tbody tr").evaluateAll(rows => rows.map(row => [...row.children].map(cell => cell.textContent)));
-    for (const rows of [markdownRows, htmlRows, currentRows]) {
+    for (const rows of [markdownRows, htmlRows]) {
         assert.equal(rows.length, pairs.length);
         pairs.forEach((pair, index) => {
             const shared = index === 6, row = rows[index];
@@ -292,8 +308,8 @@ test("F13 follow-up renders each changed definition beside its own comparison va
     originals.forEach((value, index) => assert.deepEqual(Buffer.from(JSON.stringify(value)), oldBytes[index]));
     if (directory) {
         await mkdir(directory, { recursive: true });
-        await current.screenshot({ path: path.join(directory, "current-side-correction.png"), fullPage: true });
-        await writeFile(path.join(directory, "side-cells.json"), JSON.stringify({ markdownRows, htmlRows, currentRows }, null, 2));
+        await page.screenshot({ path: path.join(directory, "saved-side-correction.png"), fullPage: true });
+        await writeFile(path.join(directory, "side-cells.json"), JSON.stringify({ markdownRows, htmlRows }, null, 2));
     }
 });
 
@@ -340,7 +356,7 @@ test("F13 new saved comparison keeps known permission, matching and unknown hist
     const html = renderComparisonHtml(comparison, snapshot), markdown = renderComparisonMarkdown(comparison, snapshot);
     const bundle = { previewHtml: html, files: { "product-report.html": html, "product-report.md": markdown,
         "product-report.json": before, "product-report.pdf": await renderPdf(html) } };
-    const { page, texts, browser, directory } = await inspect(t, "F13-saved-comparison", bundle);
+    const { page, texts } = await inspect(t, "F13-saved-comparison", bundle);
     for (const text of texts.map(text => text.replace(/\s+/g, " "))) {
         assert.match(text, /Tool use vs\. request/);
         assert.match(text, /Permission for tool use/);
@@ -380,21 +396,6 @@ test("F13 new saved comparison keeps known permission, matching and unknown hist
         }
     };
     checkOrigins(htmlCells); checkOrigins(markdownCells);
-    const current = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-    await current.route("**/*", route => route.abort());
-    await current.setContent(`<html data-evidence-theme="light"><head><style>${reportPresentationStyles}</style></head><body class="comparison-document"><main id="current"></main></body></html>`);
-    await current.addScriptTag({ content: `window.comparison = (${createReportComparison.toString()})((${createAssessmentWording.toString()})());` });
-    await current.evaluate(value => window.comparison.render(document.getElementById("current"), value), comparison);
-    const currentLabels = await current.locator(".comparison-metrics tbody th").allTextContents();
-    assert.ok(currentLabels.some(label => label.includes("Tool use vs. request")));
-    assert.ok(currentLabels.some(label => label.includes("Permission for tool use")));
-    assert.ok(currentLabels.some(label => label.includes("Saved review (type not recorded)")));
-    checkOrigins(await current.locator(".comparison-metrics").first().locator("tbody tr").evaluateAll(rows =>
-        rows.map(row => [...row.children].map(cell => cell.textContent))));
-    if (directory) {
-        await writeFile(path.join(directory, "current-view.txt"), await current.locator("#current").innerText());
-        await current.screenshot({ path: path.join(directory, "current-comparison-light-1280.png"), fullPage: true });
-    }
 });
 
 test("F11 frozen scope describes collection membership, service OR, context and within-service AND", () => {

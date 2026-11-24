@@ -1,6 +1,6 @@
 ---
 name: wire-coordination
-description: Coordinate WIRE development by complete outcomes, concrete dependencies and exception-only communication. Use when preparing or activating a successor, assigning or replacing workers, resolving cross-owner blockers, or coordinating a combined build. Not for an ordinary single-owner code change.
+description: Coordinates WIRE work across owners. Use for successor handoffs, worker assignments, rejected relays, cross-owner blockers and deciding which changes enter a combined build.
 license: MIT
 ---
 
@@ -50,6 +50,14 @@ Children need standalone context, including original feedback and attachments
 when relevant and authorized. Transfer the underlying principle across affected
 surfaces, not just a screenshot treatment or a command to load a skill.
 
+Read the receipt for each send. A rejected kickoff was not delivered. A rejected
+follow-up does not cancel an earlier kickoff or deliver the new instructions.
+Track the missing instruction separately from work the owner actually started.
+A stale user relay needs fresh, relevant user input through the supported route.
+Admission alone does not prove execution. If delivery is uncertain, check the
+recipient's state. Retry only after establishing non-delivery and confirming
+the original authority still applies.
+
 Use [end-to-end delivery](../wire-end-to-end-delivery/SKILL.md) for implementation
 and delivery; use [UX finish](../wire-ux-finish/SKILL.md) for affected interface
 acceptance. Load only their relevant branches. A single-owner fix does not
@@ -73,8 +81,9 @@ batch builds.
 Serialize only real conflicts: overlapping integration hunks, the same live
 writer/process, same-runtime checks versus restart, source/profile custody,
 or a concrete producer prerequisite. A build failure or unrelated unfinished
-feature is not a global hold. Record each hold's release condition and next actor;
-release it when satisfied.
+feature is not a global hold. Record each hold's release condition and next actor.
+On a qualified handoff, release satisfied holds and name the integration owner's
+next action or the correction that returns to the feature owner.
 
 **Ready:** each ready outcome is moving, and every blocked outcome has a concrete
 dependency rather than a general "waiting for the build."

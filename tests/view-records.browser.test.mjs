@@ -79,7 +79,7 @@ test("Analyze exposes its existing records without a duplicate navigation action
     await frames(page);
     const summary = page.locator("#activityListSummary");
     await expect(summary).toBeFocused();
-    await expect(summary).toContainText("10 interactions with 20 matching Work IQ tool calls");
+    await expect(summary).toContainText("10 interactions · 20 matching tool calls");
     await expect(page.locator("#activityListContext #activityListSummary")).toBeVisible();
     await expect(page.locator("#openAnalysisSearch")).toHaveCount(0);
     await expect(page.locator("#activityListScope")).toBeHidden();
@@ -102,7 +102,7 @@ test("an empty accepted view still has a visible entry summary without clearing 
     const origin = page.url();
     await revealAnalyzeRecords(page);
     await expect(page.locator("#activityListSummary")).toBeFocused();
-    await expect(page.locator("#activityListSummary")).toHaveText("0 interactions with 0 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("0 interactions · 0 matching tool calls");
     await expect(page.locator("#activityList")).toContainText("No matching interactions");
     await expect(page.locator("#activityPager")).toBeHidden();
     assert.equal(page.url(), origin);
@@ -170,7 +170,7 @@ test("the visible entry preserves page two and the card position through reader 
     }
 });
 
-test("Analyze remains the only ordinary navigation entry out of period comparison", async t => {
+test("the Analyze navigation link leaves period comparison", async t => {
     const { page, runtime } = await setup(t);
     await page.goto(runtime.url + "#analyze?compare=periods&aFrom=2026-01-19&aTo=2026-01-23&bFrom=2026-01-24&bTo=2026-01-28");
     await ready(page);
@@ -182,7 +182,7 @@ test("Analyze remains the only ordinary navigation entry out of period compariso
     await page.keyboard.press("Enter");
     await frames(page);
     await expect(page.locator("#activityView")).toBeVisible();
-    assert.equal(new URL(page.url()).hash.includes("compare=periods"), false);
+    assert.equal(new URL(page.url()).pathname, "/");
 });
 
 test("native chart selection and modified links lead to the same matching records and full reader", async t => {
@@ -194,7 +194,7 @@ test("native chart selection and modified links lead to the same matching record
     await failure.click({ modifiers: ["Control"] });
     const popup = await popupPromise;
     await ready(popup);
-    await expect(popup.locator("#activityListSummary")).toHaveText("10 interactions with 10 matching Work IQ tool calls");
+    await expect(popup.locator("#activityListSummary")).toHaveText("10 interactions · 10 matching tool calls");
     assert.equal(page.url(), originalUrl, "Modified chart navigation leaves the originating view intact.");
     await popup.close();
 
@@ -207,8 +207,8 @@ test("native chart selection and modified links lead to the same matching record
     assert.ok(accepted.analytics.rows.every(row => row.outcome === "failure"));
     await revealAnalyzeRecords(page);
     await expect(page.locator("#activityListSummary")).toBeFocused();
-    const ownersOnPage = () => page.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
-        new URLSearchParams(new URL(node.href).hash.split("?")[1]).get("request")));
+    const ownersOnPage = () => page.locator("#activityList .request-row").evaluateAll(nodes => nodes.map(node =>
+        node.dataset.viewKey.slice("request:".length)));
     const displayedOwners = await ownersOnPage();
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     displayedOwners.push(...await ownersOnPage());
@@ -229,22 +229,23 @@ test("native chart selection and modified links lead to the same matching record
 });
 
 test("a native time column keeps its exact accepted date window when its records are read", async t => {
-    const { page } = await setup(t);
-    const column = page.locator('#chart a[href*="from="]').first();
-    const target = new URLSearchParams((await column.getAttribute("href")).split("?")[1]);
+    const { page, runtime } = await setup(t, { navigate: false });
+    await page.goto(runtime.url + "?bucket=week"); await ready(page);
+    const column = page.locator("#chart .time-column").first();
+    const target = new URL(await column.getAttribute("href"), page.url()).searchParams;
     const response = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
-    await column.click();
+    await column.press("Enter");
     const accepted = await (await response).json();
     await ready(page);
     assert.equal(accepted.analytics.rows.length, 14);
     await revealAnalyzeRecords(page);
     await expect(page.locator("#activityListSummary")).toBeFocused();
-    await expect(page.locator("#activityListSummary")).toHaveText("7 interactions with 14 matching Work IQ tool calls");
-    const current = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    await expect(page.locator("#activityListSummary")).toHaveText("7 interactions · 14 matching tool calls");
+    const current = new URL(page.url()).searchParams;
     assert.equal(current.get("from"), target.get("from"));
     assert.equal(current.get("to"), target.get("to"));
-    const owners = await page.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
-        new URLSearchParams(new URL(node.href).hash.split("?")[1]).get("request")));
+    const owners = await page.locator("#activityList .request-row").evaluateAll(nodes => nodes.map(node =>
+        node.dataset.viewKey.slice("request:".length)));
     assert.deepEqual(owners.sort(), [...new Set(accepted.analytics.rows.map(row => row.scenarioId))].sort());
 });
 
@@ -277,7 +278,7 @@ for (const [width, scale] of [[1440, 1], [390, 2]]) test(`exact and missing call
             return { id: document.activeElement.id, summaryTop: summary.top, summaryBottom: summary.bottom, headerBottom: header.bottom,
                 inViewport: summary.top >= header.bottom && summary.bottom <= innerHeight };
         }));
-        assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("result"), "failure");
+        assert.equal(new URL(page.url()).searchParams.get("result"), "failure");
     }
     t.diagnostic(JSON.stringify(returnedFocus));
     assert.ok(returnedFocus.every(value => value.id === "activityListSummary" && value.inViewport),
@@ -308,20 +309,20 @@ test("the list caption stays on accepted scope while a chart filter is pending o
     await expect(caption).toHaveText("");
     await expect(caption).toBeHidden();
     await expect(caption).toHaveAttribute("data-revision", acceptedRevision);
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 20 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 20 matching tool calls");
     release();
     await ready(page);
     await expect(caption).toHaveText("");
     await expect(caption).toBeHidden();
     await expect(caption).toHaveAttribute("data-revision", acceptedRevision);
     await expect(caption).not.toContainText("Outcome: Tool failed");
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 20 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 20 matching tool calls");
     await page.unroute("**/api/snapshot", hold);
     await page.locator('#outcomeChart [data-category="failure"] .percentage-label').click();
     await ready(page);
     await expect(caption).toContainText("Outcome: Tool failed");
     await expect(caption).toHaveAttribute("data-revision", await page.locator("#activityView").getAttribute("data-revision"));
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 10 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 10 matching tool calls");
 });
 
 test("accepted service captions distinguish known matches from retained missing-service context", async t => {
@@ -332,7 +333,7 @@ test("accepted service captions distinguish known matches from retained missing-
     await ready(page);
     assert.equal(contextSnapshot.analytics.serviceInvolvement.selection.knownMatchIds.length, 19);
     assert.equal(contextSnapshot.analytics.serviceInvolvement.selection.contextOnlyIds.length, 1);
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 20 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 20 matching tool calls");
     const contextCaption = await page.locator("#activityListScope").textContent();
     const strict = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
     await page.goto(runtime.url + "#analyze?services=Files&includeMissingService=false");
@@ -340,7 +341,7 @@ test("accepted service captions distinguish known matches from retained missing-
     await ready(page);
     assert.equal(strictSnapshot.analytics.serviceInvolvement.selection.knownMatchIds.length, 19);
     assert.equal(strictSnapshot.analytics.serviceInvolvement.selection.contextOnlyIds.length, 0);
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 19 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 19 matching tool calls");
     assert.match(contextCaption, /Service: Files/);
     assert.match(contextCaption, /19 known matches; 1 context-only/);
     await expect(page.locator("#activityListScope")).toContainText("Files only (19 known matches)");
@@ -371,7 +372,7 @@ test("initial loading and a failed first read never expose a zero-match or accep
     await page.unroute("**/api/snapshot", hold);
     await page.locator("#storedViewRetry").click();
     await ready(page);
-    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions with 20 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toHaveText("10 interactions · 20 matching tool calls");
     await expect(page.locator("#activityListScope")).toBeHidden();
     await expect(page.locator("#activityListScope")).toHaveText("");
 });
@@ -417,10 +418,10 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
         await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
         await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("");
         await expect(page.locator("#activityListSummary")).toHaveText(match
-            ? "1 interaction with 1 matching Work IQ tool call" : "0 interactions with 0 matching Work IQ tool calls");
+            ? "1 interaction · 1 matching tool call" : "0 interactions · 0 matching tool calls");
         await expect(page.locator("#activityCount")).toHaveText(match ? "1" : "0");
-        const ids = await page.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
-            new URLSearchParams(new URL(node.href).hash.split("?")[1]).get("request")));
+        const ids = await page.locator("#activityList .request-row").evaluateAll(nodes => nodes.map(node =>
+            node.dataset.viewKey.slice("request:".length)));
         assert.deepEqual(ids, match ? ["search-0"] : []);
         if (!match) {
             await expect(page.locator("#activityPager")).toBeHidden();
@@ -454,14 +455,14 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
             await expect(page.locator("#activityView")).toBeHidden();
             await expect(filterEntry).not.toHaveAccessibleDescription(/Saved collection|Search applied/);
             await expect(filterEntry).toHaveAccessibleName("Filters and view");
-            await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+            await expect(filterEntry).toHaveText("Filters");
         } finally { release(); }
         await expect(page.locator("#activityListSummary")).toHaveText(match
-            ? "0 interactions with 0 matching Work IQ tool calls" : "1 interaction with 1 matching Work IQ tool call");
+            ? "0 interactions · 0 matching tool calls" : "1 interaction · 1 matching tool call");
         await expect(filterEntry).toHaveAccessibleDescription(/Search applied/);
         await expect(filterEntry).not.toHaveAccessibleDescription(new RegExp(nextQuery));
-        await expect(filterEntry).toHaveAccessibleName("Filters and view, 1 active filter");
-        await expect(page.locator("#analyzeFilterCount")).toBeVisible();
+        await expect(filterEntry).toHaveAccessibleName("1 filter applied");
+        await expect(filterEntry).toHaveText("1 filter applied");
         await page.unroute("**/api/search/query", hold);
     } else {
         await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
@@ -477,7 +478,7 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
             await expect(filters).not.toHaveAccessibleDescription(/Saved collection|Search applied/);
         }
         await expect(filterEntry).toHaveAccessibleName("Filters and view");
-        await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+        await expect(filterEntry).toHaveText("Filters");
     }
     await page.locator("#wireSearch").fill("");
     await expect(page.locator("#activityListSummary")).toHaveText(initialSummary);
@@ -485,6 +486,6 @@ for (const complete of [true, false]) for (const match of [true, false]) test(
     await expect(filterEntry).toHaveAccessibleDescription(/Saved collection/);
     await expect(filterEntry).not.toHaveAccessibleDescription(/Search applied/);
     await expect(filterEntry).toHaveAccessibleName("Filters and view");
-    await expect(page.locator("#analyzeFilterCount")).toBeHidden();
+    await expect(filterEntry).toHaveText("Filters");
     assert.ok(!page.url().includes(query));
 });

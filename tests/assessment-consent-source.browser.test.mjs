@@ -192,7 +192,7 @@ test("response saving keeps pending and uncertain writes explicit without offeri
     assert.equal(await input.isDisabled(), true);
     assert.equal(await pane.getByRole("button", { name: "Saving...", exact: true }).isDisabled(), true);
     assert.equal(await pane.getByRole("button", { name: "Discard change", exact: true }).isDisabled(), true);
-    assert.match(await pane.locator(".assessment-applied").textContent(), /Response saving is on/, "Pending drafts cannot claim to be the applied state");
+    assert.equal(await pane.locator(".assessment-applied").textContent(), "Turning off reply saving. Last confirmed setting: on.");
     assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 1);
     release();
     await pane.getByRole("button", { name: "Check response-saving result", exact: true }).waitFor();

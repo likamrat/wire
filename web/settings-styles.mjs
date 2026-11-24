@@ -1,8 +1,27 @@
 export const settingsStyles = `
+#appUpdateNotice {display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);flex-wrap:wrap;padding:var(--space-md) var(--space-lg);margin-bottom:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper)}
+#appUpdateNotice[hidden] {display:none}
+@media(min-width:64rem) {
+ #appUpdateNotice {position:fixed;z-index:var(--layer-header);inset-inline-start:10px;inset-block-end:7.5rem;
+  width:calc(var(--app-sidebar-width,216px) - 20px);min-width:12rem;max-width:19rem;margin:0;
+  padding:var(--space-md);gap:var(--space-xs);box-shadow:var(--surface-shadow)}
+ :root[data-navigation=collapsed] #appUpdateNotice {inset-inline-start:calc(var(--app-sidebar-width,64px) + 8px);width:16rem}
+}
+.app-update-copy p,#appUpdateProgress {margin:.25em 0 0;color:var(--muted)}
+.app-update-actions {display:flex;align-items:center;gap:var(--space-sm)}
+button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update-ink);--pill-hover:color-mix(in srgb,var(--update-fill) 90%,var(--ink));--pill-pressed:color-mix(in srgb,var(--update-fill) 82%,var(--ink))}
+#appUpdateApply {display:inline-flex;align-items:center;gap:var(--pill-gap)}
+#appUpdateApply[hidden] {display:none}
+[data-settings-section=general] .settings-actions {margin-top:0}
+[data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
+.app-version-card .settings-row-copy {flex:1 1 12rem}
+#appUpdateFence {max-width:min(29rem,calc(100vw - 2rem));padding:var(--space-xl);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
+#appUpdateFence h2 {margin:0;font-size:var(--type-section)}
+#appUpdateRecover {margin-top:var(--space-md)}
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:1.5rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
- --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:8px;
+ --settings-field-radius:10px;--settings-nav-radius:8px;
 }
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
 .settings-view {--pill-border:var(--control);max-width:70rem;container:settings / inline-size}
@@ -54,12 +73,11 @@ export const settingsStyles = `
 .settings-content {max-width:48rem;padding:24px 28px;background:var(--paper);border-radius:12px;container:settings-pane / inline-size}
 .settings-categories {padding:0}
 .settings-categories>summary {display:none}
-.settings-categories nav {display:flex;flex-direction:column;gap:4px}
-.settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
-.settings-categories a>.wire-icon {width:20px;height:20px;margin-top:0;flex:none}
+.settings-categories nav,.settings-default-links {display:flex;flex-direction:column}
+.settings-default-links {margin-block-start:var(--space-lg)}
+.settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:var(--space-md);border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
+.settings-categories a>.wire-icon {width:1.125rem;height:1.125rem;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
-.settings-categories a:hover {background:transparent;color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
-.settings-categories a:active {background:transparent;color:var(--ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.25em}
 .settings-categories a[aria-current=page] {background:transparent;color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
 .settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
@@ -87,9 +105,9 @@ export const settingsStyles = `
 .settings-search-heading>span {min-width:0;overflow-wrap:anywhere}
 .settings-search-results ul {margin:4px 0 0 1.125rem}
 .settings-search-results a {position:relative;display:grid;align-content:center;gap:2px;min-height:44px;padding:8px 8px 8px 10px;border-radius:var(--settings-nav-radius);color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-regular);overflow-wrap:anywhere}
-.settings-search-results a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
-.settings-search-results a:active {color:var(--ink);text-decoration-thickness:2px}
 .settings-search-results a[aria-current=location] {color:var(--ink)}
+.settings-rail :is(.settings-categories,.settings-search-results) a:hover {background:var(--hover);color:var(--ink)}
+.settings-rail :is(.settings-categories,.settings-search-results) a:active {background:var(--accent-pressed);color:var(--ink)}
 .settings-search-results a[aria-current=location]::before {content:"";position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-search-availability {font-size:var(--type-caption);color:var(--muted)}
 .settings-search-results mark {color:inherit;background:var(--accent-soft);font-weight:var(--weight-medium)}
@@ -113,17 +131,14 @@ export const settingsStyles = `
 .settings-view,.settings-view p,.settings-view summary {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view label {font-size:var(--type-small);line-height:var(--leading-control)}
 .settings-view :is(input,select,button,.select-trigger) {font-size:var(--type-control);line-height:var(--leading-control)}
-.settings-view :is(button:not(.ux-help,.ux-copy,.select-trigger),a.button-link) {--action-radius:var(--settings-action-radius)}
-.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy) {--pill-inset:10px}
-.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {inset-block:6px}
 .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible {outline:none}
 .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .settings-view .ux-disabled-help:focus-visible:has(>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)) {outline:none}
 .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline:2px solid var(--focus);outline-offset:2px}
-.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:.375em}
+.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:var(--pill-gap)}
 .settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead)>.wire-icon {width:1rem;height:1rem}
 .settings-view #reloadSettings {margin-bottom:16px}
-.settings-view :is(input[type=text],.select-trigger) {border-radius:var(--settings-field-radius)}
+.settings-view input[type=text] {border-radius:var(--settings-field-radius)}
 .settings-section {padding:24px;background:var(--paper);border-radius:var(--radius);margin-bottom:20px}
 .settings-section h2 {font-size:var(--type-section);line-height:var(--leading-section)}
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
@@ -132,6 +147,23 @@ export const settingsStyles = `
 .settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
+.settings-nav-group {padding-inline:var(--space-md);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-control);font-weight:var(--weight-strong)}
+.settings-view .page-default-field {min-width:0;margin:0;padding:0;border:0}
+.settings-view .page-default-field+.page-default-field {margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--rule)}
+.page-default-field>legend,.page-default-field>label {display:block;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
+.settings-view .page-default-field>.settings-help {margin:.35rem 0 .65rem}
+.page-default-field>.select-control {width:min(100%,22rem)}
+.analyze-layout-field ol {max-width:43rem;margin:0;padding-inline-start:2rem;border-block:1px solid var(--rule)}
+.analyze-layout-field li+li {border-top:1px solid var(--rule)}
+.analyze-layout-field li::marker {font-variant-numeric:tabular-nums;color:var(--muted);font-size:var(--type-small)}
+.analyze-layout-field li>div,.analyze-layout-actions {display:flex;align-items:center;gap:4px}
+.analyze-layout-field li span {flex:1;min-width:0}
+.analyze-layout-field li button {min-width:44px;min-height:44px}
+.analyze-layout-actions {justify-content:space-between;max-width:43rem;flex-wrap:wrap;margin-top:8px}
+.analyze-layout-actions a {display:inline-flex;align-items:center;min-height:44px}
+.page-default-formats {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:0 .75rem}
+.page-default-formats label {display:flex;align-items:center;gap:.55rem;min-height:44px;cursor:pointer}
+.page-default-formats input[type=checkbox] {margin:0;min-height:0;width:1rem;height:1rem;accent-color:var(--toggle-on)}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
 .settings-section-heading p,.settings-help {color:var(--muted)}
 .settings-section p {margin-top:8px;max-width:70ch}
@@ -209,6 +241,17 @@ export const settingsStyles = `
 #connectionPreferences .settings-preferences .settings-field {padding-block:0;border:0}
 #connectionPreferences #preferenceActions {margin-top:16px;padding-top:0}
 .settings-view #connectionPreferences {padding-bottom:0}
+.settings-view #connectionPreferences:not([hidden]) {padding:var(--space-lg);margin-block:var(--space-md) var(--space-lg);background:var(--canvas);border:0;border-radius:var(--radius)}
+.settings-view .settings-collection-state {border:0;padding-block:0 var(--space-sm);align-items:center}
+.settings-view #connectionTitle {margin-bottom:var(--space-lg)}
+.settings-view .settings-collection-state .connection-status {color:var(--muted);font-weight:var(--weight-regular)}
+.settings-view #approvedConnection {justify-self:end}
+.settings-view #sourceEditAction {margin-top:8px}
+.settings-view #approvedSourceDetails {padding:0;border:0}
+.settings-view #settingsStatusLink {margin:8px 0 0}
+.settings-evidence-guide {margin-block:var(--space-lg)}
+.settings-evidence-guide .settings-advanced {margin:0}
+.settings-evidence-guide h3 {margin-bottom:var(--space-sm)}
 .settings-view .settings-group>.settings-task-row {padding:0;border:0;margin:0}
 .settings-view .settings-group>.settings-task-row h3 {margin:0}
 .settings-group>.collection-status-actions {margin-top:8px}
@@ -220,17 +263,6 @@ export const settingsStyles = `
 .settings-view #assessmentSetup .settings-row-copy h3 {display:flex;align-items:center;min-height:44px}
 .settings-view #assessmentSetup .settings-row-copy h3 label {cursor:pointer}
 .settings-view #assessmentSetup .settings-reply-help {margin-top:0}
-.settings-view .settings-switch {position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;cursor:pointer}
-.settings-view .settings-switch input {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}
-.settings-view .settings-switch .select-toggle {pointer-events:none}
-.settings-view .settings-switch:has(input:checked) .select-toggle {border-color:var(--toggle-on);background:var(--toggle-on)}
-.settings-view .settings-switch:has(input:checked) .select-toggle::after {transform:translateX(12px);background:var(--toggle-thumb)}
-.settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
-.settings-view .settings-switch:has(input:disabled) {cursor:not-allowed}
-.settings-view .settings-switch:has(input:disabled) .select-toggle {box-shadow:none;border-color:var(--muted);border-style:dashed}
-.settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:var(--muted)}
-.settings-view .settings-switch:hover:has(input:enabled) .select-toggle {outline:1px solid var(--control);outline-offset:2px}
-.settings-view .settings-switch:hover:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
 .settings-view #assessmentSetup .assessment-applied {font-weight:var(--weight-regular);color:var(--muted)}
 .settings-view #assessmentSetup .assessment-control-actions {justify-content:flex-start;margin:12px 0 0}
 .settings-view #assessmentSetup .assessment-control-actions:not(:has(>button:not([hidden]))) {display:none}
@@ -240,30 +272,52 @@ export const settingsStyles = `
 @media(forced-colors:active) {
  .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before,
  .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline-color:Highlight}
- .settings-view .settings-switch .select-toggle {background:Canvas;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}
- .settings-view .settings-switch .select-toggle::after {background:ButtonText}
- .settings-view .settings-switch:has(input:checked) .select-toggle {background:Highlight;border-color:Highlight}
- .settings-view .settings-switch:has(input:checked) .select-toggle::after {background:HighlightText}
- .settings-view .settings-switch:has(input:disabled) .select-toggle {border-color:GrayText}
- .settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:GrayText}
- .settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline-color:Highlight}
 }
 .settings-view .settings-automatic-row {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0;margin:0;border:0}
 .settings-view .settings-automatic-row>h3,.settings-view .settings-automatic-row>p {margin:0}
 .settings-view .settings-automatic-actions {display:flex;flex-wrap:wrap;align-items:start;gap:8px;min-width:0}
 .settings-view .settings-automatic-row[data-scoring-state=paused]>p {border-inline-start:3px solid var(--warning);padding-inline-start:12px}
-.settings-view .settings-content a:not(.button-link),.settings-status-link a {text-decoration:underline;text-underline-offset:3px}
-.settings-view .settings-content a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+.settings-content :is(p,.notice,.settings-advanced)>a:not(.button-link) {text-decoration:underline;text-underline-offset:3px}
+.settings-content .settings-advanced>a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+#settingsGeneralBack {margin-bottom:var(--space-sm)}
+#settingsGeneralBack>.wire-icon {width:1rem;height:1rem}
+.settings-view .app-version-card + .settings-task-row {border-top:0;border-bottom:1px solid var(--rule)}
+.general-appearance {padding-block:1.25rem .85rem}
+.settings-view .general-appearance h3,.settings-preference-link strong {margin:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
+.settings-view .settings-content a.settings-preference-link {display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;width:100%;min-height:44px;
+ padding:.65rem 0;text-decoration:none;color:var(--ink);border-radius:var(--settings-nav-radius)}
+.general-appearance .palette-scene {width:min(7.5rem,100%);min-height:3.8rem;box-sizing:border-box;border:1px solid var(--rule);border-radius:var(--radius-small)}
+.general-appearance .palette-rail::before {content:"";display:block;margin:.45rem .18rem;width:60%;height:2px;background:var(--control);box-shadow:0 .36rem var(--control),0 .72rem var(--control)}
+.general-appearance .palette-sheet {align-content:center}
+.general-palette-summary {display:grid;gap:.3rem;min-width:0}
+#generalThemeValue {display:flex;align-items:baseline;flex-wrap:wrap;gap:0 .5rem}
+.settings-preference-link strong,#generalMode,#generalTimeValue {display:block}
+#generalMode,#generalTimeValue {color:var(--muted);font-size:var(--type-small)}
+.settings-preference-link>.preference-destination {display:inline-flex;align-items:center;gap:var(--space-xs);margin-inline-start:auto;
+ padding:.25em .5em;border-radius:var(--radius-small);font-size:var(--type-control);line-height:var(--leading-control);color:var(--ink)}
+.preference-destination .wire-icon {display:block;flex:none;width:1rem;height:1rem}
+.settings-preference-link:hover>.preference-destination {background:var(--hover)}
+.settings-preference-link:active>.preference-destination {background:var(--pill-pressed)}
+.settings-preference-link:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+#generalThemeAction {border:1px solid var(--control);padding:.35em var(--pill-inset);border-radius:var(--radius-control);font-weight:var(--pill-weight)}
+@container settings-pane (max-width:23rem) {
+ .settings-preference-link>.preference-destination {margin-inline-start:0}
+ #general-themes {display:grid;grid-template-columns:auto minmax(0,1fr)}
+ #general-themes .palette-scene {width:min(7.5rem,26cqi);min-height:0;aspect-ratio:2;grid-template-columns:20% minmax(0,1fr);padding:4px;gap:3px}
+ #general-themes .palette-rail::before {margin:4px 1px;box-shadow:0 4px var(--control),0 8px var(--control)}
+ #general-themes .palette-sheet {padding:3px;gap:4px}
+ #generalThemeAction {grid-column:1/-1;justify-self:start}
+}
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}
 .settings-view .settings-advanced[open] {padding-bottom:12px}
 .settings-view .settings-advanced>summary {color:var(--ink);font-weight:var(--weight-medium)}
 .settings-view .settings-advanced>p {margin:0 0 8px;color:var(--muted)}
 .settings-view [data-settings-section=troubleshooting]>.settings-group {padding-top:0;border:0}
-.settings-view [data-settings-section=display]>.settings-theme-row {padding-top:0;border:0}
+.settings-view [data-settings-section=themes]>.settings-theme-row,.settings-view [data-settings-section=regional]>.settings-display-field {padding-top:0;border:0}
 .settings-view .settings-theme-row {align-items:center}
 .settings-view .settings-theme-row .theme-trigger {border-radius:var(--radius-pill)}
-.settings-view .settings-section>:nth-last-child(1 of :not([hidden])) {padding-bottom:0}
+.settings-view .settings-section>:nth-last-child(1 of :not([hidden])):not(.settings-preference-link) {padding-bottom:0}
 .display-time-field p {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}

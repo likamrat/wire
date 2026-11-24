@@ -6,16 +6,20 @@ export function createSessionJourney() {
         const valid = id => typeof id === "string" && /^export-[a-f0-9-]{36}$/.test(id);
         if (valid(bundle)) { route.bundle = bundle; delete route.task; }
         else if (valid(inspect) && route.task !== "create") route.inspect = inspect;
+        if (route.task === "compare") { route.task = "library"; delete route.savedEntry; }
         if (order === "oldest") route.order = order;
         return route;
     }
     function returnRoute(value, includeSourceReturn = false) {
         if (!value || !["analyze", "trends", "reports", "settings", "collection-status"].includes(value.view)) return null;
-        const keys = ["view", "layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService",
-            "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded",
+        const keys = ["view", "layer", "chart", "bucket", "timelineFrom", "range", "from", "to", "source", "tool", "services", "includeMissingService",
+            "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded", "widget", "guideTopic",
             "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "comparisonFocus", "analysisQuery", "search", "inspect", "order", "nativeGroup"];
         const saved = Object.fromEntries(Object.entries(value)
             .filter(([key, entry]) => keys.includes(key) && ["string", "number", "boolean"].includes(typeof entry)));
+        if (value.view === "trends") for (const key of ["trendEntry", "trendSection", "trendMeasure", "trendPeriod", "trendFrom", "trendTo", "trendUnavailable"]) {
+            if (["string", "boolean"].includes(typeof value[key])) saved[key] = value[key];
+        }
         if (value.localSearch) saved.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
             .filter(key => typeof value.localSearch[key] === "string").map(key => [key, value.localSearch[key]]));
         if (includeSourceReturn && value.returnToSessions) saved.returnToSessions = returnRoute(value.returnToSessions);
@@ -50,6 +54,10 @@ export function createSessionJourney() {
             .some(route => route && (route.analysisKey !== undefined || typeof route.analysisQuery === "string"));
     }
     function canonical(route) {
+        if (route.view !== "trends") {
+            const { trendEntry, trendSection, trendMeasure, trendPeriod, trendFrom, trendTo, trendUnavailable, ...rest } = route;
+            route = rest;
+        }
         const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);
         if (!overview && route.view !== "request") {
             const { compare, aFrom, aTo, bFrom, bTo, comparisonView, comparisonFocus, ...peer } = route;
@@ -80,9 +88,11 @@ export function createSessionJourney() {
         if (typeof value.request !== "string" || !value.request) return null;
         const origin = { ...returnRoute({ ...value, view: "analyze" }, true), view: "request", request: value.request,
             returnToResults: underlying(value) };
-        for (const key of ["call", "callRevision", "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal"]) {
+        for (const key of ["call", "callRevision", "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeCompletedRef"]) {
             if (typeof value[key] === "string") origin[key] = value[key];
         }
+        if (value.completedCalls) origin.completedCalls = structuredClone(value.completedCalls);
+        if (value.failedCalls) origin.failedCalls = structuredClone(value.failedCalls);
         return origin;
     }
     return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin,

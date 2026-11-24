@@ -75,8 +75,8 @@ test("screen attribution wording names recorded limits without implying service 
     returned.serviceAssociation = serviceCategories.associate(returned, "reported-api", classifyWorkload);
     const all = [ask, search, files, missing, unknown, unsupported, returned], before = structuredClone(all);
     const shown = (rows, layer = "tool") => serviceCategories.availabilitySummary(rows, layer, { screen: true });
-    assert.equal(shown([search, search, ask]).label, "Underlying services not recorded");
-    assert.equal(shown([files, search, ask]).label, "Underlying services not recorded");
+    assert.equal(shown([search, search, ask]).label, "Apps unknown");
+    assert.equal(shown([files, search, ask]).label, "Apps unknown");
     assert.equal(shown([search, ask]).notice, null);
     assert.equal(shown([files, search, ask]).notice, null);
     assert.equal(shown([missing]).label, "Service target not recorded");
@@ -94,8 +94,8 @@ test("screen attribution wording names recorded limits without implying service 
     const serialized = Function(`return (${createServiceCategories.toString()})()`)();
     assert.deepEqual(serialized.availabilitySummary([files, search, ask], "tool", { screen: true }), shown([files, search, ask]));
     const mixed = shown([files, ask, missing, unknown]);
-    assert.match(mixed.label, /Underlying services not recorded/);
-    assert.doesNotMatch(mixed.notice, /underlying services/i);
+    assert.match(mixed.label, /Apps unknown/);
+    assert.doesNotMatch(mixed.notice, /Apps unknown/);
     assert.match(mixed.label, /Service target not recorded/);
     assert.match(mixed.label, /Recorded path not recognized/);
     assert.match(mixed.description, /if any/);
@@ -117,12 +117,10 @@ test("attribution reading explains basis, counting significance and action witho
     const records = [ask, search, missing, unknown, unsupported, files], before = structuredClone(records);
     const reader = value => serviceCategories.attributionReading(value);
     assert.equal(reader(ask).kind, "operation");
-    assert.match(reader(ask).text, /counts this call as Asked Copilot.*not confirmed use of a named app/);
-    assert.match(reader(ask).text, /not an app-by-app execution trace.*not a service error.*does not call for a retry, sign-in or history repair/);
+    assert.equal(reader(ask).text, "WIRE can’t tell which apps, if any, Copilot used.");
     assert.match(serviceCategories.attributionReading(ask, "tool", { hasInputReferences: true }).text,
-        /Input file references provide context, not proof/);
-    assert.match(reader(search).text, /counts the search request, not the apps searched/);
-    assert.match(reader(search).text, /not a failed search/);
+        /files listed in the request don’t tell us that either/);
+    assert.match(reader(search).text, /counts this as a search request.*can’t tell which apps were searched/);
     assert.match(reader(missing).text, /source omission or a capture problem/);
     assert.match(reader(missing).text, /still counts.*result is shown separately/);
     assert.equal(reader(unknown).text,
@@ -146,8 +144,9 @@ test("routing attribution limits stay separate from call failure and preserved s
         requestedApiPath: "/businessapps/me", toolSucceeded: false, reportedOutcome: "failed" });
     const analytics = buildActivityAnalytics([record]), before = structuredClone(analytics);
     const call = analytics.rows[0], explanation = serviceCategories.attributionReading(call);
+    assert.equal(call.serviceAssociation.gaps[0].reason, "business-app-not-named");
     assert.equal(explanation.text,
-        "The recorded path does not identify a named app. The call still counts; its result is shown separately.");
+        "The recorded /businessapps/me path does not name a specific business app. The call still counts; its result is shown separately.");
     assert.doesNotMatch(explanation.text, /investigat|supported service|named-app service counts|Dataverse|retry/i);
     assert.equal(call.outcome, "failure");
     assert.equal(call.workload, "Unknown");
@@ -156,7 +155,8 @@ test("routing attribution limits stay separate from call failure and preserved s
     const returned = { ...row("workiq-fetch", "/businessapps/me") };
     returned.serviceAssociation = serviceCategories.associate(returned, "reported-api", classifyWorkload);
     assert.equal(serviceCategories.attributionReading(returned, "reported-api").text,
-        "The recorded path does not identify a named app. The returned result and its status still count.");
+        "The recorded /businessapps/me path does not name a specific business app. The returned result and its status still count.");
+    assert.equal(row("workiq-do_action", "/businessapps/unknown").serviceAssociation.gaps[0].reason, "unrecognized-path");
     const serialized = Function(`return (${createServiceCategories.toString()})()`)();
     assert.deepEqual(serialized.attributionReading(call), explanation);
     assert.deepEqual(analytics, before);

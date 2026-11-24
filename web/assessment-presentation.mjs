@@ -60,7 +60,12 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
         }
         return fromSummary(summary, metric.coverage.eligible, metric.boundary);
     }
-    return { duration: compact ? formatMilliseconds : duration, milliseconds: formatMilliseconds, fromSummary, fromMetric };
+    function readerDuration(milliseconds) {
+        const exact = formatMilliseconds(milliseconds);
+        if (milliseconds === null || milliseconds < 1000) return exact;
+        return new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(milliseconds / 1000) + " s";
+    }
+    return { duration: compact ? formatMilliseconds : duration, milliseconds: formatMilliseconds, readerDuration, fromSummary, fromMetric };
 }
 
 // Human meaning requires the saved check, version and origin, not its dimension alone.
@@ -1329,7 +1334,6 @@ html:has(.assessment-dialog:modal) {overflow:hidden;scrollbar-gutter:stable}
 #assessmentSetup p {margin-block:var(--space-sm)}
 .interaction-response {margin-block:var(--space-xl)}
 .interaction-response>p {color:var(--muted);font-size:var(--type-small);margin-block:var(--space-sm)}
-#comparisonWorkspace {margin-block:var(--space-2xl);padding-block:var(--space-xl);border-top:1px solid var(--rule)}
 .comparison-selectors {display:flex;flex-wrap:wrap;gap:var(--space-lg);margin-block:var(--space-lg)}
 .comparison-selectors>label {display:flex;flex:1 1 16rem;min-width:0;flex-direction:column;gap:var(--space-sm)}
 .comparison-selectors>.select-field {flex:1 1 16rem;min-width:0}

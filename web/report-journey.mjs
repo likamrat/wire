@@ -1,5 +1,6 @@
 // Prepared copies alone permit parent measurement; saved readers keep their opaque sandbox.
-export function createPreparedReportFrame(html, frozenFrame, { onError, onReady, doc = document, isCurrent = () => true, contained = false } = {}) {
+export function createPreparedReportFrame(html, frozenFrame, { onError, onReady, doc = document, isCurrent = () => true, contained = false,
+    reading, isReadingCurrent = isCurrent, onReadingIntent, onReadingRestored } = {}) {
     if (typeof frozenFrame !== "function" || typeof onError !== "function") throw new TypeError("Prepared reports require sanitization and an error handler.");
     const frame = frozenFrame(html, doc), view = doc.defaultView;
     html = null;
@@ -17,6 +18,8 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         if (!frame.isConnected && changes.some(change => [...change.removedNodes].some(node => node === frame || node.contains?.(frame)))) dispose();
     });
     function current() { return active && isCurrent() && frame.isConnected && source === frame.contentDocument; }
+    const inputEvents = ["pointerdown", "wheel", "touchmove", "keydown"];
+    const noteReading = event => { if (event.isTrusted && current()) onReadingIntent?.(); };
     function schedule() {
         if (!active || !isCurrent() || scheduled) return;
         scheduled = view.requestAnimationFrame(measure);
@@ -77,7 +80,25 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
             return;
         }
         source.addEventListener("click", navigate);
+        for (const type of inputEvents) source.addEventListener(type, noteReading, { capture: true, passive: true });
         cleanup = onReady?.(source, refresh);
+        if (reading) {
+            for (const [id, open] of reading.details) {
+                const node = source.getElementById(id);
+                if (node?.localName === "details") node.open = open;
+            }
+            const restore = reading;
+            reading = null;
+            source.fonts.ready.then(() => {
+                if (!current() || !isReadingCurrent()) return;
+                const target = restore.focus && source.getElementById(restore.focus);
+                if (doc.activeElement === doc.body || doc.activeElement === frame) target?.focus({ preventScroll: true });
+                frame.contentWindow.scrollTo(restore.left, target
+                    ? frame.contentWindow.scrollY + target.getBoundingClientRect().top - restore.top : restore.scroll);
+                onReadingRestored?.();
+                refresh();
+            });
+        }
         source.addEventListener("toggle", refresh, true);
         source.fonts.addEventListener("loadingdone", refresh);
         bodySize.observe(source.body);
@@ -92,6 +113,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         bodySize.disconnect(); frameSize.disconnect(); textSize.disconnect(); removal.disconnect();
         frame.removeEventListener("load", loaded);
         source?.removeEventListener("click", navigate);
+        for (const type of inputEvents) source?.removeEventListener(type, noteReading, { capture: true });
         source?.removeEventListener("toggle", refresh, true);
         source?.fonts.removeEventListener("loadingdone", refresh);
         const tree = (source || frame.contentDocument)?.documentElement;
@@ -99,11 +121,15 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
             for (const node of [tree, ...tree.querySelectorAll("*")]) {
                 for (const child of node.childNodes) if (child.nodeType === 3) child.data = "";
                 if ("value" in node) node.value = "";
-                for (const attr of node.attributes) attr.value = "";
+                for (const attr of [...node.attributes]) {
+                    node.removeAttributeNode(attr);
+                    attr.value = ""; // Scrub held references without writing invalid values to live SVG.
+                }
             }
             tree.replaceChildren();
         }
         source = undefined;
+        reading = null;
         frame.srcdoc = "";
         frame.title = "";
         frame.remove();
@@ -114,16 +140,30 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
     textSize.observe(doc.head, { childList: true, subtree: true, characterData: true });
     removal.observe(doc.body, { childList: true, subtree: true });
     return { frame, dispose, withdrawAccess: dispose,
+        reading() {
+            if (!current()) return null;
+            const focus = doc.activeElement === frame ? source.activeElement : null;
+            return { details: [...source.querySelectorAll("details[id]")].map(node => [node.id, node.open]),
+                focus: focus?.id || null, top: focus?.getBoundingClientRect().top ?? 0,
+                scroll: frame.contentWindow.scrollY, left: frame.contentWindow.scrollX };
+        },
         expand(expanded) {
             if (!current()) return;
             for (const details of source.querySelectorAll("details:not(.wire-example-editor)")) details.open = expanded;
             refresh();
         },
-        setTitle(title) { if (current()) { source.querySelector("h1").textContent = title; refresh(); } } };
+        setTitle(title) {
+            if (!current()) return;
+            const heading = source.querySelector("h1");
+            const text = source.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+            while (text.nextNode()) text.currentNode.data = "";
+            heading.textContent = title;
+            refresh();
+        } };
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, readSavedReports, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep, api, createSaveIdentity, reportFirst = false } = {}) {
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, readSavedReports, showSourceIssues, downloadFile, fileLabel = name => name, openSavedReport, icon, utility, onStateChange, presentStep, requestStep, api, createSaveIdentity, reportFirst = false } = {}) {
     const accessIntegrated = Boolean(root) || api !== undefined || createSaveIdentity !== undefined;
     if (accessIntegrated && (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function")) {
         throw new TypeError("Mounted report journeys require publication authority and a save-identity factory.");
@@ -212,7 +252,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         nodes.activityCount.hidden = !model.scopeReady;
         const activityVisible = step === 1 || Boolean(presentStep && step === 2);
         nodes.start.hidden = !activityVisible;
-        text(nodes.contextName, model.entry?.sessionName || "Copilot chat name not recorded");
+        text(nodes.contextName, model.entry?.sessionName || "Chat name not recorded");
         nodes.context.hidden = !model.entry || !activityVisible;
         text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose an interaction or another scope to continue."));
         nodes.gap.hidden = ready();
@@ -228,6 +268,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         if (reportFirst) nodes.reviewActions.hidden = true;
         nodes.reviewHost.hidden = ["saved", "unavailable"].includes(phase);
         nodes.saveHost.hidden = !["saved", "unavailable"].includes(phase) && !saveUnconfirmed;
+        if (saveUnconfirmed) {
+            if (nodes.saveHost.previousElementSibling !== nodes.error) nodes.error.after(nodes.saveHost);
+        } else if (nodes.saveHost.parentElement !== nodes.panels[2]) nodes.reviewHost.after(nodes.saveHost);
         text(nodes.scan, reportFirst ? preview ? "Return to report" : "Show report" : preview ? "Return to review" : "Prepare report");
         text(nodes.prepareIssue, model.prepareIssue || "");
         nodes.prepareIssue.hidden = Boolean(preview) || !model.prepareIssue;
@@ -697,9 +740,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 const field = el("label", "saved-file-choice", "File"), select = el("select");
                 select.setAttribute("aria-label", "Saved file");
                 for (const name of Object.keys(value.files).sort((a, b) => Number(a === "coverage-and-redaction-manifest.json") - Number(b === "coverage-and-redaction-manifest.json"))) {
-                    const label = name === "coverage-and-redaction-manifest.json" ? "Manifest" : name.endsWith(".html") ? "HTML"
-                        : name.endsWith(".pdf") ? "PDF" : name.endsWith(".md") ? "Markdown" : "JSON";
-                    const option = el("option", "", label); option.value = name; select.append(option);
+                    const option = el("option", "", fileLabel(name)); option.value = name; select.append(option);
                 }
                 const control = button("Download", async () => {
                     if (!currentSaved() || !control.isConnected || control.disabled) return;

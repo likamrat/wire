@@ -4,9 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
-import { privateFixture, chooseTheme } from "./helpers.mjs";
+import { privateFixture, chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
 import { createCollector } from "../lib/collector.mjs";
-import { loadBoardState } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { readTail, readCompletionLookbehind, TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { projectOversizedSourceEvent, projectOversizedCompletion, COMPLETION_PROJECTION_LIMITS } from "../lib/completion-projection.mjs";
 import { recoverSameReadCompletions } from "../lib/completion-recovery.mjs";
@@ -93,6 +94,113 @@ async function finish(app) {
     assert.equal(reads.at(-1).metrics.backlogBytes, 0);
     return { state, call: calls[0], reads };
 }
+
+test("enforced opt-in correction verifies historical completion and diagnostic metadata without changing the source checkpoint", async t => {
+    const source = sourceEvents({ padding: 4 });
+    const at = source.completion.timestamp;
+    source.events.push({ id: "ordinary", type: "tool.execution_start", timestamp: at,
+        data: { toolCallId: "diagnostic", toolName: "workiq-fetch", mcpServerName: "workiq", arguments: { entityUrls: ["/me"] } } },
+    { id: "failed", type: "tool.execution_complete", timestamp: at,
+        data: { toolCallId: "diagnostic", success: false, error: { code: "Unavailable", message: "The invented service is unavailable." } } });
+    const conflicting = source.events.slice(-2).map(e => ({ ...e, id: e.id + "-conflict", data: { ...e.data, toolCallId: "conflict" } }));
+    source.events.push(...conflicting);
+    const app = await installation(t, source);
+    for (let n = 0; n < 5; n++) if (!(await app.collector.collectNow()).metrics.backlogBytes) break;
+    await app.collector.setEnabled(true);
+    await app.collector.close();
+    const initial = await loadBoardState(app.context);
+    const original = initial.evidence.flatMap(r => r.toolCalls);
+    assert.deepEqual(original.map(c => c.reportedOutcome).sort(), ["failed", "failed", "succeeded"]);
+    await replaceEvidence(app.context, records => ({ records: records.map(record => ({ ...record, toolCalls: record.toolCalls.map(call => {
+        if (call.toolCallId === "call") return { ...call, reportedOutcome: "unknown", toolSucceeded: null,
+            completionEventId: null, completedAt: null, durationMs: null };
+        const { resultEvidence, failureEvidence, ...old } = call;
+        return old;
+    }) })), importCoverage: initial.importCoverage }));
+    const index = JSON.parse(await fs.readFile(path.join(app.context.dataDir, "collector", "index.json")));
+    const checkpoint = path.join(app.context.dataDir, "collector", index.fingerprint, `${sourceId}.json`);
+    // Invented older writer discarded a carrier in both copies for this call.
+    const generated = JSON.parse(await fs.readFile(checkpoint));
+    delete generated.events.find(e => e.id === "failed-conflict").data.wireResultEvidence;
+    await fs.writeFile(checkpoint, JSON.stringify(generated));
+    const before = await fs.readFile(checkpoint);
+    const old = await loadBoardState(app.context), reports = createExportController(app.context);
+    const report = await reports.preview("fixture", undefined, { promptMode: "none", formats: ["json"] }, { kind: "all", revision: old.revision });
+    await reports.review("fixture", report.previewId, true);
+    const frozen = (await reports.confirm("fixture", report.previewId, true)).bundle;
+    const files = Object.values(frozen.files), frozenBytes = await Promise.all(files.map(file => fs.readFile(file)));
+    const oldConflict = old.evidence.flatMap(r => r.toolCalls).find(c => c.toolCallId === "conflict");
+    const expected = original.map(c => c.toolCallId === "conflict" ? oldConflict : c);
+    let runtime, access, panel, browser;
+    async function launch() {
+        runtime = await startServer(app.context, createExportController(app.context), { port: 0, collector: { timers: false },
+            createAccess: async () => access = await createCopilotRuntimeAccess(app.context) });
+        panel = (await post("/api/session", {}, null)).capability;
+    }
+    async function post(url, input, auth = panel) {
+        const origin = new URL(runtime.url).origin, res = await fetch(origin + url, { method: "POST",
+            headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(auth ? { "X-Board-Capability": auth } : {}) },
+            body: JSON.stringify(input) });
+        const body = await res.json(); assert.equal(res.status, 200, JSON.stringify(body)); return body;
+    }
+    try {
+        await launch();
+        const scope = { sourceSessionIds: [sourceId], from: source.start.timestamp.slice(0, 10), to: at.slice(0, 10),
+            timeContext: { timeZone: "UTC", locale: "en-US" }, restorePrompts: false };
+        assert.equal((await post("/api/recollection/preview", scope)).counts.records, 0);
+        browser = await chromium.launch();
+        const page = await browser.newPage({ reducedMotion: "reduce", timezoneId: "UTC" });
+        await page.route("**/*", route => new URL(route.request().url()).origin === new URL(runtime.url).origin
+            ? route.continue() : route.abort());
+        await page.goto(runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
+        await navigateMain(page, "settings"); await navigateSettings(page, "data");
+        await page.locator("#recollectActivity").click();
+        await page.locator(`#recollectSources input[value="${sourceId}"]`).check();
+        await page.locator("#recollectFrom").fill(scope.from); await page.locator("#recollectTo").fill(scope.to);
+        await expect(page.locator("#recollectCorrections")).not.toBeChecked();
+        await page.locator("#recollectCorrections").check();
+        let response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/recollection/preview");
+        await page.locator("#recollectPreview").click();
+        const p = await (await response).json();
+        assert.deepEqual([p.counts.newRecords, p.counts.verifiedCompletions, p.counts.verifiedMetadata], [0, 1, 1]);
+        assert.equal(p.counts.checkpointConflicts, 1);
+        await expect(page.locator("#recollectCorrectionList li")).toHaveCount(2);
+        await expect(page.locator("#recollectCorrectionList")).toContainText("outcome unchanged");
+        response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/recollection/confirm");
+        await page.locator("#recollectConfirm").click();
+        const completed = await (await response).json();
+        assert.equal(completed.phase, "complete");
+        assert.deepEqual(await fs.readFile(checkpoint), before);
+        await browser.close(); browser = null;
+        await runtime.close(); await access.close(); await launch();
+        const receipt = await post("/api/recollection/status", { operationId: p.operationId, receiptToken: p.receiptToken });
+        assert.deepEqual(receipt, completed);
+        assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls), expected);
+        const again = await post("/api/recollection/preview", { ...scope, correctExisting: true });
+        assert.equal(again.counts.records, 0);
+        assert.equal(again.counts.checkpointConflicts, 1);
+        await fs.appendFile(app.file, encoded([
+            { id: "new-prompt", timestamp: at, type: "user.message", data: { content: "Another invented request" } },
+            { id: "new", timestamp: at, type: "tool.execution_start", data: { toolCallId: "later", toolName: "workiq-fetch", arguments: { entityUrls: ["/me"] } } },
+            { id: "new-end", timestamp: at, type: "tool.execution_complete", data: { toolCallId: "later", success: true } },
+        ]));
+        await post("/api/collection/now", {});
+        const appendState = await loadBoardState(app.context), appended = appendState.evidence.flatMap(r => r.toolCalls);
+        assert.equal(appended.filter(c => c.toolCallId === "later").length, 1);
+        assert.deepEqual(appended.filter(c => c.toolCallId !== "later"), expected);
+        for (const record of old.evidence) {
+            const retained = appendState.evidence.find(r => r.scenarioId === record.scenarioId);
+            assert.deepEqual(retained.toolCalls.map(c => c.toolCallId), record.toolCalls.map(c => c.toolCallId));
+        }
+        assert.notDeepEqual(await fs.readFile(checkpoint), before);
+        assert.deepEqual(appendState.deletion, old.deletion);
+        assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file))), frozenBytes);
+        await runtime.close(); await access.close(); await launch();
+        await post("/api/collection/now", {});
+        assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls), appended);
+        assert.deepEqual(await post("/api/recollection/status", { operationId: p.operationId, receiptToken: p.receiptToken }), completed);
+    } finally { await browser?.close(); await runtime?.close(); await access?.close(); }
+});
 
 test("ordinary collection qualifies the complete source hook chain without retaining omitted payloads", async t => {
     const source = sourceEvents(), app = await installation(t, source);
@@ -376,15 +484,19 @@ test("qualified completion reaches normal cards, reader, report facts, analytics
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         for (const theme of ["light", "dark"]) {
             await chooseTheme(page, theme);
-            const card = page.locator(".request-card-open");
-            await expect(card).toContainText("Recorded tool call completed.");
-            await expect(card).toContainText("1 recorded call");
-            await expect(card).not.toContainText("1 failed");
-            await card.click();
+            const card = page.locator("#activityList article").filter({ hasText: "Read the invented file." });
+            await expect(card.locator(".card-outcome")).toHaveText("1 tool call completed");
+            const calls = card.locator(".request-card-open");
+            await expect(calls).toHaveAccessibleName("1 tool call completed");
+            await calls.click();
             const call = page.locator('[data-reader-section=activity] [data-tool-call-id="call"]');
-            await expect(call).toContainText("Call #1 completed");
-            await expect(call).toContainText("2,021 ms");
-            await expect(call).toContainText("fetch_blob");
+            await expect(call).toBeVisible();
+            await expect(call.locator(".reader-entry-label")).toHaveText("Call #1");
+            await expect(call.locator(".card-outcome-label")).toHaveText("1 tool call completed");
+            await expect(call.locator("data.call-duration")).toHaveAttribute("value", "2021");
+            await expect(call).toContainText("2.021 s");
+            await expect(call).toContainText("workiq-fetch_blob");
+            await call.locator(".reader-call-toggle").click();
             await expect(page.locator("#requestContent")).not.toContainText("EXCLUDED_BODY_");
             await page.locator("#closeContextSidebar").click();
             await page.waitForFunction(() => !document.querySelector("#contextSidebar").open

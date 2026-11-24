@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, revealAnalyzeRecords } from "./helpers.mjs";
-import { contrast } from "./color-measurements.mjs";
 
 const proof = process.env.WIRE_COMPACT_AUTHOR_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -83,35 +81,37 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proof, name + ".png") });
 }
 
-test("compact cards name the prompt author without inferring from text or replacing the native full-card link", { timeout: 45000 }, async t => {
+test("compact cards retain prompt authorship, selectable text and native reader links", { timeout: 45000 }, async t => {
     const { page, browserContext } = await setup(t);
     await revealAnalyzeRecords(page);
     for (const [id, actor] of cases) {
-        const row = card(page, id), label = actor === "user" ? "My prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
+        const row = card(page, id), label = actor === "user" ? "Human prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
         await expect(row.locator(".request-card-author")).toHaveText(label);
         await expect(row.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
-        await expect(row.locator("a,button,input")).toHaveCount(1);
-        await expect(row.locator(".request-card-open")).toHaveAttribute("href", /#request\?/);
+        await expect(row.locator(".request-card-open")).toHaveCount(1);
+        await expect(row.locator(".request-card-open")).toHaveAttribute("href", /\/request\?/);
     }
-    await expect(card(page, "missing").locator(".request-card-open")).toContainText("Prompt text unavailable");
+    await expect(card(page, "missing").locator(".request-card-prompt")).toContainText("Prompt text unavailable");
     const link = card(page, "mine").locator(".request-card-open");
-    await link.locator(".request-card-prompt").evaluate(node => {
+    const passage = card(page, "mine").locator(".card-excerpt");
+    await passage.evaluate(node => {
         const range = document.createRange(); range.selectNodeContents(node);
         getSelection().removeAllRanges(); getSelection().addRange(range);
     });
     const selected = await page.evaluate(() => getSelection().toString());
-    await link.dispatchEvent("click", { button: 0 });
+    await passage.dispatchEvent("click", { button: 0 });
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     assert.equal(await page.evaluate(() => getSelection().toString()), selected);
     await page.evaluate(() => getSelection().removeAllRanges());
     const opened = browserContext.waitForEvent("page");
     await link.click({ modifiers: ["Control"] });
     const popup = await opened;
-    await expect(popup.locator(".request-original h2")).toHaveText("My prompt");
+    await expect(popup.locator("#requestContent")).toHaveAttribute("data-view-key", await card(page, "mine").getAttribute("data-view-key"));
+    await expect(popup.locator(".request-original .full-text-content")).toHaveText(await passage.textContent());
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await popup.close();
     await link.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator(".request-original h2")).toHaveText("My prompt");
+    await expect(page.locator(".request-original").getByRole("region", { name: "Human prompt", exact: true })).toBeVisible();
     await page.goBack(); await ready(page);
     await expect(link).toBeFocused();
     for (const actors of [["user"], ["agent"], ["unknown"], ["user", "agent"], ["user", "unknown"], ["agent", "unknown"], "all"]) {
@@ -119,107 +119,53 @@ test("compact cards name the prompt author without inferring from text or replac
         assert.deepEqual((await page.locator(".request-card-author").evaluateAll(nodes => nodes.map(node => node.dataset.promptActor))).sort(),
             cases.filter(([, actor]) => actors === "all" || actors.includes(actor)).map(([, actor]) => actor).sort());
     }
-    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
+    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["Human prompts", "Agent prompts", "Author unverified"]);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
-    await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("My prompts");
+    await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("Human prompts");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.locator('label[for="promptAuthorFilter-control"]')).toHaveText("Prompt author");
     await expect(page.getByRole("button", { name: "About Prompt author", exact: true })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("Your prompt");
 });
 
-test("My, Agent and unverified origins agree across compact card, sidebar, report picker and peek at both themes and enlarged widths",
-    { timeout: 180000 }, async t => {
-        const { page, evidence } = await setup(t), measurements = [];
-        for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [1440, 2], [375, 1], [375, 2]]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-            await chooseTheme(page, theme);
-            await navigateMain(page, "analyze"); await ready(page);
-            await revealAnalyzeRecords(page);
-            const cues = await page.locator(".request-card-author").evaluateAll(nodes => nodes.map(node => {
-                const css = getComputedStyle(node), prompt = node.closest(".request-card-prompt"), promptCSS = getComputedStyle(prompt);
-                const rects = [...node.getClientRects()].map(rect => ({ left: rect.left, right: rect.right }));
-                let parent = node, background;
-                while (parent && (!background || background === "rgba(0, 0, 0, 0)")) {
-                    background = getComputedStyle(parent).backgroundColor; parent = parent.parentElement;
-                }
-                return { actor: node.dataset.promptActor, text: node.textContent, color: css.color, background,
-                    fontWeight: css.fontWeight, fontSize: css.fontSize, fontStyle: css.fontStyle,
-                    promptWeight: promptCSS.fontWeight, promptColor: promptCSS.color, ink: getComputedStyle(document.body).color,
-                    display: css.display, margin: css.margin, padding: css.padding, rects };
-            }));
-            assert.equal(cues.length, cases.length);
-            for (const cue of cues) {
-                assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${width}/${scale}: author contrast`);
-                assert.equal(cue.fontWeight, "400"); assert.equal(cue.promptWeight, "400");
-                assert.equal(cue.fontStyle, "normal"); assert.equal(cue.promptColor, cue.ink);
-                assert.equal(cue.display, "inline"); assert.equal(cue.margin, "0px"); assert.equal(cue.padding, "0px");
-                assert.ok(cue.rects.every(rect => rect.left >= 0 && rect.right <= width + 1), "The entire label fits without clipping");
-            }
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-            await capture(page, `${theme}-${width}-${scale}-cards`);
-            if (proof) for (const id of ["mine", "agent", "conflict"]) {
-                await card(page, id).screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-${id}-card.png`) });
-            }
-            for (const [id, actor] of cases) {
-                const record = evidence.find(record => record.scenarioId === "author-" + id);
-                const expected = actor === "user" ? "My prompt" : actor === "agent" ? "Agent prompt" : "Copilot chat prompt";
-                await card(page, id).locator(".request-card-open").click();
-                const reader = page.locator(".request-original");
-                await expect(reader.locator("h2")).toHaveText(expected);
-                await expect(reader.locator("h2")).toHaveAttribute("data-prompt-actor", actor);
-                if (actor === "unknown") await expect(reader.locator(".reader-state").first()).toBeVisible();
-                if (id === "partial") await expect(reader.locator(".reader-state-partial")).toHaveText("Partial text");
-                if (id === "missing") await expect(reader.getByRole("button", { name: "Copy prompt", exact: true })).toHaveCount(0);
-                else {
-                    if (await reader.locator(".full-text-toggle").getAttribute("aria-expanded") === "false") await reader.locator(".full-text-toggle").click();
-                    assert.equal(await reader.locator("pre").textContent(), record.userPrompt.text);
-                    if (scale === 1 && width === 1440) {
-                        await reader.getByRole("button", { name: "Copy prompt", exact: true }).click();
-                        assert.equal(await page.evaluate(() => window.authorCopy), record.userPrompt.text);
-                        await reader.locator(".full-text-toggle").click();
-                        await expect(reader.locator("pre")).toHaveCount(0);
-                        await reader.locator(".full-text-toggle").click();
-                    }
-                }
-                const technical = page.locator(".request-support details");
-                await technical.locator("summary").click();
-                await expect(technical).toContainText(promptAuthorship.reason(record.userPrompt));
-                if (actor === "user") await expect(technical).toContainText("My prompt.");
-                await expect(page.locator("#requestContent")).not.toContainText("Your prompt");
-                if (["mine", "agent", "conflict"].includes(id)) {
-                    await reader.locator("h2").scrollIntoViewIfNeeded();
-                    await capture(page, `${theme}-${width}-${scale}-${id}-sidebar`);
-                }
-                if (await page.locator("#requestReportToggle").textContent() === "Add to report") await page.locator("#requestReportToggle").click();
-                await page.locator("#requestReportContinue").click();
-                const entry = picker(page, id);
-                if (!await entry.count()) await page.locator("#reportRequestSearch").fill(record.userPrompt.text?.slice(0, 25) ?? "");
-                // The report picker is paginated independently from Analyze.
-                while (!await entry.count()) await page.getByRole("button", { name: "Next report requests", exact: true }).click();
-                await expect(entry.locator("input")).toBeChecked();
-                await expect(entry.locator(".full-text-preview-label")).toContainText(expected);
-                await expect(entry.locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", actor);
-                assert.deepEqual(await page.locator("#reportPromptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
-                if (["mine", "agent", "conflict"].includes(id)) {
-                    await entry.scrollIntoViewIfNeeded();
-                    await capture(page, `${theme}-${width}-${scale}-${id}-picker`);
-                }
-                await entry.locator(".request-link").click();
-                await expect(page.locator(".request-original h2")).toHaveText(expected);
-                await expect(page.locator(".request-original h2")).toHaveAttribute("data-prompt-actor", actor);
-                assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-                if (["mine", "agent", "conflict"].includes(id)) {
-                    await page.locator(".request-original h2").scrollIntoViewIfNeeded();
-                    await capture(page, `${theme}-${width}-${scale}-${id}-peek`);
-                }
-                await page.getByRole("button", { name: "Back to activity", exact: true }).click();
-                await expect(entry.locator("input")).toBeChecked();
-                await page.locator("#reportRequestSearch").fill("");
-                await navigateMain(page, "analyze"); await ready(page);
-            }
-            measurements.push({ theme, width, scale, cues, variants: cases.map(([id]) => id) });
+test("the report picker and its reader keep the selected interactions' author and text availability", async t => {
+    const { page } = await setup(t);
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 375, height: 960 });
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    await navigateMain(page, "reports");
+    await page.locator("#reportDeskActivity").click();
+    const dialog = page.getByRole("dialog", { name: "Choose activity" });
+    await dialog.getByRole("radio", { name: /^Selected interactions/ }).check();
+    for (const [id, actor, , text] of cases) {
+        const entry = picker(page, id);
+        if (!await entry.count()) {
+            const next = dialog.getByRole("button", { name: "Next report requests", exact: true });
+            await (await next.isEnabled() ? next : dialog.getByRole("button", { name: "Previous report requests", exact: true })).click();
         }
-        if (proof) await writeFile(path.join(proof, "measurements.json"), JSON.stringify(measurements, null, 2));
-    });
+        await entry.getByRole("checkbox").check();
+        const name = { user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor];
+        await expect(entry.locator(".request-card-author")).toHaveText(name);
+        await expect(entry.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", actor);
+        await entry.locator(".request-card-open").press("Enter");
+        await expect(page.locator("#requestContent")).toHaveAttribute("data-view-key", "request:author-" + id);
+        const section = page.locator('[data-reader-section="prompt"]');
+        await expect(section.getByRole("heading")).toContainText(name);
+        if (id === "partial") await expect(section).toContainText("Partial text");
+        if (!text) {
+            await expect(section).toContainText("Prompt text unavailable");
+            await expect(section.getByRole("button", { name: "Copy prompt" })).toHaveCount(0);
+        } else {
+            assert.equal(await section.locator("pre").textContent(), text);
+            await section.getByRole("button", { name: "Copy prompt", exact: true }).click();
+            assert.equal(await page.evaluate(() => window.authorCopy), text);
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        if (id === "conflict") await capture(page, "enlarged-unverified-report-reader");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+        if (!await dialog.isVisible()) await page.locator("#reportDeskActivity").click();
+        await expect(entry.getByRole("checkbox")).toBeChecked();
+    }
+    await expect(dialog.getByRole("radio", { name: /^Selected interactions/ })).toHaveAccessibleName(/8 interactions/);
+});

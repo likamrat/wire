@@ -61,10 +61,11 @@ test("explicit guarded model qualification updates the exact interaction, call a
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const card = page.locator(`.request-row[data-view-key="request:${records[0].scenarioId}"]`);
-    const fact = (card, label) => card.locator(".activity-card-facts>div").filter({
-        has: page.locator("dt").filter({ hasText: new RegExp(`^${label}:$`) }),
-    });
-    await expect(fact(card, "Model").locator("dd")).toHaveText("Not verified (tool metadata only)");
+    const model = page.locator('#requestContent .interaction-model-fact dd');
+    await card.locator(".request-card-open").click();
+    await page.getByRole("button", { name: "Source details" }).click();
+    await expect(model).toContainText("tool metadata only");
+    await page.locator("#closeContextSidebar").click();
     const before = await loadBoardState(context), origin = new URL(runtime.url).origin;
     const input = { operationId: randomUUID(), scenarioIds: [records[0].scenarioId], expectedSourceRevision: before.evidenceRevision };
     const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
@@ -109,13 +110,12 @@ test("explicit guarded model qualification updates the exact interaction, call a
     assert.equal((await loadBoardState(context)).revision, beforeNoOp.revision);
     assert.equal((await searchPanel.api("/api/search/status")).body.indexId, fresh.matches.receipt.indexId);
     assert.equal(commits.length, 1, "Only applied model metadata emits a commit signal.");
-    await expect(fact(card, "Model").locator("dd")).toHaveText("original-model", { timeout: 15000 });
-    await expect(card.locator(".response-timing data")).toHaveAttribute("value", "99");
-    await page.locator('[data-analyze-mode="calls"]').click();
-    const call = page.locator(".matched-action");
-    await expect(fact(call, "Interaction model").locator("dd")).toHaveText("original-model");
-    await call.getByRole("link", { name: "Open exact call in context" }).click();
-    await expect(page.locator(".request-original .interaction-model-fact dd")).toHaveText("original-model");
+    await page.reload(); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await card.getByRole("link", { name: /workiq-fetch: open call/ }).click();
+    await expect(page.locator('[data-tool-call-id="call"]')).toBeFocused();
+    await page.getByRole("button", { name: "Source details" }).click();
+    await expect(model).toContainText("original-model");
+    await expect(page.locator("#requestContent .response-timing data")).toHaveAttribute("value", "99");
     await expect(page.locator(".request-original")).toContainText("Invented original model request");
     await expect(page.locator("body")).not.toContainText("PRIVATE_RESPONSE");
     const after = await loadBoardState(context);

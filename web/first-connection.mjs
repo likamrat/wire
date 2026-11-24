@@ -2,7 +2,7 @@ export const firstConnectionMarkup = `
 <section id="firstConnection" class="first-connection" aria-labelledby="firstConnectionTitle" hidden>
   <h2 id="firstConnectionTitle"></h2>
   <p id="firstConnectionMessage" role="status" aria-live="polite"></p>
-  <div class="first-connection-actions"><button id="firstConnectionReview" type="button" class="primary">Review and connect</button><a id="firstConnectionStatus" class="text-link" href="#collection-status" data-settings-link>View collection status</a></div>
+  <div class="first-connection-actions"><button id="firstConnectionReview" type="button" class="primary">Review and connect</button><a id="firstConnectionStatus" class="text-link" href="/collection-status" data-settings-link>View collection status</a></div>
   <p id="firstConnectionStorageNotice" class="settings-help" hidden></p>
 </section>
 <p id="firstConnectionProgress" class="settings-help" role="status" hidden>More history is still being read. You can explore the activity already collected.</p>
@@ -113,7 +113,7 @@ export function mountFirstConnection({ api, ux, reviewSource, collectionStatus }
                 return;
             }
             let title, message, sourceAction = false, statusAction = true;
-            let statusLabel = "View collection status", statusHref = "#collection-status";
+            let statusLabel = "View collection status", statusHref = "/collection-status";
             if (!approved) {
                 if (paused || hasReports) { hide(); return; }
                 title = "Not connected";
@@ -127,21 +127,21 @@ export function mountFirstConnection({ api, ux, reviewSource, collectionStatus }
                 const view = collectionStatus.page(status);
                 title = paused ? "Collection is paused" : view.label;
                 message = paused ? "Automatic collection is paused. Resume it in Settings when you want new activity." : status.error || view.guidance;
-                if (paused) { statusLabel = "Open Settings"; statusHref = "#settings?section=connection&setting=collection-state"; }
+                if (paused) { statusLabel = "Open Settings"; statusHref = "/settings?section=connection&setting=collection-state"; }
             } else if (!snapshotCurrent) {
                 title = "Loading your activity";
                 message = "Reading the activity WIRE has saved.";
             } else if (status.historyCoverage?.eligible === 0) {
                 title = "No eligible local chats found";
                 message = "Review the source location if you expected to find Copilot chats here.";
-                statusLabel = "Review source"; statusHref = "#settings?section=connection&setting=source";
+                statusLabel = "Review source"; statusHref = "/settings?section=source-access&setting=source";
             } else if (status.historyCoverage?.affected > 0) {
                 title = "History is incomplete";
                 message = "No Work IQ activity has been collected. Collection status explains the history gaps.";
             } else if (status.historyCoverage?.readable > 0 && status.lastCheckedAt) {
                 title = "No Work IQ activity found";
                 message = "No recorded Work IQ calls were found in the selected history. You can review the source and history window in Settings.";
-                statusLabel = "Review source and history window"; statusHref = "#settings?section=connection&setting=source";
+                statusLabel = "Review source and history window"; statusHref = "/settings?section=source-access&setting=source";
             } else {
                 title = "History status unavailable";
                 message = "Read the current collection status before checking for activity.";

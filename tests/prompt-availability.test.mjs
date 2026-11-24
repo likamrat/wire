@@ -46,7 +46,9 @@ test("unknown, excluded, conflicting and deleted originals never become normal a
         { ...automatic, capture: undefined },
     ]) {
         assert.notEqual(promptAuthorship.availability(value).state, "automatic");
-        assert.notEqual(createTextAccess({}, {}, promptAuthorship, {}).describePrompt(value).notice, "No new message was sent.");
+        const reading = createTextAccess({}, {}, promptAuthorship, {}).describePrompt(value);
+        assert.equal(reading.automatic, false);
+        assert.notEqual(reading.notice, "Work continued without a new message.");
     }
     const legacy = { text: "", status: "full", authorship: { actor: "agent", basis: "autopilot" } };
     assert.equal(promptAuthorship.availability(legacy).state, "automatic");

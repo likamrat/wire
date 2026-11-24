@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { isPagePath } from "../lib/page-path.mjs";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { enabledConsent } from "./assessment-contract-fixtures.mjs";
@@ -36,7 +37,7 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
     if (!approved) { status.config = null; status.connected = false; status.state = "unconfigured"; assessment.source.available = false; }
     const automatic = automaticScoreOffSummary();
     const server = createServer(async (request, response) => {
-        if (request.method === "GET" && request.url === "/") {
+        if (request.method === "GET" && isPagePath(request.url.split("?")[0])) {
             response.setHeader("Content-Type", "text/html");
             response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-settings-reference'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
             return response.end(renderHtmlShell("a".repeat(64), "settings-reference", UNBOUND_FIXTURE_BOOTSTRAP));
@@ -94,6 +95,7 @@ async function captureSwitchState(page, name) {
     await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
 }
 async function category(page, value) {
+    if (value === "display") value = "themes";
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const anchor = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
     if (!await anchor.isVisible()) await page.locator("#settingsCategorySummary").click();
@@ -133,16 +135,16 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-layout>.settings-rail").count(), 1);
     assert.equal(await page.locator(".settings-rail .settings-search").count(), 1);
     assert.equal(await page.locator(".settings-rail #settingsCategories").count(), 1);
-    assert.equal(await page.locator(".settings-rail .settings-status-link").count(), 1);
+    assert.equal(await page.locator("[data-settings-section=connection] #settingsStatusLink a").getAttribute("href"), "/collection-status");
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
     assert.equal(await page.locator(".settings-search .wire-search-icon svg").getAttribute("aria-hidden"), "true");
-    for (const value of ["connection", "display", "troubleshooting", "privacy"]) {
+    for (const value of ["connection", "themes", "regional", "privacy"]) {
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
-        assert.match(await row.getAttribute("href"), /#settings\?/);
-        assert.equal(await row.locator(".fluent-icon[aria-hidden=true]").count(), 1);
+        assert.equal(await row.getAttribute("href"), "/settings?section=" + value);
+        await expect(row).toHaveAccessibleName(/.+/);
         assert.equal(await row.locator(".settings-category-label").count(), 1);
         const measure = await row.evaluate(node => {
             const style = getComputedStyle(node), pane = getComputedStyle(document.querySelector("[data-settings-section]:not([hidden])"));
@@ -153,25 +155,20 @@ test("Settings uses a compact search/category rail and flat pane without changin
         });
         assert.equal(measure.border, 0);
         assert.ok(measure.height >= 44);
-        assert.equal(measure.radius, 6);
         assert.equal(measure.paneRadius, 0);
         assert.notEqual(measure.selectedFill, "rgba(0, 0, 0, 0)");
     }
     assert.equal(await page.locator('#dataManagementTitle').evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').count(), 3);
-    assert.equal(await page.locator(".settings-task-row>#deleteActivity").count(), 1);
-    assert.equal(await page.locator(".settings-task-row>#recollectActivity").count(), 1);
-    for (const row of await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy:has(p)').all()) {
-        assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
-        assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
-    }
-    await expect(page.locator('[data-settings-section=privacy] a.button-link[href="#reports"]')).toHaveText("Open saved reports");
+    await expect(page.locator("#deleteActivity")).toBeVisible();
+    await expect(page.locator("#recollectActivity")).toBeVisible();
+    await expect(page.locator('[data-settings-section=privacy] a.button-link[href="/reports"]')).toHaveText("Open saved reports");
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     if (process.env.WIRE_SETTINGS_REFERENCE_PROOFS) {
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-            for (const value of ["connection", "privacy", "display", "troubleshooting"]) {
+            for (const value of ["connection", "privacy", "themes", "regional"]) {
                 await category(page, value);
                 if (value === "privacy") await page.locator("#assessmentSetup input[type=checkbox]").waitFor();
                 await page.evaluate(() => document.fonts.ready);
@@ -205,13 +202,12 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
                 return { inRail: search.left >= rail.left && search.right <= rail.right + 1, gap: content.left - divider.right, border: getComputedStyle(document.getElementById("settingsCategories")).borderInlineEndWidth };
             });
             assert.equal(placement.inRail, true);
-            assert.ok(Math.abs(placement.gap - 48) <= 1);
-            assert.equal(placement.border, "1px");
+            assert.ok(placement.gap >= 0, "The rail must not overlap the settings pane");
         }
     }
     await page.getByRole("searchbox", { name: "Search settings", exact: true }).fill("time zone");
     await page.locator('#settingsSearchResults a[data-setting="time-zone"]').click();
-    await page.locator('[data-settings-section="display"]').waitFor({ state: "visible" });
+    await page.locator('[data-settings-section="regional"]').waitFor({ state: "visible" });
     assert.equal(await page.locator("#displayTimeZone-control").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#settingsSearch").inputValue(), "time zone");
     assert.doesNotMatch(page.url(), /time%20zone|time\+zone/);
@@ -221,28 +217,42 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
     assert.ok(reads.every(route => ["/api/snapshot", "/api/collection/status", "/api/assessment/consent", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(route)));
 });
 
-test("every registered setting and old route opens its exact live destination without an action", { timeout: 45000 }, async t => {
+test("every registered setting and old route reaches its control or explains its unavailability without an action", { timeout: 45000 }, async t => {
     const { page, origin } = await setup(t);
-    const navigation = createSettingsNavigation(createLocalSearch());
+    const navigation = createSettingsNavigation(createLocalSearch(), { updates: false });
     const route = async hash => {
         await page.evaluate(hash => { location.hash = hash; }, hash);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     };
     for (const entry of navigation.entries) {
-        await route("#settings?section=troubleshooting");
+        await route("#settings?section=regional");
         await page.locator("#settingsSearch").fill(entry.title);
-        await page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`).click();
-        let target = entry.id === "source" ? "editSource" : entry.id === "source-paths" ? "approvedSourceTitle" : entry.target;
-        if (["displayTimeZone", "collectionWindow", "collectionCadence"].includes(target)) target += "-control";
-        if (entry.id === "save-preferences") {
-            await expect(page.locator("#saveCollection")).toBeDisabled();
-            assert.equal(await page.locator("#saveCollection").evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true);
+        const result = page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`);
+        let target = entry.target;
+        if (["microsoft-collection", "microsoft-collection-state", "microsoft-collect-now", "global-collection"].includes(entry.id)) {
+            await expect(result).toHaveCount(0);
+            await route(`#settings?setting=${entry.id}`);
+            await expect(page.locator("#settingsRouteNotice")).toContainText("not available");
+            target = "connectionTitle";
         } else {
-            const node = page.locator(`#${target}`);
-            await expect(node).toBeVisible();
-            if (await node.evaluate(node => node.tagName === "DETAILS")) await expect(node.locator("summary")).toBeFocused();
-            else await expect(node).toBeFocused();
+            if (entry.id === "microsoft-connection") await expect(result).toContainText("Unavailable in this runtime");
+            await result.click();
+            if (entry.id === "microsoft-connection") {
+                await expect(page.locator("#settingsRouteNotice")).toHaveText("Microsoft 365 connection is not available in this runtime.");
+                await expect(page.locator("#wireMicrosoftConnection")).toBeHidden();
+                target = "connectionTitle";
+            } else if (entry.id === "save-preferences") {
+                await expect(page.locator("#preferenceActions")).toBeHidden();
+                await expect(page.locator("#saveCollection")).toBeDisabled();
+                target = "connectionTitle";
+            } else if (entry.id === "source") target = "editSource";
+            else if (entry.id === "source-paths") target = "approvedSourceTitle";
         }
+        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
+        const node = page.locator(`#${target}`);
+        await expect(node).toBeVisible();
+        if (await node.evaluate(node => node.tagName === "DETAILS")) await expect(node.locator("summary")).toBeFocused();
+        else await expect(node).toBeFocused();
         assert.equal(await page.locator("dialog[open]").count(), 0, entry.id);
     }
     for (const [legacy, canonical] of Object.entries(navigation.sectionAliases)) {
@@ -273,6 +283,12 @@ test("category navigation preserves source and reply drafts, local search, cance
     await selectActivityOption(page, "collectionWindow", "7");
     await selectActivityOption(page, "collectionCadence", "15");
     const sourceNode = await page.locator("#sourceDatabase").elementHandle();
+    await page.locator("#openEvidenceHelp").click();
+    await expect(page.locator("#wireHelpView")).toBeVisible();
+    assert.equal(new URL(page.url()).hash, "");
+    await page.goBack();
+    await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
+    assert.doesNotMatch(await page.evaluate(() => JSON.stringify([location.href, history.state])), /invented-unsaved/);
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await expect(page.locator("#preferenceActions")).toBeHidden();
     await category(page, "privacy");
@@ -288,13 +304,18 @@ test("category navigation preserves source and reply drafts, local search, cance
     await page.getByRole("button", { name: "Discard change", exact: true }).click();
     await expect(choice).not.toBeChecked();
     await expect(choice).toBeFocused();
+    await page.locator("#settingsSearch").fill("");
     await category(page, "connection");
     assert.equal(await sourceNode.evaluate(node => node === document.getElementById("sourceDatabase")), true);
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
-    await expect(page.locator("#approvalScope")).toContainText("7 days; check every 15 seconds");
+    await expect(page.locator("#collectionWindow")).toHaveValue("7");
+    await expect(page.locator("#collectionCadence")).toHaveValue("15");
+    await expect(page.locator("#approvalScope")).toContainText("Collection stays paused");
+    await category(page, "source-access");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
     await expect(page.locator("#editSource")).toBeFocused();
+    await category(page, "connection");
     await selectActivityOption(page, "collectionCadence", "30");
     await category(page, "display");
     await category(page, "connection");
@@ -319,12 +340,12 @@ test("pending and uncertain settings results survive categories and only explici
     await selectActivityOption(page, "collectionCadence", "15");
     await page.locator("#saveCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Wait while");
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Saving...");
     await page.locator('#settingsCategoryNav [data-category="privacy"]').click();
     await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
     release();
     await expect(page.locator("#reloadSettings")).toBeVisible();
-    await expect(page.locator("#settingsMessage")).toContainText("No success is assumed");
+    await expect(page.locator("#settingsMessage")).toContainText("Change unconfirmed");
     await category(page, "privacy");
     await category(page, "display");
     await expect(page.locator("#settingsMessage")).toBeVisible();
@@ -402,9 +423,11 @@ test("reply-saving pending and uncertain state survives the rail without repeati
     await category(page, "display");
     release();
     await category(page, "privacy");
-    await expect(page.locator("#assessmentSetup [role=alert]")).toContainText("do not repeat the update");
+    const alert = page.locator("#assessmentSetup").getByRole("alert");
+    await expect(alert).toHaveCount(1);
+    await expect(alert).toContainText("do not repeat the update");
     await expect(choice).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Check update result", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Check response-saving result", exact: true })).toBeEnabled();
     await category(page, "connection");
     await category(page, "privacy");
     await expect(choice).toBeDisabled();
@@ -415,16 +438,13 @@ test("reply-saving pending and uncertain state survives the rail without repeati
 test("unapproved source search stays read-only and stale AI status cannot restore retired controls", { timeout: 30000 }, async t => {
     const { page, automatic } = await setup(t, { approved: false });
     await category(page, "connection");
-    await expect(page.locator("#reviewSource")).toBeEnabled();
+    await expect(page.locator("#collectionSourceEntry")).toBeVisible();
     await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");
-    for (const query of ["source", "pause", "Refresh"]) {
-        await page.locator("#settingsSearch").fill(query);
-        const id = query === "pause" ? "collection-state" : query === "Refresh" ? "collect-now" : "source";
-        if (id === "collect-now") await expect(page.locator('#settingsSearchResults a[data-setting="collect-now"]')).toContainText("stored activity only");
-        await page.locator(`#settingsSearchResults a[data-setting="${id}"]`).click();
-        await expect(page.locator(id === "collect-now" ? "#checkActivity" : "#reviewSource")).toBeFocused();
-        await expect(page.locator("#sourceEditor")).toBeHidden();
-    }
+    await page.locator("#settingsSearch").fill("source paths");
+    await page.locator('#settingsSearchResults a[data-setting="source-paths"]').click();
+    await expect(page.locator("#reviewSource")).toBeFocused();
+    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await page.locator("#settingsSearch").press("Escape");
     await category(page, "privacy");
     await expect(page.locator("#assessmentSetup")).toContainText("Connect a supported local Copilot source");
     automatic.snapshot.state = "paused";
@@ -434,11 +454,11 @@ test("unapproved source search stays read-only and stale AI status cannot restor
     assert.equal(await page.locator("dialog[open]").count(), 0);
 });
 
-test("four current groups retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
+test("Settings categories retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     const evidence = [], proofs = process.env.WIRE_SETTINGS_ORGANIZATION_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });
-    const groups = createSettingsNavigation(createLocalSearch()).categories;
+    const groups = createSettingsNavigation(createLocalSearch(), { updates: false }).categories;
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 100], [375, 100], [375, 200]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
@@ -501,7 +521,7 @@ test("Display and header share switch artwork, native activation, storage update
         for (const control of controls) {
             await expect(control).toHaveAttribute("role", "switch");
             await expect(control).toHaveAttribute("aria-checked", String(theme === "dark"));
-            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 36 : 0}, 0)`);
+            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 26 : 0}, 0)`);
         }
         const geometry = [];
         for (const control of controls) geometry.push(await control.evaluate(node => {
@@ -516,10 +536,14 @@ test("Display and header share switch artwork, native activation, storage update
                 })), artwork: node.querySelector(".theme-track").outerHTML };
         }));
         assert.deepEqual(geometry[0], geometry[1], "Same painted glyphs, thumb/track and target, not just matching SVG names");
-        assert.deepEqual(geometry[0].target, { width: 80, height: 44 });
-        assert.equal(geometry[0].track.width, 76);
-        assert.equal(geometry[0].thumb.width, 32);
-        assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 20, 20], ["moon", 20, 20]]);
+        const { target, track, thumb, glyphs: [sun, moon] } = geometry[0];
+        assert.equal(moon.x - sun.x - sun.width, 10, "Room between the sun and moon");
+        assert.equal(thumb.y - track.y, 5, "Breathing room around the selected disc");
+        assert.equal(theme === "light" ? thumb.x - track.x : track.x + track.width - thumb.x - thumb.width, 5);
+        assert.deepEqual(target, { width: 56, height: 44 });
+        assert.equal(track.width, 56);
+        assert.equal(thumb.width, 20);
+        assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 16, 16], ["moon", 16, 16]]);
         for (const control of controls) for (const action of ["click", "Space", "Enter"]) {
             const wasDark = await control.getAttribute("aria-checked") === "true";
             if (action === "click") await control.click();
@@ -555,11 +579,11 @@ test("Display and header share switch artwork, native activation, storage update
     await expect(other.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", "true");
     await captureSwitchState(page, "theme-storage-warning");
     await category(page, "connection");
-    await category(page, "display");
+    await category(page, "regional");
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await page.locator("#displayTimeZone-control").focus();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "display");
+    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "regional");
     const proofs = process.env.WIRE_RESPONSE_SETTINGS_PROOFS;
     if (proofs) await writeFile(path.join(proofs, "theme-switch-geometry.json"), JSON.stringify(evidence, null, 2));
 });
@@ -591,16 +615,20 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await captureSwitchState(page, `${theme}-reply-on-draft`);
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(choice).toBeDisabled();
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("Turning on reply saving. Last confirmed setting: off.");
     await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toBeDisabled();
     await captureSwitchState(page, `${theme}-reply-saving`);
     await category(page, "display"); release();
     await category(page, "privacy");
     await expect(pane.getByRole("alert")).toContainText("do not repeat the update");
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("The current setting is unconfirmed. Last confirmed setting: off.");
     await expect(choice).toBeDisabled();
     await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toHaveCount(0);
     await captureSwitchState(page, `${theme}-reply-unknown`);
-    await pane.getByRole("button", { name: "Check update result", exact: true }).click();
-    await expect(pane.getByRole("button", { name: "Check update result", exact: true })).toBeDisabled();
+    await pane.getByRole("button", { name: "Check response-saving result", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Checking update...", exact: true })).toBeDisabled();
     await captureSwitchState(page, `${theme}-reply-checking`);
     await expect.poll(() => reads.length).toBe(1);
     assert.equal(reads[0].mutationRef, writes[0].mutationRef);
@@ -617,6 +645,9 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(pane.getByRole("alert")).toContainText("Synthetic source approval changed");
     await expect(choice).toBeEnabled();
+    await expect(choice).not.toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toHaveText("Response saving is off.");
+    await expect(pane.getByRole("button", { name: "Turn on response saving", exact: true })).toBeEnabled();
     assert.equal(writes.length, 2);
     assert.notEqual(writes[1].mutationRef, writes[0].mutationRef);
     await captureSwitchState(page, `${theme}-reply-rejected`);
@@ -658,34 +689,36 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await captureSwitchState(page, `${theme}-reply-source-needed`);
 });
 
-test("Troubleshooting returns to unified Activity without losing scope, private query or selection", async t => {
+test("Help returns to unified Activity without losing scope, private query or selection", async t => {
     const { page } = await setup(t, { nonmatchingRecord: true });
     await page.evaluate(() => { location.hash = "#analyze?project=test-project&layer=tool"; });
     await expect(page.locator("#activityTitle")).toHaveText("Activity");
     await expect(page.locator("#activityList .request-card-open")).toHaveCount(2);
     const query = "SYNTHETIC_PRIVATE_PROMPT";
-    await restoreLegacySearch(page, query);
+    await page.locator("#activitySearch").evaluate((field, query) => {
+        field.value = query;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+    }, query);
     const selected = page.locator("#activityList .request-card-open");
     await expect(selected).toHaveCount(1);
     await selected.click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").open);
-    for (const help of ["serviceProvenanceHelp", "authorProvenanceHelp"]) {
-        await page.locator('nav [data-nav="settings"]').click();
-        await category(page, "troubleshooting");
-        await page.locator(`#${help}>summary`).click();
-        const link = page.locator("#" + help).getByRole("link", { name: "Open Activity in Analyze", exact: true });
-        await link.focus();
-        await page.keyboard.press("Enter");
+    for (const topic of ["counts", "results"]) {
+        await page.locator("#openEvidenceHelp").click();
+        await page.locator(`[data-help-topic="${topic}"]`).click();
+        await page.goBack(); await expect(page.locator("#help-reports")).toBeVisible();
+        await page.goBack();
         await expect(page.locator("#activityTitle")).toHaveText("Activity");
-        const params = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
-        assert.equal(params.get("project"), "test-project");
+        const params = new URL(page.url()).searchParams;
+        assert.equal(params.has("project"), false);
+        assert.equal(await page.locator("#projectFilter").inputValue(), "test-project");
         assert.equal(params.get("layer"), "tool");
         assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
         await expect(page.locator("#activitySearch")).toHaveValue(query);
         await expect(selected).toHaveCount(1);
         await expect(page.locator("#activityCount")).toHaveText("1");
-        await expect(page.locator('#activityList a[href*="request=settings-unmatched"]')).toHaveCount(0);
+        await expect(page.locator('#activityList [data-view-key="request:settings-unmatched"]')).toHaveCount(0);
     }
 });

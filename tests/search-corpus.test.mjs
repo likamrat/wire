@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
@@ -113,11 +114,10 @@ test("real report producers preserve verified titles through every Search format
         ordinary.push(bundle); saved.push({ bundle, format, title: preview.title, kind: "report" });
     }
     for (const format of formats) {
-        const preview = await controller.previewComparison("title-search", ordinary[0].bundleId, ordinary[1].bundleId, {
+        const preview = await historicalComparison(context, ordinary[0].bundleId, ordinary[1].bundleId, {
             title: "Zebra comparison", formats: [format],
         });
-        await controller.reviewComparison("title-search", preview.previewId, true);
-        const bundle = (await controller.confirmComparison("title-search", preview.previewId, true)).bundle;
+        const bundle = preview.bundle;
         saved.push({ bundle, format, title: preview.title, kind: "comparison" });
     }
     const before = await loadBoardState(context), stateBytes = JSON.stringify(before);
@@ -217,16 +217,14 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     const exports = createExportController(context);
     const original = await savedReport(context, exports, "original"), masked = await savedReport(context, exports, "masked");
     const none = await savedReport(context, exports, "none");
-    const preview = await exports.previewComparison("corpus-fixture", original.bundleId, none.bundleId, { formats: ["json"] });
-    await exports.reviewComparison("corpus-fixture", preview.previewId, true);
-    const comparison = (await exports.confirmComparison("corpus-fixture", preview.previewId, true)).bundle;
+    const { bundle: comparison } = await historicalComparison(context, original.bundleId, none.bundleId, { formats: ["json"] });
     let invalidations = 0;
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => { invalidations++; } });
     assert.equal(corpus.status().state, "uninitialized");
     const { items, ticket } = await indexed(corpus);
     const comparisonView = items.find(item => item.id === corpusId("view", "compare-periods"));
     assert.equal(comparisonView.title, "Compare");
-    assert.deepEqual(comparisonView.target, { kind: "route", href: "#analyze?compare=periods" });
+    assert.deepEqual(comparisonView.target, { kind: "route", href: "/compare" });
     assert.equal(comparisonView.source.kind, "fixed-navigation");
     assert.deepEqual(new Set(items.map(item => item.type)), new Set(["interaction", "context", "reply", "action", "tool", "service", "report", "comparison", "view", "setting"]));
     const origin = items.find(item => item.id === corpusId("interaction", `prompt:${records[0].scenarioId}`));
@@ -256,9 +254,9 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     assert.deepEqual(settingsItems.map(item => item.id).sort(), settings.entries.map(setting => corpusId("setting", setting.id)).sort());
     assert.ok(settingsItems.every(item => !item.target.href.includes("sidebar-motion")));
     for (const item of settingsItems) {
-        const [view, query] = item.target.href.slice(1).split("?"), parameters = Object.fromEntries(new URLSearchParams(query));
+        const [path, query] = item.target.href.split("?"), parameters = Object.fromEntries(new URLSearchParams(query));
         const resolved = settings.resolve(parameters);
-        assert.equal(view, resolved.view ?? "settings");
+        assert.equal(path, "/" + (resolved.view ?? "settings"));
         assert.equal(parameters.setting, resolved.setting);
     }
     const activity = buildRequestActivity(records), revision = (await loadBoardState(context)).revision;
@@ -433,15 +431,14 @@ test("full retained roster includes undated and earlier interactions, with no pr
     assert.ok(items.some(item => item.type === "action" && item.target.href.includes("request=earlier")));
     assert.equal(JSON.stringify(items).match(/UNSEARCHABLE_|ghp_|C:\\\\/g)?.join(",") ?? null, null);
     assert.ok(items.filter(item => item.type === "view").some(item => item.target.focus === "activityView"
-        && item.target.href === "#analyze"));
+        && item.target.href === "/"));
 });
 
 test("frozen comparison identity survives deletion of an original source report", async t => {
     const { context } = await privateFixture(t), exports = createExportController(context);
     const first = await savedReport(context, exports, "original"), second = await savedReport(context, exports, "none");
-    const preview = await exports.previewComparison("corpus-fixture", first.bundleId, second.bundleId, { formats: ["json"] });
-    await exports.reviewComparison("corpus-fixture", preview.previewId, true);
-    const saved = (await exports.confirmComparison("corpus-fixture", preview.previewId, true)).bundle;
+    const preview = await historicalComparison(context, first.bundleId, second.bundleId, { formats: ["json"] });
+    const saved = preview.bundle;
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => {} });
     const before = (await indexed(corpus)).items.find(item => item.target.bundleId === saved.bundleId);
     const deletion = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context), onSeal: () => corpus.invalidate() });
@@ -463,6 +460,7 @@ test("every supported action layer and cross-layer tool/service destination reso
         assert.equal(createCallInvestigation().resolve(activity, records, query, revision).status, "available");
     }
     for (const item of items.filter(item => ["tool", "service"].includes(item.type))) {
+        assert.ok(item.target.href.startsWith("#analyze?"), "Recorded facet names must stay in private navigation descriptors");
         const query = Object.fromEntries(new URLSearchParams(item.target.href.split("?")[1]));
         const rows = buildActivityAnalytics(records, { layer: query.layer,
             filters: { scope: "all", includeMetadata: query.layer === "http", ...(query.tool ? { tools: [query.tool] } : { services: [query.services] }) } }).rows;

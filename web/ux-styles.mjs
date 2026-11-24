@@ -1,7 +1,20 @@
 export const uxStyles = `
+.wire-local-choices[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;inline-size:min(24rem,calc(100vw - 24px));overflow:auto;overscroll-behavior:contain;background:var(--floating-paper,var(--paper));color:var(--ink);border:1px solid var(--rule);border-radius:var(--radius-control);padding:.75rem;box-shadow:var(--surface-shadow)}
+.wire-local-choices[popover]::backdrop{background:transparent}
+.wire-dates-picker.wire-local-choices[popover]{inline-size:min(24rem,calc(100vw - 16px));padding:var(--space-lg)}
+.wire-date-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-xs) var(--space-sm)}
+.wire-date-presets>button{min-width:0;min-height:44px;text-align:start;justify-content:flex-start;white-space:normal;overflow-wrap:anywhere}
+@media(min-width:52rem){.comparison-calendar[data-single=false]>.wire-date-presets{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.wire-date-presets>button[aria-pressed=true]{--pill-border:var(--control);--pill-fill:var(--accent-soft);--pill-ink:var(--ink)}
+.wire-dates-picker [hidden]{display:none!important}
+.wire-dates-picker[data-editing-dates]>.wire-date-presets:not([hidden]){margin-bottom:var(--space-lg)}
+.wire-dates-picker[popover][data-editing-dates]{scroll-padding-bottom:3.5rem}
+.wire-dates-picker[popover] .report-popover-actions{position:sticky;bottom:0;z-index:1;background:var(--floating-paper,var(--paper))}
+button.wire-dates-trigger{display:inline-flex;align-items:center;gap:var(--pill-gap);min-height:44px;max-width:100%;white-space:normal}
+button.wire-dates-trigger>.wire-icon{width:1em;height:1em;flex:none}
 :where(details>summary).ux-disclosure {list-style:none}
 :where(details>summary).ux-disclosure::-webkit-details-marker {display:none}
-.ux-disclosure>.disclosure-icon {margin-inline-end:4px;vertical-align:calc((1cap - 16px)/2)}
+.ux-disclosure>.disclosure-icon {margin-inline-end:var(--pill-gap);vertical-align:calc((1cap - 16px)/2)}
 :where(details[open]>summary) .disclosure-icon {transform:rotate(90deg)}
 .progress-slot {display:inline-block;width:16px;height:16px;margin-inline-end:.5em;vertical-align:calc((1cap - 16px)/2);visibility:hidden}
 .progress-slot-trailing {margin-inline:.5em 0}
@@ -106,7 +119,7 @@ pre {font-size:var(--type-small);line-height:var(--leading-reading);white-space:
  .technical-facts>dd {min-height:0;margin-bottom:12px}
 }
 code.api-path {display:block;width:fit-content;min-width:0;max-width:100%;padding:4px 8px;border-radius:4px;background:var(--canvas);color:var(--ink);font-family:var(--mono);font-size:var(--type-small);font-weight:var(--weight-regular);line-height:1.6;font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0;letter-spacing:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;user-select:text}
-.ux-tooltip {position:fixed;inset:auto;margin:0;border:1px solid var(--paper);border-radius:var(--radius-small);padding:var(--space-sm) var(--space-md);width:max-content;max-width:min(28rem,calc(100vw - 2 * var(--tooltip-gap)));max-height:calc(100dvh - 2 * var(--tooltip-gap));overflow:auto;overscroll-behavior:contain;background:var(--ink);color:var(--paper);font:var(--type-small)/1.5 var(--font);box-shadow:var(--shadow);overflow-wrap:anywhere;z-index:var(--layer-tooltip);text-align:left}
+.ux-tooltip {position:fixed;inset:auto;margin:0;border:1px solid var(--paper);border-radius:var(--radius-small);padding:var(--space-sm) var(--space-md);width:max-content;max-width:min(28rem,calc(100vw - 2 * var(--tooltip-gap)));max-height:calc(100dvh - 2 * var(--tooltip-gap));overflow:auto;overscroll-behavior:contain;background:var(--screen-tip);color:var(--screen-tip-ink);font:var(--type-small)/1.5 var(--font);box-shadow:var(--shadow);overflow-wrap:anywhere;z-index:var(--layer-tooltip);text-align:left}
 .ux-tooltip::backdrop {background:transparent;pointer-events:none}
 @media(forced-colors:active) {.ux-tooltip {background:Canvas;color:CanvasText;border-color:CanvasText;box-shadow:none}}
 /* Inline-flex exposes the glyph baseline, not the expanded hit target's bottom. */

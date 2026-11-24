@@ -1,3 +1,4 @@
+import { historicalComparison, inspectComparisonPair } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, privateFixture } from "./helpers.mjs";
@@ -225,15 +226,15 @@ test("reviewed saved reports and comparisons retain changed application flags wi
     const later = await saveReport(), state = await loadBoardState(context);
     const retained = await loadSavedReportSource(context, state, later);
     assert.equal(retained.resultFacts.calls[0].observations[0].applicationError, true);
-    const inspected = await controller.inspectComparison(owner, earlier, later);
+    const inspected = await inspectComparisonPair(context, state, earlier, later);
     assert.equal(inspected.comparison.toolComparison.raw.change.success, 0);
     assert.equal(inspected.comparison.resultComparison.groups[0].applicationErrorDelta, 100);
     assert.equal(inspected.comparison.resultTextSources, undefined, "Comparison result text is separately default-off");
-    const disjoint = await controller.previewComparison(owner, earlier, later,
+    const disjoint = await historicalComparison(context, earlier, later,
         { cohort: "non-overlapping", resultText: true, formats: ["json"] });
     assert.ok(disjoint.comparison.resultTextSources.sources.every(source => source.resultText.copies.length === 0));
     assert.equal(disjoint.comparison.resultComparison.reason, "empty-population");
-    const preview = await controller.previewComparison(owner, earlier, later,
+    const preview = await historicalComparison(context, earlier, later,
         { formats: ["json", "html", "markdown", "pdf"], resultText: true, manualTerms: ["Tasks.ReadWrite"] });
     await preserveReportProof("result-sdk-comparison", preview);
     assert.match(preview.previewHtml, /Application-result comparison/);
@@ -246,8 +247,8 @@ test("reviewed saved reports and comparisons retain changed application flags wi
         const data = typeof bytes === "object" && bytes.encoding === "base64" ? Buffer.from(bytes.data, "base64") : bytes;
         assert.match(await fileText(name, data), /Required scope/, name);
     }
-    await controller.reviewComparison(owner, preview.previewId, true);
-    const saved = await controller.confirmComparison(owner, preview.previewId, true);
+
+    const saved = preview;
     const reopened = await readSavedComparison(context, await loadBoardState(context), saved.bundle.bundleId);
     assert.equal(reopened.comparison.resultComparison.groups[0].applicationErrorDelta, 100);
     assert.match(reopened.comparison.resultTextSources.sources[1].resultText.copies[0].text, /manual redaction/);

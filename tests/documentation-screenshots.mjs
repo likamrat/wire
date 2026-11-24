@@ -6,6 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { selectReportFocus, prepareReportPreview, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
@@ -114,19 +115,19 @@ test("capture documentation through the normal renderer with isolated light-them
             await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
         }
     });
-    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false });
+    app = await searchFixture({ after: cleanup => cleanups.push(cleanup) }, { records, reply: false, frontend: "react", copilotAccess: true });
     receipt = {
         sourceCommit: git("rev-parse", "HEAD"), sourceTree: git("rev-parse", "HEAD^{tree}"),
         sourceChanges: git("diff", "HEAD", "--name-only", "--", "lib", "web", "assets", "package.json", "package-lock.json"),
         fixtureDay: day, fixtureSha256: sha256(JSON.stringify(records)), fixture: "tests/documentation-screenshots.mjs",
         fixtureFileSha256: sha256(await readFile(new URL(import.meta.url))),
         fixtureHelpers: {},
-        theme: "light", colorScheme: "light", timeZone: "UTC", collectionTimers: false,
-        profile: "Neutral fallback; the synthetic source contains no account identity.",
+        renderer: "react", access: "copilot-only", theme: "light", colorScheme: "light", timeZone: "UTC", collectionTimers: false,
+        profile: "Invented source-profile fixture; no remote avatar.",
         images: [], files: [], completed: false,
     };
     assert.equal(receipt.sourceChanges, "", "Capture only an immutable product source candidate.");
-    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs"]) {
+    for (const file of ["tests/helpers.mjs", "tests/live-search-fixture.mjs", "tests/source-profile-fixture.mjs", "tests/report-journey-helpers.mjs"]) {
         receipt.fixtureHelpers[file] = sha256(await readFile(file));
     }
     await writeFile(path.join(proof, "fixture.json"), JSON.stringify(records, null, 2));
@@ -166,7 +167,7 @@ test("capture documentation through the normal renderer with isolated light-them
         return route.continue();
     });
     const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false } = {}) {
+    async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false, hover } = {}) {
         if (reportsOnly && !name.startsWith("report-") && name !== "saved-report") return;
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "light");
         assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), true);
@@ -177,7 +178,9 @@ test("capture documentation through the normal renderer with isolated light-them
             await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
             await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
         }
-        await page.mouse.move(10, 70);
+        if (hover) {
+            await hover.hover(); await expect(page.getByRole("tooltip")).toHaveText("View call details");
+        } else await page.mouse.move(10, 70);
         const file = path.join(privateOnly ? proof : output, name + ".png");
         const bytes = await locator.screenshot({ path: file, ...(locator === page ? { fullPage } : {}) });
         receipt.images.push({ name, privateOnly, sha256: sha256(bytes), bytes: bytes.length,
@@ -206,20 +209,34 @@ test("capture documentation through the normal renderer with isolated light-them
     await ready();
     await chooseTheme(page, "light");
     if (!reportsOnly) {
-        await expect(page.locator("#activityListSummary")).toContainText("16 interactions with 20 matching Work IQ tool calls");
+        await expect(page.locator("#activityListSummary")).toContainText("16 interactions · 20 matching tool calls");
+        await expect(page.locator("#activityList .report-draft-trigger").first()).toBeVisible();
         await capture("analyze");
         await page.setViewportSize({ width: 2100, height: 1250 });
-        await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
+        const card = page.locator("#activityList article").filter({ hasText: "jordan@example.invalid" });
+        const outcome = card.getByRole("link", { name: "1 tool call failed", exact: true });
+        await outcome.click();
         await expect(page.locator("#contextSidebar")).toBeVisible();
-        await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
+        await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", { name: "Prompt", exact: true }).click();
+        await expect(page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle')).toBeVisible();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
         await capture("wire-overview", { top: true });
-        if (analyzeOnly) {
-            await finish();
-            return;
-        }
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
-        await capture("interaction");
+        await page.locator('#requestContent [data-reader-section=prompt] .prompt-preview-toggle[aria-expanded=true]').click();
+        await page.locator("#contextSidebarBody").evaluate(n => n.scrollTo({ top: 0, behavior: "instant" }));
+        await card.evaluate(n => scrollBy(0, n.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom - 64));
+        await capture("interaction", { hover: outcome.locator('[data-icon-role="forward"]') });
+        if (analyzeOnly) { await finish(); return; }
+        if (!widgetsOnly) {
+            await page.locator("#contextSidebar .report-draft-trigger").click();
+            const picker = page.getByRole("dialog", { name: "Report drafts" });
+            await picker.getByRole("button", { name: "New draft", exact: true }).click();
+            await picker.getByLabel("Draft name").fill("Launch follow-up");
+            await capture("report-draft");
+            await picker.getByRole("button", { name: "Create draft and add" }).click();
+            await expect(page.locator("#contextSidebar .report-draft-trigger")).toContainText("Launch follow-up");
+            await page.getByRole("button", { name: "Dismiss confirmation" }).click();
+        }
         await page.getByRole("button", { name: "Close interaction", exact: true }).click();
         await expect(page.locator("#contextSidebar")).toBeHidden();
         await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
@@ -242,8 +259,9 @@ test("capture documentation through the normal renderer with isolated light-them
 
     await page.locator('nav [data-nav=reports]').click();
     await ready();
+    await selectReportFocus(page, "errors");
     await capture("report-choices", { fullPage: true });
-    let prepared = await preparedChange(() => page.locator('[data-report-preset="errors"]').click());
+    let prepared = await preparedChange(() => prepareReportPreview(page));
     assert.equal(prepared.snapshot.reportPopulation.reference.length, 12);
     assert.equal(prepared.records.length, 4);
     const report = page.frameLocator(".report-contained-frame");
@@ -268,16 +286,16 @@ test("capture documentation through the normal renderer with isolated light-them
     await report.getByLabel("Your note", { exact: true }).first()
         .fill("Expected a list of review messages. Check how the mailbox access error was explained.");
     prepared = await preparedChange(() => report.getByRole("button", { name: "Update note", exact: true }).first().click());
-    await report.locator(".wire-reading-interaction>summary").first().click();
-    await report.locator(".wire-example-editor>summary").first().click();
+    await expect(report.locator(".wire-reading-interaction").first()).toHaveAttribute("open", "");
+    await expect(report.locator(".wire-example-editor").first()).toHaveAttribute("open", "");
     await capture("report-example", { locator: report.locator(".wire-example-editor").first() });
     await page.getByRole("button", { name: "Expand sections", exact: true }).click();
     await page.getByRole("button", { name: "Collapse sections", exact: true }).click();
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         prepared = await preparedChange(() => page.locator(`#formatOptions input[value="${format}"]`).check());
     }
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     for (const format of ["html", "pdf", "json", "md"]) {
         await selectActivityOption(page, "preparedReportView", "product-report." + format);
         const file = page.locator("#reportFileInspection .saved-file-preview:visible");
@@ -307,7 +325,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(page.locator(".report-save-warning")).toBeVisible();
     await capture("report-save-warning", { locator: page.locator(".report-save-warning") });
     const savedResponse = page.waitForResponse(item => item.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Hide details and save", exact: true }).click();
+    await page.getByRole("button", { name: "Mask detected details and save", exact: true }).click();
     assert.equal((await savedResponse).status(), 200);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     const state = await loadBoardState(app.context);
@@ -319,34 +337,20 @@ test("capture documentation through the normal renderer with isolated light-them
         originals.set(file, bytes);
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    const savedFrame = page.frameLocator("#savedReportReader iframe");
-    await expect(savedFrame.locator("h1")).toHaveText("Errors & failures");
-    await expect(savedFrame.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
-    await savedFrame.locator(".wire-reading-interaction>summary").first().click();
-    await savedFrame.locator('.report-nav a[href$="#examples"]').click();
+    const brief = page.getByRole("article", { name: "Report brief" });
+    await expect(brief).toContainText("4 of 12 interactions had recorded errors.");
+    await expect(brief.getByRole("button", { name: /^Report call / })).toBeVisible();
     await capture("saved-report");
     if (reportsOnly) { await finish(); return; }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await viewAllSavedReports(page);
     await page.locator("#savedReportSearch").fill("Launch review");
     await page.getByRole("button", { name: "View report: Launch review", exact: true }).click();
-    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Launch review");
+    await expect(page.locator("#savedReportReader h1")).toHaveText("Launch review");
+    await expect(brief).toBeVisible();
     await capture("saved-json-only", { privateOnly: true });
 
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
-    await page.getByRole("link", { name: "Compare saved reports", exact: true }).click();
-    const comparison = page.locator("#comparisonWorkspace");
-    for (const [label, title] of [["Earlier report", "Earlier release checklist"], ["Later report", "Call results"]]) {
-        await comparison.getByRole("combobox", { name: label, exact: true }).click();
-        await page.locator(`.select-popup [data-value="${seeded.get(title)}"]`).click();
-    }
-    const comparisonResponse = page.waitForResponse(item => item.url().endsWith("/api/report-comparison/preview"));
-    await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-    const comparisonPreview = await comparisonResponse;
-    assert.equal(comparisonPreview.status(), 200);
-    await expect(comparison.getByRole("button", { name: "Save comparison", exact: true })).toBeEnabled();
-    await expect(comparison.locator(".comparison-prepared-files iframe")).toBeVisible();
-    await capture("compare-saved-reports", { privateOnly: true, top: true });
-
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await capture("compare-periods");
@@ -361,7 +365,20 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.locator("#reportLibraryLink").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
 
+    await page.locator('nav [data-nav=trends]').click();
+    const sections = page.getByRole("navigation", { name: "Trends sections" });
+    await sections.getByRole("button", { name: "Overview" }).click();
+    await expect(page.locator("#trendsView")).toHaveAttribute("aria-busy", "false");
+    await capture("trends-overview", { top: true });
+    await sections.getByRole("button", { name: "Charts" }).click();
+    await page.getByRole("button", { name: "Arrange charts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Arrange charts" }).getByRole("button", { name: "All charts" }).click();
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await capture("trends-collapsed", { top: true });
+
     await page.locator('nav [data-nav=settings]').click();
+    await expect(page.locator("#settingsSearch")).toBeVisible();
     await navigateSettings(page, "display");
     await page.setViewportSize({ width: 1440, height: 760 });
     await capture("settings-display");

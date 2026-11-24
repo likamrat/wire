@@ -1,7 +1,7 @@
+import { nativeReportKey as key, nativeReportFrame as frame } from "./native-report-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { projectNativeReportEvidence, validateNativeReportEvidence } from "../lib/native-report-evidence.mjs";
-import { nativeReportKey as key, nativeReportFrame as frame } from "./native-report-fixtures.mjs";
 import { chatSource } from "./native-chat-source-fixtures.mjs";
 import { decodeNativeChatObservation } from "../lib/native-chat-source.mjs";
 import { retainNativeChatSourceObservations } from "../lib/native-read-model.mjs";
@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { buildSanitizedBundle } from "../lib/export.mjs";
 import { fixture } from "./helpers.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
-import { buildComparisonBundle } from "../lib/comparison-export.mjs";
+import { buildComparisonBundle } from "./historical-comparison-fixture.mjs";
 import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
 import { coworkFixture, envelope, recorded } from "./native-read-model-fixtures.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";

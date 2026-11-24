@@ -98,25 +98,26 @@ for (const configured of [false, true]) test(`ordinary GitHub paging survives ${
         const first = await cards.evaluateAll(nodes => nodes.map(node => node.dataset.viewKey));
         const next = pager.getByRole("button", { name: "Next", exact: true });
         await expect(next).toBeEnabled();
-        await expect(pager).toContainText("1-8 of 9 GitHub interactions");
-        await expect(pager).toContainText("Microsoft total unavailable");
+        await expect(pager).toContainText(`1-8 of 9 ${configured ? "GitHub " : ""}interactions`);
+        if (configured) await expect(pager).toContainText("Microsoft total unavailable");
+        else await expect(pager).not.toContainText("Microsoft");
         await next.click();
         await expect(cards).toHaveCount(1);
-        await expect(pager).toContainText("9-9 of 9 GitHub interactions");
+        await expect(pager).toContainText(`9-9 of 9 ${configured ? "GitHub " : ""}interactions`);
         await expect(next).toBeDisabled();
         await expect(page.locator("#activityList .empty-state")).toHaveCount(0);
-        await expect(pager).toContainText("Microsoft total unavailable");
-        await expect(page.locator("#periodResult")).toContainText("Microsoft: current totals unavailable");
+        if (configured) await expect(page.locator("#periodResult")).toContainText("Microsoft: current totals unavailable");
+        else await expect(page.locator("#periodResult")).not.toContainText(/GitHub|Microsoft/);
         await expect(page.locator("#periodResult")).not.toContainText("Microsoft: 0");
         await expect(page.locator("#sourceFilter")).toHaveValue("all");
         await pager.getByRole("button", { name: "Previous", exact: true }).click();
         await expect(cards).toHaveCount(8);
         assert.deepEqual(await cards.evaluateAll(nodes => nodes.map(node => node.dataset.viewKey)), first);
         await navigateMain(page, "reports");
-        await page.getByRole("link", { name: "Create a report", exact: true }).click();
+        await page.locator("#reportDeskActivity").click();
         for (const scope of ["current", "all"]) {
             await page.locator(`[name=reportScope][value=${scope}]`).check();
-            const next = page.getByRole("button", { name: "Continue to contents", exact: true });
+            const next = page.locator("#prepareReportPreview");
             if (configured) {
                 await expect(next).toBeDisabled();
                 await expect(page.locator("#scopeCount-" + scope)).not.toContainText("9 interactions");

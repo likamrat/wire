@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { privateFixture, fixture, chooseTheme, navigateMain, openActivitySessions } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_HEADING_FOCUS_PROOFS;
@@ -98,8 +98,8 @@ test("pointer, keyboard and Skip to content keep an intentional current-page des
         return matching;
     });
     await navigateMain(page, "home");
-    await page.keyboard.press("Tab");
-    const link = page.locator('nav [data-nav="collection-status"]');
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+    const link = page.locator("#settingsStatusLink a");
     await link.focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#pageTitle")).toBeFocused();
     const keyboard = await headingState(page), beforeSkip = page.url();
@@ -132,9 +132,7 @@ test("pointer, keyboard and Skip to content keep an intentional current-page des
 
 test("shared page and section headings retain readable keyboard focus across routes and enlarged layouts", { timeout: 60000 }, async t => {
     const { page, url } = await setup(t), measured = [];
-    const routes = ["home", "activity", "activity?session=test-session", "request?request=test-scenario", "reports",
-        "reports?task=create", "settings?section=connection", "settings?section=collection", "settings?section=display",
-        "settings?section=data", "collection-status"];
+    const routes = ["", "reports", "reports?task=library", "settings?section=connection", "settings?section=themes", "settings?section=regional", "settings?section=privacy", "collection-status"];
     await page.goto(url + "#home");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     for (const [theme, width, size] of [["light", 1614, 100], ["dark", 375, 200]]) {
@@ -142,7 +140,7 @@ test("shared page and section headings retain readable keyboard focus across rou
         await page.setViewportSize({ width, height: 1100 });
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
         for (const route of routes) {
-            await page.goto(url + "#" + route);
+            await page.goto(new URL(route, url).href);
             await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
             const beforeSkip = page.url();
             await page.locator(".skip-link").focus(); await page.keyboard.press("Enter");
@@ -190,26 +188,24 @@ test("shared page and section headings retain readable keyboard focus across rou
     if (proofs) await writeFile(path.join(proofs, "shared-heading-matrix.json"), JSON.stringify({ measured, forced }, null, 2));
 });
 
-test("Skip preserves history, private query and report selection before ordinary Back navigation", async t => {
+test("Skip preserves the local Settings query and history before Back", async t => {
     const { page, url } = await setup(t);
-    await page.goto(url + "#activity?range=capture");
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await openActivitySessions(page);
-    await page.locator("#select-request-test-scenario").check();
-    await page.locator("#activitySearch").fill("Synthetic");
-    await page.waitForFunction(() => history.state?.evidenceView?.search === "Synthetic");
-    await expect(page.locator("#select-request-test-scenario")).toBeChecked();
-    const before = await page.evaluate(() => ({ url: location.href, length: history.length, state: history.state,
-        selection: document.querySelector("#activitySelectionSummary").textContent }));
-    await page.locator(".skip-link").focus(); await page.keyboard.press("Enter");
+    await page.goto(url); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await navigateMain(page, "settings");
+    const search = page.locator("#settingsSearch");
+    await search.fill("theme");
+    const hit = page.locator('#settingsSearchResults a[data-setting="theme"]');
+    await expect(hit).toBeVisible();
+    const location = () => page.evaluate(() => ({ url: document.URL, length: history.length, state: history.state }));
+    const before = await location();
+    await page.locator(".skip-link").press("Enter");
     await expect(page.locator("#pageTitle")).toBeFocused();
-    const after = await page.evaluate(() => ({ url: location.href, length: history.length, state: history.state,
-        selection: document.querySelector("#activitySelectionSummary").textContent }));
-    assert.deepEqual(after, before);
-    await expect(page.locator("#activitySearch")).toHaveValue("Synthetic");
-    await expect(page.locator("#select-request-test-scenario")).toBeChecked();
-    await navigateMain(page, "home");
+    assert.deepEqual(await location(), before);
+    await expect(search).toHaveValue("theme");
+    await hit.click();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     await page.goBack();
-    await expect(page.locator("#activitySearch")).toHaveValue("Synthetic");
-    await expect(page.locator("#select-request-test-scenario")).toBeChecked();
+    await expect(hit).toBeFocused();
+    await expect(search).toHaveValue("theme");
+    assert.equal(page.url(), before.url);
 });

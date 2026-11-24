@@ -11,6 +11,17 @@ export function createCallInvestigation(compareEntries) {
         });
     }
     const only = values => values?.length === 1 ? values[0] : null;
+    function sourceToolCall(scenario, row) {
+        if (!scenario?.sourceSessionId || scenario.scenarioId !== row?.scenarioId
+            || row.sourceSessionId != null && row.sourceSessionId !== scenario.sourceSessionId) return null;
+        const id = row.parentCallId ?? row.id;
+        const matches = scenario.toolCalls?.filter(call => row.toolCallId ? call.toolCallId === row.toolCallId
+            : call.startEventId && id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`);
+        if (!matches || matches.length < 2) return only(matches);
+        // A repeated copy of the full retained JSON is still one observation.
+        const retained = JSON.stringify(matches[0]);
+        return matches.every((call, index) => index === 0 || JSON.stringify(call) === retained) ? matches[0] : null;
+    }
     function resolve(activity, records, route, revision) {
         if (route.call === undefined) return { status: "none" };
         const unavailable = { status: "unavailable" }, layer = route.layer || "tool";
@@ -37,22 +48,21 @@ export function createCallInvestigation(compareEntries) {
         const source = ["tool", "reported-api"].includes(layer)
             ? scenario.recordKind === "native-conversation"
                 ? scenario.nativeConversation.calls.find(call => call.key === parent.id && call.nativeCallId === parent.toolCallId)
-                : scenario.toolCalls?.find(call => parent.toolCallId ? call.toolCallId === parent.toolCallId
-                : call.startEventId && parent.id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`)
+                : sourceToolCall(scenario, parent)
             : layer === "http" ? scenario.httpRecords?.find(record => record.recordId === row.recordId)
                 : scenario.graphActivities?.find(record => record.activityId === row.activityId);
         return source ? { status: "available", row, source, actionId: parent.id } : unavailable;
     }
-    function firstFailure(activity, records, matching, route, revision) {
+    function firstToolCall(activity, records, matching, route, revision, qualifies) {
         if (route.view !== "request" || route.layer !== "tool" || route.call !== undefined) return null;
         const candidates = [];
         for (const row of matching) {
-            if (row.scenarioId !== route.request || row.outcome !== "failure") continue;
+            if (row.scenarioId !== route.request || !qualifies(row)) continue;
             const target = { ...route, call: row.id };
             const resolved = resolve(activity, records, target, revision);
-            // Missing ownership cannot be repaired by selecting a neighboring failure.
-            if (resolved.status !== "available") return target;
-            if (resolved.row.outcome !== "failure") continue;
+            // Missing ownership cannot be repaired by selecting a neighboring call.
+            if (resolved.status !== "available") return null;
+            if (!qualifies(resolved.row)) continue;
             const source = records.find(record => record.scenarioId === route.request);
             candidates.push({ target, at: resolved.source.startedAt, index: source.recordKind === "native-conversation"
                 ? source.nativeConversation.calls.indexOf(resolved.source) : source.toolCalls.indexOf(resolved.source) });
@@ -60,5 +70,12 @@ export function createCallInvestigation(compareEntries) {
         candidates.sort((a, b) => compareEntries(a, b) || a.index - b.index);
         return candidates[0]?.target ?? null;
     }
-    return { duration, order, resolve, firstFailure };
+    function countedIds(rows, request, outcome) {
+        if (!rows?.length || !["success", "failure"].includes(outcome)) return null;
+        if (outcome === "success" && rows.some(row => row.outcome !== "success")) return null;
+        const members = rows.filter(row => row.outcome === outcome);
+        if (members.some(row => !row.id || !(row.scenarioIds?.length ? row.scenarioIds : [row.scenarioId]).includes(request))) return null;
+        return new Set(members.map(row => row.id));
+    }
+    return { duration, order, resolve, sourceToolCall, countedIds, firstToolCall };
 }

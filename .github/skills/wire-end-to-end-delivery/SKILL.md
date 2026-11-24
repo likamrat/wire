@@ -1,6 +1,6 @@
 ---
 name: wire-end-to-end-delivery
-description: Deliver working WIRE capabilities through existing product paths with proportionate proof. Use for feature implementation, collector or source fixes, Search or report changes, retained-data recovery, and composing or shipping a qualified build. Distinguish source readiness from real integration and the running experience.
+description: Diagnose a WIRE bug, deliver a feature, audit regression coverage or qualify a combined build. Follow the normal product entry and distinguish a source fix from a working delivery.
 license: MIT
 ---
 
@@ -15,16 +15,11 @@ Recover the current request and acceptance criteria. State the normal user entry
 expected result, required evidence and real authority boundaries in the existing
 task record. Reuse recovered facts; ask only about consequential unknowns.
 
-Inspect the actual checkout and relevant current contracts. Start with
-[Development](../../../docs/development.md) and the pertinent sections of
-[the user guide](../../../docs/user-guide.md),
-[design](../../../docs/design.md),
-[reporting](../../../docs/reporting.md) or
-[Search](../../../docs/live-search.md). Read current scripts from
-`package.json` at the repository root when needed. Historical handoffs can
-describe retired or unshipped features; applicable user decisions govern the
-requested change without silently broadening access. An absent adapter is a
-source/version gap, not proof it is delivered.
+Find the reported entry in [the user guide](../../../docs/user-guide.md) and
+the checkout. Use [Development](../../../docs/development.md#check-a-change)
+for checks; read exact commands from `package.json`. A handoff can describe
+an older or unshipped entry. User decisions about the feature do not grant
+access to private data.
 
 **Ready:** completion can be distinguished from a demo, preparation or a partial
 result. Source-only work can be complete as source-only without claiming live
@@ -42,7 +37,7 @@ Load only the skills whose branches apply:
 | --- | --- |
 | Collection, source adapters, native history or account integration | [Source integration](../wire-source-integration/SKILL.md) |
 | Counts, filters, outcomes, authorship, service or timing meaning | [Evidence semantics](../wire-evidence-semantics/SKILL.md) |
-| Report creation, comparison, exports or saved reading | [Report integrity](../wire-report-integrity/SKILL.md) |
+| Draft membership, report preparation, comparison reports, exports or saved reading | [Report integrity](../wire-report-integrity/SKILL.md) |
 | Search corpus, matching, highlights, result opening or invalidation | [Local Search](../wire-local-search/SKILL.md) |
 | Refresh, repair, recollection, deletion or uncertain operations | [Safe recovery](../wire-safe-recovery/SKILL.md) |
 
@@ -59,25 +54,44 @@ for, and any missing producer contract is explicit.
 
 ## 3. Implement and prove the requested behavior
 
-Keep diagnosis, implementation, related documentation, focused validation and
-corrections with the same owner. Routine failures start diagnosis inside the
-brief, not a micro-approval round. Escalate only a genuine boundary or blocker.
+For a bug, use the entry where the failure was reported. Get a check that fails
+on that symptom before the fix and passes on the candidate. For missing or
+incorrect data, follow one invented record from source to store to screen to
+find the first disagreement, including the projection the screen reads. If you
+cannot observe a step, say which one. A fixture can reproduce a defect without
+establishing why an earlier request failed.
 
 Reuse existing modules, tests and tooling. Start with the smallest command that
 covers the changed behavior and its coupled regressions. Expand only for a
-specific dependency, observed failure or acceptance requirement. A focused check
-must prove the right outcome, not weaken an assertion to fit the implementation.
-For documentation or skill packaging, use relevant static checks rather than
-running application journeys without a behavior change.
+specific dependency, observed failure or acceptance requirement.
 
-Use invented records and disposable stores for mutation tests. Real collection,
+When auditing tests, review passing cases too. Before dropping one, name the
+regression it catches and the retained case that would fail for the same reason,
+or show why the behavior is retired or the assertion proves nothing. Before adding
+a case, name the regression the existing tests miss. For an async UI action,
+check the result the user sees after the matching read completes. Search Back,
+for example, can restore the query before the matching row regains focus.
+
+For documentation or skill links, check exact-case paths, GitHub heading
+anchors and embedded images. When replacing screenshots or explaining a
+changed control, operate that path with invented data in the [documentation
+fixture](../../../docs/development.md#capture-documentation-screenshots). Keep the rest
+of the app out of the test unless it supplies a necessary step.
+
+Use invented records and disposable stores for mutation tests. Register cleanup
+as each fixture acquires a resource so a failed setup or assertion releases
+pending requests and closes its browser and server. Real collection,
 private-data reads, authentication, disclosure and destructive operations retain
 their actual permission gates; this skill supplies none. Prove ordinary product
 entry when that is the acceptance criterion, rather than seeding backend state.
 
-Record baseline failures separately and verify they reproduce before calling
-them inherited. Reuse evidence only when input, candidate and route still match.
-Do not add a new diagnostic framework or broad testing campaign by default.
+Call a failure inherited only after reproducing it on the baseline with the same
+input and route. If a test opens a retired screen, move it to the supported
+entry and keep the behavior it protected. If it exposes a product defect,
+keep the assertion and send the reproduction to the feature owner. When a
+full suite is required, report the unfiltered run's exit status on the exact
+combined revision. Report focused passes, interrupted runs and separate
+qualification lanes as such.
 
 **Ready:** the exact candidate satisfies the relevant behavior, error and
 preservation criteria; unrun real-data or UI criteria remain visibly pending.

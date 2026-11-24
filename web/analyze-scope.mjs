@@ -1,7 +1,7 @@
 // Serialized with the shell. Read accepted state only; this module owns no filters.
 export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabel) {
     const collections = { history: "Saved collection", legacy: "Earlier snapshot", all: "Both collections" };
-    function format({ applied, acceptedRoute, period, analytics, snapshot, hasSearch = false }, pairedScope) {
+    function format({ applied, acceptedRoute, period, analytics, snapshot, hasSearch = false, singleSource = false }, pairedScope, caption) {
         const paired = pairedScope !== undefined;
         const filters = applied.filters;
         if (!Object.hasOwn(collections, filters.scope)) throw new RangeError("Accepted collection scope is unavailable.");
@@ -11,22 +11,26 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
         const parts = paired ? [] : [period, collections[filters.scope]];
         const restrictions = [];
         if (!paired && (filters.from || filters.to)) restrictions.push(period);
-        if (filters.scope !== "history") {
+        if (filters.scope !== "history" && !(caption && filters.scope === "all")) {
             restrictions.push(collections[filters.scope]);
             if (paired) parts.push(collections[filters.scope]);
         }
-        let activeCount = Number(!paired && Boolean(filters.from || filters.to)) + Number(filters.scope !== "history");
         function add(label, values, restriction = true) {
             if (!values?.length) return;
             const text = `${label}: ${values.join(", ")}`;
             if (!paired || restriction) parts.push(text);
             if (restriction) restrictions.push(text);
-            activeCount++;
         }
         const count = value => value.toLocaleString(applied.timeContext?.locale);
         if (applied.layer !== "tool") add("Activity", [results.unit(applied.layer, 2)], false);
         if (filters.sources?.length && typeof sourceLabel !== "function") throw new TypeError("Accepted source presentation is unavailable.");
-        add("Source", filters.sources?.map(id => sourceLabel(id)));
+        const sources = filters.sources?.map(id => sourceLabel(id));
+        if (caption && sources?.length) {
+            if (!(caption.githubOnly && filters.sources.length === 1 && filters.sources[0] === "github-copilot")) {
+                const text = `${sources.join(", ")} only`;
+                parts.push(text); restrictions.push(text);
+            }
+        } else if (!singleSource || filters.sources?.some(id => id !== "github-copilot")) add("Source", sources);
         if (acceptedRoute.nativeGroupLabel) add("Microsoft group", [acceptedRoute.nativeGroupLabel]);
         add("Tool", filters.tools);
         if (filters.services?.length) {
@@ -41,7 +45,6 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
                 const context = paired ? "Missing-service context allowed"
                     : `Includes missing-service context: ${count(selection.knownMatchIds.length)} known matches; ${count(selection.contextOnlyIds.length)} context-only`;
                 parts.push(context); restrictions.push(context);
-                activeCount++;
             }
         }
         add("Category", filters.workloads?.map(serviceLabel));
@@ -49,9 +52,9 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
             add("Previous outcome", filters.outcomes?.map(value => `${results.labels("tool")[value]} (execution not observed)`));
         } else add("Outcome", filters.outcomes?.map(value => results.labels(applied.layer)[value]));
         if (authorship.filterValue(filters.promptAuthors)) add("Author", [authorship.selectionLabel(filters.promptAuthors)]);
-        add("Copilot project", filters.projectIds?.map(id => id === null ? "Project not recorded"
+        add(singleSource || caption?.githubOnly ? "Project" : "Copilot project", filters.projectIds?.map(id => id === null ? "Project not recorded"
             : (paired ? pairedScope.projects.find(entry => entry.id === id)?.name : snapshot.scenarios.find(scenario => scenario.projectId === id)?.project) || "Project unavailable"));
-        add(applied.layer === "http" ? "Recorder source" : "Copilot chat", filters.sourceSessionIds?.map(id => (paired
+        add(applied.layer === "http" ? "Recorder source" : singleSource || caption?.githubOnly ? "Chat" : "Copilot chat", filters.sourceSessionIds?.map(id => (paired
             ? pairedScope.sessions.find(entry => entry.id === id)?.name : snapshot.sessions?.find(source => source.sessionId === id)?.name
                 || snapshot.scenarios.find(scenario => scenario.sourceSessionId === id)?.sourceSessionName) || (applied.layer === "http" ? "Source unavailable" : "Chat unavailable")));
         add("API path", filters.endpoints?.map(id => (paired ? pairedScope.endpoints.find(entry => entry.id === id)?.name
@@ -59,12 +62,11 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
         for (const service of acceptedRoute.withinServices?.split(",") || []) {
             const context = `${serviceLabel(service)} within current scope`;
             parts.push(context); restrictions.push(context);
-            activeCount++;
         }
-        if (hasSearch) { parts.push("Search applied"); restrictions.push("Search applied"); activeCount++; }
-        return { text: parts.join("; "), parts, activeCount, restrictions, restrictionText: restrictions.join("; ") };
+        if (hasSearch) { parts.push("Search applied"); restrictions.push("Search applied"); }
+        return { text: parts.join("; "), parts, activeCount: restrictions.length, restrictions, restrictionText: restrictions.join("; ") };
     }
-    function describePair(pair) {
+    function describePair(pair, caption) {
         if (pair === null) return null;
         const value = pair?.comparison, scope = pair?.scope;
         if (typeof pair?.key !== "string" || !pair.key || !Number.isSafeInteger(pair.revision) || pair.revision < 0 || pair.revision !== value?.revision
@@ -76,7 +78,7 @@ export function createAnalyzeScope(results, authorship, serviceLabel, sourceLabe
             throw new TypeError("Accepted comparison scope is unavailable.");
         }
         return format({ applied: value.options, acceptedRoute: { withinServices: value.selection.withinServices.join(",") || undefined },
-            hasSearch: scope.hasSearch }, scope);
+            hasSearch: scope.hasSearch }, scope, caption);
     }
     return { describe: input => format(input), describePair };
 }

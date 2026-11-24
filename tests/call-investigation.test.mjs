@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCallInvestigation } from "../web/call-investigation.mjs";
-import { createRequestContext } from "../web/request-context.mjs";
 import { projectNativeReadModel } from "../lib/native-read-model.mjs";
 import { multiCallChatFixture } from "./native-read-model-fixtures.mjs";
 
@@ -18,35 +17,13 @@ test("native readers preserve literal call identity without legacy toolCalls or 
     assert.equal(record.toolCalls, undefined);
 });
 
-test("homepage failure entry selects the first matching canonical failure in retained log order", () => {
-    const calls = createCallInvestigation(createRequestContext().compare);
-    const source = { scenarioId: "group", toolCalls: [
-        { toolCallId: "later", startedAt: "2026-10-01T12:00:03Z" },
-        { toolCallId: "first", startedAt: "2026-10-01T12:00:01Z" },
-        { toolCallId: "second", startedAt: "2026-10-01T12:00:02Z" },
-    ] };
-    const rows = source.toolCalls.map(call => ({ id: call.toolCallId, scenarioId: "group", toolCallId: call.toolCallId, outcome: "failure" }));
-    const route = { view: "request", request: "group", layer: "tool" };
-    assert.deepEqual(calls.firstFailure({ tool: rows }, [source], [rows[0], rows[2]], route, 1),
-        { ...route, call: "second" });
-    assert.deepEqual(source.toolCalls.map(call => call.toolCallId), ["later", "first", "second"]);
-});
-
-test("failure entry preserves explicit targets and fails closed on missing ownership without promoting a successful parent", () => {
-    const calls = createCallInvestigation(createRequestContext().compare);
-    const records = [{ scenarioId: "group", toolCalls: [{ toolCallId: "success" }, { toolCallId: "failure" }] }];
-    const rows = [
-        { id: "success", scenarioId: "group", toolCallId: "success", outcome: "success" },
-        { id: "failure", scenarioId: "group", toolCallId: "failure", outcome: "failure" },
-    ];
-    const activity = { tool: rows, "reported-api": [{ id: "child", scenarioId: "group", parentCallId: "success", outcome: "failure" }] };
-    const route = { view: "request", request: "group", layer: "tool" };
-    assert.equal(calls.firstFailure(activity, records, rows, { ...route, call: "success" }, 1), null);
-    for (const layer of ["reported-api", "http", "code-reference"]) assert.equal(calls.firstFailure(activity, records, rows, { ...route, layer }, 1), null);
-    assert.equal(calls.firstFailure(activity, records, [{ ...rows[0], outcome: "failure" }], route, 1), null);
-    assert.equal(calls.firstFailure(activity, records, [{ ...rows[0], outcome: "unknown" }], route, 1), null);
-    const unavailable = { id: "missing", scenarioId: "group", outcome: "failure" };
-    assert.deepEqual(calls.firstFailure(activity, records, [unavailable, rows[1]], route, 1), { ...route, call: "missing" });
+test("a failed badge keeps every counted member and cannot link a partial or unidentified set", () => {
+    const calls = createCallInvestigation();
+    const rows = ["success", "failure", "failure"].map((outcome, i) => ({ id: String(i), scenarioId: "group", outcome }));
+    assert.deepEqual(calls.countedIds([...rows, rows[1]], "group", "failure"), new Set(["1", "2"]));
+    assert.equal(calls.countedIds(rows, "group", "success"), null);
+    assert.equal(calls.countedIds([...rows, { ...rows[2], scenarioId: "other" }], "group", "failure"), null);
+    assert.equal(calls.countedIds([...rows, { ...rows[2], id: undefined }], "group", "failure"), null);
 });
 
 test("duration ordering is measured, stable by canonical ID, and keeps unavailable values separate", () => {
@@ -83,10 +60,20 @@ test("start-event, Graph sites, visible statuses, code references and owned HTTP
         assert.equal(result.row, rows[0]);
         assert.equal(result.actionId, rows[0].id);
     }
-    scenario.toolCalls.push({ startEventId: "event" });
-    assert.equal(calls.resolve(activity, [scenario], { request: "group", call: activity.tool[0].id }).source, scenario.toolCalls[0]);
     activity["reported-api"] = [{ id: "orphan", scenarioId: "group", parentCallId: "absent" }];
     assert.equal(calls.resolve(activity, [scenario], { request: "group", layer: "reported-api", call: "orphan" }).status, "unavailable");
+});
+
+test("an exact start-event target is unavailable when two owning calls have conflicting arguments", () => {
+    const calls = createCallInvestigation();
+    const scenario = { scenarioId: "group", sourceSessionId: "chat", toolCalls: [
+        { startEventId: "event", requestArgs: { entityUrls: ["/me/messages"] } },
+        { startEventId: "event", requestArgs: { entityUrls: ["/me/events"] } },
+    ] };
+    const row = { id: 'event:["chat","event"]', scenarioId: "group", sourceSessionId: "chat" };
+    const result = calls.resolve({ tool: [row] }, [scenario], { request: "group", layer: "tool", call: row.id });
+    assert.equal(result.status, "unavailable");
+    assert.equal(result.source, undefined);
 });
 
 test("exact targets use canonical identity and API parent links, never an index or nearby action", () => {

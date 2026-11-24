@@ -28,37 +28,33 @@ async function setup(t) {
     return page;
 }
 
-test("line previews remeasure layout and font readiness, then release observers and exact retained text", async t => {
+test("full card text wraps at the available width without rewriting its source, then retires synchronously", async t => {
     const page = await setup(t);
-    await page.addStyleTag({ content: ".request-card-prompt{font:16px/24px sans-serif;max-height:48px;overflow:hidden;margin:0}#home{width:900px}" });
+    await page.addStyleTag({ content: ".request-card-prompt{font:16px/24px sans-serif;white-space:pre-wrap;margin:0}#home{width:900px}" });
     const source = "Review the workshop reference notes, confirm the recorded room layout, and keep the preparation order. ".repeat(2);
     await page.evaluate(text => {
-        window.previewChanges = [];
         const source = { status: "full", text };
-        window.preview = window.access.renderCardPreview(source, value => window.previewChanges.push(value));
+        window.preview = window.access.renderCardPreview(source);
         document.querySelector("#home").append(window.preview);
     }, source);
-    await page.waitForFunction(() => window.previewChanges.at(-1) === false);
-    assert.equal(await page.locator(".request-card-prompt").textContent(), source.trim());
+    const height = () => page.evaluate(() => window.preview.clientHeight);
+    const wide = await height();
+    assert.equal(await page.locator(".request-card-prompt").textContent(), source);
     await page.locator("#home").evaluate(node => node.style.width = "240px");
-    await page.waitForFunction(() => window.previewChanges.at(-1) === true);
+    assert.ok(await height() > wide);
     await page.locator("#home").evaluate(node => node.style.width = "900px");
-    await page.waitForFunction(() => window.previewChanges.at(-1) === false);
+    assert.equal(await height(), wide);
     const released = await page.evaluate(() => {
-        const nodes = [...window.preview.childNodes], before = window.previewChanges.length;
-        document.fonts.dispatchEvent(new Event("loadingdone"));
-        const fontMeasured = window.previewChanges.length > before;
+        const nodes = [...window.preview.childNodes];
         window.access.release(window.preview);
-        const count = window.previewChanges.length;
         document.fonts.dispatchEvent(new Event("loadingdone"));
         window.preview.style.width = "100px";
-        return { fontMeasured, count, text: window.preview.textContent, heldText: nodes.map(node => node.textContent).join("") };
+        return { text: window.preview.textContent, heldText: nodes.map(node => node.textContent).join("") };
     });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(released.fontMeasured, true);
     assert.equal(released.text, "");
     assert.equal(released.heldText, "");
-    assert.equal(await page.evaluate(() => window.previewChanges.length), released.count);
+    assert.equal(await page.evaluate(() => window.preview.textContent), "");
 });
 
 for (const mode of ["complete", "preview", "short-preview"]) test(`release synchronously erases ${mode} and retained old toggle bodies`, async t => {

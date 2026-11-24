@@ -18,14 +18,15 @@ for (const provenance of ["human-authored", "coordinator-message", "recorded-use
         });
         const before = structuredClone(source);
         const bundle = await buildSanitizedBundle([source], "a".repeat(64), { promptMode: "masked", formats: ["html", "json", "markdown"] });
-        assert.match(bundle.previewHtml, /<h3>Prompt<span class="prompt-status"> · full source \/ masked-copy<\/span><\/h3>/);
-        assert.equal(bundle.previewHtml.split("SYNTHETIC_PROMPT_CAPTION").length - 1, 1);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: query<span class="prompt-status">/);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: filter<span class="prompt-status">/);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 3: question<span class="prompt-status">/);
-        assert.match(bundle.files["product-report.md"], /\*\*Prompt\*\*/);
-        assert.match(bundle.files["product-report.md"], /\*\*Recorded tool argument/);
-        assert.doesNotMatch(bundle.previewHtml, /Human prompt|Agent-to-tool prompt|Reviewed request excerpt/);
+        for (const artifact of [bundle.previewHtml, bundle.files["product-report.md"]]) {
+            assert.match(artifact, /Author not verified/);
+            assert.equal(artifact.split("SYNTHETIC_PROMPT_CAPTION").length - 1, 1);
+            for (const label of ["Tool 2: query", "Tool 2: filter", "Tool 3: question"]) {
+                assert.ok(artifact.includes(label), `Missing source label: ${label}`);
+            }
+            assert.match(artifact, /Recorded tool argument/);
+            assert.doesNotMatch(artifact, /Agent-to-tool prompt|Reviewed request excerpt/);
+        }
         assert.equal(bundle.records[0].prompts.find(prompt => prompt.kind === "origin").label, "Original request", "Stored projection label is not renamed");
         assert.equal(JSON.parse(bundle.files["product-report.json"]).records[0].prompts.find(prompt => prompt.kind === "origin").label, "Original request");
         assert.deepEqual(source, before);

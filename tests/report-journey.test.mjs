@@ -67,24 +67,6 @@ test("contextual hosting follows deliberate journey entry without granting previ
     assert.equal(journey.snapshot().phase, "ready", "Returning to unchanged setup is not disclosure approval");
 });
 
-test("Activity and Contents lead to Review with separate approval and save in the same stage", () => {
-    const journey = createReportJourney();
-    chosen(journey);
-    assert.equal(journey.go(2), true, "Contents is available after deliberate activity selection");
-    assert.equal(journey.go(3), false, "Contents cannot bypass preparation");
-    journey.beginScan();
-    assert.equal(journey.snapshot().step, 3);
-    journey.previewReady(preview);
-    journey.writing(true);
-    assert.equal(journey.snapshot().phase, "ready", "Viewing the report cannot save it");
-    journey.reviewed();
-    assert.equal(journey.snapshot().step, 3);
-    assert.equal(journey.snapshot().phase, "reviewed");
-    assert.equal(journey.snapshot().completed, false, "Disclosure approval is not a save");
-    journey.writing(true);
-    assert.equal(journey.snapshot().phase, "writing", "Save is a separate transition");
-    assert.equal(journey.go(4), false, "There is no fourth preliminary stage");
-});
 
 test("Contents does not claim a prepared review or defer ordinary reads", () => {
     const journey = createReportJourney();

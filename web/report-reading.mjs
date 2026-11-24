@@ -1,5 +1,5 @@
 // Screen-only reading structure. Original files and their print layout are unchanged.
-export function enhanceReportReading(source, { expanded, brand } = {}) {
+export function enhanceReportReading(source, { expanded, brand, icon, saved = false } = {}) {
     if (source.body.hasAttribute("data-wire-reader")) return;
     source.body.setAttribute("data-wire-reader", "");
     for (const mark of source.querySelectorAll('header.report-brand[aria-label="WIRE"]>.report-mark')) {
@@ -58,6 +58,13 @@ body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=da
 .wire-reading-section>summary:focus-visible,.wire-reading-interaction>summary:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 .wire-reading-section>section:not(.wire-reading-multi-heading)>h2:first-child,.wire-reading-interaction>article>h3:first-child{display:none}
 body[data-wire-reader] .report-nav{position:sticky;top:0;z-index:2;background:var(--report-sheet,var(--paper));padding:12px 0;margin:16px 0;border-bottom:1px solid var(--rule);gap:8px 16px}
+${saved ? `@media screen{
+ body[data-wire-reader] .report-nav a{position:relative;isolation:isolate;min-height:44px;align-items:center}
+ body[data-wire-reader] .report-nav a:is(:hover,:active){background:transparent}
+ body[data-wire-reader] .report-nav a::before{content:"";position:absolute;inset:.55em -.2em;z-index:-1;pointer-events:none;border-radius:.25em}
+}
+@media screen and (hover:hover){body[data-wire-reader] .report-nav a:hover::before{background:var(--accent-soft)}}
+@media screen{body[data-wire-reader] .report-nav a:active::before{background:var(--accent-pressed)}}` : ""}
 body[data-wire-reader] [id]{scroll-margin-top:5rem}
 .wire-reading-interaction>article[id]{scroll-margin-top:9rem}
 .wire-reading-meta{margin-top:16px}
@@ -95,7 +102,8 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
         if (!heading) continue;
         const details = source.createElement("details"), summary = source.createElement("summary");
         details.className = "wire-reading-section";
-        details.open = expanded ?? ["patterns", "examples"].includes(section.id);
+        details.open = expanded ?? (main.dataset.productVersion === "1"
+            ? ["overview", "timing", "patterns", "examples"] : ["patterns", "examples"]).includes(section.id);
         const multiple = section.querySelectorAll(":scope>h2").length > 1;
         if (multiple) section.classList.add("wire-reading-multi-heading");
         summary.textContent = multiple && section.id === "patterns" ? "Patterns" : labels[heading.textContent] || heading.textContent;
@@ -113,6 +121,30 @@ body[data-wire-reader] [id]{scroll-margin-top:5rem}
         const title = section.querySelector(":scope>h2").textContent;
         link.href = "#" + section.id; link.textContent = labels[title] || title;
         navigation.append(link);
+    }
+    if (icon && main.dataset.findingVersion === "1") {
+        const roles = { overview:"section-overview", timing:"section-activity", patterns:"section-charts",
+            examples:"search-interaction", "recorded-result-facts":"search-tool", coverage:"report-all" };
+        for (const link of navigation?.querySelectorAll("a[href]") ?? []) {
+            const id = link.getAttribute("href").split("#")[1];
+            if (!Object.hasOwn(roles,id)) continue;
+            link.prepend(icon(roles[id]));
+            // The saved frame remains opaque and script-free. A native fragment, not hover, marks location.
+            style.textContent += `\n@media screen{main:has(#${id}:target) .report-nav a[href$="#${id}"]{border-bottom-color:var(--accent);color:var(--ink)}}`;
+        }
+        const links = main.querySelectorAll(".finding-example>a[href],.report-count-link[href],.report-pattern-table td[data-label=Calls] a[href]");
+        for (const link of links) {
+            link.classList.add("wire-reader-destination"); link.append(icon("forward"));
+        }
+        style.textContent += `\n@media screen{
+main[data-finding-version] .report-nav a{display:inline-flex;align-items:center;gap:.5em;padding-inline:.25em;border-bottom:3px solid transparent;text-decoration:none}
+main[data-finding-version] .report-nav .wire-icon{width:1.125em;height:1.125em;flex:none}
+main[data-finding-version] .wire-reader-destination{display:inline-flex;align-items:center;gap:.5em;min-height:44px;max-width:100%;text-decoration:none;font-weight:inherit}
+main[data-finding-version] .wire-reader-destination::after{content:none}
+main[data-finding-version] .wire-reader-destination .wire-icon{width:1em;height:1em;flex:none}
+main[data-finding-version] .wire-reader-destination:is(:hover,:active){background:var(--accent-soft);text-decoration:none}
+main[data-finding-version] :is(.wire-reader-destination,.report-nav a):focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+}`;
     }
     const meta = main.querySelector(":scope>.report-facts");
     if (meta) {

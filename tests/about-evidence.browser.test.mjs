@@ -1,15 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { extractGraphActivities } from "../lib/graph-history.mjs";
 import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
-const proofs = process.env.WORKIQ_ABOUT_PROOFS;
 const records = [fixture("about-one"), fixture("about-two")];
 records[0].toolCalls[0].startedAt = "2026-09-29T12:00:00Z";
 records[1].toolCalls[0].startedAt = "2026-09-30T12:00:00Z";
@@ -70,80 +67,26 @@ async function setup(t, source = records, sourceCoverage = coverage) {
     return { page, url: `http://127.0.0.1:${server.address().port}/`, current: () => last,
         holdUtc: () => { let release; holdZone = new Promise(resolve => { release = resolve; }); return () => { release(); holdZone = null; }; } };
 }
-async function measure(page) {
-    return page.locator("#coverage").evaluate(section => {
-        const paragraphs = [...section.querySelectorAll("p")].map(node => {
-            const box = node.getBoundingClientRect(), style = getComputedStyle(node);
-            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), fragments = [];
-            let text;
-            while ((text = walker.nextNode())) {
-                const range = document.createRange(); range.selectNodeContents(text);
-                fragments.push(...range.getClientRects());
-            }
-            return {
-                text: node.innerText, width: box.width, lines: new Set(fragments.map(r => Math.round(r.y))).size,
-                font: parseFloat(style.fontSize), lineHeight: parseFloat(style.lineHeight),
-                clipped: fragments.some(r => r.x < box.x - 1 || r.right > box.right + 1 || r.bottom > box.bottom + 1),
-                whiteSpace: style.whiteSpace, overflow: style.overflow, clamp: style.webkitLineClamp,
-            };
-        });
-        return {
-            paragraphs, text: section.innerText, words: section.innerText.trim().split(/\s+/).length,
-            height: section.getBoundingClientRect().height, facts: section.querySelectorAll("dt").length,
-            nestedDisclosures: section.querySelectorAll("details").length,
-            overflow: document.documentElement.scrollWidth - innerWidth,
-        };
-    });
-}
-
-test("About uses short plain paragraphs, one reading measure and unclipped text in both themes at 375/820/1200/2560 and 200%", { timeout: 60000 }, async t => {
-    const { page, url } = await setup(t), measurements = [];
-    if (proofs) await mkdir(proofs, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.goto(url); await ready(page); await chooseTheme(page, theme);
-        await page.evaluate(value => { document.documentElement.style.fontSize = `${value * 100}%`; }, scale);
-        assert.equal(await page.locator("#coverage").evaluate(n => n.open), false);
-        await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
-        const value = await measure(page);
-        assert.ok(value.overflow <= 1, `${theme}/${width}/${scale} overflow`);
-        assert.equal(value.facts, 0); assert.equal(value.nestedDisclosures, 0);
-        assert.ok(value.words < 160, "Evidence limits live once in this disclosure, not in an unconditional footer");
-        assert.doesNotMatch(value.text, /GMT|Snapshot revision|Coverage checked|Sources scanned|sources currently eligible/i);
-        assert.equal(new Set(value.paragraphs.map(p => p.width)).size, 1, "Same-role paragraphs share one adaptive measure");
-        for (const p of value.paragraphs) {
-            assert.ok(p.font >= 16 * scale && p.lineHeight / p.font >= 1.5);
-            assert.equal(p.clipped, false, p.text); assert.notEqual(p.whiteSpace, "nowrap");
-            assert.notEqual(p.overflow, "hidden"); assert.equal(p.clamp, "none");
-        }
-        if (width >= 1200 && scale === 1) {
-            assert.ok(value.paragraphs[0].lines <= 2 && value.paragraphs[1].lines <= 2);
-            assert.ok(value.height < 400);
-            assert.ok(value.paragraphs[0].width < 800, "Wide screens still have a bounded reading line");
-        }
-        assert.match(value.text, /message, which may be automated.*Follow-ups with calls.*missing origins stay unverified/s);
-        assert.match(value.text, /date filter selects saved evidence, not the history to collect/);
-        assert.equal(await page.locator("#coverage h2,#coverage h3").count(), 0);
-        await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
-        assert.equal(await page.locator("#evidenceExplanation").isVisible(), false);
-        await page.keyboard.press("Space");
-        assert.equal(await page.locator("#evidenceExplanation").isVisible(), true);
-        if (proofs) await page.locator("#coverage").screenshot({ path: path.join(proofs, `about-${theme}-${width}-${scale * 100}.png`) });
-        measurements.push({ theme, width, scale, ...value });
-    }
-    if (proofs) await writeFile(path.join(proofs, "about-measurements.json"), JSON.stringify(measurements, null, 2));
+test("Analyze shows current counts without a scope accordion or an empty warning row", async t => {
+    const { page, url } = await setup(t);
+    await page.goto(url); await ready(page);
+    const activity = page.locator("#activityView");
+    await expect(activity.locator("#coverage, #coverageBody")).toHaveCount(0);
+    await expect(activity.locator("#activityListSummary")).toBeVisible();
+    assert.equal(await activity.locator("#coverageNotice").boundingBox(), null);
 });
 
 test("Collection status holds distinct scope/check/scan meanings, canonical counts and unchanged source notes", { timeout: 30000 }, async t => {
     const { page, url, current } = await setup(t);
     await page.goto(url + "#home?range=custom&from=2026-09-30&to=2026-09-30"); await ready(page);
-    await page.locator("#coverage>summary").click();
     const c = current().coverage;
-    assert.match(await page.locator(".coverage-counts").innerText(), new RegExp(`${c.scenarioCount} request group.*${c.sessionCount} Copilot chat.*${c.projectCount} project`));
+    assert.match(await page.locator("#coverageBody").innerText(), new RegExp(`${c.scenarioCount} interaction.*${c.sessionCount} Copilot chat.*${c.projectCount} project`));
     assert.equal(c.sessionCount, 1, "Metadata-only and date-excluded chats are not evidence-bearing counts");
-    assert.equal(await page.locator("#coverageNotice").isVisible(), true, "The history-gap warning remains visible near the activity");
-    await page.locator("#coverage").getByRole("link", { name: "Collection status", exact: true }).focus();
-    await page.keyboard.press("Enter"); await ready(page);
+    assert.equal(await page.locator("#coverageNotice").isVisible(), false, "No missing chat identity or unscanned Graph layer in this view");
+    await page.locator('nav [data-nav="settings"]').click();
+    await page.locator('#settingsCategoryNav [data-category="connection"]').click();
+    await page.getByRole("link", { name: "View collection status", exact: true }).click(); await ready(page);
+    if (!await page.locator("#collectionSetup").evaluate(n => n.open)) await page.locator("#collectionSetup>summary").click();
     await expect(page.locator("#collectionSetup")).toHaveAttribute("open", "");
     assert.equal(await page.locator("#collectionSetup>summary").evaluate(n => n === document.activeElement), true);
     const facts = Object.fromEntries(await page.locator("#collectionEvidenceDetails dt").evaluateAll(nodes => nodes.map(n => [n.textContent, n.nextElementSibling.textContent])));
@@ -186,14 +129,12 @@ test("unknown, empty and code-only evidence stay distinct, including a pending t
     ], { sessionId: "about-code-chat" }).scenarios;
     const { page, url, current, holdUtc } = await setup(t, code, { ...coverage, graphHistory: null });
     await page.goto(url + "#home?layer=code-reference"); await ready(page);
-    await page.locator("#coverage>summary").click();
     assert.equal(current().totals.count, 1);
     assert.equal(current().coverage.sessionCount, 1);
-    assert.match(await page.locator(".coverage-warning").innerText(), /Coverage is unknown, not zero/);
+    assert.match(await page.locator("#activityCoverageGap").innerText(), /coverage is unknown/i);
     await page.goto(url + "#home?layer=direct-request"); await ready(page);
-    if (!await page.locator("#coverage").evaluate(n => n.open)) await page.locator("#coverage>summary").click();
     assert.equal(current().totals.count, 0);
-    assert.match(await page.locator(".coverage-counts").innerText(), /0 request groups from 0 Copilot chats/);
+    assert.match(await page.locator("#coverageBody").innerText(), /0 interactions from 0 Copilot chats/);
     const release = holdUtc();
     try {
         await page.evaluate(() => {
@@ -204,7 +145,7 @@ test("unknown, empty and code-only evidence stay distinct, including a pending t
         assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
         assert.match(await page.locator("#displayTimeEffective").textContent(), /Updating time zone\. Still using America\/Los_Angeles/);
         assert.match(await page.locator("#collectionEvidenceDetails").textContent(), /5:00:00 AM GMT-7/);
-        assert.doesNotMatch(await page.locator("#coverage").innerText(), /GMT|UTC/);
+        assert.doesNotMatch(await page.locator("#activityCoverageGap").innerText(), /GMT|UTC/);
     } finally { release(); }
     await ready(page);
     assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /UTC/);

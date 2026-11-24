@@ -6,7 +6,7 @@ async function check(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
         const file = path.join(directory, entry.name);
         if (entry.isDirectory()) {
-            if (!["node_modules", ".git", "test-results", "playwright-report"].includes(entry.name)) await check(file);
+            if (!["node_modules", ".git", "dist", "test-results", "playwright-report"].includes(entry.name)) await check(file);
         } else if (/\.(?:cjs|mjs|js)$/.test(entry.name)) {
             const result = spawnSync(process.execPath, ["--check", file], { stdio: "inherit" });
             if (result.error) throw result.error;

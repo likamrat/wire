@@ -5,7 +5,9 @@ reference explains collection permissions, read limits and saved-data operations
 For setup, see [Connect local history](user-guide.md#connect-local-history).
 
 Collection does not rerun Work IQ requests or read remote-only chats through a
-provider. Microsoft 365 Chat and Cowork are not supported sources.
+provider. Normal startup supports the GitHub Copilot app only. The separate
+development-only Microsoft 365 Chat and Cowork adapters are not additional
+sources you can enable in a normal installation.
 
 ## Operations and permissions
 
@@ -18,7 +20,7 @@ provider. Microsoft 365 Chat and Cowork are not supported sources.
 | Read stored activity | Reads WIRE's saved view/status, without checking original history. |
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
-| Read history again | Separately previews and confirms rereading selected approved chats/dates, including an independent original-prompt restoration choice. |
+| Read history again | Preview missing, nondeleted activity in selected approved chats and dates. Confirm separately to save it. |
 | Sign out of this instance | Stops collection and hides private retained content across this instance's tabs, without deleting it or signing out of GitHub, Copilot or other independent WIRE instances. |
 
 View dates, Search, opening an interaction, report selection and report
@@ -73,7 +75,19 @@ their Work IQ calls only when the approved app metadata labels that exact
 session and event as **Work IQ** or **WorkIQ**. A tool named `fetch` alone is
 not enough. This bounded read admits at most 100,000 managed Work IQ event
 identities; incompatible mappings fail explicitly without replacing evidence.
-Updating WIRE does not reset collection cursors or authorize a historical reread.
+If a recognized operation needs an app mapping, even when the start carries
+only the logical tool name, WIRE rechecks that decision if metadata changes before it saves
+progress. A changed mapping stops the stale read; the next check can collect
+the call from the unchanged cursor. A mapping first supplied **after** progress
+was saved is different: updating WIRE or refreshing does not rewind the cursor
+or authorize a historical reread. Use **Read history again** to review eligible
+missing calls; only a separately confirmed preview can save them.
+
+A failed managed call can return a JSON error labeled with its opaque connector
+name. WIRE reads supported diagnostics and returned entries only when the name
+matches the unique earlier call start in the source or its bounded checkpoint,
+and the app still identifies that event as Work IQ. A connector name alone
+does not qualify an error. Response bodies and inner identifiers remain excluded.
 
 ### Account profile
 
@@ -91,7 +105,7 @@ image requests alone do not renew it.
 If unrelated metadata changes during a profile read, WIRE makes one fresh
 read-only check of the selected profile. It accepts matching profile facts from
 the same database, not an old cached identity; changed or unreadable results
-remain unavailable. History collection keeps its whole-metadata change checks.
+remain unavailable. Ordinary roster discovery keeps its whole-metadata change checks.
 The display association neither grants access nor assigns ownership of history.
 
 ### Native metadata reads
@@ -112,6 +126,11 @@ The source reader preserves these checks:
 - Metadata changes during publication require a fresh bounded projection and
   unchanged selected-source eligibility, membership and provenance. Source-file,
   authority or store conflicts still refuse.
+- During an authorized selected-chat read, a concurrent metadata commit can
+  trigger one fresh read-only transaction. WIRE requires the same database,
+  selected mappings and managed event identities. Only the fresh transaction's
+  fully checked stamp can advance the read. If metadata changes again during
+  that check, or access is withdrawn, WIRE refuses rather than using the first result.
 - Final pre-write validation allows one fresh membership check before the
   same rename. A second freshness change refuses; no write is repeated or
   interrupted write relabeled as success.
@@ -178,7 +197,11 @@ The reader follows this order:
 
 Restart deduplicates canonical identities. A late completion can update an
 unknown result without adding a call; rotation/truncation cannot erase
-retained evidence. The bounded-history index barrier preserves committed
+retained evidence. A saved start may omit empty completion ID, time or duration
+fields. To fill them, the reprojected call must match the same saved prompt and
+start facts, have a recorded outcome, and have consistent completion timing.
+A call ID and order alone do not qualify. This does not widen historical reads.
+The bounded-history index barrier preserves committed
 progress. Source-reader instances use schema 3 to bind the store to its host
 and make older readers refuse rather than ignore that ownership.
 Use a compatible reader when restarting an existing store; do not remove its
@@ -203,6 +226,25 @@ name or prompt wording. User-profile relationships such as `/me/manager` and
 identify another service. Correcting path recognition updates live views of
 retained calls without rereading history or changing outcomes. Previously saved
 report facts and files remain frozen.
+
+An exact `/me/translateExchangeIds` or `/users/{id}/translateExchangeIds`
+target identifies an Exchange ID conversion request, not whether the item is
+mail, an event or a contact. The public operation name survives normalization;
+user IDs, item IDs and query values do not become part of its path template.
+An older record that retains only `/me/{id}` cannot establish the operation.
+The generic `/businessapps/me` route also identifies no particular business
+app. WIRE distinguishes that recorded limit from a path it does not recognize.
+
+Ask returns an answer and a conversation ID, not an app-by-app execution log.
+Requested sources, attached files and citations do not establish which apps
+Copilot used. Separately, a structured Work IQ batch can report a path on an
+individual result. When its completion matches one recorded Work IQ start,
+WIRE keeps the normalized path beside that result's status, without query
+values, bodies or literal identifiers. A sibling's path is never substituted.
+An older result saved without that path does not gain one on reopen.
+A lone requested target can supply explicitly labeled request context, but
+not if another result reports a different path. A pathless sibling then
+keeps its status and no service assignment.
 
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
@@ -279,6 +321,15 @@ the image-envelope classifier does not trigger that repair automatically.
 Literal image-reference examples in the original prompt or a supported canvas
 attachment remain content, not host provenance.
 
+The sender of a saved message is separate from the link between a call and
+its initiating request. Within existing checkpoint limits, WIRE keeps the
+assistant's outstanding tool-request identifiers beyond the recent-event
+window so a later start can still match the original message and turn.
+This does not keep extra reply text. A uniquely linked Work IQ call keeps
+its prompt and assistant-request event references. A group-level link from
+an older record is not evidence for each call in it. Reading old records
+does not reopen history or assign a requester from a skill or system message.
+
 The host can append a direct-message source reference after the original text.
 WIRE recognizes the supported UUID/revision envelope and fixed footer only at
 that exact outer boundary. The reference is neutral framing: source, timestamp,
@@ -324,6 +375,22 @@ ambiguous metadata and any other body difference remain unqualified. This is not
 fuzzy matching or general Markdown removal. Original timeline text stays intact;
 file contents are never opened and attachment paths are not added to retention.
 
+Classifier version 11 checks the direct-message reference and a following image
+notice separately. Version 12 also recognizes a canvas attachment immediately
+before that reference. The canvas contents stay opaque, including quoted sender
+or attachment markers. With a matching timestamp, message ID, delivery and original
+text, the reference can accompany the app's ordered workspace sections outside
+plan mode. A cross-chat sender, automatic continuation or agent-created first
+message still goes through its own origin checks. Workspace text alone does not
+establish a sender. New unverified records distinguish an unsupported source
+value (`source-value-v1`) from workspace details without verified origin
+(`workspace-origin-v1`). WIRE saves neither the source value nor the host text.
+Already-qualified prompts are not reopened or updated on startup.
+For example, a prompt already marked unverified by version 10 keeps that
+label after an upgrade, even when every call links directly to it. The links
+identify the request, not its author. To correct its retained author, review
+that original through the procedure below rather than refreshing the chat.
+
 Historical origin correction is separate from collection. The prompt-origin
 maintenance policy binds exact original regions, every retained origin/follow-up
 copy and its checkpoint preimage. Its read-only inspector proposes changes but
@@ -342,6 +409,42 @@ Named checkpoint-only companions can correct an existing context message without
 creating a retained interaction. They are counted separately, preserve all tool
 and repaired error carriers, and bind honest before/after checkpoint hashes.
 Already-known origins remain outside the unknown-only repair population.
+
+### Review older unverified authors as a group
+
+Use the existing prompt-origin maintenance command. You do not need a
+screenshot, a prompt excerpt or a hand-built event pin. Keep its output private:
+it contains local source identifiers and hashes, not prompt or reply text.
+
+```text
+node scripts/maintain-prompt-origins.mjs --mode list --data-dir <absolute-store>
+node scripts/maintain-prompt-origins.mjs --mode review --data-dir <absolute-store> --batch <listed-batch>
+```
+
+`list` reads only the retained store. It groups older unverified origins and
+their retained copies by chat, lists batches of up to four, and counts excluded
+origins by reason. A candidate is **not** a finding that the author was human.
+The default is the current window and active sources. To review older dates or
+archived local chats, explicitly add `--include-older` or `--include-archived`
+to both commands. These options do not change collection settings.
+
+`review` checks the selected chat's approved local mapping and reads one bounded
+page of its fully consumed journal. If it returns `status: "continue"`, save
+that JSON as UTF-8 in a private file **outside** the checkout and store. Run
+the same `review` command with `--previous <absolute-page-file>`. Keep each
+new page separate from the one you're reading. Pages cannot be mixed across
+batches or changed sources. No proposal is made until the full journal has
+been checked for competing event identities. An unreadable, oversized or
+ambiguous source region prevents a complete review; it is not an empty batch.
+
+The final `targets` are the corrections the original records actually support.
+They may be human **or** agent prompts. `unresolved` explains why other
+candidates stay unverified. Listing, reviewing and installing a new reader
+do not write these changes. For an approved correction, use the returned
+targets, source and state guard in the existing offline Prepare/Apply plan.
+Preserve its stopped-runtime attestation, saved-file guards, review seal and
+separate confirmation. A changed source invalidates the proposal. A stale
+batch must be listed again; do not weaken the guards or replay calls.
 
 For a complete correction batch, `inspectPromptOriginRepair` also accepts
 `origins`: exact source/event identities, pinned original regions and the
@@ -440,19 +543,207 @@ activity permission is not artifact mutation permission.
 
 ## Explicit recollection
 
+In the normal Copilot runtime this is a **missing, nondeleted activity** review.
+Both local source approval and active acquisition must still be valid. This
+operation does not use manual Refresh's Pause exception. A panel can preview
+its selected scope without writing evidence; only a separate confirmation of
+that still-current preview can publish it. It cannot restore suppressed calls
+or deleted prompts. Reading an existing receipt does not require another
+source read.
+
+**Also review source-verified corrections to saved calls** is off by default.
+The preview names each proposed change (up to 32). An unknown can become a
+completed call only through the bounded original start/completion qualification;
+omitted bodies or HTTP statuses are not recovered from success alone. For an
+already completed call, WIRE can fill an absent result or failure carrier when
+the start, completion, outcome and retained entries agree. It never replaces
+conflicting facts. Duplicate targets, an unread prefix or incomplete tail, and
+missing or contradictory checkpoint evidence prevent correction. Checkpoints
+and saved reports are not rewritten. If an existing checkpoint needs a different
+postimage, the separately reviewed maintenance path is required.
+
 1. Open **Read history again > Choose chats** and select eligible approved local
    chats. Selection survives paging. Inclusive dates intersect the approved
    window; they do not grant wider history or a new source.
 2. Read the preview's deleted, newly available, already-present and unavailable
-   counts. Bounds are 128 chats, 32 MiB per preview/confirmation, the last
-   64 MiB per file and 20,000 candidate records.
-3. Choose separately whether to **Also restore original prompts for these
-   requests**. It starts unchecked; without it, deleted prompt text stays unavailable.
-4. Confirm. If the result is uncertain, use **Check recollection result**,
-   including after reload/restart, rather than confirming again.
+   counts. Bounds are 128 chats, 32 MiB per read, the last 64 MiB per file
+   and 20,000 candidate records.
+3. Confirm only the changes you reviewed. If the result is uncertain, use
+   **Check recollection result**, including after reload/restart, rather than
+   confirming again.
 
-Restored prompts need exact source-qualified selected prompt/call associations.
-Host envelopes cannot promote an agent kickoff to User. Anonymous local records
+An edit in a different Copilot chat does not invalidate your preview by
+itself. WIRE rechecks the physical source database and the selected chats,
+their histories and the proposed changes before saving. A changed selection
+or expired preview requires a fresh review. The panel distinguishes a known
+refusal before saving from a lost response: only the latter needs a receipt
+check. Neither is automatically retried.
+
+For **one chat, one day, missing records only**, a large log can take more
+than one read. **Read next part** continues from the verified byte boundary;
+it does not start another scan or show partial counts as the final selection.
+After confirmation, **Continue verification and save if complete** checks the
+same original selection before any write. Each phase allows at most three
+32 MiB reads (including repeated partial lines and source checks). The file
+must fit the 64 MiB source window. A continued read with an unfinished,
+malformed or oversized entry, or an unqualified prompt or credential-bearing
+entry excluded by retention, cannot certify that day and offers no save.
+
+Only one large-chat read is held in memory at once, with bounded screened
+event context and no raw partial-line buffer on disk. Cancellation, access
+withdrawal, restart or the original two-minute deadline retires it. Continued
+steps do not extend the deadline. The collector's normal source cursor and
+other stored receipts are not used to resume a review. On the oldest partly
+approved day, only records inside the original window can be proposed. If
+any proposed record leaves the rolling window before saving, the whole
+selection is refused rather than silently shortened.
+
+**Verified records only (day incomplete; runtime opt-in).**
+Strict recovery stays selected by default. A Copilot-only runtime started
+with `--verified-record-recovery` also offers this operation. Opening the
+chooser on that runtime does not read the chat list. **Load eligible chats**
+reads the list; previewing and confirming the selected calls remain separate.
+This is a separate choice for one chat and one day, not a fallback from a
+failed full-day preview. It lists up to 32 missing calls whose original
+identities, explicit message and tool links, and recorded completions can be
+checked independently. A completion with no reported outcome stays **unknown**.
+No completion is inferred from a neighboring event. An unidentified region
+that could hide another matching identity prevents the preview, even if it is
+outside the proposed calls.
+
+In this mode only, each bounded read step can spend up to four extra parser
+pages on structurally dense entries. Each page keeps the ordinary 100,000-token
+limit, yields between pages and rechecks access and the selected file. Only
+the completed, validated entry is available to the identity checks. An
+unread tail, an unsupported field or an exhausted budget still prevents
+recovery; ordinary collection and strict recovery keep their existing limits.
+
+A supported SDK startup header can contain typed workspace, model and tool
+settings. WIRE still requires the source's mapped session identity and
+supported version. The header grants no access and its values are not copied
+into the recovered call or its receipt.
+
+A separate assistant turn or a text-free Copilot mode or permission notice
+need not rule out an otherwise verified call. WIRE checks the notice's
+declared fields and identifiers against the whole source and its checkpoint.
+Notice content never supplies attribution or grants access. Unknown
+fields, ambiguous identifiers, and unclassified oversized entries still
+prevent a verified-record preview.
+If another saved prompt's text happens to equal the call ID, WIRE can
+distinguish that text from a second request. The complete checkpoint row
+and saved prompt must match a unique original, and the ID must appear there
+only as text. An actual competing request still rules out the call.
+For a permissions notice recorded as `on`/`off`, both the previous and new
+modes must agree with their corresponding Boolean flags.
+A remote-session notice may name a canonical GitHub Copilot task URL. WIRE
+checks the task identifier for conflicting claims, but does not visit the URL,
+import the task, or use it to connect a prompt to a call.
+
+The assistant's `originatingMessageId` identifies the initiating user
+message; `parentId` identifies the preceding journal event. They need not
+point to the same event. A review can verify the user's message across up
+to 32 typed, consecutively linked timeline notices and a matching turn
+start. It requires the explicit origin, request, turn and call to agree;
+chronological order alone is never enough. Intervening system or developer
+text is not a user prompt and is not copied into the call. A linked turn
+end is checked against the completion and changes neither its outcome nor
+the receipt's incomplete-day coverage.
+
+A prompt can also follow an independently verified session notice in the
+selected interval if the prompt names that immediately preceding event. This
+checks journal order only; the assistant must still name the prompt explicitly.
+
+For a first message, WIRE can verify the recorded session-start, prompt-submission
+and prompt-transformation hook pairs in order. All must belong to this source,
+finish successfully without output, and agree with the original message and
+its transformed copy. Hook text is not saved and does not establish authorship.
+
+A task-linked prompt may also record a parent-task ID, an interaction ID, an
+empty native-document list and reasoning settings. WIRE checks those IDs
+separately from the source, prompt, request and call. A parent-task reference
+may recur in the same role; neither ID can stand in for the initiating message.
+A conflicting identity or checkpoint claim still prevents recovery.
+
+The historical SDK also records which interaction received a system or
+developer instruction. When that instruction immediately follows its original
+prompt, WIRE can verify their shared interaction ID and bounded template
+metadata (`promptVersion` and JSON `variables`). It screens the complete
+instruction but does not keep it or use it to choose a call's owner. A
+second request claiming the same call still excludes the call.
+If an instruction prevents the review, WIRE distinguishes an unverified
+prompt link, an unsupported template, excess template size, incomplete
+original verification and a privacy exclusion without showing the contents.
+
+If the original prompt exactly matches a single saved parent in this chat,
+WIRE can keep that parent and its recorded author, including an agent author,
+without writing a new prompt. The explicit request and call must agree on
+their turn; the originating prompt can be from an earlier turn. WIRE screens
+the complete original prompt and assistant request before using their bounded
+retained fields. It neither truncates the prompt to fit nor retains the
+assistant's discarded text. This does not make an unresolved reference safe.
+If multiple saved parents claim the original prompt, or its saved parent is
+ineligible, WIRE does not treat that prompt as missing to recover the call.
+For a newly verified human prompt, the assistant request may exceed the
+individual-record limit because of reply text alone. WIRE screens the full
+original, keeps only the bounded request, and requires an app-mapped start.
+The prompt, call and completion still have to qualify independently.
+A start that records only its logical tool name (such as `fetch`) can qualify
+when the app identifies that exact start as Work IQ. The name alone cannot
+qualify a call or override a conflicting recorded server.
+
+An unrelated external-tool request or canvas record can be classified when
+its matching close is the next original event. The supported forms carry no
+tool arguments or canvas input; an empty arguments object is also allowed.
+Their IDs must be disjoint across the whole journal, including original
+fields that JSON parsing could hide. Even separate canvas lifecycles reusing
+an extension or canvas ID are currently refused. Neither an external
+completion nor a canvas close can supply a missing call outcome.
+
+A compact, text-free post-tool hook may close directly after its matching
+unrelated hook start. Its success flag describes the hook, not the tool call.
+An unmatched close, an intervening record, or an unverified hook body cannot
+supply that link.
+
+For an app-mapped Work IQ start already linked to the user's prompt and the
+assistant's request, the completion's parent can instead lead back through
+three adjacent hook pairs: `preToolUse`, `preMcpToolCall`, then `postToolUse`.
+For an app-mapped managed start, the MCP hook can name the exact same
+managed server as the original start instead of the literal `workiq`.
+An unrelated server name or an unmapped identifier does not establish this link.
+The start, all six original hook records and the original completion must fit
+in one read part. WIRE checks every parent link and event time, the distinct
+event and invocation IDs across the source and checkpoint, the hook session,
+tool, `workiq` server on the MCP hook and arguments, and the completion's own call and turn.
+Only the completion reports the outcome; missing success stays unknown.
+Projected hooks, ambiguous original fields, credentials and deleted
+dependencies cannot qualify the chain. WIRE binds the original bytes. For
+entries up to 16 KiB it can also verify harmless JSON spelling differences,
+such as `17.0` instead of `17`, without accepting duplicate keys or rounded
+values. Explicit `checkpoint: false` and `ephemeral: false` flags are
+compatible with an ordinary original; replay copies and transient records
+are not. Even a directly linked call cannot be proposed if another original
+in the journal could hide a conflicting identifier. WIRE refuses a split
+hook chain rather than carrying private arguments or result bodies into the
+next part.
+
+Confirmation rereads the same bounded originals, using the same two-minute
+deadline and explicit reading steps. A changed mapping, file, checkpoint,
+approval, selection or review basis refuses the operation. The writer preserves
+other records, consent, checkpoints and saved reports. Its original receipt
+identifies each added call and always says **verified records only; day
+incomplete**. Proposed and added are calls, excluded counts observed candidates
+not admitted, and unknown counts proposed calls without a recorded outcome.
+None estimates the number of missing calls in the day. Byte-span witnesses
+are not stored. If WIRE refused the original confirmation before writing,
+the panel says nothing was saved and gives the reason. A lost response or a
+response for a different operation is not that proof: check the original
+receipt instead of confirming again.
+
+Older compatibility-mode previews can include deleted records. Only those
+previews offer **Also restore original prompts for these requests**; it starts
+unchecked and requires an exact association between the selected call and
+its source prompt. Neither normal recovery mode offers that choice. Host
+envelopes cannot promote an agent kickoff to User. Anonymous local records
 and owned HTTP diagnostics cannot be recovered through this source reread.
 
 Confirmation rechecks source stamps, mapping, approval, revision, expiry and
@@ -472,6 +763,14 @@ A manual check's receipt and its applied stored revision are distinct.
 No-change, late results, outside-view updates and incomplete history remain
 separate. Previous accepted results survive an ordinary failed read; access
 withdrawal instead clears private content.
+
+A missing or unreadable approved metadata file is a known source-read failure,
+including the file checks before opening SQLite. Refresh identifies the source
+problem and keeps Review source and Read stored activity available; it does not
+replay the check or change approval or Pause. An absent optional SQLite WAL is
+normal, but an unreadable companion file is not. Failures after publication
+begins still require outcome recovery rather than being relabeled as no-effect
+source failures.
 
 GitHub checks do not have client-request correlation for a lost response.
 A newer last-check timestamp cannot settle that operation. The tab's verified

@@ -29,12 +29,12 @@ grant backend authority.
 
 | Entry | Contract |
 | --- | --- |
-| `GET /` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability |
+| `GET` of `/`, `/analyze`, `/trends`, `/reports`, `/compare`, `/settings`, `/request` or `/collection-status` at the canonical `127.0.0.1` origin | Current renderer with one newly issued panel capability; named pages also accept a single trailing slash |
 | `GET /` with the exact `localhost` host and actual port, no Origin header | Once ready, empty redirect to the canonical root; no capability or private content |
 | `POST /api/session` | Independent-client handshake; exactly `{}` and `X-Wire-Session-Protocol: 1` |
 | Invalid/missing/duplicate protocol | 409 `WIRE_CLIENT_UPDATE_REQUIRED`, before allocating authority |
 | `/health` | Readiness check without allocating a panel |
-| `/api/session/release` | Release the API helper's own capability after its work/recovery ends |
+| `/api/session/release` | Release the caller's own capability after its work/recovery ends |
 
 The handshake returns exactly `{capability,runtimeId,accessBootstrap}` with
 matching runtime IDs. The descriptor is immutable for that runtime, with
@@ -43,8 +43,13 @@ mode. Explicit unbound is a validated compatibility mode, never inferred from
 a missing or failed watch. Enforced renewal cannot silently downgrade.
 
 Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
-random capabilities, TTL and the 128-panel limit still apply. Repeated `GET /`
-allocates panels; closing a tab does not release authority before its TTL.
+random capabilities, TTL and the 128-panel limit still apply. Each page GET
+allocates a panel, including on reload. On a clean departure, a verified
+browser page releases only its original panel. Suspended pages and pages
+with unfinished work do not release it. If the browser cannot deliver the
+release, the ordinary session expires after inactivity; expiry does not
+clear a managed installation's update interlock.
+There is no general HTML fallback for other paths, files, APIs or methods.
 The localhost spelling is only an entry redirect for root navigation; fragments
 stay with the browser. It is not an alternate API/write origin. Requests with
 an Origin header, a non-root path or non-navigation fetch metadata retain the
@@ -52,6 +57,14 @@ existing rejection, and the destination never comes from forwarded headers.
 
 Every client must match this protocol and its runtime client. A successful
 server start does not make an incompatible adapter safe to use.
+
+The registered canvas targets only the selected canonical loopback port.
+It checks the health identity against the enforced handshake and pins that
+runtime for its action owner; a restricted unbound preview or a replacement
+process is not a continuation. Its embedded browser obtains a different panel
+from the same server. Agent report previews are not browser disclosure approval.
+Source checks stay in the normal browser flow; the canvas does not advertise
+the unsupported legacy history import or network diagnostic writes.
 
 ## One latest-state watch
 
@@ -224,7 +237,7 @@ client withdrawal is independently required.
 | --- | --- | --- |
 | Collection Settings | Unsent safe window/frequency draft; original write uncertainty | Source paths/baselines, private status/errors and old read/write callbacks |
 | Reply saving | Original response-capture operation/token and unresolved outcome | Consent/source snapshots, payloads, private drafts and old detail callbacks |
-| Reports and comparisons | Minimal original Save identity/fingerprint and uncertainty | Titles, masking terms, copy overrides, prepared bytes and private frames |
+| Reports (including reports from period comparisons) | Minimal original Save identity/fingerprint and uncertainty | Titles, masking terms, copy overrides, prepared bytes and private frames |
 | Deletion/recollection | Original opaque operation/token and unknown result | Targets, counts, source lists, previews and return-focus references |
 | Recorder | Original attempt recovery | Confirmation body, timers and detached Send callbacks |
 | Search | Only intent allowed by its current explicit lifecycle contract | Results, receipts, private history/preparations, open documents and obsolete callbacks |
@@ -247,8 +260,11 @@ An unavailable source dependency is not an empty or GitHub-only all-source cohor
 
 ## Check an access change
 
-Use runtime-access/watch, collector-access, client-access, account-gate and
-owner-withdrawal suites for the affected boundary. Check backend admission and
-client clearance together, including late responses and a second open panel.
+Use the tests for the affected boundary: [runtime access](../tests/runtime-access.test.mjs)
+and its [watch](../tests/runtime-access-watch.test.mjs), [collector access](../tests/collector-access.test.mjs),
+[client access](../tests/access-client.browser.test.mjs) or the [account gate](../tests/account-gate.browser.test.mjs).
+For withdrawal, include the affected operation, such as a
+[pending write](../tests/mutation-withdrawal.browser.test.mjs). Check backend admission
+and client clearance together, including late responses and a second open panel.
 Use the enforced fixture when testing enforced access, not a substitute
 unbound descriptor.

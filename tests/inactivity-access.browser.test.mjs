@@ -60,7 +60,7 @@ async function capture(page, name) {
 for (const view of ["analyze", "reports"]) test(`still-authorized background return keeps ${view} painted without a replacement snapshot`, { timeout: 20000 }, async t => {
     const { page, requests } = await setup(t, view);
     const content = view === "analyze" ? page.locator(".request-card-open").first()
-        : page.locator("#reportsView").getByRole("button", { name: /^All activity / });
+        : page.locator("#reportsView").getByRole("button", { name: /^Activity source:/ });
     const owner = await content.elementHandle();
     const snapshots = requests.filter(value => value === "/api/snapshot").length;
     let navigations = 0;
@@ -123,7 +123,7 @@ test("a still-fresh watch after a renderer stall keeps Reports painted without r
         };
     });
     await page.waitForFunction(() => window.watchStall.count >= 2);
-    const content = page.locator("#reportsView").getByRole("button", { name: /^All activity / });
+    const content = page.locator("#reportsView").getByRole("button", { name: /^Activity source:/ });
     const owner = await content.elementHandle(), snapshots = requests.filter(path => path === "/api/snapshot").length;
     const release = Promise.withResolvers();
     await page.route("**/api/snapshot", async route => { await release.promise; await route.continue(); });
@@ -146,7 +146,7 @@ test("a still-fresh watch after a renderer stall keeps Reports painted without r
 
 test("background logout still clears the accepted view and return never signs in", { timeout: 15000 }, async t => {
     const { page, profile, requests, url } = await setup(t);
-    const oldText = await page.locator(".request-card-open p").last().evaluateHandle(node =>
+    const oldText = await page.locator("#activityList .request-card-prompt .card-excerpt").first().evaluateHandle(node =>
         document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode());
     assert.match(await oldText.evaluate(node => node.data), /SYNTHETIC_PRIVATE_PROMPT/);
     const controller = await profile.newPage();

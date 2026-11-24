@@ -7,6 +7,11 @@ import os from "node:os";
 import { createCollector } from "../lib/collector.mjs";
 import { TAIL_LIMITS, hash } from "../lib/collector-io.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { promptAuthorship } from "../lib/prompt-authorship.mjs";
+import { buildSanitizedRecord, buildSanitizedBundle } from "../lib/export.mjs";
+import { eventIdentity, filterDeletedRecords } from "../lib/deletion-identities.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 
 const sessionId = "10000000-0000-4000-8000-000000000001";
@@ -143,7 +148,19 @@ for (const envelope of ["canonical", "ignored-host-context", "multiple-chunks"])
             envelope === "canonical" ? {} : { transformedContent: "x".repeat(size) }, "oversized"), start()]);
         await app.collect();
         await app.restart();
-        const state = await app.collect(), record = state.evidence[0];
+        let state = await app.collect();
+        if (envelope === "multiple-chunks") {
+            // The first read included the preceding prompt. Only the next full
+            // chunk establishes that this entry cannot be projected.
+            const { cursor } = await app.checkpoint();
+            assert.equal(cursor.skipping, true);
+            assert.equal(cursor.skipReason, "oversized-line");
+            assert.ok(cursor.backlogBytes > 0);
+            assert.deepEqual(state.evidence, []);
+            await app.restart();
+            state = await app.collect();
+        }
+        const record = state.evidence[0];
         assert.equal(record.userPrompt.text, null);
         assert.equal(record.userPrompt.sourceEventId, undefined);
         assert.equal(record.userPrompt.capture.reason, "oversized-line");
@@ -162,6 +179,78 @@ test("turn coincidence alone never links a late message", async t => {
     assert.equal(state.evidence.length, 1);
     assert.equal(state.evidence[0].userPrompt.text, null);
     assert.equal(state.evidence[0].userPrompt.capture.reason, "unlinked");
+});
+
+for (const [source, expected] of [["user", "user"], ["agent-invented", "agent"]]) {
+    test(`a pending tool request still links to its ${expected} prompt across intervening skill input and restart`, async t => {
+        const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "original",
+            turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+        const app = await installation(t, [
+            prompt("Invented initiating request", { source, messageId: "original" }),
+            request("first-request", "first", 1), start("first", 2),
+            prompt("Invented host instructions", { source: "skill-workiq", messageId: "instructions" }, "skill", 3),
+            request("second-request", "second", 4),
+            ...Array.from({ length: 305 }, (_, i) => event("other-" + i, "assistant.message", {}, 10 + i)),
+        ]);
+        await app.collect();
+        await app.restart();
+        await app.append([start("second", 1000)]);
+        const state = await app.collect();
+        assert.deepEqual(state.evidence.map(r => [r.userPrompt.sourceEventId, r.toolCalls.map(c => c.toolCallId)]),
+            [["prompt", ["first", "second"]]], "An app-inserted message must not become an additional request when the call names its actual origin.");
+        const chart = createPercentageCharts({ authorship: promptAuthorship }).authorUsage(state.evidence);
+        assert.equal(chart.total, 1);
+        assert.equal(chart.rows.find(row => row.id === expected).count, 1);
+        const detail = [...buildAssessmentModel(state).details.values()][0];
+        assert.equal(detail.interaction.message.association, "explicit-source-link");
+        const record = state.evidence[0];
+        const snapshot = buildSanitizedRecord(record, "a".repeat(64));
+        assert.equal(snapshot.promptAssociation, "Copilot linked all 2 tool calls directly to the prompt.");
+        assert.doesNotMatch(JSON.stringify(snapshot), /first-request|second-request/);
+        const [pruned] = filterDeletedRecords([record], { events: [eventIdentity(sessionId, "first-request")] });
+        assert.equal(pruned.toolCalls[0].promptLink, undefined);
+        assert.match(promptAuthorship.requestLink(pruned).note, /linked 1 of 2 tool calls/);
+        await app.append([event("end-second", "tool.execution_complete", { toolCallId: "second", success: true }, 1010)]);
+        const refreshed = await app.collect();
+        assert.equal(refreshed.evidence.length, 1);
+        assert.equal(refreshed.evidence[0].toolCalls[1].completionEventId, "end-second");
+        assert.deepEqual(refreshed.evidence[0].toolCalls[1].promptLink, record.toolCalls[1].promptLink);
+    });
+}
+
+test("the recent-event cutoff cannot discard a competing request and manufacture a direct link", async t => {
+    const response = (id, messageId, at) => event(id, "assistant.message", { originatingMessageId: messageId,
+        turnId: "turn-one", toolRequests: [{ toolCallId: "competing" }] }, at);
+    const app = await installation(t, [
+        prompt("First invented request", { messageId: "one" }),
+        response("older-claim", "one", 1),
+        ...Array.from({ length: 305 }, (_, i) => event("filler-" + i, "assistant.message", {}, 10 + i)),
+        prompt("Second invented request", { messageId: "two" }, "other", 400), response("recent-claim", "two", 410),
+    ]);
+    await app.collect(); await app.restart(); await app.append([start("competing", 1000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.toolCalls.length, 1);
+    assert.equal(record.userPrompt.capture.reason, "ambiguous-link");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
+});
+
+test("hard checkpoint bounds leave a pruned competing request unlinked", async t => {
+    const request = (id, call, at) => event(id, "assistant.message", { originatingMessageId: "origin",
+        turnId: "turn-one", toolRequests: [{ toolCallId: call }] }, at);
+    const app = await installation(t, [
+        prompt("A pending original", { messageId: "origin" }),
+        request("old", "shared", 1),
+        ...Array.from({ length: TAIL_LIMITS.maxContextEvents }, (_, i) => request(`filler-${i}`, `other-${i}`, 10 + i)),
+        request("recent", "shared", 4000),
+    ]);
+    await app.collect();
+    const checkpoint = await app.checkpoint();
+    assert.ok(checkpoint.events.length <= TAIL_LIMITS.maxContextEvents);
+    assert.ok(Buffer.byteLength(JSON.stringify(checkpoint.events.filter(e => e.id !== "prompt"))) <= TAIL_LIMITS.maxContextBytes);
+    await app.restart(); await app.append([start("shared", 5000)]);
+    const { evidence: [record] } = await app.collect();
+    assert.equal(record.userPrompt.capture.reason, "unlinked");
+    assert.equal(record.toolCalls[0].promptLink, undefined);
 });
 
 for (const flaw of ["duplicate-message", "different-turn", "subagent"]) {
@@ -225,6 +314,47 @@ test("new explicit evidence conflicting with a saved origin qualifies the link w
     assert.equal(state.evidence.length, 1);
     assert.equal(state.evidence[0].userPrompt.text, "Synthetic first association");
     assert.equal(state.evidence[0].userPrompt.capture.reason, "ambiguous-link");
+});
+
+test("a later claim naming a different origin withdraws direct linkage from the reader and a new report", async t => {
+    const request = (id, msg, call, at) => event(id, "assistant.message", {
+        originatingMessageId: msg, turnId: "turn-one", toolRequests: [{ toolCallId: call }],
+    }, at);
+    const app = await installation(t, [
+        prompt("Invented first request", { messageId: "one" }),
+        request("first-claim", "one", "first", 1), start("first", 2),
+        prompt("Invented second request", { messageId: "two" }, "other", 3),
+        request("second-claim", "two", "second", 4), start("second", 5),
+    ]);
+    const before = await app.collect();
+    assert.deepEqual([...buildAssessmentModel(before).details.values()].map(v => v.interaction.message.association),
+        ["explicit-source-link", "explicit-source-link"]);
+    await app.restart();
+    await app.append([
+        request("competes-first", "two", "first", 1), request("competes-second", "missing-original", "second", 4),
+        event("first-end", "tool.execution_complete", { toolCallId: "first", success: true }, 10),
+        event("second-end", "tool.execution_complete", { toolCallId: "second", success: true }, 11),
+    ]);
+    const after = await app.collect();
+    const expected = "The saved links disagree about which request started this activity.";
+    const bundle = await buildSanitizedBundle(after.evidence, "a".repeat(64), { formats: ["json"] });
+    assert.deepEqual(JSON.parse(bundle.files["product-report.json"]).records.map(r => r.promptAssociation), [expected, expected]);
+    assert.deepEqual([...buildAssessmentModel(after).details.values()].map(v => v.interaction.message.association), ["unverified", "unverified"]);
+    const { searchFixture } = await import("./live-search-fixture.mjs");
+    const { chromium, expect } = await import("@playwright/test");
+    const { runtime } = await searchFixture(t, { records: after.evidence, reply: false });
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        await page.goto(runtime.url);
+        for (const record of after.evidence) {
+            await page.locator(`[data-view-key="request:${record.scenarioId}"] .request-card-open`).click();
+            const reader = page.locator("#contextSidebar");
+            await reader.locator(".reader-section-jumps").getByRole("button", { name: "Source", exact: true }).click();
+            await expect(reader.locator(`[data-context-group="${record.scenarioId}"] .reader-record-limits p`).first()).toHaveText(expected);
+            await page.locator("#closeContextSidebar").click();
+        }
+    } finally { await browser.close(); }
 });
 
 test("a complete prompt exactly at the initial byte-window boundary is not discarded as a partial line", async t => {

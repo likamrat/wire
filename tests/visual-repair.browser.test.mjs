@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -7,8 +9,9 @@ import { startServer } from "../lib/server.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
+import { openReportLibrary } from "./report-journey-helpers.mjs";
 
-async function setup(t, { reports = false, rosterCount = 0 } = {}) {
+async function setup(t, { reports = false, rosterCount = 0, frontend, hasTouch = false, entry = "#analyze" } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         Array.from({ length: 60 }, (_, index) => {
             const record = fixture("visual-repair-" + index);
@@ -35,7 +38,7 @@ async function setup(t, { reports = false, rosterCount = 0 } = {}) {
         await browser?.close(); await runtime?.close(); await access.close(); source.db.close();
         for (const work of cleanup.reverse()) await work();
     });
-    runtime = await startServer(context, exports, { port: 0, access, collector: { timers: false },
+    runtime = await startServer(context, exports, { port: 0, access, frontend, collector: { timers: false },
         githubProfile: { fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) } });
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
@@ -51,17 +54,208 @@ async function setup(t, { reports = false, rosterCount = 0 } = {}) {
         await exports.confirm("visual-repair", preview.previewId, true);
     }
     browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" });
+    const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", hasTouch });
+    const page = await browserContext.newPage();
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.route(url => url.origin !== origin, route => route.abort());
     t.after(() => assert.deepEqual(errors, []));
-    await page.goto(runtime.url + "#analyze");
+    await page.goto(runtime.url + entry);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     return { page, context, records, roster };
 }
+
+for (const hasTouch of [false, true])
+test(`footer utilities group closely without sharing hit targets (${hasTouch ? "touch" : "mouse"})`, async t => {
+    const { page } = await setup(t, { hasTouch });
+    const utilities = page.getByRole("navigation", { name: "Utility navigation" });
+    const settings = utilities.getByRole("link", { name: "Settings" });
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-current", "page");
+    await chooseTheme(page, "light");
+    await page.mouse.move(1000, 800);
+    const targets = utilities.locator(":scope > :is(a,button)");
+    const boxes = await targets.evaluateAll(nodes => nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return { label: node.getAttribute("aria-label"), box: box.toJSON(), glyph: node.querySelector("svg").getBoundingClientRect().toJSON(),
+            hit: [box.left + 1, box.right - 1].every(x => node.contains(document.elementFromPoint(x, box.top + box.height / 2))) };
+    }));
+    const dir = process.env.WIRE_FOOTER_PROOFS;
+    if (dir && !hasTouch) {
+        await mkdir(dir, { recursive: true });
+        await page.screenshot({ path: path.join(dir, "screen.png") });
+        // Identical viewport coordinates include the edge of the rail in both revisions.
+        await page.screenshot({ path: path.join(dir, "footer.png"), clip: { x: 0, y: page.viewportSize().height - 76, width: 320, height: 76 } });
+        const boxesFor = await page.evaluate(() => Object.fromEntries(["#sidebar", "#navigationFooter", "#wireAccountTrigger",
+            ".wire-account-avatar img", ".wire-account-copy"].map(s => [s, document.querySelector(s).getBoundingClientRect().toJSON()])));
+        await writeFile(path.join(dir, "geometry.json"), JSON.stringify({ boxesFor, boxes }, null, 2));
+    }
+    assert.deepEqual(boxes.map(item => item.label), ["Help", "Feedback", "Settings"]);
+    const minimum = hasTouch ? 44 : 32;
+    const footprint = boxes.at(-1).box.right - boxes[0].box.left;
+    assert.ok(hasTouch || footprint <= 100, `Expanded desktop utilities take ${footprint}px`);
+    await page.locator("#wireAccountTrigger").focus();
+    for (const [index, { box, hit }] of boxes.entries()) {
+        assert.ok(box.width >= minimum && box.height >= 44 && hit);
+        if (index) assert.ok(box.left >= boxes[index - 1].box.right);
+        await page.keyboard.press("Tab");
+        await expect(targets.nth(index)).toBeFocused();
+        await expect(targets.nth(index)).toHaveCSS("outline-style", "solid");
+        if (dir && !hasTouch && index === 1) await page.screenshot({ path: path.join(dir, "feedback-focus.png") });
+    }
+});
+
+for (const frontend of ["bundled", "react"])
+test(`${frontend}: sidebar feedback prefills the GitHub new issue title and optional description`, async t => {
+    const { page } = await setup(t, { frontend });
+    const feedback = page.getByRole("button", { name: "Feedback", exact: true });
+    const help = page.getByRole("link", { name: "Help", exact: true });
+    const panel = page.getByRole("dialog", { name: "Report a bug or suggest a feature" });
+    const title = panel.getByRole("textbox", { name: "Title", exact: true });
+    const description = panel.getByRole("textbox", { name: "Description (optional)" });
+    const openIssue = panel.getByRole("button", { name: "Open on GitHub" });
+    const summary = "Remember filters & dates #2";
+    const example = "Please keep the filter visible.\nA&B #1 + 👋";
+    const opens = [];
+    // Fulfill the new tab's navigation locally. No request reaches GitHub.
+    await page.context().route(url => url.hostname === "github.com", route => {
+        opens.push(route.request());
+        return route.fulfill({ contentType: "text/html", body: "<title>Intercepted new issue</title>" });
+    });
+    await expect(help).toHaveCount(1);
+    await expect(page.locator("#navigationFooter #wireAccountTrigger img")).toBeVisible();
+    for (const [theme, layout] of [["light", "expanded"], ["dark", "collapsed"], ["dark", "drawer"]]) {
+        await chooseTheme(page, theme);
+        if (layout === "collapsed") await page.getByRole("button", { name: "Collapse navigation" }).click();
+        if (layout === "drawer") {
+            await page.setViewportSize({ width: 375, height: 800 });
+            await page.locator("#navigationToggle").click();
+        }
+        await feedback.focus(); await page.keyboard.press("Enter");
+        await expect(title).toBeFocused(); await expect(openIssue).toBeDisabled();
+        const bounds = await panel.boundingBox(), anchor = await feedback.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width + 1);
+        assert.ok(Math.abs(anchor.y - bounds.y - bounds.height - 6) < 2, JSON.stringify({ bounds, anchor }));
+        await title.fill("   "); await expect(openIssue).toBeDisabled();
+        if (layout === "expanded") await description.fill(example);
+        await expect(openIssue).toBeDisabled();
+        await title.fill(summary); await expect(openIssue).toBeEnabled();
+        if (layout !== "drawer") {
+            const [tab] = await Promise.all([page.context().waitForEvent("page"), openIssue.click()]);
+            await expect(tab).toHaveTitle("Intercepted new issue");
+            const url = new URL(tab.url());
+            assert.equal(url.origin + url.pathname, "https://github.com/likamrat/wire/issues/new");
+            assert.deepEqual([...url.searchParams], layout === "expanded" ? [["title", summary], ["body", example]] : [["title", summary]]);
+            assert.equal(opens.at(-1).method(), "GET"); assert.equal(opens.at(-1).headers().referer, undefined);
+            assert.equal(await tab.evaluate(() => window.opener === null), true);
+            await tab.close();
+            await panel.getByRole("button", { name: "Cancel" }).click();
+        } else await page.keyboard.press("Escape");
+        await expect(panel).toBeHidden(); await expect(feedback).toBeFocused();
+        await page.keyboard.press("Space"); await expect(title).toHaveValue(""); await expect(description).toHaveValue("");
+        await page.keyboard.press("Escape"); await expect(feedback).toBeFocused();
+        if (layout === "drawer") {
+            await expect(page.locator("#navigationDrawer")).toBeVisible();
+            await page.keyboard.press("Escape"); await expect(page.locator("#navigationToggle")).toBeFocused();
+        }
+    }
+    assert.equal(opens.length, 2);
+});
+
+test("the navigation edge never paints parallel resize lines or leaves a grip after collapse", async t => {
+    const { page } = await setup(t, { frontend: "react" });
+    const divider = page.locator(".navigation-resize"), collapse = page.locator("#navigationCollapse");
+    const rail = page.locator("#sidebar"), dir = process.env.WIRE_SIDEBAR_SEAM_PROOFS;
+    if (dir) await mkdir(dir, {recursive: true});
+    const read = async state => {
+        const r = await rail.boundingBox();
+        const clip = {x: Math.round(r.x + r.width) - 14, y: Math.round(r.y + r.height / 2) - 64, width: 30, height: 65};
+        const bytes = await page.screenshot({clip, animations:"disabled"});
+        if (dir) await page.screenshot({ path: path.join(dir, state + ".png") });
+        return page.evaluate(async ({ png }) => {
+            const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))], {type:"image/png"}));
+            const ctx = document.createElement("canvas").getContext("2d");
+            ctx.drawImage(bitmap, 0, 0);
+            const colors = new Set(["--accent", "--focus"].map(role => {
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(role).trim();
+                return ctx.fillStyle;
+            }));
+            // Sample above and through the grip: a full-height outline paints both rows.
+            return [0, bitmap.height - 1].map(y => {
+                const pixels = ctx.getImageData(0, y, bitmap.width, 1).data;
+                let runs = 0, last = false;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const ink = colors.has("#" + [...pixels.slice(i, i + 3)].map(v => v.toString(16).padStart(2, "0")).join(""));
+                    if (ink && !last) runs++;
+                    last = ink;
+                }
+                return runs;
+            });
+        }, {png: bytes.toString("base64")});
+    };
+    for (const [palette, theme] of [["blue", "light"], ["petrol", "light"], ["blue", "dark"]]) {
+        await chooseTheme(page, theme);
+        await page.evaluate(p => document.documentElement.dataset.evidencePalette = p, palette);
+        const edge = {}, record = async state => { edge[state] = await read(`${palette}-${theme}-${state}`); };
+        await page.mouse.move(900, 150);
+        await record("expanded");
+        const handle = await divider.boundingBox(), x = handle.x + handle.width / 2, y = handle.y + 90;
+        await page.mouse.move(x, y); await divider.hover(); await record("hover");
+        await page.mouse.move(x,y); await page.mouse.down(); await page.mouse.move(x + 45,y,{steps:5}); await record("drag");
+        await page.mouse.up(); await page.mouse.move(900,150);
+        await record("released");
+        const width = await rail.evaluate(n => n.offsetWidth);
+        await divider.focus(); await divider.press("ArrowRight"); await page.keyboard.press("ArrowLeft");
+        assert.ok(await divider.evaluate(n => n.matches(":focus-visible")));
+        await record("keyboard");
+        await collapse.press("Enter");
+        await expect(divider).toBeHidden();
+        await page.waitForFunction(() => !document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
+        await record("collapsed");
+        await collapse.press("Enter");
+        await expect.poll(() => rail.evaluate(n => n.offsetWidth)).toBe(width);
+        if (dir) await writeFile(path.join(dir, `${palette}-${theme}.json`), JSON.stringify(edge));
+        for (const state of ["expanded","released","collapsed"]) assert.deepEqual(edge[state], [0, 0], `${theme}/${palette}: ${state}`);
+        for (const state of ["hover","drag","keyboard"]) assert.deepEqual(edge[state], [0, 1], `${theme}/${palette}: ${state}`);
+    }
+});
+
+test("the left divider resizes live, remembers the release and leaves the narrow drawer alone", async t => {
+    const { page } = await setup(t, { frontend: "react" });
+    const divider = page.getByRole("separator", { name: "Navigation width" });
+    const rail = page.locator("#sidebar"), collapse = page.locator("#navigationCollapse");
+    const width = () => rail.evaluate(node => Math.round(node.getBoundingClientRect().width));
+    await expect(divider).toBeVisible({ timeout: 1000 });
+    const defaultWidth = await width();
+    const handle = await divider.boundingBox(), x = handle.x + handle.width / 2, y = handle.y + 120;
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 55, y);
+    await expect.poll(width).toBe(defaultWidth + 55);
+    await page.keyboard.press("Escape"); await page.mouse.up(); await expect.poll(width).toBe(defaultWidth);
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 96, y, { steps: 6 });
+    await expect.poll(width).toBe(defaultWidth + 96);
+    assert.ok(Math.abs((await page.locator("#main").boundingBox()).x - await width()) <= 1);
+    await page.mouse.up();
+    await collapse.click(); await expect(divider).toBeHidden();
+    await collapse.click(); await expect.poll(width).toBe(defaultWidth + 96);
+    await page.reload(); await expect(divider).toHaveAttribute("aria-valuenow", String(defaultWidth + 96));
+    const sibling = await page.context().newPage();
+    await sibling.goto(page.url());
+    const otherDivider = sibling.getByRole("separator", { name: "Navigation width" });
+    await expect(otherDivider).toHaveAttribute("aria-valuenow", String(defaultWidth + 96));
+    await divider.focus(); await page.keyboard.press("ArrowRight");
+    await expect.poll(width).toBe(defaultWidth + 112);
+    await expect(otherDivider).toHaveAttribute("aria-valuenow", String(defaultWidth + 112));
+    await sibling.close();
+    await page.keyboard.press("End"); const wide = await width();
+    await page.setViewportSize({ width: 760, height: 900 }); await expect.poll(width).toBeLessThan(wide);
+    await page.setViewportSize({ width: 390, height: 900 }); await expect(divider).toBeHidden();
+    await page.locator("#navigationToggle").click(); await expect(page.locator("#navigationDrawer")).toBeVisible();
+    await expect(divider).toBeHidden(); await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 1440, height: 1000 }); await expect.poll(width).toBe(wide);
+    await divider.dblclick(); await expect.poll(width).toBe(defaultWidth);
+});
 
 test("the loaded avatar keeps its horizontal position at collapse, reversal and settle", async t => {
     const { page } = await setup(t);
@@ -105,7 +299,7 @@ test("chart grouping, category states and report identity remain readable at enl
         assert.notEqual(chart.bg, "rgba(0, 0, 0, 0)"); assert.equal(chart.shadow, "none");
     }
     await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "privacy");
-    const privacy = page.locator('#settingsCategoryNav [data-category=privacy]'), display = page.locator('#settingsCategoryNav [data-category=display]');
+    const privacy = page.locator('#settingsCategoryNav [data-category=privacy]'), display = page.locator('#settingsCategoryNav [data-category=themes]');
     await display.hover();
     assert.notEqual(await privacy.evaluate(n => getComputedStyle(n, "::before").content), "none");
     assert.equal(await display.evaluate(n => getComputedStyle(n, "::before").content), "none");
@@ -114,10 +308,12 @@ test("chart grouping, category states and report identity remain readable at enl
     await page.locator('nav [data-nav=reports]').click();
     const title = page.getByRole("button", { name: "View report: Calendar activity", exact: true });
     await expect(title.locator("[data-lucide-icon=file-text]")).toHaveCount(1);
-    await expect(page.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
+    await openReportLibrary(page);
+    const row = page.locator("#bundleList .saved-library-row").filter({ hasText: "Calendar activity" });
+    await expect(row.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
     await page.setViewportSize({ width: 900, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "150%");
-    const layout = await page.locator(".saved-library-row").evaluate(row => {
+    const layout = await row.evaluate(row => {
         const label = row.querySelector(".saved-report-name"), name = label.getBoundingClientRect(), period = row.querySelector(".saved-report-period").getBoundingClientRect();
         const wordLines = [...label.textContent.matchAll(/\S+/g)].map(word => {
             const range = document.createRange();
@@ -130,56 +326,19 @@ test("chart grouping, category states and report identity remain readable at enl
     assert.ok(layout.periodY >= layout.nameBottom, "Period moves below the full-width identity before the name is squeezed");
 });
 
-test("destination feedback precedes its snapshot without presenting an unaccepted chart scope", async t => {
-    const { page } = await setup(t), started = Promise.withResolvers(), release = Promise.withResolvers();
-    t.after(() => release.resolve());
-    await page.route("**/api/snapshot", async route => { started.resolve(); await release.promise; await route.continue(); });
-    await page.locator("#comparePeriods").click(); await started.promise;
-    const pending = await page.evaluate(() => ({
-        selected: document.getElementById("comparePeriods").getAttribute("aria-current"),
-        busy: document.getElementById("workspace").getAttribute("aria-busy"),
-        home: document.getElementById("homeView").checkVisibility(),
-        notice: document.getElementById("navigationPending")?.textContent,
-    }));
-    assert.equal(pending.selected, "page");
-    assert.equal(pending.busy, "true");
-    assert.equal(pending.home, false);
-    assert.equal(pending.notice, "Opening Compare...");
-    release.resolve();
-    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await expect(page.locator("#navigationPending")).toBeHidden();
-    await page.locator('nav [data-nav=settings]').click();
-    await expect(page.locator("#settingsView")).toBeVisible();
-});
-
-for (const outcome of ["failure", "superseded"]) test(`pending destination ${outcome} preserves the accepted or newer route`, async t => {
-    const { page } = await setup(t), started = Promise.withResolvers(), release = Promise.withResolvers();
-    t.after(() => release.resolve());
-    let held = false;
-    await page.route("**/api/snapshot", async route => {
-        if (held) return route.continue();
-        held = true; started.resolve(); await release.promise;
-        if (outcome === "failure") return route.fulfill({ status: 503, contentType: "application/json", json: { error: "Invented stored read failure." } });
-        return route.continue();
-    });
-    await page.locator("#comparePeriods").click(); await started.promise;
-    if (outcome === "superseded") {
-        await page.locator('nav [data-nav=reports]').click();
-        await expect(page.locator("#reportsView")).toBeVisible();
-        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    }
-    const response = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
-    release.resolve(); await response;
-    if (outcome === "failure") {
-        await expect(page.locator("#message")).toContainText("Invented stored read failure.");
-        await expect(page.locator('nav [data-nav=analyze]')).toHaveAttribute("aria-current", "page");
-        await expect(page.locator("#homeView")).toBeVisible();
-    } else {
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        await expect(page.locator('nav [data-nav=reports]')).toHaveAttribute("aria-current", "page");
-        await expect(page.locator("#reportsView")).toBeVisible();
-    }
-    await expect(page.locator("#navigationPending")).toBeHidden();
+test("when Compare cannot open, Analyze keeps the accepted filter and results", async t => {
+    const { page } = await setup(t, { entry: "?result=failure" });
+    const summary = page.locator("#activityListSummary");
+    await expect(summary).toHaveText("0 interactions · 0 matching tool calls");
+    await page.route("**/api/snapshot", route => route.fulfill({
+        status: 503, json: { error: "Invented stored read failure." },
+    }), { times: 1 });
+    await page.getByRole("link", { name: "Compare", exact: true }).click();
+    await expect(page.locator("#message")).toContainText("Invented stored read failure.");
+    await expect(page.locator('nav [data-nav=analyze]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
+    await expect(summary).toBeVisible();
+    await expect(summary).toHaveText("0 interactions · 0 matching tool calls");
 });
 
 test("large roster labels preserve every option, selected identity, source updates and withdrawal", { timeout: 60000 }, async t => {

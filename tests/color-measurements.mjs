@@ -5,6 +5,42 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
+// Measure ordinary screen text against its composed surface, including inset control faces.
+export function visibleInk() {
+    const rgba = value => {
+        if (value.startsWith("color(srgb")) {
+            const [color, alpha] = value.slice(11, -1).split("/");
+            return [...color.trim().split(/\s+/).map(v => Number(v) * 255), Number(alpha ?? 1)];
+        }
+        const values = value.match(/[\d.]+/g).map(Number);
+        return [...values.slice(0, 3), values[3] ?? 1];
+    };
+    const blend = (a, b) => a.slice(0, 3).map((n, i) => n * a[3] + b[i] * (1 - a[3]));
+    function background(node) {
+        if (!node) return [255, 255, 255];
+        const css = getComputedStyle(node), surface = blend(rgba(css.backgroundColor), background(node.parentElement));
+        const before = getComputedStyle(node, "::before");
+        const coversText = parseFloat(before.width) >= node.getBoundingClientRect().width * .8
+            && parseFloat(before.height) >= parseFloat(css.lineHeight);
+        return before.content !== "none" && before.display !== "none" && coversText
+            ? blend(rgba(before.backgroundColor), surface) : surface;
+    }
+    return [...document.querySelectorAll("body *")].filter(node => node.checkVisibility({ visibilityProperty: true })
+        && !node.closest(".visually-hidden,.skip-link,svg,iframe") && !node.matches("option")
+        && ([...node.childNodes].some(child => child.nodeType === 3 && child.textContent.trim())
+            || node.matches("input:not([type=checkbox],[type=radio]),textarea")))
+        .map(node => {
+            const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
+            return { target: node.id || node.tagName + "." + node.className, background: color(bg),
+                ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
+                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "400"
+                    : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "400"
+                        : node.matches("#activityList>.activity-card .card-tool-name") ? "400" : null,
+                placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,
+                code: !!node.closest("code,kbd,samp,.mono,pre:not(.full-text-content)") };
+        });
+}
+
 // Browser-side paint measurement includes alpha edges and the action's inset face.
 export function measureControlSurface(node) {
     const rgba = value => {
@@ -77,6 +113,33 @@ export async function shadowPaint(page, selector, side, distances = [2, 6, 12, 2
         return bands;
     }, { before: baseline.toString("base64"), after: flat.toString("base64"), bounds, side, distances });
     return { bands: result, screenshot: baseline };
+}
+
+// Hide only text ink in the second exposure; the pseudo-face and composited opacity remain.
+export async function paintedLabelContrast(control) {
+    const before = await control.screenshot();
+    const face = await control.screenshot({ style: "*{-webkit-text-fill-color:transparent!important;text-shadow:none!important}" });
+    return control.evaluate(async (_, [normal, blank]) => {
+        async function pixels(value) {
+            const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(value), c => c.charCodeAt(0))]));
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width; canvas.height = bitmap.height;
+            const ctx = canvas.getContext("2d"); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+            return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        }
+        const [a, b] = await Promise.all([pixels(normal), pixels(blank)]);
+        if (a.length !== b.length) throw new Error("The control moved during the paint measurement.");
+        const channel = v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+        const luminance = (data, i) => .2126 * channel(data[i] / 255) + .7152 * channel(data[i+1] / 255) + .0722 * channel(data[i+2] / 255);
+        const ratios = [];
+        for (let i = 0; i < a.length; i += 4) {
+            if (a[i] === b[i] && a[i+1] === b[i+1] && a[i+2] === b[i+2]) continue;
+            const l = luminance(a, i), r = luminance(b, i);
+            ratios.push((Math.max(l, r) + .05) / (Math.min(l, r) + .05));
+        }
+        ratios.sort((a, b) => a-b);
+        return ratios[Math.floor(ratios.length * .99)] ?? 1;
+    }, [before.toString("base64"), face.toString("base64")]);
 }
 
 // Runs in the browser so contrast covers actual paint, not a gradient's solid fallback.

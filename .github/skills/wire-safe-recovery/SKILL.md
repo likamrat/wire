@@ -1,14 +1,15 @@
 ---
 name: wire-safe-recovery
-description: Diagnose and recover WIRE state without replaying uncertain effects or losing retained evidence. Use for Refresh failures, interrupted saves, historical repair, recollection, deletion, checkpoint persistence or recovery receipts. Separate ordinary code fixes from actually authorized private-data operations.
+description: Reconciles uncertain WIRE operations and missing historical records. Use for a lost Refresh, Save or Delete response, recovery receipts, historical repair or recollection.
 license: MIT
 ---
 
 # WIRE safe recovery
 
-Read the affected [collection and recovery](../../../docs/collection.md) and
-[runtime access](../../../docs/runtime-access.md) contracts.
-Diagnose first; the skill does not authorize access or mutation.
+For missing calls, use [explicit recollection](../../../docs/collection.md#explicit-recollection).
+For a lost response, start with the original operation's
+[recovery rules](../../../docs/runtime-access.md#existing-owner-responsibilities).
+Diagnosis grants no access or mutation.
 
 ## Identify the operation
 
@@ -18,6 +19,10 @@ View dates/filters are not acquisition approval. Refresh does not implicitly
 enroll a source, widen history, resume Pause or enable optional reply retention.
 Preserve the existing bounded manual Refresh exception under Pause; it does
 not resume automatic collection.
+
+For a lost draft-deletion response, read the named draft list. For saved-file
+or collected-activity deletion, check the original operation's receipt in
+its own workflow. None of those checks sends another Delete.
 
 Recover the operation's real grant, target, owner, revision and receipt.
 Distinguish source failure, transport uncertainty, retained-read failure and
@@ -57,7 +62,13 @@ cases with focused existing tests. A safer error label alone does not close
 broken collection; a missing retained cause does not justify unapproved rereads.
 Give the actual result or one precise blocked action and next actor.
 
-Use [source integration](../wire-source-integration/SKILL.md) when collection's
-source contract is affected and [report integrity](../wire-report-integrity/SKILL.md)
+Report prevention and restoration separately. A restart test can prove the
+next call survives. Count a historical call as restored only after the approved
+operation's receipt and retained readback identify it. List unresolved members
+separately; a candidate in a preview is not a restored call.
+
+For partial scans and continuation, use the
+[bounded-reader check](../wire-source-integration/SKILL.md#prove-the-actual-requirement).
+Use [report integrity](../wire-report-integrity/SKILL.md)
 for report-save/frozen-artifact boundaries. Keep the recovery outcome with its
 existing owner and avoid another diagnostic framework.

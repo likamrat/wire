@@ -14,6 +14,8 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
 
+const localSource = sessionRoot => ({ approved: true, sessionRoot, appDbPath: path.join(path.dirname(sessionRoot), "data.db") });
+
 const time = ms => new Date(Date.UTC(2026, 9, 1, 12, 0, 0) + ms).toISOString();
 function source(duration = 1200) {
     return [
@@ -191,7 +193,7 @@ test("bounded original metadata qualification respects source window, context li
     const rows = source(), start = { id: "startup", type: "session.start", timestamp: time(0), data: { sessionId, version: 1 } };
     await writeFile(path.join(sessionRoot, sessionId, "events.jsonl"), [start, ...rows].map(event => JSON.stringify(event) + "\n").join(""));
     const record = { sourceSessionId: sessionId, userPrompt: prompt };
-    const config = { approved: true, sessionRoot }, sourceInfo = { sessionId, eligible: true };
+    const config = localSource(sessionRoot), sourceInfo = { sessionId, eligible: true };
     const bounded = await qualifyRetainedResponseTimings(config, sourceInfo, [record], null, 1024, time(0));
     assert.equal(bounded.bytesRead, 0);
     assert.equal(bounded.checkpoint.status, "pending");
@@ -218,7 +220,7 @@ test("model qualification shares the bounded reader while keeping timing-only me
     const write = rows => writeFile(file, [start, ...rows].map(event => JSON.stringify(event) + "\n").join(""));
     await write(rows);
     const record = { sourceSessionId: sessionId, userPrompt: prompt };
-    const config = { approved: true, sessionRoot }, sourceInfo = { sessionId, eligible: true };
+    const config = localSource(sessionRoot), sourceInfo = { sessionId, eligible: true };
     const bounded = await qualifyRetainedInteractionModels(config, sourceInfo, [record], null, 1024, time(0));
     assert.equal(bounded.bytesRead, 0);
     assert.equal(bounded.checkpoint.status, "pending");
@@ -265,7 +267,7 @@ test("scoped model context excludes unrelated payloads but keeps late links, dup
     const late = { ...rows[1], id: "late", timestamp: time(5000),
         data: { ...rows[1].data, model: "later-model", apiCallId: "late-call", turnId: "late-turn" } };
     const record = { sourceSessionId: sessionId, userPrompt: prompt };
-    const config = { approved: true, sessionRoot }, sourceInfo = { sessionId, eligible: true };
+    const config = localSource(sessionRoot), sourceInfo = { sessionId, eligible: true };
     const qualify = async (extra = [], preceding = []) => {
         await writeFile(file, [startup, ...unrelated("before", -4000), ...preceding, ...rows, neighbor,
             ...unrelated("neighbor", 3000), late, ...extra].map(event => JSON.stringify(event) + "\n").join(""));
@@ -312,7 +314,7 @@ test("consecutive identical model metadata deliveries do not exhaust selected co
         const events = [startup, rows[0], ...copies, ...(changed ? [changed] : []), rows[2]];
         const text = events.map(event => JSON.stringify(event) + "\n").join("");
         await writeFile(file, text);
-        const result = await qualifyRetainedInteractionModels({ approved: true, sessionRoot },
+        const result = await qualifyRetainedInteractionModels(localSource(sessionRoot),
             { sessionId, eligible: true }, [record], null, 8 * 1024 ** 2, time(0));
         assert.equal(result.checkpoint.reason, undefined);
         assert.equal(result.bytesRead, Buffer.byteLength(text) + 65536 + 256,

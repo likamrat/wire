@@ -297,6 +297,165 @@ test("Copilot-only canvas requires explicit GitHub approval and preserves the di
     }
 });
 
+test("enforced Copilot history review reads an approved scope and separately commits only its new identities", async t => {
+    const app = await fixture(t, { startCollector: false });
+    let access, runtime;
+    try {
+        runtime = await startServer(app.context, createExportController(app.context), {
+            port: 0, collector: { timers: false }, createAccess: async () => access = await createCopilotRuntimeAccess(app.context),
+        });
+        const origin = new URL(runtime.url).origin;
+        const post = async (path, body, panel) => {
+            const response = await fetch(origin + path, { method: "POST",
+                headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1",
+                    ...(panel ? { "X-Board-Capability": panel } : {}) }, body: JSON.stringify(body) });
+            return { status: response.status, body: await response.json() };
+        };
+        const panel = (await post("/api/session", {})).body.capability;
+        await app.append(interaction("missing"));
+        const list = await post("/api/recollection/sources", {}, panel);
+        assert.equal(list.status, 200, JSON.stringify(list.body));
+        assert.equal(list.body.newOnly, true);
+        assert.deepEqual(list.body.sources.map(s => s.sourceSessionId), [app.sourceId]);
+        const date = new Date(Date.now() - 1000).toISOString().slice(0, 10);
+        const selected = { sourceSessionIds: [app.sourceId], from: date, to: date, timeContext: { timeZone: "UTC", locale: "en-US" }, restorePrompts: false };
+        assert.equal((await post("/api/recollection/preview", { ...selected, restorePrompts: true }, panel)).status, 422);
+        const p = await post("/api/recollection/preview", selected, panel);
+        assert.equal(p.status, 200, JSON.stringify(p.body));
+        assert.equal(p.body.counts.newRecords, 1);
+        const receipt = { operationId: p.body.operationId, receiptToken: p.body.receiptToken };
+        assert.equal((await post("/api/recollection/status", receipt, panel)).body.phase, "not-started");
+        const configBefore = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
+        const other = (await post("/api/session", {})).body.capability;
+        assert.equal((await post("/api/recollection/confirm", { operationId: receipt.operationId, confirmed: true }, other)).status, 409);
+        assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
+        // Discard the original confirmation body; a fresh panel recovers by receipt only.
+        const dispatched = await fetch(origin + "/api/recollection/confirm", { method: "POST", headers: {
+            Origin: origin, "Content-Type": "application/json", "X-Board-Capability": panel,
+        }, body: JSON.stringify({ operationId: receipt.operationId, confirmed: true }) });
+        assert.equal(dispatched.status, 200);
+        await dispatched.body.cancel();
+        const status = await post("/api/recollection/status", receipt, other);
+        assert.equal(status.body.phase, "complete");
+        assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls).map(c => c.toolCallId), ["missing"]);
+        assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), configBefore);
+        const second = await post("/api/recollection/preview", selected, panel);
+        assert.equal(second.body.counts.alreadyPresent, 1);
+        assert.equal(second.body.counts.records, 0);
+        assert.equal((await post("/api/recollection/confirm", { operationId: second.body.operationId, confirmed: true }, panel)).status, 422);
+        await app.append(interaction("not-authorized-after-signout"));
+        const retiring = await post("/api/recollection/preview", selected, panel);
+        assert.equal(retiring.body.counts.newRecords, 1);
+        const generation = (await access.status()).generation;
+        const withdrawn = await post("/api/access/command", { schemaVersion: 1, action: "wire-sign-out", operationId: randomUUID(), generation }, panel);
+        assert.equal(withdrawn.status, 200);
+        for (const [route, input] of [["sources", {}], ["preview", selected], ["confirm", { operationId: retiring.body.operationId, confirmed: true }]]) {
+            assert.equal((await post("/api/recollection/" + route, input, panel)).status, 403);
+        }
+        assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls).map(c => c.toolCallId), ["missing"]);
+    } finally { await runtime?.close(); await access?.close(); }
+});
+
+test("enforced recovery withholds retired previews and resolves an ambiguous publication by its original receipt", { timeout: 15000 }, async t => {
+    const app = await fixture(t, { startCollector: false });
+    const clock = Date.now;
+    let advance = 0;
+    t.mock.method(Date, "now", () => clock() + advance);
+    let runtime, access;
+    try {
+        runtime = await startServer(app.context, createExportController(app.context), {
+            port: 0, collector: { timers: false }, createAccess: async () => access = await createCopilotRuntimeAccess(app.context),
+        });
+        const origin = new URL(runtime.url).origin;
+        const post = async (route, input, panel) => {
+            const result = await nativeFetch(origin + route, { method: "POST",
+                headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1",
+                    ...(panel ? { "X-Board-Capability": panel } : {}) }, body: JSON.stringify(input) });
+            return { status: result.status, ...await result.json() };
+        };
+        const createPanel = async () => (await post("/api/session", {})).capability;
+        const control = await createPanel(), today = new Date(Date.now() - 1000).toISOString().slice(0, 10);
+        const scope = { sourceSessionIds: [app.sourceId], from: today, to: today, timeContext: { timeZone: "UTC", locale: "en-US" }, restorePrompts: false };
+        const status = receipt => post("/api/recollection/status", { operationId: receipt.operationId, receiptToken: receipt.receiptToken }, control);
+        await app.append(interaction("new-event"));
+        async function heldRead(run, change) {
+            const entered = Promise.withResolvers(), resume = Promise.withResolvers(), realOpen = fs.open;
+            let held = false;
+            const hook = t.mock.method(fs, "open", async (file, ...args) => {
+                if (!held && file === app.sourceFile) { held = true; entered.resolve(); await resume.promise; }
+                return realOpen(file, ...args);
+            });
+            syncBuiltinESMExports();
+            const pending = run();
+            try {
+                await Promise.race([entered.promise, pending.then(value => { throw Error(`Source did not reach hold: ${value.status}`); })]);
+                await change();
+            } finally { resume.resolve(); hook.mock.restore(); syncBuiltinESMExports(); }
+            return pending;
+        }
+        const abandoned = await createPanel();
+        const stale = await heldRead(() => post("/api/recollection/preview", scope, abandoned),
+            () => post("/api/session/release", {}, abandoned));
+        assert.ok(stale.status >= 400 && !stale.operationId);
+        const staleState = await heldRead(() => post("/api/recollection/preview", scope, control),
+            () => exclusiveBoard(app.context, async (state, save) => { state.revision++; await save(state); }));
+        assert.equal(staleState.status, 409);
+        assert.equal(staleState.operationId, undefined);
+        const retiring = await createPanel();
+        let preview = await post("/api/recollection/preview", scope, retiring);
+        const confirm = (p, panel) => post("/api/recollection/confirm", { operationId: p.operationId, confirmed: true }, panel);
+        const retired = await heldRead(() => confirm(preview, retiring), () => post("/api/session/release", {}, retiring));
+        assert.ok(retired.status >= 400);
+        assert.equal((await status(preview)).phase, "not-started");
+        preview = await post("/api/recollection/preview", scope, control);
+        const changedSource = await heldRead(() => confirm(preview, control), () => appendFile(app.sourceFile, "\n"));
+        assert.equal(changedSource.status, 409);
+        assert.equal((await status(preview)).phase, "not-started");
+        preview = await post("/api/recollection/preview", scope, control);
+        const expired = await heldRead(() => confirm(preview, control), () => { advance += 120001; });
+        assert.equal(expired.status, 409);
+        assert.equal((await status(preview)).phase, "not-started");
+        advance = 0;
+        preview = await post("/api/recollection/preview", scope, control);
+        const realRename = fs.rename;
+        let published = 0;
+        const backendLoss = t.mock.method(fs, "rename", async (from, to) => {
+            await realRename(from, to);
+            if (path.basename(to) === "workiq-evidence-board-v1.state.json" && path.dirname(to) === app.context.dataDir) {
+                published++;
+                throw Object.assign(new Error("Invented lost acknowledgment"), { code: "EIO" });
+            }
+        });
+        syncBuiltinESMExports();
+        let uncertain;
+        try { uncertain = await confirm(preview, control); }
+        finally { backendLoss.mock.restore(); syncBuiltinESMExports(); }
+        assert.equal(published, 1);
+        assert.equal(uncertain.outcome, "unknown");
+        assert.equal((await status(preview)).phase, "complete");
+        assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(r => r.toolCalls).map(c => c.toolCallId), ["new-event"]);
+        const source = await post("/api/collection/sources/status", {}, control);
+        const paused = await heldRead(() => post("/api/recollection/preview", scope, control), async () => {
+            const result = await post("/api/collection/global/enabled", { schemaVersion: 1, enabled: false, generation: source.generation,
+                authorizationRevision: source.authorizationRevision, expectedRevision: source.global.revision }, control);
+            assert.equal(result.status, 200);
+        });
+        assert.ok(paused.status >= 400 && !paused.operationId);
+        const realOpen = fs.open;
+        let originalsRead = 0;
+        const pausedRead = t.mock.method(fs, "open", (file, ...args) => {
+            if (file === app.sourceFile) originalsRead++;
+            return realOpen(file, ...args);
+        });
+        syncBuiltinESMExports();
+        try {
+            for (const [route, input] of [["sources", {}], ["preview", scope]]) assert.ok((await post("/api/recollection/" + route, input, control)).status >= 400);
+        } finally { pausedRead.mock.restore(); syncBuiltinESMExports(); }
+        assert.equal(originalsRead, 0);
+        assert.equal((await status(preview)).phase, "complete");
+    } finally { await runtime?.close(); await access?.close(); }
+});
+
 test("approved GitHub timer keeps collecting while a scheduled Microsoft source read is waiting", { timeout: 15000 }, async t => {
     const app = await fixture(t, { startCollector: false });
     const entered = Promise.withResolvers(), release = Promise.withResolvers(), completed = Promise.withResolvers();
@@ -1159,6 +1318,45 @@ for (const setting of ["pause", "configuration"]) {
     });
 }
 
+test("metadata becoming unreadable after evidence publication remains outcome-unknown", async t => {
+    const app = await fixture(t, { signedIn: true });
+    const http = await app.http(), panel = await http.panel();
+    await app.append(interaction("metadata-prior"));
+    assert.equal((await http.api(panel, "/api/collection/now", {})).code, 200);
+    const before = await checkpoint(app), config = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
+    const next = interaction("metadata-interrupted");
+    next[1].data.mcpServerName = "cc-invented";
+    next[1].data.toolName = "cc-invented-fetch";
+    const db = new DatabaseSync(app.config.appDbPath);
+    db.exec("CREATE TABLE session_managed_mcp_event_display_names(session_id TEXT NOT NULL,event_id TEXT NOT NULL,display_name TEXT,PRIMARY KEY(session_id,event_id))");
+    db.prepare("INSERT INTO session_managed_mcp_event_display_names VALUES(?,?,?)").run(app.sourceId, next[1].id, "Work IQ");
+    db.close();
+    await app.append(next);
+    let published = false;
+    interceptRenames(t, async (from, to, rename) => {
+        await rename();
+        if (path.dirname(to) === app.context.dataDir && to.endsWith(".state.json")) published = true;
+    });
+    const stat = nativeFs.statSync;
+    t.mock.method(nativeFs, "statSync", (file, ...args) => {
+        if (published && file === app.config.appDbPath) throw Object.assign(new Error("Invented source access loss"),
+            { code: "EACCES", syscall: "stat" });
+        return stat(file, ...args);
+    });
+    syncBuiltinESMExports();
+    const failed = await http.api(panel, "/api/collection/now", {});
+    assert.equal(published, true);
+    assert.equal(failed.code, 409);
+    assert.equal(failed.body.code, "wire_access_admission_failed");
+    assert.equal(failed.body.outcome, "unknown");
+    assert.equal((await loadBoardState(app.context)).evidence.length, 2, "Evidence may have committed; never claim no effect.");
+    const after = await checkpoint(app);
+    assert.equal(after.bytes, before.bytes);
+    assert.equal(after.lastCheck, before.lastCheck, "The original receipt is not replaced by a failed check.");
+    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), config);
+    assert.equal((await app.collector.status()).config.enabled, app.config.enabled);
+});
+
 test("joined HTTP reply-write failure remains outcome-unknown and resumes from unchanged checkpoints after restart", async t => {
     const app = await fixture(t);
     let http = await app.http(), panel = await http.panel();
@@ -1461,12 +1659,19 @@ for (const churnPoint of ["board", "prefix", "unrelated-tail", "final-check"]) t
         assert.ok(changes > 0, `The fixture must change unrelated live-WAL metadata at prefix publication; failures=${JSON.stringify(failures)}.`);
         assert.deepEqual([...failures], [], "Harmless metadata churn must not create unknown publication outcomes.");
         assert.equal(status.backfill?.visitedSources, 1, "The actual automatic prefix progress must be durable.");
-        const prefix = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")));
-        assert.equal(prefix.backfill.sources[0].phase, "visited");
-        assert.equal((await loadBoardState(app.context)).evidence.length, 1);
+        // Drain any later poll before reading the checkpoint and closing this collector.
+        // Restarting in its admission callback correctly supersedes that poll, not this prefix.
+        await app.collector.exclusiveActivity(async () => {
+            const prefix = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")));
+            assert.equal(prefix.backfillSource, app.sourceId);
+            assert.deepEqual(prefix.backfill.sources.map(row => [row.sessionId, row.phase]), [[app.sourceId, "visited"]]);
+            const state = await loadBoardState(app.context);
+            assert.deepEqual(state.evidence.flatMap(record => record.toolCalls.map(call =>
+                [record.sourceSessionId, call.toolCallId])), [[app.sourceId, "prefix-metadata-churn"]]);
+        });
         await app.restart();
         assert.equal((await app.collector.status()).backfill.visitedSources, 1);
-        await app.append(interaction("after-prefix-churn"));
+        await app.collector.exclusiveActivity(() => app.append(interaction("after-prefix-churn")));
         await waitForNativeRecords(app, ["prefix-metadata-churn", "after-prefix-churn"]);
         assert.deepEqual([...failures], []);
     } finally {

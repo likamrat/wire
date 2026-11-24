@@ -4,9 +4,9 @@ import { runInNewContext } from "node:vm";
 import { initializeNavigationPreference } from "../web/sidebar-navigation.mjs";
 
 function fixture({ stored = null, readError, writeError } = {}) {
-    const root = { dataset: {} }, warnings = [], writes = [], events = new Map();
+    const root = { dataset: {}, style: { setProperty() {}, removeProperty() {} } }, warnings = [], writes = [], events = new Map();
     const storage = {
-        getItem(key) { assert.equal(key, "workiq-evidence.navigation"); if (readError) throw readError; return stored; },
+        getItem(key) { if (key === "workiq-evidence.navigation-width") return null; assert.equal(key, "workiq-evidence.navigation"); if (readError) throw readError; return stored; },
         setItem(key, value) { assert.equal(key, "workiq-evidence.navigation"); if (writeError) throw writeError; writes.push(value); stored = value; },
     };
     const navigation = runInNewContext(`(${initializeNavigationPreference.toString()})()`, {

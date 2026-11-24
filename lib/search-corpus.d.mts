@@ -1,7 +1,8 @@
 export type CorpusType = "interaction" | "context" | "reply" | "action" | "tool" | "service" | "report" | "comparison" | "view" | "setting";
 export type CorpusTarget =
-    | { readonly kind: "route"; readonly href: `#${"analyze" | "request" | "reports" | "settings" | "collection-status"}${string}`;
-        readonly focus?: "percentageCharts" | "recordedTiming" | "homeFindings" | `native-message-${string}` | `native-source-fact-${string}` }
+    | { readonly kind: "route"; readonly href: "/compare" | "/reports" | `/${"" | "settings" | "collection-status"}${"" | `?${string}`}`
+        | `#${"analyze" | "request"}?${string}`;
+        readonly focus?: "activityView" | "percentageCharts" | "recordedTiming" | "homeFindings" | `native-message-${string}` | `native-source-fact-${string}` }
     | { readonly kind: "open-saved-report" | "open-saved-comparison"; readonly bundleId: string;
         readonly revision: string; readonly manifestHash: string; readonly documentHash: string }
     | { readonly kind: "open-saved-report-file"; readonly format: "json" | "markdown" | "pdf"; readonly bundleId: string;

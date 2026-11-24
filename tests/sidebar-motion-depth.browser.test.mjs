@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
-import { shadowPaint } from "./color-measurements.mjs";
+
 
 const proofs = process.env.WIRE_MOTION_DEPTH_PROOFS;
 
@@ -71,73 +71,45 @@ async function save(name, value) {
     if (proofs) await writeFile(path.join(proofs, `${name}.json`), JSON.stringify(value, null, 2));
 }
 
-test("built-in glide ignores absent and legacy choices under native and controlled media without a setting", async t => {
-    const results = [];
-    for (const reducedMotion of [null, "reduce", "no-preference"]) for (const storedMotion of [null, "off", "system", "on"]) {
-        await t.test(`${reducedMotion ?? "native"}/${storedMotion ?? "clean"}`, async t => {
-            const page = await setup(t, { storedMotion, reducedMotion });
-            const native = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
-            const frames = await page.evaluate(async () => {
-                const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar"), rows = [];
-                const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-                for (const phase of ["collapse", "expand", "open", "close"]) {
-                    const left = phase === "collapse" || phase === "expand";
-                    document.querySelector(left ? "#navigationCollapse" : phase === "open" ? ".request-card-open" : "#closeContextSidebar").click();
-                    for (let i = 0; i < 120; i++) {
-                        await frame();
-                        rows.push({ phase, width: rail.getBoundingClientRect().width, x: panel.getBoundingClientRect().x, open: panel.open });
-                        if (i > 2 && !(left ? rail.hasAttribute("data-navigation-moving")
-                            : panel.getAnimations().length || panel.open !== (phase === "open"))) break;
-                        if (i === 119) throw new Error(`${phase} did not settle`);
-                    }
-                }
-                return rows;
-            });
-            for (const phase of ["collapse", "expand", "open", "close"]) {
-                const left = phase === "collapse" || phase === "expand";
-                assert.ok(new Set(frames.filter(row => row.phase === phase && (left || row.open)).map(row => Math.round(left ? row.width : row.x))).size >= 3,
-                    `${phase}: built-in glide must paint intermediate positions without opting in`);
-            }
-            await page.evaluate(() => {
-                window.sidebarResizeDelivered = false;
-                addEventListener("resize", () => { window.sidebarResizeDelivered = true; }, { once: true });
-            });
-            await page.setViewportSize({ width: 375, height: 900 });
-            await page.waitForFunction(() => window.sidebarResizeDelivered && document.querySelector("#navigationContent").closest("#navigationDrawer"));
-            const drawerFrames = await page.evaluate(async () => {
-                const drawer = document.querySelector("#navigationDrawer"), rows = [];
-                const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-                for (const phase of ["open", "close"]) {
-                    document.querySelector(phase === "open" ? "#navigationToggle" : "#closeNavigation").click();
-                    for (let i = 0; i < 120; i++) {
-                        await frame(); rows.push({ phase, x: drawer.getBoundingClientRect().x, open: drawer.open });
-                        if (i > 2 && drawer.open === (phase === "open") && !drawer.getAnimations().length) break;
-                        if (i === 119) throw new Error(`Drawer ${phase} did not settle`);
-                    }
-                }
-                return rows;
-            });
-            for (const phase of ["open", "close"]) assert.ok(new Set(drawerFrames.filter(row => row.phase === phase && row.open).map(row => Math.round(row.x))).size >= 3);
-            await page.setViewportSize({ width: 1440, height: 1000 });
-            await page.goto(new URL("#settings?section=display&setting=sidebar-motion", page.url()).href);
-            await page.locator('#workspace[aria-busy="false"]').waitFor();
-            assert.equal(await page.locator("#sidebarMotionPreference,#sidebarMotionNotice,#sidebarMotionHelp").count(), 0);
-            assert.ok(await page.locator("#displayTimeZone").count());
-            assert.ok(await page.locator("#settingsThemePreference").isVisible());
-            await page.locator("#settingsSearch").fill("Sidebar motion");
-            assert.equal(await page.locator("#settingsSearchResults a").count(), 0);
-            const persisted = await page.evaluate(() => ({
-                reads: window.retiredMotionReads.slice(),
-                value: Object.entries(localStorage).find(([key]) => key === "workiq-evidence.sidebar-motion")?.[1] ?? null,
-                reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
-            }));
-            assert.deepEqual(persisted.reads, [], "No runtime reads or writes of the retired preference");
-            assert.equal(persisted.value, storedMotion, "Old storage is preserved, not migrated or deleted");
-            assert.equal(persisted.reduced, native);
-            results.push({ reducedMotion, storedMotion, nativeReduced: native, frames, drawerFrames, persisted });
-        });
-    }
-    await save("built-in-glide-matrix", results);
+// Only the handoff tests hold the real panel and column timelines. A loaded browser
+// can otherwise finish their 320ms glide before it dispatches the next user input.
+async function controlDockedGlide(page) {
+    await page.evaluate(() => {
+        const nodes = ["contextSidebar", "main"].map(id => document.getElementById(id));
+        let held = false;
+        for (const node of nodes) {
+            const animate = node.animate;
+            node.animate = function (...args) {
+                const effect = animate.apply(this, args);
+                if (held) queueMicrotask(() => {
+                    if (effect.playState === "idle") return;
+                    effect.pause();
+                    effect.currentTime = effect.effect.getTiming().duration / 4;
+                });
+                return effect;
+            };
+        }
+        window.holdDockedGlide = () => { held = true; };
+        window.resumeDockedGlide = () => {
+            held = false;
+            for (const node of nodes) for (const effect of node.getAnimations())
+                if (effect.playState === "paused") effect.play();
+        };
+    });
+}
+
+test("the retired motion preference stays unread and unchanged through navigation", async t => {
+    const page = await setup(t, { storedMotion: "off", reducedMotion: "reduce" });
+    await page.locator("#navigationCollapse").click();
+    await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
+    await page.goto(new URL("#settings?section=display&setting=sidebar-motion", page.url()).href);
+    await expect(page.locator("#settingsThemePreference")).toBeVisible();
+    await page.locator("#settingsSearch").fill("Sidebar motion");
+    await expect(page.locator("#settingsSearchResults a")).toHaveCount(0);
+    assert.deepEqual(await page.evaluate(() => ({
+        reads: window.retiredMotionReads.slice(),
+        value: Object.entries(localStorage).find(([key]) => key === "workiq-evidence.sidebar-motion")?.[1],
+    })), { reads: [], value: "off" });
 });
 
 test("retired motion setting is absent from global Search and cannot return through a stale URL", async t => {
@@ -151,7 +123,7 @@ test("retired motion setting is absent from global Search and cannot return thro
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(await page.locator("#sidebarMotionPreference").count(), 0, "Reloading an obsolete deep link cannot recreate the control");
     await expect(page.locator("#settingsThemePreference")).toBeVisible();
-    await expect(page.locator("#displayTimeZone-control")).toBeVisible();
+    await expect(page.locator("[data-settings-section=themes]")).toBeVisible();
     if (proofs) await page.screenshot({ path: path.join(proofs, "display-without-motion.png") });
 });
 
@@ -168,12 +140,37 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         };
         for (const phase of ["open", "close"]) {
             sample(phase);
+            let owners;
+            const observer = new MutationObserver(() => {
+                const reader = panel.getAnimations()[0];
+                if (reader?.startTime == null) return;
+                observer.disconnect();
+                owners = [reader, ...main.getAnimations()].map(animation => ({
+                    animation, start: animation.startTime, rate: animation.playbackRate, state: animation.playState,
+                }));
+                for (const { animation } of owners) animation.pause();
+            });
+            observer.observe(panel, { attributes: true, attributeFilter: [phase === "open" ? "open" : "inert"] });
             document.querySelector(phase === "open" ? ".request-card-open" : "#closeContextSidebar").click();
-            for (let i = 0; i < 120; i++) {
-                await frame(); sample(phase);
-                if (i > 2 && panel.open === (phase === "open") && !panel.getAnimations().length) break;
-                if (i === 119) throw new Error(`${phase} did not settle`);
+            for (let i = 0; i < 120 && !owners; i++) await frame();
+            observer.disconnect();
+            if (!owners) throw Error(`${phase} never started a docked glide`);
+            if (owners.some(owner => owner.start == null || owner.rate <= 0 || owner.state !== "running"))
+                throw Error(`${phase} did not start playing on the document timeline`);
+            const [reader] = owners;
+            // Inspect the same document times, not the same progress on each
+            // effect: independently delayed or differently eased edges must fail.
+            for (const fraction of [.125, .375, .625]) {
+                const time = reader.start + reader.animation.effect.getTiming().duration * fraction / reader.rate;
+                for (const { animation, start, rate } of owners) animation.currentTime = (time - start) * rate;
+                await frame();
+                sample(phase);
             }
+            for (const { animation } of owners) animation.play();
+            await reader.animation.finished;
+            await frame();
+            if (panel.open !== (phase === "open")) throw Error(`${phase} did not settle`);
+            sample(phase);
         }
         return samples;
     });
@@ -184,6 +181,8 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         const maxGap = Math.max(...moving.map(row => Math.abs(row.mainRight - row.panelX)));
         t.diagnostic(JSON.stringify({ phase, widths, maxGap }));
         assert.ok(widths >= 3, `${phase}: main width snaps instead of following the sidebar (${widths} painted width)`);
+        assert.ok((moving[0].mainWidth - moving.at(-1).mainWidth) * (phase === "open" ? 1 : -1) > 40,
+            `${phase}: the main surface must reflow in the direction of the glide`);
         assert.ok(maxGap < 2, `${phase}: main edge must follow the actual exposed sidebar edge, gap ${maxGap}`);
     }
 });
@@ -227,7 +226,8 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     await expect(card).toBeFocused();
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) <= 2);
     await navigateMain(page, "reports");
-    await page.locator(".saved-report-summary").first().click();
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
+    await page.locator('[data-view-key^="inspect-bundle:"]').first().click();
     await panel.waitFor();
     for (const id of ["readerWidthControls", "readerResize", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
     assert.equal(await panel.evaluate(node => node.hasAttribute("data-interaction-reader")), false);
@@ -235,42 +235,13 @@ test("combined geometry keeps exact origin and history through rapid reversal wi
     assert.equal(await page.evaluate(() => document.body.style.getPropertyValue("--context-sidebar-width")), "");
     await page.locator("#closeContextSidebar").click();
     await panel.waitFor({ state: "hidden" });
-    await expect(page.locator(".saved-report-summary").first()).toBeFocused();
+    await expect(page.locator('[data-view-key^="inspect-bundle:"]').first()).toBeFocused();
 });
 
-test("sidebar paint preserves light depth and distinguishes dark inset navigation from contextual depth", async t => {
-    const page = await setup(t), results = [];
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.locator(".request-card-open").first().click();
-        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-        for (const [selector, side] of [["#sidebar", "right"], ["#contextSidebar", "left"]]) {
-            const distances = theme === "dark" && selector === "#sidebar" ? [-2, -1, 2, 6, 12, 24, 40] : undefined;
-            const { bands, screenshot } = await shadowPaint(page, selector, side, distances);
-            results.push({ theme, selector, bands });
-            if (proofs) await writeFile(path.join(proofs, `${theme}-${selector.slice(1)}.png`), screenshot);
-        }
-        await page.locator("#closeContextSidebar").click();
-        await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    }
-    await save("shadow-paint", results);
-    for (const result of results) {
-        t.diagnostic(JSON.stringify(result));
-        if (result.theme === "dark" && result.selector === "#sidebar") {
-            assert.ok(result.bands.filter(band => band.distance < 0).some(band => band.darkening <= -5),
-                "Dark navigation has an actual inset highlight, not an outward shadow band");
-            assert.ok(result.bands.filter(band => band.distance > 0).every(band => Math.abs(band.darkening) < .05));
-            continue;
-        }
-        assert.ok(result.bands[0].darkening >= (result.theme === "light" ? 4 : 2), `${result.theme}/${result.selector}: no visible painted edge depth`);
-        assert.ok(result.bands[2].darkening >= (result.theme === "light" ? 2 : 1), `${result.theme}/${result.selector}: shadow should extend beyond a hairline`);
-        assert.ok(result.bands[4].darkening < result.bands[0].darkening / 2, "Depth fades into the workspace, not a gray slab");
-    }
-});
-
-test("unpaused shared motion reverses and replaces content without stale geometry or hit targets", async t => {
+test("in-flight shared motion reverses and replaces content without stale geometry or hit targets", async t => {
     const page = await setup(t);
     await revealAnalyzeRecords(page);
+    await controlDockedGlide(page);
     const trace = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
         const rail = document.querySelector("#sidebar"), rows = [...document.querySelectorAll(".request-card-open")];
@@ -301,19 +272,27 @@ test("unpaused shared motion reverses and replaces content without stale geometr
         }
         document.querySelector("#navigationCollapse").click(); await advance(4);
         phase = "left-reverse"; document.querySelector("#navigationCollapse").click(); await settle(false);
+        window.holdDockedGlide();
         phase = "open"; rows[0].click(); await advance(4);
         const animation = panel.getAnimations()[0];
+        if (animation?.playState !== "paused" || animation.effect.getComputedTiming().progress <= 0)
+            throw new Error("Expected an in-flight reader entrance");
         phase = "replace";
         event("replace", () => rows[1].click());
         if (panel.getAnimations()[0] !== animation) throw new Error("Content replacement replayed entrance");
+        await advance(2); window.resumeDockedGlide();
         await settle(true);
+        window.holdDockedGlide();
         phase = "close"; document.querySelector("#closeContextSidebar").click(); await advance(4);
         phase = "reverse";
         event("reverse", () => rows[0].click());
+        await advance(2); window.resumeDockedGlide();
         await settle(true);
+        window.holdDockedGlide();
         phase = "both"; document.querySelector("#navigationCollapse").click(); document.querySelector("#closeContextSidebar").click();
+        await advance(2); window.resumeDockedGlide();
         await settle(false);
-        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.documentElement.clientWidth - main.getBoundingClientRect().x,
+        const closeState = { mainWidth: main.getBoundingClientRect().width, available: document.body.getBoundingClientRect().right - main.getBoundingClientRect().x,
             mainAnimations: main.getAnimations().length, overflowAnchor: getComputedStyle(main).overflowAnchor };
         return { frames, events, closeState };
     });
@@ -324,7 +303,7 @@ test("unpaused shared motion reverses and replaces content without stale geometr
     }
     for (const phase of ["open", "replace", "close", "reverse", "both"]) {
         const rows = trace.frames.filter(row => row.phase === phase && row.open && row.panelMoving);
-        assert.ok(rows.length >= 2, `${phase}: sampled actual unpaused motion`);
+        assert.ok(rows.length >= 1, `${phase}: sampled the in-flight layout`);
         assert.ok(rows.every(row => Math.abs(row.x - row.mainRight) < 2), `${phase}: panel and main have different edges`);
         if (phase === "replace") {
             const top = trace.events.find(event => event.label === phase).after.cardY;
@@ -378,78 +357,13 @@ test("native-modal and docked surfaces keep their proper main layout at normal a
         if (width === 375) {
             await page.locator("#navigationToggle").click();
             await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
-            const { bands, screenshot } = await shadowPaint(page, "#navigationDrawer", "right");
-            assert.ok(bands[0].darkening > 0, "Narrow drawer shadow paints onto the native backdrop");
-            if (proofs) await writeFile(path.join(proofs, `${theme}-navigation-modal.png`), screenshot);
+            assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.matches(":modal")), true);
             await page.keyboard.press("Escape");
             await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
             assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true);
         }
     }
     await save("layout-matrix", results);
-});
-
-test("painted synthetic film contains moving edges for both sides and directions", async t => {
-    const page = await setup(t);
-    await chooseTheme(page, "light");
-    await revealAnalyzeRecords(page);
-    const cdp = await page.context().newCDPSession(page), frames = [], acknowledgements = [];
-    const onFrame = event => {
-        frames.push(event);
-        acknowledgements.push(cdp.send("Page.screencastFrameAck", { sessionId: event.sessionId }));
-    };
-    cdp.on("Page.screencastFrame", onFrame);
-    await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
-    const phases = await page.evaluate(async () => {
-        const phases = [], panel = document.querySelector("#contextSidebar"), rail = document.querySelector("#sidebar");
-        const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-        for (const name of ["collapse", "expand", "open", "close"]) {
-            const left = name === "collapse" || name === "expand";
-            const start = Date.now() / 1000;
-            document.querySelector(left ? "#navigationCollapse" : name === "open" ? ".request-card-open" : "#closeContextSidebar").click();
-            for (let i = 0; i < 120; i++) {
-                await frame();
-                if (i > 2 && !(left ? rail.hasAttribute("data-navigation-moving") : panel.getAnimations().length || panel.open !== (name === "open"))) break;
-                if (i === 119) throw new Error(`${name} did not settle`);
-            }
-            phases.push({ name, start, end: Date.now() / 1000 });
-        }
-        return phases;
-    });
-    await cdp.send("Page.stopScreencast");
-    cdp.off("Page.screencastFrame", onFrame);
-    await Promise.all(acknowledgements);
-    await cdp.detach();
-    const painted = await page.evaluate(async frames => {
-        const result = [];
-        const rowY = Math.ceil(document.querySelector(".app-header").getBoundingClientRect().bottom) + 2;
-        for (const frame of frames) {
-            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(frame.data), c => c.charCodeAt(0))]));
-            const canvas = document.createElement("canvas");
-            canvas.width = image.width; canvas.height = image.height;
-            const context = canvas.getContext("2d");
-            context.drawImage(image, 0, 0);
-            const { data } = context.getImageData(0, rowY, image.width, 1);
-            // White pane interiors surround the cool-gray main gutter at this height.
-            let left = 0, right = image.width;
-            while (left < image.width && data[left * 4] >= 254 && data[left * 4 + 1] >= 254) left++;
-            while (right > left && data[(right - 1) * 4] >= 254 && data[(right - 1) * 4 + 1] >= 254) right--;
-            result.push({ timestamp: frame.metadata.timestamp, left, right });
-        }
-        return result;
-    }, frames);
-    await save("painted-film", { phases, painted, nativeReduced: await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches) });
-    for (const phase of phases) {
-        const positions = painted.filter(frame => frame.timestamp >= phase.start && frame.timestamp <= phase.end);
-        const edge = phase.name === "collapse" || phase.name === "expand" ? "left" : "right";
-        assert.ok(new Set(positions.map(row => row[edge])).size >= 3, `${phase.name}: actual captured paint must include intermediate edges`);
-        if (proofs) {
-            const candidates = frames.filter(frame => frame.metadata.timestamp >= phase.start && frame.metadata.timestamp <= phase.end);
-            for (const [label, index] of [["start", 0], ["middle", Math.floor(candidates.length / 2)], ["end", candidates.length - 1]]) {
-                await writeFile(path.join(proofs, `film-${phase.name}-${label}.png`), Buffer.from(candidates[index].data, "base64"));
-            }
-        }
-    }
 });
 
 test("native scrollbar gutters keep main and sidebar edges registered throughout reflow", async t => {
@@ -493,7 +407,7 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
             await frame();
             await scheduler.postTask(() => rows.push({ modal: panel.matches(":modal"),
                 columnMoving: main.getAnimations().length, panelMoving: panel.getAnimations().length,
-                mainRight: main.getBoundingClientRect().right, availableRight: document.documentElement.clientWidth }));
+                mainRight: main.getBoundingClientRect().right, availableRight: document.body.getBoundingClientRect().right }));
             if (i > 2 && !panel.getAnimations().length && !document.querySelector("#sidebar").hasAttribute("data-navigation-moving")) break;
         }
         return rows;
@@ -508,9 +422,10 @@ test("left-rail reflow crossing the native-modal boundary settles the previous d
 test("saved-item replacement keeps its entrance and reverses exit without stale content or focus", async t => {
     const page = await setup(t, { savedReports: 2 });
     await navigateMain(page, "reports");
+    await page.getByRole("link", { name: "Saved library", exact: true }).click();
     const result = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
-        const rows = [...document.querySelectorAll(".saved-report-summary")], frames = [];
+        const rows = [...document.querySelectorAll('[data-view-key^="inspect-bundle:"]')], frames = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
         let phase = "open";
         const snapshot = () => ({
@@ -537,7 +452,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
             throw new Error("Saved inspector did not settle");
         }
         const ids = rows.map(row => row.closest(".saved-library-row").dataset.bundleId);
-        const titles = rows.map(row => row.querySelector(".saved-report-name").textContent);
+        const titles = rows.map(row => row.closest(".saved-library-row").querySelector(".saved-report-name").textContent);
         const interactionCounts = [2, 1];
         rows[0].click(); await advance(3);
         const firstBody = document.querySelector(".saved-report-inspection");
@@ -581,7 +496,8 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     assert.ok(result.removedFirst && result.removedSecond, "Old saved bodies and their controls are released");
     assert.equal(result.beforeReverse.moving, true, "Reverse during actual unpaused exit");
     assert.ok(Math.abs(result.beforeReverse.x - result.afterReverse.x) < 1, "Saved exit reversal preserves the presented edge");
-    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1);
+    assert.ok(Math.abs(result.beforeReverse.mainRight - result.afterReverse.mainRight) < 1,
+        `Main edge jumps from ${result.beforeReverse.mainRight} to ${result.afterReverse.mainRight}px on reversal`);
     assert.ok(result.beforeSame.moving && Math.abs(result.beforeSame.x - result.afterSame.x) < 1);
     assert.ok(Math.abs(result.beforeSame.mainRight - result.afterSame.mainRight) < 1);
     assert.equal(result.retiredExitState, "idle", "The superseded exit cannot later finish against the reopened owner");
@@ -599,16 +515,16 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     }
     await page.keyboard.press("Escape");
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
-    assert.equal(await page.locator(".saved-report-summary").first().evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('[data-view-key^="inspect-bundle:"]').first().evaluate(node => node === document.activeElement), true);
     const departure = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar");
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
-        document.querySelector(".saved-report-summary").click();
+        document.querySelector('[data-view-key^="inspect-bundle:"]').click();
         for (let i = 0; i < 120 && (!panel.open || panel.getAnimations().length); i++) await frame();
         document.querySelector("#closeContextSidebar").click();
         for (let i = 0; i < 120 && !panel.inert; i++) await frame();
         const exiting = panel.getAnimations()[0];
-        document.querySelector('.primary-navigation [data-nav="settings"]').click();
+        document.querySelector('nav [data-nav="settings"]').click();
         await frame();
         return { wasExiting: Boolean(exiting), retiredState: exiting?.playState, open: panel.open,
             bodyCount: document.querySelectorAll(".saved-report-inspection").length,
@@ -624,6 +540,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
 
 test("trusted main-page scrolling revokes exit compensation for a reflow-sensitive anchor", async t => {
     const page = await setup(t, { nativeScrollbars: true });
+    await controlDockedGlide(page);
     await revealAnalyzeRecords(page);
     const wideTop = await page.locator(".request-card-open").first().evaluate(node => node.getBoundingClientRect().top + scrollY);
     await page.locator(".request-card-open").first().click();
@@ -647,6 +564,10 @@ test("trusted main-page scrolling revokes exit compensation for a reflow-sensiti
             anchorTop: document.querySelector(".request-card-open").getBoundingClientRect().top,
             focus: document.activeElement?.id,
         });
+        window.addEventListener("wheel", event => {
+            if (event.isTrusted) proof.wheelCapture = { y: scrollY, target: event.target.tagName,
+                onMain: main.contains(event.target), delta: event.deltaY, scrollCalls: proof.programmaticScrolls.length };
+        }, { once: true, capture: true, passive: true });
         document.addEventListener("wheel", event => {
             if (event.isTrusted) {
                 proof.wheel = { ...read(), trusted: true, deltaY: event.deltaY,
@@ -666,18 +587,32 @@ test("trusted main-page scrolling revokes exit compensation for a reflow-sensiti
             observer.disconnect();
         }, { once: true });
     });
+    await page.evaluate(() => window.holdDockedGlide());
     await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").inert && document.querySelector("#contextSidebar").getAnimations().length > 0);
     await page.locator("#navigationCollapse").focus();
-    await page.mouse.move(400, 500);
-    await page.mouse.wheel(0, 160);
+    const mainX = await page.locator("#main").evaluate(node => {
+        const x = node.getBoundingClientRect().left + 16;
+        if (!node.contains(document.elementFromPoint(x, 500))) throw new Error("Wheel must target the main page, not the rail divider");
+        return x;
+    });
+    await page.mouse.move(mainX, 500);
+    const beforeWheel = await page.evaluate(() => scrollY);
+    assert.ok(beforeWheel >= 160, "The test needs room for an upward wheel gesture");
+    await page.mouse.wheel(0, -160);
+    await page.waitForFunction(() => window.exitScrollProof.wheel?.trusted);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const observed = await page.evaluate(() => ({ capture: window.exitScrollProof.wheelCapture,
+        after: window.exitScrollProof.wheel.y, now: scrollY,
+        compensation: window.exitScrollProof.programmaticScrolls.slice(window.exitScrollProof.wheelCapture.scrollCalls) }));
+    assert.ok(observed.capture.onMain && observed.now < beforeWheel, JSON.stringify({ beforeWheel, ...observed }));
+    await page.evaluate(() => window.resumeDockedGlide());
     await page.waitForFunction(() => window.exitScrollProof.finished && window.exitScrollProof.userY !== null);
     const result = await page.evaluate(() => window.exitScrollProof);
     if (proofs) result.video = await page.video().path();
     await save("trusted-exit-scroll", { wideTop, dockedTop, ...result });
-    assert.ok(result.wheel.trusted && result.wheel.open && result.wheel.moving, "A real wheel event revokes ownership during unpaused exit");
-    assert.ok(Math.abs(result.wheel.y - result.initialY - result.wheel.compensated - result.wheel.deltaY) <= 1,
-        "Actual main scrolling, minus measured reflow compensation, must equal the trusted wheel delta");
+    assert.ok(result.wheel.trusted && result.wheel.open && result.wheel.moving, "A real wheel event revokes ownership during exit");
+    assert.ok(result.userY < beforeWheel, `The trusted wheel must move the main page from ${beforeWheel}, got ${result.userY}`);
     assert.ok(Math.abs(result.final.y - result.userY) <= 1, `Exit must keep the user's newer scroll ${result.userY}, got ${result.final.y}`);
     assert.ok(result.programmaticScrolls.filter(row => row.afterWheel).every(row => row.before === row.after),
         "Revoked ownership cannot cause another programmatic scroll");

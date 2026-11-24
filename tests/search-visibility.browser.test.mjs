@@ -169,7 +169,7 @@ test("consent revocation while hidden cannot revive a retained reply on return",
     assert.equal(revoked.status, 200);
     await expect.poll(async () => (await status()).body.indexId).toBe(null);
     await visibility(page, false);
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.", { timeout: 10000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Saved replies are unavailable for Search.", { timeout: 10000 });
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 
@@ -428,7 +428,7 @@ test("a late return snapshot cannot settle or replace a newer route read", { tim
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
     releases[1].resolve();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page).toHaveURL(/#analyze\?layer=http/);
+    await expect(page).toHaveURL(url => url.pathname === "/" && url.search === "?layer=http" && !url.hash);
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#reportsView")).toBeHidden();
     await expect(page.locator("#message")).toBeHidden();
@@ -541,7 +541,8 @@ test("return restores the current results page and keyboard reading position", {
     await row.focus();
     const id = await row.getAttribute("data-search-id");
     await visibility(page, true); await visibility(page, false);
-    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2; 24 total");
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
+    await expect(page.locator("#wireSearchCount")).toHaveText("24 matches");
     await expect(page.locator(`[data-search-id="${id}"]`)).toBeFocused();
     await expect(page.locator("#wireSearchPanel")).toBeVisible();
 });

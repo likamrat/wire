@@ -1,8 +1,9 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createExportController, takeNativeSaveRefusal, writeBundle } from "../lib/export.mjs";
 import { createNativeRetainedViews } from "../lib/native-retained-views.mjs";
-import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { committedNativeReportFixture } from "./native-report-controller-fixture.mjs";
 import { chatFixture, coworkFixture } from "./native-read-model-fixtures.mjs";
 import { fixture } from "./helpers.mjs";
@@ -94,12 +95,20 @@ test("prepared reports keep their original source after its collection receipt i
     const reviewed = await controller.review(app.owner, preview.previewId, true, undefined, services);
     const added = chatFixture();
     for (const row of added) row.scope.conversationId += "-after-prepared-archive-proof";
-    for (let cycle = 0; cycle < 129; cycle++) {
-        const begun = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
-        const receipt = await app.persistence.commitSegmented(begun.ticket, cycle === 0 ? [...envelopes, ...added] : []);
-        assert.equal(receipt.status, "committed");
-        await app.persistence.retire(begun.ticket);
-    }
+    const advanced = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
+    assert.equal((await app.persistence.commitSegmented(advanced.ticket, [...envelopes, ...added])).status, "committed");
+    await app.persistence.retire(advanced.ticket);
+    // Only the intervening history is fixture data. The original receipt, successor root,
+    // archival transaction and subsequent status lookup all come from the real writer.
+    await updateBoardState(app.context, state => {
+        const retention = state.nativeRetention;
+        const successor = retention.receipts.find(receipt => receipt.operationId === advanced.ticket.operationId);
+        assert.equal(successor.status, "committed");
+        while (retention.receipts.length < 128) retention.receipts.push({ ...structuredClone(successor), operationId: randomUUID() });
+    });
+    const rollover = await app.persistence.beginSegmented({ operationId: randomUUID() }, app.services.nativeReportAdmission);
+    assert.equal((await app.persistence.commitSegmented(rollover.ticket, [])).status, "committed");
+    await app.persistence.retire(rollover.ticket);
     const current = await loadBoardState(app.context);
     assert.ok(current.nativeRetention.receiptArchive);
     assert.equal(current.nativeRetention.receipts.some(receipt => receipt.operationId === operationId), false);
@@ -317,15 +326,15 @@ test("empty source scope stays frozen through collection, actual saved formats a
     assert.equal(later.preview.snapshot.nativeEvidence.conversations.length, 1);
     const laterReviewed = await controller.review(app.owner, later.preview.previewId, true, undefined, later.services);
     const savedLater = (await controller.confirm(app.owner, later.preview.previewId, true, undefined, later.services)).bundle;
-    const comparison = await controller.previewComparison(app.owner, savedEmpty.bundleId, savedLater.bundleId,
+    const comparison = await historicalComparison(app.context, savedEmpty.bundleId, savedLater.bundleId,
         { title: "Invented source-bound comparison", formats }, app.services);
     assert.equal(comparison.comparison.status, "ready");
     const chat = comparison.comparison.nativeComparison.units.filter(unit => unit.sourceId === "microsoft-365-chat");
     assert.ok(chat.length > 0);
     assert.ok(chat.every(unit => unit.baselineCount === null && unit.delta === null && unit.baselineState === "source-not-present"),
         "No native cohort in the earlier report cannot manufacture an improvement from zero.");
-    const comparisonReviewed = await controller.reviewComparison(app.owner, comparison.previewId, true, undefined, app.services);
-    const savedComparison = (await controller.confirmComparison(app.owner, comparison.previewId, true, undefined, app.services)).bundle;
+    const comparisonReviewed = comparison;
+    const savedComparison = comparison.bundle;
     const cases = [
         [savedEmpty, reviewed, "report", "empty-native-report"],
         [savedLater, laterReviewed, "report", "later-native-report"],

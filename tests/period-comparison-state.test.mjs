@@ -16,7 +16,9 @@ import { nativeConsumerFixture } from "./native-consumer-fixture.mjs";
 import { fixture } from "./helpers.mjs";
 
 test("actual mixed-source snapshot accepts only its qualified dated-side unit transition", async t => {
-    const app = await nativeConsumerFixture(t, { records: [fixture("comparison-unit-transition")] });
+    const github = fixture("comparison-unit-transition");
+    github.toolCalls[0].startedAt = "2026-09-30T12:00:00Z";
+    const app = await nativeConsumerFixture(t, { records: [github] });
     const api = await app.start();
     const options = { layer: "tool", groupBy: "workload", bucket: "day", filters: { scope: "history" },
         timeContext: time.normalize({ timeZone: "UTC", locale: "en-US" }) };

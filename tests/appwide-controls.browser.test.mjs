@@ -6,12 +6,83 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, chooseTheme, navigateSettings, closeAnalyzeFilters } from "./helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
+import { openReportLibrary } from "./report-journey-helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { renderAccountSettingsFixture } from "./account-settings-presentation-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_VISUAL_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+test("report outline actions keep pointer paint inside one face and retain keyboard focus", async t => {
+    const { runtime } = await searchFixture(t, { records: records(), frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    for (const palette of ["petrol", "blue", "linen", "midnight", "field"]) for (const mode of ["light", "dark"]) {
+        await page.goto(new URL("/settings?section=themes", runtime.url).href);
+        await chooseTheme(page, mode);
+        await page.locator(`.palette-option:has(#palette-${palette})`).click();
+        await page.locator("nav [data-nav=reports]").click(); await ready(page);
+        await expect(page.locator("html")).toHaveAttribute("data-evidence-palette", palette);
+        for (const selector of ["#reportDeskDates", "#reportDeskActivity", "[popovertarget=reportFileOptions]"]) {
+            const control = page.locator(selector);
+            await control.scrollIntoViewIfNeeded(); await page.mouse.move(0, 0);
+            const box = await control.boundingBox();
+            assert.ok(box.height >= 44);
+            // Sample the target above the border; this strip must not acquire a second face.
+            const strip = () => page.screenshot({ clip: { x: Math.floor(box.x + box.width / 2),
+                y: Math.ceil(box.y) + 1, width: 2, height: 2 } });
+            const clear = await strip(), idle = await control.evaluate(measureControlSurface);
+            await control.hover({ position: { x: Math.floor(box.width / 2), y: 2 } });
+            const hover = await control.evaluate(measureControlSurface);
+            assert.deepEqual(await strip(), clear, `${selector}: hover spills into its target`);
+            assert.notEqual(hover.face, idle.face);
+            await page.mouse.down();
+            const pressed = await control.evaluate(measureControlSurface);
+            assert.deepEqual(await strip(), clear, `${selector}: press spills into its target`);
+            assert.notEqual(pressed.face, hover.face);
+            assert.deepEqual(await control.boundingBox(), box);
+            for (const state of [idle, hover, pressed]) assert.ok(contrast(state.ink, state.face) >= 4.5);
+            await page.mouse.up(); await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
+            await control.press("Shift+Tab"); await page.keyboard.press("Tab");
+            await expect(control).toBeFocused();
+            const focus = await control.evaluate(measureControlSurface);
+            assert.ok(focus.focusWidth >= 2 && contrast(focus.focus, focus.backdrop) >= 3);
+        }
+    }
+});
+
+test("the report primary, Settings commands and directional shortcut share a face without sharing a meaning", async t => {
+    const app = await searchFixture(t, { records: records(), frontend: "react", reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(app.runtime.url + "reports"); await ready(page);
+    const primary = page.getByRole("button", { name: "Prepare preview", exact: true });
+    async function face(control) {
+        return control.evaluate(node => {
+            const css = getComputedStyle(node), paint = getComputedStyle(node, "::before");
+            return { height: node.getBoundingClientRect().height, inset: paint.top, radius: paint.borderRadius,
+                padding: css.paddingInlineStart, font: css.fontSize, gap: css.columnGap, fill: paint.backgroundColor,
+                ink: css.color, border: paint.borderColor };
+        });
+    }
+    const reference = await face(primary);
+    assert.notEqual(reference.fill, "rgba(0, 0, 0, 0)");
+    assert.equal(reference.gap, "8px");
+    await page.locator('nav [data-nav=settings]').click(); await ready(page); await navigateSettings(page, "privacy");
+    const shortcut = page.getByRole("link", { name: "Open saved reports", exact: true });
+    const [review, choose, open] = await Promise.all([page.locator("#deleteActivity"), page.locator("#recollectActivity"), shortcut].map(face));
+    for (const value of [review, choose, open]) for (const key of ["height","inset","radius","padding","font"]) {
+        assert.equal(value[key], reference[key], key);
+    }
+    assert.notEqual(review.ink, choose.ink);
+    assert.notEqual(choose.border, open.border);
+    assert.equal(open.fill, "rgba(0, 0, 0, 0)");
+    await expect(shortcut.locator("[data-icon-role=forward]")).toBeVisible();
+    await shortcut.hover(); await expect(shortcut).toHaveCSS("text-decoration-line", "none");
+    await shortcut.focus(); await shortcut.press("Enter");
+    await expect(primary).toBeVisible();
+});
+
 async function capture(page, name) {
     if (!proofDir) return;
     await mkdir(proofDir, { recursive: true });
@@ -79,7 +150,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
         if (url.pathname === "/api/snapshot") snapshots.push(url.pathname);
     });
     await page.goto(app.runtime.url + "#analyze"); await ready(page);
-    await expect(page.locator("#activityListSummary")).toContainText("8 interactions with 10 matching Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toContainText(/\b8 interactions\b.*\b10 matching (?:Work IQ )?tool calls\b/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.waitForFunction(() => document.getAnimations().every(animation =>
@@ -137,6 +208,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await closeAnalyzeFilters(page); await capture(page, "compare");
     await page.locator('nav [data-nav=reports]').click(); await ready(page);
+    await openReportLibrary(page);
     await capture(page, "reports");
     const jump = page.locator(".library-page-jump"), input = jump.locator("input"), go = jump.getByRole("button", { name: "Go to page", exact: true });
     await expect(go).toHaveText("Go to page");
@@ -147,27 +219,27 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
             const input = node.querySelector("input"), button = node.querySelector("button");
             const box = input.getBoundingClientRect(), action = button.getBoundingClientRect();
             return { width: box.width, height: box.height, actionHeight: action.height,
-                faceInset: parseFloat(getComputedStyle(input.parentElement, "::before").top),
-                actionInset: parseFloat(getComputedStyle(button, "::before").top), overflow: document.documentElement.scrollWidth - innerWidth };
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
         });
         assert.ok(geometry.width >= 44 && geometry.height >= 44);
         assert.equal(geometry.height, geometry.actionHeight);
-        assert.equal(geometry.faceInset, geometry.actionInset);
-        assert.equal(geometry.overflow, 0);
-        await input.fill("2"); await go.click(); await expect(input).toHaveValue("2");
-        await input.fill("1"); await input.press("Enter"); await expect(input).toHaveValue("1");
+        assert.ok(geometry.overflow <= 1, "Paging does not create horizontal scrolling");
+        const first = page.getByRole("button", { name: "View report: Mailbox calls", exact: true });
+        await expect(first).toBeVisible();
+        await input.fill("2"); await go.click(); await expect(first).toBeHidden();
+        await input.fill("1"); await input.press("Enter"); await expect(first).toBeVisible();
         await input.fill("3"); assert.equal(await input.evaluate(node => node.checkValidity()), false); await input.fill("1");
         await capture(page, `pager-${width}-${scale}`);
     }
     await page.evaluate(() => document.documentElement.style.fontSize = "100%");
     await page.getByRole("button", { name: "View report: Mailbox calls", exact: true }).click();
-    await expect(page.locator("#savedReportReader iframe")).toBeVisible();
+    await expect(page.getByRole("article", { name: "Report brief" })).toContainText("8 interactions");
     await page.locator("#savedReaderFormat-control").click();
     await page.locator('.select-popup [data-value="pdf"]').click();
     await expect(page.getByLabel("PDF page", { exact: true })).toBeVisible();
     assert.ok((await page.getByLabel("PDF page", { exact: true }).boundingBox()).width >= 44);
     await capture(page, "saved-pdf");
-    await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "display");
+    await page.locator('nav [data-nav=settings]').click(); await navigateSettings(page, "regional");
     await capture(page, "settings");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.locator('#settingsView .select-trigger:visible').first().click();
@@ -175,6 +247,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
     await page.keyboard.press("Escape");
     await page.emulateMedia({ forcedColors: "active" });
     await page.locator('nav [data-nav=reports]').click(); await ready(page);
+    await openReportLibrary(page);
     await page.locator(".library-page-jump input").focus();
     assert.equal(await page.locator(".library-page-jump .number-field").evaluate(node => getComputedStyle(node, "::before").outlineWidth), "2px");
     assert.equal(await page.locator('nav [data-nav=reports]').evaluate(node => getComputedStyle(node).backgroundImage), "none");

@@ -1,3 +1,5 @@
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { request as httpRequest } from "node:http";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -19,10 +21,8 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { BOARD_ID } from "../lib/evidence.mjs";
 import { createMicrosoftNativeHost, assertNativeRequestAdmission, nativeProtocolFailure } from "../lib/microsoft-native-host.mjs";
-import { request as httpRequest } from "node:http";
 import { chromium } from "playwright";
 import { readMicrosoftNativeConfiguration, prepareMicrosoftNativeConfiguration } from "../lib/microsoft-native-configuration.mjs";
-import { setImmediate as nextTurn } from "node:timers/promises";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
 import { nativeFailureDetails, withNativeFailurePredicate } from "../lib/microsoft-session-state.mjs";
 import filesystem from "node:fs/promises";
@@ -727,19 +727,7 @@ test("HTTP GitHub reports and comparisons keep their single writer admission on 
         assert.doesNotMatch(JSON.stringify(result.body), /nativeSourceBinding/);
         saved.push(result.body.bundle.bundleId);
     }
-    const preview = await app.api(capability, "/api/report-comparison/preview", {
-        baselineId: saved[0], laterId: saved[1], formats: ["html", "json"],
-    });
-    assert.equal(preview.status, 200);
-    assert.equal((await app.api(capability, "/api/report-comparison/review", {
-        previewId: preview.body.previewId, disclosureReviewed: true,
-    })).status, 200);
-    const result = await bounded(app.api(capability, "/api/report-comparison/save", {
-        previewId: preview.body.previewId, confirmed: true,
-    }));
-    assert.equal(result.status, 200);
-    assert.doesNotMatch(JSON.stringify(result.body), /nativeSourceBinding/);
-    assert.equal((await app.api(capability, "/api/report-comparison/open", { bundleId: result.body.bundle.bundleId })).status, 200);
+    assert.equal((await app.api(capability, "/api/report-comparison/preview", { baselineId: saved[0], laterId: saved[1] })).status, 404);
     assert.equal((await app.api(capability, "/api/artifact-deletion/preview", {
         artifactKind: "report", artifactId: saved[0],
     })).status, 200);
@@ -1330,7 +1318,7 @@ test("ordinary GitHub artifact metadata cannot expose or imply deletion through 
     const hiddenId = `export-${randomUUID()}`, hiddenTitle = "Private dependency title";
     await updateBoardState(app.context, state => {
         state.exports.push({ bundleId: hiddenId, kind: "comparison", title: hiddenTitle,
-            nativeEvidenceHash: "a".repeat(64), nativeSourceBinding: { schemaVersion: 1, account: "0".repeat(64) },
+            comparisonHash: "a".repeat(64), nativeComparisonHash: "a".repeat(64), nativeSourceBinding: { schemaVersion: 1, account: "0".repeat(64) },
             sourceReports: saved.map(item => ({ bundleId: item.bundleId, snapshotHash: item.snapshotHash })), formats: [], files: {} });
     });
     const target = saved[0].bundleId;
@@ -1338,8 +1326,6 @@ test("ordinary GitHub artifact metadata cannot expose or imply deletion through 
         ["/api/report-artifacts/list", {}],
         ["/api/report/open", { bundleId: target }],
         ["/api/artifact-file", { bundleId: target, kind: "report", format: "json" }],
-        ["/api/report-comparison/inspect", { baselineId: target, laterId: saved[1].bundleId }],
-        ["/api/report-comparison/preview", { baselineId: target, laterId: saved[1].bundleId, formats: ["json"] }],
     ]) {
         const response = await app.api(capability, route, input);
         assert.equal(response.status, 200, JSON.stringify(response.body));

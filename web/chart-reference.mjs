@@ -30,12 +30,13 @@ export function chartReferenceFacts(analytics, model) {
 
 export const chartReferenceMarkup = `
 <dialog id="meaning" class="chart-reference" aria-labelledby="chartReferenceTitle">
-  <div class="chart-reference-heading"><h2 id="chartReferenceTitle" tabindex="-1">Chart guide</h2><button id="closeChartReference" class="quiet" type="button" aria-label="Close chart guide">Close</button></div>
+  <div class="chart-reference-heading"><h2 id="chartReferenceTitle" tabindex="-1">Guide</h2><button id="closeChartReference" class="quiet" type="button" aria-label="Close Guide">Close</button></div>
   <div id="chartReferenceBody" class="chart-reference-body">
   <p id="chartReferenceNotice" class="notice" role="status" hidden></p>
   <p id="chartReferenceStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
   <section id="chartReferenceIndex" class="chart-reference-index" aria-labelledby="chartReferenceIndexTitle" hidden>
     <h3 id="chartReferenceIndexTitle" tabindex="-1">Choose a chart</h3>
+    <button id="chartReferenceTopicToggle" type="button" class="quiet" aria-expanded="false" aria-controls="chartReferenceTopics" hidden>Topics</button>
     <nav id="chartReferenceTopics" class="chart-reference-topics" aria-label="Chart guide topics"></nav>
   </section>
   <div id="chartReferenceGuide" class="chart-reference-layout">
@@ -63,7 +64,7 @@ export const chartReferenceMarkup = `
 
 // The caller supplies accepted chart facts and the existing navigation/table owners.
 export function mountChartReference({ host, root, trigger, createState, ux, results, help, categories, dimensional, readContext, renderQualification,
-    renderExact, openComparisonRecords, onUnavailable, publicationToken, isCurrent, motionTiming }) {
+    renderExact, openComparisonRecords, onUnavailable, onAnalyzeExit, publicationToken, isCurrent, motionTiming }) {
     if (typeof publicationToken !== "function" || typeof isCurrent !== "function") {
         throw new TypeError("Chart help requires publicationToken and isCurrent.");
     }
@@ -112,17 +113,17 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (className) node.className = className;
         return node;
     };
-    const control = (text, action, className = "quiet") => {
+    const control = (text, action, className = "quiet", views = ["guide", "index"]) => {
         const button = el("button", text, className), token = contextToken;
         button.type = "button";
         button.addEventListener("click", () => {
-            if (button.isConnected && root.open && !closing && ["guide", "index"].includes(state.value().view)
+            if (button.isConnected && root.open && !closing && views.includes(state.value().view)
                 && button.checkVisibility() && currentView(token)) action();
         });
         return button;
     };
     let context, contextToken = null, renderKey, exactRender = null, size = null, lastFocused = null, returnFocus = trigger, rowQuery = "";
-    let motion = null, closing = false;
+    let motion = null, closing = false, lastAnalyzeTopic = null, returnY = 0;
     const currentPublication = token => token != null && typeof token.then !== "function" && isCurrent(token) === true;
     function currentView(token = contextToken) {
         if (currentPublication(token)) return true;
@@ -155,7 +156,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function requestClose() {
         if (!root.open || closing || !currentView()) return;
         ux.hideTooltip();
-        move(false);
+        if (root.dataset.mode === "analyze" && onAnalyzeExit) onAnalyzeExit();
+        else if (root.dataset.mode === "analyze") navigate("closed");
+        else move(false);
     }
     function dismiss() {
         if (!root.open || closing || !currentView()) return;
@@ -165,6 +168,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function readingRegion() {
         return $(state.value().view === "data" ? "chartReferenceExact"
             : state.value().view === "index" ? "chartReferenceIndex" : "chartReferenceExplanation");
+    }
+    function readingScroll() {
+        return root.dataset.mode === "analyze" ? doc.scrollingElement : readingRegion();
     }
     function keepFocusVisible(token = contextToken) {
         if (!root.open || closing || !currentView(token)) return;
@@ -190,12 +196,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function group() {
         return el("section", undefined, "chart-reference-group");
     }
-    function countShare(tag, { count, percentage }) {
-        const value = el(tag, undefined, "chart-reference-value");
-        value.append(ux.countShare({ count, percentage: context.model?.separateUnits ? undefined : percentage }));
-        return value;
-    }
-    function definition(label, description, { value, outcome } = {}) {
+    function definition(label, description, { outcome } = {}) {
         const row = el("div", undefined, "chart-reference-definition"), term = el("dt"), detail = el("dd", description, "chart-reference-definition-copy");
         if (outcome) {
             const cue = el("span", undefined, `chart-reference-outcome result-tone-${outcome}`);
@@ -204,12 +205,11 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         }
         term.append(doc.createTextNode(label)); row.append(term);
         if (description) row.append(detail);
-        if (value !== undefined) row.append(countShare("dd", value));
         return row;
     }
     function topicName(topic) {
         if (topic === "outcomes") return context.mode === "comparison" ? "Results by period"
-            : results.outcomeTitle(context.layer, context.model);
+            : context.layer === "tool" ? "Tool call outcomes" : results.outcomeTitle(context.layer, context.model);
         if (context.mode === "comparison") {
             return { time: context.layer === "tool" ? "Call timing" : "Recorded timing",
                 categories: "Reading the comparison" }[topic];
@@ -219,7 +219,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             if (topic === "categories") return "Service categories";
             if (topic === "paths") return "API paths";
         }
-        return topics.find(([id]) => id === topic)[1];
+        return topic === "tools" ? "Calls by tool" : topics.find(([id]) => id === topic)[1];
     }
     function intro(topic) {
         if (context.mode === "comparison") {
@@ -228,13 +228,15 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             return "Change is Period B minus Period A. The periods keep their own records and coverage.";
         }
         if (topic === "outcomes") return context.layer === "tool"
-            ? "Worked means tool completion, not answer correctness."
+            ? "Each call counts once. A completed call means the tool finished, not that the answer was correct or that every returned item succeeded."
             : help.layers[context.layer];
-        if (topic === "time") return "";
-        if (topic === "services") return "A record can involve several services, so counts can overlap.";
-        if (topic === "models") return "Counts interactions by original response model. One interaction may use several models.";
+        if (topic === "time") return context.layer === "tool" ? "Each bar counts calls by their recorded start. Undated calls stay in the period total, outside the bars."
+            : "Each interval counts qualifying dated records. A record without a usable date cannot be placed on the timeline.";
+        if (topic === "services") return "A service is unidentified when the record does not name an app or WIRE cannot map the saved target to one. Each service’s share uses all matching records, and one record can name several services.";
+        if (topic === "models") return "Each interaction counts once for each recorded response model. Interactions without a recorded model name stay in the denominator.";
         if (topic === "authors") return "One originating prompt per matching interaction, across all pages. Tool calls and follow-ups do not add prompts.";
-        if (topic === "tools") return "";
+        if (topic === "tools") return context.layer === "tool" ? "Count each invocation under its recorded tool name. Repeated uses count separately; one call with several targets still counts once."
+            : "Group matching records by their associated tool, not by the number of invocations.";
         if (topic === "categories") return context.layer === "tool" ? help.charts.activityCategory : help.charts.workload;
         return context.layer === "tool" ? help.charts.endpoint
             : help.layers[context.layer];
@@ -294,13 +296,15 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const header = el("div", undefined, "chart-reference-group-heading");
         if (showFacts()) header.append(el("span", `${number(context.model.total)} ${results.unit(context.layer, context.model.total)}`, "muted"));
         section.append(header);
-        const keys = context.layer === "code-reference" ? ["unknown"] : outcomeKeys;
+        const keys = context.mode === "comparison" ? (context.layer === "code-reference" ? ["unknown"] : outcomeKeys) : applicableOutcomes();
         const rows = keys => {
             const list = el("dl", undefined, "chart-reference-definitions");
             for (const key of keys) {
-                const fact = context.model?.outcomes.rows.find(row => row.id === key);
-                list.append(definition(names[key], context.layer === "tool" && ["success", "failure"].includes(key) ? "" : help.resultMeaning(key, context.layer), {
-                    outcome: key, value: showFacts() ? fact : undefined,
+                const meaning = context.mode === "analyze" && context.layer === "tool" && key === "failure"
+                    ? "The failure belongs to the call itself. Look for a diagnostic on that call, not an HTTP error on a returned item."
+                    : context.mode === "comparison" && context.layer === "tool" && ["success", "failure"].includes(key) ? "" : help.resultMeaning(key, context.layer);
+                list.append(definition(names[key], meaning, {
+                    outcome: key,
                 }));
             }
             return list;
@@ -309,29 +313,67 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (context.model?.separateUnits && !context.nativeView) section.append(el("p", "These results use different source units.", "chart-reference-help"));
         host.append(section);
     }
+    function applicableOutcomes() {
+        const usual = { tool: ["success", "failure", "partial", "unknown"], "reported-api": ["success", "failure", "unknown", "other"],
+            "direct-request": ["success", "failure", "unknown", "other"], "recorded-http": ["success", "failure", "other"],
+            http: ["success", "failure", "unknown", "other", "transport"], "code-reference": ["unknown"] }[context.layer];
+        return [...new Set([...usual, ...outcomeKeys.filter(key => context.model?.outcomes.rows.some(row => row.id === key && row.count > 0))])];
+    }
+    function workedExample(topic) {
+        if (topic === "outcomes" && !context.nativeOnly && ["tool", "reported-api"].includes(context.layer)) return "Two calls in one interaction can report different kinds of errors. The retrieval below failed; the fetch finished but returned an error for one item.";
+        if (topic === "services" && !context.nativeOnly && context.layer === "tool") return "One interaction asks Copilot for help, then fetches two targets. Only one target is recognized as Files. That tells you about the fetch, not which apps Copilot used.";
+        if (topic === "categories" && context.layer === "tool") return "A fetch targeting Files and Mail counts once under More than one service, rather than once in each service category.";
+        if (topic === "authors") return "A human prompt followed by four tool calls contributes one human prompt, not four agent prompts.";
+        if (topic === "models") return "An interaction with two model names appears in both rows. One without a name appears in neither, but still counts toward the total.";
+        if (topic === "time") return "An undated record can count toward the selected period but cannot be assigned to Tuesday. Moving the visible window does not change the period total.";
+        if (topic === "tools") return context.layer === "tool" ? "Three separate fetch calls count three times. One fetch requesting three targets counts once." : "One tool can account for several records. Its record count is not a separate count of invocations.";
+        if (topic === "paths") return context.layer === "code-reference" ? "A path mentioned in code is still a reference when no execution or response was observed." : "Two paths on one batch do not prove that the first returned item belongs to the first path.";
+        if (topic === "outcomes" && context.layer === "code-reference") return "A request mentioned in a script is a reference, not a successful or failed execution.";
+        if (topic === "outcomes" && context.layer === "tool") return "A call without a usable result is not a failed call. A source that explicitly reports partial completion has supplied a different outcome.";
+        if (topic === "outcomes") return "An HTTP 403 is evidence about that recorded response, not proof that the entire interaction failed.";
+        if (topic === "services" || topic === "categories") return "A record with no qualified service target cannot be counted as activity in Mail simply because another record mentions Mail.";
+        return "";
+    }
+    function examplePanel(topic) {
+        const example = el("aside", undefined, "chart-reference-example");
+        example.append(el("h4", "Worked example"), el("p", "Illustrative, not from your activity", "guide-example-caption"), el("p", workedExample(topic)));
+        const cases = !context.nativeOnly && context.layer === "tool" && ({
+            outcomes: [["workiq-retrieve", "Tool failed · ToolUnavailable", "The tool was unavailable. This invocation counts as one failed call."],
+                ["workiq-fetch", "Tool completed · HTTP 200 and 403", "The file entry returned HTTP 200. The message entry returned HTTP 403. That is one completed call with an error on the message entry."]],
+            services: [["workiq-ask", "No downstream app list", "The request to Copilot is recorded; the apps used internally are not."],
+                ["workiq-fetch", "One of two targets identified", "One path identifies Files. The other path was saved, but WIRE cannot classify it."]],
+        })[topic];
+        if (cases) {
+            const list = el("div", undefined, "guide-example-calls");
+            cases.forEach(([tool, result, detail], i) => {
+                const entry = el("details"), summary = el("summary");
+                summary.dataset.viewKey = `guide-example:${topic}:${tool}`;
+                summary.append(el("span", `Call ${i + 1} · ${tool}`, "guide-example-caption"), el("span", result), ux.icon("next"));
+                entry.append(summary, el("p", detail)); list.append(entry);
+            });
+            example.append(list);
+        }
+        return example;
+    }
     function serviceGuide(host) {
         const section = group(), data = context.model?.services;
         if (showFacts()) {
             if (data.missingDetailCount) section.append(el("p",
                 `${number(data.missingDetailCount)} records have missing service details${data.partialCount ? `; ${number(data.partialCount)} also have a known service` : ""}.`));
-            const list = el("div", undefined, "chart-reference-services");
-            for (const row of data.recordedRows) {
-                const item = el("div", undefined, `chart-reference-service dimensional-tone-${dimensional.tone(row.id)}`);
-                const line = el("div"), label = el("span", undefined, "chart-reference-service-name"), swatch = el("i", undefined, "chart-reference-service-key");
-                swatch.setAttribute("aria-hidden", "true"); label.append(swatch, doc.createTextNode(row.label));
-                line.append(label, countShare("span", row));
-                const track = el("span", undefined, "chart-reference-service-track"), fill = el("i");
-                track.setAttribute("aria-hidden", "true"); track.hidden = Boolean(context.model.separateUnits);
-                fill.style.width = `${row.fraction * 100}%`;
-                track.append(fill); item.append(line, track); list.append(item);
-            }
-            section.append(list);
-            host.append(section);
+            if (section.childElementCount) host.append(section);
         }
         const meanings = group(), list = el("dl", undefined, "chart-reference-definitions");
-        if (context.layer === "tool") list.append(definition("Search / retrieval", "A tool-purpose association, not proof of downstream service execution."),
-            definition(categories.operation("workiq-ask").label, categories.operation("workiq-ask").description));
-        else list.append(definition("Evidence", help.layers[context.layer]));
+        if (context.layer === "tool") {
+            const hosted = categories.displayEvidence({ reason: "hosted-routing" }, { screen: true });
+            const unmapped = categories.displayEvidence({ reason: "unrecognized-path" }, { screen: true });
+            list.append(definition("Search requested", "Counts a search request, not confirmed use of a named app."),
+                definition("Search endpoint", "The recorded target identifies a search endpoint."),
+                definition(categories.operation("workiq-ask").label, hosted.description),
+                definition(unmapped.label, unmapped.description));
+            meanings.append(list, el("p", "Use View call beside a service or operation to inspect its evidence. If several calls match, the link opens the earliest one. The tool-call count opens the whole interaction. A service label does not tell you who wrote the prompt or whether the call failed."));
+            host.append(meanings); return;
+        }
+        list.append(definition("Evidence", help.layers[context.layer]));
         list.append(definition("Missing service details", "Missing targets are not assigned to a service. A record can have both known targets and missing details."));
         meanings.append(list); host.append(meanings);
     }
@@ -362,11 +404,11 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                     : "Dated and undated counts are unavailable."));
                 host.append(section);
             }
-            list.append(definition("Dates and grouping", "Weeks start Monday, in the display time zone."));
+            list.append(definition("Dates and grouping", "Individual calendar days by default. Long timelines page through 90 intervals; Timeline dates below the chart reaches earlier or later dates without changing the selected-period totals. Explicit weekly or monthly views keep their intervals; weeks start Monday."));
         } else if (topic === "models") {
             if (showFacts()) {
                 const section = group(), data = context.model.models;
-                section.append(el("p", `${number(data.total)} matching interactions. Model counts can overlap.`));
+                section.append(el("p", `${number(data.total)} matching interactions.`));
                 const coverage = { recorded: "Recorded", partial: "Partly recorded", unavailable: "Not recorded", unverified: "Not verified", conflicting: "Conflicting" };
                 for (const [key, label] of Object.entries(coverage)) list.append(definition(label, `${number(data.coverage[key])} interactions`));
                 host.append(section);
@@ -379,9 +421,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 section.append(el("p", `${number(total)} matching ${total === 1 ? "interaction" : "interactions"}. Each belongs to one author category.`));
                 host.append(section);
             }
-            list.append(definition("My prompts", "Recorded user origin, not verified account identity."),
+            list.append(definition("Human prompts", "Recorded user origin, not verified account identity."),
                 definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
-                definition("Author unverified", "Missing, conflicting, system or unsupported author evidence. These interactions stay in the denominator."),
+                definition("Author unverified", "The saved record does not establish a human or agent sender. These interactions still count. Filter to Author unverified and open an interaction to see its recorded reason."),
                 definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));
         } else if (topic === "tools") {
             list.append(definition("Discovery / preparation", "API, schema or agent lookup, not data-service execution."),
@@ -392,38 +434,93 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         } else {
             list.append(definition("Path not recorded", "No usable path was saved."),
                 definition("Other", "Smaller groups; listed individually in Exact numbers."));
+            if (context.layer === "tool") {
+                const unmapped = categories.displayEvidence({ reason: "unrecognized-path" }, { screen: true });
+                list.append(definition(unmapped.label, `${unmapped.description} Choose See exact numbers, select the path or batch, then open the prompt. Expand the numbered call marked “Matches current view” to inspect its recorded evidence.`));
+            }
         }
         const section = group(); section.append(list); host.append(section);
     }
+    function readingTopic(key) {
+        const tool = context.layer === "tool";
+        return {
+            outcomes: tool ? ["A tool call failed", "Did the tool fail, or did it return an error?"]
+                : context.layer === "code-reference" ? ["Execution not observed", "Does a reference mean the code ran?"]
+                    : ["Recorded outcomes", "What do the recorded statuses tell me?"],
+            services: ["A service is unidentified", "Why is the service unidentified?"],
+            time: tool ? ["When calls happened", "When did calls start?"] : ["Activity over time", "When was the activity recorded?"],
+            tools: tool ? ["Which tools ran", "How often was each tool used?"] : ["Tools behind records", "Which tools are associated with these records?"],
+            authors: ["Recorded prompt authors", "What is recorded about the prompt author?"],
+            models: ["Which models appeared", "Which response models were recorded?"],
+            categories: ["How activity is grouped", tool ? "How are calls with several targets grouped?" : "How are records assigned to a category?"],
+            paths: ["Which path was requested", "Which path or operation was requested?"],
+        }[key];
+    }
+    function setTopicChooser(open) {
+        $("chartReferenceTopicToggle").setAttribute("aria-expanded", String(open));
+    }
     function renderIndex() {
-        const topic = state.value().topic, navigation = $("chartReferenceTopics");
+        const { topic, view } = state.value(), navigation = $("chartReferenceTopics");
         navigation.replaceChildren();
-        const visible = context.mode === "comparison" ? topics.filter(([id]) => ["outcomes", "time", "categories"].includes(id)) : topics;
-        for (const [key] of visible) {
-            const button = control(topicName(key), () => navigate("guide", key), "chart-reference-topic");
-            button.append(ux.icon("next"));
-            button.dataset.referenceTopic = key; button.setAttribute("aria-pressed", String(key === topic));
-            button.setAttribute("aria-controls", "chartReferenceExplanation"); navigation.append(button);
+        const comparison = context.mode === "comparison";
+        const sets = comparison ? [["", ["outcomes", "time", "categories"]]] : [
+            ["Investigate a result", ["outcomes", "services"]], ["Read a measure", ["time", "tools", "authors", "models", "categories", "paths"]],
+        ];
+        for (const [title, keys] of sets) {
+            const list = el("div", undefined, "chart-reference-topic-group");
+            if (title) list.append(el("h4", title));
+            for (const key of keys) {
+                const button = control(comparison ? topicName(key) : readingTopic(key)[0], () => {
+                    setTopicChooser(false);
+                    if (navigate("guide", key) && !comparison && currentView()) $("chartReferenceTopicTitle").focus({ preventScroll: true });
+                }, "chart-reference-topic", comparison ? ["guide", "index"] : ["guide", "data"]);
+                button.dataset.referenceTopic = key;
+                if (view !== "index" && key === topic) button.setAttribute("aria-current", "page");
+                button.setAttribute("aria-controls", "chartReferenceExplanation"); list.append(button);
+            }
+            navigation.append(list);
         }
-        $("chartReferenceIndexTitle").textContent = context.mode === "comparison" ? "Compare" : "Choose a chart";
-        $("chartReferenceAllTopics").replaceChildren(ux.icon("back"), doc.createTextNode(context.mode === "comparison" ? "All topics" : "All charts"));
+        $("chartReferenceIndexTitle").textContent = comparison ? "Compare" : "Topics";
+        const toggle = $("chartReferenceTopicToggle");
+        toggle.hidden = comparison;
+        if (!comparison) toggle.replaceChildren(doc.createTextNode("Topics · " + readingTopic(topic)[0]), ux.icon("next"));
+        $("chartReferenceAllTopics").replaceChildren(ux.icon("back"), doc.createTextNode("All topics"));
     }
     function renderGuide() {
         const topic = state.value().topic;
         renderIndex();
         const host = $("chartReferenceExplanation");
-        const title = el("h3", topicName(topic)); title.id = "chartReferenceTopicTitle"; title.tabIndex = -1;
+        const analyze = context.mode === "analyze";
+        const title = el("h3", analyze ? readingTopic(topic)[1] : topicName(topic)); title.id = "chartReferenceTopicTitle"; title.tabIndex = -1;
         host.replaceChildren(title);
+        if (analyze) {
+            const chartName = el("p", undefined, "guide-chart-name");
+            chartName.append(ux.icon("section-guide"), doc.createTextNode(topicName(topic))); title.before(chartName);
+        }
         const introduction = context.nativeOnly ? topic === "outcomes" && context.layer === "tool"
-            ? "Worked means tool completion, not answer correctness." : "" : intro(topic);
+            ? "Each call counts once. Completion does not establish answer correctness." : "" : intro(topic);
         if (introduction) host.append(el("p", introduction, "chart-reference-intro"));
         qualify(host);
-        if (context.nativeView) nativeGuide(host, topic);
+        const reading = analyze ? el("div", undefined, "guide-reading") : host;
+        if (analyze) reading.append(el("h4", "How to read it"));
+        if (context.nativeView) nativeGuide(reading, topic);
         if (!context.nativeOnly) {
-            if (context.nativeView) host.append(el("h3", "GitHub Copilot"));
-            if (topic === "outcomes") outcomeGuide(host);
-            else if (topic === "services") serviceGuide(host);
-            else otherGuide(host, topic);
+            if (context.nativeView) reading.append(el("h4", "GitHub Copilot"));
+            if (topic === "outcomes") outcomeGuide(reading);
+            else if (topic === "services") serviceGuide(reading);
+            else otherGuide(reading, topic);
+        }
+        if (analyze) {
+            const spread = el("div", undefined, "guide-reading-spread");
+            spread.append(reading, examplePanel(topic)); host.append(spread);
+        }
+        if (topic === "outcomes" && context.mode === "analyze" && context.layer === "tool" && !context.nativeOnly) {
+            const related = el("details", undefined, "chart-reference-related");
+            const summary = el("summary", "Returned API entries");
+            summary.dataset.viewKey = "guide-outcomes:returned-entries";
+            related.append(summary, el("p", help.layers["reported-api"]),
+                el("p", "A retained entry with no usable status is still an entry. A call with no returned entries adds nothing to that total. A recorder connection failure without a response is a separate HTTP record."));
+            reading.append(related);
         }
         const actions = $("chartReferenceActions");
         actions.replaceChildren();
@@ -441,10 +538,19 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         const token = contextToken;
         if (!currentView(token)) return;
         const current = state.value(), guide = current.view === "guide", index = current.view === "index";
+        root.dataset.mode = context.mode;
+        $("chartReferenceTitle").textContent = context.mode === "comparison" ? "Chart guide" : "Guide";
+        const backToPage = $("closeChartReference");
+        backToPage.setAttribute("aria-label", context.mode === "comparison" ? "Close chart guide" : "Back to Analyze");
+        if (backToPage.dataset.mode !== context.mode) {
+            backToPage.replaceChildren(...(context.mode === "comparison" ? [ux.icon("close")] : [ux.icon("back"), doc.createTextNode("Back to Analyze")]));
+            backToPage.dataset.mode = context.mode;
+        }
         exactRender = null;
         exactQualification();
         $("chartReferenceGuide").hidden = !guide;
-        $("chartReferenceIndex").hidden = !index;
+        $("chartReferenceIndex").hidden = !index && context.mode !== "analyze";
+        $("chartReferenceAllTopics").hidden = context.mode === "analyze";
         $("chartReferenceExact").hidden = current.view !== "data";
         $("chartReferenceSource").hidden = !context.canOpenData;
         $("chartReferenceNotice").textContent = context.notice || "";
@@ -454,7 +560,9 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (index) renderIndex();
         else if (guide) renderGuide();
         else {
+            if (context.mode === "analyze") renderIndex();
             $("chartReferenceDataTitle").textContent = topicName(current.topic);
+            $("chartReferenceBack").replaceChildren(ux.icon("back"), doc.createTextNode("Back to explanation"));
             $("chartReferenceFind").hidden = current.topic !== "paths";
             $("chartReferenceFindInput").value = rowQuery;
             $("chartReferenceFindInput").disabled = !context.canOpenData;
@@ -469,6 +577,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                         isCurrent: () => currentView(token) && exactRender === owner && root.open && !closing
                             && state.value().view === "data" && state.value().topic === current.topic,
                         rowQuery: current.topic === "paths" ? rowQuery : "", resetPage,
+                        ...(current.topic === "outcomes" ? { outcomeKeys: applicableOutcomes() } : {}),
                     });
                 } catch (error) {
                     if (!currentView(token)) return;
@@ -484,7 +593,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             else data.append(el("p", context.unavailableReason, "notice"));
         }
     }
-    function sync({ view = "closed", topic = state.value().topic, restoreFocus = false, restoreQuery } = {}) {
+    function sync({ view = "closed", topic = state.value().topic, restoreFocus = false, restoreQuery, keepSearchFocus = false } = {}) {
         if (view === "closed") {
             if (contextToken !== null && !currentPublication(contextToken)) { withdrawAccess(); return false; }
             const token = contextToken;
@@ -495,8 +604,11 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             trigger.setAttribute("aria-expanded", "false");
             if (root.open) root.close();
             host.hidden = true;
-            if (restoreFocus && currentView(token) && !root.open && state.value().view === "closed"
-                && returnFocus?.checkVisibility()) returnFocus.focus({ preventScroll: true });
+            setTopicChooser(false);
+            if (restoreFocus && currentView(token) && !root.open && state.value().view === "closed" && returnFocus?.checkVisibility()) {
+                if (root.dataset.mode === "analyze") doc.defaultView.scrollTo(0, returnY);
+                returnFocus.focus({ preventScroll: true });
+            }
             return true;
         }
         const token = publicationToken();
@@ -530,14 +642,18 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (view === "data") state.showData();
         else if (view === "index") state.showIndex();
         else if (state.value().view === "data") state.back();
+        if (context.mode === "analyze" && view === "guide") lastAnalyzeTopic = topic;
         const key = JSON.stringify([context.key, view, topic, context.notice, context.qualification, context.qualificationParts,
             context.coverage, context.available, context.canOpenData, rowQuery]);
-        const focus = activeFocus();
+        const focused = doc.activeElement, focus = activeFocus();
         if (key !== renderKey) {
             paint();
             if (!currentView(token)) return false;
             renderKey = key;
-            if (previous.view !== view || previous.topic !== topic) readingRegion().scrollTop = 0;
+            if (previous.view !== view || previous.topic !== topic) {
+                if (!opening && context.mode === "analyze") root.scrollIntoView({ block: "start" });
+                else readingRegion().scrollTop = 0;
+            }
         }
         if (!opening && context.available && context.canOpenData && previousContextKey !== context.key) {
             $("chartReferenceStatus").textContent = context.mode === "comparison" ? "Period records are now available." : topicName(topic) + " values updated.";
@@ -547,20 +663,29 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
             returnFocus = trigger;
             host.hidden = false;
             watchSize(token);
-            root.showModal();
+            if (context.mode === "comparison") root.showModal();
+            else if (keepSearchFocus) {
+                // Restoring a nonmodal Guide after Search completes must not run dialog.show()'s focusing steps.
+                returnY = doc.defaultView.scrollY;
+                root.open = true;
+            }
+            else {
+                returnY = doc.defaultView.scrollY; root.show();
+                if (onAnalyzeExit) doc.defaultView.scrollTo(0, 0); else root.scrollIntoView({ block: "start" });
+            }
             if (!currentView(token) || !root.open) return false;
             trigger.setAttribute("aria-expanded", "true");
-            $("chartReferenceTitle").focus({ preventScroll: true });
-            move(true);
+            if (!keepSearchFocus) (context.mode === "analyze" && onAnalyzeExit ? trigger : $("chartReferenceTitle")).focus({ preventScroll: true });
+            if (context.mode === "comparison") move(true);
         } else if (reopening) {
             move(true);
             $("chartReferenceTitle").focus({ preventScroll: true });
-        } else if (previous.view !== view) {
+        } else if (previous.view !== view || previous.topic !== topic) {
             const target = view === "data" ? $("chartReferenceDataTitle")
-                : view === "index" ? $("chartReferenceTopics").querySelector("[aria-pressed=true]") || $("chartReferenceIndexTitle")
+                : view === "index" ? $("chartReferenceTopics").querySelector(`[data-reference-topic="${topic}"]`) || $("chartReferenceIndexTitle")
                     : previous.view === "data" ? $("chartReferenceShowData") : $("chartReferenceTopicTitle");
             target.focus({ preventScroll: true });
-        } else if (focus) {
+        } else if (focus && (!focused.isConnected || !focused.checkVisibility())) {
             const target = findFocus(focus) || (view === "data" ? $("chartReferenceDataTitle") : $("chartReferenceTopicTitle"));
             target.focus({ preventScroll: true });
             keepFocusVisible();
@@ -569,7 +694,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     $("closeChartReference").replaceChildren(ux.icon("close"));
     trigger.setAttribute("aria-controls", root.id);
-    trigger.setAttribute("aria-haspopup", "dialog");
+    if (!onAnalyzeExit) trigger.setAttribute("aria-haspopup", "dialog");
     trigger.setAttribute("aria-expanded", "false");
     $("closeChartReference").addEventListener("click", requestClose);
     $("chartReferenceBack").addEventListener("click", () => {
@@ -578,12 +703,24 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     $("chartReferenceAllTopics").addEventListener("click", () => {
         if (root.open && !closing && state.value().view === "guide" && currentView()) navigate("index");
     });
+    $("chartReferenceTopicToggle").addEventListener("click", () => {
+        const toggle = $("chartReferenceTopicToggle");
+        if (root.open && !closing && toggle.checkVisibility() && currentView()) setTopicChooser(toggle.getAttribute("aria-expanded") !== "true");
+    });
     $("chartReferenceFindInput").addEventListener("input", event => {
         if (!root.open || closing || state.value().view !== "data" || state.value().topic !== "paths" || !currentView() || !context.canOpenData) return;
         rowQuery = event.target.value;
         paint({ resetPage: true });
     });
     root.addEventListener("cancel", event => { event.preventDefault(); dismiss(); });
+    root.addEventListener("keydown", event => {
+        if (event.key !== "Escape" || event.defaultPrevented || !root.open || root.dataset.mode !== "analyze") return;
+        event.preventDefault();
+        const toggle = $("chartReferenceTopicToggle");
+        if (toggle.checkVisibility() && toggle.getAttribute("aria-expanded") === "true") {
+            setTopicChooser(false); toggle.focus();
+        } else dismiss();
+    });
     ux.dismissOnOutside(root, dismiss);
     root.addEventListener("close", () => { if (!root.open && state.value().view !== "closed") navigate("closed"); });
     root.addEventListener("focusin", event => {
@@ -608,7 +745,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function withdrawAccess() {
         cancelMotion();
         state.close(); context = null; contextToken = null; renderKey = undefined; exactRender = null;
-        rowQuery = ""; lastFocused = null; returnFocus = null;
+        rowQuery = ""; lastFocused = null; returnFocus = null; lastAnalyzeTopic = null;
         size?.disconnect(); size = null;
         const selection = doc.getSelection();
         if (root.contains(selection?.anchorNode) || root.contains(selection?.focusNode)) selection.removeAllRanges();
@@ -644,7 +781,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     function capture() {
         if (contextToken !== null && !currentPublication(contextToken)) { withdrawAccess(); return null; }
         if (!root.open || closing) return null;
-        return { ...state.value(), publicationToken: contextToken, key: context.key, revision: context.revision, scrollTop: readingRegion().scrollTop, rowQuery,
+        return { ...state.value(), publicationToken: contextToken, key: context.key, revision: context.revision, scrollTop: readingScroll().scrollTop, rowQuery,
             ...activeFocus() };
     }
     function restore(saved) {
@@ -666,7 +803,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         }
         if (!sync({ view: saved.view, topic: saved.topic, restoreQuery: saved.rowQuery })) return false;
         if (!currentView(saved.publicationToken)) return false;
-        readingRegion().scrollTop = saved.scrollTop;
+        readingScroll().scrollTop = saved.scrollTop;
         const target = findFocus(saved);
         if (!currentView(saved.publicationToken)) return false;
         target?.focus({ preventScroll: true });
@@ -675,6 +812,8 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     return {
         open: topic => sync({ view: "guide", topic }),
+        openAnalyze: (start, topic, keepSearchFocus = false) => sync({ view: "guide", keepSearchFocus,
+            topic: topics.some(([id]) => id === topic) ? topic : start === "last" && lastAnalyzeTopic ? lastAnalyzeTopic : "outcomes" }),
         close: requestClose,
         leave: () => sync({ view: "closed" }),
         refresh: () => {

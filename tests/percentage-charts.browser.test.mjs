@@ -70,7 +70,7 @@ test("prompt shares separate native conversations and erase exact authorship fac
     await expect(card.locator(".percentage-exact .percentage-empty")).toHaveCount(1);
     await render([record]);
     await expect(card.locator(".percentage-denominator")).toBeVisible();
-    await expect(card.locator(".percentage-table tbody th")).toHaveText(["My prompts", "Agent prompts", "Author unverified"]);
+    await expect(card.locator(".percentage-table tbody th")).toHaveText(["Human prompts", "Agent prompts", "Author unverified"]);
     await page.evaluate(() => window.view.withdrawAccess());
     await expect(card.locator(".percentage-legend,.percentage-table,[data-count]")).toHaveCount(0);
     assert.equal(await card.getAttribute("data-total"), null);
@@ -154,11 +154,26 @@ test("access withdrawal drops the chart model and all private exact content with
 
 test("flat outcome paint retains exact tiny/full circles, inert centers, local fills and separate keyboard labels", async t => {
     const page = await setup(t);
-    for (const theme of ["light", "dark"]) for (const counts of [[193, 25, 1], [1022, 1, 1], [1, 0, 0], [1, 1, 0], [0, 0, 1], [0, 0, 0]]) {
+    for (const theme of ["light", "dark"]) for (const counts of [[193, 25, 1], [999, 1, 1], [1, 0, 0], [1, 1, 0], [0, 0, 1], [0, 0, 0]]) {
         await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; }, theme);
         await update(page, counts);
         const total = counts.reduce((sum, count) => sum + count, 0);
         assert.equal(await page.locator(".percentage-ring").count(), total ? 1 : 0);
+        if (total === 1001) {
+            const outcomes = page.locator('[data-percentage-card="outcomes"]');
+            await expect(outcomes.getByRole("link", { name: /Tool failed: 1 of 1,001 Work IQ tool calls \(<0.1%\)/ })).toBeVisible();
+            await expect(outcomes.locator('.percentage-slice[data-category="partial"]')).toHaveCount(0);
+            const failure = outcomes.locator('.percentage-slice[data-category="failure"]');
+            await expect(failure).toBeVisible();
+            const hits = await failure.evaluate((path, total) => {
+                // Probe either side of the one-call wedge, not just its declared fraction.
+                return [-0.1, 0.5, 1.1].map(calls => {
+                    const angle = Math.PI / 2 + 2 * Math.PI * (Number(path.dataset.start) + calls / total);
+                    return path.isPointInFill(new DOMPoint(85 * Math.cos(angle), 85 * Math.sin(angle)));
+                });
+            }, total);
+            assert.deepEqual(hits, [false, true, false], "The failure is painted inside its share, not over either neighbor");
+        }
         for (const slice of await page.locator(".percentage-slice").all()) {
             const measured = await slice.evaluate(node => {
                 const start = +node.dataset.start, end = +node.dataset.end;
@@ -220,7 +235,10 @@ test("outcome emphasis preserves light fades, accepted dark fills and forced col
             assert.match(paint.fill, /^url\(/);
             assert.equal(paint.filter, "brightness(0.9)");
         } else {
-            assert.equal(paint.fill, "rgb(242, 139, 130)");
+            const cue = page.locator('[data-percentage-card="outcomes"] [data-category="failure"] .percentage-cue');
+            assert.equal(paint.fill, await cue.evaluate(node => getComputedStyle(node).color));
+            assert.notEqual(paint.fill, await page.locator('[data-percentage-card="outcomes"] [data-category="success"] .percentage-cue')
+                .evaluate(node => getComputedStyle(node).color));
             assert.equal(paint.filter, "none");
         }
         await page.emulateMedia({ forcedColors: "active" });

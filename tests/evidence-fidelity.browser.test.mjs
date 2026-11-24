@@ -38,23 +38,23 @@ test("cards, reader and author filters explain fresh and retained failures witho
     await page.goto(runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => document.fonts.ready);
-    const card = id => page.locator(`.request-row[data-view-key="request:${id}"] .request-card-open`);
+    const card = id => page.locator(`.request-row[data-view-key="request:${id}"]`);
     const reason = "Work IQ reported HTTP 503 (Service unavailable). No further error details are retained.";
     for (const [index, actor] of ["user", "agent", "unknown"].entries()) {
-        await expect(card(records[index].scenarioId)).toContainText({ user: "My prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+        await expect(card(records[index].scenarioId)).toContainText({ user: "Human prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
         await expect(card(records[index].scenarioId)).toContainText(reason);
     }
     await expect(card("invented-legacy")).toContainText("The tool reported HTTP 503 (Service unavailable). No further error details are retained.");
     await expect(card("invented-legacy")).toContainText("Author unverified");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        await card(records[0].scenarioId).click();
+        await card(records[0].scenarioId).locator(".request-card-open").click();
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
         const reader = page.locator("#requestContent");
-        await expect(reader).toContainText("My prompt");
+        await expect(reader).toContainText("Human prompt");
         await expect(reader).toContainText(reason);
         await expect(reader).not.toContainText(/unsupported format|Request timed out|try again/i);
-        await expect(reader).toContainText("The recorded path does not identify a named app. The call still counts; its result is shown separately.");
+        await expect(reader).toContainText("The recorded /businessapps/me path does not name a specific business app. The call still counts; its result is shown separately.");
         await expect(reader).not.toContainText(/Inspect the recorded request|named-app service counts|Other identified targets/);
         if (process.env.WIRE_FIDELITY_PROOFS) {
             await mkdir(process.env.WIRE_FIDELITY_PROOFS, { recursive: true });
@@ -68,7 +68,7 @@ test("cards, reader and author filters explain fresh and retained failures witho
         [records[1].scenarioId, "Agent prompt", reason],
         [records[2].scenarioId, "Author unverified", reason],
     ]) {
-        await card(id).click();
+        await card(id).locator(".request-card-open").click();
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
         await expect(page.locator("#requestContent")).toContainText(label);
         await expect(page.locator("#requestContent")).toContainText(expectedReason);
@@ -81,7 +81,7 @@ test("cards, reader and author filters explain fresh and retained failures witho
     await expect(page.locator(".request-card-open")).toHaveCount(1);
     await expect(card(records[0].scenarioId)).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
-    await card(records[0].scenarioId).click();
+    await card(records[0].scenarioId).locator(".request-card-open").click();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await expect(page.locator("#requestContent")).toContainText(reason);
     assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));

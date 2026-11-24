@@ -51,7 +51,7 @@ test("v3 comparison and period report deltas preserve both signs without changin
         const legacyChange = difference === 0 ? "Unchanged"
             : `${difference < 0 ? "\u2212" : "+"}${legacy.formatValue(Math.abs(difference), "ms")}`;
         assert.ok(comparisonBodyHtml(model, v2).includes(legacyChange), "v2 HTML retains legacy duration wording");
-        assert.ok(renderComparisonMarkdown(model, v2).includes(legacy.formatValue(difference, "ms")), "v2 Markdown retains legacy duration wording");
+        assert.ok(renderComparisonMarkdown(model, v2).includes(difference === 0 ? "Unchanged" : legacy.formatValue(difference, "ms")), "v2 Markdown retains legacy duration wording");
 
         const { state, input } = periodFixture();
         for (const record of state.evidence) for (const call of record.toolCalls) {
@@ -95,7 +95,6 @@ test("a one-in-ten-thousand change remains nonzero in app, HTML and Markdown com
         bundleId: "export-precision",
         sourceReports: [model.baseline, model.later],
     });
-    const patternLine = markdown.split("\n").find(line => line.startsWith("| Mail / workiq-fetch"));
-    assert.ok(patternLine.includes("0.01"), `Tiny measured change was lost: ${patternLine}`);
-    assert.doesNotMatch(patternLine, /\| -?0\.0 \|/);
+    const patternLine = markdown.split("\n").find(line => line.startsWith("| Mail | workiq-fetch |"));
+    assert.match(patternLine, /\| 1\/10000 \| 0\/10000 \| -0\.01 pp \|$/);
 });

@@ -62,9 +62,9 @@ export function searchHitPresentation(hit, { showSource = true } = {}) {
         ].filter(part => part.text);
     }
     if (field !== "source" && hit.type === "view" && hit.target?.kind === "route" && typeof hit.target.href === "string") {
-        const names = { analyze: "Analyze", reports: "Reports", settings: "Settings", "collection-status": "Collection status" };
-        const view = hit.target.href.slice(1).split("?")[0];
-        if (Object.hasOwn(names, view)) shown.source = names[view] === hit.title ? [] : plain(names[view]);
+        const names = { "/": "Analyze", "/compare": "Compare", "/reports": "Reports", "/settings": "Settings", "/collection-status": "Collection status" };
+        const path = hit.target.href.split("?")[0];
+        if (Object.hasOwn(names, path)) shown.source = names[path] === hit.title ? [] : plain(names[path]);
     }
     if (!showSource && field !== "source") shown.source = [];
     return shown;
@@ -101,23 +101,19 @@ export const liveSearchStyles = `
 html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-entry {position:relative;display:grid;grid-template-columns:minmax(0,1fr);align-items:center;flex:1 1 280px;min-width:180px;max-width:480px}
 .wire-search-entry>label {font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);white-space:nowrap}
-.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:16px;box-shadow:var(--surface-shadow);font:var(--type-body)/var(--leading-ui) var(--font);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
-@media(prefers-color-scheme:dark) {
- :root:not([data-evidence-theme]) .wire-search-panel {--wire-search-match:#67c9df}
-}
-:root[data-evidence-theme=dark] .wire-search-panel {--wire-search-match:#67c9df}
+.wire-search-panel {position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:16px;box-shadow:var(--surface-shadow);font:var(--type-body)/var(--leading-ui) var(--font);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
 .wire-search-filters,.wire-search-paging {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .wire-search-filters {gap:8px;padding:4px 6px 8px}
 .wire-search-panel > p:not(.visually-hidden):not(:empty) {margin:8px}
 #wireSearchMatchesTitle {display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-xs) var(--space-md)}
 #wireSearchMatchesTitle>span {min-width:0;overflow-wrap:anywhere}
 #wireSearchCount {color:var(--ink)}
-.wire-search-set {margin:0;min-width:0}
-.wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px 6px 4px 34px;font:inherit;color:var(--muted)}
+.wire-search-set {--result-glyph-column:20px;--result-text-inset:calc(var(--choice-row-inset) + var(--result-glyph-column) + var(--space-sm));margin:0;min-width:0}
+.wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px var(--choice-row-inset) 4px var(--result-text-inset);font:inherit;color:var(--muted)}
 .wire-search-results {padding:0;margin:0;list-style:none}
 .wire-search-results>li+li {margin-top:2px}
-.wire-search-group-label {margin:10px 6px 2px 34px;font:inherit;color:var(--search-category)}
-#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px 6px;transition:var(--control-paint-transition)}
+.wire-search-group-label {margin:10px var(--choice-row-inset) 2px var(--result-text-inset);font:inherit;color:var(--search-category)}
+#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:var(--result-glyph-column) minmax(0,1fr);align-items:start;gap:var(--space-sm);width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px var(--choice-row-inset);transition:var(--control-paint-transition)}
 #wireSearchPanel .wire-search-hit:hover:not(:disabled) {background:var(--hover)}
 #wireSearchPanel .wire-search-hit:active:not(:disabled) {background:var(--pill-pressed)}
 @media(prefers-reduced-motion:reduce) {#wireSearchPanel .wire-search-hit {transition:none}}
@@ -127,7 +123,7 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-body {grid-column:2;display:grid;gap:4px;min-width:0}
 .wire-search-heading {min-width:0;overflow-wrap:anywhere}
 .wire-search-title {font:inherit;min-width:0;overflow-wrap:anywhere}
-.wire-search-hit mark {background:var(--accent-soft);color:var(--wire-search-match);font-weight:600;text-decoration:none}
+.wire-search-hit mark {background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .wire-search-excerpt {white-space:normal;overflow-wrap:anywhere;font:inherit;color:var(--muted)}
 .wire-search-meta,.wire-search-source,.wire-search-limitation {font:inherit;color:var(--muted);min-width:0;overflow-wrap:anywhere}
 .wire-search-meta {display:flex;gap:4px 8px;flex-wrap:wrap;align-items:baseline}
@@ -193,7 +189,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, presentHit, serviceIcon, nativeSearch }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, authorship, presentHit, serviceIcon, nativeSearch }) {
     if (typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function" || typeof api.accessState !== "function") {
         throw new TypeError("Search requires the shared access publication fence.");
     }
@@ -309,7 +305,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             || issue.types.some(type => requestedTypes.includes(type))) ?? [];
         if (issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "reply"
             && ["not-authorized", "revoked", "not-retained", "source-unavailable"].includes(issue.code))) {
-            return "Saved GitHub replies are unavailable for Search.";
+            return nativeSearch?.active() ? "Saved GitHub replies are unavailable for Search." : "Saved replies are unavailable for Search.";
         }
         const reports = issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "report");
         if (reports && issues.every(issue => issue.code === "missing")) {
@@ -397,13 +393,12 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             changing: "Saved content changed. Search again.",
             unavailable: "Search is unavailable. Try again.",
             disconnected: failure || "Search disconnected. Reconnect to read current items.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
-            incomplete: coverage === "Saved GitHub replies are unavailable for Search."
-                ? coverage : "Search is incomplete. " + coverage,
+            incomplete: coverage,
             "no-match": nativeSearch?.active() ? "No GitHub, saved or navigation matches. Microsoft results are separate." : "No matches. Try different words." };
         replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
-                : partial ? labels.incomplete : labels["no-match"]
+                : partial ? (nativeSearch?.active() ? coverage : "No matches in the items WIRE could search. " + coverage) : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.");
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
         replaceSearchText($("wireSearchCoverage"), partial && current.matches.total ? coverage : "");
@@ -472,10 +467,20 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             if (icon?.localName !== "svg") throw new TypeError("Search result icon is unavailable.");
             const slot = el("span", undefined, "wire-search-type-icon");
             slot.setAttribute("aria-hidden", "true"); slot.append(icon); target.append(slot);
+            let origin = "";
+            if (authorship && ["interaction", "context"].includes(hit.type) && hit.coverage?.authorBasis) {
+                const actor = authorship.read({ authorship: { actor: hit.coverage.author, basis: hit.coverage.authorBasis } }).actor;
+                origin = actor === "unknown" ? "Author unverified" : authorship.label({ authorship: { actor, basis: hit.coverage.authorBasis } });
+                const cue = el("span", origin, "author-option-value");
+                cue.dataset.promptActor = actor;
+                cue.prepend(ux.icon("author-" + actor));
+                meta.append(cue);
+            }
             if (layer) meta.append(el("span", kindLabel, "wire-search-kind"));
             if (format && context.formats.size > 1) meta.append(el("span", format, "wire-search-format"));
             if (outcome) {
                 const cue = el("span", undefined, "wire-search-outcome result-tone-" + outcome.key);
+                cue.dataset.resultLayer = layer;
                 cue.append(ux.icon(outcome.icon + "-compact"), document.createTextNode(outcome.label)); meta.append(cue);
             }
             const sourceTitle = !shown.title.length;
@@ -499,7 +504,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             target.setAttribute("aria-label", [`${destination}: ${shorten(primary)}; ${kindLabel}`,
                 sourceTitle ? "Source match" : shown.source.map(part => part.text).join(""),
                 shown.excerpt.map(part => part.text).join("").replace(/\s+/gu, " "),
-                format, outcome?.label, limitation].filter(Boolean).join("; "));
+                origin, format, outcome?.label, limitation].filter(Boolean).join("; "));
             if (limitation) body.append(el("span", limitation, "wire-search-limitation"));
             target.append(body);
             if (!isPublished(authority)) return;
@@ -519,7 +524,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             });
             previous.disabled = !pages[key]; next.disabled = pages[key] >= pageCount - 1;
             if (!isPublished(authority)) return;
-            paging.append(previous, el("span", `Page ${pages[key] + 1} of ${pageCount}; ${hits.length} total`), next);
+            const position = `Page ${pages[key] + 1} of ${pageCount}`;
+            paging.append(previous, el("span", hits.length === value.total ? position : `${position}; ${hits.length} available`), next);
         }
     }
     function receive(event, authority) {

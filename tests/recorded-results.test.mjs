@@ -17,6 +17,53 @@ test("call group labels preserve retained ordinals without implying unselected c
     }
 });
 
+test("card issues distinguish a completed tool's result, equal statuses, repeated source indexes and a gap-only diagnostic", () => {
+    const results = createRecordedResults({ screen: true });
+    const rows = ["a", "b", "outside"].map(id => ({id, tool:"workiq-fetch", outcome:"success"}));
+    const calls = {
+        a: {apiResults:[
+            {index:0,statusCode:200,errorDiagnostic:{version:1,status:"not-supplied"}},
+            {index:1,statusCode:400}, {index:1,statusCode:400},
+        ]},
+        b: {resultEvidence:{version:1,applicationError:true}, apiResults:[
+            {index:1,statusCode:200,errorDiagnostic:{version:1,status:"recorded",statusCode:503}},
+        ]},
+        outside: {apiResults:[{index:1,statusCode:400}]},
+    };
+    const entries = rows.flatMap(call=>calls[call.id].apiResults.map((entry,i)=>({
+        id:`result:${JSON.stringify([call.id,i])}`,parentCallId:call.id,status:entry.statusCode,outcome:entry.statusCode>=400?"failure":"success",
+    })));
+    const groups = results.cardIssues(rows.slice(0,2),entries.reverse(),r=>calls[r.id]);
+    assert.deepEqual(groups.map(g=>g.rows.map(r=>r.id)),[["a"],["b"]]);
+    assert.deepEqual(groups[0].entries.map(e=>[e.label,e.row.id]),[
+        ["Returned entry 2 (saved item 2) · HTTP 400",'result:["a",1]'],
+        ["Returned entry 2 (saved item 3) · HTTP 400",'result:["a",2]'],
+    ]);
+    assert.equal(groups[1].resultIssue,true);
+    assert.match(groups[1].detail,/application error/);
+    assert.equal(groups[1].entries[0].label,"Returned entry 2 · HTTP 200; diagnostic HTTP 503");
+});
+
+test("a card folds a repeated error code into its entry preview without dropping a distinct call reason", () => {
+    const results = createRecordedResults({ screen: true });
+    const row = { id: "fetch", tool: "workiq-fetch", outcome: "failure" };
+    const api = { id: 'result:["fetch",0]', parentCallId: "fetch", outcome: "failure", status: 400 };
+    const message = "Syntax error: character ':' is not valid at position 16 in 'tag:cedar:review'.";
+    const call = { failureEvidence: { version: 1, reason: "error-code-recorded", code: "BadRequest" },
+        apiResults: [{ index: 1, statusCode: 400, errorCode: "BadRequest",
+            errorDiagnostic: { version: 1, code: "BadRequest", message, source: "result-error", status: "recorded" } }] };
+    const [folded] = results.cardIssues([row], [api], () => call);
+    assert.equal(folded.detail, null);
+    assert.equal(folded.entries[0].label, "Returned entry 2 · HTTP 400");
+    assert.equal(folded.entries[0].detail, "Invalid colon at position 16.");
+    assert.equal(results.returnedResult(call, api).errorDiagnostic.message, message);
+    call.failureEvidence.diagnostic = { version: 1, code: "BadRequest", message: "The batch could not be finalized.",
+        source: "completion-error", status: "recorded" };
+    const [distinct] = results.cardIssues([row], [api], () => call);
+    assert.match(distinct.detail, /batch could not be finalized/);
+    assert.equal(distinct.entries[0].row, api);
+});
+
 test("screen result details preserve dynamic source-qualified units and report defaults", () => {
     let accepted = { layer: "tool", unit: "source-qualified tool calls" };
     const results = createRecordedResults({ scope: () => accepted, screen: true });
@@ -52,6 +99,37 @@ test("result widget titles name the evidence unit without conflating source popu
     for (const layer of ["unsupported", "__proto__", "toString"]) {
         assert.throws(() => results.outcomeTitle(layer), /supported evidence layer/);
     }
+});
+
+test("partial-call reading identifies its retained flag without inventing a completed portion or changing report meaning", () => {
+    const screen = createRecordedResults({ screen: true }), frozen = createRecordedResults();
+    const call = { reportedOutcome: "partial", toolSucceeded: null, completedAt: null, apiResults: [
+        { index: 0, statusCode: 200 }, { index: 1, statusCode: null },
+    ] }, row = { id: "partial-call", outcome: "partial" };
+    const before = JSON.stringify(call);
+    const reason = screen.explainedEntries("tool", [row], () => call)[0].reason;
+    assert.match(reason, /call was saved as partial/i);
+    assert.match(reason, /flag alone does not say which part completed/i);
+    assert.match(reason, /No completion event or end time is retained/);
+    assert.ok(screen.callReasonItems(call, "partial").some(item => /call was saved as partial/i.test(item.text)));
+    assert.equal(frozen.explainedEntries("tool", [row], () => call)[0].reason, undefined);
+    assert.deepEqual(frozen.callReasonItems(call, "partial"), []);
+    assert.deepEqual(screen.interpretation(call, "partial"), frozen.interpretation(call, "partial"),
+        "Screen provenance is not a new frozen interpretation or evidence definition");
+    for (const metadata of [{ completionEventId: "retained-end" }, { completedAt: "2026-11-16T18:00:11Z" }]) {
+        const detailed = { ...call, ...metadata, apiResults: [{ index: 0, statusCode: 403, errorCode: "AccessDenied" }] };
+        const text = screen.explainedEntries("tool", [row], () => detailed)[0].reason;
+        assert.match(text, /call was saved as partial/i);
+        assert.match(text, /AccessDenied/);
+        assert.doesNotMatch(text, /No completion event or end time/);
+    }
+    for (const outcome of ["success", "failure", "unknown"]) {
+        const text = screen.explainedEntries("tool", [{ ...row, outcome }], () => ({
+            ...call, reportedOutcome: "unknown", resultEvidence: { version: 1, contentStatus: "partial" },
+        }))[0].reason;
+        assert.doesNotMatch(text ?? "", /call was saved as partial/i);
+    }
+    assert.equal(JSON.stringify(call), before);
 });
 
 test("operation labels use recorded tool and canonical requested targets without inventing methods", () => {
@@ -449,6 +527,22 @@ test("full-request context uses canonical identities and keeps batched API units
     assert.deepEqual(createRecordedResults().summarize(context["reported-api"]), { count: 3, success: 1, failure: 1, unknown: 1, partial: 0, other: 0, transport: 0 });
 });
 
+test("full-request context preserves qualified tool identity for the shared operation formatter", () => {
+    const record = fixture("picker-tool");
+    const call = record.toolCalls[0];
+    call.tool = "workiq-retrieve";
+    call.requestArgs = { query: "Find the release decisions.", capabilities: [{ name: "Email" }] };
+    delete call.requestedApiPath;
+    const analytics = buildActivityAnalytics([record], { filters: { scope: "all" } });
+    const context = buildRequestActivity([record]), results = createRecordedResults();
+    assert.equal(context.tool[0].id, analytics.rows[0].id);
+    assert.equal(context.tool[0].tool, call.tool);
+    assert.equal(results.callOperation(context.tool[0]), results.callOperation(analytics.rows[0]));
+    assert.equal(context["reported-api"][0].tool, call.tool);
+    assert.equal(results.callOperation({ endpoint: { path: "/me/messages" } }),
+        "Tool not recorded \u00b7 Requested: /me/messages", "A target alone cannot supply a missing tool identity.");
+});
+
 test("literal API paths preserve all retained characters and missing targets without normalization", () => {
     const results = createRecordedResults();
     const path = "/Users/{User-ID}/messages?$filter=subject%20eq%20'\u65e5\u672c\u8a9e'&Case=Keep+This";
@@ -495,7 +589,11 @@ test("only a qualified single-target fallback shares its parent's displayed serv
     ];
     assert.equal(inherits(0), false, "Same service, independently returned path: keep its attribution");
     assert.equal(inherits(1), false, "A different returned service must not inherit the parent");
-    assert.equal(inherits(2), true, "Repeated source indices do not determine the result identity");
+    assert.equal(inherits(2), false, "A sibling with a different returned target rules out request fallback");
+    call.apiResults[0].path = call.requestArgs.entityUrls[0];
+    call.apiResults[1].path = call.requestArgs.entityUrls[0];
+    assert.equal(inherits(0), false, "A returned path remains independently attributed");
+    assert.equal(inherits(2), true, "With consistent siblings, a repeated source index does not select their own returned paths");
     const rows = buildRequestActivity([record]), parent = rows.tool[0], row = rows["reported-api"][2];
     const source = structuredClone(call);
     assert.equal(results.inheritsCallService(call, row, { ...parent, id: "unrelated-parent" }), false);

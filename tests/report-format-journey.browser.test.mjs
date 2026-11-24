@@ -6,14 +6,111 @@ import { createHash } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { chooseLandingReportDates, prepareLandingReport, viewAllSavedReports } from "./report-journey-helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { reviewRecords } from "./frontend-fixture.mjs";
 
 const filenames = ["product-report.html", "product-report.pdf", "product-report.json", "product-report.md", "coverage-and-redaction-manifest.json"];
 const formats = ["html", "pdf", "json", "markdown", "manifest"];
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const bytesOf = value => typeof value === "string" ? Buffer.from(value) : Buffer.from(value.data, "base64");
+
+test("the React review fixture prepares, edits and saves real formats through the framed activity picker", { timeout: 120000 }, async t => {
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, reviewRecords());
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); for (const fn of cleanup) await fn(); });
+    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "UTC" })).newPage();
+    const errors = [], output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => {
+        const url = new URL(route.request().url());
+        if (url.origin !== new URL(runtime.url).origin && !["blob:", "data:"].includes(url.protocol)) return route.abort();
+        return route.continue();
+    });
+    async function prepare(action) {
+        // The multi-format response for 241 interactions exceeds Chromium's inspector body cache.
+        const url = new URL("api/preview", runtime.url).href;
+        let full;
+        await page.route(url, async route => {
+            full = await route.fetch();
+            await route.fulfill({ response: full });
+        }, { times: 1 });
+        const response = page.waitForResponse(url);
+        await action();
+        const result = await response, body = await full.json();
+        await full.dispose();
+        assert.equal(result.status(), 200, body.error);
+        await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
+        return body;
+    }
+    async function capture(name) {
+        if (!output) return;
+        await mkdir(output, { recursive: true });
+        await page.evaluate(() => document.fonts.ready);
+        await page.screenshot({ path: path.join(output, name + ".png") });
+    }
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseLandingReportDates(page, "Custom dates");
+    await page.locator("#reportDatefrom").fill("2026-11-10");
+    await page.locator("#reportDateto").fill("2026-11-16");
+    await page.locator("#reportCustomDates").getByRole("button", { name: "Apply dates", exact: true }).click();
+    let prepared = await prepare(() => prepareLandingReport(page, "all"));
+    assert.deepEqual(prepared.snapshot.dateSelection, { range: "custom", from: "2026-11-10", to: "2026-11-16" });
+    assert.equal(prepared.records.length, 241);
+    prepared = await prepare(() => page.getByLabel("Report name", { exact: true }).fill("Cedar review fixture"));
+    const picker = page.locator("#reportActivityOptions");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole("button", { name: "Change what's included", exact: true }).click();
+        await page.getByRole("button", { name: "Change activity selection", exact: true }).click();
+        await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeInViewport();
+        await expect(page.locator("#reportContinue")).toBeInViewport();
+        assert.equal(await picker.locator("#reportList").evaluate(node => getComputedStyle(node).overflowY), "visible");
+        await capture("review-picker-" + theme);
+        const chosen = await page.locator('input[name="reportScope"]:checked').inputValue();
+        await picker.getByRole("button", { name: "Close", exact: true }).click();
+        await expect(picker).toBeHidden();
+        await expect(page.getByRole("button", { name: "Change what's included", exact: true })).toBeFocused();
+        assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), chosen);
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    for (const format of ["pdf", "json", "markdown"]) prepared = await prepare(() => page.locator(`#formatOptions input[value=${format}]`).check());
+    await page.keyboard.press("Escape");
+    await selectActivityOption(page, "preparedReportView", "text");
+    await page.getByText("Edit or omit this report copy", { exact: true }).click();
+    await page.locator(".report-copy-controls textarea").fill("Cedar edited synthetic review copy.");
+    prepared = await prepare(() => page.getByRole("button", { name: "Update report copy", exact: true }).click());
+    await page.locator("#reportPrivacyChoice").click();
+    prepared = await prepare(() => page.locator('#reportPrivacyOptions input[value=original]').check());
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save with chat details", exact: true })).toBeVisible();
+    await capture("review-disclosure");
+    await page.getByRole("button", { name: "Save with chat details", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const saved = (await loadBoardState(context)).exports[0], originals = new Map();
+    for (const name of filenames) originals.set(name, await readFile(saved.files[name]));
+    for (const name of filenames.slice(0, 4)) assert.deepEqual(originals.get(name), bytesOf(prepared.files[name]));
+    const json = JSON.parse(originals.get("product-report.json"));
+    assert.equal(json.records.length, 241);
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    for (const format of formats) {
+        await selectActivityOption(page, "savedReaderFormat", format);
+        const file = page.locator("#savedReportReader .saved-file-preview:visible");
+        if (format === "pdf") await file.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+        else if (format === "html") await expect(file.frameLocator("iframe").locator("h1")).toHaveText("Cedar review fixture");
+        else await expect(file.locator(format === "markdown" ? ".saved-markdown" : ".saved-json-tree")).toBeVisible();
+        await capture("review-saved-" + format);
+    }
+    for (const name of filenames) assert.deepEqual(await readFile(saved.files[name]), originals.get(name));
+    assert.deepEqual(errors, []);
+});
 
 test("all file viewers preserve the edited report through regeneration, reading and exact saved download", { timeout: 120000 }, async t => {
     const records = Array.from({ length: 6 }, (_, index) => {
@@ -39,7 +136,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); for (const fn of cleanup) await fn(); });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, colorScheme: "light" });
+    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1100 }, colorScheme: "light" })).newPage();
     page.setDefaultTimeout(10000);
     const errors = [], outside = [], receipts = [], output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
     page.on("pageerror", error => errors.push(error.message));
@@ -76,7 +173,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         const heading = documentView.locator("h1");
         await expect(heading).toHaveText(title);
         await expect(heading).toBeInViewport({ ratio: 1 });
-        await expect(documentView.getByText("Retained activity", { exact: true })).toBeInViewport();
+        await expect(documentView.locator("dl").first().getByText("Retained activity", { exact: true })).toBeInViewport();
         await expect.poll(() => heading.evaluate(() => document.fonts.status)).toBe("loaded");
         let screenshot;
         await expect.poll(async () => {
@@ -104,11 +201,11 @@ test("all file viewers preserve the edited report through regeneration, reading 
     }
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    let prepared = await regenerate(() => page.locator('[data-report-preset="all"]').click());
+    let prepared = await regenerate(() => prepareLandingReport(page, "all"));
     prepared = await regenerate(() => page.getByLabel("Report name", { exact: true }).fill("Cedar format review"));
-    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) prepared = await regenerate(() => page.locator(`#formatOptions input[value=${format}]`).check());
-    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.keyboard.press("Escape");
     await selectActivityOption(page, "preparedReportView", "text");
     await page.getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".report-copy-controls textarea").fill("Cedar revised copy for jordan@example.invalid.");
@@ -154,7 +251,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
             }
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             assert.ok((await file.boundingBox()).height >= 200);
-            const view = await page.getByRole("combobox", { name: "Prepared report view", exact: true }).boundingBox();
+            const view = await page.getByRole("combobox", { name: "Viewing", exact: true }).boundingBox();
             const header = await page.getByRole("banner").boundingBox();
             assert.ok(view.y >= header.y + header.height, "The View control must not be covered by the sticky header.");
             const label = await page.locator(".report-reading-toolbar .select-field>label").evaluate(node => {
@@ -168,8 +265,8 @@ test("all file viewers preserve the edited report through regeneration, reading 
         }
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
-        await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
-        await file.click({ position: { x: 25, y: 25 } });
+        await page.locator("#reportDeskDates").click();
+        await page.keyboard.press("Escape");
         await expect(page.locator("#reportPeriodChoices")).toBeHidden();
         receipts.push({ format, prepared: true, regeneration: true, keyboard: true, themesAndNarrow: true });
     }
@@ -192,7 +289,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     if (output) await writeFile(path.join(output, "edited-pdf-extracted.txt"), pages.join("\n\n"));
     // Changing population still regenerates the selected real file, never a substitute Report view.
     await inspection.getByRole("button", { name: "Source", exact: true }).click();
-    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await page.locator("#reportDeskDates").click();
     prepared = await regenerate(() => page.locator("#reportPeriodChoices [data-report-range='14']").click());
     await expect(page.locator("#preparedReportView")).toHaveValue(filenames[4]);
     assert.equal(await inspection.locator("pre:visible").textContent(), prepared.files[filenames[4]]);
@@ -229,7 +326,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
             await page.setViewportSize({ width: 768, height: 1000 });
             await file.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
             await capture("pdf-tablet-toolbar");
-            const select = await reader.getByRole("combobox", { name: "Saved report view", exact: true }).boundingBox();
+            const select = await reader.getByRole("combobox", { name: "Viewing", exact: true }).boundingBox();
             const info = await reader.getByRole("button", { name: "About this file", exact: true }).boundingBox();
             assert.ok(Math.abs(select.y + select.height / 2 - info.y - info.height / 2) < 2,
                 "File selection and its info action must share a row above PDF controls.");
@@ -258,7 +355,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
     }
-    await selectActivityOption(page, "savedReaderFormat", "report");
+    await selectActivityOption(page, "savedReaderFormat", "document");
     await expect(reader.frameLocator("iframe").locator("h1")).toHaveText(prepared.title);
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
@@ -297,6 +394,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const reader = page.locator("#savedReportReader"), output = process.env.WIRE_FORMAT_JOURNEY_PROOFS;
+    await viewAllSavedReports(page);
     for (const [index, format] of ["pdf", "json", "markdown"].entries()) {
         await page.getByRole("button", { name: `View report: Cedar ${format}-only report`, exact: true }).click();
         if (format === "pdf") await reader.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
@@ -314,7 +412,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
         const download = page.waitForEvent("download");
         await reader.getByRole("button", { name: "Download", exact: true }).click();
         assert.deepEqual(await readFile(await (await download).path()), originals.get(bundles[index].files[name]));
-        await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     }
     const target = bundles[1].files["product-report.json"];
     await writeFile(target, Buffer.concat([originals.get(target), Buffer.from("\n")]));
@@ -325,7 +423,7 @@ test("HTML-absent reports use their real saved formats and refuse an altered sel
         await expect(reader.getByRole("button", { name: "Download", exact: true })).toBeHidden();
         await expect(reader.getByRole("button", { name: "Expand sections", exact: true })).toBeHidden();
         if (output) await page.screenshot({ path: path.join(output, "altered-file-refused.png"), animations: "disabled" });
-        await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     } finally { await writeFile(target, originals.get(target)); }
     assert.deepEqual(await loadBoardState(context), before);
     for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);

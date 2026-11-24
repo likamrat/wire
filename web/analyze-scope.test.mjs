@@ -48,6 +48,16 @@ test("paired captions describe only accepted common restrictions, without dates,
     assert.equal(scope.describePair(null), null);
 });
 
+test("compact Compare scope omits unrestricted collections but keeps meaningful limits", () => {
+    const pair = { key: "p", revision: 1, scope: { hasSearch: false, projects: [], sessions: [], endpoints: [] },
+        comparison: { revision: 1, schemaVersion: 1, kind: "retained-period-comparison", selection: { withinServices: [] },
+            options: { layer: "tool", filters: { scope: "all", sources: ["github-copilot"] } } } };
+    assert.equal(scope.describePair(pair, { githubOnly: true }).text, "");
+    assert.equal(scope.describePair(pair, { githubOnly: false }).text, "GitHub Copilot only");
+    Object.assign(pair.comparison.options.filters, { scope: "legacy", tools: ["workiq-fetch"] });
+    assert.equal(scope.describePair(pair, { githubOnly: true }).text, "Earlier snapshot; Tool: workiq-fetch");
+});
+
 test("paired restrictions reuse canonical labels and captured names without inventing shared service counts", () => {
     const pair = {
         key: "period:8", revision: 4,
@@ -64,11 +74,11 @@ test("paired restrictions reuse canonical labels and captured names without inve
     Object.defineProperty(pair, "requested", { get() { throw Error("Do not read newer controls."); } });
     const value = scope.describePair(pair);
     assert.equal(value.text, "Both collections; Tool: fetch; Service: Files; Missing-service context allowed"
-        + "; Category: Files; Outcome: HTTP 4xx/5xx; Author: My and agent prompts"
+        + "; Category: Files; Outcome: HTTP 4xx/5xx; Author: Human and agent prompts"
         + "; Copilot project: Accepted project, Project not recorded, Project unavailable"
         + "; Recorder source: Accepted recorder, Source unavailable; API path: Accepted path, Selected path unavailable"
         + "; Files within current scope; Mail within current scope; Search applied");
-    assert.equal(value.activeCount, 14);
+    assert.equal(value.activeCount, 13, "The evidence unit is not another restriction");
     assert.equal(value.parts.join("; "), value.text);
     assert.equal(value.restrictions.join("; "), value.restrictionText);
     assert.equal(value.restrictionText, value.text);
@@ -77,7 +87,7 @@ test("paired restrictions reuse canonical labels and captured names without inve
     const strict = scope.describePair(pair);
     assert.match(strict.text, /Service: Files only;/);
     assert.doesNotMatch(strict.text, /missing-service/);
-    assert.equal(strict.activeCount, 13);
+    assert.equal(strict.activeCount, 12);
 });
 
 test("malformed or mismatched paired authority cannot become an unrestricted caption", () => {
@@ -108,7 +118,7 @@ test("paired outcome wording keeps returned results and unobserved code referenc
                 options: { layer, filters: { scope: "history", outcomes: ["failure"] } }, selection: { withinServices: [] } },
             scope: { hasSearch: false, projects: [], sessions: [], endpoints: [] } };
         assert.deepEqual(scope.describePair(pair), { text: label, parts: [label], restrictions: [label],
-            restrictionText: label, activeCount: 2 });
+            restrictionText: label, activeCount: 1 });
     }
 });
 
@@ -144,13 +154,13 @@ test("accepted captions retain non-date restrictions and known versus context-on
     });
     assert.equal(value.text, "Jan 12 - Jan 26; Both collections; Tool: workiq-fetch; Service: Files"
         + "; Includes missing-service context: 3 known matches; 1 context-only; Category: Multiple workloads"
-        + "; Outcome: Tool failed; Author: My and agent prompts; Copilot project: Invented project"
+        + "; Outcome: Tool failed; Author: Human and agent prompts; Copilot project: Invented project"
         + "; Copilot chat: Invented chat; API path: workiq-fetch; Search applied");
     assert.equal(value.activeCount, 12);
     assert.deepEqual(value.restrictions, [
         "Jan 12 - Jan 26", "Both collections", "Tool: workiq-fetch", "Service: Files",
         "Includes missing-service context: 3 known matches; 1 context-only", "Category: Multiple workloads",
-        "Outcome: Tool failed", "Author: My and agent prompts", "Copilot project: Invented project",
+        "Outcome: Tool failed", "Author: Human and agent prompts", "Copilot project: Invented project",
         "Copilot chat: Invented chat", "API path: workiq-fetch", "Search applied",
     ]);
     assert.deepEqual(value.parts, value.restrictions);
@@ -167,7 +177,7 @@ test("layer, strict service scope and accepted chart refinements stay explicit w
     });
     assert.equal(value.text, "All dates; Earlier snapshot; Activity: owned HTTP records"
         + "; Service: Files only (2 known matches); Recorder source: Source unavailable; Files within current scope");
-    assert.equal(value.activeCount, 5);
+    assert.equal(value.activeCount, 4);
     assert.deepEqual(value.restrictions, ["Earlier snapshot", "Service: Files only (2 known matches)",
         "Recorder source: Source unavailable", "Files within current scope"]);
 });
@@ -179,7 +189,7 @@ test("retained outcome restrictions on code references never imply observed exec
     });
     assert.equal(value.text, "All dates; Saved collection; Activity: Graph code references"
         + "; Previous outcome: Tool failed (execution not observed)");
-    assert.equal(value.activeCount, 2);
+    assert.equal(value.activeCount, 1);
     assert.deepEqual(value.restrictions, ["Previous outcome: Tool failed (execution not observed)"]);
 });
 

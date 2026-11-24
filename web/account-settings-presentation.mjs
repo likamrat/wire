@@ -53,10 +53,10 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
     trigger.setAttribute("aria-haspopup", "menu");
     trigger.setAttribute("aria-expanded", "false");
     trigger.setAttribute("aria-controls", "wireAccountMenu");
-    const triggerAvatar = avatar(), triggerName = node("span"), triggerDetail = node("small");
+    const triggerAvatar = avatar(), triggerName = node("span");
     const triggerCopy = node("span", "wire-account-copy");
-    triggerCopy.append(triggerName, triggerDetail);
-    trigger.append(triggerAvatar, triggerCopy, ux.icon("chevron"));
+    triggerCopy.append(triggerName);
+    trigger.append(triggerAvatar, triggerCopy);
     const entry = node("div", "wire-account-entry");
     entry.append(trigger); accountSlot.append(entry);
     accountSlot.classList.add("wire-account-slot");
@@ -152,6 +152,10 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         if (!menu.matches(":popover-open")) return;
         if (event.key === "Escape") {
             event.preventDefault(); event.stopImmediatePropagation(); close(true);
+        } else if (event.key === "Tab" && menu.contains(document.activeElement)) {
+            // The popover is portaled out of the rail. Resume native tab order
+            // from its trigger, even when no menu item is enabled.
+            close(true);
         } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
             const items = [...menu.querySelectorAll('[role="menuitem"]')].filter(item => !item.disabled && item.checkVisibility());
@@ -233,12 +237,17 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             detail = "Checking profile";
         }
         setText(triggerName, verified ? name : "Account"); setText(menuName, name);
-        setText(triggerDetail, verified ? "" : detail); triggerDetail.hidden = verified;
         setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
         menuDetail.hidden = !verified && detail === "This instance";
-        const needsRead = github.phase === "error" || verified === false
+        const failedAppRead = appProfile && profile?.identity.reason === "app-profile-read-failed";
+        const needsRead = failedAppRead || github.phase === "error" || verified === false
             && (profile?.identity.reason === "account-snapshot-expired" || profile?.issues?.length > 0);
-        const profileHelp = !wireHidden && needsRead ? "GitHub profile could not be read." : "";
+        const profileHelp = wireHidden ? "" : needsRead ? "GitHub profile could not be read."
+            : appProfile && !verified ? ({
+                "app-profile-source-unavailable": "Copilot profile unavailable from the current source.",
+                "app-profile-signed-out": "No GitHub account found in the Copilot app.",
+                "app-profile-selection-ambiguous": "The selected Copilot account is unclear.",
+            }[profile.identity.reason] || "Copilot profile unavailable.") : "";
         setText(profileMessage, profileHelp); profileMessage.hidden = !profileHelp;
         if (profileRetry) {
             profileRetry.hidden = wireHidden || !needsRead;
@@ -397,6 +406,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         if (gateScope.hidden) gate.removeAttribute("aria-describedby");
         else gate.setAttribute("aria-describedby", gateScope.id);
         gateMessage.textContent = feedback; gateMessage.hidden = !feedback;
+        gateMessage.dataset.tone = operation ? "unconfirmed" : "error";
         if (menu.matches(":popover-open")) position();
         paintNativeConnection();
     }
@@ -613,6 +623,8 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         setText(status, ms ? states[ms.state][0] : "Connection result unconfirmed");
         setText(action, label);
         setText(explanation, feedback || ""); explanation.hidden = !feedback;
+        explanation.dataset.tone = model.phase === "owner-lost" || model.phase === "unconfirmed" ? "unconfirmed"
+            : model.error?.code === "failed" || statusError ? "error" : "";
         action.disabled = !available || actionBusy || !intent && !(statusError && !model.pending.length);
         return true;
     }
@@ -834,6 +846,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             const state = ms?.state || "unavailable";
             const [label, help, actionLabel] = states[state];
             setText(status, label); setText(action, actionLabel); action.disabled = true;
+            delete explanation.dataset.tone;
             setText(explanation, ms?.reason ? connectionReason(ms.reason, lifecycle.wire) : help);
             explanation.hidden = !explanation.textContent;
         }
@@ -866,6 +879,8 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
     paintProfile(); paintGate();
     return {
         receive, receiveMicrosoft, receiveAccess, withdrawAccess, unavailableConnectionFeedback,
+        hasUnfinishedChange: () => Boolean(actionBusy || pendingGate || nativeResultRead || enrollment?.hasUnfinishedChange()
+            || nativeState?.snapshot(null, api.controlToken()).pending.length),
         dispose() {
             if (disposed) return;
             withdrawAccess(); close(); disposed = true;

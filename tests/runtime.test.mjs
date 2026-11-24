@@ -181,26 +181,56 @@ test("canvas incompatibility identifies the requested origin without allocating 
         calls.push(url);
         return Response.json({ service: "unrelated-fixture", protocol: 1 });
     });
+
     await assert.rejects(createRuntimeClient(origin).open("wrong-service"),
         { message: `${origin} is not a compatible WIRE runtime.` });
     assert.deepEqual(calls, [origin + "/health"]);
 });
 
-test("registered canvas uses the current adapter and surfaces update-required without hiding it as server downtime", async t => {
-    const { runtime, origin } = await fixture(t), key = `wireCanvasFixture_${randomUUID()}`;
+test("an account-bound canvas rejects unbound and replaced runtimes without adopting data or replaying writes", async t => {
+    const { origin } = await fixture(t);
+    const client = createRuntimeClient(origin, { requireEnforced: true });
+    await assert.rejects(client.open("unbound"), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+    let runtimeId = randomUUID();
+    const calls = [];
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+        const path = new URL(url).pathname;
+        calls.push(path);
+        assert.equal(options.redirect, "error");
+        if (path === "/health") return Response.json({ service: "workiq-evidence", protocol: 1, runtimeId });
+        if (path === "/api/session") return Response.json({ capability: "a".repeat(64), runtimeId, accessBootstrap: {
+            runtimeId, mode: "enforced", collectionMode: "copilot-only", schemaVersion: 1, maxWaitMs: 1000, freshnessMs: 5000,
+        } });
+        return Response.json({ code: "session_expired" }, { status: 403 });
+    });
+    await client.open("changed"); calls.length = 0;
+    runtimeId = randomUUID();
+    await assert.rejects(client.open("changed"), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+    await assert.rejects(client.action("changed", "get_summary", {}), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+    await assert.rejects(client.action("changed", "confirm_export", {}), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+    assert.deepEqual(calls, ["/health", "/api/canvas"]);
+    await assert.rejects(client.open("changed"), { code: "WIRE_CANVAS_BINDING_CHANGED" });
+    assert.equal(calls.at(-1), "/health");
+});
+
+test("registered canvas binds its selected contributor runtime; no implicit actions, retargeting or fallback", async t => {
+    const { createCopilotRuntimeAccess } = await import("../lib/runtime-access.mjs");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "wire-canvas-owned-")), ctx = { dataDir: dir };
+    let access;
+    const runtime = await startServer(ctx, createExportController(ctx), { port: 0, collector: { timers: false },
+        createAccess: async () => access = await createCopilotRuntimeAccess(ctx) });
+    t.after(async () => { await runtime.close(); await access.close(); await rm(dir, { recursive: true, force: true }); });
+    const origin = new URL(runtime.url).origin, port = Number(new URL(origin).port), key = `wireCanvasFixture_${randomUUID()}`;
     const sdk = `export class CanvasError extends Error {
         constructor(code, message) { super(message); this.code = code; }
     }
     export const createCanvas = value => value;
     export const joinSession = async value => { globalThis[${JSON.stringify(key)}] = value; return {}; };`;
-    const client = `import { createRuntimeClient as create } from ${JSON.stringify(new URL("../lib/runtime-client.mjs", import.meta.url).href)};
-        export const createRuntimeClient = () => create(${JSON.stringify(origin)});`;
     const entry = new URL("../extension.mjs", import.meta.url);
     const hooks = registerHooks({
         resolve(specifier, context, next) {
             if (context.parentURL?.startsWith(entry.href)) {
-                const source = specifier === "@github/copilot-sdk/extension" ? sdk
-                    : specifier === "./lib/runtime-client.mjs" ? client : null;
+                const source = specifier === "@github/copilot-sdk/extension" ? sdk : null;
                 if (source) return { url: "data:text/javascript," + encodeURIComponent(source), shortCircuit: true };
             }
             return next(specifier, context);
@@ -209,16 +239,29 @@ test("registered canvas uses the current adapter and surfaces update-required wi
     t.after(() => { hooks.deregister(); delete globalThis[key]; });
     await import(entry.href + "?fixture=" + randomUUID());
     const canvas = globalThis[key].canvases[0];
-    const opened = await canvas.open({ instanceId: "registered-fixture" });
+    const calls = [];
+    t.mock.method(globalThis, "fetch", (url, options) => {
+        assert.equal(new URL(url).origin, origin, "No request may reach the default or another store");
+        calls.push(new URL(url).pathname);
+        return nativeFetch(url, options);
+    });
+    const input = { boardId: "workiq-evidence-board-v1", runtimePort: port };
+    const opened = await canvas.open({ instanceId: "registered-fixture", input });
     assert.equal(opened.url, runtime.url);
+    assert.equal((await canvas.open({ instanceId: "registered-fixture" })).url, runtime.url);
     const summary = canvas.actions.find(action => action.name === "get_summary");
     await summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} });
+    await assert.rejects(canvas.open({ instanceId: "registered-fixture", input: { ...input, runtimePort: port === 50001 ? 50002 : 50001 } }),
+        { code: "runtime_changed" });
     await canvas.onClose({ instanceId: "registered-fixture" });
+    await assert.rejects(summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} }), /open/i);
+    assert.deepEqual(calls, ["/health", "/api/session", "/health", "/api/canvas", "/api/session/release"]);
+    assert.equal(canvas.actions.some(action => ["refresh_history", "record_graph_metadata"].includes(action.name)), false);
     t.mock.method(globalThis, "fetch", (url, options) => url === origin + "/api/session"
         ? Promise.resolve(Response.json({ code: "WIRE_CLIENT_UPDATE_REQUIRED",
             error: "Update and reload the WIRE canvas extension. No panel was opened." }, { status: 409 }))
         : nativeFetch(url, options));
-    await assert.rejects(canvas.open({ instanceId: "incompatible-fixture" }),
+    await assert.rejects(canvas.open({ instanceId: "incompatible-fixture", input }),
         error => error.code === "runtime_update_required" && /update and reload/i.test(error.message));
 });
 

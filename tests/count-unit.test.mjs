@@ -142,15 +142,21 @@ test("new human reports and JSON summary share frozen six-group/fourteen-call tr
     assert.equal(snapshot.summary.metrics.find(row => row.layer === "tool").outcomes.success, 12);
     assert.equal(snapshot.summary.metrics.find(row => row.layer === "tool").outcomes.failure, 2);
     assert.equal(snapshot.coverage.distinctSourceSessions, 1);
+    assert.equal(snapshot.coverage.scenarioCount, 6);
     assert.ok(snapshot.records.every(row => row.sourceSessionId && row.scenarioId && !Object.hasOwn(row, "sourceChatId")));
     const task = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
     const pdf = await task.promise, pages = [];
     try {
         for (let i = 1; i <= pdf.numPages; i++) pages.push((await (await pdf.getPage(i)).getTextContent()).items.map(item => item.str || "").join(" "));
     } finally { await task.destroy(); }
-    for (const text of [bundle.files["product-report.html"], bundle.files["product-report.md"], snapshot.summary.takeaways.join(" "), pages.join(" ").replace(/\s+/g, " ")]) {
-        assert.match(text, /6 request groups with 14 Work IQ tool calls/);
-        assert.match(text, /12 of 14 Work IQ calls succeeded; 2 failed/);
+    const takeaways = snapshot.summary.takeaways.join(" ");
+    assert.match(takeaways, /6 request groups with 14 Work IQ tool calls/);
+    assert.match(takeaways, /12 of 14 Work IQ calls recorded completion; 2 failed/);
+    for (const format of [bundle.files["product-report.html"], bundle.files["product-report.md"], pages.join(" ")]) {
+        const text = format.replace(/<[^>]+>|\|/g, " ").replace(/\s+/g, " ");
+        assert.match(text, /Interactions 6\b/);
+        assert.match(text, /Work IQ tool calls 14 12 completed \/ 2 failed\b/);
+        assert.match(text, /Tool-returned API results 14 14 2xx\b/);
         assert.doesNotMatch(text, /14 (?:Graph API requests|Work IQ MCP requests)/);
     }
     assert.deepEqual(records, before);

@@ -4,19 +4,20 @@ import { runInNewContext } from "node:vm";
 import { initializeTheme } from "../web/theme.mjs";
 
 const key = "workiq-evidence.theme";
+const paletteKey = "workiq-evidence.palette.v1";
 
-function fixture({ stored = null, rootHost = null, bodyHost = null, dark = false, mediaAvailable = true, readError, writeError } = {}) {
+function fixture({ stored = null, palette = null, rootHost = null, bodyHost = null, dark = false, mediaAvailable = true, readError, writeError } = {}) {
     const root = { dataset: {}, getAttribute: () => rootHost };
     const body = { getAttribute: () => bodyHost };
     const writes = [], warnings = [], events = new Map();
     const storage = {
-        getItem(name) { assert.equal(name, key); if (readError) throw readError; return stored; },
-        setItem(name, value) { assert.equal(name, key); if (writeError) throw writeError; stored = value; writes.push(value); },
+        getItem(name) { if (readError) throw readError; if (name === paletteKey) return palette; assert.equal(name, key); return stored; },
+        setItem(name, value) { if (writeError) throw writeError; if (name === paletteKey) palette = value; else { assert.equal(name, key); stored = value; } writes.push(value); },
     };
     const media = { matches: dark, addEventListener() { assert.fail("Theme must not follow OS changes"); } };
     const window = { localStorage: storage, addEventListener: (name, callback) => events.set(name, callback) };
     if (mediaAvailable) window.matchMedia = () => media;
-    const theme = runInNewContext(`(${initializeTheme.toString()})()`, {
+    const theme = runInNewContext(`(${initializeTheme.toString()})(["petrol","linen","blue","field"])`, {
         window, document: { documentElement: root, body }, console: { warn: (message) => warnings.push(message) },
     });
     let state;
@@ -25,10 +26,30 @@ function fixture({ stored = null, rootHost = null, bodyHost = null, dark = false
         theme, root, writes, warnings,
         get state() { return state; }, get stored() { return stored; },
         changeEnvironment() { rootHost = rootHost === "dark" ? "light" : "dark"; bodyHost = "dark"; media.matches = !media.matches; },
-        storageEvent(value, options = {}) { events.get("storage")({ storageArea: storage, key, newValue: value, ...options }); },
+        storageEvent(value, options = {}) {
+            const event = { storageArea: storage, key, newValue: value, ...options };
+            if (event.storageArea === storage && event.key === key) stored = value;
+            events.get("storage")(event);
+        },
         recoverStorage() { readError = undefined; writeError = undefined; },
     };
 }
+
+test("palette and mode coexist before paint; stale storage events never undo a newer selection", () => {
+    const value = fixture({ stored: "dark", palette: "blue" });
+    assert.equal(value.root.dataset.evidencePalette, "blue");
+    value.theme.setPalette("linen");
+    value.storageEvent("field", { key: paletteKey });
+    assert.equal(value.state.palette, "linen");
+    assert.equal(value.stored, "dark");
+    assert.throws(() => value.theme.setPalette("future"), /palette/i);
+    assert.equal(fixture({ stored: "light", palette: "future" }).state.palette, "petrol");
+    const denied = fixture({ stored: "dark", writeError: new DOMException("Full", "QuotaExceededError") });
+    denied.theme.setPalette("blue");
+    assert.equal(denied.state.paletteStorageUnavailable, true);
+    denied.recoverStorage(); denied.theme.setPalette("blue");
+    assert.equal(denied.state.paletteStorageUnavailable, false);
+});
 
 test("explicit saved choices win over host/OS and are not rewritten on initialization", () => {
     for (const stored of ["light", "dark"]) {

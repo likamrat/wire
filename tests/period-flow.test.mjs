@@ -14,13 +14,13 @@ test("checked history compares elapsed selected time, not future calendar days",
     assert.equal(model({ from: "2026-11-01", to: "2026-11-30" }, null).warning, "");
     assert.equal(model({ from: "2026-09-14", to: "2026-10-12" }).warning, "");
     assert.equal(model({ from: "2026-09-13", to: "2026-10-12" }).warning,
-        "Some of this period is outside checked history; activity may be missing.");
+        "The last history check covered only part of this period.");
     assert.equal(model({ from: "2026-10-01", to: "2026-10-31" }, { ...coverage, until: "2026-10-13T18:00:00Z" }).warning,
-        "Some of this period is outside checked history; activity may be missing.");
+        "The last history check covered only part of this period.");
     assert.equal(model({ from: "2026-09-01", to: "2026-09-12" }).warning,
-        "This period is outside checked history; activity may be missing.");
+        "This period falls outside the dates WIRE last checked.");
     assert.equal(model({ from: "2026-10-01", to: "2026-10-12" }, null).warning,
-        "Checked history is unknown; this view uses retained activity.");
+        "The dates of the last history check are unavailable.");
     assert.equal(model({}).warning, "");
 });
 test("period feedback counts exact distinct canonical request owners and source sessions", () => {
@@ -31,7 +31,7 @@ test("period feedback counts exact distinct canonical request owners and source 
     assert.deepEqual(result.countParts, ["2 interactions", "2 Copilot chats"]);
     assert.equal(result.countText, "2 interactions; 2 Copilot chats");
     assert.match(result.next, /^Jul 29, 2026 - Oct 5, 2026.*Current filters/);
-    assert.equal(result.warning, "Some of this period is outside checked history; activity may be missing.");
+    assert.equal(result.warning, "The last history check covered only part of this period.");
     assert.equal(result.historyLink, true);
 });
 
@@ -45,11 +45,11 @@ test("scope count peers retain separate recorder and unknown-source populations"
 });
 test("coverage boundaries use local IANA days without claiming full-day or complete collection", () => {
     const result = describe({ rows, filters: { from: "2026-09-04", to: "2026-10-04" }, coverage: { since: "2026-09-05T00:00:00Z", until: "2026-10-05T00:00:00Z" }, timeContext });
-    assert.equal(result.warning, "Some of this period is outside checked history; activity may be missing.");
+    assert.equal(result.warning, "The last history check covered only part of this period.");
     const inside = describe({ rows, filters: { from: "2026-09-05", to: "2026-10-03" }, coverage: { since: "2026-09-05T00:00:00Z", until: "2026-10-05T00:00:00Z" }, timeContext });
     assert.equal(inside.warning, "");
     const unknown = describe({ rows: [], filters: { from: "2026-07-29" }, coverage: {}, timeContext });
-    assert.equal(unknown.warning, "Checked history is unknown; this view uses retained activity.");
+    assert.equal(unknown.warning, "The dates of the last history check are unavailable.");
     assert.match(unknown.next, /not proof that no activity occurred/);
     assert.equal(unknown.historyLink, true);
 });
@@ -65,8 +65,8 @@ test("headline captions preserve exact applied dates, open bounds, cross-year sp
     const caption = (filters, context = timeContext) => describe({ rows, filters, timeContext: context }).caption;
     assert.equal(caption({}), "All dates");
     assert.equal(caption({ from: "2026-10-13", to: "2026-10-13" }), "Oct 13, 2026");
-    assert.equal(caption({ from: "2026-10-01", to: "2026-10-31" }), "Oct 1 - Oct 31, 2026");
-    assert.equal(caption({ from: "2026-12-28", to: "2027-01-03" }), "Dec 28, 2026 - Jan 3, 2027");
+    assert.equal(caption({ from: "2026-10-01", to: "2026-10-31" }), "Oct 1–31, 2026");
+    assert.equal(caption({ from: "2026-12-28", to: "2027-01-03" }), "Dec 28, 2026–Jan 3, 2027");
     assert.equal(caption({ from: "2026-10-01" }), "From Oct 1, 2026");
     assert.equal(caption({ to: "2026-10-31" }), "Through Oct 31, 2026");
     const instants = { from: "2026-11-01T08:30:00Z", to: "2026-11-01T09:30:00Z" };
@@ -83,18 +83,18 @@ test("partial boundary instants stay distinct from full civil days, unknown wind
     const full = { since: "2026-10-01T07:00:00Z", until: "2026-10-02T07:00:00Z" };
     assert.equal(model(full).warning, "");
     assert.equal(model({ ...full, until: "2026-10-02T06:59:59.999Z" }).warning, "");
-    assert.match(model({ ...full, since: "2026-10-01T07:00:00.001Z" }).warning, /^Some of/);
-    assert.match(model({ ...full, until: "2026-10-02T06:59:59.998Z" }).warning, /^Some of/);
-    assert.match(model(full, filters, { ...timeContext, timeZone: "UTC" }).warning, /^Some of/);
+    assert.match(model({ ...full, since: "2026-10-01T07:00:00.001Z" }).warning, /only part/);
+    assert.match(model({ ...full, until: "2026-10-02T06:59:59.998Z" }).warning, /only part/);
+    assert.match(model(full, filters, { ...timeContext, timeZone: "UTC" }).warning, /only part/);
     assert.match(model(full, { from: "2026-09-30", to: "2026-09-30" }).warning, /^This period/);
     assert.equal(model(full, { from: full.since, to: full.until }).warning, "");
-    assert.match(model(full, { from: "2026-09-30T07:00:00Z", to: full.since }).warning, /^Some of/,
+    assert.match(model(full, { from: "2026-09-30T07:00:00Z", to: full.since }).warning, /only part/,
         "An inclusive instant end can overlap the first checked instant.");
     for (const coverage of [null, {}, { since: full.since }, { since: "invalid", until: full.until },
         { since: full.until, until: full.since }, { since: 0, until: full.until }]) {
-        assert.match(model(coverage).warning, /^Checked history is unknown/);
+        assert.match(model(coverage).warning, /dates of the last history check are unavailable/);
         assert.equal(model(coverage, { from: "2026-10-14" }).warning, "");
     }
-    assert.match(model(full, { to: "2026-10-01" }).warning, /^Some of/);
-    assert.match(model(full, { from: "2026-10-01" }).warning, /^Some of/);
+    assert.match(model(full, { to: "2026-10-01" }).warning, /only part/);
+    assert.match(model(full, { from: "2026-10-01" }).warning, /only part/);
 });

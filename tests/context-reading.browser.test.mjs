@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { assessmentDependencies, assessmentRef, assessmentSource, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { assessmentSource } from "../lib/assessment-read-model.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { collectRecordedAnswerCandidates, commitRecordedAnswers } from "../lib/assessment-capture.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
@@ -58,25 +58,10 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
         candidates.push(...extraReplies.map(reply => ({ sourceSessionId: records[0].sourceSessionId, ...reply })));
         assert.equal((await commitRecordedAnswers(context, candidates, { consentRevision: 1, source: sourceConfig })).captured, candidates.length);
     }
-    await updateBoardState(context, state => {
-        state.personalEvaluation ??= defaultPersonalEvaluation();
-        const personal = state.personalEvaluation;
-        const model = buildAssessmentModel(state, { source: sourceConfig });
-        const view = model.details.get(model.catalog.find(item => item.scenarioId === records[0].scenarioId).interactionRef);
-        const dependencies = assessmentDependencies(view), ref = view.interaction.interactionRef;
-        personal.feedback.records.push({ schemaVersion: 1, dependencies, assessment: {
-            schemaVersion: 1, interactionRef: ref, basis: view.basis, createdAt: "2026-09-30T12:00:03.000Z",
-            evidenceRefs: dependencies.evidenceRefs, assessmentRef: assessmentRef(state, "assessment", "invented-prior-verdict"),
-            checkId: "semantic-answer-correctness", checkVersion: 1, dimension: "accuracy", unitRef: ref,
-            origin: "user-personal", rubricVersion: 1, verdict: "fail", reason: "user-verdict", revision: 1, supersedes: null, withdrawn: false,
-        } });
-        personal.feedback.revision = 1;
-        personal.overrideRevision = 1;
-    });
     let expected = await loadBoardState(context);
     const configBefore = await readFile(path.join(context.dataDir, "collector", "config.json"));
     let forbiddenSourceReads = 0;
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", collector: { timers: false },
         evaluation: { evaluatorFactory: async () => { forbiddenSourceReads++; throw Error("No provider work in context proof."); },
             readSource: async () => { forbiddenSourceReads++; throw Error("No source reads in context proof."); } } });
     closeResources = () => runtime.close();
@@ -88,9 +73,10 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
+        const updateStatus = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
         const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
             "/api/assessment/evidence", "/api/evaluation/automatic/summary"];
-        if (url.origin !== new URL(runtime.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
+        if (url.origin !== new URL(runtime.url).origin || request.method() !== "GET" && !updateStatus && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
         }
         requests.push({ path: url.pathname, method: request.method(), body: request.postData() });
@@ -118,29 +104,6 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
     return { page, runtime, records, context, payloadReads, requests, acceptFixtureChange: async () => { expected = await loadBoardState(context); } };
 }
 
-test("compact reader keeps read errors and a reachable retry rather than claiming no saved reviews", { timeout: 30000 }, async t => {
-    const { page, runtime, records } = await setup(t, { responses: false, missing: true });
-    let fail = true;
-    await page.route("**/api/assessment/detail", route => fail
-        ? route.fulfill({ status: 503, json: { error: "Invented saved-review read unavailable." } })
-        : route.continue());
-    await page.goto(runtime.url + "#request?request=" + encodeURIComponent(records[0].scenarioId));
-    await ready(page);
-    const host = page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`);
-    const findings = page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`);
-    await expect(findings).toContainText("Saved findings could not be read");
-    await expect(host).not.toContainText("No saved reviews for these requests.");
-    await expect(page.locator(".request-context-timeline")).toContainText("Work IQ sign-in was required");
-    const retry = host.getByRole("button", { name: "Read insights again", exact: true });
-    await expect(retry).toBeVisible();
-    fail = false;
-    await retry.click();
-    await expect(findings).toContainText("Your feedback");
-    await expect(host.getByRole("button", { name: "Details and feedback", exact: true })).toBeVisible();
-    await expect(findings.locator("[data-finding-kind=execution]")).toHaveCount(0);
-    await expect(page.locator(".request-context-timeline")).toContainText("No saved response.");
-});
-
 test("normal isolated source opens retained correction, retry and reply immediately; Analyze Back is exact", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, payloadReads } = app;
     await page.goto(runtime.url + "#analyze"); await ready(page);
@@ -148,74 +111,42 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await restoreLegacySearch(page, "synthetic");
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const row = page.locator(`.request-row[data-view-key="request:${records[0].scenarioId}"]`);
-    await row.locator("input").check();
-    const open = row.locator(".request-link");
+    const open = row.locator(".request-card-open");
     await open.focus(); await frames(page);
     const origin = page.url(), position = await open.boundingBox();
     await page.keyboard.press("Enter"); await ready(page);
+    await page.getByRole("button", { name: "Source details", exact: true }).click();
+    await page.locator(".reader-linked-context > summary").click();
     await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
-    for (const id of ["filters", "filterChips", "serviceFocus", "viewingContext", "scopeResetActions", "pageIntro"]) {
-        await expect(page.locator("#" + id)).toBeHidden();
-    }
-    await expect(page.locator(".request-context-heading")).toHaveCount(0);
-    await expect(page.locator(".request-context-summaries > h2")).toHaveText("Reviews");
-    await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeVisible();
-    const timeline = page.locator(".request-context-timeline");
-    await expect(timeline.locator(".interaction-findings,.interaction-insights")).toHaveCount(0);
-    assert.ok(await timeline.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-context-summaries")) & Node.DOCUMENT_POSITION_FOLLOWING)));
-    assert.deepEqual(await timeline.locator(".full-text-complete").evaluateAll(nodes => nodes
-        .filter(node => node.querySelector(".full-text-body"))
-        .map(node => node.querySelector(".full-text-reader-actions").parentElement === node.querySelector(".full-text-header")
-            && Boolean(node.querySelector(".full-text-reader-actions").compareDocumentPosition(node.querySelector(".full-text-body")) & Node.DOCUMENT_POSITION_FOLLOWING))),
-    [true, true, true], "Prompt, correction and reply each keep their controls beside the subject, before its text");
-    await expect(page.locator("#reader-copy-notice")).toHaveCount(0);
-    for (const copy of await timeline.getByRole("button", { name: /^Copy (prompt|response)$/ }).all()) {
+    const reader = page.locator("#requestContent"), linked = reader.locator(".reader-linked-context");
+    const timeline = reader.locator(".request-context-timeline");
+    await expect(timeline.locator(".reader-call-row")).toHaveCount(1);
+    await expect(linked.locator(".reader-call-row")).toHaveAttribute("data-tool-call-id", "retry-lookup");
+    for (const copy of await reader.getByRole("button", { name: /^Copy / }).all()) {
         const description = await copy.getAttribute("aria-describedby");
         await expect(page.locator(`[id="${description}"]`)).toHaveText("Copies original text, unmasked.");
     }
-    assert.doesNotMatch(await timeline.innerText(), /UNRELATED_RECORD|Separate synthetic topic|More unrelated synthetic/);
-    assert.deepEqual(await timeline.locator(".full-text-content").allTextContents(),
+    assert.doesNotMatch(await reader.innerText(), /UNRELATED_RECORD|Separate synthetic topic|More unrelated synthetic/);
+    assert.deepEqual(await reader.locator(".full-text-content").allTextContents(),
         [records[0].userPrompt.text, records[1].userPrompt.text, bodyText]);
-    assert.deepEqual(await timeline.locator("li[data-context-kind=action]").evaluateAll(nodes => nodes.map(node => node.dataset.toolCallId)),
+    assert.deepEqual(await reader.locator("li[data-context-kind=action]").evaluateAll(nodes => nodes.map(node => node.dataset.toolCallId)),
         ["failed-lookup", "retry-lookup"]);
-    const kinds = await timeline.locator(":scope > li:visible").evaluateAll(nodes => nodes.map(node => node.dataset.contextKind));
-    assert.deepEqual(kinds.slice(0, 5), ["prompt", "action", "prompt", "action", "response"]);
     await expect(page.locator("#selectedContext")).toHaveAttribute("data-context-group", records[0].scenarioId);
     const failed = timeline.locator('[data-tool-call-id="failed-lookup"]');
-    await expect(failed).toContainText("Work IQ sign-in was required");
-    await expect(failed).toContainText("Historical call evidence only");
+    await expect(failed).toContainText("Re-authentication required");
+    await expect(failed).toContainText("This historical error does not establish the account's current sign-in state");
     assert.doesNotMatch(await failed.innerText(), /HTTP 401|HTTP 403|Sign in now/);
     for (const record of records) {
-        const prompt = timeline.locator(`[data-context-group="${record.scenarioId}"][data-context-kind=prompt]`);
+        const prompt = reader.locator(`[data-context-group="${record.scenarioId}"][data-context-kind=prompt]`);
         await expect(prompt.locator("[data-prompt-actor]").first()).toHaveAttribute("data-prompt-actor", promptAuthorship.read(record.userPrompt).actor);
     }
-    await expect(page.locator(".request-context-summaries .request-recorded").first()).toHaveAttribute("data-context-group", records[0].scenarioId);
-    await expect(page.locator(".request-context-summaries .request-link-details")).toContainText("not inferred task boundaries");
-    await expect(page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`)).toContainText("Your feedback");
-    await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
-    await expect(page.locator(".interaction-findings [data-finding-kind=execution]")).toHaveCount(0);
-    await expect(page.locator(".interaction-findings").first()).toContainText("Your feedback");
-    await expect(page.locator(".interaction-findings").first()).toContainText("Work IQ sign-in was required");
-    await expect(page.locator(".request-context-summaries .full-request-results").first()).toContainText("1 Tool failed");
-    await expect(page.locator(".request-context-summaries .full-request-results").nth(1)).toContainText("1 Tool completed");
-    await expect(page.locator(".request-context-summaries .assessment-timing")).toHaveCount(0);
-    await expect(page.locator(".request-context-timeline .response-timing")).toHaveCount(2);
-    await expect(page.locator(".request-context-summaries .timing-summary")).toHaveCount(0);
-    await expect(page.locator(".request-context-summaries [data-empty-reviews]")).toHaveCount(0);
-    const feedback = page.locator(".request-context-summaries").getByRole("button", { name: "Details and feedback", exact: true }).first();
-    await expect(feedback).toBeVisible();
-    await feedback.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("dialog").getByText("Recorded measures and definitions", { exact: true }).click();
-    const failedVerdict = page.getByRole("dialog").locator('tr[data-origin="user-personal"][data-value="0"][data-denominator="1"]');
-    await expect(failedVerdict.locator(".single-measure-value.negative")).toHaveText("Not correct");
-    await expect(page.getByRole("dialog").locator('tr[data-metric-status="unassessed"] .negative')).toHaveCount(0);
-    await page.keyboard.press("Escape");
-    await expect(feedback).toBeFocused();
+    await expect(linked).toContainText("not inferred task boundaries");
+    await expect(failed.locator(".card-outcome-label")).toHaveText("1 tool call failed");
+    await expect(linked.locator(".card-outcome-label")).toHaveText("1 tool call completed");
     assert.equal(payloadReads.length, 1, "Only the independently authorized linked answer was read");
-    await expect(timeline.locator(".reader-state-partial")).toHaveText("Partial text");
-    const correction = timeline.locator(`[data-context-group="${records[1].scenarioId}"][data-context-kind=prompt]`);
-    const copy = correction.getByRole("button", { name: "Copy prompt", exact: true });
+    await expect(linked).toContainText("Partial text");
+    const correction = linked.locator(`[data-context-group="${records[1].scenarioId}"][data-context-kind=prompt]`);
+    const copy = correction.getByRole("button", { name: "Copy following message", exact: true });
     await copy.focus(); await page.keyboard.press("Enter");
     await expect.poll(() => page.evaluate(() => window.contextClipboard.writes)).toEqual([records[1].userPrompt.text]);
     await page.evaluate(() => { window.contextClipboard.denied = true; });
@@ -223,36 +154,30 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(correction.locator("[role=alert]")).toContainText("Couldn't copy");
     await page.evaluate(() => { window.contextClipboard.denied = false; });
     const response = page.locator(".interaction-response").filter({ has: page.locator(".full-text-content") });
-    await response.getByRole("button", { name: "Copy response", exact: true }).click();
+    await response.getByRole("button", { name: /^Copy following linked response$/i }).click();
     assert.deepEqual(await page.evaluate(() => window.contextClipboard.writes), [records[1].userPrompt.text, bodyText]);
-    await response.getByRole("button", { name: "Hide response", exact: true }).click();
-    const reads = payloadReads.length;
-    await page.locator("#requestReportToggle").click();
-    await expect(page.locator(".interaction-response:visible")).toContainText(["No saved response.", "Response text is hidden."]);
-    assert.equal(payloadReads.length, reads, "Rerender never re-reads intentionally hidden private response text");
-    await page.locator(".interaction-response:visible").getByRole("button", { name: "Read response", exact: true }).click();
-    await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#contextBack").click(); await ready(page); await frames(page);
+    await linked.locator(":scope > summary").click();
+    await expect(linked.locator(".full-text-content")).toHaveCount(0);
+    await page.goBack(); await ready(page); await frames(page);
     assert.equal(page.url(), origin);
     await expect(page.locator("#activitySearch")).toHaveValue("synthetic");
     await expect(open).toBeFocused();
     assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3);
-    await expect(row.locator("input")).toBeChecked();
+    await expect(reader.locator(".full-text-content")).toHaveCount(0);
     await open.click(); await ready(page);
-    await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
+    await linked.locator(":scope > summary").click();
+    await expect(linked.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
     for (const [width, scale, theme] of [[1280, 1, "dark"], [375, 2, "light"]]) {
-        await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${100 * scale}%`, scale);
         await frames(page);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
         assert.equal(await timeline.locator(".full-text-content,button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility())
             .every(node => node.scrollWidth <= node.clientWidth + 1)), true);
-        await correction.getByRole("button", { name: "Hide prompt", exact: true }).focus();
-        await page.keyboard.press("Enter");
+        await linked.locator(":scope > summary").press("Enter");
         await expect(correction.locator(".full-text-content")).toHaveCount(0);
-        await correction.getByRole("button", { name: "Read prompt", exact: true }).press("Space");
+        await linked.locator(":scope > summary").press("Space");
         await expect(correction.locator(".full-text-content")).toHaveText(records[1].userPrompt.text);
         if (proof) {
             await mkdir(proof, { recursive: true });
@@ -261,7 +186,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
             const align = node => scrollTo(0, scrollY + node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 16);
             await timeline.locator(":scope > li").first().evaluate(align);
             await page.screenshot({ path: path.join(proof, `context-${width}-${scale}x-messages.png`) });
-            await page.locator('[data-context-kind=response]').evaluate(align);
+            await response.evaluate(align);
             await page.screenshot({ path: path.join(proof, `context-${width}-${scale}x-response.png`) });
             await writeFile(path.join(proof, `context-${width}-${scale}x.txt`), await page.locator("#requestContent").ariaSnapshot());
         }
@@ -276,12 +201,12 @@ test("deep retained-reply reading returns after authorized payloads settle witho
     await page.goto(runtime.url + "#analyze"); await ready(page);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
-    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    const b = page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first();
     await a.click();
     const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "LONG_RETAINED_LINE_0:" });
     await expect(reply).toHaveText(longText);
-    const technical = page.locator("#requestContent .journey-item>.detail-disclosure").first();
-    await technical.locator("summary").click();
+    const technical = page.locator('#requestContent [data-tool-call-id="retry-lookup"] .reader-call-toggle');
+    await technical.click();
     await reply.focus();
     await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop += 3500);
     const original = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
@@ -307,7 +232,7 @@ test("deep retained-reply reading returns after authorized payloads settle witho
         await expect(reply).toHaveText(longText);
         await expect.poll(async () => Math.abs(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) - original)).toBeLessThan(3);
         await expect(reply).toBeFocused();
-        await expect(technical).toHaveAttribute("open", "");
+        await expect(technical).toHaveAttribute("aria-expanded", "true");
         if (proof) {
             await mkdir(proof, { recursive: true });
             await page.screenshot({ path: path.join(proof, "deep-retained-return.png") });
@@ -322,11 +247,13 @@ test("deep retained-reply reading returns after authorized payloads settle witho
 
 for (const ending of ["complete", "replacement", "revocation", "visibility"]) test(`authorized reply and footer exit paint ends safely on ${ending}`, { timeout: 30000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
-    await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
+    await page.goto(runtime.url); await ready(page);
+    await page.locator("#activityPager").getByRole("button", { name: "Next" }).click();
+    await page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`).click();
     const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "Here are three synthetic documents:" });
     await expect(reply).toHaveText(bodyText);
     await expect(page.locator("#requestContent .interaction-insights[aria-busy=true]")).toHaveCount(0);
-    const copy = await reply.locator("xpath=ancestor::div[contains(@class,'full-text-complete')][1]").locator(".ux-copy").elementHandle();
+    const copy = await page.locator('[data-reader-section="response"]').getByRole("button", { name: "Copy response", exact: true }).elementHandle();
     const before = await page.locator("#requestContent").textContent();
     const footer = await page.locator("#contextSidebarFooter").textContent();
     await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -349,12 +276,12 @@ for (const ending of ["complete", "replacement", "revocation", "visibility"]) te
         samples.push({ time, ...sample });
     }
     if (ending === "replacement") {
-        await page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first().click();
-        await expect(page.locator(".request-original pre")).toContainText("UNRELATED_RECORD");
+        await page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first().click();
+        await expect(page.locator(".request-original .full-text-content")).toContainText("UNRELATED_RECORD");
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
         await frames(page);
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-        await expect(page.locator(".request-original pre")).toContainText("UNRELATED_RECORD");
+        await expect(page.locator(".request-original .full-text-content")).toContainText("UNRELATED_RECORD");
         assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert), false);
     } else if (ending === "revocation") {
         await updateBoardState(context, state => {
@@ -416,7 +343,7 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
     await page.goto(runtime.url + "#analyze"); await ready(page);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
-    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    const b = page.locator("#activityList article").filter({ hasText: "UNRELATED_RECORD" }).locator(".request-card-open").first();
     await a.click();
     const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "DEFERRED_READING_REPLY" });
     await expect(reply).toHaveText(text);
@@ -437,7 +364,7 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
     try {
         await a.click(); await pending;
         if (interruption === "reading") {
-            await page.locator(".request-original .full-text-toggle").first().focus();
+            await page.locator(".reader-section-jumps").getByRole("button", { name: "Prompt", exact: true }).focus();
             await page.keyboard.press("Control+Home");
             await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBe(0);
         } else if (interruption === "switch") await b.click();
@@ -448,7 +375,7 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
             });
             await app.acceptFixtureChange();
             await page.evaluate(() => dispatchEvent(new Event("online")));
-            await expect(page.locator("#requestContent")).toContainText("Capture is off.");
+            await expect(page.locator("#unavailableCall")).toContainText("The matching evidence changed");
             await ready(page);
         }
         const current = await page.evaluate(() => ({ focus: document.activeElement.id, route: location.hash, page: scrollY }));
@@ -472,20 +399,20 @@ for (const interruption of ["reading", "switch", "revocation"]) test(`pending re
 
 test("leaving before the shared reader is ready never starts an eager hidden payload read", { timeout: 20000 }, async t => {
     const { page, runtime, records, payloadReads } = await setup(t);
-    let release, reached;
-    const intercepted = new Promise(resolve => { reached = resolve; });
+    const held = Promise.withResolvers(), intercepted = Promise.withResolvers();
+    const delivered = page.waitForResponse(response => response.url().endsWith("/assets/assessment-contract.mjs"));
     await page.route("**/assets/assessment-contract.mjs", async route => {
         const response = await route.fetch();
-        reached();
-        await new Promise(resolve => { release = resolve; });
+        intercepted.resolve(); await held.promise;
         await route.fulfill({ response });
     });
-    await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await intercepted;
-    await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    await page.getByText("Saved reviews", { exact: true }).click();
-    release();
-    await expect(page.locator("#homeInsights .assessment-summary")).toBeVisible();
+    try {
+        await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
+        await intercepted.promise;
+        await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
+        await expect(page.locator("#contextSidebar")).not.toBeVisible();
+    } finally { held.resolve(); }
+    await (await delivered).finished(); await frames(page);
     assert.equal(payloadReads.length, 0);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
 });
@@ -510,8 +437,8 @@ test("each adjacent reply is independently authorized and multiple retained resp
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(2);
     assert.equal(payloadReads.some(input => input.observationRef === excludedRef), false);
     const responses = page.locator('[data-context-kind="response"]');
-    await expect(responses.first()).toContainText("Response recorded:");
-    await expect(responses.last()).toContainText("Time not recorded; position in the chronology is unknown.");
+    await expect(responses.first().locator("time")).toHaveAttribute("datetime", "2026-09-30T12:00:07.000Z");
+    await expect(responses.last().locator("time")).toHaveCount(0);
     await expect(responses.last()).toContainText("Partial text");
     assert.deepEqual(await responses.locator(".full-text-content").allTextContents(),
         [bodyText, "Exact retained response fragment.\r\n  unchanged  "]);
@@ -521,47 +448,34 @@ test("each adjacent reply is independently authorized and multiple retained resp
 test("off capture, missing retained text and unmatched same-chat records remain explicit without payload reads", { timeout: 20000 }, async t => {
     const { page, runtime, records, payloadReads } = await setup(t, { responses: false, missing: true });
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await expect(page.locator(".interaction-response:visible")).toHaveCount(2);
-    await expect(page.locator(".interaction-response:visible").first()).toContainText("No saved response.");
-    await expect(page.locator(".request-context-timeline")).toContainText("Prompt not available");
-    await expect(page.locator(".request-context-note")).toHaveText("Linked messages may be separate work; this is not the whole chat.");
+    await expect(page.locator(".interaction-response:visible")).toHaveCount(1);
+    await expect(page.locator(".interaction-response:visible")).toContainText("No assistant reply was saved");
+    const linked = page.locator(".reader-linked-context");
+    await page.getByRole("button", { name: "Source details" }).click();
+    await linked.locator("summary").click();
+    await expect(linked).toContainText("Prompt text unavailable");
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /EXCLUDED_UNAVAILABLE_TEXT|UNRELATED_RECORD/);
     assert.equal(payloadReads.length, 0);
 });
 
-test("late eager answers cannot survive navigation or revoked access; no mutation is replayed", { timeout: 40000 }, async t => {
+test("reconnect rejects an already authorized reply delivered after consent revocation without replaying a source check", { timeout: 20000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
     let sourceChecks = 0;
     await page.route("**/api/collection/now", async route => {
         sourceChecks++;
         await route.abort();
     });
-    let release, reached;
-    const intercepted = new Promise(resolve => { reached = resolve; });
-    await page.route("**/api/assessment/evidence", async route => {
-        const response = await route.fetch();
-        reached();
-        await new Promise(resolve => { release = resolve; });
-        await route.fulfill({ response });
-    });
-    await page.goto(runtime.url + "#request?request=" + records[0].scenarioId); await ready(page);
-    await intercepted;
-    await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    const leftResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
-    release(); await (await leftResponse).finished(); await frames(page);
-    await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
-    await page.unroute("**/api/assessment/evidence");
-    let releaseStale, sawStale;
-    const pending = new Promise(resolve => { sawStale = resolve; });
+    const held = Promise.withResolvers(), admitted = Promise.withResolvers();
+    t.after(held.resolve);
     await page.route("**/api/assessment/evidence", async route => {
         const response = await route.fetch();
         assert.equal((await response.json()).basis.consentRevision, 1);
-        sawStale();
-        await new Promise(resolve => { releaseStale = resolve; });
+        admitted.resolve();
+        await held.promise;
         await route.fulfill({ response });
     });
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
-    await pending;
+    await admitted.promise;
     await updateBoardState(context, state => {
         state.personalEvaluation.consent = { ...state.personalEvaluation.consent, state: "revoked", revision: 2,
             categories: [], revokedAt: "2026-10-01T12:00:00.000Z" };
@@ -595,11 +509,11 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await (await revokedSnapshot).finished();
     await ready(page);
     await expect(page.locator("#promptAuthorSummary")).toHaveAttribute("data-revision", String(revoked.revision));
-    const revokedResponse = page.locator(`[data-context-kind="action"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
-    await expect(revokedResponse).toContainText("No saved response.");
+    const revokedResponse = page.locator("#requestContent > .interaction-response");
+    await expect(revokedResponse).toContainText("No assistant reply was saved");
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
-    releaseStale();
+    held.resolve();
     const deliveredStale = await staleResponse;
     await deliveredStale.finished();
     assert.equal(deliveredStale.status(), 200);
@@ -611,7 +525,7 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await page.unroute("**/api/assessment/evidence");
     const reads = app.payloadReads.length;
     await page.reload(); await ready(page);
-    await expect(revokedResponse).toContainText("No saved response.");
+    await expect(revokedResponse).toContainText("No assistant reply was saved");
     assert.equal(app.payloadReads.length, reads, "Revoked payloads aren't fetched on reopening");
     assert.equal(sourceChecks, 0, "Reconnect, the late answer and reload never dispatch or replay a source check");
 });

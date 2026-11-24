@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { navigateMain, openActivitySessions, selectActivityOption, chooseTheme, restoreLegacySearch, openAnalyzeFilters } from "./helpers.mjs";
-import { selectAnalyzeRequest, reportContents } from "./report-journey-helpers.mjs";
+import { navigateMain, selectActivityOption, chooseTheme, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { selectReportFocus } from "./report-journey-helpers.mjs";
 
 const proofDir = process.env.WIRE_FILTER_CONTROLS_PROOFS;
 const ready = async page => {
@@ -22,7 +22,7 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const reads = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail", "/api/evaluation/automatic/summary", "/api/report-artifacts/list"];
+        const reads = ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/report-artifacts/list", "/api/preview", "/api/cancel-preview"];
         if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && !reads.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
         }
@@ -47,20 +47,21 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     const choose = async (id, value) => { await selectActivityOption(page, id, value); await ready(page); };
     if (proofDir) await mkdir(proofDir, { recursive: true });
     assert.equal(await page.locator("#moreFilters").evaluate(node => node.open), false);
-    assert.deepEqual(await page.locator(".filter-scroll .select-trigger").evaluateAll(nodes => nodes.map(node => node.dataset.selectId)),
-        ["dateFilter", "sourceFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter"]);
-    assert.deepEqual(await page.locator("#sourceFilter option").evaluateAll(nodes => nodes.map(node => [node.value, node.textContent])), [
-        ["all", "All sources"], ["github-copilot", "GitHub Copilot app"], ["microsoft-365-chat", "Microsoft 365 Chat"], ["microsoft-365-cowork", "Cowork"],
-    ]);
-
-    await navigateMain(page, "activity"); await ready(page);
+    await openAnalyzeFilters(page);
+    await expect(page.locator("#dateFilter-control")).toBeVisible();
+    await expect(page.locator("#sourceFilter-control")).toBeHidden();
+    assert.deepEqual(await page.locator("#sourceFilter option").evaluateAll(nodes => nodes.map(node => node.value)), ["all", "github-copilot"]);
+    await navigateMain(page, "reports"); await ready(page);
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity", exact: true });
+    await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
     for (const key of ["ownMail", "agentMail", "unverified"]) {
-        await restoreLegacySearch(page, app.cases[key].content);
-        await openActivitySessions(page);
-        await selectAnalyzeRequest(page, page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"]`));
+        await picker.getByRole("searchbox").fill(app.cases[key].content);
+        await picker.locator(`input[data-report-request="${app.cases[key].scenarioId}"]`).check();
     }
-    await restoreLegacySearch(page, "");
-    await navigateMain(page, "home"); await ready(page);
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await selectReportFocus(page, "mine");
+    await navigateMain(page, "analyze"); await ready(page);
     await choose("serviceAssociationFilter", "Files");
     exact("Files plus explicit context", ["otherAgent", "multiFiles", "failedFiles", "partialFiles", "missingUser", "missingAgent", "assistance"]);
     assert.deepEqual(snapshot.analytics.serviceInvolvement.selection.knownMatchIds.sort(), ids(["otherAgent", "multiFiles", "failedFiles", "partialFiles"]));
@@ -131,24 +132,19 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     assert.equal(await page.locator('[data-analyze-mode="calls"]').count(), 0);
     await page.goBack(); await ready(page);
     exact("Back returns equivalent analytical scope", ["multiFiles", "partialFiles", "missingUser"]);
-    await restoreLegacySearch(page, app.cases.missingUser.content);
-    await openActivitySessions(page);
-    assert.match(await page.locator("#analyzeScopeCaption").textContent(), /0 known matches; 1 context-only/);
-    assert.deepEqual(await page.locator(".request-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey)), [`request:${app.cases.missingUser.scenarioId}`]);
-    await restoreLegacySearch(page, "");
-    assert.match(await page.locator("#analyzeScopeCaption").textContent(), /2 known matches; 1 context-only/);
     await openAnalyzeFilters(page);
     if (await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
-    await page.getByRole("button", { name: "Remove copilot project filter: Invented project A", exact: true }).click(); await ready(page);
+    await page.getByRole("button", { name: "Remove project filter: Invented project A", exact: true }).click(); await ready(page);
     assert.equal(await page.evaluate(() => document.activeElement.id), "moreFiltersToggle", "Clearing a hidden secondary field focuses More filters without opening it");
     assert.equal(await page.locator("#moreFilters").evaluate(node => node.open), false);
     await choose("projectFilter", app.projectId);
     await page.locator("#moreFiltersToggle").click();
 
     for (const [width, scale, theme] of [[1200, 1, "light"], [375, 2, "dark"]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await closeAnalyzeFilters(page); await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme); await openAnalyzeFilters(page);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await page.evaluate(() => document.fonts.ready);
+        await page.waitForFunction(() => !document.querySelector("#analyzeFilterDialog").getAnimations().length);
         const geometry = await page.locator(".filter-scroll .select-trigger, #filterChips .filter-chip").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
             const box = node.getBoundingClientRect(), text = node.querySelector(".select-value") || node;
             return { id: node.id || node.getAttribute("aria-label"), width: box.width, height: box.height, left: box.left, right: box.right,
@@ -172,19 +168,21 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await navigateMain(page, "reports"); await ready(page);
-    await page.locator("#reportCreateLink").click(); await ready(page);
-    await reportContents(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
-    await choose("reportPromptAuthorFilter", ["user"]);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/);
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("mine");
+    await expect(page.locator("#reportDeskActivity")).toContainText("Selected interactions");
     await navigateMain(page, "home"); await ready(page);
     await openAnalyzeFilters(page);
     await page.locator("#resetView").click(); await ready(page);
     assert.equal(snapshot.analytics.totals.count, 15);
     await navigateMain(page, "reports"); await ready(page);
-    await page.locator("#reportCreateLink").click(); await ready(page);
-    await reportContents(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/, "Reset preserves explicit report-author membership and hidden selection");
+    await expect(page.locator("#reportDeskFocus")).toHaveValue("mine");
+    const preparing = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.getByRole("button", { name: "Prepare preview", exact: true }).click();
+    const response = await preparing; assert.equal(response.status(), 200);
+    const preview = await response.json();
+    assert.equal(preview.snapshot.records.length, 1);
+    assert.ok(preview.snapshot.records[0].prompts.some(p => p.text === app.cases.ownMail.content));
+    assert.equal(preview.snapshot.records[0].toolCalls.length, 2);
 
     for (const alias of ["home", "overview", "activity", "calls"]) {
         await page.goto(app.runtime.url + `#${alias}?services=Files&tool=workiq-fetch`); await ready(page);

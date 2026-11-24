@@ -8,7 +8,7 @@ export function mountDashboardLayout(host) {
     host.dataset.dashboardLayout = "packed";
 
     function measure() {
-        if (!host.checkVisibility()) return;
+        if (!host.checkVisibility() || host.hasAttribute("data-custom-order")) return;
         const gap = parseFloat(view.getComputedStyle(host).columnGap);
         if (!Number.isFinite(gap) || gap < 0) throw new Error("Dashboard packing requires a nonnegative pixel gutter.");
         const sizes = [...widgets].map(widget => [widget, Math.ceil(widget.getBoundingClientRect().height + gap)]);

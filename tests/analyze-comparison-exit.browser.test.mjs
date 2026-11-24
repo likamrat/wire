@@ -5,6 +5,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, restoreLegacySearch } from "./helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -15,9 +16,10 @@ async function setup(t) {
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, records);
     const before = await loadBoardState(context);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const browser = await chromium.launch(), page = await browser.newPage({
+    const browser = await chromium.launch(), profile = await browser.newContext({
         viewport: { width: 1440, height: 1000 }, timezoneId: "America/New_York", reducedMotion: "reduce",
     });
+    const page = await profile.newPage();
     const denied = [], errors = [];
     let snapshot;
     await page.context().route("**/*", route => {
@@ -43,9 +45,10 @@ async function setup(t) {
     await ready(page); await restoreLegacySearch(page, periodQuery);
     const originalIds = snapshot.analytics.rows.map(row => row.id).sort();
     await page.locator("#comparePeriods").click();
+    const picker = await openDatePicker(page, "compare", "Custom dates");
     for (const [id, value] of Object.entries({ comparisonAFrom: "2026-03-07", comparisonATo: "2026-03-07",
-        comparisonBFrom: "2026-03-08", comparisonBTo: "2026-03-09" })) await page.locator("#" + id).fill(value);
-    await page.locator("#applyPeriodComparison").click();
+        comparisonBFrom: "2026-03-08", comparisonBTo: "2026-03-09" })) await picker.locator("#" + id).fill(value);
+    await picker.getByRole("button", { name: "Apply dates", exact: true }).click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     return { page, originalIds, snapshot: () => snapshot };
 }
@@ -67,9 +70,10 @@ function ordinaryScope(url) {
     assert.doesNotMatch(url, new RegExp(periodQuery));
 }
 
-for (const activation of ["click", "keyboard"]) test(`Analyze exits comparison through the existing Stop transition (${activation})`, { timeout: 30000 }, async t => {
+for (const activation of ["click", "keyboard"]) test(`Analyze restores its own filters and Back restores the independent comparison (${activation})`, { timeout: 30000 }, async t => {
     const { page, originalIds, snapshot } = await setup(t);
     const comparison = page.url();
+    await expect(page.locator("#activitySearch")).toHaveValue("");
     if (activation === "keyboard") {
         await page.setViewportSize({ width: 390, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
@@ -89,25 +93,31 @@ for (const activation of ["click", "keyboard"]) test(`Analyze exits comparison t
     await page.goBack(); await ready(page);
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
     assert.equal(page.url(), comparison);
-    await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
+    await expect(page.locator("#activitySearch")).toHaveValue("");
 });
 
-test("modified Analyze activation opens ordinary public scope without exiting the original comparison", { timeout: 30000 }, async t => {
+test("opening Analyze in another tab restores its filters without putting the private phrase in the link", { timeout: 30000 }, async t => {
     const { page } = await setup(t), comparison = page.url(), link = await analyzeLink(page);
     ordinaryScope(await link.getAttribute("href"));
+    await expect(link).toHaveAttribute("href", /privateView=required/);
     const [opened] = await Promise.all([page.context().waitForEvent("page"), link.click({ modifiers: ["Control"] })]);
     await ready(opened);
     ordinaryScope(opened.url());
     await expect(opened.locator("#periodComparisonSetup")).not.toBeVisible();
-    await expect(opened.locator("#activitySearch")).toHaveValue("");
+    await expect(opened.locator("#activitySearch")).toHaveValue(periodQuery);
+    const direct = await page.context().newPage();
+    await direct.goto(opened.url()); await ready(direct);
+    await expect(direct.locator("#activitySearch")).toHaveValue("");
+    await direct.close();
     assert.equal(page.url(), comparison);
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
-    await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
+    await expect(page.locator("#activitySearch")).toHaveValue("");
     await opened.close();
 });
 
 test("Analyze from a comparison record uses the same ordinary origin rather than the selected side dates", { timeout: 30000 }, async t => {
     const { page, originalIds, snapshot } = await setup(t);
+    await page.locator("#viewComparisonCalls").click();
     await page.locator("#comparisonRecordsB").click();
     await page.locator("#comparisonExactRecordsB a.text-link").first().click();
     await expect(page.locator("#contextSidebar")).toBeVisible();

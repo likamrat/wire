@@ -12,6 +12,9 @@ import { createRuntimeClient, RUNTIME_ORIGIN } from "../lib/runtime-client.mjs";
 import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture } from "./helpers.mjs";
+import pkg from "../package.json" with { type: "json" };
+import { chromium, expect } from "@playwright/test";
+import { createProfileSource, profileProjectId } from "./source-profile-fixture.mjs";
 
 async function isolatedStore(t) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-port-test-"));
@@ -29,7 +32,7 @@ async function isolatedStore(t) {
     return { root, context, stops, configFile, config };
 }
 
-async function launch(app, args = [], { expectFailure = false, dataDir = app.context.dataDir } = {}) {
+async function launch(app, args = [], { expectFailure = false, dataDir = app.context.dataDir, contributor = false } = {}) {
     const server = new URL("../lib/server.mjs", import.meta.url).href;
     const entry = new URL("../scripts/start.mjs", import.meta.url);
     // Keep the normal entry and access gates; only disable fixture collection timers.
@@ -48,7 +51,7 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
         name !== "NODE_TEST_CONTEXT" && name !== "NODE_OPTIONS" && !name.startsWith("WIRE_")
         && !/^(?:GH|GITHUB|COPILOT)(?:_[A-Z0-9]+)*_TOKEN$/i.test(name)));
     const child = fork(entry, args, {
-        env: { ...environment, WORKIQ_EVIDENCE_DATA_DIR: dataDir,
+        env: { ...environment, WORKIQ_EVIDENCE_DATA_DIR: contributor ? "" : dataDir, LOCALAPPDATA: app.root,
             COPILOT_HOME: path.join(app.root, "no-copilot"), GH_CONFIG_DIR: path.join(app.root, "no-profile") },
         execArgv: ["--import", "data:text/javascript," + encodeURIComponent(guard)],
         stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -75,7 +78,7 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
         child.once("error", error => finish(error));
         child.stderr.on("data", bytes => {
             stderr += bytes;
-            if (/could not start|requested port is already owned/.test(stderr)) {
+            if (/could not start|requested port is already owned|Unset WORKIQ_EVIDENCE_DATA_DIR|React evaluation needs an explicitly owned store/.test(stderr)) {
                 if (expectFailure && child.connected) child.disconnect();
                 else finish(new Error(stderr));
             }
@@ -92,6 +95,62 @@ async function launch(app, args = [], { expectFailure = false, dataDir = app.con
     });
     return { url, stop, stdout, stderr };
 }
+
+test("the same approved account reopens A and B after a full launcher restart; a different selected account cannot", async t => {
+    const app = await isolatedStore(t), source = await createProfileSource(app.root);
+    try {
+        const config = JSON.parse(app.config);
+        await writeFile(app.configFile, JSON.stringify({ ...config, appDbPath: source.appDbPath, sessionRoot: source.sessionRoot }));
+        await replaceEvidence(app.context, () => ({ records: [fixture("x"), fixture("y")], importCoverage: null }));
+        async function run(work) {
+            const runtime = await launch(app, ["--port", "0"]);
+            try {
+                const origin = new URL(runtime.url).origin;
+                const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
+                const post = async (route, body = {}) => {
+                    const res = await fetch(origin + route, { method: "POST", headers, body: JSON.stringify(body) });
+                    assert.equal(res.status, 200); return res.json();
+                };
+                headers["X-Board-Capability"] = (await post("/api/session")).capability;
+                return await work(post);
+            } finally { await runtime.stop(); }
+        }
+        const list = post => post("/api/report-drafts/list");
+        const before = await run(async post => {
+            let catalog = await list(post);
+            for (const [scenarioId, name] of [["x", "A"], ["y", "B"]]) {
+                ({ catalog } = await post("/api/report-drafts/edit", { expected: catalog.version, scenarioId, name, included: true }));
+            }
+            return catalog.drafts;
+        });
+        assert.deepEqual(before.map(d => [d.name, d.scenarioIds]), [["A", ["x"]], ["B", ["y"]]]);
+        assert.deepEqual((await run(list)).drafts, before);
+        source.db.prepare("UPDATE projects SET github_account_id=? WHERE id=?").run("default", profileProjectId);
+        assert.deepEqual((await run(list)).drafts, []);
+    } finally { source.db.close(); }
+});
+
+test("General identifies a directly launched manual copy by package version without claiming a verified build or offering Update", async t => {
+    const app = await isolatedStore(t);
+    const runtime = await launch(app, ["--port", "0"]);
+    const browser = await chromium.launch();
+    try {
+        const page = await browser.newPage();
+        const status = page.waitForResponse(response => response.url() === runtime.url + "api/app-update"
+            && response.request().postDataJSON()?.action === "status");
+        await page.goto(runtime.url + "settings?section=general");
+        const data = await (await status).json();
+        assert.equal(data.packageVersion, pkg.version);
+        assert.equal(data.installed, null);
+        assert.equal(data.phase, "manual");
+        await expect(page.locator("#generalTitle")).toBeVisible();
+        await expect(page.locator("#appUpdateVersion")).toHaveText(`WIRE · Package version ${pkg.version}`);
+        await expect(page.locator("#appUpdateStatus")).toContainText("managed manually");
+        await expect(page.locator("#appUpdateNotice")).toBeHidden();
+        await expect(page.locator("#settingsAppUpdate")).toBeHidden();
+        await expect(page.locator("#appUpdateCheck")).toBeDisabled();
+    } finally { await browser.close(); }
+});
 
 test("normal launcher and default canvas client use loopback 4000 and preserve retained evidence", { timeout: 30000 }, async t => {
     const app = await isolatedStore(t), before = await loadBoardState(app.context);
@@ -162,6 +221,7 @@ test("explicit ephemeral and fixed ports retain client and data-directory overri
     const refused = await launch(app, ["--port", port], {
         expectFailure: true, dataDir: path.join(app.root, "must-stay-absent"),
     });
+
     assert.equal(refused.url, null);
     assert.match(refused.stderr, /requested port is already owned/);
     assert.equal((await fetch(ephemeral.url + "health")).status, 200);
@@ -171,4 +231,28 @@ test("explicit ephemeral and fixed ports retain client and data-directory overri
     await fixed.stop();
     assert.equal((await loadBoardState(app.context)).evidence[0].scenarioId, "invented-port-record");
     assert.equal(await readFile(app.configFile, "utf8"), app.config);
+});
+
+test("contributor launcher owns a stable checkout store, shares the enforced gate, and refuses an inherited store", { timeout: 30000 }, async t => {
+    const app = await isolatedStore(t), args = ["--contributor", "--port", "0"];
+    const first = await launch(app, args, { contributor: true });
+    const storeRoot = path.join(app.root, "WorkIQEvidence", "checkouts");
+    const names = await readdir(storeRoot);
+    assert.equal(names.length, 1);
+    const client = createRuntimeClient(new URL(first.url).origin, { requireEnforced: true });
+    try {
+        assert.equal((await client.open("contributor")).url, first.url);
+        assert.deepEqual((await client.action("contributor", "get_state", {})).scenarios, []);
+    } finally { await client.close("contributor"); }
+    await first.stop();
+    const next = await launch(app, [...args, "--development-frontend", "bundled"], { contributor: true });
+    assert.deepEqual(await readdir(storeRoot), names);
+    await next.stop();
+    await assert.rejects(readdir(path.join(app.root, "WorkIQEvidence", "data")), { code: "ENOENT" });
+    const refused = await launch(app, args, { expectFailure: true });
+    assert.match(refused.stderr, /Unset WORKIQ_EVIDENCE_DATA_DIR/);
+    const unsafe = await launch(app, ["--development-frontend", "react", "--port", "0"], { expectFailure: true, dataDir: "" });
+    assert.match(unsafe.stderr, /React evaluation needs an explicitly owned store/);
+    await assert.rejects(readdir(path.join(app.root, "WorkIQEvidence", "data")), { code: "ENOENT" });
+    assert.equal((await loadBoardState(app.context)).evidence[0].scenarioId, "invented-port-record");
 });

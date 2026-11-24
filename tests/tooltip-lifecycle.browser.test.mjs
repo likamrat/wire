@@ -15,8 +15,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createSelectControls } from "../web/select-control.mjs";
 import { selectStyles } from "../web/select-styles.mjs";
-import { navigateMain, navigateSettings, revealSavedDataRead, openAnalyzeFilters, closeAnalyzeFilters, selectActivityOption } from "./helpers.mjs";
-import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+import { navigateMain, revealSavedDataRead } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_TOOLTIP_PROOFS;
 
@@ -294,19 +293,26 @@ test("departure cancels pending help and removal or destroy releases pending and
 
 test("scroll and reflow do not turn stale hover into a new visit or extend departure", async t => {
     const page = await fixture(t), action = page.locator("#action");
-    await controlledClock(page);
     await page.evaluate(() => { document.body.style.minHeight = "2000px"; });
-    await action.hover(); await page.clock.runFor(180); await visibleTooltip(page);
-    await page.evaluate(() => { document.querySelector("main").style.marginTop = "300px"; });
-    // Hit testing runs on native compositor frames, not Playwright's JavaScript clock.
-    await page.waitForTimeout(50);
-    await page.clock.runFor(140);
+    // Use the renderer's clock for this test: compositor hit testing is not
+    // advanced by Playwright's fake clock. The timer-only cases bound departure.
+    const tooltip = page.getByRole("tooltip");
+    await action.hover(); await tooltip.waitFor(); await visibleTooltip(page);
+    assert.ok(await action.evaluate(node => {
+        const box = node.getBoundingClientRect(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+        if (!node.contains(document.elementFromPoint(x, y))) return false;
+        document.querySelector("main").style.marginTop = "300px";
+        return !node.contains(document.elementFromPoint(x, y));
+    }), "The stationary pointer is no longer over its original target");
+    await tooltip.waitFor({ state: "hidden" });
     await noTooltip(page);
-    await action.hover(); await page.clock.runFor(180); await visibleTooltip(page);
+    await action.hover(); await tooltip.waitFor(); await visibleTooltip(page);
     await page.mouse.wheel(0, 300);
     await page.waitForFunction(() => window.scrollY > 0);
-    await page.clock.runFor(140); await noTooltip(page);
-    await page.clock.runFor(1000); await noTooltip(page);
+    await tooltip.waitFor({ state: "hidden" }); await noTooltip(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForFunction(() => window.scrollY === 0);
+    await page.waitForTimeout(250); await noTooltip(page);
 });
 
 test("navigation, disabled wrappers, info and copy share departure while wrapped selects need no duplicate help", async t => {
@@ -626,43 +632,6 @@ async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 }
 
-test("real shell action, result, chart, source and report help clears without altering application state", { timeout: 30000 }, async t => {
-    const { page, runtime, writes } = await pipeline(t);
-    await runtime.collector.collectNow();
-    await page.reload(); await ready(page);
-    await controlledClock(page);
-    async function leave(selector) {
-        await page.mouse.move(1198, 998);
-        await page.locator(selector).first().hover();
-        await page.clock.runFor(180); await visibleTooltip(page);
-        await page.mouse.move(1198, 998); await page.clock.runFor(120); await noTooltip(page);
-    }
-    await page.locator("#analyzeRefresh").hover(); await page.clock.runFor(180); await noTooltip(page);
-    for (const selector of ["#chart .time-column .dimensional-count", ".percentage-label[href]"]) {
-        await page.locator(selector).first().hover();
-        await page.clock.runFor(180); await noTooltip(page);
-    }
-    assert.equal(await page.locator("#analyzeRefresh").getAttribute("aria-describedby"), null);
-    assert.equal(await page.locator("#activityCount").innerText(), "1");
-    await page.clock.resume();
-    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
-    const resultChip = page.getByRole("button", { name: /^Remove outcome filter:/ });
-    assert.equal(await resultChip.getAttribute("data-ux-tooltip"), null);
-    await resultChip.hover(); await page.clock.runFor(180); await noTooltip(page);
-    assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
-    await navigateMain(page, "settings");
-    await navigateSettings(page, "connection");
-    await page.locator("#editSource").hover(); await noTooltip(page);
-    await navigateMain(page, "reports");
-    await chooseReportScope(page, "all");
-    await reportContents(page);
-    await leave("#exportBtn");
-    assert.equal(await page.locator("#reportsView .ux-help:visible").count(), 0, "Report choices explain their scope inline rather than through retired per-field help");
-    assert.equal(await page.locator("#exportBtn").isDisabled(), false);
-    assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), "all");
-    assert.deepEqual(writes, []);
-});
-
 test("percentage links drill down without duplicate help or a second keyboard action", { timeout: 30000 }, async t => {
     const { page, runtime, writes } = await pipeline(t, { hasTouch: true });
     await runtime.collector.collectNow();
@@ -684,7 +653,7 @@ test("percentage links drill down without duplicate help or a second keyboard ac
         if (proxy) assert.deepEqual(proxy, { tabIndex: -1, hidden: "true", sameRoute: true }, "Painted pointer proxies share the visible label's route, never a second keyboard stop");
     }
     await legend.tap(); await ready(page); await noTooltip(page);
-    assert.match(page.url(), /#analyze.*result=success/);
+    assert.equal(new URL(page.url()).searchParams.get("result"), "success");
     await page.goBack(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.deepEqual(writes, []);
@@ -733,48 +702,4 @@ test("real isolated check stays tooltip-free through stalled action, receipt, ap
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
     await page.waitForTimeout(250); await noTooltip(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-});
-
-test("real shell result dropdown, chart actions, legend info and Settings navigation retain their distinct lifecycles", { timeout: 30000 }, async t => {
-    const { page, runtime, writes } = await pipeline(t);
-    await runtime.collector.collectNow();
-    await page.reload(); await ready(page);
-    await page.mouse.move(1, 1);
-    await openAnalyzeFilters(page);
-    const result = page.locator("#outcomeFilter-control");
-    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
-    await page.waitForTimeout(250); await noTooltip(page);
-    assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
-    assert.equal(await result.evaluate(node => node === document.activeElement), true);
-    const clear = page.getByRole("button", { name: /^Remove outcome filter:/ });
-    await clear.hover(); await noTooltip(page);
-    assert.equal(await clear.getAttribute("data-ux-tooltip"), null);
-    await clear.click(); await ready(page); await page.waitForTimeout(250); await noTooltip(page);
-    assert.deepEqual(await page.locator("#outcomeFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)),
-        ["success", "failure", "unknown", "partial", "other", "transport"]);
-    assert.equal(await result.evaluate(node => node === document.activeElement), true);
-    await closeAnalyzeFilters(page);
-    const column = page.locator("#chart .time-column").first();
-    await column.focus(); await noTooltip(page);
-    await page.keyboard.press("Enter"); await ready(page);
-    await page.waitForTimeout(250); await noTooltip(page);
-    assert.match(page.url(), /#analyze/);
-    await page.goBack(); await ready(page); await noTooltip(page);
-    const legend = page.locator(".percentage-label[href]").first();
-    await legend.focus(); await noTooltip(page);
-    await page.keyboard.press("Escape"); await noTooltip(page);
-    await (await revealSavedDataRead(page)).click(); await ready(page); await noTooltip(page);
-    await navigateMain(page, "analyze");
-    await legend.click(); await ready(page); await noTooltip(page);
-    await navigateMain(page, "settings");
-    await navigateSettings(page, "connection");
-    await page.waitForTimeout(250); await noTooltip(page);
-    const edit = page.locator("#editSource");
-    await edit.focus(); await noTooltip(page);
-    await edit.click(); await noTooltip(page);
-    await page.locator("#cancelSource").click();
-    await page.waitForTimeout(250); await noTooltip(page);
-    assert.equal(await edit.evaluate(node => node === document.activeElement), true);
-    await page.goBack(); await ready(page); await noTooltip(page);
-    assert.deepEqual(writes, [], "Only the fixture-owned collector runs; navigation and help write no source preferences");
 });

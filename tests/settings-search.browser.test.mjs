@@ -11,7 +11,7 @@ import { createLocalSearch } from "../web/local-search.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_SETTINGS_SEARCH_PROOFS;
-const navigation = createSettingsNavigation(createLocalSearch());
+const navigation = createSettingsNavigation(createLocalSearch(), { updates: false });
 const queries = ["reco", "record", "Theme", "city", "purge", "permission", "history", "display", "TIME-zone"];
 const unavailableHere = new Set(["microsoft-collection", "microsoft-collection-state", "microsoft-collect-now", "global-collection"]);
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -131,10 +131,11 @@ test("Settings search reference layouts use the normal renderer and invented act
         const result = page.locator('[data-setting="recollect-activity"]');
         const bounds = await result.boundingBox();
         await result.hover();
-        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationLine), "underline");
-        assert.equal(await result.evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)");
+        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationLine), "none");
+        const hoveredFill = await result.evaluate(node => getComputedStyle(node).backgroundColor);
+        assert.notEqual(hoveredFill, "rgba(0, 0, 0, 0)");
         await page.mouse.down();
-        assert.equal(await result.evaluate(node => getComputedStyle(node).textDecorationThickness), "2px");
+        assert.notEqual(await result.evaluate(node => getComputedStyle(node).backgroundColor), hoveredFill);
         assert.deepEqual(await result.boundingBox(), bounds, "Hover/press cannot shift a destination");
         await page.mouse.up();
         await expect(page.locator("#recollectActivity")).toBeFocused();
@@ -171,11 +172,11 @@ test("Settings search groups all existing title, description and keyword matches
             assert.equal(await page.locator("#" + heading + ">span").textContent(), entry.category);
         }
         await expect(page.locator("#settingsCategories")).toBeHidden();
-        await expect(page.locator("#settingsStatusLink")).toBeHidden();
+        await expect(page.locator("#settingsView .settings-rail #settingsStatusLink")).toHaveCount(0);
         await expect(page.locator("#settingsSearchCount")).toContainText(`${expected.length} setting`);
     }
     await page.locator("#settingsSearch").fill("city");
-    await expect(page.locator("#settingsSearchResults")).toHaveText("DisplayTime zone");
+    await expect(page.locator("#settingsSearchResults")).toHaveText("RegionalTime zone");
     await page.locator("#settingsSearch").fill("TIME-zone");
     await expect(page.locator("#settingsSearchResults mark")).toHaveText(["Time", "zone"]);
     await page.locator("#settingsSearch").fill("<img src=x onerror=alert(1)> [.*]");
@@ -202,6 +203,7 @@ test("Settings results reveal every available destination without changing data 
     const { page } = await setup(t);
     const targets = {
         source: "editSource", "source-paths": "approvedSourceTitle", "microsoft-connection": "connectionTitle",
+        "save-preferences": "connectionTitle", // No outstanding collection draft in this fixture.
     };
     for (const entry of navigation.entries.filter(entry => !unavailableHere.has(entry.id))) {
         await navigateMain(page, "settings");
@@ -210,14 +212,14 @@ test("Settings results reveal every available destination without changing data 
         await expect(result).toBeVisible();
         await result.click();
         let target = targets[entry.id] || entry.target;
-        if (["displayTimeZone", "collectionWindow", "collectionCadence"].includes(target)) target += "-control";
+        if (await page.locator("#" + target).evaluate(node => node instanceof HTMLSelectElement)) target += "-control";
         const destination = page.locator("#" + target);
         await expect(destination).toBeVisible();
         if (await destination.evaluate(node => node.tagName === "DETAILS")) await expect(destination.locator("summary")).toBeFocused();
         else if (await destination.evaluate(node => node.disabled === true)) {
             assert.equal(await destination.evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true, entry.id);
         } else await expect(destination).toBeFocused();
-        assert.equal(new URL(page.url()).hash.includes("setting=" + entry.id), true);
+        assert.equal(new URL(page.url()).searchParams.get("setting"), entry.id);
         await expect(page.locator("dialog[open]")).toHaveCount(0);
         await expect(page.locator("#sourceEditor")).toBeHidden();
         if (entry.view !== "collection-status") {
@@ -255,11 +257,8 @@ test("keyboard activation, polling, draft changes and Back retain the Settings s
     await expect(search).toHaveValue("city");
     await page.goForward();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-    await search.fill("record");
+    await search.fill("review deletion");
     await search.press("Tab"); await page.keyboard.press("Tab");
-    const first = page.locator('#settingsSearchResults a[data-setting]').first();
-    await expect(first).toBeFocused();
-    await page.keyboard.press("Tab");
     await expect(page.locator('[data-setting="delete-activity"]')).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator("#deleteActivity")).toBeFocused();

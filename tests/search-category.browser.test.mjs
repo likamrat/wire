@@ -99,7 +99,6 @@ test("every Search category has its own readable rendered color, Lucide identity
                 assert.equal(await rows.first().locator(".wire-search-type-icon .wire-icon").innerHTML(), await shared.innerHTML());
             }
             assert.ok(current.label.trim());
-            assert.equal(current.labelColor, current.color);
             assert.notEqual(current.color, current.titleColor);
             assert.equal(current.size, "14px"); assert.equal(current.weight, "400");
             assert.match(current.family, /Asta Sans/);
@@ -132,7 +131,7 @@ test("every Search category has its own readable rendered color, Lucide identity
             assert.ok(footprint.icon.x >= footprint.before.row.x && footprint.icon.y >= footprint.before.row.y);
             assert.ok(footprint.icon.x + footprint.icon.width <= footprint.before.row.x + footprint.before.row.width);
             assert.ok(footprint.icon.y + footprint.icon.height <= footprint.before.row.y + footprint.before.row.height);
-            colors[type] = current.color;
+            colors[type] = current.labelColor;
             observations.push({ theme, state: "focused", ...current });
             await rows.first().hover();
             assert.equal((await rows.first().evaluate(measure)).color, current.color);
@@ -220,14 +219,14 @@ test("every Search category has its own readable rendered color, Lucide identity
     await expect(report.locator(".wire-search-title")).toHaveText(app.bundles[1].title);
     await expect(report.locator(".wire-search-meta")).toHaveCount(0);
     await input.fill("unmatched invented phrase");
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. A saved report file is missing.");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. A saved report file is missing.");
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/search/query", async route => {
         entered.resolve(); await release.promise;
         await route.fulfill({ status: 503, json: { code: "runtime_unavailable", error: "Search is unavailable. Try again." } });
     });
-    await input.fill("Theme"); await entered.promise;
+    await input.fill("Color palette"); await entered.promise;
     await expect(page.locator("#wireSearchStatus")).toHaveText("Searching...");
     release.resolve();
     await expect(page.locator("#wireSearchStatus")).toHaveText("Search is unavailable. Try again.");
@@ -236,7 +235,7 @@ test("every Search category has its own readable rendered color, Lucide identity
     await page.unroute("**/api/search/query");
     await page.locator("#wireSearchRetry").click();
     await expect(rows).toHaveCount(1);
-    await expect(rows).toContainText("Theme");
+    await expect(rows.locator(".wire-search-title")).toHaveText("Color palette");
     const storedAfter = await loadBoardState(app.context);
     for (const key of ["evidence", "exports", "cards", "personalEvaluation"]) assert.deepEqual(storedAfter[key], storedBefore[key]);
     if (proofs) await writeFile(path.join(proofs, "rendered-category-measurements.json"), JSON.stringify(observations, null, 2));
@@ -299,7 +298,7 @@ test("the stationary capsule has an idle gradient halo, bounded interaction glid
         assert.ok(contrast(focused.outlineColor, focused.paper) >= 3);
         assert.deepEqual([focused.x, focused.y, focused.width, focused.height], [idle.x, idle.y, idle.width, idle.height]);
         if (proofs) await page.screenshot({ path: path.join(proofs, `capsule-${theme}-${width}-${scale}-focus.png`) });
-        await input.fill("Theme");
+        await input.fill("physician");
         await expect(page.locator(".wire-search-hit")).toHaveCount(1);
         const opened = await input.evaluate(paint), bounds = await panel.boundingBox();
         assert.deepEqual([opened.x, opened.y, opened.width, opened.height], [idle.x, idle.y, idle.width, idle.height]);

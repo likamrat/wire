@@ -107,12 +107,14 @@ test("new frozen formats carry discovery semantics and definition version withou
             }
         }
     } finally { await pdf.destroy(); }
-    for (const text of [bundle.files["product-report.html"], bundle.files["product-report.md"], pdfText]) {
-        assert.match(text, /Activity categories/);
+    for (const format of [bundle.files["product-report.html"], bundle.files["product-report.md"], pdfText]) {
+        const text = format.replace(/<[^>]+>|\|/g, " ").replace(/\s+/g, " ");
+        assert.match(text, /Work IQ tool calls 8 5 completed \/ 2 failed \/ 1 outcome unknown/);
+        assert.match(text, /3 preparation calls with no applicable data service/);
+        assert.match(text, /2 calls with missing or partial service details/);
+        assert.match(text, /Service definition: wire-service-involvement v1/);
         assert.match(text, /API discovery/);
-        assert.match(text, /Schema lookup/);
-        assert.match(text, /Schema path/);
-        assert.match(text, /regrouping, not a change in recorded outcomes/);
+        assert.match(text, /Schema lookup - Schema path: \/me\/messages/);
     }
     const current = adaptEvaluationReport(bundle.snapshot.evaluationFacts, {
         bundleId: "export-new", snapshotHash: "a".repeat(64), disclosureReviewed: true,

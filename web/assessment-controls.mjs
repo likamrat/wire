@@ -5,7 +5,7 @@ export function createAssessmentControls(contract) {
         let generation = 0, operation = null, disposed = false;
         let state = { phase: "view", applied: clone(applied), draft: null, message: "", mutationRef: null };
         const used = new Set();
-        const locked = () => disposed || ["pending", "unknown", "checking", "stale"].includes(state.phase);
+        const locked = () => disposed || ["pending", "unknown", "checking", "confirmed", "stale"].includes(state.phase);
         const current = token => !disposed && token === generation && operation !== null && ["pending", "checking"].includes(state.phase);
         function transitionFailure(token, phase, message) {
             if (!current(token)) return false;
@@ -48,7 +48,8 @@ export function createAssessmentControls(contract) {
                 if (!current(token)) return false;
                 try {
                     const next = accept(clone(result), operation.input, state.applied);
-                    state = { phase: "view", applied: clone(next), draft: null, message: "Your choice is saved.", mutationRef: null };
+                    // A receipt confirms the write, not the source basis for a subsequent edit.
+                    state = { phase: "confirmed", applied: clone(next), draft: null, message: "Your choice is saved.", mutationRef: null };
                     operation = null;
                     return true;
                 } catch (error) {

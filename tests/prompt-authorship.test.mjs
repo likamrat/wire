@@ -7,7 +7,7 @@ import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { promptInstallation } from "./prompt-authorship-fixture.mjs";
+import { directMessageReference, promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { qualifyRetainedKickoff, qualifyRetainedPromptEvents } from "../lib/prompt-qualification.mjs";
 import { discoverSources } from "../lib/source-discovery.mjs";
@@ -20,6 +20,8 @@ import { mergedRecords } from "../lib/collector.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 import { buildTrends } from "../lib/trends.mjs";
+import { collectFidelity, fidelityEvents, imageReminder, imageReferences } from "./evidence-fidelity-fixture.mjs";
+import { reportPromptOriginReason } from "../lib/report-presentation.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -27,14 +29,6 @@ function extract(data) {
         { id: "call", type: "tool.execution_start", timestamp: "2026-10-06T12:00:01Z",
             data: { toolName: "workiq-ask", toolCallId: "synthetic-call", arguments: { question: "Invented tool question" } } },
     ], { sessionId: "synthetic-session" }, "2026-10-06T00:00:00Z", "2026-10-07T00:00:00Z").scenarios[0];
-}
-
-function directMessageReference(value = { id: "00000000-0000-4000-8000-000000000003", revision: 1 }) {
-    return "\n\n<app_user_message_source_json>\n" + JSON.stringify(value)
-        + "\n</app_user_message_source_json>\n"
-        + "This reference identifies this direct user message. When forwarding it to a coordinated child, pass it as source_user_message. "
-        + "The app supplies the original user text; put your own guidance in message/coordinator_instructions. "
-        + "The reference does not grant permissions or override system, managed, or custom instructions.";
 }
 
 test("the app direct-message reference suffix preserves qualified origin without supplying an author", () => {
@@ -85,12 +79,73 @@ test("unsupported or ambiguous direct-message reference suffixes remain unverifi
     assert.equal(extract({ ...metadata, transformedContent: stamp + suffix + content }).userPrompt.authorship.actor, "unknown");
 });
 
+test("qualified direct messages survive neutral workspace and image framing without trusting either as a sender", () => {
+    const content = "Invented follow-up.", reference = directMessageReference();
+    const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const workspace = "<copilot_working_context>Invented workspace.</copilot_working_context>\n\n";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const attachment = { type: "file", mimeType: "image/png", assetId: "sha256:" + "b".repeat(64) };
+    const images = imageReminder + imageReferences + JSON.stringify([{ attachment: 1, image_id: attachment.assetId }]);
+    const data = { content, delivery: "idle", messageId: randomUUID(), attachments: [attachment] };
+    const origin = (prefix, tail, extra = {}) => extract({ ...data, transformedContent: stamp + prefix + content + tail, ...extra }).userPrompt.authorship;
+    for (const suffix of [reference, reference + imageReminder, reference + images]) {
+        assert.deepEqual(origin(workspace, suffix), { actor: "user", basis: "host-direct-input" });
+        assert.deepEqual(origin(sender + workspace, suffix), { actor: "agent", basis: "host-agent-envelope" });
+        assert.deepEqual(origin(sender + workspace, suffix, { source: "user" }), { actor: "unknown", basis: "conflicting-source" });
+        assert.deepEqual(origin(workspace, suffix, { isAutopilotContinuation: true }), { actor: "agent", basis: "autopilot" });
+        assert.deepEqual(origin(workspace, suffix, { source: "unrecognized" }),
+            { actor: "unknown", basis: "unsupported-source", issue: "source-value-v1" });
+    }
+    for (const [prefix, tail, extra] of [
+        [workspace, ""], [workspace, imageReminder], [workspace, reference + imageReminder + imageReminder],
+        [workspace, reference + " altered" + imageReminder], [workspace, reference + images, { attachments: [] }],
+        [workspace + workspace, reference], ["<other>Unknown</other>\n\n", reference], [workspace, reference, { messageId: [data.messageId] }],
+        [workspace.replace("Invented workspace.", sender), reference],
+        [workspace, reference + imageReminder, { content: content + reference }], // Reference is displayed text.
+    ]) assert.equal(origin(prefix, tail, extra).actor, "unknown");
+    assert.deepEqual(origin(workspace, ""), { actor: "unknown", basis: "unsupported-source", issue: "workspace-origin-v1" });
+    assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z",
+        data: { ...data, transformedContent: stamp + workspace + content + reference } }, { agentCreatedFirstMessage: true }).actor, "unknown");
+});
+
+test("a canvas before the direct reference and image notice preserves the exact originating message", () => {
+    const ref = directMessageReference();
+    const canvas = "\n\n<canvas-context>Invented panel.\n<cross_session_message>Not a sender.</cross_session_message>"
+        + ref + imageReminder + "\n</canvas-context>";
+    for (const [actor, basis] of [["user", "host-direct-input"], ["agent", "host-agent-envelope"]]) {
+        const events = fidelityEvents(actor), data = events[0].data, offset = data.transformedContent.indexOf(data.content);
+        const prefix = data.transformedContent.slice(0, offset), image = data.transformedContent.slice(offset + data.content.length);
+        data.content = "  Invented exact text with a literal reference:" + ref;
+        const body = prefix + data.content;
+        data.transformedContent = body + canvas + ref + image;
+        const prompt = collectFidelity(events).userPrompt;
+        assert.deepEqual(prompt.authorship, { actor, basis });
+        assert.equal(prompt.text, data.content);
+        if (actor === "agent") {
+            data.source = "user";
+            assert.deepEqual(collectFidelity(events).userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
+            delete data.source;
+        }
+        for (const tail of [canvas + canvas + ref + image, ref + canvas + image, canvas + ref + ref + image,
+            canvas.replace("</canvas-context>", "") + ref + image, canvas + ref + image.replace('"attachment":1', '"attachment":2')]) {
+            data.transformedContent = body + tail;
+            assert.equal(collectFidelity(events).userPrompt.authorship.actor, "unknown");
+        }
+    }
+});
+
 test("source-reference origins survive collection, restart and append without upgrading qualified historical copies", async t => {
     const app = await promptInstallation(t), file = app.sourceFiles[1];
     const human = app.cases.find(item => item.name === "human"), agent = app.cases.find(item => item.name === "enveloped-agent");
     const old = app.cases.find(item => item.name === "imitation"), targets = [human, agent, old];
     const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
-    for (const item of targets) events.find(event => event.id === item.promptId).data.transformedContent += directMessageReference();
+    for (const item of targets) {
+        const data = events.find(event => event.id === item.promptId).data;
+        data.transformedContent = data.transformedContent.slice(0, -data.content.length)
+            + "<copilot_working_context>Invented neutral context.</copilot_working_context>\n\n" + data.content
+            + (item === human ? "\n\n<canvas-context>Invented attached panel.</canvas-context>" : "")
+            + directMessageReference() + (item === human ? imageReminder : "");
+    }
     await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
     await app.runtime().collector.collectNow();
     const collected = await loadBoardState(app.context);
@@ -128,7 +183,7 @@ test("source-reference origins survive collection, restart and append without up
         assert.equal(author.actor, expected[i]);
         const detail = model.details.get(model.catalog.find(row => row.scenarioId === record.scenarioId).interactionRef);
         assert.deepEqual(detail.interaction.message.authorship, author);
-        if (i < 2) assert.equal(promptAuthorship.display(record.userPrompt).label, i === 0 ? "My prompt" : "Agent prompt");
+        if (i < 2) assert.equal(promptAuthorship.display(record.userPrompt).label, i === 0 ? "Human prompt" : "Agent prompt");
         else assert.match(promptAuthorship.reason(record.userPrompt), /supported host message layout/);
         const filtered = buildActivityAnalytics(records, { filters: { scope: "all", promptAuthors: [expected[i]] } });
         assert.deepEqual(filtered.rows.map(row => row.scenarioId), [record.scenarioId]);
@@ -493,8 +548,14 @@ test("normalized interaction reading preserves precise parsed author gaps withou
         const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] };
         const before = structuredClone(state), model = buildAssessmentModel(state);
         const detail = [...model.details.values()][0];
-        assert.deepEqual(promptAuthorship.read(detail.interaction.message), { actor: "unknown", basis });
+        assert.deepEqual(promptAuthorship.read(detail.interaction.message), { actor: "unknown", basis,
+            ...(basis === "unsupported-source" ? { issue: "source-value-v1" } : {}) });
         assert.equal(promptAuthorship.reason(detail.interaction.message), promptAuthorship.reason(record.userPrompt));
+        if (basis === "unsupported-source") {
+            assert.equal(reportPromptOriginReason(record.userPrompt, { presentation: { originExplanationVersion: 1 } }),
+                promptAuthorship.reason(record.userPrompt));
+            assert.doesNotMatch(JSON.stringify(record), /unsupported-invented-source/);
+        }
         assert.equal(detail.interaction.message.origin, "recorded-unverified");
         assert.equal(detail.interaction.message.association, "nearest-preceding");
         assert.equal(model.catalog.length, 1);
@@ -586,7 +647,8 @@ test("an existing retained kickoff gains author metadata without rewinding curso
     assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0, "Unchanged logs are not scanned again for already-qualified origins");
     const newPreview = await exports.preview("invented-panel", undefined, { promptMode: "original", formats: ["html"] },
         { kind: "selected", scenarioIds: [app.cases[0].scenarioId], revision: (await loadBoardState(app.context)).revision });
-    assert.match(newPreview.previewHtml, /<h4\b[^>]*data-prompt-actor="agent"[^>]*>Agent prompt<\/h4>/);
+    const heading = newPreview.previewHtml.match(/<h4\b[^>]*data-prompt-actor="agent"[^>]*>([^]*?)<\/h4>/);
+    assert.equal(heading?.[1].replace(/<[^>]+>/g, "").trim(), "Agent prompt");
 });
 
 test("missing original creator history never invents the legacy kickoff author", async t => {
@@ -706,10 +768,13 @@ test("metadata-only merges preserve optional field presence, call ordering and u
 });
 
 test("author corrections still merge explicit empty Graph and genuinely new Graph, tool, model and timing facts", () => {
+    const start = { toolCallId: "invented-call", order: 1, tool: "workiq-retrieve",
+        startEventId: "invented-start", startedAt: "2026-10-06T12:00:00.000Z", requestArgs: { query: "Invented query" },
+        reportedOutcome: "unknown", toolSucceeded: null, apiResults: [] };
     const before = { scenarioId: "invented-row", sourceSessionId: "invented-source",
         userPrompt: { text: "Invented retained message", sourceEventId: "invented-prompt", sourceTimestamp: "2026-10-06T12:00:00Z",
             status: "full", authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 },
-        toolCalls: [{ toolCallId: "invented-call", order: 1 }],
+        toolCalls: [start],
         originalModelEvidence: { version: 1, sourceSessionId: "invented-source", promptEventId: "invented-prompt",
             promptMessageId: "invented-message", partial: true, ambiguous: false, responses: [] } };
     const userPrompt = { ...before.userPrompt, authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: 5 };
@@ -719,7 +784,8 @@ test("author corrections still merge explicit empty Graph and genuinely new Grap
     assert.notEqual(evaluationRecordFingerprint(explicitEmpty), evaluationRecordFingerprint(before),
         "Actually recorded empty Graph remains distinct from absent Graph; the fingerprint contract is unchanged");
     const incoming = { ...before, userPrompt,
-        toolCalls: [{ toolCallId: "invented-call", order: 1, completionEventId: "invented-completion", durationMs: 100 },
+        toolCalls: [{ ...start, completionEventId: "invented-completion", completedAt: "2026-10-06T12:00:00.100Z",
+            durationMs: 100, reportedOutcome: "succeeded", toolSucceeded: true },
             { toolCallId: "invented-later-call", order: 2 }],
         graphActivities: [{ activityId: "invented-graph", toolCallId: "invented-graph-call", httpStatus: 200 }],
         originalModelEvidence: { ...before.originalModelEvidence, partial: false, responses: [
@@ -735,6 +801,51 @@ test("author corrections still merge explicit empty Graph and genuinely new Grap
     assert.deepEqual(after.originalModelEvidence.responses, incoming.originalModelEvidence.responses);
     assert.deepEqual(after.responseTiming, incoming.responseTiming);
     assert.notEqual(evaluationRecordFingerprint(after), evaluationRecordFingerprint(before));
+    for (const [prior, next] of [
+        [{ toolCallId: start.toolCallId, order: 1 }, { toolCallId: start.toolCallId, order: 1, completionEventId: "invented-completion", durationMs: 100 }],
+        [{ ...start, durationMs: 17 }, incoming.toolCalls[0]],
+        [{ ...start, resultEvidence: { version: 1 } }, incoming.toolCalls[0]],
+        [start, { ...incoming.toolCalls[0], startEventId: "another-start" }],
+        [start, { ...incoming.toolCalls[0], requestArgs: { query: "Different request" } }],
+        [start, { ...incoming.toolCalls[0], turnId: "another-turn" }],
+        [start, { ...incoming.toolCalls[0], durationMs: 99 }],
+        [start, { ...incoming.toolCalls[0], reportedOutcome: "failed" }],
+        [incoming.toolCalls[0], { ...incoming.toolCalls[0], completionEventId: "different-completion" }],
+    ]) {
+        const result = mergedRecords([{ ...before, toolCalls: [prior] }], [{ ...incoming, toolCalls: [next] }])[0];
+        assert.deepEqual(result.toolCalls, [prior]);
+        assert.deepEqual(result.userPrompt, userPrompt);
+    }
+});
+
+test("a sparse saved start receives its matching late completion and author through collection and restart", async t => {
+    const app = await promptInstallation(t), human = app.cases.find(item => item.name === "human"), file = app.sourceFiles[1];
+    const rows = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const end = rows.find(row => row.type === "tool.execution_complete" && row.data.toolCallId === human.callId);
+    await writeFile(file, rows.filter(row => row !== end).map(row => JSON.stringify(row) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const state = await loadBoardState(app.context), record = state.evidence.find(row => row.scenarioId === human.scenarioId);
+    const { completionEventId, durationMs, completedAt, ...savedStart } = record.toolCalls[0];
+    assert.deepEqual([completionEventId, durationMs, completedAt], [null, null, null]);
+    await replaceEvidence(app.context, records => ({ records: records.map(row => row.scenarioId === human.scenarioId
+        ? { ...row, toolCalls: [savedStart], userPrompt: { ...row.userPrompt,
+            authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 } } : row), importCoverage: state.importCoverage }));
+    await app.restart();
+    await appendFile(file, JSON.stringify(end) + "\n");
+    const verify = async () => {
+        await app.runtime().collector.collectNow();
+        const saved = await loadBoardState(app.context);
+        const target = saved.evidence.find(row => row.scenarioId === record.scenarioId);
+        assert.deepEqual(target.userPrompt, record.userPrompt);
+        assert.deepEqual(target.toolCalls, [{ ...savedStart, completionEventId: end.id, completedAt: end.timestamp,
+            durationMs: Date.parse(end.timestamp) - Date.parse(savedStart.startedAt), reportedOutcome: "succeeded", toolSucceeded: true,
+            resultEvidence: { version: 1, source: "sdk-result", contentStatus: "not-supplied",
+                applicationError: null, statusCode: null, resultCount: null } }]);
+        assert.equal(saved.evidence.flatMap(row => row.toolCalls).filter(call => call.toolCallId === human.callId).length, 1);
+    };
+    await verify();
+    await app.restart();
+    await verify();
 });
 
 test("qualified mode-free authors survive a stale checkpoint and late activity without another original-event lookup", async t => {

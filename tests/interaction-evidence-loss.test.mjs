@@ -25,8 +25,8 @@ function collect(source) {
         source[0].timestamp, source.at(-1).timestamp).scenarios };
 }
 
-test("wrapped Work IQ path failure survives retention, persistence and presentation without private error text", async t => {
-    const source = events(wrappedError("PRIVATE_INVENTED_PATH"));
+test("wrapped Work IQ path failure preserves the screened reason through storage without envelope identifiers", async t => {
+    const source = events(wrappedError("/invented/service"));
     const { retained, records } = collect(source);
     const failure = records[0].toolCalls[0].failureEvidence;
     assert.equal(failure.messageSignal, "mcp-server-path-not-found");
@@ -36,12 +36,16 @@ test("wrapped Work IQ path failure survives retention, persistence and presentat
     const { context } = await privateFixture(t, []);
     await replaceEvidence(context, () => ({ records }));
     const call = mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0];
-    assert.equal(createRecordedResults().failureReason(call), "Work IQ could not find the requested MCP server");
+    const reason = createRecordedResults().failureReason(call);
+    assert.match(reason, /No MCP server was found for path '\/invented\/service'/);
+    assert.equal(call.failureEvidence.diagnostic.message, failure.diagnostic.message);
+    const { diagnostic, ...historicalSignal } = failure;
+    assert.equal(createRecordedResults().failureReason({ failureEvidence: historicalSignal }), "Work IQ could not find the requested MCP server");
     assert.equal(call.completionEventId, "invented-end");
     assert.equal(call.durationMs, 1000);
     assert.deepEqual(call.apiResults, []);
     assert.equal(call.observedGraphHttp, false);
-    assert.doesNotMatch(JSON.stringify([retained, records, call]), /PRIVATE_INVENTED_PATH|invented-request|Error executing tool/);
+    assert.doesNotMatch(JSON.stringify([retained, records, call, reason]), /00000000-0000-0000-0000-000000000000|invented-request/);
 });
 
 test("unsupported, private and ambiguous wrapped errors remain qualified gaps, not guessed causes", () => {
@@ -56,7 +60,9 @@ test("unsupported, private and ambiguous wrapped errors remain qualified gaps, n
         good.replace("invented-path", "\\u0042earer " + "a".repeat(40)),
         JSON.stringify({ error: good }), "No MCP server was found",
     ]) {
-        assert.equal(collect(events(message)).records[0].toolCalls[0].failureEvidence.messageSignal, null);
+        const collected = collect(events(message));
+        assert.equal(collected.records[0].toolCalls[0].failureEvidence.messageSignal, null);
+        assert.doesNotMatch(JSON.stringify(collected), /a{40}/, "Credential-bearing inputs stay excluded from retained diagnostics");
     }
 });
 
@@ -81,15 +87,20 @@ test("each completion keeps its own cause in a mixed call sequence", () => {
 test("absence wording distinguishes source absence, policy exclusions and unsupported shapes", () => {
     const results = createRecordedResults();
     for (const [message, expected] of [
-        [undefined, "The source did not supply a failure reason"],
-        ["An invented unclassified failure", "Error text was not saved"],
-        ["x".repeat(8193), "Error text exceeded the saving limit"],
-        ["Bearer " + "a".repeat(40), "Error text excluded for privacy"],
-        [{ error: "invented nested value" }, "Error format was not supported"],
+        [undefined, "The source supplied only a generic failure marker"],
+        ["An invented unclassified failure", "Recorded error: An invented unclassified failure"],
+        ["x".repeat(8193), "Error details exceeded the saving limit"],
+        ["Bearer " + "a".repeat(40), "Error details excluded for privacy"],
+        [{ error: "invented nested value" }, "WIRE could not extract a readable reason from the recorded error"],
     ]) {
         const call = collect(events(message)).records[0].toolCalls[0];
         assert.equal(results.failureReason(call), expected);
     }
+    const missing = events();
+    delete missing.at(-1).data.error;
+    const missingCall = collect(missing).records[0].toolCalls[0];
+    assert.equal(missingCall.failureEvidence.reason, "no-structured-error");
+    assert.doesNotMatch(results.failureReason(missingCall), /generic failure marker/);
     assert.equal(results.failureReason({}), "Failure reason was not saved");
 });
 

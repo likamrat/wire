@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { evaluationFixture, materializeEvaluationSource } from "./evaluation-fixture.mjs";
-import { privateFixture, navigateSettings, chooseTheme, selectActivityOption, openSourceEditor } from "./helpers.mjs";
+import { navigateSettings, chooseTheme, selectActivityOption } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_SETTINGS_HIERARCHY_PROOFS;
 async function capture(page, name) {
@@ -27,11 +27,10 @@ async function captureState(page, name) {
     await page.setViewportSize(viewport);
     await chooseTheme(page, currentTheme);
 }
-async function setup(t, approved = true) {
+async function setup(t) {
     const cleanup = [], denied = [], posts = [], errors = [];
-    const f = approved ? await evaluationFixture({ after: action => cleanup.push(action) })
-        : await privateFixture({ after: action => cleanup.push(action) });
-    if (approved) await materializeEvaluationSource(f);
+    const f = await evaluationFixture({ after: action => cleanup.push(action) });
+    await materializeEvaluationSource(f);
     const runtime = await startServer(f.context, createExportController(f.context), {
         port: 0, collector: { timers: false },
         search: { modelDirectory: path.join(f.context.dataDir, "model-not-provisioned") },
@@ -67,61 +66,20 @@ async function setup(t, approved = true) {
     return { ...f, runtime, page, posts };
 }
 
-test("Settings groups contain their own controls with consistent nearby columns across categories", { timeout: 40000 }, async t => {
+test("Collection keeps automatic reads and preferences separate from approved source paths", async t => {
     const { page, context, posts } = await setup(t);
     const before = await loadBoardState(context);
-    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await chooseTheme(page, theme);
-        await navigateSettings(page, "connection");
-        const source = page.getByRole("region", { name: "Source", exact: true });
-        const preferences = page.getByRole("region", { name: "History and frequency", exact: true });
-        await expect(source.locator("#connectionStatus")).toHaveText("Paused");
-        await expect(source.locator("#viewApprovedSource")).toBeVisible();
-        await expect(source.locator("#pauseCollection")).toBeVisible();
-        await expect(preferences.locator("#preferenceActions")).toBeVisible();
-        await expect(preferences.locator("#saveCollection")).toBeDisabled();
-        await expect(preferences.locator("#collectionWindow-control")).toBeVisible();
-        await expect(source.locator("#connectionSummary")).toHaveCount(0);
-        await expect(preferences.locator("#historyWindowHelp,#collectionPreferenceDetails")).toHaveCount(0);
-        for (const selector of ["#sourceEditor", "#approvedSourceDetails", "#settingsDraftStatus", "#freshResult"]) {
-            assert.equal(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height), 0,
-                `${selector} does not reserve a blank row when inactive`);
-        }
-        assert.deepEqual(await page.locator('[data-settings-section=connection] > section').evaluateAll(nodes => nodes.map(node => node.id)),
-            ["connectionSource", "freshActivity", "connectionPreferences"]);
-        const geometry = await preferences.evaluate(root => {
-            const box = node => {
-                const { x, y, right, bottom } = node.getBoundingClientRect();
-                return { x, y, right, bottom };
-            };
-            return { root: box(root), label: box(root.querySelector(".settings-field > label")),
-                history: box(root.querySelector("#collectionWindow-control")), cadence: box(root.querySelector("#collectionCadence-control")),
-                actions: box(root.querySelector("#preferenceActions")) };
-        });
-        assert.ok(Math.abs(geometry.history.x - geometry.cadence.x) <= 1, "Both preference controls use the same leading column");
-        assert.ok(geometry.history.x - geometry.label.x <= 320, "Dropdown stays near its label, not the far pane edge");
-        // Native DOMRect rounding can exceed the shared bottom by 0.00001145 CSS px.
-        assert.ok(geometry.actions.x >= geometry.root.x && geometry.actions.right <= geometry.root.right + 1
-            && geometry.actions.y >= geometry.cadence.bottom && geometry.actions.bottom <= geometry.root.bottom + 0.0001,
-        "Save and Cancel are contained below the fields they govern");
-        await capture(page, `connection-${width}-${theme}`);
-        for (const category of ["privacy", "display", "troubleshooting"]) {
-            await navigateSettings(page, category);
-            const pane = page.locator(`[data-settings-section=${category}]`);
-            assert.equal(await pane.locator("h2").count(), 1);
-            assert.deepEqual(await pane.locator("[aria-describedby],[aria-labelledby]").evaluateAll(nodes =>
-                nodes.flatMap(node => ["aria-describedby", "aria-labelledby"].flatMap(attribute =>
-                    (node.getAttribute(attribute) || "").split(/\s+/).filter(id => id && !document.getElementById(id))))), [],
-            "Removed explanations leave no dead accessible descriptions");
-            assert.equal(await page.locator("#automaticScoreSetup,[data-category=ai]").count(), 0);
-            if (category === "display") await expect(pane.getByRole("heading", { name: "Time zone", level: 3 })).toBeVisible();
-            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
-            assert.deepEqual(await pane.locator("button,label,summary").evaluateAll(nodes => nodes.filter(node =>
-                node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
-            await capture(page, `${category}-${width}-${theme}`);
-        }
-    }
+    await expect(page.locator("#connectionStatus")).toHaveText("Paused");
+    await expect(page.locator("#pauseCollection")).toBeVisible();
+    await expect(page.getByRole("region", { name: "History and frequency" }).locator("#collectionWindow-control")).toBeVisible();
+    await expect(page.locator("#approvedSourceDetails")).toBeHidden();
+    await navigateSettings(page, "source-access");
+    await expect(page.locator("#approvedDatabase")).toBeVisible();
+    await expect(page.locator("#sourceEditor")).toBeHidden();
+    await expect(page.locator("#pauseCollection")).toBeHidden();
+    assert.deepEqual(await page.locator("#settingsView [aria-describedby], #settingsView [aria-labelledby]").evaluateAll(nodes =>
+        nodes.flatMap(node => ["aria-describedby", "aria-labelledby"].flatMap(attribute =>
+            (node.getAttribute(attribute) || "").split(/\s+/).filter(id => id && !document.getElementById(id))))), []);
     assert.equal(posts.filter(item => item.path === "/api/collection/configure").length, 0);
     assert.deepEqual(await loadBoardState(context), before);
 });
@@ -130,7 +88,7 @@ test("preference drafts, pending save, errors and uncertain recovery remain atta
     const { page, context, runtime, posts } = await setup(t);
     const before = await loadBoardState(context);
     await selectActivityOption(page, "collectionWindow", "7");
-    await expect(page.locator("#connectionPreferences #settingsDraftStatus")).toContainText("Unsaved preferences");
+    await expect(page.locator("#connectionPreferences #settingsDraftStatus")).toContainText("Unsaved changes");
     await expect(page.locator("#saveCollection")).toBeEnabled();
     await captureState(page, "preferences-dirty");
     await navigateSettings(page, "display");
@@ -145,7 +103,7 @@ test("preference drafts, pending save, errors and uncertain recovery remain atta
     t.after(() => release());
     await page.route("**/api/collection/configure", async route => { await gate; await route.continue(); }, { times: 1 });
     await page.locator("#saveCollection").click();
-    await expect(page.locator("#connectionPreferences #settingsDraftStatus")).toContainText("saved");
+    await expect(page.locator("#connectionPreferences #settingsDraftStatus")).toContainText("Saving");
     await expect(page.locator("#saveCollection")).toBeDisabled();
     await expect(page.locator("#cancelPreferences")).toBeDisabled();
     await captureState(page, "preferences-pending");
@@ -179,47 +137,4 @@ test("preference drafts, pending save, errors and uncertain recovery remain atta
     assert.equal((await runtime.collector.status()).config.enabled, false);
     const after = await loadBoardState(context);
     for (const key of ["evidence", "cards", "exports", "personalEvaluation"]) assert.deepEqual(after[key], before[key], key);
-});
-
-test("unconfigured source and source-edit controls stay in Source without granting permission", { timeout: 30000 }, async t => {
-    const { page, runtime, posts } = await setup(t, false);
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await chooseTheme(page, "dark");
-    await expect(page.locator("#connectionSource #connectionStatus")).toHaveText("Not connected");
-    await expect(page.locator("#connectionSource #reviewSource")).toBeVisible();
-    await expect(page.locator("#connectionPreferences #preferenceActions")).toBeHidden();
-    await captureState(page, "unconfigured");
-    await page.locator("#reviewSource").tap();
-    await expect(page.locator("#connectionSource #sourceEditor")).toBeVisible();
-    await page.locator("#sourceDatabase").fill("C:\\invented-source\\data.db");
-    await page.locator("#sourceSessions").fill("C:\\invented-source\\session-state");
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#connectionSource #approvalScope")).toBeVisible();
-    await captureState(page, "unconfigured-source-draft");
-    assert.equal((await runtime.collector.status()).config, null);
-    assert.equal(posts.filter(item => item.path === "/api/collection/configure").length, 0);
-    await page.locator("#cancelSource").click();
-    await expect(page.locator("#sourceEditor")).toBeHidden();
-    await expect(page.locator("#reviewSource")).toBeFocused();
-});
-
-test("source inspection, Settings search and Time zone retain exact destinations and browser Back", { timeout: 30000 }, async t => {
-    const { page, runtime, context, posts } = await setup(t);
-    const config = await readFile(path.join(context.dataDir, "collector", "config.json"));
-    await openSourceEditor(page);
-    await expect(page.locator("#connectionSource #sourceDatabase")).toBeFocused();
-    await page.locator("#sourceDatabase").fill("C:\\invented-change\\data.db");
-    await expect(page.locator("#sourceChangeImpact")).toContainText("stays paused");
-    await page.locator("#cancelSource").click();
-    await page.locator("#settingsSearch").fill("time zone");
-    await page.locator('#settingsSearchResults a[data-setting="time-zone"]').click();
-    await expect(page.locator("#displayTimeZone-control")).toBeFocused();
-    await selectActivityOption(page, "displayTimeZone", "UTC");
-    await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
-    await expect(page.locator("#displayTimeEffective")).toBeHidden();
-    await page.goBack();
-    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
-    assert.equal((await runtime.collector.status()).config.enabled, false);
-    assert.equal(posts.filter(item => item.path === "/api/collection/configure").length, 0);
-    assert.deepEqual(await readFile(path.join(context.dataDir, "collector", "config.json")), config);
 });

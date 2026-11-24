@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -7,6 +8,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { scanTree, scanReportMetadata } from "../lib/privacy.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { evaluationGeneratedHashes } from "../lib/report-facts.mjs";
+import { makeSnapshot } from "./assessment-contract-fixtures.mjs";
 
 function volumeRecords() {
     const records = Array.from({ length: 18 }, (_, session) => Array.from({ length: session === 0 ? 29 : 5 }, (_, request) => {
@@ -48,12 +50,12 @@ test("114 request groups and 376 calls retain complete scanning through all-form
         { kind: "all", revision: (await loadBoardState(context)).revision });
     await controller.review("volume", next.previewId, true);
     const later = (await controller.confirm("volume", next.previewId, true)).bundle;
-    const compared = await controller.previewComparison("volume", earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
+    const compared = await historicalComparison(context, earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
     assert.equal(compared.comparison.toolComparison.raw.baseline.count, 376);
     assert.equal(compared.comparison.toolComparison.overlap.sharedCount, 376);
     assert.equal(compared.privacy.allSelectedFieldsScanned, true);
-    await controller.reviewComparison("volume", compared.previewId, true);
-    const comparison = (await controller.confirmComparison("volume", compared.previewId, true)).bundle;
+
+    const comparison = compared.bundle;
     assert.equal(comparison.kind, "comparison");
     assert.deepEqual((await loadBoardState(context)).evidence, before.evidence);
 });
@@ -66,23 +68,31 @@ test("closed-schema facts validate every nested field before text de-duplication
     const scan = scanReportMetadata({ evaluationFacts: facts }, generated);
     assert.equal(scan.categories.credentials, 0);
     assert.equal(JSON.stringify(facts), before);
-    for (const inject of [
-        copy => { copy.assessments.at(-1).hidden = "password='SYNTHETIC_HIDDEN_CREDENTIAL'"; },
-        copy => { copy.metrics.at(-1).coverage.secret = "SYNTHETIC_HIDDEN_TEXT"; },
-        copy => { copy.memberships.at(-1).members.at(-1).localPath = "C:\\Synthetic\\private.json"; },
-        copy => { copy.patterns[0].pattern.display.endpoints[0].pathTemplate = "/me/messages?secret=hidden"; },
+    const historical = makeSnapshot();
+    assert.deepEqual(facts.assessments, []);
+    for (const [source, inject] of [
+        [historical, copy => { copy.assessments.at(-1).hidden = "password='SYNTHETIC_HIDDEN_CREDENTIAL'"; }],
+        [facts, copy => { copy.metrics.at(-1).coverage.secret = "SYNTHETIC_HIDDEN_TEXT"; }],
+        [facts, copy => { copy.memberships.at(-1).members.at(-1).localPath = "C:\\Synthetic\\private.json"; }],
+        [facts, copy => { copy.patterns[0].pattern.display.endpoints[0].pathTemplate = "/me/messages?secret=hidden"; }],
     ]) {
-        const tampered = structuredClone(facts);
+        const hashes = new Set(evaluationGeneratedHashes(source));
+        assert.equal(scanReportMetadata({ evaluationFacts: source }, hashes).categories.credentials, 0);
+        const tampered = structuredClone(source);
         inject(tampered);
-        assert.throws(() => scanReportMetadata({ evaluationFacts: tampered }, generated), /Projected evaluation facts are invalid/);
-        assert.throws(() => scanReportMetadata({ sourceFacts: [{ evaluationFacts: tampered }] }, generated), /Projected evaluation facts are invalid/);
+        assert.throws(() => scanReportMetadata({ evaluationFacts: tampered }, hashes), /Projected evaluation facts are invalid/);
+        assert.throws(() => scanReportMetadata({ sourceFacts: [{ evaluationFacts: tampered }] }, hashes), /Projected evaluation facts are invalid/);
     }
     const sensitiveOutsideFacts = scanReportMetadata({ evaluationFacts: facts, unexpectedCaption: "password='SYNTHETIC_PRIVATE'" }, generated);
     assert.ok(sensitiveOutsideFacts.categories.credential_assignments > 0, "Non-fact metadata still receives the full scanner");
     for (const malformed of [false, 0, "", undefined]) {
         assert.throws(() => scanReportMetadata({ evaluationFacts: malformed }, generated), /Projected evaluation facts are invalid/);
         assert.throws(() => scanReportMetadata({ sourceFacts: [{ evaluationFacts: malformed }] }, generated), /Projected evaluation facts are invalid/);
+        assert.throws(() => scanReportMetadata({ resultFacts: malformed }), /Invalid frozen result facts/);
+        assert.throws(() => scanReportMetadata({ sourceFacts: [{ resultFacts: malformed }] }), /Invalid frozen result facts/);
     }
+    assert.throws(() => scanReportMetadata({ resultFacts: null }), /Invalid frozen result facts/);
+    assert.doesNotThrow(() => scanReportMetadata({ sourceFacts: [{ resultFacts: null }, {}] }));
 });
 
 test("untrusted structural and text budgets remain bounded by the original scanner limits", () => {

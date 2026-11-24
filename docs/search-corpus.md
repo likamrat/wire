@@ -10,14 +10,17 @@ original history, grant permission, render UI or persist an index.
 | Type | Authoritative input and reader | Destination and limit |
 | --- | --- | --- |
 | Interaction/context | Complete accepted `mergeEvidenceWithState` roster and `createRequestContext.select`, not a date/page slice | Exact interaction/message context; no task clustering or reconstructed chat |
-| Retained reply | Assessment read model plus the existing authorized retained-response action | Original interaction; source/consent/membership/integrity checked before and after read |
+| Retained reply | Assessment read model and the same retained-response reader used by the evidence action | Original interaction; source/consent/membership checked before and after a bounded group of reads; every payload verified individually |
 | Recorded action | Canonical activity analytics and exact call investigation across supported layers | Exact request/layer/call; returned entries also bind snapshot revision |
 | Tool/service | Names actually present in qualified retained actions | Existing all-scope filter destination, not automatic analytical membership |
 | Saved report | Registered saved-file reader, disclosure manifest and exact bytes/hash | Exact bundle/format/manifest/file identity, without source regeneration |
 | Saved comparison | Verified frozen manifest and compatibility reader | Exact independent saved comparison, not its source reports' current contents |
 | View/setting | Fixed current navigation/settings registry | Reveal/navigate only; never click a control or open approval |
 
-No source-path or live permission DOM values become setting text.
+View and setting targets use public page paths. Targets derived from record IDs,
+calls, tool names or service names are private navigation descriptors; do not
+copy them into a public link path or query string. No source-path or live permission
+DOM values become setting text.
 
 | Text or identity | Rule |
 | --- | --- |
@@ -83,8 +86,13 @@ authority does not block independently authorized saved artifacts.
 
 The corpus starts uninitialized with no disk index. Every rebuild/index read/
 delivery revalidates retained inputs. Artifact checks run inside the existing
-board serialization boundary; reply payload reads remain outside it so their
-own guards can operate. A final state/source stamp check linearizes publication
+board serialization boundary; up to eight reply payload reads share a before/after
+state and source check outside the writer queue. A changed grant or cancellation
+discards the group before delivery and prevents the next group from starting.
+Each check rereads the store. For file-backed evidence it uses the SHA-256
+verified against those bytes by that read, rather than serializing all parsed
+records again. Inline evidence still compares the records themselves.
+A final state/source stamp check linearizes publication
 against owned changes.
 
 | Method | Contract |

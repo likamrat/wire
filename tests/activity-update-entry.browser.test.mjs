@@ -8,7 +8,7 @@ import { recollectionFixture } from "./recollection-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { selectActivityOption, navigateMain, navigateSettings, openSourceEditor, chooseTheme, revealStoredRefresh, revealSavedDataRead } from "./helpers.mjs";
-import { chooseReportScope, scanReport } from "./report-journey-helpers.mjs";
+import { prepareLandingReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 async function capture(page, name) {
@@ -16,6 +16,18 @@ async function capture(page, name) {
     await mkdir(process.env.WIRE_ACTIVITY_UPDATE_PROOF_DIR, { recursive: true });
     await page.evaluate(async () => { await document.fonts.ready; getSelection().removeAllRanges(); });
     await page.screenshot({ path: path.join(process.env.WIRE_ACTIVITY_UPDATE_PROOF_DIR, `${name}.png`) });
+}
+
+async function prepareFrozenReport(page, expectedRecords) {
+    await navigateMain(page, "reports");
+    const [response] = await Promise.all([
+        page.waitForResponse(r => r.url().endsWith("/api/preview")), prepareLandingReport(page, "all"),
+    ]);
+    assert.equal(response.status(), 200);
+    assert.equal((await response.json()).records.length, expectedRecords);
+    const frame = page.locator("#reportReviewBody .report-contained-frame");
+    await expect(frame).toBeVisible();
+    return frame;
 }
 
 async function readableDisabled(page, selector) {
@@ -35,6 +47,41 @@ async function readableDisabled(page, selector) {
     assert.ok(paint.height >= 44);
 }
 
+test("Settings history dates match the workspace fields without requesting a preview", { timeout: 30000 }, async t => {
+    const f = await recollectionFixture(t), browser = await chromium.launch();
+    f.closeClient(() => browser.close());
+    const page = await browser.newPage({ reducedMotion: "reduce", timezoneId: "UTC" }), operations = [];
+    page.on("request", r => { if (/\/api\/(?:deletion|recollection)\/(?:preview|confirm)$/.test(r.url())) operations.push(r.url()); });
+    await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
+    const measure = async input => input.evaluate(n => {
+        const caption = n.labels[0].querySelector("span");
+        const gap = n.getBoundingClientRect().top - caption.getBoundingClientRect().bottom;
+        return { radius: getComputedStyle(n).borderRadius, height: n.getBoundingClientRect().height, gap };
+    });
+    for (const [width, size] of [[1280, 100], [390, 150]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(value => document.documentElement.style.fontSize = `${value}%`, size);
+        await navigateMain(page, "analyze"); await selectActivityOption(page, "dateFilter", "custom");
+        const reference = await measure(page.locator("#fromFilter"));
+        assert.ok(reference.height >= 44 && reference.gap >= 8);
+        await page.locator("#analyzeDates").getByRole("button", { name: "Cancel", exact: true }).click();
+        await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
+        for (const [op, opener, close] of [["delete", "deleteActivity", "deleteCancel"], ["recollect", "recollectActivity", "recollectClose"]]) {
+            await page.locator("#" + opener).click();
+            const dialog = page.locator(`#${op}Dialog`);
+            for (const bound of ["From", "To"]) {
+                const field = dialog.getByLabel(bound, { exact: true });
+                await expect(field).toBeVisible();
+                assert.deepEqual(await measure(field), reference, `${op} ${bound}, ${width}px`);
+                await field.fill(f.firstDay);
+            }
+            await expect(dialog).not.toContainText(/current display time zone/i);
+            await page.locator("#" + close).click(); await expect(page.locator("#" + opener)).toBeFocused();
+        }
+    }
+    assert.deepEqual(operations, []);
+});
+
 test("Settings recollection uses the authoritative preview and preserves the displayed date scope", { timeout: 30000 }, async t => {
     const f = await recollectionFixture(t);
     const deletion = createDeletionController(f.context);
@@ -49,6 +96,7 @@ test("Settings recollection uses the authoritative preview and preserves the dis
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
     await selectActivityOption(page, "dateFilter", "day"); await page.locator("#workspace[aria-busy=false]").waitFor();
     await page.locator("#closeAnalyzeFilters").click();
+    await expect(page.locator("#analyzeFilterDialog")).toBeHidden();
     await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     assert.equal(await page.locator("#recollectActivity").count(), 1);
     const trigger = await page.locator("#recollectActivity").elementHandle();
@@ -62,6 +110,12 @@ test("Settings recollection uses the authoritative preview and preserves the dis
         await capture(page, `selection-${theme}-disabled`);
     }
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
+    const previewRequests=[];
+    page.on("request",r=>{if(r.url().endsWith("/api/recollection/preview"))previewRequests.push(r.url());});
+    await page.locator("#recollectFrom").fill("2098-01-02");await page.locator("#recollectTo").fill("2098-01-03");
+    await expect(page.locator("#recollectPreview")).toBeDisabled();
+    await expect(page.locator("#recollectCalendarStatus")).toContainText("today or an earlier date");
+    assert.deepEqual(previewRequests,[]);
     await page.locator("#recollectFrom").fill(f.firstDay); await page.locator("#recollectTo").fill(f.firstDay);
     const response = page.waitForResponse(response => response.url().endsWith("/api/recollection/preview"));
     await page.locator("#recollectPreview").click();
@@ -126,7 +180,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
     const retainedReceipt = await page.evaluate(() => JSON.parse(sessionStorage.getItem("workiq-evidence.recollection-operation")));
     await page.reload(); await page.locator("#workspace[aria-busy=false]").waitFor();
     await navigateMain(page, "analyze");
-    await expect(page.locator("#freshAwayLink")).toHaveAttribute("href", "#settings?section=privacy&setting=recollect-activity");
+    await expect(page.locator("#freshAwayLink")).toHaveAttribute("href", "/settings?section=privacy&setting=recollect-activity");
     await page.locator("#freshAwayLink").focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#recollectActivity")).toHaveText("Check recollection result");
     await page.locator("#recollectActivity").click();
@@ -145,8 +199,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
         await capture(page, "receipt-read-pending");
         await page.locator("#recollectClose").click();
         await page.waitForFunction(() => document.activeElement.id === "recollectActivity");
-        await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
-        frozen = page.locator("#reportReviewBody iframe"); frozenNode = await frozen.elementHandle();
+        frozen = await prepareFrozenReport(page, 1); frozenNode = await frozen.elementHandle();
         frozenHtml = await frozen.getAttribute("srcdoc");
     } finally { release(); }
     await page.waitForFunction(() => !sessionStorage.getItem("workiq-evidence.recollection-operation"));
@@ -179,14 +232,16 @@ test("B actions preserve dirty Settings and a frozen report without dispatch", {
     await navigateMain(page, "analyze"); await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
     await capture(page, "entry-dirty-settings");
-    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+    await navigateMain(page, "settings"); await navigateSettings(page, "source-access");
     assert.equal(await page.locator("#sourceSessions").inputValue(), draft);
     await page.locator("#cancelSource").click();
-    await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
-    const frozen = await page.locator("#reportReviewBody iframe").getAttribute("srcdoc");
+    const frame = await prepareFrozenReport(page, 3);
+    const frozen = await frame.getAttribute("srcdoc");
+    assert.ok(frozen);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await navigateMain(page, "analyze");
     for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
-    assert.equal(await page.locator("#reportReviewBody iframe").getAttribute("srcdoc"), frozen);
+    assert.equal(await frame.getAttribute("srcdoc"), frozen);
     assert.deepEqual(effects, []);
 });
 
@@ -341,7 +396,7 @@ for (const [name, raw, unreadable] of [
         const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
         await (await revealSavedDataRead(page)).click(); await read; await page.locator("#workspace[aria-busy=false]").waitFor();
         if (name === "malformed JSON") await chooseTheme(page, "light");
-        await navigateSettings(page, "privacy");
+        await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
         await page.locator("#recollectActivity").click();
         await expect(page.locator("#recollectTitle")).toHaveText("Recollection recovery unavailable");
         if (name === "malformed JSON") await capture(page, "blocked-recollection-receipt-light");

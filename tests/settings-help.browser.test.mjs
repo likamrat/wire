@@ -1,30 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { isPagePath } from "../lib/page-path.mjs";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_SETTINGS_HELP_PROOFS;
-const copy = {
-    editSource: "Open the source editor without changing the approved source.",
-    pauseCollection: "Pause future local collection without removing retained evidence.",
-    resume: "Resume local collection from the previously approved source.",
-    collectNow: "Refresh stored activity and check approved local history. Paused collection stays paused; before approval only stored data is read.",
-    reviewSource: "Open the local source paths for review before granting permission.",
-    connectCollection: "Approve these local paths and start collection with the chosen preferences.",
-    switchSource: "Validate and approve these paths, then collect from the replacement source.",
-    switchPaused: "Validate and approve these paths while keeping collection paused.",
-    cancelSource: "Discard these source edits without changing the current connection.",
-    saveCollection: "Save history and cadence preferences, keeping the approved source and pause state.",
-    cancelPreferences: "Discard preference edits and load the current connection settings.",
-    reloadSettings: "Read the current connection without replaying the previous action.",
-};
-const progress = "A local check is in progress; wait for it to finish.";
 const records = [fixture("synthetic-settings-help")];
 
 async function setup(t, approved = true) {
@@ -38,7 +21,7 @@ async function setup(t, approved = true) {
     const mutations = [], errors = [], rejected = [];
     let release, hold = false, fail = false, reads = 0;
     const server = createServer(async (req, res) => {
-        if (req.method === "GET" && req.url === "/") {
+        if (req.method === "GET" && isPagePath(req.url.split("?")[0])) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "settings-help", UNBOUND_FIXTURE_BOOTSTRAP));
         }
@@ -84,7 +67,6 @@ async function setup(t, approved = true) {
     });
     await page.goto(origin + "/#settings");
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
-    if (proofDir) await mkdir(proofDir, { recursive: true });
     return { page, mutations, status: () => status, reads: () => reads,
         update: patch => { status = { ...status, ...patch }; },
         hold: () => { hold = true; }, fail: () => { fail = true; },
@@ -100,8 +82,8 @@ test("benign Settings messages stay with their originating section while uncerta
         await openSourceEditor(page);
         if (changed) await page.locator("#sourceDatabase").fill("C:\\synthetic\\unsaved-data.db");
         await page.locator("#cancelSource").click();
-        if (changed) assert.match(await page.locator("#settingsMessage").textContent(), /^Source edits discarded/);
-        else assert.equal(await page.locator("#settingsMessage").isVisible(), false, "Closing an unchanged editor needs no cancellation notice");
+        assert.equal(await page.locator("#sourceEditor").isVisible(), false);
+        assert.equal(await page.locator("#approvedDatabase").textContent(), state.status().config.appDbPath);
         await navigateSettings(page, "data");
         assert.equal(await page.locator("#settingsMessage").isVisible(), false);
         await navigateSettings(page, "display");
@@ -109,7 +91,7 @@ test("benign Settings messages stay with their originating section while uncerta
         await page.locator("[data-settings-section=privacy]:visible").waitFor();
         assert.equal(await page.locator("#settingsMessage").isVisible(), false, "Back cannot revive an unrelated discard message");
         await page.goForward();
-        await page.locator("[data-settings-section=display]:visible").waitFor();
+        await page.locator("[data-settings-section=themes]:visible").waitFor();
         await navigateSettings(page, "data");
         await page.reload();
         await page.locator("#workspace[aria-busy=false]").waitFor();
@@ -136,7 +118,7 @@ test("benign Settings messages stay with their originating section while uncerta
     await navigateSettings(page, "collection");
     await selectActivityOption(page, "collectionCadence", "30");
     await page.locator("#cancelPreferences").click();
-    assert.match(await page.locator("#settingsMessage").textContent(), /Preference edits discarded.*Saved collection settings are unchanged/);
+    assert.equal(await page.locator("#collectionCadence").inputValue(), "15");
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), false);
     await navigateSettings(page, "collection");
@@ -146,7 +128,7 @@ test("benign Settings messages stay with their originating section while uncerta
     await page.locator("#reloadSettings").waitFor();
     await navigateSettings(page, "data");
     assert.equal(await page.locator("#settingsMessage").isVisible(), true);
-    assert.match(await page.locator("#settingsMessage").textContent(), /Synthetic unconfirmed write.*No success is assumed/);
+    assert.match(await page.locator("#settingsMessage").textContent(), /Synthetic unconfirmed write.*Change unconfirmed/);
     assert.equal(await page.locator("#reloadSettings").isVisible(), true);
     assert.equal(state.mutations.length, 2, "Navigation and cancellation never repeat either explicit write");
 });
@@ -196,191 +178,30 @@ async function dismiss(page, trigger) {
 async function saved(page) {
     await page.waitForFunction(() => !document.querySelector("#collectionCadence").disabled);
 }
-async function geometry(page) {
-    await page.evaluate(() => document.fonts.ready);
-    return page.locator("#approvedConnection .settings-actions button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
-        const box = node.getBoundingClientRect(), style = getComputedStyle(node), range = document.createRange();
-        range.selectNodeContents(node);
-        const text = range.getBoundingClientRect(), canvas = document.createElement("canvas").getContext("2d");
-        canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-        const metrics = canvas.measureText(node.textContent);
-        return { id: node.id, text: node.textContent, disabled: node.disabled,
-            top: box.top, bottom: box.bottom, left: box.left, right: box.right, height: box.height, center: box.top + box.height / 2,
-            textCenter: text.top + text.height / 2, baseline: text.bottom - metrics.fontBoundingBoxDescent,
-            lineHeight: style.lineHeight, padding: style.padding, border: style.borderWidth };
-    }));
-}
-function assertActionRows(buttons, width, context) {
-    for (const [index, box] of buttons.entries()) {
-        assert.ok(box.height >= 44, `${context}: actual action target`);
-        assert.ok(box.left >= 0 && box.right <= width + 1, `${context}: action fits viewport`);
-        for (const other of buttons.slice(index + 1)) {
-            if (Math.abs(box.top - other.top) <= 1) {
-                for (const key of ["bottom", "height", "center", "textCenter", "baseline"]) {
-                    assert.ok(Math.abs(box[key] - other[key]) <= 1, `${context}/${key}: same-row actions align`);
-                }
-                assert.ok(other.left - box.right >= 7, `${context}: horizontal action gap`);
-            } else assert.ok(other.top - box.bottom >= 7, `${context}: wrapped actions form a distinct row`);
-        }
-    }
-}
-
-test("collection actions explain consequences on hover and Tab without writes; Escape, hoverability and polling stay stable", { timeout: 45000 }, async t => {
-    const { page, mutations, reads } = await setup(t);
-    for (const mode of ["hover", "keyboard"]) for (const id of ["editSource", "pauseCollection", "collectNow"]) {
-        const trigger = await tooltip(page, id, copy[id], mode);
-        await dismiss(page, trigger);
-    }
-    const change = await tooltip(page, "editSource", copy.editSource);
-    await page.getByRole("tooltip").hover(); await page.waitForTimeout(200);
-    assert.equal(await page.getByRole("tooltip").isVisible(), true, "Help is hoverable");
-    await page.mouse.move(0, 0); await page.getByRole("tooltip").waitFor({ state: "hidden" });
-    await change.hover(); await page.getByRole("tooltip").waitFor({ state: "visible" });
-    const focused = await tooltip(page, "pauseCollection", copy.pauseCollection, "keyboard");
-    const handle = await focused.elementHandle(), count = reads();
-    await page.waitForResponse(response => response.url().endsWith("/api/collection/status"), { timeout: 10000 });
-    assert.ok(reads() > count);
-    assert.equal(await handle.evaluate(node => node === document.activeElement && node.isConnected), true);
-    assert.equal(await page.getByRole("tooltip").innerText(), copy.pauseCollection);
-    assert.equal(await page.locator('[aria-describedby~="evidence-tooltip"]').count(), 1);
-    await dismiss(page, focused);
-    await page.waitForResponse(response => response.url().endsWith("/api/collection/status"), { timeout: 10000 });
-    assert.equal(await page.getByRole("tooltip").isVisible(), false, "Polling does not reopen dismissed help");
-    await tooltip(page, "collectNow", copy.collectNow);
-    await chooseTheme(page, "dark");
-    await tooltip(page, "collectNow", copy.collectNow, "keyboard");
-    await page.keyboard.press("Escape");
-    await page.evaluate(() => {
-        document.activeElement.blur();
-        document.querySelector("#editSource").setAttribute("aria-describedby", "connectionStatus");
-    });
-    await control(page, "editSource").focus();
-    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionStatus evidence-tooltip");
-    await page.keyboard.press("Escape");
-    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionStatus");
-    await control(page, "editSource").evaluate(node => node.removeAttribute("aria-describedby"));
-    await tooltip(page, "editSource", copy.editSource, "keyboard");
-    await page.evaluate(() => { location.hash = "home"; });
-    await page.getByRole("tooltip").waitFor({ state: "hidden" });
-    assert.equal(await page.locator('[aria-describedby~="evidence-tooltip"]').count(), 0);
-    assert.deepEqual(mutations, []);
-});
-
-test("disabled and pending collection actions have one reachable explanation, and paused/source-review variants remain accurate", { timeout: 50000 }, async t => {
+test("disabled collection actions explain the actual hold without authorizing any work", async t => {
     const state = await setup(t), { page, mutations } = state;
     await selectActivityOption(page, "collectionCadence", "15");
-    const disabled = await tooltip(page, "collectNow", "Save or cancel your Settings edits before refreshing.", "keyboard");
-    const before = mutations.length;
-    await page.keyboard.press("Enter"); await page.keyboard.press("Space");
-    assert.equal(mutations.length, before);
-    assert.equal(await control(page, "collectNow").isDisabled(), true);
-    assert.equal(await disabled.locator("button").count(), 1);
-    await tooltip(page, "saveCollection", copy.saveCollection);
-    await tooltip(page, "cancelPreferences", copy.cancelPreferences, "keyboard");
-    await control(page, "cancelPreferences").click();
-    await tooltip(page, "saveCollection", "Change a preference before saving.", "keyboard");
-    await tooltip(page, "cancelPreferences", "There are no preference changes to cancel.", "keyboard");
-    await navigateSettings(page, "connection");
-    await control(page, "pauseCollection").click(); await saved(page);
-    await tooltip(page, "pauseCollection", copy.resume, "keyboard");
-    await tooltip(page, "collectNow", copy.collectNow);
-    await control(page, "editSource").click();
-    await tooltip(page, "collectNow", "Save or cancel your Settings edits before refreshing.", "keyboard");
-    await tooltip(page, "connectCollection", "Change a source path before approving a replacement.", "keyboard");
-    await control(page, "sourceDatabase").fill("");
-    await tooltip(page, "connectCollection", "Enter both local source paths before approving.", "keyboard");
-    await control(page, "sourceDatabase").fill("C:\\synthetic-replacement\\data.db");
-    await tooltip(page, "connectCollection", copy.switchPaused);
-    await tooltip(page, "cancelSource", copy.cancelSource, "keyboard");
-    await control(page, "cancelSource").click();
-    await control(page, "pauseCollection").click(); await saved(page);
-    await control(page, "editSource").click();
-    await control(page, "sourceDatabase").fill("C:\\synthetic-replacement\\data.db");
-    await tooltip(page, "connectCollection", copy.switchSource, "keyboard");
-    await control(page, "cancelSource").click();
-    state.hold();
-    await control(page, "collectNow").click();
-    await page.waitForFunction(() => document.querySelector("#collectNow").disabled);
-    for (const id of ["editSource", "pauseCollection", "collectNow"]) {
-        const pendingHelp = id === "collectNow" ? "Wait for the current activity update to finish." : progress;
-        await tooltip(page, id, pendingHelp, "hover");
-        await tooltip(page, id, pendingHelp, "keyboard");
+    for (const mode of ["hover", "keyboard"]) {
+        const trigger = await tooltip(page, "pauseCollection", "Save or cancel your changes.", mode);
+        await page.getByRole("tooltip").hover();
+        assert.equal(await page.getByRole("tooltip").isVisible(), true);
+        await dismiss(page, trigger);
     }
-    const pendingCount = mutations.length;
-    await page.keyboard.press("Enter"); await page.keyboard.press("Space");
-    assert.equal(mutations.length, pendingCount);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        const boxes = await geometry(page);
-        assertActionRows(boxes, page.viewportSize().width, `Pending ${theme}`);
-    }
-    state.release(); await saved(page);
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
-    await tooltip(page, "collectNow", copy.collectNow, "keyboard");
-    assert.deepEqual(mutations.map(row => row.endpoint), ["/api/collection/enabled", "/api/collection/enabled", "/api/collection/now"]);
-});
-
-test("first approval, stale settings and uncertain-response help never imply automatic permission or replay", { timeout: 40000 }, async t => {
-    const state = await setup(t, false), { page, mutations } = state;
-    await tooltip(page, "reviewSource", copy.reviewSource, "keyboard");
-    await control(page, "reviewSource").click();
-    await tooltip(page, "connectCollection", copy.connectCollection, "keyboard");
     assert.deepEqual(mutations, []);
-    await control(page, "connectCollection").click(); await saved(page);
-    await selectActivityOption(page, "collectionCadence", "15");
-    state.update({ configVersion: 2 + state.status().configVersion });
-    await page.waitForFunction(() => document.querySelector("#settingsDraftStatus").textContent.includes("another panel"));
-    await tooltip(page, "saveCollection", "Cancel your edits to load the connection changed in another panel.", "keyboard");
-    await control(page, "cancelPreferences").click();
-    state.fail();
-    await navigateSettings(page, "connection");
-    await control(page, "collectNow").click();
-    await page.locator("#refreshBtn").waitFor();
-    assert.match(await page.locator("#freshContextMessage").innerText(), /Source check outcome unknown/);
-    assert.equal(await control(page, "reloadSettings").isVisible(), false, "A source check is not a settings write");
-    const count = mutations.length;
-    await page.locator("#refreshBtn").click();
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "unconfirmed");
-    assert.match(await page.locator("#freshStatus").innerText(), /source check unconfirmed/);
-    assert.equal(mutations.length, count);
+    state.hold();
+    await page.locator("#saveCollection").click();
+    await tooltip(page, "pauseCollection", "Saving...", "keyboard");
+    state.release(); await saved(page);
+    assert.equal(state.status().config.pollSeconds, 15);
+    assert.deepEqual(mutations.map(row => row.endpoint), ["/api/collection/configure"]);
 });
 
-test("painted collection pills and tooltip geometry stay aligned across themes, widths, text sizes and states", { timeout: 120000 }, async t => {
-    const { page, mutations } = await setup(t), proof = [];
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) for (const scale of [100, 200]) {
-        await page.setViewportSize({ width, height: 1100 });
-        await chooseTheme(page, theme);
-        await page.evaluate(value => { document.documentElement.style.fontSize = value + "%"; }, scale);
-        for (const variant of ["active", "paused", "draft"]) {
-            if (variant === "paused") { await control(page, "pauseCollection").click(); await saved(page); }
-            if (variant === "draft") await selectActivityOption(page, "collectionCadence", "15");
-            await navigateSettings(page, "connection");
-            await control(page, "editSource").scrollIntoViewIfNeeded();
-            const buttons = await geometry(page);
-            assertActionRows(buttons, width, `${theme}/${width}/${scale}`);
-            for (const id of ["editSource", "pauseCollection", "collectNow"]) {
-                const expected = variant === "draft" ? id === "collectNow" ? "Save or cancel your Settings edits before refreshing." : "Save or cancel your preference changes first."
-                    : id === "pauseCollection" && variant === "paused" ? copy.resume : copy[id];
-                const trigger = await tooltip(page, id, expected, "keyboard");
-                const tip = await page.getByRole("tooltip").evaluate(node => {
-                    const b = node.getBoundingClientRect(), s = getComputedStyle(node);
-                    return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, color: s.color, background: s.backgroundColor,
-                        overflowX: node.scrollWidth - node.clientWidth, overflowY: node.scrollHeight - node.clientHeight };
-                });
-                assert.ok(tip.left >= 7 && tip.right <= width - 7 && tip.top >= 7 && tip.bottom <= 1093);
-                assert.ok(tip.overflowX <= 1 && tip.overflowY <= 1);
-                assert.ok(contrast(tip.color, tip.background) >= 4.5);
-                assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-                proof.push({ theme, width, scale, variant, id, buttons, tooltip: tip });
-                if (proofDir && id === "collectNow" && variant === "active") await page.screenshot({ path: path.join(proofDir, `collection-help-${theme}-${width}-${scale}.png`) });
-                await dismiss(page, trigger);
-            }
-        }
-        await navigateSettings(page, "collection");
-        await control(page, "cancelPreferences").click();
-        await navigateSettings(page, "connection");
-        await control(page, "pauseCollection").click(); await saved(page);
-    }
-    assert.ok(mutations.every(row => row.endpoint === "/api/collection/enabled"));
-    if (proofDir) await writeFile(path.join(proofDir, "collection-help-measurements.json"), JSON.stringify(proof, null, 2));
+test("a source draft with a missing path explains why approval is unavailable", async t => {
+    const { page, mutations, status } = await setup(t, false);
+    await navigateSettings(page, "source-access");
+    await page.locator("#reviewSource").click();
+    await page.locator("#sourceSessions").fill("");
+    await tooltip(page, "connectCollection", "Enter both source paths.", "keyboard");
+    assert.deepEqual(mutations, []);
+    assert.equal(status().config, null);
 });

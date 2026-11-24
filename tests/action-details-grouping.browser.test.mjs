@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_ACTION_DETAILS_PROOFS;
 const original = "Synthetic retained request\n  Exact spacing and <not-markup> stay unchanged.  ";
@@ -29,53 +30,57 @@ function source(count = 2) {
 async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 }
-async function setup(t, record = source()) {
-    const { context } = await privateFixture(t, [record]);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+async function setup(t, record = source(), otherRecords = [], { enforced = false } = {}) {
+    const cleanup = [];
+    const { context } = await privateFixture({ after: fn => cleanup.push(fn) }, [record, ...otherRecords]);
+    const access = enforced ? await createCopilotRuntimeAccess(context) : undefined;
+    const runtime = await startServer(context, createExportController(context), { port: 0, frontend: "react", access, collector: { timers: false } });
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
     page.setDefaultTimeout(7000);
     const errors = [], mutations = [];
     page.on("pageerror", error => errors.push(error.message));
-    page.on("request", request => {
-        const endpoint = new URL(request.url()).pathname;
-        if (request.method() !== "GET" && !(request.method() === "POST" && ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(endpoint))) mutations.push(endpoint);
+    await page.route("**/*", route => {
+        const request = route.request(), url = new URL(request.url());
+        const updateStatus = url.pathname === "/api/app-update" && request.method() === "POST" && request.postDataJSON()?.action === "status";
+        if (url.origin !== new URL(runtime.url).origin || (request.method() !== "GET" && !updateStatus && ![
+            "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",
+            "/api/evaluation/automatic/summary", ...(enforced ? ["/api/access/watch", "/api/profile/github",
+                "/api/access/status", "/api/collection/sources/status", "/api/report-drafts/list","/api/assessment/consent"] : []),
+        ].includes(url.pathname))) { mutations.push(url.pathname); t.diagnostic(`Blocked fixture request: ${url.pathname}`); return route.abort(); }
+        return route.continue();
     });
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: {
         readText() { throw Error("Grouping never reads the clipboard."); },
         writeText() { throw Error("Grouping never writes the clipboard."); },
     } }));
     t.after(async () => {
-        await browser.close(); await runtime.close();
+        try { await browser.close(); await runtime.close(); await access?.close(); }
+        finally { for (const fn of cleanup) await fn(); }
         assert.deepEqual(errors, []); assert.deepEqual(mutations, []);
     });
-    await page.goto(runtime.url + "#request?request=action-grouping"); await ready(page);
-    return { page, runtime, context, record };
+    await page.goto(runtime.url); await ready(page);
+    const card = page.locator('#activityList article[data-view-key="request:action-grouping"]');
+    return { page, card, context, record };
 }
-const actions = page => page.locator(".journey-item");
-const details = item => item.locator(":scope > .detail-disclosure");
-const argumentsSummary = item => item.locator("summary").filter({ hasText: /^Exact recorded arguments \/ local only$/ });
+const actions = page => page.locator('[data-reader-section="activity"] .reader-call-row');
+const details = item => item.locator(":scope > .technical-detail");
+const toggle = item => item.locator(".reader-call-toggle");
 
 async function geometry(page) {
     return page.evaluate(() => ({
         pageOverflow: document.documentElement.scrollWidth - innerWidth,
-        items: [...document.querySelectorAll(".journey-item")].map(item => {
-            const detail = item.querySelector(":scope > .detail-disclosure"), summary = detail.firstElementChild;
-            const prior = detail.previousElementSibling, heading = item.querySelector("h3");
+        items: [...document.querySelectorAll('[data-reader-section="activity"] .reader-call-row')].map(item => {
+            const summary = item.querySelector(".reader-call-toggle"), detail = document.getElementById(summary.getAttribute("aria-controls"));
             const box = item.getBoundingClientRect(), support = detail.getBoundingClientRect(), label = summary.getBoundingClientRect();
-            const style = getComputedStyle(detail);
             return {
-                key: item.dataset.viewKey, detailKey: detail.dataset.disclosureKey,
-                open: detail.open, parent: detail.parentElement === item, last: item.lastElementChild === detail,
-                headingLeft: heading.getBoundingClientRect().left, detailLeft: support.left,
-                top: box.top, bottom: box.bottom, detailTop: support.top, detailBottom: support.bottom,
-                summaryBottom: label.bottom, summaryHeight: label.height, summaryWidth: label.width,
-                gapBefore: support.top - prior.getBoundingClientRect().bottom,
+                detailKey: detail.id, open: !detail.hidden, expanded: summary.getAttribute("aria-expanded"),
+                parent: detail.parentElement === item, last: item.lastElementChild === detail,
+                top: box.top, bottom: box.bottom, detailTop: support.top, detailBottom: support.bottom, summaryBottom: label.bottom,
+                summaryHeight: label.height, summaryWidth: label.width,
                 nextTop: item.nextElementSibling?.getBoundingClientRect().top ?? null,
-                borderTop: parseFloat(style.borderTopWidth), borderBottom: parseFloat(style.borderBottomWidth),
-                rail: parseFloat(getComputedStyle(item).borderLeftWidth),
-                contentBottom: detail.open ? Math.max(...[...detail.children].map(child => child.getBoundingClientRect().bottom)) : label.bottom,
-                clippedLabels: [...item.querySelectorAll("h3,summary,dt,dd,.ux-inline-code>code,code.api-path")].filter(node =>
+                divider: parseFloat(getComputedStyle(item).borderBlockStartWidth),
+                clippedLabels: [...item.querySelectorAll("h3,dt:not(.visually-hidden),dd,code.api-path")].filter(node =>
                     node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.tagName),
             };
         }),
@@ -83,112 +88,112 @@ async function geometry(page) {
 }
 function assertGrouped(result, context) {
     assert.ok(result.pageOverflow <= 1, `${context}: page fits`);
+    assert.ok(result.items.length > 0);
     assert.equal(new Set(result.items.map(item => item.detailKey)).size, result.items.length);
-    for (const item of result.items) {
+    for (const [index,item] of result.items.entries()) {
         assert.equal(item.parent && item.last, true, `${context}: disclosure ends its own record`);
-        assert.equal(item.borderTop, 0, `${context}: no apparent record-ending rule before disclosure`);
-        assert.equal(item.borderBottom, item.nextTop === null ? 0 : 1, `${context}: divider follows complete non-last record`);
-        assert.ok(Math.abs(item.headingLeft - item.detailLeft) < 1, `${context}: aligned with action content`);
-        assert.ok(item.gapBefore >= 0 && item.gapBefore <= 4.1, `${context}: attached, not separated by a larger gap`);
+        assert.equal(item.expanded, String(item.open), `${context}: toggle controls its own detail`);
+        assert.equal(item.divider, index ? 1 : 0, `${context}: divider separates complete records`);
         assert.ok(item.summaryHeight >= 44 && item.summaryWidth >= 44, `${context}: disclosure target`);
-        assert.equal(item.rail, 2);
-        assert.ok(item.contentBottom <= item.detailBottom + 1 && item.detailBottom <= item.bottom + 1);
-        if (item.nextTop !== null) assert.ok(item.detailBottom <= item.nextTop && item.nextTop - item.detailBottom <= 24.1);
+        if (item.open) assert.ok(item.detailTop >= item.summaryBottom - 1 && item.detailBottom <= item.bottom + 1);
+        if (item.nextTop !== null) assert.ok(item.bottom <= item.nextTop + 1);
         assert.deepEqual(item.clippedLabels, [], `${context}: labels fit`);
     }
 }
 async function screenshot(page, name) {
     if (!proofDir) return;
     await mkdir(proofDir, { recursive: true });
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const clip = await page.locator(".journey").boundingBox();
-    await page.screenshot({ path: path.join(proofDir, `${name}.png`), fullPage: true, clip });
+    await page.locator("#contextSidebar").screenshot({ path: path.join(proofDir, `${name}.png`) });
 }
 
 test("action details stay inside their record before the divider at every supported width and text size", { timeout: 90000 }, async t => {
-    const { page } = await setup(t), metrics = [];
+    const { page, card } = await setup(t), metrics = [];
+    await card.getByRole("link", { name: "1 tool call failed" }).click();
+    await expect(actions(page)).toHaveCount(2);
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
         const label = `${theme}-${width}-${scale * 100}`;
         metrics.push({ label: label + "-collapsed", ...await geometry(page) });
         if ((width === 1200 && scale === 1) || (width === 375 && scale === 2)) await screenshot(page, label + "-collapsed");
-        for (const item of await actions(page).all()) {
-            await details(item).locator(":scope > summary").click();
-            await argumentsSummary(item).click();
-        }
+        for (const item of await actions(page).all()) await toggle(item).click();
         metrics.push({ label: label + "-expanded", ...await geometry(page) });
         assert.equal(await actions(page).nth(1).locator("pre").textContent(), JSON.stringify(source().toolCalls[1].requestArgs, null, 2));
         const code = actions(page).nth(1).locator("pre");
-        assert.ok(await code.evaluate(node => getComputedStyle(node).overflowX === "auto" && node.tabIndex === 0),
-            "Exact unbroken arguments remain keyboard-scrollable, never clipped or rewritten");
+        assert.ok(await code.evaluate(node => node.scrollWidth <= node.clientWidth + 1 ||
+            getComputedStyle(node).overflowX === "auto" && node.tabIndex === 0),
+            "Unbroken arguments must wrap or allow keyboard scrolling");
         if ((width === 1200 && scale === 1) || (width === 375 && scale === 2)) await screenshot(page, label + "-expanded");
-        for (const item of await actions(page).all()) {
-            await argumentsSummary(item).click();
-            await details(item).locator(":scope > summary").click();
-        }
+        for (const item of await actions(page).all()) await toggle(item).click();
     }
     if (proofDir) await writeFile(path.join(proofDir, "geometry.json"), JSON.stringify(metrics, null, 2));
     for (const result of metrics) assertGrouped(result, result.label);
 });
 
 test("repeated tools keep exact owning details, keyboard focus and expansion through pages, Back and live snapshots", { timeout: 45000 }, async t => {
-    const { page, runtime, context, record } = await setup(t, source(8));
-    const stateFile = (await readdir(context.dataDir)).find(name => name.endsWith(".state.json"));
-    const reviewBefore = await readFile(path.join(context.dataDir, stateFile));
-    const url = page.url(), first = actions(page).first(), second = actions(page).nth(1);
-    const summary = details(first).locator(":scope > summary");
-    const counts = await page.locator(".full-request-results").innerText();
+    const others = Array.from({ length: 8 }, (_, i) => {
+        const r = fixture(`newer-${i}`); r.capturedAt = r.userPrompt.sourceTimestamp = `2026-10-01T12:00:0${i}Z`;
+        return r;
+    });
+    const { page, context, card, record } = await setup(t, source(8), others, { enforced: true });
+    const before = await loadBoardState(context);
+    const pager = page.getByRole("navigation", { name: "Analyze result pages" });
+    await pager.getByRole("button", { name: "Next", exact: true }).press("Enter");
+    await expect(pager).toContainText("9-9 of 9");
+    const failed = card.getByRole("link", { name: "1 tool call failed", exact: true });
+    await failed.press("Enter");
+    const first = actions(page).nth(0), second = actions(page).nth(1), summary = toggle(first);
+    await expect(second).toBeFocused();
+    await expect(second).toHaveAttribute("data-tool-call-id", "grouping-call-1");
+    await expect(actions(page)).toHaveCount(8);
+    const url = page.url();
     await summary.focus(); await page.keyboard.press("Enter");
-    assert.equal(await details(first).evaluate(node => node.open), true);
-    assert.equal(await details(second).evaluate(node => node.open), false);
+    await expect(details(first)).toBeVisible(); await expect(details(second)).toBeHidden();
     assert.ok(await summary.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle !== "none"));
     await page.keyboard.press("Space");
-    assert.equal(await details(first).evaluate(node => node.open), false);
+    await expect(details(first)).toBeHidden();
     await page.keyboard.press("Enter");
-    await argumentsSummary(first).click();
-    await details(second).locator(":scope > summary").click();
-    await argumentsSummary(second).click();
+    await toggle(second).click();
     for (const [index, item] of [first, second].entries()) {
         assert.equal(await item.locator("pre").textContent(), JSON.stringify(record.toolCalls[index].requestArgs, null, 2));
-        assert.match(await details(item).innerText(), new RegExp(`grouping-call-${index}`));
-        assert.doesNotMatch(await details(item).innerText(), new RegExp(`grouping-call-${1 - index}`));
+        await expect(item).toHaveAttribute("data-tool-call-id", `grouping-call-${index}`);
     }
     assert.doesNotMatch(await first.innerText(), /Only_action_1/);
     assert.match(await second.innerText(), /Only_action_1_<not-markup>/);
     assert.equal(await page.locator("not-markup").count(), 0);
     assert.equal(page.url(), url);
-    assert.equal(await page.locator(".full-request-results").innerText(), counts);
-    assert.equal(await page.getByRole("button", { name: "Add to report", exact: true }).count(), 1);
-    await page.getByRole("button", { name: "Next action records", exact: true }).click();
-    assert.equal(await actions(page).count(), 2);
-    await details(actions(page).last()).locator(":scope > summary").click();
-    await argumentsSummary(actions(page).last()).click();
+    await toggle(actions(page).last()).click();
     assert.equal(await actions(page).last().locator("pre").textContent(), JSON.stringify(record.toolCalls[7].requestArgs, null, 2));
-    assertGrouped(await geometry(page), "last action page");
-    await page.getByRole("button", { name: "Previous action records", exact: true }).click();
-    assert.equal(await first.locator("details[open]").count(), 2);
-    assert.equal(await second.locator("details[open]").count(), 2);
-    await navigateMain(page, "home"); await page.goBack(); await ready(page);
-    assert.equal(page.url(), url);
-    assert.equal(await first.locator("details[open]").count(), 2);
+    await page.goBack(); await expect(failed).toBeFocused();
+    await pager.getByRole("button", { name: "Previous", exact: true }).press("Enter");
+    await expect(pager).toContainText("1-8 of 9");
+    await page.goBack(); await expect(pager).toContainText("9-9 of 9");
+    await failed.press("Enter"); await expect(second).toBeFocused();
+    await expect(toggle(first)).toHaveAttribute("aria-expanded", "true");
+    await expect(toggle(second)).toHaveAttribute("aria-expanded", "true");
     await summary.focus();
-    assert.deepEqual(await readFile(path.join(context.dataDir, stateFile)), reviewBefore);
+    await expect(summary).toBeFocused();
+    assert.deepEqual(await loadBoardState(context), before);
     const updated = structuredClone(record);
     updated.toolCalls[0].durationMs = 9876;
-    await replaceEvidence(context, () => ({ records: [updated], importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
-    const stateAfterAppend = await readFile(path.join(context.dataDir, stateFile));
-    await page.waitForFunction(() => document.querySelector(".journey-item")?.textContent.includes("9876 ms"), null, { timeout: 15000 });
-    assert.equal(await first.locator("details[open]").count(), 2);
-    assert.equal(await summary.evaluate(node => node === document.activeElement), true);
+    const refreshed = page.waitForResponse(async response => response.ok() && response.url().endsWith("/api/snapshot")
+        && (await response.json()).revision > before.revision);
+    await replaceEvidence(context, () => ({ records: [updated, ...others], importCoverage: before.evidence.importCoverage }));
+    const stateAfterAppend = await loadBoardState(context);
+    await refreshed;
+    await expect(first.locator("data.call-duration")).toHaveAttribute("value", "9876");
+    await expect(summary).toBeFocused();
+    // A new evidence revision closes the old private input. Reopen its current owner.
+    await expect(summary).toHaveAttribute("aria-expanded", "false"); await summary.press("Enter");
     assert.equal(await first.locator("pre").textContent(), JSON.stringify(record.toolCalls[0].requestArgs, null, 2));
     assert.equal(await page.locator("#requestContent [id]").evaluateAll(nodes => nodes.length === new Set(nodes.map(node => node.id)).size), true);
-    assert.deepEqual(await readFile(path.join(context.dataDir, stateFile)), stateAfterAppend);
-    await page.goto(runtime.url + "#activity?session=test-session&result=failure"); await ready(page);
-    assert.equal(await page.locator(".matched-action").count(), 1);
-    assert.equal(await page.locator(".matched-action .detail-disclosure").count(), 0, "Matching actions use a request link, not this disclosure pattern");
-    await page.locator(".matched-action .text-link").click(); await ready(page);
-    assert.equal(await second.locator("pre").textContent(), JSON.stringify(record.toolCalls[1].requestArgs, null, 2));
+    assert.deepEqual(await loadBoardState(context), stateAfterAppend);
+    await page.goBack(); await expect(failed).toBeFocused();
+    const entry = card.getByRole("link", { name: /Returned entry 1.*HTTP 403/i });
+    await entry.press("Enter");
+    await expect(second.locator(".api-result-entry")).toBeFocused();
+    await expect(second.locator(".api-result-entry")).toContainText("Only_action_1_<not-markup>");
+    await page.goBack(); await expect(entry).toBeFocused();
 });
 
 test("only action and missing details retain explicit absence and independent request support boundaries", { timeout: 30000 }, async t => {
@@ -197,25 +202,24 @@ test("only action and missing details retain explicit absence and independent re
     record.toolCalls[0].requestedApiPath = "/me/" + "messages/".repeat(60);
     record.toolCalls[0].toolSucceeded = false;
     record.toolCalls[0].reportedOutcome = "failed";
-    const { page } = await setup(t, record);
-    assert.match(await page.locator(".request-outcome").innerText(), /Failure cause unavailable in retained evidence/);
-    await details(actions(page).first()).locator(":scope > summary").click();
-    await argumentsSummary(actions(page).first()).click();
+    record.toolCalls[0].tool = "workiq-fetch";
+    const { page, card } = await setup(t, record);
+    await card.getByRole("link", { name: "1 tool call failed" }).click();
+    await expect(actions(page).first()).toContainText("No failure reason was saved");
+    await toggle(actions(page).first()).click();
     assert.equal(await actions(page).first().locator("pre").textContent(), "[Arguments unavailable]");
-    assert.match(await details(actions(page).first()).innerText(), /Not recorded/);
-    assert.equal(await actions(page).first().locator(":scope > .action-fields code.api-path").textContent(), record.toolCalls[0].requestedApiPath);
-    assert.ok((await actions(page).first().locator(":scope > .action-fields code.api-path").textContent()).length > 300,
+    assert.equal(await details(actions(page).first()).locator("code.api-path").textContent(), record.toolCalls[0].requestedApiPath);
+    assert.ok(record.toolCalls[0].requestedApiPath.length > 300,
         "The long-path fixture must render a long path, not a normalized short placeholder");
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200, 2560]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
         assertGrouped(await geometry(page), `only long-path action/${theme}/${width}/${scale}`);
     }
-    assert.equal(await page.locator(".request-support > .detail-disclosure").evaluateAll(nodes =>
-        nodes.every(node => getComputedStyle(node).borderTopWidth === "1px")), true, "Independent page-level support retains its own hierarchy");
-    const reader = page.locator(".request-original .full-text-toggle");
-    if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-    assert.equal(await page.locator(".request-original pre").textContent(), original);
+    await page.getByRole("button", { name: "Source details", exact: true }).click();
+    await page.getByRole("button", { name: "Record identifiers", exact: true }).click();
+    await expect(page.locator(".reader-identifiers")).toContainText("grouping-call-0");
+    assert.equal(await page.locator(".request-original .full-text-content").textContent(), original);
 });
 
 test("Graph and HTTP action records share the same attached support pattern without changing their evidence", { timeout: 30000 }, async t => {
@@ -236,9 +240,10 @@ test("Graph and HTTP action records share the same attached support pattern with
         status: 200, responseOrigin: "https://graph.microsoft.com", apiVersion: "v1.0", method: "GET",
         responsePath: { path: "/$metadata", query: [] },
     }];
-    const { page } = await setup(t, record);
+    const { page, card } = await setup(t, record);
+    await card.getByRole("link", { name: "API discovery: open call", exact: true }).click();
     assert.equal(await actions(page).count(), 4);
-    for (const item of await actions(page).all()) await details(item).locator(":scope > summary").click();
+    for (const item of await actions(page).all()) await toggle(item).click();
     const evidence = [record.graphActivities[0], record.graphActivities[1], record.httpRecords[0]];
     for (let index = 0; index < evidence.length; index++) {
         const item = actions(page).nth(index + 1);

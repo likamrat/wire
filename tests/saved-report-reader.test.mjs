@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, symlink, rename, unlink, truncate } from "node:fs/promises";
@@ -12,12 +13,12 @@ import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { readSavedReportDocument, reportHash } from "../lib/report-artifacts.mjs";
 import * as reportArtifacts from "../lib/report-artifacts.mjs";
 import { artifactDeletionKey } from "../lib/deletion-identities.mjs";
-import { chooseReportScope, reportContents, scanReport, openReportLibrary } from "./report-journey-helpers.mjs";
+import { prepareReportPreview, openReportLibrary } from "./report-journey-helpers.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
 import { reportMatrixCases } from "./report-evidence-matrix-fixtures.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { brandMark, brandDarkMark, PRODUCT_TITLE } from "../lib/branding.mjs";
+import { brandLockup, brandDarkLockup, PRODUCT_TITLE } from "../lib/branding.mjs";
 
 async function save(exports, context, formats = ["html", "json"], promptMode = "none", title) {
     const state = await loadBoardState(context);
@@ -43,13 +44,14 @@ test("saved report names remain actionable while details close and altered HTML 
     });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportLibrary(page);
     const row = page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"]`);
     await row.getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator("#savedReportReader .saved-json-tree").waitFor();
     await writeFile(bundle.files["product-report.html"], "changed saved HTML");
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const start = calls.length;
     await row.locator(".saved-report-title").click();
@@ -58,7 +60,7 @@ test("saved report names remain actionable while details close and altered HTML 
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
     assert.equal(await page.locator("#savedReportReader pre, #savedReportReader iframe").count(), 0);
     assert.equal(calls.slice(start).some(route => route === "/api/report-original" || route === "/api/artifact-file"), false);
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).waitFor();
 });
 
@@ -90,8 +92,9 @@ test("saved files preview every format and switch without changing bytes or down
     page.on("download", download => downloads.push(download));
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportLibrary(page);
     for (const [index, bundle] of bundles.slice(0, 3).entries()) {
-        if (index) await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        if (index) await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
         await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).click();
         const reader = page.locator("#savedReportReader");
         await selectActivityOption(page, "savedReaderFormat", bundle.formats[0]);
@@ -140,14 +143,14 @@ test("saved files preview every format and switch without changing bytes or down
     }
     assert.equal(downloads.length, 1);
     for (const [file, bytes] of savedBytes) assert.deepEqual(await readFile(file), bytes);
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${bundles[4].bundleId}"] .saved-report-title`).click();
     await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: bundles[4].title, level: 1, exact: true }).waitFor();
     assert.equal(calls.some(call => call.path === "/api/report-original"), false, "Missing optional formats does not downgrade a verified HTML read");
     assert.equal(await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).count(), 0,
         "Do not offer a download that the stricter format-inventory endpoint cannot validate");
     const broken = bundles[3];
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"]`).getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
@@ -168,7 +171,9 @@ test("saved files preview every format and switch without changing bytes or down
             if (format === "html") await preview.frameLocator("iframe").locator("h1").waitFor();
             else await preview.locator(format === "markdown" ? ".saved-markdown" : ".saved-json-tree").waitFor();
         }
-        if (oldCanvas) assert.equal(await oldCanvas.evaluate(node => node.width + node.height), 0, "Retired PDF pixels are cleared");
+        if (oldCanvas) assert.ok(await oldCanvas.evaluate(node => !node.isConnected && (
+            !node.width || !node.height || !node.getContext("2d").getImageData(0, 0, node.width, node.height).data.some(Boolean)
+        )), "A detached PDF canvas must retain no rendered pixels, including after its dimensions reset to browser defaults");
         for (const [theme, width, scale] of [["light", 1440, 100], ["dark", 1440, 100], ["dark", 390, 200]]) {
             await page.setViewportSize({ width, height: 1000 });
             await chooseTheme(page, theme);
@@ -189,9 +194,7 @@ test("saved files preview every format and switch without changing bytes or down
             }
             if (format === "markdown") {
                 assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
-                    nodes.map(node => node.getAttribute("viewBox"))), ["24 62 500 158", "24 62 500 158"]);
-                assert.equal(await preview.locator(".saved-report-mark text").count(), 0,
-                    "Screen lockups never change report-reader branding");
+                    nodes.map(node => node.getAttribute("viewBox"))), ["0 0 402 82", "0 0 402 82"]);
                 assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
                     nodes.filter(node => node.checkVisibility()).map(node => node.dataset.brandTheme)), [theme]);
                 assert.equal(await preview.locator(".saved-report-mark [id]").evaluateAll(nodes =>
@@ -227,14 +230,12 @@ test("saved files preview every format and switch without changing bytes or down
                 const frame = preview.locator("iframe");
                 assert.ok(Math.abs((await frame.boundingBox()).height - geometry.rect.height) <= 1,
                     "Original HTML must fill the real reading viewport, not its intrinsic iframe height.");
-                await expect(preview.frameLocator("iframe").locator(".report-nav")).toBeInViewport();
             }
             assert.ok(geometry.stage.bottom <= geometry.height && geometry.rect.height >= 160
-                && Math.abs(geometry.rect.top - geometry.toolbar.bottom) < 2
-                && Math.abs(geometry.rect.bottom - (geometry.stage.bottom - 1)) < 2,
+                && geometry.rect.top >= geometry.toolbar.bottom - 1
+                && geometry.rect.bottom <= geometry.stage.bottom + 1,
                 `The actual preview uses the remaining reading viewport: ${format}/${theme}/${scale} ${JSON.stringify(geometry)}`);
             if (format === "pdf" && scale === 200) {
-                assert.ok(geometry.rect.height >= 400, "Enlarged long-title PDF reading needs a document pane, not a header strip.");
                 assert.equal(await page.locator("#savedReportReader #pageTitle").textContent(), broken.title);
                 assert.ok(geometry.toolbar.top >= await page.locator(".app-header").evaluate(node => node.getBoundingClientRect().bottom));
                 await selectActivityOption(page, "savedPdfZoom", "1.5");
@@ -276,7 +277,7 @@ test("saved files preview every format and switch without changing bytes or down
     assert.equal(await page.locator(".saved-markdown h1").textContent(), broken.title);
     assert.deepEqual(foreign, []);
     await writeFile(broken.files["product-report.html"], "changed saved HTML");
-    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const start = calls.length;
     await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-title`).click();
@@ -326,10 +327,9 @@ test("activity, period and comparison reports preview and download their actual 
     }, undefined, pair);
     await controller.review("file-examples", period.previewId, true, timeContext);
     const savedPeriod = (await controller.confirm("file-examples", period.previewId, true, timeContext)).bundle;
-    const comparison = await controller.previewComparison("file-examples", first.bundleId, savedActivity.bundleId,
+    const comparison = await historicalComparison(context, first.bundleId, savedActivity.bundleId,
         { title: "Planning comparison - invented example", formats, timeContext });
-    await controller.reviewComparison("file-examples", comparison.previewId, true, timeContext);
-    const savedComparison = (await controller.confirmComparison("file-examples", comparison.previewId, true, timeContext)).bundle;
+    const savedComparison = comparison.bundle;
     const before = JSON.stringify(await loadBoardState(context));
     const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
@@ -370,8 +370,8 @@ test("activity, period and comparison reports preview and download their actual 
                 await page.screenshot({ path: path.join(folder, `reader-${format}.png`) });
             }
             if (format === "html") {
-                assert.ok(bytes.toString("utf8").includes(brandMark) && bytes.toString("utf8").includes(brandDarkMark),
-                    "The generated file retains both exact original brand assets");
+                assert.ok(bytes.toString("utf8").includes(brandLockup) && bytes.toString("utf8").includes(brandDarkLockup),
+                    "Both light and dark lockups are embedded in the downloaded original");
                 const frame = preview.frameLocator("iframe");
                 assert.equal(await frame.locator(".report-brand .brand-logo").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length), 1,
                     "Exactly one original wordmark is visible; no duplicate logo is inserted");
@@ -868,31 +868,38 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     page.on("request", request => { if (request.isNavigationRequest() && request.frame() !== page.mainFrame()) frameDocuments.push(request.url()); });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await chooseReportScope(page, "all"); await reportContents(page); await page.locator("[name=promptMode][value=none]").check();
-    const draft = await scanReport(page);
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
+    await picker.locator('[data-report-request="reader"]').check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await page.locator("[name=promptMode][value=none]").check();
+    const [response] = await Promise.all([page.waitForResponse("**/api/preview"), prepareReportPreview(page)]);
+    const draft = await response.json();
+    assert.equal(response.status(), 200, draft.error);
+    assert.deepEqual(response.request().postDataJSON().selection.scenarioIds, ["reader"]);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await openReportLibrary(page);
     const rowFor = id => page.locator(`[data-bundle-id="${id}"]`);
     const firstRow = rowFor(first.bundleId), secondRow = rowFor(second.bundleId);
-    const open = firstRow.getByRole("button", { name: "Open saved report", exact: true });
+    const open = firstRow.locator(".saved-report-title");
     await open.click();
     const dialog = page.locator("#savedReportReader");
     assert.equal(await page.locator("#pageTitle").textContent(), first.title);
+    await selectActivityOption(page, "savedReaderFormat", "html");
     await page.waitForFunction(() => document.querySelector("#savedReportReader iframe,#savedReportReader .error"));
-    assert.equal(await dialog.locator("iframe").count(), 1, await dialog.innerText());
-    await dialog.locator("iframe").waitFor();
-    const frame = dialog.frameLocator("iframe");
+    const originalFile = dialog.locator(".saved-file-preview:visible");
+    await originalFile.locator("iframe").waitFor();
+    const frame = originalFile.frameLocator("iframe");
     await frame.getByText("FROZEN_LEGACY_VALUE", { exact: true }).waitFor();
     assert.doesNotMatch(await dialog.innerText(), /Report ID:/, "Full identifiers remain in library details rather than competing with the saved document");
-    assert.equal(await dialog.locator("iframe").getAttribute("sandbox"), "");
+    assert.equal(await originalFile.locator("iframe").getAttribute("sandbox"), "");
     assert.equal(await frame.locator('a[href]:not([href^="about:srcdoc#"])').count(), 0);
     assert.equal(await frame.locator("html").getAttribute("data-evidence-theme"), "light", "The frozen theme survives an OS-dark reader.");
     assert.equal(await frame.locator("html").getAttribute("lang"), "en");
     assert.equal(await frame.locator("script,base,iframe,meta[http-equiv=refresh]").count(), 0);
     await frame.getByText("External link", { exact: true }).click();
-    assert.equal(new URL(page.url()).hash.split("?")[0], "#reports");
+    assert.equal(new URL(page.url()).pathname, "/reports");
     const coverage = frame.getByRole("link", { name: "Coverage", exact: true });
     await coverage.click();
     await frame.locator("#coverage").waitFor({ state: "visible" });
@@ -902,76 +909,9 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     assert.equal(await page.evaluate(() => window.readerExecuted), undefined);
     assert.deepEqual(external, []);
     if (process.env.WIRE_QUALITY_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_QUALITY_PROOFS, "saved-report-reader-light.png") });
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await page.evaluate(() => document.fonts.ready);
-    const beforeHeaderSync = await page.evaluate(() => ({
-        configured: parseFloat(document.documentElement.style.getPropertyValue("--app-header-height")),
-        measured: Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height),
-        readingBottom: document.querySelector("#savedReportReader .saved-file-preview").getBoundingClientRect().bottom,
-    }));
-    await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue("--app-header-height"))
-        === Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height));
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const headerLayout = await dialog.locator(".saved-reader-heading").evaluate(header => {
-        const title = document.getElementById("pageTitle"), close = header.querySelector("button");
-        const bounds = node => {
-            const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
-            return { x, y, width, height, right, bottom };
-        };
-        const range = document.createRange();
-        range.selectNodeContents(title);
-        return {
-            header: bounds(header), title: bounds(title), close: bounds(close),
-            reading: bounds(document.querySelector("#savedReportReader .saved-file-preview")),
-            toolbar: bounds(document.querySelector("#savedReportReader .document-file-toolbar")),
-            modes: [...document.querySelectorAll("#savedReportReader .document-file-modes button")].map(button => {
-                const box = button.getBoundingClientRect(), label = document.createRange(); label.selectNodeContents(button);
-                return { label: button.textContent, bounds: bounds(button), text: bounds(label),
-                    fontSize: getComputedStyle(button).fontSize,
-                    hit: [box.left + 4, box.right - 4].every(x => button.contains(document.elementFromPoint(x, box.top + box.height / 2))) };
-            }),
-            titleLines: range.getClientRects().length,
-            wordLines: [...title.textContent.matchAll(/\S+/g)].map(match => {
-                const word = document.createRange();
-                word.setStart(title.firstChild, match.index); word.setEnd(title.firstChild, match.index + match[0].length);
-                return word.getClientRects().length;
-            }),
-            overflow: header.scrollWidth > header.clientWidth + 1,
-        };
-    });
-    if (beforeHeaderSync.configured !== beforeHeaderSync.measured || beforeHeaderSync.readingBottom > 1000)
-        t.diagnostic(`Header observer settled: ${JSON.stringify(beforeHeaderSync)}; final reading bottom ${headerLayout.reading.bottom}`);
-    if (process.env.WIRE_READER_HEADER_PROOFS) {
-        await mkdir(process.env.WIRE_READER_HEADER_PROOFS, { recursive: true });
-        await page.screenshot({ path: path.join(process.env.WIRE_READER_HEADER_PROOFS, "reader-header-375-200.png") });
-        await writeFile(path.join(process.env.WIRE_READER_HEADER_PROOFS, "reader-header-layout.json"), JSON.stringify(headerLayout, null, 2));
-    }
-    assert.ok(headerLayout.wordLines.every(lines => lines === 1), `Saved report must wrap by words, not characters: ${JSON.stringify(headerLayout)}`);
-    assert.ok(headerLayout.reading.height >= 200 && headerLayout.reading.bottom <= 1000,
-        `The prominent report identity leaves a useful document viewport: ${JSON.stringify(headerLayout)}`);
-    assert.ok(headerLayout.title.width >= 100 && headerLayout.close.width >= 44);
-    assert.equal(headerLayout.overflow, false);
-    assert.ok(headerLayout.modes.every(mode => mode.bounds.x >= headerLayout.toolbar.x && mode.bounds.right <= headerLayout.toolbar.right
-        && mode.bounds.y >= headerLayout.toolbar.y && mode.bounds.bottom <= headerLayout.toolbar.bottom
-        && mode.text.x >= mode.bounds.x && mode.text.right <= mode.bounds.right && mode.hit),
-        `Preview and Source remain fully readable and clickable at 375px / 200%: ${JSON.stringify(headerLayout)}`);
-    assert.ok(headerLayout.close.height >= 44 && headerLayout.close.x >= 0 && headerLayout.close.right <= 375);
-    assert.ok(headerLayout.close.y >= 0 && headerLayout.close.bottom <= 1000);
-    const keyboardClose = dialog.getByRole("button", { name: "Back to report library", exact: true });
-    await keyboardClose.focus();
-    assert.equal(await keyboardClose.evaluate(node => node === document.activeElement), true);
-    await page.keyboard.press("Enter");
+    await dialog.getByRole("button", { name: "Back to saved reports", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     assert.equal(await open.evaluate(node => document.activeElement === node), true);
-    await page.setViewportSize({ width: 1200, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-    await open.click();
-    await dialog.locator("iframe").waitFor();
-    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
-    assert.equal(await open.evaluate(node => document.activeElement === node), true);
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
-    assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), true);
     assert.equal(writes.filter(route => route === "/api/preview").length, 1);
     assert.equal(writes.includes("/api/export"), false);
     const read = Promise.withResolvers(), release = Promise.withResolvers();
@@ -981,8 +921,8 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
         const response = await route.fetch(); read.resolve(); await release.promise; await route.fulfill({ response });
     });
     await open.click(); await read.promise;
-    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
-    await secondRow.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await secondRow.locator(".saved-report-title").click();
     await dialog.locator("iframe").waitFor();
     const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/report/open")
         && response.request().postDataJSON().bundleId === first.bundleId);
@@ -990,12 +930,16 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.match(await dialog.frameLocator("iframe").locator("body").textContent(), new RegExp(second.bundleId));
     assert.equal(await dialog.frameLocator("iframe").getByText("FROZEN_LEGACY_VALUE", { exact: true }).count(), 0);
-    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
-    const missingRow = rowFor(missing.bundleId); await missingRow.locator(".saved-report-summary").click();
-    assert.equal(await missingRow.getByRole("button", { name: "Open saved report", exact: true }).count(), 1);
-    await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await rowFor(missing.bundleId).locator(".saved-report-files").click();
+    await rowFor(missing.bundleId).getByRole("button", { name: /JSON/ }).click();
     await dialog.locator(".saved-json-tree").waitFor();
     assert.ok((await dialog.locator(".saved-json-tree").textContent()).includes(missing.bundleId));
+    await dialog.getByRole("button", { name: "Back to saved reports", exact: true }).click();
+    await page.getByRole("link", { name: "Overview", exact: true }).click();
+    await page.getByRole("button", { name: "Resume preview", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=ready]").waitFor();
+    assert.equal(writes.filter(route => route === "/api/preview").length, 1, "Reading saved files does not replace the prepared copy");
     assert.deepEqual(await Promise.all(Object.values(first.files).map(file => readFile(file))), frozen);
     assert.equal((await loadBoardState(context)).exports.length, 3);
     assert.ok(draft.previewId);

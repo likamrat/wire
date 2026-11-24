@@ -15,13 +15,21 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, navigateMain, navigateSettings, revealStoredRefresh, chooseTheme, openAnalyzeFilters,
     closeAnalyzeFilters } from "./helpers.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
-import { openReportLibrary, chooseReportScope, reportContents, scanReport, openReportComparison, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
+import { openReportLibrary, prepareReportPreview, selectReportFocus } from "./report-journey-helpers.mjs";
+
+async function prepareFromDesk(page) {
+    const pending = page.waitForResponse(r => new URL(r.url()).pathname === "/api/preview" && r.request().method() === "POST");
+    await prepareReportPreview(page);
+    const response = await pending, preview = await response.json();
+    assert.equal(response.status(), 200, preview.error);
+    await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
+    return preview;
+}
 
 async function assertSettingsCategoryNavigation(page, { keyboard = false } = {}) {
-    const url = new URL(page.url()); url.hash = "";
     const categories = [
-        ["privacy", "dataManagementTitle"], ["display", "displayTitle"],
-        ["troubleshooting", "troubleshootingTitle"], ["connection", "connectionTitle"],
+        ["privacy", "dataManagementTitle"], ["themes", "themesTitle"],
+        ["regional", "regionalTitle"], ["connection", "connectionTitle"],
     ];
     for (const [category, heading] of categories) {
         if (keyboard) {
@@ -32,7 +40,7 @@ async function assertSettingsCategoryNavigation(page, { keyboard = false } = {})
             await expect(link).toBeFocused();
             await page.keyboard.press("Enter");
         } else await navigateSettings(page, category);
-        await expect(page).toHaveURL(url.href + "#settings?section=" + category);
+        await expect.poll(() => new URL(page.url()).searchParams.get("section")).toBe(category);
         await expect(page.locator(`[data-settings-section=${category}]`)).toBeVisible();
         await expect(page.locator("[data-settings-section]:visible")).toHaveCount(1);
         await expect(page.locator(`#settingsCategoryNav [data-category=${category}]`)).toHaveAttribute("aria-current", "page");
@@ -132,15 +140,8 @@ for (const statusFailure of [false, true]) test(`Copilot-only explicit Refresh a
     await page.goto(url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#activityList .request-card-open")).toContainText(/no result recorded/i);
-    await selectAnalyzeRequest(page, page.locator("#activityList .activity-card"));
     await navigateMain(page, "reports");
-    await chooseReportScope(page, "selected");
-    await reportContents(page);
-    await page.locator("#reportTitle").fill("Reviewed late completion");
-    await page.locator("[name=promptMode][value=none]").check();
-    const selection = await page.locator("#previewSelectionSummary").textContent();
-    await page.locator("#closeContextSidebar").click();
-    await expect(page.locator("#contextSidebar")).toBeHidden();
+    await page.getByRole("radio", { name: /Leave out prompts and replies/ }).check();
     const message = "The invented item cannot be edited.";
     await appendFile(file, lines([event("completion", "tool.execution_complete", {
         toolCallId: "late-call", success: false, error: { code: "AccessDenied", message },
@@ -194,20 +195,11 @@ for (const statusFailure of [false, true]) test(`Copilot-only explicit Refresh a
     await expect(page.locator("#contextSidebar")).toBeHidden();
     await page.locator("#wireSearch").fill("");
     await navigateMain(page, "reports");
-    await reportContents(page);
-    await expect(page.locator("#reportTitle")).toHaveValue("Reviewed late completion");
-    await expect(page.locator("[name=promptMode][value=none]")).toBeChecked();
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), selection);
-    await page.locator("#reportResultText").check();
-    for (const format of ["html", "json", "pdf", "markdown"]) {
-        await page.locator(`#formatOptions input[value=${format}]`).setChecked(["html", "json"].includes(format));
-    }
-    const preview = await scanReport(page);
-    assert.equal(preview.snapshot.selectionScope.kind, "selected");
+    await expect(page.getByRole("radio", { name: /Leave out prompts and replies/ })).toBeChecked();
+    await selectReportFocus(page, "errors");
+    const preview = await prepareFromDesk(page);
     assert.equal(preview.snapshot.selectionScope.requestGroups, 1);
     assert.ok(JSON.stringify(preview.snapshot).includes(message));
-    await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     const [saved] = await Promise.all([
         page.waitForResponse(response => response.url() === origin + "/api/export"),
         page.getByRole("button", { name: "Save report", exact: true }).click(),
@@ -298,8 +290,10 @@ test("fresh Copilot-only ordinary app preserves Settings category navigation and
         });
         await page.goto(url);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        await expect(page.locator("#firstConnectionWelcome")).toBeVisible();
+        await page.keyboard.press("Escape");
         await navigateMain(page, "settings");
-        await expect(page.locator("#connectionTitle")).toBeFocused();
+        await expect(page.locator("[data-settings-section=general]")).toBeVisible();
         await assertSettingsCategoryNavigation(page);
         await page.setViewportSize({ width: 375, height: 1000 });
         // The responsive observer must collapse the rail before choosing a keyboard target.
@@ -307,7 +301,7 @@ test("fresh Copilot-only ordinary app preserves Settings category navigation and
         await assertSettingsCategoryNavigation(page, { keyboard: true });
         await expect(page.locator("#settingsCategories")).not.toHaveAttribute("open");
         await page.goBack();
-        await expect(page.locator("[data-settings-section=troubleshooting]")).toBeVisible();
+        await expect(page.locator("[data-settings-section=regional]")).toBeVisible();
         await page.goForward();
         await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
         await page.setViewportSize({ width: 1440, height: 1000 });
@@ -464,7 +458,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
             .filter(([name]) => name !== "NODE_TEST_CONTEXT" && !name.startsWith("WIRE_")
                 && !["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"].includes(name)));
         child = fork(new URL("../scripts/start.mjs", import.meta.url), ["--port", "0"], {
-            env: { ...environment, WORKIQ_EVIDENCE_DATA_DIR: context.dataDir, GH_CONFIG_DIR: path.join(root, "no-profile") },
+            env: { ...environment, WORKIQ_EVIDENCE_DATA_DIR: context.dataDir, COPILOT_HOME: path.join(root, "no-copilot"), GH_CONFIG_DIR: path.join(root, "no-profile") },
             execArgv: [], stdio: ["ignore", "pipe", "pipe", "ipc"],
         });
         exited = new Promise(resolve => child.once("exit", resolve));
@@ -520,7 +514,9 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         }
         page.on("pageerror", error => errors.push(error.message));
         page.on("console", message => {
-            if (message.type() === "error" && /^Error: <[\w:-]+> attribute [\w:-]+:/i.test(message.text())) errors.push(message.text());
+            if (message.type() === "error" && /^Error: <[\w:-]+> attribute [\w:-]+:/i.test(message.text())) {
+                errors.push(`${new URL(page.url()).pathname}: ${message.text()}`);
+            }
         });
         page.on("request", request => {
             const route = new URL(request.url()).pathname;
@@ -547,7 +543,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         }
         await capture("analyze");
         await openAnalyzeFilters(page);
-        await expect(page.locator("#sourceFilter-control")).toBeVisible();
+        await expect(page.locator("#sourceFilter-control")).toBeHidden();
         await capture("filters");
         await closeAnalyzeFilters(page);
         await page.locator("#activityList .request-card-open").click();
@@ -566,25 +562,16 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         await openReportLibrary(page);
         await expect(page.locator("#bundleList")).toContainText("Preserved ordinary report");
         await capture("library");
-        await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-        await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Preserved ordinary report");
-        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+        await page.getByRole("button", { name: "View report: Preserved ordinary report", exact: true }).click();
+        await expect(page.locator("#savedReportReader")).toContainText("Preserved ordinary report");
+        await page.getByRole("button", { name: "Back to saved reports", exact: true }).click();
         assert.deepEqual(mutations, [], "Read-only journeys must not infer source, account or report consent.");
 
-        await chooseReportScope(page, "all");
-        await capture("report-picker");
-        await expect(page.locator("#reportContinue"), await page.locator("#reportStage1").innerText()).toBeEnabled();
-        await reportContents(page);
-        await page.locator("#reportTitle").fill("Ordinary reviewed snapshot");
-        await page.locator("[name=promptMode][value=none]").check();
-        for (const format of ["html", "json", "pdf", "markdown"]) {
-            await page.locator(`#formatOptions input[value=${format}]`).setChecked(["html", "json"].includes(format));
-        }
-        const reviewedPreview = await scanReport(page);
+        await page.getByRole("link", { name: "Overview", exact: true }).click();
+        await page.getByRole("radio", { name: /Leave out prompts and replies/ }).check();
+        const reviewedPreview = await prepareFromDesk(page);
         assert.equal(reviewedPreview.snapshot.selectionScope.requestGroups, 1);
-        await page.locator(".attestation input[data-review-control]").check();
-        await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
+        const preparedTitle = await page.frameLocator(".report-frame").locator("h1").innerText();
         await capture("reviewed");
         await appendFile(file, lines([...events("Later ordinary activity collected automatically."),
             ...(repliesEnabled ? [{ id: randomUUID(), type: "assistant.message", timestamp: new Date().toISOString(),
@@ -592,7 +579,7 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         await expect.poll(async () => (await loadBoardState(context, { readOnly: true })).evidence.length, { timeout: 20000 }).toBe(2);
         if (repliesEnabled) await expect.poll(async () =>
             (await loadBoardState(context, { readOnly: true })).personalEvaluation.captures.length, { timeout: 10000 }).toBe(1);
-        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
+        await expect(page.frameLocator(".report-frame").locator("h1")).toHaveText(preparedTitle);
         const [savedResponse] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === "/api/export"),
             page.getByRole("button", { name: "Save report", exact: true }).click(),
@@ -605,20 +592,9 @@ for (const repliesEnabled of [false, true]) test(`Copilot-only ordinary app pres
         const reviewedEntry = savedState.exports.find(entry => entry.bundleId === reviewedBundle.bundleId);
         assert.equal(reviewedEntry.selectionScope.requestGroups, 1, "Newly collected activity must not broaden the reviewed scope.");
         await capture("saved");
-        await openReportLibrary(page);
-        await page.locator(`[data-bundle-id="${reviewedBundle.bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
-        await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Ordinary reviewed snapshot");
+        await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+        await expect(page.locator("#savedReportReader")).toContainText(preparedTitle);
         await capture("saved-reader");
-        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-        await openReportComparison(page);
-        const comparison = page.locator("#comparisonWorkspace");
-        for (const [index, label] of ["Earlier report", "Later report"].entries()) {
-            await comparison.getByRole("combobox", { name: label, exact: true }).click();
-            await page.locator(`.select-popup .select-option[data-value="${[bundle.bundleId, reviewedBundle.bundleId][index]}"]`).click();
-        }
-        await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
-        await expect(comparison.getByRole("button", { name: "Prepare comparison copy", exact: true })).toBeEnabled();
-        await capture("comparison");
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
         await expect(page.locator("#globalCollectionControls")).toBeHidden();

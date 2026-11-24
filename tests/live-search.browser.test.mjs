@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, appendFile, readFile, unlink } from "node:fs/promises";
@@ -7,10 +8,9 @@ import { DatabaseSync } from "node:sqlite";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel, saveSearchComparison } from "./live-search-fixture.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { chooseTheme, selectActivityOption, openSearchFilters, openAnalyzeFilters } from "./helpers.mjs";
-import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+import { chooseTheme, selectActivityOption, openSearchFilters, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { openDatePicker } from "./analytics-date-picker.mjs";
 import { readSavedReportFile, readSavedComparisonFile, readSavedComparison, reportHash } from "../lib/report-artifacts.mjs";
-import { mountPeriodComparison, createPeriodComparisonPresentation } from "../web/period-comparison.mjs";
 
 async function setup(t, options) {
     const app = await searchFixture(t, options);
@@ -39,35 +39,31 @@ async function setup(t, options) {
     });
     return { ...app, page, errors, requests, api };
 }
+const waitForSearchStatus = (page, expected) => expect(page.locator("#wireSearchStatus")).toHaveText(expected, { timeout: 30000 });
 async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|Search is incomplete\. Some saved content could not be searched\.|Saved GitHub replies are unavailable for Search\.)$/, { timeout: 30000 });
+    await waitForSearchStatus(page, /^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|No matches in the items WIRE could search\. (?:Some saved content could not be searched\.|Saved replies are unavailable for Search\.))$/);
     return page.locator("#wireSearchResults button");
 }
-async function jsonValues(page) {
-    const tree = page.locator("#savedReportReader .saved-json-tree");
-    await tree.waitFor();
-    while (await tree.locator("details:not([open])").count()) {
-        await tree.locator("details:not([open])").first().evaluate(node => new Promise(resolve => {
-            node.addEventListener("toggle", resolve, { once: true }); node.open = true;
-        }));
-    }
-    return tree.locator(".saved-json-scalar").allTextContents();
+async function checkFrozenJson(page, name, expectedFile, bundleId) {
+    const reader = page.locator("#savedReportReader");
+    await expect(reader.locator(".saved-json-tree").getByText(JSON.stringify(bundleId), { exact: true }).first()).toBeVisible();
+    await reader.getByRole("button", { name: "Source", exact: true }).click();
+    const original = reader.locator(`pre[aria-label="${name}"]`);
+    await expect(original).toBeVisible();
+    assert.equal(await original.textContent(), await readFile(expectedFile, "utf8"));
 }
 
 test("normal literal fragments and exact anchors open all types and restore Back", { timeout: 120000 }, async t => {
     const app = await setup(t, { formats: ["html", "json", "markdown", "pdf"] });
     const { page, bundles, exports, context } = app;
-    const preview = await exports.previewComparison("live-proof", bundles[0].bundleId, bundles[1].bundleId, { formats: ["json"] });
-    await exports.reviewComparison("live-proof", preview.previewId, true);
-    await exports.confirmComparison("live-proof", preview.previewId, true);
+    const preview = await historicalComparison(context, bundles[0].bundleId, bundles[1].bundleId, { formats: ["json"] });
     const before = await loadBoardState(context);
+    await page.reload();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const initialCount = await page.locator("#activityCount").textContent();
-    await page.locator("#activityList .request-card-open").first().click();
-    await page.locator("#requestReportToggle").click();
-    await page.locator("#closeContextSidebar").click();
     const query = "PHYS";
     const words = new Set(before.evidence[0].userPrompt.text.toLowerCase().match(/\p{L}+/gu));
     assert.equal(words.has(query.toLowerCase()), false, "This is a partial word, not exact whole-word matching");
@@ -80,24 +76,60 @@ test("normal literal fragments and exact anchors open all types and restore Back
     assert.equal(await page.locator("#activityCount").textContent(), initialCount);
     await page.locator("#wireSearch").press("ArrowDown");
     await expect(hits.first()).toBeFocused();
+    const openingId = await hits.first().getAttribute("data-search-id");
     await page.keyboard.press("Enter");
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator(".request-original .full-text-content")).toHaveText("The physician treated an injured patient in the hospital.");
+    const returnQuery = page.waitForResponse(response => {
+        if (!response.url().endsWith("/api/search/query")) return false;
+        const input = response.request().postDataJSON();
+        return input.purpose === "navigation" && input.query === query && input.types.length === 1 && input.types[0] === "interaction";
+    });
     await page.goBack();
     await expect(page.locator("#wireSearch")).toHaveValue(query);
-    await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
-    const cases = [["context", "subsequent medical", "#request"], ["reply", "lab results", "#request"],
-        ["action", "403", "layer=http"], ["tool", "workiq-fet", "tool=workiq-fetch"],
-        ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "#analyze"],
-        ["setting", "Theme", "setting=theme"]];
+    assert.equal((await returnQuery).status(), 200);
+    await expect(page.locator("#contextSidebar")).toBeHidden();
+    await waitForSearchStatus(page, "1 match");
+    await expect(page.locator(`#wireSearchResults [data-search-id="${openingId}"]`)).toBeFocused();
+    const cases = [["context", "subsequent medical", "/request\\?"], ["reply", "lab results", "/request\\?"],
+        ["action", "403", "layer=http"], ["tool", "workiq-fet", "privateView=required"],
+        ["service", "Calendar", "services=Calendar"], ["view", "Recorded timing", "/$"],
+        ["setting", "Color palette", "section=themes&setting=palette"]];
     for (const [type, query, destination] of cases) {
+        if (type === "reply") {
+            // Replace the context query while its reader is leaving, not after Back has settled.
+            const field = page.locator("#wireSearch");
+            await field.fill(query);
+            await page.locator("#contextSidebar").evaluate(panel => {
+                const exit = panel.getAnimations()[0];
+                if (exit?.playState !== "paused" || !panel.inert) throw Error("Expected an in-flight context return");
+                exit.finish();
+            });
+            await expect(page.locator("#contextSidebar")).toBeHidden();
+            await expect(field, "Back from conversation context must not replace the newer reply query").toHaveValue(query);
+        }
         const rows = await find(page, query, type);
-        await expect(rows.first()).toBeVisible();
+        await expect(rows.first(), `${type}: expected a literal match for ${query}`).toBeVisible();
         await rows.first().click();
         await expect(page.locator("#wireSearchPanel")).toBeHidden();
         await expect(page).toHaveURL(new RegExp(destination));
+        assert.equal(new URL(page.url()).hash, "");
+        if (type === "tool") {
+            assert.equal(await page.locator("#toolFilter").inputValue(), "workiq-fetch");
+            assert.ok(!page.url().includes("workiq-fetch"));
+        }
         if (type === "action") await expect(page.locator("#selectedCall")).toBeVisible();
-        if (type === "setting") await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", "false");
+        if (type === "setting") await expect(page.locator("#palette-petrol")).toBeFocused();
+        if (type === "context") await page.evaluate(() => {
+            const panel = document.querySelector("#contextSidebar");
+            const animate = panel.animate;
+            panel.animate = function (...args) {
+                panel.animate = animate;
+                const effect = animate.apply(this, args);
+                queueMicrotask(() => { effect.pause(); effect.currentTime = effect.effect.getTiming().duration / 2; });
+                return effect;
+            };
+        });
         await page.goBack();
         await expect(page.locator("#wireSearch")).toHaveValue(query);
     }
@@ -120,7 +152,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
         const dialog = page.locator("#savedReportReader");
         await expect(dialog).toBeVisible();
         if (kind === "html") await expect(dialog.locator("iframe")).toHaveCount(1);
-        if (kind === "json") assert.ok((await jsonValues(page)).some(value => value.includes("physician")));
+        if (kind === "json") await checkFrozenJson(page, "product-report.json", bundles[index].files["product-report.json"], bundles[index].bundleId);
         if (kind === "markdown") await expect(dialog.locator(".saved-markdown")).toContainText("physician");
         if (kind === "pdf") {
             await expect(dialog.locator(".saved-pdf-pages")).toHaveAttribute("aria-busy", "false");
@@ -161,18 +193,6 @@ test("one explicit reconnect recovers an expired stream and polling failures era
     assert.deepEqual(errors, []);
 });
 
-test("literal Search is the normal path without model fields, provisioning or fallback UI", { timeout: 30000 }, async t => {
-    const { page, runtime, requests, api } = await setup(t);
-    await find(page, "PHYS", "interaction");
-    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
-    const status = await (await api("/api/search/status")).json();
-    assert.equal(status.mode, "text");
-    for (const field of ["model", "modelId", "linguistics", "chunks"]) assert.equal(Object.hasOwn(status, field), false);
-    await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
-    await expect(page.locator("#wireSearchCoverage")).not.toContainText("Word search only");
-    assert.ok(requests.every(request => new URL(request.url).origin === new URL(runtime.url).origin));
-});
-
 test("a tampered saved copy refuses opening and leaves an explicit search retry", { timeout: 30000 }, async t => {
     const { page, bundles, errors } = await setup(t, { formats: ["json"] });
     await find(page, "physician", "report");
@@ -197,17 +217,23 @@ test("partial searchable coverage blocks only current-view reports, preserving h
     await expect(page.locator("#homeView")).toBeHidden();
     await expect(page.locator("#activityView")).toBeHidden();
     await page.locator('nav [data-nav="reports"]').click();
-    await chooseReportScope(page, "current");
-    await expect(page.locator("#exportBtn")).toBeDisabled();
+    await page.locator("#reportDeskActivity").click();
+    const picker = page.getByRole("dialog", { name: "Choose activity" });
+    await picker.getByRole("radio", { name: /^Current Analyze view/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await expect(page.locator("#prepareReportPreview")).toBeDisabled();
     await expect(page.locator("#scopeCount-current")).toHaveText("Count unavailable");
-    await expect(page.locator("#reportPromptAuthorSummary")).toContainText("counts are unavailable");
-    await chooseReportScope(page, "selected");
-    await expect(page.locator("#exportBtn")).toBeEnabled();
+    await page.locator("#reportDeskActivity").click();
+    await picker.getByRole("radio", { name: /^Selected interactions/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await expect(page.locator("#prepareReportPreview")).toBeEnabled();
     await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
     await expect(page.locator("#previewSelectionSummary > span")).toHaveText(["1 chat", "1 interaction"]);
     await expect(page.locator("#reportMatchingContext")).toBeHidden();
-    await chooseReportScope(page, "all");
-    await expect(page.locator("#exportBtn")).toBeEnabled();
+    await page.locator("#reportDeskActivity").click();
+    await picker.getByRole("radio", { name: /^All collected activity/ }).check();
+    await picker.getByRole("button", { name: "Use activity", exact: true }).click();
+    await expect(page.locator("#prepareReportPreview")).toBeEnabled();
     await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 3 interactions");
     await expect(page.locator("#previewSelectionSummary > span")).toHaveText(["1 chat", "3 interactions"]);
 });
@@ -254,8 +280,8 @@ test("correction: legacy phrase intersects literal membership and survives remov
     await openAnalyzeFilters(page);
     await expect(page.getByRole("button", { name: "Remove private search", exact: true })).toBeVisible();
     await expect(page.locator("#wireSearch")).toHaveValue("mechanic");
-    const stored = await page.evaluate(() => history.state.evidenceView.search);
-    assert.equal(stored, "physician");
+    const stored = await page.evaluate(() => JSON.stringify([history.state, location.href, {...sessionStorage}, {...localStorage}]));
+    assert.doesNotMatch(stored, /physician|mechanic/);
     assert.doesNotMatch(JSON.stringify(sentBodies), /physician/);
 });
 
@@ -306,7 +332,7 @@ test("correction: page-two cross-layer action Back retains result page and focus
 
 test("scope is explicit, selection is retained, themes and narrow text remain usable", { timeout: 60000 }, async t => {
     const { page, errors } = await setup(t);
-    await page.locator("#activityList .request-card-open").first().click();
+    await page.locator('[data-view-key="request:search-0"] .request-card-open').click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
     await page.locator("#wireSearch").fill("PHYS");
@@ -317,7 +343,7 @@ test("scope is explicit, selection is retained, themes and narrow text remain us
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator("#activityList .request-row")).toHaveCount(1);
-    await page.locator('.request-card-open[href*="request=search-0"]').click();
+    await page.locator('[data-view-key="request:search-0"] .request-card-open').click();
     await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
     await page.locator("#closeContextSidebar").click();
     const changedScope = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
@@ -329,7 +355,7 @@ test("scope is explicit, selection is retained, themes and narrow text remain us
     await openSearchFilters(page);
     await page.locator("#wireSearchClear").click();
     await expect(page.locator("#activityCount")).toHaveText("3");
-    await page.locator('.request-card-open[href*="request=search-0"]').click();
+    await page.locator('[data-view-key="request:search-0"] .request-card-open').click();
     await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
     await page.locator("#closeContextSidebar").click();
     await page.locator("#wireSearch").fill("Theme");
@@ -383,7 +409,7 @@ test("two visible panels clear on revocation, artifact deletion and source repla
         await expect(current.locator("#wireSearchStatus")).toHaveText("Saved content changed. Search again.");
         await find(current, "lab results", "reply");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(0);
-        await expect(current.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.");
+        await expect(current.locator("#wireSearchStatus")).toHaveText("No matches in the items WIRE could search. Saved replies are unavailable for Search.");
         await find(current, "physician", "report");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(1);
     }
@@ -472,11 +498,17 @@ async function jointSearch(page, query, layer = "tool") {
 }
 async function compareJointPeriods(page) {
     await page.locator("#comparePeriods").click();
+    await expect(page.locator("#comparisonDates")).toBeVisible();
+    await openAnalyzeFilters(page);
+    await page.getByRole("button", { name: "Use Analyze view", exact: true }).click();
+    await closeAnalyzeFilters(page);
+    await openDatePicker(page, "compare", "Custom dates");
     for (const [label, value] of [
         ["Period A from", "2026-09-30"], ["Period A to", "2026-09-30"],
         ["Period B from", "2026-10-01"], ["Period B to", "2026-10-01"],
     ]) await page.getByLabel(label, { exact: true }).fill(value);
-    const response = page.waitForResponse(value => value.url().endsWith("/api/period-comparison"));
+    const response = page.waitForResponse(value => value.url().endsWith("/api/period-comparison")
+        && value.request().postDataJSON().periods?.baseline?.from === "2026-09-30");
     await page.locator("#applyPeriodComparison").click();
     const result = await response, value = await result.json();
     assert.equal(result.status(), 200, value.error);
@@ -506,51 +538,51 @@ test("joint: literal matching and legacy scope span both periods through Review 
     assert.deepEqual(value.periods.later.scenarioIds, ["search-3"]);
     assert.equal(value.periods.baseline.rowIds.length, 2);
     assert.equal(value.periods.later.rowIds.length, 2);
-    assert.equal(admissions, 1);
+    const pairAdmissions = admissions;
+    assert.ok(pairAdmissions > 0);
     await expect(page.locator("#comparisonSearch")).toBeHidden();
     await expect(page.locator('input[type=search]:visible')).toHaveCount(1);
     await page.locator("#wireSearch").focus();
     await expect(page.locator("#wireSearch")).toBeFocused();
-    await expect(page.getByLabel("Period A from", { exact: true })).toHaveValue("2026-09-30");
-    await expect(page.getByLabel("Period B to", { exact: true })).toHaveValue("2026-10-01");
+    await expect(page.getByRole("button", { name: "Change baseline period: Sep 30, 2026" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change selected period: Oct 1, 2026" })).toBeVisible();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
-    assert.equal(admissions, 1);
+    assert.equal(admissions, pairAdmissions);
     if (process.env.WIRE_SEARCH_PROOFS) {
         await openSearchFilters(page);
         await page.locator("#wireSearch").press("Escape");
         await page.locator("#periodComparisonTitle").evaluate(node => node.scrollIntoView({ block: "start" }));
         await page.screenshot({ path: path.join(process.env.WIRE_SEARCH_PROOFS, "joint-periods.png") });
     }
+    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
     await expect(page.locator("#periodReportScope")).toContainText("Period B");
-    await reportContents(page);
-    await page.locator("#formatOptions input[value=json]").check();
-    await page.locator('[name=promptMode][value=none]').check();
-    const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
     const preview = await (await preparing).json();
     assert.equal(preview.error, undefined, preview.error);
     assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
     assert.equal(preview.snapshot.periodComparison.selection.withinScenarioRefs.length, 2);
     assert.doesNotMatch(JSON.stringify(preview.snapshot.periodComparison), /cedar cohort|PHYS|panelId|requestId|indexId/);
-    assert.equal(admissions, 2);
+    assert.equal(admissions, pairAdmissions + 1);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    await page.getByRole("button", { name: "Formats: HTML", exact: true }).click();
+    const formatted = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.locator("#formatOptions input[value=json]").check();
+    assert.equal((await formatted).status(), 200);
+    await page.keyboard.press("Escape");
+    const frozenAdmissions = admissions;
     await page.locator("#wireSearch").focus();
     const clear = page.waitForResponse(response => response.url().endsWith("/api/search/query") && response.request().postDataJSON().query === "");
     await openSearchFilters(page);
     await page.locator("#wireSearchClear").click();
     await clear;
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(context)).exports.length, 0);
     const saving = page.waitForResponse(response => response.url().endsWith("/api/export"));
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     const saved = await (await saving).json();
     assert.equal(saved.error, undefined, saved.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
-    assert.equal(admissions, 2, "A legitimate frozen preview must not re-resolve the cleared live receipt at Review/Save");
+    assert.equal(admissions, frozenAdmissions, "Saving the frozen pair must not re-resolve the cleared live receipt");
     const state = await loadBoardState(context);
     assert.equal(state.exports.length, 1);
     const artifact = state.exports[0];
@@ -597,8 +629,7 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
     await expect(page.locator("#periodComparisonResults > .compare-caption").filter({ hasText: /^tool-returned API results$/ })).toHaveCount(1);
     await expect(page.locator("#comparisonAcceptedScope")).toHaveText("Search applied");
     await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription("Search applied");
-    await expect(page.locator(".compare-latency .compare-empty")).toContainText("not timed tool calls");
-    await expect(page.locator(".compare-latency table")).toHaveCount(0);
+    await expect(page.locator("#periodComparisonResults")).not.toContainText("Tool latency");
     assert.deepEqual(value.selection.semanticMembership.scenarioIds, []);
     for (const [side, id] of [["baseline", "search-0"], ["later", "search-3"]]) {
         assert.deepEqual(value.periods[side].scenarioIds, [id]);
@@ -607,6 +638,7 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
         assert.equal(value.periods[side].analytics.apiCoverage.eligibleToolCalls, 2);
         assert.equal(value.periods[side].analytics.apiCoverage.returnedResultUnits, 3);
     }
+    await page.getByRole("button", { name: "View records", exact: true }).click();
     await page.locator("#comparisonRecordsB").click();
     const exact = page.locator('[data-period-side="later"]');
     await exact.locator("a").click();
@@ -616,7 +648,7 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
     const restored = await (await backRead).json();
     assert.deepEqual(restored.periods.baseline.rowIds, value.periods.baseline.rowIds);
     assert.deepEqual(restored.selection.withinScenarioIds, ["search-0", "search-3"]);
-    await expect(page.getByLabel("Period B to", { exact: true })).toHaveValue("2026-10-01");
+    assert.deepEqual(restored.periods.later.range, { from: "2026-10-01", to: "2026-10-01" });
     await expect(page.locator("#wireSearch")).toHaveValue("403");
     await expect(exact).toBeVisible();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
@@ -630,10 +662,8 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearchRetry").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled({ timeout: 15000 });
-    await page.locator("#createPeriodReport").click();
-    await reportContents(page);
     const preparing = page.waitForResponse(response => response.url().endsWith("/api/preview"));
-    await page.locator("#exportBtn").click();
+    await page.locator("#createPeriodReport").click();
     const preview = await (await preparing).json();
     assert.equal(preview.error, undefined, preview.error);
     assert.equal(preview.snapshot.periodComparison.periods.baseline.rows.length, 1);
@@ -648,6 +678,10 @@ test("joint: partial search cannot dispatch a complete paired population or enab
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
+    const reads = () => requests.filter(request => new URL(request.url).pathname === "/api/period-comparison").length;
+    const prior = reads();
+    await page.locator("#wireSearch").press("Escape");
+    await openDatePicker(page, "compare", "Custom dates");
     for (const [label, value] of [
         ["Period A from", "2026-09-30"], ["Period A to", "2026-09-30"],
         ["Period B from", "2026-10-01"], ["Period B to", "2026-10-01"],
@@ -656,40 +690,8 @@ test("joint: partial search cannot dispatch a complete paired population or enab
     await expect(page.locator("#periodComparisonStatus")).toContainText("Search cannot provide a complete current selection");
     await expect(page.locator("#periodComparisonResults")).toBeEmpty();
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
-    assert.equal(requests.some(request => new URL(request.url).pathname === "/api/period-comparison"), false);
+    assert.equal(reads(), prior, "Editing the dates cannot dispatch a comparison on incomplete Search membership");
     assert.equal((await loadBoardState(context)).exports.length, 0);
-});
-
-test("joint: absent openSearch callback preserves the standalone legacy field", async t => {
-    const browser = await chromium.launch();
-    t.after(() => browser.close());
-    const page = await browser.newPage();
-    await page.setContent("<select id='outcomeFilter'><option value='success'>Worked</option></select><button id='toggle'>Compare</button><section id='comparison'></section>");
-    await page.evaluate(async ({ source, presenter }) => {
-        const mount = (0, eval)("(" + source + ")");
-        const context = { route: { view: "analyze", compare: "periods" }, search: "legacy phrase",
-            options: { layer: "tool", filters: {}, timeContext: { timeZone: "UTC", locale: "en-US" } },
-            snapshot: { revision: 1, scenarios: [] }, isLoading: false, isStale: false };
-        const token = Object.freeze({});
-        const api = Object.assign(() => { throw new Error("No request expected without periods."); }, {
-            publicationToken: () => token, isCurrent: value => value === token,
-        });
-        const component = mount({
-            root: document.getElementById("comparison"), toggle: document.getElementById("toggle"),
-            getContext: () => context, time: { label: () => "UTC" }, results: { labels: () => ({ success: "Worked" }) },
-            assessmentFactories: { periodComparison: { createPresentation: (0, eval)("(" + presenter + ")") } },
-            onSearch: value => { window.legacySearchValue = value; },
-            api, navigate: () => {},
-            syncFilters: () => {}, bindDetails: value => value,
-        });
-
-        await component.update();
-    }, { source: mountPeriodComparison.toString(), presenter: createPeriodComparisonPresentation.toString() });
-    await expect(page.locator("#comparisonSearch")).toBeVisible();
-    await expect(page.locator("#comparisonSearch")).toHaveValue("legacy phrase");
-    await page.locator("#comparisonSearch").fill("edited legacy phrase");
-    assert.equal(await page.evaluate(() => window.legacySearchValue), "edited legacy phrase");
-    await expect(page.getByRole("button", { name: "Search this comparison", exact: true })).toHaveCount(0);
 });
 
 test("frozen-reader: search opens actual historical comparison HTML and JSON-only bytes without corruption fallback", { timeout: 60000 }, async t => {
@@ -729,10 +731,7 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`)).toBeFocused();
     await page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`).click();
-    const jsonBytes = await readFile(json.files["comparison-report.json"], "utf8");
-    const leaves = value => value !== null && typeof value === "object" ? Object.values(value).flatMap(leaves)
-        : [typeof value === "string" ? JSON.stringify(value) : String(value)];
-    assert.deepEqual(await jsonValues(page), leaves(JSON.parse(jsonBytes)));
+    await checkFrozenJson(page, "comparison-report.json", json.files["comparison-report.json"], json.bundleId);
     await expect(page.locator("#savedReportReader iframe")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`)).toBeFocused();

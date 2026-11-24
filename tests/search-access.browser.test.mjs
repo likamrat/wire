@@ -55,7 +55,8 @@ test("unenrolled Microsoft Search cannot retire valid GitHub access in the ordin
     await expect(page.locator("#collectionNoticeText")).not.toContainText("status is unavailable");
     await page.locator("#wireSearch").fill("workiq-fetch");
     await expect(page.locator("#wireSearchResults button").first()).toBeVisible();
-    await expect(page.locator("#wireNativeSearch")).toContainText("Microsoft saved activity is unavailable for Search.");
+    await expect(page.locator("#wireNativeSearch")).toBeHidden();
+    await expect(page.locator("#wireNativeSearch .wire-search-hit")).toHaveCount(0);
     await expect(page.locator("#workspace")).toBeVisible();
     await expect(page.locator("#wireSearch")).toBeEnabled();
     assert.deepEqual(nativeRequests, [], "Unavailable native membership is not permission to query the Microsoft reader.");
@@ -63,8 +64,6 @@ test("unenrolled Microsoft Search cannot retire valid GitHub access in the ordin
     assert.deepEqual(external, []);
 });
 
-// The accepted base predates shared transport access methods. This fixture adds
-// only their control seam; private queries/events still use the real transport/runtime.
 async function setup(t, { initialAccess = true, initialMode = "enforced", partial = false } = {}) {
     const cleanup = [], app = await searchFixture({ after: action => cleanup.push(action) }, {
         formats: ["html"], reply: false, ...(partial ? { records: searchRecords(24) } : {}),
@@ -437,7 +436,7 @@ test("only the current explicit unbound mode retains query intent through a fres
 test("Search erases held generated Text and private Attr handles before replacement and withdrawal", async t => {
     const { page } = await setup(t, { partial: true });
     const input = page.locator("#wireSearch");
-    await input.fill("Invented local");
+    await input.fill("subsequent medical");
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 1 of");
     await expect(page.locator("#wireSearchCoverage")).toHaveText("Some saved content could not be searched.");
     const hold = () => page.evaluateHandle(() => {

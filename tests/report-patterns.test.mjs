@@ -8,6 +8,50 @@ import { normalizeReportOptions } from "../lib/prompt-projection.mjs";
 import { projectReportResultText } from "../lib/report-result-text.mjs";
 import { projectReportResults } from "../lib/report-result-projection.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
+import { reportObservationHasError } from "../lib/report-result-contract.mjs";
+
+test("qualified reasons distinguish repeated failures of the same operation without grouping by message prose", () => {
+    const key = "a".repeat(64);
+    const records = ["sign-in-required", "sign-in-required", "unexplained"].map((type, i) => {
+        const record = fixture(`same-operation-${i}`), call = record.toolCalls[0];
+        Object.assign(call, { toolSucceeded: false, reportedOutcome: "failed", apiResults: [],
+            failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded",
+                ...(type === "sign-in-required" ? { messageSignal: "workiq-sign-in-required" } : {}) } });
+        return record;
+    });
+    const facts = buildReportFacts(records, { revision: 1, pseudonymKey: key }).facts;
+    const results = projectReportResults(records, key).facts, patterns = projectReportPatterns(records, facts, results, key);
+    const groups = patterns.groups.filter(g => g.kind === "errors");
+    assert.deepEqual(groups.map(g => g.callRefs.length), [2, 1]);
+    assert.match(reportPatternError(groups[0]), /Call: Sign-in was required at the time/);
+    assert.doesNotMatch(reportPatternError(groups[1]), /sign-in|timeout/i);
+});
+test("returned diagnostic evidence is grouped without publishing its source code or changing earlier observations", async t => {
+    const record = fixture("entry-diagnostic"), call = record.toolCalls[0];
+    call.startedAt = record.capturedAt;
+    const message = "Supply the required title.", code = "InventedTitleRequired";
+    call.apiResults = [{ index: 0, statusCode: 200 }, { index: 1, errorCode: code,
+        errorDiagnostic: { version: 1, source: "result-error", status: "recorded", message, code } }];
+    const { context } = await privateFixture(t, [record]), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        saveMode: "local", formats: ["html", "json", "markdown"], reportFocus: { version: 1, preset: "errors", outcome: "errors", services: [] },
+    }, { kind: "all", revision: state.revision });
+    const { resultFacts, reportPatterns, evaluationFacts } = preview.snapshot;
+    const fact = resultFacts.calls[0], obs = fact.observations[0];
+    assert.ok(preview.previewHtml.includes(`href="#${fact.ref}">Report call 1</a>`));
+    assert.ok(preview.previewHtml.includes(`id="${fact.ref}"`));
+    assert.equal(fact.completion, "succeeded"); assert.equal(reportObservationHasError(obs), true);
+    assert.equal(obs.returnedEntries[1].errorCode, null);
+    assert.equal(reportPatterns.groups.filter(group => group.kind === "errors").length, 1);
+    for (const body of [preview.previewHtml, preview.files["product-report.md"]]) {
+        assert.match(body, /A returned entry reported an error/);
+        assert.doesNotMatch(body, /Supply the required title|InventedTitleRequired/);
+    }
+    const oldObs = structuredClone(obs); delete oldObs.errorDetailVersion;
+    assert.equal(reportObservationHasError(oldObs), false);
+    const oldPatterns = { ...reportPatterns, version: 2, definition: "wire-report-patterns-v2", groups: reportPatterns.groups.filter(g => g.kind !== "errors") };
+    assert.doesNotThrow(() => validateReportPatterns(oldPatterns, { facts: evaluationFacts, results: resultFacts }));
+});
 
 test("error patterns retain both conflicting status sources only when error evidence exists", () => {
     const key = "a".repeat(64);
@@ -25,7 +69,8 @@ test("error patterns retain both conflicting status sources only when error evid
     assert.match(reportPatternError(groups[0]), /Conflicting returned-entry statuses/);
     assert.match(reportPatternError(groups[0]), /reported: 200/);
     assert.match(reportPatternError(groups[0]), /diagnostic: 500/);
-    assert.equal(patterns.version, 2);
+    assert.equal(patterns.version, 3);
+    assert.doesNotThrow(() => validateReportPatterns({ ...patterns, version: 2, definition: "wire-report-patterns-v2" }, { facts, results }));
     const legacy = { ...structuredClone(patterns), version: 1, definition: "wire-report-patterns-v1",
         groups: patterns.groups.filter(group => group.kind === "operation") };
     const bytes = JSON.stringify(legacy);

@@ -1,5 +1,5 @@
 // Presentation only. Existing controls retain their nodes, listeners and state owners.
-export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming }) {
+export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, motionTiming, toolbarHost, scopeHost }) {
     if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
         throw new TypeError("Analyze controls require the shared publication token interface.");
     }
@@ -12,7 +12,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     const scope = $("analyzeScopeSummary"), actionHosts = new Map();
     const pairScope = document.createElement("p");
     pairScope.id = "comparisonAcceptedScope";
-    pairScope.className = "compare-caption";
+    pairScope.className = "compare-caption workspace-command-context";
     const scopeDescription = document.createElement("span");
     scopeDescription.id = "analyzeFilterScopeDescription";
     scopeDescription.hidden = true;
@@ -20,6 +20,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     let active = false, comparing = false, referenceAvailable = false, withdrawn = false, withdrawalRevision = 0;
     let motion = null, closing = false, restoreAfterClose = false;
     const panel = $("analyzeFilterPanel");
+    const narrowFilters = window.matchMedia("(max-width:699px)");
     const publicationToken = () => api.publicationToken();
     const isCurrent = token => token != null && typeof token.then !== "function" && api.isCurrent(token) === true;
     const canPublish = () => isCurrent(publicationToken());
@@ -100,7 +101,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (!active || withdrawn || !canPublish()) return;
         closeSelect(); closeNavigation(); ux.hideTooltip();
         position();
-        if (!dialog.open) dialog.showModal();
+        if (!dialog.open) narrowFilters.matches ? dialog.showModal() : dialog.show();
         move(true);
         trigger.setAttribute("aria-expanded", "true");
         ux.restoreFocus($(comparing ? "toolFilter-control" : "dateFilter-control"));
@@ -109,6 +110,20 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     $("closeAnalyzeFilters").addEventListener("click", () => close());
     dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     ux.dismissOnOutside(dialog, () => close());
+    document.addEventListener("pointerdown", event => {
+        if (dialog.open && !dialog.matches(":modal") && !dialog.contains(event.target) && !trigger.contains(event.target)) close(false);
+    }, true);
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !event.defaultPrevented && dialog.open && !dialog.matches(":modal")) {
+            event.preventDefault(); close();
+        }
+    });
+    narrowFilters.addEventListener("change", () => {
+        if (!dialog.open || closing) return;
+        const focus = document.activeElement;
+        closeSelect(); dialog.close(); open();
+        if (dialog.contains(focus) && focus.checkVisibility()) focus.focus({preventScroll:true});
+    });
     dialog.addEventListener("close", () => {
         if (dialog.open) return;
         closing = false; finishMotion();
@@ -150,15 +165,14 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         referenceAvailable = ordinary;
         document.body.classList.toggle("analyze-reading", active);
         $("analyzeTools").hidden = false;
-        $("analyzeToolbar").hidden = !active;
+        $("analyzeToolbar").hidden = !active || comparing;
         const toolbar = $("analyzeToolbar");
         const entryFocus = toolbar.contains(document.activeElement) ? document.activeElement : null;
+        $("analyzeResultCommands").hidden = !active || comparing;
         if (comparing) place($("pagePrimaryActions"), toolbar);
-        else if (toolbar.parentElement !== $("workspace")) $("analyzePopulation").before(toolbar);
+        else place(toolbarHost, toolbar);
         place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
-        trigger.querySelector(".analyze-entry-label").textContent = comparing ? "More options" : "Filters";
         for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
-        for (const control of dialog.querySelectorAll("select")) control.dataset.optionSearch = String(comparing);
         // Reparenting the existing entry must not discard Reset's real focus handoff.
         if (entryFocus && active && canPublish() && document.activeElement !== entryFocus) entryFocus.focus({ preventScroll: true });
         if (reference.tagName === "DETAILS") $("analyzeReference").hidden = !referenceAvailable || !reference.open;
@@ -179,11 +193,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         scopeDescription.textContent = text;
         if (describedBy) trigger.setAttribute("aria-describedby", describedBy);
         else trigger.removeAttribute("aria-describedby");
-        const countText = activeCount === null ? "" : String(activeCount);
-        if ($("analyzeFilterCount").textContent !== countText) $("analyzeFilterCount").textContent = countText;
-        $("analyzeFilterCount").hidden = !activeCount;
-        const label = comparing ? "More comparison options" : "Filters and view";
-        trigger.setAttribute("aria-label", `${label}${activeCount ? `, ${activeCount} active ${activeCount === 1 ? "filter" : "filters"}` : ""}`);
+        ux.paintFilterEntry(trigger, activeCount, comparing ? "Filters" : "Filters and view");
     }
     function clearPairCaption() {
         pairScope.remove();
@@ -224,11 +234,8 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (value.text) {
             const dates = $("periodComparisonResults").querySelector(":scope > .compare-period-key");
             if (!dates) throw new Error("Accepted comparison scope requires its current result caption area.");
-            if (value.replacesCollectionCaption && dates.nextElementSibling !== pairScope) {
-                const collection = dates.nextElementSibling;
-                if (!collection?.matches("p.compare-caption")) throw new Error("Accepted collection scope requires its current caption.");
-                collection.replaceWith(pairScope);
-            } else if (pairScope.previousElementSibling !== dates) dates.after(pairScope);
+            const row = $("comparisonOptionsSlot").closest(".workspace-command-row");
+            if (pairScope.parentElement !== row) row.prepend(pairScope);
             scopeCaption(pairScope, value);
             pairScope.dataset.pairKey = value.key;
             pairScope.dataset.revision = String(value.revision);
@@ -242,13 +249,15 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         if (comparing) return;
         if (value === null) { entryScope(); return; }
         const { activeCount, status, error, revision, empty } = value;
-        const host = empty ? $("analyzeEmptyScope") : $("outcomeChart").querySelector('[data-percentage-card="outcomes"]');
+        const host = scopeHost || (empty ? $("analyzeEmptyScope") : $("outcomeChart").querySelector('[data-percentage-card="outcomes"]'));
         place(host, scope);
         $("analyzeEmptyScope").hidden = !empty;
         // Dates and collection defaults already have global controls; keep actual qualifications.
-        const parts = empty || !Array.isArray(value.restrictions) ? value.parts : value.parts.filter((part, index) => index > 1 || value.restrictions.includes(part));
+        const parts = value.parts.filter((part, index) => empty || !Array.isArray(value.restrictions) || index > 1 || value.restrictions.includes(part));
         scopeCaption($("analyzeScopeCaption"), { ...value, parts, text: parts.join("; ") });
         $("analyzeScopeCaption").hidden = !parts.length;
+        $("periodResult").classList.toggle("visually-hidden", Boolean(parts.length));
+        for (const link of $("periodResult").querySelectorAll("a")) link.tabIndex = parts.length ? -1 : 0;
         if ($("analyzeScopeStatus").textContent !== status) $("analyzeScopeStatus").textContent = status;
         $("analyzeScopeStatus").hidden = !status;
         if ($("analyzeScopeErrorText").textContent !== error) $("analyzeScopeErrorText").textContent = error;
@@ -275,7 +284,6 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         }
         clearPairCaption();
         clearData(scopeDescription);
-        clearData($("analyzeFilterCount"));
         entryScope(null);
         const owned = id => scope.querySelector("#" + id) || $(id);
         function clearData(node) {
@@ -295,7 +303,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
             clearData(node);
             node.replaceChildren();
         }
-        for (const node of [scope, pairScope, owned("analyzeScopeError"), owned("periodCoverage"), $("analyzeFilterCount"), $("serviceFocus")].filter(Boolean)) clearData(node);
+        for (const node of [scope, pairScope, owned("analyzeScopeError"), owned("periodCoverage"), $("serviceFocus")].filter(Boolean)) clearData(node);
         for (const id of ["analyzeScopeStatus", "analyzeScopeError", "periodCoverage", "analyzeSourceCoverage",
             "analyzeEmptyScope", "activityListScope", "serviceFocus"]) {
             const node = owned(id);

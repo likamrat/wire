@@ -13,9 +13,9 @@ import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { createTimeContext } from "../lib/time.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 const proof = process.env.WIRE_CHART_GUIDE_PROOFS;
 async function captureNative(page, name) {
@@ -26,7 +26,7 @@ async function captureNative(page, name) {
     await capture.detach();
     await writeFile(path.join(proof, name + ".png"), Buffer.from(image.data, "base64"));
 }
-async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZoom = false, observeQualification = false, observeGuide = false } = {}) {
+async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZoom = false, observeGuide = false } = {}) {
     let removeFixture;
     const { context } = await privateFixture({ after: cleanup => { removeFixture = cleanup; } }, records);
     const before = await loadBoardState(context), errors = [], denied = [], requests = [];
@@ -66,25 +66,14 @@ async function setup(t, records, { reducedMotion = "reduce", hash = "", nativeZo
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && ![
             "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
-            "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/session",
+            "/api/evaluation/automatic/summary", "/api/session",
         ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
         requests.push(url.pathname);
-        if ((observeQualification || observeGuide) && url.pathname === "/") {
+        if (observeGuide && url.pathname === "/") {
             const response = await route.fetch();
-            let html = await response.text();
-            if (observeQualification) {
-                const binding = "readContext: readChartReferenceContext, renderExact:";
-                assert.equal(html.split(binding).length, 2);
-                html = html.replace(binding, `readContext: () => {
-                    const value = readChartReferenceContext(); window.observedGuideQualification = value; return value;
-                }, renderExact:`);
-            }
-            if (observeGuide) {
-                const binding = "let readingIntent = 0;";
-                assert.equal(html.split(binding).length, 2);
-                html = html.replace(binding, `window.nativeGuide = chartReferenceUI; window.nativeSidebarTiming = sidebar.timing; ${binding}`);
-            }
-            return route.fulfill({ response, body: html });
+            const html = await response.text(), binding = "const chartReferenceUI =";
+            assert.equal(html.split(binding).length, 2);
+            return route.fulfill({ response, body: html.replace(binding, `${binding} window.nativeGuide =`) });
         }
         return route.continue();
     });
@@ -108,84 +97,74 @@ async function exact(page, topic) {
 }
 
 async function topicChoice(page, topic) {
-    if (await page.locator("#chartReferenceExact").isVisible()) await page.locator("#chartReferenceBack").click();
-    if (await page.locator("#chartReferenceAllTopics").isVisible()) await page.locator("#chartReferenceAllTopics").click();
-    await page.locator(`button[data-reference-topic="${topic}"]`).click();
+    const toggle = page.locator("#chartReferenceTopicToggle");
+    if (await toggle.isVisible() && !await page.locator("#chartReferenceTopics").isVisible()) await toggle.click();
+    await page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`).click();
 }
 
-async function assertGuideFrame(page, expected) {
-    const actual = await page.locator("#meaning").boundingBox();
-    for (const key of ["x", "y", "width", "height"]) assert.ok(Math.abs(actual[key] - expected[key]) < 1, `Stable guide ${key}`);
+async function assertInPageReader(page) {
+    const reader = await page.locator("#meaning").evaluate(node => {
+        const bounds = node.getBoundingClientRect(), workspace = node.closest("#workspace")?.getBoundingClientRect();
+        return { modal: node.matches(":modal"), motion: node.getAnimations().length, position: getComputedStyle(node).position,
+            inside: workspace && bounds.left >= workspace.left - 1 && bounds.right <= workspace.right + 1 };
+    });
+    assert.equal(reader.modal, false);
+    assert.equal(reader.motion, 0);
+    assert.notEqual(reader.position, "fixed");
+    assert.equal(reader.inside, true);
 }
 
-test("the native side guide routes every topic, index and exact view with native Back and focus", { timeout: 60000 }, async t => {
+test("the in-page Analyze Guide routes every topic from the article or exact data with Back and focus", { timeout: 60000 }, async t => {
     const { page } = await setup(t, pathRecords());
     await page.locator("#openChartReference").click();
-    await page.locator("#meaning").evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
-    const original = await page.locator("#meaning").boundingBox();
-    for (const topic of ["outcomes", "time", "services", "models", "tools", "categories", "paths"]) {
-        await page.locator("#chartReferenceAllTopics").click();
-        await assertGuideFrame(page, original);
-        await page.locator(`button[data-reference-topic="${topic}"]`).click();
+    await expect(page.locator("#openChartReference")).toBeFocused();
+    await expect(page.locator("#analyzeReferenceEntry [aria-current=page]")).toHaveAttribute("id", "openChartReference");
+    await expect(page.locator("#meaning .chart-reference-heading")).toBeHidden();
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
+    await expect(page.locator('#chartReferenceTopics [aria-current="page"]')).toHaveAttribute("data-reference-topic", "outcomes");
+    await expect(page.locator("#chartReferenceAllTopics")).toBeHidden();
+    for (const topic of ["outcomes", "time", "services", "models", "authors", "tools", "categories", "paths"]) {
+        const button = page.locator(`#chartReferenceTopics button[data-reference-topic="${topic}"]`);
+        await button.click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", topic);
-        await assertGuideFrame(page, original);
+        await expect(page.locator("#chartReferenceTopicTitle")).toBeVisible();
+        await expect(page.locator("#chartReferenceTopicTitle")).toHaveText(/\?$/);
+        await assertInPageReader(page);
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "data");
-        await assertGuideFrame(page, original);
-        await page.mouse.click(original.x - 4, original.y + 30);
+        await expect(button).toBeVisible();
+        await expect(button).toHaveAttribute("aria-current", "page");
+        await assertInPageReader(page);
+        await page.locator("#chartReferenceBack").click();
         await expect(page.locator("#meaning")).toHaveAttribute("data-reference-view", "guide");
         await expect(page.locator("#chartReferenceShowData")).toBeFocused();
     }
-    await page.mouse.click(original.x - 4, original.y + 30);
+    await page.locator("#chartReferenceShowData").click();
+    await topicChoice(page, "services");
+    await expect(page.locator("#meaning")).toHaveAttribute("data-reference-topic", "services");
+    await expect(page.locator("#chartReferenceTopicTitle")).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.locator("#meaning")).not.toBeVisible();
     await expect(page.locator("#openChartReference")).toBeFocused();
 });
 
-test("the native guide uses the sidebar glide, reverses continuously and tears down immediately", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, pathRecords(), { reducedMotion: "no-preference", observeGuide: true });
-    for (const width of [1440, 390]) {
+test("the Analyze Guide opens and closes without a glide or a deferred dismissal", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, pathRecords(), { observeGuide: true });
+    for (const [width, reducedMotion] of [[1440, "no-preference"], [390, "no-preference"], [390, "reduce"]]) {
         await page.setViewportSize({ width, height: 1000 });
+        await page.emulateMedia({ reducedMotion });
         await page.locator("#openChartReference").click();
-        const entering = await page.locator("#meaning").evaluate(node => {
-            const animation = node.getAnimations()[0];
-            animation.pause(); animation.currentTime = 80;
-            const box = node.getBoundingClientRect();
-            return { x: box.x, y: box.y, width: box.width, height: box.height, timing: animation.effect.getTiming(), shared: window.nativeSidebarTiming };
-        });
-        assert.equal(entering.timing.duration, entering.shared.duration);
-        assert.equal(entering.timing.easing, "cubic-bezier(0.2, 0, 0, 1)");
-        await captureNative(page, `glide-${width}-opening`);
-        await page.locator("#meaning").evaluate(node => node.getAnimations()[0].finish());
-        await page.waitForFunction(() => document.getElementById("meaning").getAnimations().length === 0);
-        const settled = await page.locator("#meaning").boundingBox();
-        assert.ok(entering.x > settled.x);
-        for (const key of ["y", "width", "height"]) assert.equal(entering[key], settled[key]);
-        await page.locator("#closeChartReference").click();
-        const reversal = await page.evaluate(() => {
-            const root = document.getElementById("meaning"), exiting = root.getAnimations()[0];
-            exiting.pause(); exiting.currentTime = 90;
-            const before = root.getBoundingClientRect().x;
+        await assertInPageReader(page);
+        const closed = await page.evaluate(() => {
+            const root = document.getElementById("meaning");
+            document.getElementById("analyzeResultsSection").click();
             window.nativeGuide.refresh();
-            const staysClosing = root.hasAttribute("data-closing") && root.getAnimations()[0] === exiting;
-            window.nativeGuide.open();
-            const entering = root.getAnimations()[0];
-            entering.pause(); entering.currentTime = 0;
-            return { before, after: root.getBoundingClientRect().x, staysClosing };
+            return { open: root.open, animations: root.getAnimations().length, capture: window.nativeGuide.capture() };
         });
-        assert.equal(reversal.staysClosing, true, "A background refresh must not reopen a guide the user is dismissing");
-        assert.ok(Math.abs(reversal.before - reversal.after) < 1);
-        await captureNative(page, `glide-${width}-reversal`);
-        await page.evaluate(() => window.nativeGuide.leave());
+        assert.deepEqual(closed, { open: false, animations: 0, capture: null }, "Refresh cannot reopen a dismissed Guide");
         await expect(page.locator("#meaning")).not.toBeVisible();
-        assert.equal(await page.locator("#meaning").evaluate(node => node.getAnimations().length), 0);
+        await expect(page.locator("#openChartReference")).toBeFocused();
     }
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.locator("#openChartReference").click();
-    assert.equal(await page.locator("#meaning").evaluate(node => node.getAnimations()[0]?.effect.getTiming().duration), 320);
-    assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), true);
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#meaning")).not.toBeVisible();
-    await expect(page.locator("#openChartReference")).toBeFocused();
 });
 
 function pathRecords() {
@@ -218,12 +197,12 @@ test("native path tables find rows locally, retain all-row totals and restore ex
     await expect(table.locator("tbody tr")).toHaveCount(24);
     await expect(table.locator("tfoot td").first()).toHaveText(String(analytics.totals.count));
     await table.getByRole("button", { name: "Next chart rows", exact: true }).click();
-    const lastPageLink = table.locator("tbody a").last(), lastHref = await lastPageLink.getAttribute("href");
+    const lastPageLink = table.locator("tbody a").last(), lastName = await lastPageLink.getAttribute("aria-label");
     await lastPageLink.click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.goBack();
     await expect(page.locator("#meaning")).toBeVisible();
-    await expect(table.locator(`a[href="${lastHref}"]`)).toBeFocused();
+    await expect(table.getByRole("link", { name: lastName, exact: true })).toBeFocused();
     const reads = requests.filter(path => path === "/api/snapshot").length;
     const privateState = () => page.evaluate(() => JSON.stringify({
         hash: location.hash, history: history.state, local: { ...localStorage }, session: { ...sessionStorage },
@@ -247,12 +226,12 @@ test("native path tables find rows locally, retain all-row totals and restore ex
         return { click, middle };
     }), { click: false, middle: false });
     await expect(table.locator("tbody tr")).toHaveCount(found.length);
-    const target = table.locator("tbody a").first(), href = await target.getAttribute("href");
+    const target = table.locator("tbody a").first(), name = await target.getAttribute("aria-label");
     await target.click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.goBack();
     await expect(page.getByRole("searchbox", { name: "Find in this table", exact: true })).toHaveValue("calendar");
-    await expect(table.locator(`a[href="${href}"]`)).toBeFocused();
+    await expect(table.getByRole("link", { name, exact: true })).toBeFocused();
     await page.getByRole("searchbox", { name: "Find in this table", exact: true }).fill("INVENTED_NO_ROW");
     await expect(table.locator("tbody tr")).toHaveCount(0);
     await expect(table.locator("tfoot td").first()).toHaveText(String(analytics.totals.count));
@@ -282,8 +261,7 @@ for (const topic of ["time", "categories"]) test(`native ${topic} exact rows kee
         assert.equal(parameters.get("from"), "2026-09-22");
         assert.equal(parameters.get("to"), "2026-09-25", "A Monday-labeled week cannot expand the accepted dates");
         assert.equal(requests.filter(path => path === "/api/snapshot").length, reads, "An unchanged scope only reveals its existing records");
-        await page.locator("#openChartReference").click();
-        await page.locator("#chartReferenceShowData").click();
+        await exact(page, "time");
         await expect(page.locator("#countTable tfoot td").first()).toHaveText("19");
     } else {
         await page.goBack();
@@ -291,88 +269,29 @@ for (const topic of ["time", "categories"]) test(`native ${topic} exact rows kee
     }
 });
 
-async function compare(page, { emptyB = false } = {}) {
-    if (!await page.locator("#comparePeriods").isVisible()) await page.locator("#navigationToggle").click();
-    await page.locator("#comparePeriods").click();
-    for (const [id, value] of [
-        ["comparisonAFrom", "2026-03-07"], ["comparisonATo", "2026-03-07"],
-        ["comparisonBFrom", emptyB ? "2026-03-11" : "2026-03-08"], ["comparisonBTo", emptyB ? "2026-03-11" : "2026-03-09"],
-    ]) await page.locator("#" + id).fill(value);
-    await page.locator("#applyPeriodComparison").click();
-    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-    await page.locator("#comparisonRecordsB").click();
-}
-
-for (const reducedMotion of ["reduce", "no-preference"]) test(`native paired guide restores the selected B exact target (${reducedMotion})`, { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t, periodFixture().records, { reducedMotion });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await compare(page);
-    const target = page.locator('[data-period-side="later"] tbody tr').last().locator("a");
-    const position = () => page.evaluate(() => ({
-        y: scrollY, focus: document.activeElement.id, inner: document.getElementById("comparison-record-scroll-B")?.scrollTop ?? null,
-    }));
-    for (const action of ["close", "back"]) {
-        await target.scrollIntoViewIfNeeded(); await target.focus();
-        const before = await position();
-        assert.ok(before.inner > 0, "Return to a real late B record, not the initial roster viewport");
-        await target.click();
-        await expect(page.locator("#contextSidebar")).toBeVisible();
-        if (action === "close") await page.locator("#closeContextSidebar").click(); else await page.goBack();
-        await expect(page.locator("#contextSidebar")).not.toBeVisible();
-        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-        await expect.poll(position).toEqual(before);
-        const reads = requests.filter(path => path === "/api/period-comparison").length;
-        await page.locator("#openChartReference").click();
-        await expect(page.locator("#chartReferenceData table")).toHaveCount(0);
-        await page.locator("#chartReferenceShowData").click();
-        await expect(page.locator("#meaning")).not.toBeVisible();
-        await expect.poll(position).toEqual(before);
-        await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
-        assert.equal(requests.filter(path => path === "/api/period-comparison").length, reads);
-    }
-});
-
-test("native paired guide delegates empty B and rejects a changed pair without ordinary fallback", { timeout: 30000 }, async t => {
-    const { page, requests } = await setup(t, periodFixture().records);
-    await compare(page, { emptyB: true });
-    const reads = requests.filter(path => path === "/api/period-comparison").length;
-    await page.locator("#openChartReference").click();
-    await captureNative(page, "comparison-guide");
-    await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#comparisonRecordsB")).toBeFocused();
-    await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("0 calls across 0 interactions");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("No matching activity was found in this period.");
-    await page.locator("#openChartReference").click();
-    const retiredAction = await page.locator("#chartReferenceShowData").elementHandle();
-    await page.locator("#comparisonATo").evaluate(node => {
-        node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    assert.equal(await page.locator("#chartReferenceShowData").evaluate(node => node.disabled), true,
-        "The pair's null publication withdraws the open guide action immediately");
-    await retiredAction.evaluate(node => node.click());
-    await retiredAction.dispose();
-    await expect(page.locator("#meaning")).toBeVisible();
-    await expect(page.locator("#chartReferenceNotice")).toContainText("Comparison records are not available");
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveCount(0);
-    await expect(page.locator("#chartReferenceData table")).toHaveCount(0);
-    assert.equal(requests.filter(path => path === "/api/period-comparison").length, reads);
-});
-
 test("an accepted empty native view has qualified zero counts rather than stale prior values", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, pathRecords(), { hash: "#analyze?range=custom&from=2027-01-01&to=2027-01-02" });
+    const { page } = await setup(t, pathRecords());
+    await exact(page, "outcomes");
+    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("32");
+    await page.locator("#analyzeResultsSection").click();
+    await selectActivityOption(page, "dateFilter", "custom");
+    await page.locator("#fromFilter").fill("2025-01-01");
+    await page.locator("#toFilter").fill("2025-01-02");
+    await page.locator("#applyDates").click();
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    await closeAnalyzeFilters(page);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").click();
-        await expect(page.locator(".chart-reference-group-heading")).toContainText("0 Work IQ tool calls");
+        await topicChoice(page, "outcomes");
+        await expect(page.locator("#chartReferenceExplanation")).toContainText("0 Work IQ tool calls");
         await captureNative(page, `${theme}-empty-guide`);
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("0");
         await expect(page.locator("#chartReferenceData")).toContainText("Not applicable");
         await expect(page.locator("#chartReferenceData a")).toHaveCount(0);
         await captureNative(page, `${theme}-empty-exact`);
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
     for (const layer of ["direct-request", "recorded-http"]) {
         await page.goto(new URL(page.url()).origin + "#analyze?layer=" + layer);
@@ -381,57 +300,13 @@ test("an accepted empty native view has qualified zero counts rather than stale 
         await expect(page.locator("#activityCount")).toHaveText("0");
         await expect(page.locator("#chart")).toContainText(layer === "direct-request" ? "No Graph request sites were recorded" : "No HTTP statuses were recorded");
         await page.locator("#openChartReference").click();
+        await topicChoice(page, "outcomes");
         if (layer === "recorded-http") await expect(page.locator("#chartReferenceExplanation")).toContainText("subset of recorded Graph request sites, not extra requests");
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("0");
         await page.locator("#chartReferenceSource>summary").press("Enter");
         await expect(page.locator("#layerFilter")).toHaveValue(layer);
-        await page.locator("#closeChartReference").click();
-    }
-});
-
-for (const change of ["reading", "pair"]) test(`the native guide return yields to newer ${change} before its frame commits`, { timeout: 30000 }, async t => {
-    const { page } = await setup(t, periodFixture().records);
-    await compare(page);
-    await page.locator("#openChartReference").click();
-    await page.evaluate(() => {
-        window.originalGuideFrame = window.requestAnimationFrame;
-        window.originalGuideCancel = window.cancelAnimationFrame;
-        window.heldGuideFrames = new Map();
-        let id = 1000000000;
-        window.requestAnimationFrame = callback => { window.heldGuideFrames.set(++id, callback); return id; };
-        window.cancelAnimationFrame = id => {
-            if (!window.heldGuideFrames.delete(id)) window.originalGuideCancel(id);
-        };
-    });
-    try {
-        await page.locator("#chartReferenceShowData").click();
-        assert.ok(await page.evaluate(() => window.heldGuideFrames.size > 0));
-        if (change === "reading") {
-            await page.locator('.primary-navigation [data-nav="analyze"]').focus();
-            await page.evaluate(() => addEventListener("wheel", event => { window.guideWheelObserved = event.isTrusted; }, { once: true }));
-            await page.mouse.wheel(0, 80);
-            await page.waitForFunction(() => window.guideWheelObserved, { }, { polling: 10 });
-        } else await page.locator("#comparisonATo").evaluate(node => {
-            node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-        });
-        await page.evaluate(() => new Promise(resolve => window.originalGuideFrame(() => window.originalGuideFrame(resolve))));
-        const before = await page.evaluate(() => ({ y: scrollY, focus: document.activeElement.id }));
-        await page.evaluate(() => {
-            window.requestAnimationFrame = window.originalGuideFrame;
-            window.cancelAnimationFrame = window.originalGuideCancel;
-            for (const callback of window.heldGuideFrames.values()) requestAnimationFrame(callback);
-            window.heldGuideFrames.clear();
-        });
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        if (change === "reading") assert.deepEqual(await page.evaluate(() => ({ y: scrollY, focus: document.activeElement.id })), before);
-        else await expect(page.locator("#message")).toContainText("The comparison records are no longer current");
-        await expect(page.locator("#meaning")).not.toBeVisible();
-    } finally {
-        await page.evaluate(() => {
-            window.requestAnimationFrame = window.originalGuideFrame;
-            window.cancelAnimationFrame = window.originalGuideCancel;
-        });
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
@@ -456,7 +331,8 @@ test("the native guide keeps all six accepted evidence layers and their executio
         }
         const count = buildActivityAnalytics(records, { layer }).totals.count;
         await page.locator("#openChartReference").click();
-        await expect(page.locator(".chart-reference-group-heading")).toContainText(`${count} ${results.unit(layer, count)}`);
+        await topicChoice(page, "outcomes");
+        await expect(page.locator("#chartReferenceExplanation")).toContainText(`${count} ${results.unit(layer, count)}`);
         await page.locator("#chartReferenceShowData").click();
         await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText(String(count));
         if (layer === "code-reference") {
@@ -464,7 +340,7 @@ test("the native guide keeps all six accepted evidence layers and their executio
             await expect(page.locator("#chartReferenceData")).toContainText("Execution not observed");
             await expect(page.locator("#chartReferenceData")).not.toContainText("HTTP 2xx");
         }
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
@@ -478,23 +354,24 @@ async function inspectGuide(page, name) {
     });
     assert.equal(layout.overflow, false, JSON.stringify({ name, ...layout }));
     assert.equal(layout.dialogOverflow, false, JSON.stringify({ name, ...layout }));
-    assert.ok(layout.left >= 0 && layout.right <= layout.width && layout.top >= 0 && layout.bottom <= layout.height, name);
+    assert.ok(layout.left >= 0 && layout.right <= layout.width, name);
+    await assertInPageReader(page);
     assert.ok(layout.loaded && layout.font.includes("Asta Sans"), "Use the actually loaded WIRE font");
     if (proof) {
         await mkdir(proof, { recursive: true });
         await captureNative(page, name);
         await writeFile(path.join(proof, name + ".json"), JSON.stringify(layout));
     }
-    const controls = page.locator("#meaning button:visible,#meaning a:visible,#meaning input:visible,#meaning summary:visible");
+    const controls = page.locator("#analyzeReferenceEntry button:visible,#meaning button:visible,#meaning a:visible,#meaning input:visible,#meaning summary:visible");
     for (let index = 0; index < await controls.count(); index++) {
         const control = controls.nth(index);
         if (await control.isDisabled()) continue;
         await control.focus();
         const visible = await control.evaluate(node => {
-            const r = node.getBoundingClientRect(), root = document.getElementById("meaning").getBoundingClientRect();
+            const r = node.getBoundingClientRect();
             const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
             return { id: node.id, text: node.textContent, width: r.width, height: r.height,
-                full: r.top >= root.top + 3 && r.bottom <= root.bottom - 3 && r.left >= root.left + 3 && r.right <= root.right - 3,
+                full: r.top >= -1 && r.bottom <= innerHeight + 1 && r.left >= -1 && r.right <= innerWidth + 1,
                 hit: hit === node || node.contains(hit) };
         });
         assert.ok(visible.full && visible.hit, JSON.stringify({ name, ...visible }));
@@ -504,34 +381,32 @@ async function inspectGuide(page, name) {
 
 test("the whole native guide reflows in both themes, long tables, phone, tablet and 200% text", { timeout: 60000 }, async t => {
     const { page } = await setup(t, pathRecords());
-    for (const theme of ["light", "dark"]) {
+    for (const [theme, name, width, height, size] of [
+        ["light", "wide", 1440, 1000, ""], ["dark", "tablet", 768, 1000, ""], ["light", "phone", 390, 844, ""],
+        ["dark", "text200", 390, 844, "200%"], ["light", "landscape", 844, 390, ""],
+    ]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
         await chooseTheme(page, theme);
-        for (const [name, width, height, size] of [
-            ["wide", 1440, 1000, ""], ["tablet", 768, 1000, ""], ["phone", 390, 844, ""],
-            ["text200", 390, 844, "200%"], ["landscape", 844, 390, ""],
-        ]) {
             await page.setViewportSize({ width, height });
             await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
             await page.locator("#openChartReference").click();
             await topicChoice(page, "outcomes");
             await page.locator("#meaning").evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
-            const frame = await page.locator("#meaning").boundingBox();
-            await page.locator("#chartReferenceTitle").focus();
+            await page.locator("#openChartReference").focus();
             await inspectGuide(page, `${theme}-${name}-guide`);
-            await page.locator("#chartReferenceAllTopics").click();
-            await assertGuideFrame(page, frame);
-            await inspectGuide(page, `${theme}-${name}-index`);
+            const toggle = page.locator("#chartReferenceTopicToggle");
+            if (await toggle.isVisible()) {
+                await toggle.click();
+                await expect(page.locator("#chartReferenceTopics")).toBeVisible();
+                await inspectGuide(page, `${theme}-${name}-topics`);
+            }
             await topicChoice(page, "paths");
-            await assertGuideFrame(page, frame);
             await page.locator("#chartReferenceShowData").click();
             await page.locator("#chartReferenceDataTitle").focus();
             await inspectGuide(page, `${theme}-${name}-paths`);
-            await assertGuideFrame(page, frame);
-            await page.locator("#closeChartReference").click();
+            await page.locator("#analyzeResultsSection").click();
             await expect(page.locator("#openChartReference")).toBeFocused();
-        }
     }
 });
 
@@ -592,29 +467,31 @@ test("the whole native guide works at actual 200% browser zoom", {
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").click();
         await topicChoice(page, "outcomes");
-        await page.locator("#chartReferenceTitle").focus();
+        await page.locator("#openChartReference").focus();
         await inspectGuide(page, `${theme}-zoom200-guide`);
         await topicChoice(page, "paths");
         await page.locator("#chartReferenceShowData").click();
         await page.locator("#chartReferenceDataTitle").focus();
         await inspectGuide(page, `${theme}-zoom200-paths`);
-        await page.locator("#closeChartReference").click();
+        await page.locator("#analyzeResultsSection").click();
     }
 });
 
 async function guideControlPaint(page, locator) {
     await locator.scrollIntoViewIfNeeded();
     const state = await locator.evaluate(node => {
-        const css = getComputedStyle(node), paint = getComputedStyle(node, "::before"), box = node.getBoundingClientRect();
-        const dialog = document.getElementById("meaning").getBoundingClientRect();
+        const css = getComputedStyle(node), box = node.getBoundingClientRect();
         const ring = css.outlineStyle === "none" ? 0 : parseFloat(css.outlineWidth) + parseFloat(css.outlineOffset);
+        const clips = [{ left: 0, top: 0, right: innerWidth, bottom: innerHeight }];
+        for (let n = node.parentElement; n; n = n.parentElement) {
+            if (getComputedStyle(n).overflow !== "visible") clips.push(n.getBoundingClientRect());
+        }
         return { x: box.x, y: box.y, width: box.width, height: box.height,
-            surface: getComputedStyle(document.getElementById("meaning")).backgroundColor, color: css.color,
+            color: css.color,
             outline: { color: css.outlineColor, width: parseFloat(css.outlineWidth), style: css.outlineStyle },
-            paint: { display: paint.display, border: paint.borderLeftColor, width: parseFloat(paint.borderLeftWidth) },
-            focused: node.matches(":focus-visible"), hover: node.matches(":hover"), pressed: node.getAttribute("aria-pressed"),
-            ringVisible: box.left - ring > dialog.left && box.right + ring < dialog.right
-                && box.top - ring > dialog.top && box.bottom + ring < dialog.bottom };
+            weight: Number(css.fontWeight), focused: node.matches(":focus-visible"), hover: node.matches(":hover"),
+            ringVisible: clips.every(clip => box.left - ring >= clip.left && box.right + ring <= clip.right
+                && box.top - ring >= clip.top && box.bottom + ring <= clip.bottom) };
     });
     const image = await page.screenshot();
     const fill = await page.evaluate(async ({ image, x, y }) => {
@@ -626,7 +503,8 @@ async function guideControlPaint(page, locator) {
         if (pixel[3] !== 255) throw new Error("The control paint sample must be inside the captured viewport.");
         return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
     }, { image: image.toString("base64"), x: state.x + state.width - 8, y: state.y + state.height / 2 });
-    return { ...state, fill };
+    const { backdrop: surface } = await locator.evaluate(measureControlSurface);
+    return { ...state, fill, surface };
 }
 
 for (const theme of ["light", "dark"]) test(`native guide topic and exact-action feedback separates hover, current and keyboard focus (${theme})`, { timeout: 30000 }, async t => {
@@ -634,9 +512,9 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     await chooseTheme(page, theme);
     await page.locator("#openChartReference").click();
     await topicChoice(page, "time");
-    await page.locator("#chartReferenceAllTopics").click();
     await page.mouse.move(0, 0);
-    const current = page.locator('button[data-reference-topic="time"]'), other = page.locator('button[data-reference-topic="services"]');
+    const current = page.locator('#chartReferenceTopics button[data-reference-topic="time"]');
+    const other = page.locator('#chartReferenceTopics button[data-reference-topic="tools"]');
     const exact = page.locator("#chartReferenceShowData");
     const capture = async (name, target) => {
         measurements[name] = await guideControlPaint(page, target);
@@ -649,14 +527,15 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     await other.hover();
     const hover = await capture("hover", other);
     assert.ok(hover.hover && contrast(idle.fill, hover.fill) >= 1.1, "Actual topic hover paint must be perceptible, not a hidden pseudo-element");
-    assert.ok(selected.paint.display !== "none" && selected.paint.width >= 1 && contrast(selected.paint.border, selected.surface) >= 3,
-        "The current topic needs a persistent visible indicator distinct from hover");
-    await expect(current).toHaveAttribute("aria-pressed", "true");
-    await expect(other).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Activity over time");
+    assert.ok(selected.weight > idle.weight && selected.fill !== idle.fill, "Current page has a persistent indicator beyond color alone");
+    await expect(current).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#chartReferenceTopics [aria-pressed]")).toHaveCount(0);
+    const heading = page.locator("#chartReferenceTopicTitle");
+    await expect(heading).toHaveText(/\?$/);
+    const timeQuestion = await heading.innerText();
     await current.hover();
     const selectedHover = await capture("current-hover", current);
-    assert.ok(contrast(selectedHover.paint.border, selectedHover.fill) >= 3, "Hover must not erase the current-topic indicator");
+    assert.ok(selectedHover.weight > hover.weight, "Hover must not erase the current-topic indicator");
 
     await current.focus();
     await page.mouse.move(0, 0);
@@ -666,9 +545,10 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     assert.ok(keyboard.focused && keyboard.outline.style === "solid" && keyboard.outline.width >= 2
         && keyboard.ringVisible && contrast(keyboard.outline.color, keyboard.surface) >= 3, "Keyboard focus must remain distinct and unobscured");
     await page.keyboard.press("Enter");
-    await expect(other).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#chartReferenceTopics [aria-pressed=true]")).toHaveCount(1);
-    await expect(page.locator("#chartReferenceTopicTitle")).toHaveText("Services and operations");
+    await expect(other).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('#chartReferenceTopics [aria-current="page"]')).toHaveCount(1);
+    await expect(heading).toHaveText(/\?$/);
+    await expect(heading).not.toHaveText(timeQuestion);
     await page.mouse.move(0, 0);
     const actionIdle = await capture("action-idle", exact);
     await exact.hover();
@@ -680,15 +560,15 @@ for (const theme of ["light", "dark"]) test(`native guide topic and exact-action
     const actionFocus = await capture("action-keyboard", exact);
     assert.ok(actionFocus.focused && actionFocus.outline.width >= 2 && actionFocus.ringVisible
         && contrast(actionFocus.outline.color, actionFocus.surface) >= 3);
-    for (const state of Object.values(measurements)) {
+    for (const [name, state] of Object.entries(measurements)) {
         assert.ok(state.width >= 44 && state.height >= 44);
-        assert.ok(contrast(state.color, state.fill) >= 4.5, "Control text must remain readable in every state");
+        assert.ok(contrast(state.color, state.fill) >= 4.5, `Unreadable ${name}: ${state.color} on ${state.fill}`);
     }
     await page.keyboard.press("Enter");
     await expect(page.locator("#chartReferenceData table")).toBeVisible();
     await page.locator("#chartReferenceBack").click();
     await expect(exact).toBeFocused();
-    await expect(other).toHaveAttribute("aria-pressed", "true");
+    await expect(other).toHaveAttribute("aria-current", "page");
     await page.keyboard.press("Escape");
     await expect(page.locator("#openChartReference")).toBeFocused();
     assert.equal(requests.filter(path => path === "/api/snapshot").length, reads);
@@ -699,12 +579,12 @@ test("native guide current topic keeps a separate keyboard ring in forced colors
     await page.emulateMedia({ forcedColors: "active" });
     await page.locator("#openChartReference").click();
     await topicChoice(page, "time");
-    await page.locator("#chartReferenceAllTopics").click();
-    const current = page.locator('button[data-reference-topic="time"]');
+    const current = page.locator('#chartReferenceTopics button[data-reference-topic="time"]');
     const selected = await guideControlPaint(page, current);
     await captureNative(page, "forced-colors-current");
     assert.ok(selected.outline.style === "solid" && selected.outline.width >= 1
         && contrast(selected.outline.color, selected.surface) >= 3, "Forced colors retain the current-topic mark without keyboard focus");
+    await current.focus();
     await page.keyboard.press("Tab");
     await page.keyboard.press("Shift+Tab");
     await expect(current).toBeFocused();
@@ -712,73 +592,57 @@ test("native guide current topic keeps a separate keyboard ring in forced colors
     await captureNative(page, "forced-colors-current-keyboard");
     assert.ok(paint.focused && paint.ringVisible && paint.outline.width >= 2,
         "Current-topic marking must not replace the keyboard ring");
-    assert.ok(paint.paint.display !== "none" && contrast(paint.paint.border, paint.fill) >= 3);
+    assert.ok(contrast(paint.outline.color, paint.fill) >= 3);
 });
 
-for (const theme of ["light", "dark"]) test(`native guide groups count and share without losing meaning or wrapping (${theme})`, { timeout: 30000 }, async t => {
+for (const theme of ["light", "dark"]) test(`Guide explains scope and coverage while exact data keeps counts and shares (${theme})`, { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, pathRecords());
     await chooseTheme(page, theme);
     await page.locator("#openChartReference").click();
-    const values = page.locator(".chart-reference-definition>.chart-reference-value");
-    await expect(values.first()).toHaveText("100% (32)");
-    await expect(values.nth(1)).toHaveText("0% (0)");
-    const measure = value => value.evaluate(node => {
-        const share = node.querySelector(".percentage-value > span"), text = document.createRange();
-        text.selectNodeContents(node.querySelector("strong"));
-        const first = text.getBoundingClientRect(), css = getComputedStyle(node);
-        text.selectNodeContents(share);
-        const second = text.getBoundingClientRect();
-        return { text: node.textContent, firstTop: first.top, shareTop: second.top, countWidth: first.width, shareWidth: second.width,
-            width: node.clientWidth, overflow: node.scrollWidth > node.clientWidth + 1, whitespace: css.whiteSpace,
-            countColor: css.color, shareColor: getComputedStyle(share).color, muted: css.getPropertyValue("--muted").trim(),
-            countWeight: Number(getComputedStyle(node.querySelector("strong")).fontWeight), shareWeight: Number(getComputedStyle(share).fontWeight) };
-    });
-    const first = await measure(values.first());
-    assert.ok(Math.abs(first.firstTop - first.shareTop) <= 1, "Count and share start on the same line when they fit");
-    assert.ok(first.shareWeight < first.countWeight && first.shareColor !== first.countColor);
-    await captureNative(page, `${theme}-grouped-outcomes`);
+    const article = page.locator("#chartReferenceExplanation"), exactData = page.locator("#chartReferenceData");
+    await topicChoice(page, "outcomes");
+    await expect(article).toContainText("32 Work IQ tool calls");
+    await expect(article).not.toContainText(/\d%/);
+    await page.locator("#chartReferenceShowData").click();
+    await expect(exactData.locator("tbody tr")).toHaveCount(4);
+    await expect(exactData.locator('tr:has(a[href*="result=success"]) td')).toHaveText(["32", "100%"]);
+    await expect(exactData.locator("tbody tr").filter({ hasText: "Tool failed" }).locator("td")).toHaveText(["0", "0%"]);
+    await page.locator("#chartReferenceBack").click();
     await topicChoice(page, "services");
-    const services = page.locator(".chart-reference-service .chart-reference-value");
-    await expect(services.first()).toHaveText("25% (8)");
-    await expect(page.locator("#chartReferenceExplanation")).toContainText("A record can involve several services, so counts can overlap.");
-    await expect(page.locator("#chartReferenceExplanation")).toContainText("2 records have missing service details");
-    await captureNative(page, `${theme}-grouped-services`);
+    await expect(article).toContainText(/several services|counts can overlap/);
+    await expect(article).toContainText("2 records have missing service details");
+    await expect(article).not.toContainText("25%");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await topicChoice(page, "outcomes");
-    await values.first().scrollIntoViewIfNeeded();
-    const enlarged = await measure(values.first());
-    assert.equal(enlarged.overflow, false);
-    assert.equal(enlarged.whitespace, "normal");
-    await captureNative(page, `${theme}-grouped-text200`);
-    // Constrain only the existing value slot: each value fits, but the pair must wrap.
-    await values.first().evaluate((node, width) => { node.style.inlineSize = `${width}px`; }, Math.max(enlarged.countWidth, enlarged.shareWidth) + 2);
-    const wrapped = await measure(values.first());
-    assert.ok(wrapped.shareTop > wrapped.firstTop && !wrapped.overflow, "The share wraps without making the pair unbreakable");
-    assert.equal(wrapped.text, "100% (32)");
-    await captureNative(page, `${theme}-grouped-wrap-stress`);
-    await values.first().evaluate(node => { node.style.removeProperty("inline-size"); });
     await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("32");
+    const fileRow = exactData.locator("tbody tr").filter({ has: page.getByText("Files", { exact: true }) });
+    await expect(fileRow.locator("td")).toHaveText(["8", "25%"]);
+    await expect(exactData.locator("tfoot td").first()).toHaveText("32");
+    await captureNative(page, `${theme}-exact-services-text200`);
     await page.locator("#chartReferenceBack").click();
-    await expect(values.first()).toHaveText("100% (32)");
+    await expect(article).toContainText("2 records have missing service details");
+    await expect(article).not.toContainText("25%");
     assert.equal(requests.filter(path => path === "/api/snapshot").length, 1);
-    if (proof) await writeFile(path.join(proof, `${theme}-grouped-values.json`), JSON.stringify({ first, enlarged, wrapped }, null, 2));
 });
 
-for (const paired of [false, true]) for (const nativeZoom of [false, true]) test(`native guide qualification parts preserve complete accepted facts and clear null (${paired ? "paired" : "ordinary"}${nativeZoom ? ", native zoom" : ""})`, {
+for (const nativeZoom of [false, true]) test(`Analyze Guide and exact numbers keep complete filter qualifications until reset${nativeZoom ? " (native zoom)" : ""}`, {
     timeout: 60000, skip: nativeZoom && !process.env.WIRE_CHART_NATIVE_ZOOM,
 }, async t => {
     const project = "Invented guide project \u00b7 original punctuation; long cross-team investigation: evidence and delivery";
     const { records } = periodFixture();
     for (const record of records) { record.projectId = "guide-parts-project"; record.project = project; }
-    const { page } = await setup(t, records, { observeQualification: true, nativeZoom });
+    const { page, snapshot: initial } = await setup(t, records, { nativeZoom });
+    const parts = ["Service: Files", "Includes missing-service context: 2 known matches; 0 context-only",
+        "Outcome: Tool failed", `Project: ${project}`], qualification = parts.join("; ");
     for (const [id, value] of [["serviceAssociationFilter", "Files"], ["outcomeFilter", ["failure"]], ["projectFilter", "guide-parts-project"]]) {
+        const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
         await selectActivityOption(page, id, value);
+        const accepted = await (await read).json();
+        if (id === "projectFilter") assert.deepEqual(accepted.analytics.rows.map(row => row.id).sort(),
+            ['call:["period-chat-0","period-call-0"]', 'call:["period-chat-2","period-call-2"]']);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     }
     await closeAnalyzeFilters(page);
-    if (paired) await compare(page);
     const measurements = [];
     const sizes = nativeZoom ? [[await page.evaluate(() => innerWidth), "native200"]] : [[1440, 1], [768, 1], [390, 2]];
     for (const theme of ["light", "dark"]) for (const [width, scale] of sizes) {
@@ -788,15 +652,12 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
         }
         await chooseTheme(page, theme);
         await page.locator("#openChartReference").press("Enter");
-        const context = await page.evaluate(() => window.observedGuideQualification);
-        assert.equal(context.available, true);
-        assert.ok(context.qualificationParts.includes(`Copilot project: ${project}`));
+        await topicChoice(page, "outcomes");
         const caption = page.locator("#chartReferenceGuide .chart-reference-qualification").first();
-        await expect(caption.locator(".analyze-scope-part")).toHaveCount(context.qualificationParts.length);
-        assert.deepEqual(await caption.locator(".analyze-scope-part").evaluateAll(parts => parts.map(part => part.firstChild.textContent)),
-            context.qualificationParts);
-        assert.equal(await caption.textContent(), context.qualification);
-        assert.match(await caption.ariaSnapshot(), /Copilot project: Invented guide project/);
+        const partTexts = host => host.locator(".analyze-scope-part").evaluateAll(nodes => nodes.map(part => part.firstChild.textContent));
+        assert.deepEqual(await partTexts(caption), parts);
+        await expect(caption).toHaveText(qualification);
+        assert.match(await caption.ariaSnapshot(), /Project: Invented guide project/);
         const geometry = await caption.evaluate(node => {
             const bounds = node.getBoundingClientRect();
             return { overflow: document.documentElement.scrollWidth - innerWidth, clipped: node.scrollWidth - node.clientWidth,
@@ -808,10 +669,10 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
         });
         assert.ok(geometry.overflow <= 1 && geometry.clipped <= 1);
         assert.ok(geometry.lines.every(line => line.left >= geometry.bounds.left - 1 && line.right <= geometry.bounds.right + 1));
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}-top`);
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}-top`);
         await caption.click({ position: { x: 6, y: 6 } });
         await caption.scrollIntoViewIfNeeded();
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}`);
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}`);
         const lastFact = caption.locator(".analyze-scope-part").last();
         await lastFact.scrollIntoViewIfNeeded();
         const fullyReadable = await lastFact.evaluate(node => {
@@ -820,39 +681,35 @@ for (const paired of [false, true]) for (const nativeZoom of [false, true]) test
             return [...range.getClientRects()].every(line => line.left >= bounds.left && line.right <= bounds.right
                 && line.top >= bounds.top && line.bottom <= bounds.bottom);
         });
-        assert.equal(fullyReadable, true, "The complete retained name remains readable through native dialog scrolling");
-        await captureNative(page, `${paired ? "paired" : "ordinary"}-qualification-${theme}-${width}-${scale}-end`);
-        measurements.push({ theme, width, scale, parts: context.qualificationParts, text: context.qualification, geometry });
-        if (!paired) {
-            await page.locator("#chartReferenceShowData").click();
-            const exact = page.locator("#chartReferenceQualification .chart-reference-scope");
-            assert.equal(await exact.textContent(), context.qualification);
-            assert.deepEqual(await exact.locator(".analyze-scope-part").evaluateAll(parts => parts.map(part => part.firstChild.textContent)),
-                context.qualificationParts);
-            await page.locator("#chartReferenceBack").click();
-            await expect(page.locator("#chartReferenceShowData")).toBeFocused();
-        }
+        assert.equal(fullyReadable, true, "The complete retained name remains readable in the in-page Guide");
+        await captureNative(page, `ordinary-qualification-${theme}-${width}-${scale}-end`);
+        measurements.push({ theme, width, scale, parts, text: qualification, geometry });
+        await page.locator("#chartReferenceShowData").press("Enter");
+        const exact = page.locator("#chartReferenceQualification .chart-reference-scope");
+        await expect(exact).toHaveText(qualification);
+        assert.deepEqual(await partTexts(exact), parts);
+        await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("2");
+        await page.locator("#chartReferenceBack").press("Enter");
+        await expect(page.locator("#chartReferenceShowData")).toBeFocused();
         await page.locator("#meaning").press("Escape");
+        await expect(page.locator("#openChartReference")).toBeFocused();
     }
     if (!nativeZoom) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     }
-    if (!paired) {
-        await expect(page.locator("#comparePeriods:visible, #navigationToggle:visible").first()).toBeVisible();
-        if (!await page.locator("#comparePeriods").isVisible()) await page.locator("#navigationToggle").click();
-        await page.locator("#comparePeriods").click();
-    }
-    await page.locator("#openChartReference").click();
-    if (paired) await page.locator("#comparisonATo").evaluate(node => {
-        node.value = "2026-03-08"; node.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await expect(page.locator("#chartReferenceGuide .chart-reference-qualification")).toHaveCount(0);
+    await openAnalyzeFilters(page);
+    const reset = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.ok());
+    await page.locator("#resetView").press("Enter");
+    const restored = await (await reset).json();
+    assert.deepEqual(restored.analytics.rows.map(row => row.id).sort(), initial.analytics.rows.map(row => row.id).sort());
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await closeAnalyzeFilters(page);
+    await page.locator("#openChartReference").press("Enter");
+    await expect(page.locator("#chartReferenceGuide .analyze-scope-part")).toHaveCount(0);
+    await expect(page.locator("#chartReferenceGuide")).not.toContainText(project);
+    await page.locator("#chartReferenceShowData").press("Enter");
     await expect(page.locator("#chartReferenceQualification")).toHaveText("");
-    const unavailable = await page.evaluate(() => window.observedGuideQualification);
-    assert.equal(unavailable.available, false);
-    assert.deepEqual(unavailable.qualificationParts, []);
-    assert.equal(unavailable.qualification, "");
-    await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
-    if (proof) await writeFile(path.join(proof, `${paired ? "paired" : "ordinary"}-qualification${nativeZoom ? "-zoom200" : ""}.json`), JSON.stringify(measurements, null, 2));
+    await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText(String(initial.analytics.rows.length));
+    if (proof) await writeFile(path.join(proof, `ordinary-qualification${nativeZoom ? "-zoom200" : ""}.json`), JSON.stringify(measurements, null, 2));
 });

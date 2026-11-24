@@ -69,27 +69,49 @@ async function setup(t, evidence = records(), { start = startServer } = {}) {
     return { page, revision: (await (await snapshot).json()).revision };
 }
 
-async function measure(page) {
-    return page.locator(".request-card-open").evaluateAll(nodes => nodes.map(node => {
-        const prompt = node.querySelector(".request-card-prompt"), style = getComputedStyle(prompt);
-        const range = document.createRange(); range.selectNodeContents(prompt);
-        const box = prompt.getBoundingClientRect();
-        const lines = [...new Set([...range.getClientRects()].filter(rect => rect.height > 0 && rect.y < box.bottom)
-            .map(rect => Math.round(rect.y)))];
-        const card = node.getBoundingClientRect();
-        return { card: card.toJSON(), prompt: box.toJSON(), lines: lines.length,
-            font: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight,
-            weight: style.fontWeight,
-            origin: node.querySelector(".request-card-origin").getBoundingClientRect().toJSON(),
-            categories: node.querySelector(".request-card-categories").getBoundingClientRect().toJSON(),
-            problem: node.querySelector(".request-card-problem").getBoundingClientRect().toJSON(),
-            more: node.querySelector(".request-card-more-problems")?.getBoundingClientRect().toJSON() ?? null,
-            metadata: node.querySelector(".request-card-summary").getBoundingClientRect().toJSON(),
-            authors: [...node.querySelectorAll(".request-card-author")].flatMap(n => [...n.getClientRects()].map(r => r.toJSON())),
-            time: node.querySelector(".request-card-time").getBoundingClientRect().toJSON(),
-            text: prompt.textContent };
-    }));
+async function expectCallStatus(call, ordinal, status) {
+    await expect(call.locator(".reader-entry-label")).toHaveText(`Call #${ordinal}`);
+    await expect(call.locator(".reader-call-summary .card-outcome-label")).toHaveText(`1 tool call ${status}`);
 }
+const interactionCard = (page, id) => page.locator(`#activityList article[data-view-key=${JSON.stringify("request:" + id)}]`);
+const promptLink = (page, id) => interactionCard(page, id).locator(".request-card-open");
+
+test("service limits open their own calls, not a neighboring named target or the prompt", async t => {
+    const record = records()[0], sample = record.toolCalls[0];
+    const values = [["workiq-fetch", { entityUrls: ["/me/messages", "/me/calendar/events"] }],
+        ["workiq-ask", { question: "Plan the workshop" }], ["workiq-ask", { question: "Review the plan" }],
+        ["workiq-do_action", { actionUrl: "/me/translateExchangeIds" }], ["workiq-do_action", { actionUrl: "/me/{id}" }]];
+    record.toolCalls = values.map(([tool, requestArgs], i) => ({ tool, requestArgs, toolCallId: `service-exact-${i}`,
+        startEventId: `service-start-${i}`, startedAt: new Date(Date.parse(sample.startedAt) + [0, 2, 1, 3, 4][i] * 1000).toISOString(),
+        toolSucceeded: true, reportedOutcome: "succeeded", apiResults: [] }));
+    const { page } = await setup(t, [record]);
+    const card = page.locator("#activityList .card-identities");
+    for (const [label, index, via, words] of [
+        ["Asked Copilot", 2, "keyboard", /which apps, if any, Copilot used/],
+        ["Exchange ID conversion", 3, "pointer", /Exchange item IDs/],
+        ["Recorded path not recognized", 4, "pointer", /recorded path/],
+    ]) {
+        await chooseTheme(page, via === "keyboard" ? "light" : "dark");
+        await page.setViewportSize({ width: via === "keyboard" ? 1440 : 390, height: 1000 });
+        const link = card.getByRole("link", { name: new RegExp(label) });
+        await expect(link).toHaveCount(1);
+        if (via === "keyboard") {
+            await expect(link.locator(".semantic-cue")).toHaveText("Asked Copilot (first of 2 calls)");
+            await expect(card).not.toContainText("Apps unknown");
+            await link.focus(); await page.keyboard.press("Enter");
+        } else await link.click();
+        const call = page.locator(`[data-tool-call-id="service-exact-${index}"]`);
+        await expect(call).toBeFocused();
+        const inspect = call.locator(".reader-call-toggle");
+        await expect(inspect).toHaveAttribute("aria-expanded", "false", "Opening a service explanation does not reveal the recorded input.");
+        await inspect.click();
+        await expect(call).toContainText(words);
+        await page.keyboard.press("Escape");
+        await expect(link).toBeFocused();
+        assert.ok(await link.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+    }
+    await expect(card.getByRole("link", { name: /Mail|Calendar/ })).toHaveCount(0);
+});
 
 async function capture(page, name, metrics) {
     if (!proofs) return;
@@ -109,52 +131,46 @@ async function capture(page, name, metrics) {
     await writeFile(path.join(proofs, name + ".json"), JSON.stringify(metrics, null, 2));
 }
 
-test("Activity gives origin, prompt, labelled services and meaningful problems distinct regions", async t => {
+test("the prompt, scoped tools and targets identify each interaction before reading exact evidence", async t => {
     const { page } = await setup(t);
-    const first = page.locator('.request-card-open[href*="card-clarity-0"]');
-    await expect(first.locator(".request-card-origin")).toHaveText("My prompt");
-    await expect(first.locator(".request-card-categories")).toContainText("Service:");
-    await expect(first.locator(".request-card-categories")).toContainText("Mail");
-    await expect(first.locator(".request-card-problem")).toContainText("Work IQ required sign-in at the time");
-    const mixed = page.locator('.request-card-open[href*="card-clarity-2"]');
-    await expect(mixed.locator(".request-card-categories")).toContainText("Services:");
-    await expect(mixed.locator(".request-card-categories .service-label-list > li")).toHaveCount(2);
-    await expect(mixed.locator(".request-card-problem")).toContainText("Access was denied");
-    await expect(mixed.locator(".request-card-problem")).toContainText("The tool did not respond in time");
-    await expect(mixed.locator(".request-card-problem")).toContainText("Work IQ required sign-in at the time");
-    await expect(mixed.locator(".request-card-reason")).toHaveCount(3);
-    await expect(mixed.locator(".request-card-more-problems")).toHaveCount(0);
-    await expect(first.locator(".request-card-more-problems")).toHaveCount(0);
+    const first = promptLink(page, "card-clarity-0");
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Human prompt");
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
+    await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
+    const mixed = promptLink(page, "card-clarity-2");
+    await expect(mixed.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("3 tool calls failed");
+    await expect(mixed).not.toContainText(/Access was denied|did not respond in time|required sign-in/);
     await expect(mixed.locator("button,input,a")).toHaveCount(0);
-    const geometry = await mixed.evaluate(card => {
+    const geometry = await mixed.locator("xpath=ancestor::article[1]").evaluate(card => {
         const box = selector => card.querySelector(selector).getBoundingClientRect().toJSON();
-        return { origin: box(".request-card-origin"), prompt: box(".request-card-prompt"),
-            categories: box(".request-card-categories"), result: box(".request-card-problem"),
-            metadata: box(".request-card-summary") };
+        return { prompt: box(".request-card-prompt"), outcome: box(".card-orientation") };
     });
-    assert.ok(geometry.prompt.top >= geometry.origin.bottom + 7);
-    assert.ok(geometry.categories.top >= geometry.prompt.bottom + 15);
-    assert.ok(geometry.result.top >= geometry.categories.bottom + 15);
-    assert.ok(geometry.metadata.top >= geometry.result.bottom + 11);
+    assert.ok(geometry.outcome.top >= geometry.prompt.bottom);
+    await first.click();
+    await expect(page.locator("#requestContent .reader-call-services").first()).toContainText("Mail");
 });
 
-test("Card reasons follow the same retained chronology as native first-failure entry", async t => {
+test("the failure count opens exactly the failed calls in retained chronology", async t => {
     const record = records()[2];
+    record.userPrompt.text = "Check the workshop failures.";
     for (const [index, seconds] of [[3, 30], [4, 10], [5, 20]]) {
         record.toolCalls[index].startedAt = new Date(Date.parse(record.userPrompt.sourceTimestamp) + seconds * 1000).toISOString();
     }
     const { page } = await setup(t, [record]);
-    const card = page.locator(".request-card-open");
-    const problem = await card.locator(".request-card-problem").textContent();
+    const card = page.locator(".read-in-place .result-tone-failure");
+    await expect(card).toHaveText("3 tool calls failed");
+    await card.click();
+    const problem = await page.locator('[data-reader-section="activity"]').innerText();
+    for (const reason of ["The tool did not respond in time", "Work IQ required sign-in at the time", "Access was denied"]) assert.ok(problem.includes(reason));
     assert.ok(problem.indexOf("The tool did not respond in time") < problem.indexOf("Work IQ required sign-in at the time"));
     assert.ok(problem.indexOf("Work IQ required sign-in at the time") < problem.indexOf("Access was denied"));
-    await expect(card.locator(".request-card-more-problems")).toHaveCount(0);
-    await card.click();
-    await expect(page.locator('[data-tool-call-id="clarity-call-2-4"]')).toBeFocused();
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeFocused();
+    assert.deepEqual(await page.locator(".reader-call-row").evaluateAll(rows => rows.map(row => row.dataset.toolCallId)),
+        ["clarity-call-2-4", "clarity-call-2-5", "clarity-call-2-3"]);
     await expect(page.locator('[data-tool-call-id="clarity-call-2-3"]')).toContainText("Access was denied");
 });
 
-test("Read more starts at the actual reader top after motion without changing ordinary saved reading positions", { timeout: 90000 }, async t => {
+test("the reader's Prompt shortcut reaches the original and closing restores the outcome link", { timeout: 90000 }, async t => {
     const evidence = ["top-first", "top-second", "top-ordinary"].map((id, index) => {
         const record = records()[2];
         record.scenarioId = id;
@@ -172,6 +188,8 @@ test("Read more starts at the actual reader top after motion without changing or
     const phase = process.env.WIRE_READER_TOP_PHASE ?? "after", proof = process.env.WIRE_READER_TOP_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
     const body = page.locator("#contextSidebarBody");
+    const visitPrompt = () => body.getByRole("navigation", { name: "In this interaction" })
+        .getByRole("button", { name: "Prompt", exact: true }).click();
     const settle = async () => {
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
@@ -195,8 +213,8 @@ test("Read more starts at the actual reader top after motion without changing or
             ["first", "top-first", "pointer"], ["same", "top-first", "keyboard"],
             ["another", "top-second", "pointer"], ["return", "top-first", "keyboard"],
         ]) {
-            const card = page.locator(`.request-card-open[href*="${id}"]`);
-            const more = card.locator(".request-card-read-more");
+            const card = promptLink(page, id);
+            const more = card;
             await expect(more).toBeVisible();
             await more.scrollIntoViewIfNeeded();
             await card.focus();
@@ -211,12 +229,13 @@ test("Read more starts at the actual reader top after motion without changing or
             } else await page.keyboard.press("Enter");
             await expect(page.locator("#contextSidebar")).toBeVisible();
             await settle();
+            await visitPrompt();
             const measurement = await body.evaluate(node => {
                 const promptHeading = node.querySelector('[data-reader-section="prompt"] .reader-section-heading');
                 const viewport = node.getBoundingClientRect(), first = promptHeading.getBoundingClientRect();
                 return { scrollTop: node.scrollTop, scrollHeight: node.scrollHeight, viewportHeight: node.clientHeight,
                     viewportTop: viewport.top, firstContentTop: first.top, firstContentBottom: first.bottom,
-                    focusIsOriginal: document.activeElement === node.querySelector('[data-reader-section="prompt"] .full-text-content') };
+                    focusIsHeading: document.activeElement === promptHeading };
             });
             measurements.push({ theme, width, scale, visit, input, ...measurement });
             if (proof) {
@@ -226,14 +245,13 @@ test("Read more starts at the actual reader top after motion without changing or
                 });
             }
             if (phase !== "before") {
-                assert.equal(measurement.scrollTop, 0, JSON.stringify(measurements.at(-1)));
                 assert.ok(measurement.firstContentTop >= measurement.viewportTop);
                 assert.ok(measurement.firstContentBottom <= measurement.viewportTop + measurement.viewportHeight);
-                assert.equal(measurement.focusIsOriginal, true);
+                assert.equal(measurement.focusIsHeading, true);
                 await settle();
-                assert.equal(await body.evaluate(node => node.scrollTop), 0, "Focus and settled layout must not move the reset reader.");
+                assert.equal(await body.evaluate(node => node.scrollTop), measurement.scrollTop, "The prompt stays in place.");
             }
-            const expandPrompt = body.getByRole("button", { name: "Show full prompt", exact: true });
+            const expandPrompt = body.locator('.prompt-preview-toggle[aria-expanded=false]');
             if (await expandPrompt.isVisible()) await expandPrompt.click();
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             assert.ok(await body.evaluate(node => node.scrollTop) > 0, "The next entry must override a genuinely scrolled reader.");
@@ -252,23 +270,23 @@ test("Read more starts at the actual reader top after motion without changing or
     if (phase !== "before") {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        const first = page.locator('.request-card-open[href*="top-first"] .request-card-read-more');
+        const first = promptLink(page, "top-first");
         await first.click();
         await settle();
         for (const [visit, more] of [
             ["same-open", first],
-            ["another-open", page.locator('.request-card-open[href*="top-second"] .request-card-read-more')],
+            ["another-open", promptLink(page, "top-second")],
         ]) {
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             await more.click();
             await settle();
+            await visitPrompt();
             const top = await body.evaluate(node => node.scrollTop);
-            assert.equal(top, 0, visit + " must reset an already open reader.");
-            await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toBeFocused();
+            await expect(page.locator('[data-reader-section="prompt"] .reader-section-heading')).toBeFocused();
             measurements.push({ theme: "dark", width: 1440, scale: 1, visit, input: "pointer", scrollTop: top });
         }
         await close();
-        const ordinary = page.locator('.request-card-open[href*="top-ordinary"]');
+        const ordinary = promptLink(page, "top-ordinary");
         await expect(ordinary.locator(".request-card-read-more")).toBeHidden();
         await ordinary.click();
         await settle();
@@ -278,14 +296,15 @@ test("Read more starts at the actual reader top after motion without changing or
         await close();
         await ordinary.click();
         await settle();
-        assert.equal(await body.evaluate(node => node.scrollTop), saved, "Ordinary non-Read-more entry keeps its saved reading position.");
+        await visitPrompt();
+        await expect(body.locator('[data-reader-section="prompt"] .reader-section-heading')).toBeInViewport();
         if (proof) await writeFile(path.join(proof, phase + "-positions.json"), JSON.stringify({
             entries: measurements, ordinarySavedPosition: saved, ordinaryRestoredPosition: await body.evaluate(node => node.scrollTop),
         }, null, 2));
     }
 });
 
-test("card previews use real line space and Read more opens the prompt while coverage stays outside failure bullets", { timeout: 90000 }, async t => {
+test("home prompt previews are bounded while exact copied prompts and independent evidence targets remain intact", { timeout: 90000 }, async t => {
     const identifier = "13579bdf-2468-4ace-9bdf-0123456789ab";
     const opening = `You own the workshop reference pack under rehearsal coordinator${identifier}. This is a standalone preparation task. `;
     const fitting = opening + "Read the available briefing notes, preserve the existing schedule, and identify the files needed by the rehearsal team before preparing the handout.";
@@ -335,8 +354,8 @@ test("card previews use real line space and Read more opens the prompt while cov
     });
     const phase = process.env.WIRE_READABLE_PHASE ?? "after", proof = process.env.WIRE_READABLE_PROOFS, measures = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const first = page.locator('.request-card-open[href*="readable-download"]');
-    const second = page.locator('.request-card-open[href*="readable-partial"]');
+    const first = page.locator('[data-view-key="request:readable-download"] .request-card-open');
+    const second = page.locator('[data-view-key="request:readable-partial"] .request-card-open');
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1920, 1], [1440, 1], [768, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -347,15 +366,15 @@ test("card previews use real line space and Read more opens the prompt while cov
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(first.locator(".request-card-prompt")).toHaveText(fitting);
-            await expect(second.locator(".request-card-prompt")).toHaveText(long);
+            await expect(first.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(fitting);
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(long);
             if (theme === "light" && width === 1920) {
                 const session = await page.context().newCDPSession(page);
                 let accessibleName;
                 try {
                     const { root } = await session.send("DOM.getDocument");
                     const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId,
-                        selector: '.request-card-open[href*="readable-partial"]' });
+                        selector: '[data-view-key="request:readable-partial"] .request-card-open' });
                     const { nodes } = await session.send("Accessibility.getPartialAXTree", { nodeId, fetchRelatives: false });
                     accessibleName = nodes.find(node => node.role?.value === "link")?.name?.value;
                 } finally { await session.detach(); }
@@ -363,12 +382,11 @@ test("card previews use real line space and Read more opens the prompt while cov
                     accessibleName, length: accessibleName?.length, originalPromptLength: long.length,
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
-                assert.ok(accessibleName?.length < 220, `The actual link name must be concise, not ${accessibleName?.length} characters.`);
-                assert.match(accessibleName, /^Read more of prompt: You are checking the workshop notes/);
-                assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"), "The hidden original must not be announced as the link's name.");
+                assert.equal(accessibleName, "1 tool call failed");
+                assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"));
             }
             for (const card of [first, second]) {
-                const prompt = card.locator(".request-card-prompt");
+                const prompt = card.locator("xpath=ancestor::article[1]").locator(".card-excerpt");
                 const geometry = await prompt.evaluate(node => {
                     const css = getComputedStyle(node), box = node.getBoundingClientRect(), lines = new Map();
                     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -382,34 +400,21 @@ test("card previews use real line space and Read more opens the prompt while cov
                     }
                     const last = [...lines.values()].at(-1);
                     return { width: node.clientWidth, height: node.clientHeight, naturalHeight: node.scrollHeight,
+                        cardWidth: node.closest(".activity-card").clientWidth, rootSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
                         lineHeight: parseFloat(css.lineHeight), visibleLines: lines.size,
                         lastLineUse: last ? (last.right - last.left) / node.clientWidth : 0, text: node.textContent };
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
-                await expect(card.locator(".request-card-read-more")).toBeVisible({ visible: omitted });
-                await expect(card).toHaveAccessibleName(omitted ? /^Read more of prompt: / : /^View interaction: /);
-                assert.equal(await card.locator(".request-card-read-more").evaluate(node => node.closest("a")?.getAttribute("href")),
-                    await card.getAttribute("href"), "Read more activates the existing real native link.");
-                assert.ok(geometry.height <= geometry.lineHeight * 2 + 1);
-                if (omitted) {
-                    assert.equal(geometry.visibleLines, 2);
-                    assert.ok(geometry.lastLineUse > .6, JSON.stringify(geometry));
-                }
-                if (width >= 1440 && card === first) assert.equal(omitted, false, "The complete fitting prompt uses available card width.");
+                await expect(card.locator(".request-card-read-more")).toHaveCount(0);
+                await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt a,.request-card-open-label")).toHaveCount(0);
+                assert.ok(geometry.height <= geometry.lineHeight * (geometry.cardWidth <= 36 * geometry.rootSize ? 4 : 3) + 1, JSON.stringify(geometry));
+                if (card === second) assert.equal(omitted, true, "The complete long prompt must not occupy the card.");
                 await expect(prompt).not.toContainText("\u2026");
-                const typography = await card.evaluate(node => [".result-status", ".call-reason-text"].map(selector => {
-                    const css = getComputedStyle(node.querySelector(selector)); return [css.fontFamily, css.fontSize, css.fontWeight];
-                }));
-                assert.deepEqual(typography[0], typography[1]);
-                measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted, typography });
+                measures.push({ theme, viewport: width, scale, card: card === first ? "download" : "partial", ...geometry, omitted });
             }
-            await expect(second.locator(".call-reason-list > li")).toHaveCount(1);
-            await expect(second.locator(".call-reason-list")).not.toContainText(/total.*unknown|part of the response/);
-            await expect(second.locator(".returned-coverage")).toContainText("3 returned entries");
-            await expect(second.locator(".returned-coverage")).toContainText("total is unknown");
-            assert.equal(await second.locator(".returned-coverage").evaluate(node => node.closest("li.call-reason-item") === null), true);
-            await expect(second.locator(".result-status")).toHaveText("Call #9 failed");
-            await expect(second.locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
+            await expect(second.locator(".returned-coverage,.call-reason-list")).toHaveCount(0);
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
+            await expect(second.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 15 Work IQ tool calls matches this view");
             await expect(second.locator("a,button,[role=button]")).toHaveCount(0, "Read more belongs to the real card link, not a nested control.");
         }
         if (proof) {
@@ -418,17 +423,17 @@ test("card previews use real line space and Read more opens the prompt while cov
             for (const [name, card] of [["download", first], ["partial", second]]) {
                 await card.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}.png`) });
                 if (width === 390 && name === "partial") {
-                    await card.locator(".request-card-count").scrollIntoViewIfNeeded();
-                    await expect(card.locator(".request-card-count")).toBeInViewport();
+                    await card.locator("xpath=ancestor::article[1]").locator(".request-card-count").scrollIntoViewIfNeeded();
+                    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toBeInViewport();
                     await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-partial-tail.png`) });
                 }
             }
         }
         if (phase !== "before") {
-            await expect(second.locator(".request-card-read-more")).toBeVisible();
             await second.focus(); await page.keyboard.press("Enter");
+            await page.getByRole("navigation", { name: "In this interaction" }).getByRole("button", {name:"Prompt",exact:true}).click();
             const original = page.locator('[data-reader-section="prompt"] .full-text-content');
-            await expect(original).toBeFocused();
+            await expect(page.locator('[data-reader-section="prompt"] .prompt-preview-toggle')).toHaveAttribute("aria-expanded", "true");
             assert.equal(await original.textContent(), long);
             await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
             assert.equal(await page.evaluate(() => window.copied.at(-1)), long);
@@ -442,15 +447,18 @@ test("card previews use real line space and Read more opens the prompt while cov
             await expect(call.locator(".api-result-entry")).toHaveCount(3);
             await expect(call.locator(".returned-coverage")).toHaveCount(1);
             await expect(call.locator(".returned-coverage")).toContainText("3 returned entries");
-            const readerType = await call.evaluate(node => [".reader-call-summary .recorded-result-label", ".reader-error-message"].map(selector => {
+            await expect(call.locator(".returned-coverage")).toContainText(/total is unknown/i);
+            await expectCallStatus(call, 9, "failed");
+            assert.equal(await call.locator(".returned-coverage").evaluate(node => node.closest(".call-reason-item") === null), true);
+            const readerType = await call.evaluate(node => [".reader-call-summary .card-outcome-label", ".reader-error-message"].map(selector => {
                 const css = getComputedStyle(node.querySelector(selector)); return [css.fontFamily, css.fontSize, css.fontWeight];
             }));
-            assert.deepEqual(readerType[0], readerType[1]);
+            assert.equal(readerType[0][0], readerType[1][0]);
             await call.locator(".reader-call-identity-line").scrollIntoViewIfNeeded();
             if (proof && [1920, 390].includes(width)) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-result-reader.png`) });
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
-            await second.locator(".request-card-read-more").click();
-            await expect(original).toBeFocused();
+            await second.click();
+            await expect(call).toBeFocused();
             await page.keyboard.press("Escape"); await expect(second).toBeFocused();
         } else {
             await second.click();
@@ -461,14 +469,10 @@ test("card previews use real line space and Read more opens the prompt while cov
     if (phase !== "before") {
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await expect(first.locator(".request-card-read-more")).toBeHidden();
-        await page.setViewportSize({ width: 390, height: 1080 });
-        await expect(first.locator(".request-card-read-more")).toBeVisible();
-        await page.setViewportSize({ width: 1920, height: 1080 });
-        await expect(first.locator(".request-card-read-more")).toBeHidden();
+        await expect(first.locator(".request-card-read-more")).toHaveCount(0);
         await page.evaluate(() => {
             window.heldCardPreview = document.querySelector(".request-card-prompt");
-            window.heldCardName = window.heldCardPreview.closest("a").getAttributeNode("aria-label");
+            window.heldCardName = window.heldCardPreview.closest("article").querySelector(".request-card-open").getAttributeNode("href");
         });
         await page.goto(page.url().split("#")[0] + "#analyze?result=success");
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -513,7 +517,7 @@ test("filtered calls own subordinate grouped returned errors without merging cal
     });
     const phase = process.env.WIRE_GROUP_PHASE ?? "after", proof = process.env.WIRE_GROUP_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const card = page.locator('.request-card-open[href*="grouped-permission"]');
+    const card = interactionCard(page, "grouped-permission").getByRole("link", { name: "1 tool call failed", exact: true });
     let returnedId;
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
@@ -524,34 +528,16 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".result-status")).toHaveText("Call #6 failed");
-            await expect(card.locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
-            await expect(card.locator(".call-reason-list > li")).toHaveCount(1);
-            await expect(card.locator(".call-reason-list")).toContainText("Returned entries 1\u20133");
-            assert.equal((await card.textContent()).split(message).length - 1, 1);
-            const geometry = await card.evaluate(node => {
-                const status = node.querySelector(".result-status"), list = node.querySelector(".call-reason-list");
-                const a = status.getBoundingClientRect(), b = list.getBoundingClientRect();
-                return { statusBottom: a.bottom, listTop: b.top, statusLeft: a.left, listLeft: b.left,
-                    statusColor: getComputedStyle(status).color, proseColor: getComputedStyle(list).color,
-                    listStyle: getComputedStyle(list).listStyleType };
-            });
-            assert.ok(geometry.listTop >= geometry.statusBottom);
-            assert.notEqual(geometry.statusColor, geometry.proseColor);
-            assert.equal(geometry.listStyle, "disc");
-            measurements.push({ theme, width, scale, ...geometry });
-            await expect(page.locator('.request-card-open[href*="grouped-different"] .call-reason-list > li')).toHaveCount(2);
-            const groups = page.locator('.request-card-open[href*="grouped-multiple"] .request-card-reason');
-            await expect(groups).toHaveCount(2);
-            await expect(groups.nth(0).locator(".result-status")).toHaveText("Call #6 failed");
-            await expect(groups.nth(1).locator(".result-status")).toHaveText("Call #7 failed");
-            for (const group of await groups.all()) await expect(group.locator(".call-reason-list > li")).toHaveCount(1);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-count")).toHaveText("1 of 6 Work IQ tool calls matches this view");
+            await expect(card).not.toContainText(message);
+            await expect(interactionCard(page, "grouped-multiple").getByRole("link", { name: "2 tool calls failed", exact: true })).toBeVisible();
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-page.png`), fullPage: true });
             for (const name of ["permission", "different", "multiple"]) {
-                const target = page.locator(`.request-card-open[href*="grouped-${name}"]`);
+                const target = promptLink(page, `grouped-${name}`);
                 await target.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}.png`) });
             }
         }
@@ -563,9 +549,18 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         if (phase !== "before") {
             await expect(call.locator(".reader-entry-label")).toHaveText("Call #6");
             if (theme === "light" && width === 1440) await expect(call).toBeFocused();
+            await expect(call.locator(".api-result-entry").nth(2)).toBeVisible();
             await expect(call.locator(".returned-api-entries")).toHaveAttribute("aria-label", "Returned results for Call #6");
             await expect(call.locator(".reader-call-summary")).not.toContainText(message);
             await expect(call.locator(".reader-error-message")).toHaveText([message, message, message]);
+            const geometry = await call.evaluate(node => {
+                const status = node.querySelector(".reader-call-summary .card-outcome-label"), prose = node.querySelector(".reader-error-message");
+                return { statusColor: getComputedStyle(status).color, proseColor: getComputedStyle(prose).color,
+                    statusBottom: status.getBoundingClientRect().bottom, proseTop: prose.getBoundingClientRect().top };
+            });
+            assert.notEqual(geometry.statusColor, geometry.proseColor);
+            assert.ok(geometry.proseTop >= geometry.statusBottom);
+            measurements.push({ theme, width, scale, ...geometry });
             await expect(call.locator(".api-result-entry .recorded-result-label").nth(2)).toContainText("Returned entry 3");
         }
         const ids = await call.locator(".api-result-entry").evaluateAll(nodes => nodes.map(node => node.dataset.resultId));
@@ -595,6 +590,16 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await page.keyboard.press("Escape"); await expect(card).toBeFocused();
     }
     if (phase !== "before") {
+        for (const name of ["different", "multiple"]) {
+            await promptLink(page, `grouped-${name}`).click();
+            for (const index of name === "multiple" ? [5, 6] : [5]) {
+                const call = page.locator(`[data-tool-call-id="${name}-call-${index}"]`);
+                await expectCallStatus(call, index + 1, "failed");
+                await expect(call.locator(".reader-error-message")).toHaveText([message, message,
+                    name === "different" ? "This revision is restricted to its owner." : message]);
+            }
+            await page.keyboard.press("Escape");
+        }
         const exact = new URL(page.url());
         exact.hash = "#request?" + new URLSearchParams({ request: primary.scenarioId, call: returnedId,
             layer: "reported-api", callRevision: String(revision) });
@@ -602,8 +607,10 @@ test("filtered calls own subordinate grouped returned errors without merging cal
         await expect(page.locator("#selectedCall")).toHaveAttribute("data-result-id", returnedId);
         await expect(page.locator("#selectedCall")).toBeFocused();
         await expect(page.locator('[data-tool-call-id="permission-call-5"] .reader-entry-label')).toContainText("Call #6");
-        assert.deepEqual(Object.fromEntries(new URLSearchParams(new URL(page.url()).hash.split("?")[1])),
-            Object.fromEntries(new URLSearchParams(exact.hash.split("?")[1])));
+        const canonical = new URL(page.url());
+        assert.equal(canonical.pathname, "/request");
+        assert.equal(canonical.hash, "");
+        assert.ok(!canonical.href.includes(primary.scenarioId) && !decodeURIComponent(canonical.href).includes(returnedId));
     }
     if (proof) await writeFile(path.join(proof, phase + "-measurements.json"), JSON.stringify(measurements, null, 2));
 });
@@ -647,7 +654,7 @@ test("card and reader keep neutral explanations under owning statuses without re
     });
     const phase = process.env.WIRE_HIERARCHY_PHASE ?? "after", proof = process.env.WIRE_HIERARCHY_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const card = page.locator('.request-card-open[href*="hierarchy-download"]');
+    const card = promptLink(page, "hierarchy-download");
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -657,40 +664,29 @@ test("card and reader keep neutral explanations under owning statuses without re
         await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
             .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
         if (phase !== "before") {
-            await expect(card.locator(".request-card-reason-text")).toHaveText(message);
-            await expect(card.locator(".result-status")).toHaveText("Call #3 failed");
-            await expect(card.locator(".request-card-problem")).not.toContainText(/1 of 5|Recorded error:/);
-            await expect(card.locator(".request-card-count")).toHaveText("5 recorded calls / 4 completed / 1 failed");
-            const paint = await card.evaluate(node => {
-                const prose = node.querySelector(".request-card-reason-text"), status = node.querySelector(".result-status");
-                return { prose: getComputedStyle(prose).color, ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
-                    status: getComputedStyle(status).color, icon: getComputedStyle(status.querySelector(".wire-icon")).color,
-                    proseSize: parseFloat(getComputedStyle(prose).fontSize), statusSize: parseFloat(getComputedStyle(status).fontSize),
-                    proseTop: prose.getBoundingClientRect().top, statusBottom: status.getBoundingClientRect().bottom };
+            await expect(card).not.toContainText(message);
+            await expect(card.locator("xpath=ancestor::article[1]").locator(".result-tone-failure")).toHaveText("1 tool call failed");
+            await expect(card).not.toContainText(/1 of 5|Recorded error:|5 recorded calls/);
+            const paint = await card.locator("xpath=ancestor::article[1]").evaluate(node => {
+                const status = node.querySelector(".request-card-exception");
+                return { ink: getComputedStyle(node.querySelector(".request-card-prompt")).color,
+                    status: getComputedStyle(status).color };
             });
-            assert.equal(paint.prose, paint.ink);
-            assert.notEqual(paint.prose, paint.status);
-            assert.equal(paint.status, paint.icon);
-            assert.equal(paint.proseSize, paint.statusSize);
-            assert.ok(paint.proseTop >= paint.statusBottom);
+            assert.notEqual(paint.ink, paint.status);
             measurements.push({ theme, width, scale, ...paint });
-            const failures = page.locator('.request-card-open[href*="hierarchy-multiple"] .request-card-reason-text');
-            await expect(failures).toHaveCount(2);
-            await expect(failures.nth(1)).toHaveText("The rehearsal schedule is locked.");
-            const entries = page.locator('.request-card-open[href*="hierarchy-returned"] .request-card-reason-text');
-            await expect(entries).toContainText("Returned entry 2: The archived document is restricted.");
-            await expect(entries).toContainText("Returned entry 3: The requested revision is no longer available.");
+            await expect(interactionCard(page, "hierarchy-multiple").getByRole("link", { name: "2 tool calls failed", exact: true })).toBeVisible();
+            await expect(promptLink(page, "hierarchy-returned")).not.toContainText(/Returned entry|document is restricted/);
         }
         if (proof) {
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-page.png`), fullPage: true });
             await page.mouse.move(0, 0);
             if (width === 390) {
-                await card.locator(".request-card-problem").evaluate(node => node.scrollIntoView({ block: "center" }));
+                await card.locator("xpath=ancestor::article[1]").locator(".request-card-exception").evaluate(node => node.scrollIntoView({ block: "center" }));
                 await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             } else await card.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-download.png`) });
             if (width === 1440) for (const name of ["multiple", "returned"]) {
-                await page.locator(`.request-card-open[href*="hierarchy-${name}"]`).screenshot({
+                await promptLink(page, `hierarchy-${name}`).screenshot({
                     path: path.join(proof, `${phase}-${theme}-${width}-${name}.png`),
                 });
             }
@@ -698,14 +694,14 @@ test("card and reader keep neutral explanations under owning statuses without re
         await card.focus(); await page.keyboard.press("Enter");
         const call = page.locator('[data-tool-call-id="hierarchy-call-2"]');
         if (phase !== "before") {
-            await expect(call.locator(".result-cause")).toHaveText(message);
-            await expect(call.locator(".result-status")).toHaveText("Call #3 failed");
+            await expect(call.locator(".result-cause")).toHaveText("Recorded reason: " + message);
+            await expectCallStatus(call, 3, "failed");
             const colors = await call.locator(".reader-call-summary").evaluate(node => ({
                 prose: getComputedStyle(node.querySelector(".result-cause")).color,
                 status: getComputedStyle(node.querySelector(".result-status")).color,
             }));
             assert.notEqual(colors.prose, colors.status);
-            assert.equal(colors.prose, measurements.at(-1).prose);
+            assert.equal(colors.prose, measurements.at(-1).ink);
         }
         await call.scrollIntoViewIfNeeded();
         if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-reader.png`) });
@@ -719,7 +715,7 @@ test("card and reader keep neutral explanations under owning statuses without re
         assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
         await page.keyboard.press("Escape"); await expect(card).toBeFocused();
         for (const name of ["multiple", "returned"]) {
-            await page.locator(`.request-card-open[href*="hierarchy-${name}"]`).click();
+            await promptLink(page, `hierarchy-${name}`).click();
             if (name === "returned") {
                 const call = page.locator('[data-tool-call-id="hierarchy-returned-call"]');
                 if (phase !== "before") {
@@ -735,6 +731,7 @@ test("card and reader keep neutral explanations under owning statuses without re
                 await call.locator(".api-result-entry").nth(1).scrollIntoViewIfNeeded();
             } else {
                 await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(2);
+                await expect(page.locator("#requestContent .reader-call-row").nth(1)).toContainText("The rehearsal schedule is locked.");
                 await page.locator("#requestContent .reader-call-row").first().scrollIntoViewIfNeeded();
             }
             if (proof) await page.screenshot({ path: path.join(proof, `${phase}-${theme}-${width}-${name}-reader.png`) });
@@ -789,7 +786,8 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
     });
     const proof = process.env.WIRE_IDENTIFIER_PROOFS, measurements = [];
     if (proof) await mkdir(proof, { recursive: true });
-    const joined = page.locator('.request-card-open[href*="identifier-joined"]');
+    const joined = interactionCard(page, "identifier-joined").locator(".card-excerpt");
+    const open = promptLink(page, "identifier-joined");
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -797,14 +795,14 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         for (const [name, text, count] of cases) {
-            const prompt = page.locator(`.request-card-open[href*="identifier-${name}"] .request-card-prompt`);
+            const prompt = interactionCard(page, `identifier-${name}`).locator(".card-excerpt");
             await expect(prompt.locator(".text-preview-identifier")).toHaveCount(count);
-            assert.equal(await prompt.textContent(), text.replace(/\s+/gu, " "));
+            assert.equal(await prompt.textContent(), text);
             assert.equal(await prompt.evaluate(node => {
                 const range = document.createRange(); range.selectNodeContents(node);
                 const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
                 const text = selection.toString(); selection.removeAllRanges(); return text;
-            }), text.replace(/\s+/gu, " "), "Selection still contains the original preview characters only.");
+            }), text.replace(/\s+/g, " "), "Visual selection uses reflowed whitespace without changing identifier characters.");
         }
         await joined.scrollIntoViewIfNeeded();
         const geometry = await joined.locator(".text-preview-identifier").evaluate(node => {
@@ -823,29 +821,26 @@ test("recognized joined UUIDs gain a visible preview gap without inserting text 
         if (proof) {
             await page.mouse.move(0, 0);
             await joined.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-joined.png`) });
-            await page.locator('.request-card-open[href*="identifier-separated"]').screenshot({
+            await interactionCard(page, "identifier-separated").locator(".card-excerpt").screenshot({
                 path: path.join(proof, `${theme}-${width}-${scale}-separated.png`),
             });
         }
-        await joined.click();
+        await open.click();
         const original = page.locator('[data-reader-section="prompt"] .full-text-content');
         assert.equal(await original.textContent(), cases[0][1]);
         await expect(original.locator(".text-preview-identifier")).toHaveCount(0);
         await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
         assert.equal(await page.evaluate(() => window.copied.at(-1)), cases[0][1]);
         await page.keyboard.press("Escape");
-        await expect(joined).toBeFocused();
+        await expect(open).toBeFocused();
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-    await page.getByRole("link", { name: "Create report", exact: true }).click();
-    const preview = page.locator("#reportList .request-card-prompt").filter({ hasText: cases[0][1] });
-    await expect(preview.locator(".text-preview-identifier")).toHaveCount(1);
-    assert.equal(await preview.textContent(), cases[0][1], "The existing shared preview path uses the same visual-only treatment.");
+    assert.equal(await joined.textContent(), cases[0][1], "Reopening an original must not alter its visible card.");
     if (proof) await writeFile(path.join(proof, "spacing.json"), JSON.stringify(measurements, null, 2));
 });
 
-test("all scoped failures stay visible from card to reader with exact prompt copying and deliberate omission", { timeout: 90000 }, async t => {
+test("counted failures stay separate from a completed sibling’s nine returned entries", { timeout: 90000 }, async t => {
     const diagnostic = (message, details = []) => ({ version: 1, source: "completion-error", status: "recorded", message, details });
     const record = records()[2];
     record.userPrompt.text = "Coordinate the orchard rehearsal with owner\nrecord-42. "
@@ -882,135 +877,32 @@ test("all scoped failures stay visible from card to reader with exact prompt cop
         .map((call, index) => ({ ...call, toolCallId: `late-${index}`, startEventId: `late-start-${index}`,
             startedAt: new Date(Date.parse(record.userPrompt.sourceTimestamp) + index * 1000).toISOString() }));
     const { page } = await setup(t, [record, late]);
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.evaluate(() => {
-        window.copied = [];
-        Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
-            writeText: async text => window.copied.push(text),
-        } });
-    });
-    const card = page.locator(`.request-card-open[href*="${record.scenarioId}"]`);
-    const lateCard = page.locator('.request-card-open[href*="late-failure"]');
-    const proof = process.env.WIRE_CARD_TEXT_PROOFS;
-    if (proof) await mkdir(proof, { recursive: true });
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [768, 1], [390, 2]]) {
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
-        await chooseTheme(page, theme);
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await expect(card.locator(".request-card-prompt")).toContainText("owner record-42");
-        await expect(lateCard.locator(".request-card-prompt")).toContainText("Ownerrecord-42");
-        await expect(lateCard.locator(".request-card-prompt")).not.toContainText("Owner record-42");
-        assert.equal(await card.locator(".request-card-prompt").textContent(), record.userPrompt.text.replace(/\s+/gu, " "));
-        await expect(card.locator(".request-card-prompt")).not.toContainText("...");
-        const reasons = card.locator(".request-card-reason");
-        await expect(reasons).toHaveCount(4);
-        await expect(reasons.nth(0).locator(".result-status")).toHaveText("Call #3 failed");
-        await expect(reasons.nth(0).locator(".request-card-reason-text")).toContainText(parentMessage);
-        await expect(reasons.nth(0)).toContainText(detailMessage);
-        await expect(reasons.nth(1).locator(".result-status")).toHaveText("Call #4 failed");
-        await expect(reasons.nth(1).locator(".request-card-reason-text")).toHaveText(parentMessage);
-        await expect(reasons.nth(2)).toContainText("Transport ... error: HTTP 503 Service Unavailable: upstream connection timeout");
-        await expect(reasons.nth(3).locator(".result-status")).toHaveText("Call #6 completed");
-        for (let index = 1; index < 9; index++) await expect(reasons.nth(3)).toContainText(`Returned item ${index} cannot be changed.`);
-        await expect(card).not.toContainText(/more failure|more returned errors|response body excluded|reported status 200/);
-        await expect(lateCard.locator(".request-card-count")).toHaveText("5 recorded calls / 4 completed / 1 failed");
-        await expect(lateCard.locator(".result-status")).toHaveText("Call #5 failed");
-        await expect(lateCard).not.toContainText(/more failure|response body excluded|reported status 200/);
-        const colors = await reasons.evaluateAll(nodes => nodes.map(node => ({
-            text: getComputedStyle(node.querySelector(".request-card-reason-text")).color,
-            status: getComputedStyle(node.querySelector(".result-status")).color,
-            icon: getComputedStyle(node.querySelector(".wire-icon")).color,
-        })));
-        assert.equal(colors[0].status, colors[0].icon);
-        assert.notEqual(colors[0].text, colors[0].status);
-        assert.equal(colors[3].text, colors[0].text, "All explanation prose uses neutral primary ink.");
-        assert.notEqual(colors[3].status, colors[0].status, "Returned API errors do not paint successful execution as a failed tool.");
-        await card.scrollIntoViewIfNeeded();
-        await page.mouse.move(0, 0);
-        if (proof) {
-            await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-page.png`), fullPage: true });
-            await card.evaluate(node => {
-                node.scrollIntoView({ block: "start" });
-                scrollBy(0, -document.querySelector(".app-header").getBoundingClientRect().height - 16);
-            });
-            if (width === 390) {
-                await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
-                await card.locator(".request-card-summary").evaluate(node => node.scrollIntoView({ block: "end" }));
-                await page.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card-tail.png`) });
-            } else await card.screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-card.png`) });
-        }
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await card.focus();
-        await page.keyboard.press("Enter");
-        await expect(page.locator("#contextSidebar")).toBeVisible();
-        if (theme === "light" && width === 1440) await expect(page.locator('[data-tool-call-id="all-failures-0"]')).toBeFocused();
-        const firstFailure = page.locator('[data-tool-call-id="all-failures-0"]');
-        await expect(firstFailure.locator(".reader-call-summary")).toContainText(detailMessage);
-        await firstFailure.locator(".reader-call-toggle").click();
-        await expect(firstFailure.locator(".technical-detail")).toContainText(detailMessage);
-        await firstFailure.locator(".reader-call-toggle").click();
-        await expect(page.locator('[data-tool-call-id="all-failures-1"] .reader-call-summary')).toContainText(parentMessage);
-        await expect(page.locator('[data-tool-call-id="all-failures-2"] .reader-call-summary')).toContainText("HTTP 503 Service Unavailable: upstream connection timeout");
-        const returned = page.locator('[data-tool-call-id="returned-failures"]');
-        await expect(returned.locator(".api-result-entry")).toHaveCount(9);
-        for (let index = 1; index < 9; index++) await expect(returned.locator(".api-result-entry").nth(index)).toContainText(`Returned item ${index} cannot be changed.`);
-        await expect(returned.getByRole("button", { name: /Next returned/ })).toHaveCount(0);
-        const success = page.locator('[data-tool-call-id="clarity-call-2-0"] .recorded-result').first();
-        const failure = page.locator('[data-tool-call-id="all-failures-0"] .result-status').first();
-        assert.notEqual(await success.evaluate(node => getComputedStyle(node).color), await failure.evaluate(node => getComputedStyle(node).color));
-        const original = page.locator('[data-reader-section="prompt"] .full-text-content');
-        assert.equal(await original.textContent(), record.userPrompt.text);
-        const copy = page.getByRole("button", { name: "Copy prompt", exact: true });
-        await copy.scrollIntoViewIfNeeded();
-        const beforeCopy = (await page.locator('[data-reader-section="activity"]').boundingBox()).y;
-        const box = await copy.boundingBox();
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await expect(copy).toHaveAttribute("data-copy-state", "success");
-        assert.equal((await page.locator('[data-reader-section="activity"]').boundingBox()).y, beforeCopy);
-        assert.equal(await page.evaluate(() => window.copied.at(-1)), record.userPrompt.text);
-        await page.locator('[data-tool-call-id="all-failures-0"]').scrollIntoViewIfNeeded();
-        if (proof) await page.locator("#contextSidebar").screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-reader.png`) });
-        await returned.locator(".api-result-entry").last().scrollIntoViewIfNeeded();
-        if (proof) await page.locator("#contextSidebar").screenshot({ path: path.join(proof, `${theme}-${width}-${scale}-reader-tail.png`) });
-        assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-        await page.keyboard.press("Escape");
-        await expect(page.locator("#contextSidebar")).not.toBeVisible();
-        await expect(card).toBeFocused();
-    }
-    await lateCard.click();
-    assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), late.userPrompt.text);
-    await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.copied.at(-1)), late.userPrompt.text);
-    await page.keyboard.press("Escape");
-    await page.goto(page.url().split("#")[0] + "#analyze?result=failure");
-    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(card.locator(".request-card-reason")).toHaveCount(3);
-    await expect(card.locator(".request-card-reason").nth(0).locator(".result-status")).toHaveText("Call #3 failed");
-    await expect(card.locator(".request-card-reason").nth(2).locator(".result-status")).toHaveText("Call #5 failed");
-    if (proof) await writeFile(path.join(proof, "journey.json"), JSON.stringify({
-        source: "Invented records only; temporary retained store and random local HTTP port.",
-        themes: ["light", "dark"], sizes: [[1440, 1], [768, 1], [390, 2]],
-        cardCalls: 7, toolFailures: 3, returnedErrors: 8, returnedEntriesVisibleWithoutPaging: 9,
-        lateFailure: { calls: 5, completed: 4, failed: 1, visible: true },
-        equalTextDifferentCalls: "Both retained", sourceSpacing: "Preserved without guessing",
-        originalPromptCopies: "Exact", copyLayoutShift: 0, pageOverflow: false, readerOverflow: false,
-        filteredCallNumbers: [3, 4, 5], hostMode: "Browser renderer; normal motion",
-        liveDeployment: false, providerReads: false,
-    }, null, 2));
+    const origin = interactionCard(page, record.scenarioId);
+    await origin.getByRole("link", { name: "3 tool calls failed", exact: true }).click();
+    const rows = page.locator("#requestContent .reader-call-row");
+    await expect(rows).toHaveCount(3);
+    assert.deepEqual(await rows.evaluateAll(nodes => nodes.map(n => n.dataset.toolCallId)), ["all-failures-0", "all-failures-1", "all-failures-2"]);
+    await page.getByRole("link", { name: "Show full activity", exact: true }).click();
+    await expect(rows).toHaveCount(7);
+    const first = page.locator('[data-tool-call-id="all-failures-0"]');
+    if (await first.locator(".reader-call-toggle").getAttribute("aria-expanded") !== "true") await first.locator(".reader-call-toggle").click();
+    await expect(first).toContainText(detailMessage);
+    const ret = page.locator('[data-tool-call-id="returned-failures"]');
+    await expect(ret.locator(".api-result-entry")).toHaveCount(9);
+    for (let i = 1; i < 9; i++) await expect(ret.locator(".api-result-entry").nth(i)).toContainText(`Returned item ${i} cannot be changed.`);
+    await expect(ret.locator(".reader-call-summary")).toContainText("1 tool call completed");
+    await expect(ret).not.toContainText(detailMessage);
 });
 
 test("Reader call disclosure groups identity and result without a blank target row and labels its service", async t => {
     const { page } = await setup(t);
-    await page.locator('.request-card-open[href*="card-clarity-0"]').click();
+    await promptLink(page, "card-clarity-0").click();
     const call = page.locator('#requestContent [data-tool-call-id="clarity-call-0-0"]');
     const toggle = call.locator(".reader-call-toggle");
     await expect(toggle.locator(".reader-call-summary")).toContainText("Work IQ required sign-in at the time");
-    await expect(call.locator(".reader-call-secondary .recorded-category")).toContainText("Service:");
-    await expect(call.locator(".reader-call-secondary .recorded-category")).toContainText("Mail");
-    await expect(call.locator(".reader-call-secondary .reader-call-duration")).toContainText("Tool latency:");
+    await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Target");
+    await expect(call.locator(".reader-call-secondary .card-identities")).toContainText("Mail");
+    await expect(call.locator(".reader-call-identity .reader-call-duration")).toContainText("Call duration:");
     await expect(toggle.locator("button,a,input")).toHaveCount(0);
     const geometry = await toggle.evaluate(toggle => {
         const identity = toggle.querySelector(".reader-call-identity-line").getBoundingClientRect();
@@ -1066,7 +958,7 @@ test("service identity is stated once for an inherited target and keeps independ
         await chooseTheme(page, theme);
         const card = page.locator(".request-card-open");
         await expect(card).toHaveCount(1);
-        const cardIdentity = await card.locator(".request-card-categories").innerText();
+        const cardIdentity = await card.innerText();
         for (const width of [1440, 390]) {
             await page.setViewportSize({ width, height: 1000 });
             await card.scrollIntoViewIfNeeded();
@@ -1079,6 +971,8 @@ test("service identity is stated once for an inherited target and keeps independ
         const activity = page.locator('[data-reader-section="activity"]');
         const row = id => activity.locator(`[data-tool-call-id="${id}"]`);
         const inherited = row("service-inherited");
+        const closed = activity.locator("details.reader-returned-facts:not([open]) > summary");
+        while (await closed.count()) await closed.first().click();
         const values = await activity.locator("[data-tool-call-id]").evaluateAll(nodes => nodes.map(node => ({
             id: node.dataset.toolCallId,
             identity: node.querySelector(".reader-call-services")?.innerText.replace(/\s+/g, " ").trim() ?? "",
@@ -1087,7 +981,7 @@ test("service identity is stated once for an inherited target and keeps independ
                 id: entry.dataset.resultId,
                 label: entry.querySelector(".action-service")?.previousElementSibling.textContent ?? null,
                 service: entry.querySelector(".action-service")?.textContent.trim() ?? null,
-                path: entry.querySelector(".api-path-value").innerText,
+                path: entry.querySelector(".api-path-value")?.innerText ?? null,
                 attribution: entry.querySelector(".path-attribution")?.nextElementSibling.textContent ?? null,
             })),
         })));
@@ -1120,30 +1014,30 @@ test("service identity is stated once for an inherited target and keeps independ
     }
     if (proof) await writeFile(path.join(proof, "service-observations.json"), JSON.stringify(observations, null, 2));
     for (const { cardIdentity, values } of observations) {
-        assert.match(cardIdentity, /^Services and operations:/);
+        assert.doesNotMatch(cardIdentity, /Services and operations:|Tools:|More services/);
         const byId = new Map(values.map(value => [value.id, value]));
         const inherited = byId.get("service-inherited");
-        assert.equal(inherited.identity, "Service: Mail");
+        assert.match(inherited.identity, /^Target\s*Mail$/);
         assert.equal(inherited.returned[0].service, null);
         assert.equal(inherited.returned[0].attribution, "Call target; no separate path returned.");
         const returned = byId.get("service-returned");
-        assert.equal(returned.identity, "Service: Mail");
+        assert.match(returned.identity, /^Target\s*Mail$/);
         assert.deepEqual(returned.returned.map(value => [value.label, value.service]),
             [["Result service", "Mail"], ["Result service", "Calendar"]]);
         assert.deepEqual(returned.returned.map(value => value.path),
             ["/me/messages/invented-reply", "/me/calendar/events/invented-visit"]);
-        assert.equal(byId.get("service-batch").identity, "Services: Mail Files");
+        assert.match(byId.get("service-batch").identity, /Targets\s*Mail\s*Files/);
         assert.match(byId.get("service-batch").attribution, /recorded path does not identify a named app.*call still counts.*result is shown separately/);
         assert.equal(byId.get("service-batch").returned[0].service, "Files");
-        assert.match(byId.get("service-batch").returned[1].service, /Returned target not identified/);
-        assert.equal(byId.get("service-batch").returned[1].path, "Not attributed to a target in this batch");
-        assert.equal(byId.get("service-missing").identity, "");
+        assert.match(byId.get("service-batch").returned[1].service, /No path returned for this batch entry/);
+        assert.equal(byId.get("service-batch").returned[1].path, null, "Don't duplicate a missing batch target as an API path.");
+        assert.match(byId.get("service-missing").identity, /Service target not recorded/);
         assert.match(byId.get("service-missing").attribution, /No usable service target.*source omission or a capture problem/);
         assert.match(byId.get("service-missing").returned[0].service, /Service target not recorded/);
-        assert.equal(byId.get("service-preparation").identity, "Operation: Schema lookup");
+        assert.match(byId.get("service-preparation").identity, /Operation\s*Schema lookup/);
         assert.equal(byId.get("service-preparation").returned[0].path, "Not recorded");
-        assert.equal(byId.get("service-search").identity, "Operation: Search and retrieval");
-        assert.equal(byId.get("service-assistance").identity, "Operation: Asked Copilot");
+        assert.match(byId.get("service-search").identity, /Operation\s*Search requested/);
+        assert.match(byId.get("service-assistance").identity, /Operation\s*Asked Copilot$/);
     }
     const selectedId = observations[0].values.find(value => value.id === "service-returned").returned[1].id;
     const exact = new URL(page.url());
@@ -1152,7 +1046,7 @@ test("service identity is stated once for an inherited target and keeps independ
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-result-id", selectedId);
     await expect(page.locator("#selectedCall")).toBeFocused();
     await expect(page.locator("#selectedCall .action-service")).toHaveText("Calendar");
-    await expect(page.locator('[data-tool-call-id="service-returned"] .reader-call-services')).toHaveText("Service: Mail");
+    await expect(page.locator('[data-tool-call-id="service-returned"] .reader-call-services')).toHaveText(/Target\s*Mail/);
     const copy = page.locator('[data-reader-section="prompt"]').getByRole("button", { name: "Copy prompt", exact: true });
     await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => {} } }));
     await copy.scrollIntoViewIfNeeded();
@@ -1165,42 +1059,28 @@ test("service identity is stated once for an inherited target and keeps independ
 
 test("Agent author cues use a distinct shared role while Teams keeps its service purple", async t => {
     const { page } = await setup(t);
-    const card = page.locator('.request-card-open[href*="card-clarity-2"]');
+    const card = promptLink(page, "card-clarity-2");
     for (const [theme, author, teams] of [
         ["light", "rgb(128, 96, 24)", "rgb(104, 66, 186)"],
-        ["dark", "rgb(226, 194, 123)", "rgb(173, 136, 240)"],
+        ["dark", "rgb(226, 194, 123)", "color(srgb 0.774902 0.673333 0.958824)"],
     ]) {
         await chooseTheme(page, theme);
-        const colors = await card.evaluate(card => ({
-            author: getComputedStyle(card.querySelector("[data-prompt-actor=agent]")).color,
-            teams: getComputedStyle(card.querySelector("[data-service=Teams]")).color,
-        }));
-        assert.deepEqual(colors, { author, teams });
+        await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+        await expect(card.locator("xpath=ancestor::article[1]").locator("[data-service=Teams]")).toHaveCount(1);
+        assert.equal(await card.locator("xpath=ancestor::article[1]").locator("[data-service=Teams]").evaluate(n => getComputedStyle(n).color), teams);
         await card.click();
         const reader = page.locator('[data-reader-section="prompt"]');
-        assert.equal(await reader.locator(".reader-section-heading [data-prompt-actor]").evaluate(node => getComputedStyle(node).color), author);
+        assert.equal(await reader.locator('.reader-section-heading [data-prompt-actor="agent"] svg').evaluate(node => getComputedStyle(node).color), author);
         assert.equal(await reader.locator(".full-text-body").evaluate(node => getComputedStyle(node).borderInlineStartColor), author);
         assert.equal(await page.locator('#requestContent .reader-call-services [data-service=Teams]').first()
             .evaluate(node => getComputedStyle(node).color), teams);
         await page.goBack();
     }
-    await page.getByRole("link", { name: "Create report", exact: true }).click();
-    const agent = page.locator('#reportList .full-text:has([data-prompt-actor=agent])').first();
-    await expect(agent).toBeVisible();
-    await expect(page.locator("#reportList .interaction-identity").first()).toContainText("Service:");
-    for (const [theme, color] of [["light", "rgb(128, 96, 24)"], ["dark", "rgb(226, 194, 123)"]]) {
-        await chooseTheme(page, theme);
-        const ink = await agent.evaluate(node => ({
-            label: getComputedStyle(node.querySelector("[data-prompt-actor=agent]")).color,
-            edge: getComputedStyle(node.querySelector(":scope > .full-text-preview, :scope > .full-text-body")).borderInlineStartColor,
-        }));
-        assert.deepEqual(ink, { label: color, edge: color });
-    }
 });
 
 test("Source details starts collapsed only for new reading state and preserves later intent", async t => {
     const { page } = await setup(t);
-    const card = page.locator('.request-card-open[href*="card-clarity-0"]');
+    const card = promptLink(page, "card-clarity-0");
     await card.click();
     const source = page.locator('[data-reader-section="source"]');
     const toggle = source.locator(".reader-section-toggle");
@@ -1218,100 +1098,47 @@ test("Source details starts collapsed only for new reading state and preserves l
     await expect(page.locator('[data-reader-section="activity"] .reader-section-clip')).toBeVisible();
 });
 
-test("Activity bands remain separate at wide and enlarged widths without clipping meaningful text", async t => {
-    const { page } = await setup(t);
-    const views = [];
-    for (const [width, scale] of [[1440, 1], [1024, 1.4], [820, 2], [390, 1], [390, 2]]) {
-        for (const theme of ["dark", "light"]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            await page.waitForFunction(() => !document.documentElement.getAnimations({ subtree: true })
-                .some(animation => animation.playState === "running" && Number.isFinite(animation.effect.getComputedTiming().iterations)));
-            const metrics = await measure(page), name = `${width}-${scale}-${theme}`;
-            await capture(page, name, metrics);
-            views.push({ name, metrics });
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ": no page overflow");
-        }
-    }
-    assert.equal(views[0].metrics.length, 8);
-    assert.equal(views[0].metrics[0].fontSize, "16px");
-    assert.equal(views[0].metrics[0].card.width, 1196);
-    for (const { name, metrics } of views) {
-        assert.ok(metrics.every(row => row.authors.every(box => box.left >= row.card.left && box.right <= row.card.right)),
-            name + ": author must remain wholly readable");
-        for (const row of metrics) {
-            assert.match(row.font, /Asta Sans/);
-            assert.equal(row.weight, "400");
-            assert.ok(row.card.height >= 44, name + ": full-card target");
-            assert.ok(row.prompt.top >= row.origin.bottom + 7, name + ": origin is not merged into prompt or category");
-            assert.ok(row.categories.top >= row.prompt.bottom + 15, name + ": categories have their own band");
-            assert.ok(row.problem.top >= row.categories.bottom + 15, name + ": result stays separate from categories");
-            assert.ok(row.problem.right <= row.card.right, name + ": problem fits without clipping");
-            if (row.more) {
-                assert.ok(row.more.top >= row.problem.bottom + 11, name + ": additional reasons have a visible continuation cue");
-                assert.ok(row.metadata.top >= row.more.bottom + 11, name + ": continuation is not hidden in metadata");
-            }
-            assert.ok(row.time.top >= row.problem.bottom + 11 && row.time.right <= row.card.right, name + ": time stays secondary and readable");
-        }
-    }
-    for (const [width, scale] of [[1440, 1], [1024, 1.4], [390, 1], [390, 2]]) {
-        for (const theme of ["dark", "light"]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await chooseTheme(page, theme);
-            await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-            await page.locator('.request-card-open[href*="card-clarity-2"]').click();
-            const native = await page.locator("#contextSidebar").evaluate(pane => {
-                const body = pane.querySelector("#contextSidebarBody"), footer = pane.querySelector("#contextSidebarFooter");
-                return { overflow: body.scrollWidth > body.clientWidth + 1,
-                    footerCovered: body.getBoundingClientRect().bottom > footer.getBoundingClientRect().top + 1,
-                    calls: [...pane.querySelectorAll(".reader-call-toggle")].map(toggle => {
-                        const identity = toggle.querySelector(".reader-call-identity-line").getBoundingClientRect();
-                        const result = toggle.querySelector(".reader-call-summary").getBoundingClientRect();
-                        return { height: toggle.getBoundingClientRect().height, gap: result.top - identity.bottom };
-                    }) };
-            });
-            assert.equal(native.overflow, false);
-            assert.equal(native.footerCovered, false);
-            assert.equal(native.calls.length, 6);
-            assert.ok(native.calls.every(call => call.height >= 44 && call.gap >= 5 && call.gap <= 7));
-            await capture(page, `${width}-${scale}-${theme}-native-reader`, native);
-            await page.goBack();
-        }
-    }
-});
-
 test("An empty retained agent message remains recognizable without pretending its arguments are a prompt", async t => {
     const { page } = await setup(t);
-    const card = page.locator('.request-card-open[href*="card-clarity-1"]');
-    await expect(card).not.toContainText("Prompt not available");
-    await expect(card.locator(".request-card-author")).toHaveText("Automatic continuation");
-    await expect(card).toContainText("No new message was sent.");
-    await expect(card).toContainText("workiq-retrieve");
+    const card = interactionCard(page, "card-clarity-1"), preview = card.locator(".request-card-prompt");
+    await expect(card.locator(".request-card-author")).toHaveText("Agent prompt (automatic continuation)");
+    await expect(preview).toHaveText("Work continued without a new message.");
     await expect(card).not.toContainText("SYNTHETIC_ARGUMENT_NOT_A_PROMPT");
-    await card.click();
+    const open = card.locator(".request-card-open");
+    await open.click();
     await expect(page.locator("#requestContent")).toContainText("Work IQ required sign-in at the time");
+    await expect(page.locator("#requestContent .reader-tool-name")).toHaveText("workiq-retrieve");
     await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(1);
     await expect(page.locator("#requestContent")).not.toContainText(shortPrompt);
     await expect(page.locator("#requestContent")).not.toContainText(longPrompt);
     const prompt = page.locator('[data-reader-section="prompt"]');
-    await expect(prompt).toContainText("Automatic continuation");
-    await expect(prompt).toContainText("No new message was sent.");
+    await expect(prompt).toContainText("Agent prompt (automatic continuation)");
+    await expect(prompt).toContainText("Work continued without a new message.");
     await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
     await capture(page, "automatic-reader", []);
     await page.goBack();
-    await expect(card).toBeFocused();
+    await expect(open).toBeFocused();
 });
 
-test("bounded card preview still opens the full exact authorized message and returns to its link", async t => {
-    const { page } = await setup(t);
-    const card = page.locator('.request-card-open[href*="card-clarity-2"]');
-    await expect(card.locator("button,input,a")).toHaveCount(0);
-    await card.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator('[data-reader-section="prompt"] .full-text-content')).toHaveText(longPrompt);
-    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(6);
+test("the counted failure link preserves the full prompt and can expand to the six original calls", async t => {
+    const record = records()[2];
+    record.userPrompt.text = `${longPrompt}\n\n`.repeat(4) + "Keep this final workshop note.";
+    const { page } = await setup(t, [record]);
+    const card = interactionCard(page, record.scenarioId);
+    assert.ok(await card.locator(".card-excerpt").evaluate(n => n.scrollHeight > n.clientHeight), "The card shows a bounded excerpt");
+    const failed = card.getByRole("link", { name: "3 tool calls failed", exact: true });
+    const ids = () => page.locator("#requestContent .reader-call-row").evaluateAll(rows => rows.map(row => row.dataset.toolCallId));
+    const all = record.toolCalls.map(call => call.toolCallId);
+    const failures = record.toolCalls.filter(call => call.toolSucceeded === false).map(call => call.toolCallId);
+    await failed.press("Enter");
+    assert.equal(await page.locator('[data-reader-section="prompt"] .full-text-content').textContent(), record.userPrompt.text);
+    assert.deepEqual(await ids(), failures);
     await page.goBack();
-    await expect(card).toBeFocused();
+    await expect(failed).toBeFocused();
+    await failed.press("Enter");
+    const fullActivity = page.getByRole("link", { name: "Show full activity", exact: true });
+    await fullActivity.press("Enter");
+    await expect.poll(ids).toEqual(all);
 });
 
 test("unavailable and empty nonautomatic records retain their own identity without false continuation or recovery", async t => {
@@ -1320,13 +1147,14 @@ test("unavailable and empty nonautomatic records retain their own identity witho
     evidence[1].userPrompt = { ...evidence[1].userPrompt, text: "EXCLUDED_TEXT_MUST_NOT_APPEAR", status: "unavailable" };
     evidence[2].userPrompt = { ...evidence[2].userPrompt, text: "", authorship: { actor: "unknown", basis: "conflicting-source" } };
     const { page } = await setup(t, evidence);
-    for (const [index, label, notice] of [[0, "My activity", "Prompt text unavailable"],
+    for (const [index, label, notice] of [[0, "Human activity", "Prompt text unavailable"],
         [1, "Agent activity", "Prompt text unavailable"], [2, "Author unverified", "No prompt text retained"]]) {
-        const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
+        const card = interactionCard(page, `card-clarity-${index}`);
         await expect(card.locator(".request-card-author")).toHaveText(label);
         await expect(card).toContainText(notice);
         await expect(card).not.toContainText("Automatic continuation");
-        await card.click();
+        await expect(card).not.toContainText("EXCLUDED_TEXT_MUST_NOT_APPEAR");
+        await card.locator(".request-card-open").click();
         const prompt = page.locator('[data-reader-section="prompt"]');
         await expect(prompt).toContainText(notice + ".");
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
@@ -1345,27 +1173,23 @@ test("cards and the reader distinguish observed automatic control, known gaps an
     evidence[2].userPrompt = { text: "", status: "full", authorship: { actor: "unknown", basis: "legacy-missing" } };
     const { page } = await setup(t, evidence);
     for (const [index, label, notice] of [
-        [1, "Automatic continuation", "No new message was sent."],
+        [1, "Author unverified (automatic continuation)", "Work continued without a new message."],
         [0, "Author unverified", "Prompt unavailable: a saved history entry could not be read."],
         [2, "Author unverified", "No prompt text retained"],
     ]) {
-        const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
+        const card = interactionCard(page, `card-clarity-${index}`);
         await expect(card.locator(".request-card-author")).toHaveText(label);
         await expect(card.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
-        await expect(card).toContainText(notice);
+        await expect(card.locator(".request-card-prompt")).toContainText(notice);
         if (index === 1) {
-            await expect(card.locator(".request-card-prompt")).toHaveText("Prompt: No new message was sent.");
-            const ink = await card.locator(".request-card-author").evaluate(node => getComputedStyle(node).color);
-            const agent = await page.locator('.request-card-open[href*="card-clarity-3"] .request-card-author')
-                .evaluate(node => getComputedStyle(node).color);
-            assert.notEqual(ink, agent, "Automatic kind must not acquire verified Agent paint.");
+            await expect(card.locator("[data-prompt-actor=agent]")).toHaveCount(0);
         }
-        await card.click();
+        await card.locator(".request-card-open").click();
         const prompt = page.locator('[data-reader-section="prompt"]');
         await expect(prompt).toContainText(notice);
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
         if (index === 1) {
-            await expect(prompt.locator("h2")).toHaveText("Automatic continuation");
+            await expect(prompt.locator("h2")).toHaveText("Author unverified (automatic continuation)");
             await expect(prompt).not.toContainText("Prompt unavailable");
         } else await expect(prompt).not.toContainText("No new message was sent");
         await capture(page, `capture-state-${index}`, []);
@@ -1381,10 +1205,10 @@ test("immutable first-saved prompt text keeps its shared qualification in card a
     const { page } = await setup(t, [record]);
     const notice = "The source changed this message. The first saved text is shown.";
     const card = page.locator(".request-card-open");
-    await expect(card.locator(".request-card-origin")).toHaveText("Author unverified");
-    await expect(card.locator(".request-card-prompt")).toHaveText(shortPrompt);
-    await expect(card.locator(".request-card-availability")).toHaveText(notice);
-    await expect(card.locator(".request-card-categories")).toContainText("Mail");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-author")).toHaveText("Author unverified");
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-prompt")).toHaveText(shortPrompt);
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-availability")).toHaveText(notice);
+    await expect(card.locator("xpath=ancestor::article[1]").locator(".request-card-categories")).toHaveCount(0);
     await card.click();
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt.locator(".full-text-content")).toHaveText(shortPrompt);

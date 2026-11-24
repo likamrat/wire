@@ -1,3 +1,4 @@
+import { historicalComparison } from "./historical-comparison-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -108,7 +109,7 @@ test("new report origin explanations are versioned and survive JSON-only saved r
     const { context } = await privateFixture(t, [record]), controller = createExportController(context);
     const bundle = await save(controller, context, { formats: ["json"], promptMode: "original" });
     const snapshot = JSON.parse(await readFile(bundle.files["product-report.json"], "utf8"));
-    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 2 });
+    assert.equal(snapshot.presentation.originExplanationVersion, 1);
     t.mock.method(promptAuthorship, "reason", () => "Changed live screen explanation.");
     const state = await loadBoardState(context), view = await readSavedReportView(context, state, bundle.bundleId);
     assert.match(view.text, /WIRE could not reconcile the recorded origin evidence\./);
@@ -126,10 +127,8 @@ test("JSON-only activity, period and comparison reports render their frozen save
     const state = await loadBoardState(context);
     const pair = buildPeriodComparison(state, { ...input, expectedRevision: state.revision });
     const period = await save(controller, context, { ...options, title: "Saved periods" }, pair);
-    const prepared = await controller.previewComparison("saved-view", first.bundleId, second.bundleId,
+    const { bundle: comparison } = await historicalComparison(context, first.bundleId, second.bundleId,
         { ...options, title: "Saved comparison" });
-    await controller.reviewComparison("saved-view", prepared.previewId, true, options.timeContext);
-    const comparison = (await controller.confirmComparison("saved-view", prepared.previewId, true, options.timeContext)).bundle;
     const bundles = [first, period, comparison], bytes = new Map();
     for (const bundle of bundles) for (const file of Object.values(bundle.files)) bytes.set(file, await readFile(file));
     await replaceEvidence(context, () => ({ records: [], importCoverage: state.importCoverage }));
