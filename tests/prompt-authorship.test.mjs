@@ -311,6 +311,27 @@ test("a host agent-authored mark identifies the sender, not the user role or the
     assert.deepEqual(read({ content: '{"agentAuthored":true}' }), { actor: "unknown", basis: "missing-source" });
 });
 
+test("an unresolved original review explains the classifier's actual predicate without source strings or prompt text", () => {
+    const timestamp = "2026-10-06T12:00:00Z", content = "PRIVATE_INVENTED_BODY";
+    const base = { content, messageId: randomUUID(), delivery: "idle", transformedContent: `<current_datetime>${timestamp}</current_datetime>\n\n${content}` };
+    for (const [extra, expected, context] of [
+        [{ messageId: undefined }, ["invalid-source", "logical-message-id-absent", "not-recorded"]],
+        [{ delivery: "PRIVATE_DELIVERY" }, ["invalid-source", "delivery-unsupported", "not-recorded"]],
+        [{ transformedContent: base.transformedContent.replace("12:00:00", "11:05:00") }, ["invalid-source", "timestamp-disagreement", "not-recorded"]],
+        [{ transformedContent: undefined }, ["missing-source", "not-recorded", "not-recorded"]],
+        [{}, ["missing-source", "direct", "not-recorded"], { agentCreatedFirstMessage: true }],
+        [{ source: "PRIVATE_SOURCE" }, ["unsupported-source", "direct", "unrecognized-string"]],
+        [{ source: "skill-PRIVATE_SKILL", transformedContent: undefined }, ["unsupported-source", "not-recorded", "skill-source-family"]],
+        [{ source: "user", agentAuthored: true }, ["conflicting-source", "direct", "user"]],
+    ]) {
+        const e = { type: "user.message", timestamp, data: { ...base, ...extra } };
+        const { authorship, observation } = promptAuthorship.reviewEvent(e, context);
+        assert.deepEqual(authorship, promptAuthorship.fromEvent(e, context));
+        assert.deepEqual([authorship.basis, observation.envelope, observation.source], expected);
+        assert.doesNotMatch(JSON.stringify(observation), /PRIVATE_|2026-10-|[a-f0-9]{8}-/);
+    }
+});
+
 test("supported host canvas-context suffix is neutral attachment data, not an author claim", () => {
     const content = "Invented short owner request.";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";

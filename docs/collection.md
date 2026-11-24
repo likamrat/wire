@@ -506,6 +506,13 @@ Preserve its stopped-runtime attestation, saved-file guards, review seal and
 separate confirmation. A changed source invalidates the proposal. A stale
 batch must be listed again; do not weaken the guards or replay calls.
 
+For an exact original the classifier cannot qualify, the private review receipt
+includes the failed host-envelope condition, a fixed sender/delivery category,
+the host flag states, and the checked original-region pin. It contains no raw
+sender value, prompt or transformed input. For example, a missing logical
+message ID and a timestamp disagreement are separate observations. These
+observations explain a refusal; neither assigns a sender nor grants another read.
+
 For a complete correction batch, `inspectPromptOriginRepair` also accepts
 `origins`: exact source/event identities, pinned original regions and the
 explicit `olderRetained` choice. It uses the same classifier as collection,

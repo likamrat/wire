@@ -401,6 +401,11 @@ test("operators can discover and review a mixed historical author cohort without
     const review = run("--mode", "review", "--batch", catalog.batches[0].batch);
     assert.deepEqual(review.targets.map(t => t.prompt.authorship.basis).sort(), ["host-agent-envelope", "host-direct-input"]);
     assert.deepEqual(review.unresolved.map(row => row.authorship.basis).sort(), ["conflicting-source", "missing-source"]);
+    for (const item of review.unresolved) {
+        assert.equal(item.observation.envelope, "not-recorded");
+        assert.equal(item.observation.source, item.authorship.basis === "missing-source" ? "not-recorded" : "user");
+        assert.match(item.sourceEvent.sourceStampSha256, /^[0-9a-f]{64}$/);
+    }
     assert.equal(review.authorized, false);
     assert.deepEqual(await loadBoardState(f.app.context), f.state);
     for (const item of f.app.cases) assert.ok(!JSON.stringify([catalog, review]).includes(item.data.content));
