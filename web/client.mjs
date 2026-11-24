@@ -12083,7 +12083,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || sourceSettings?.hasUnconfirmedChange() || accountUI?.hasUnfinishedChange() || savedArtifactUI?.hasUnfinishedChange()
             || recorderUI?.hasUnfinishedChange() || deletionUI?.hasUnfinishedChange() || reread?.busy || reread?.needsReceipt || reread?.hasReceipt
             || nativeCollectIntent || sourcePending || githubRecoveryPending || refresh.sourceUnknown || refresh.sourceBlocked || artifactRefreshRequired || collection?.assessment?.pendingCleanup
-            || refreshWorking() || fresh.busy() || workspaceState.loading || collectionBusy) {
+            || refreshWorking() || fresh.busy() || collectionBusy) {
             return { kind: "operation", message: "Finish the current operation or check its original result before updating." };
         }
         if (workspaceState.dateDraft || document.querySelector("dialog[open]:not(#appUpdateFence),.select-popup:not([hidden])")) {

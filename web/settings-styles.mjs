@@ -27,6 +27,8 @@ button.app-update-action {--pill-fill:var(--update-fill);--pill-ink:var(--update
 [data-settings-section=general] .settings-task-row.app-version-card {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-md);padding:var(--space-md);border:1px solid var(--surface-edge);border-radius:var(--radius)}
 .app-version-card .settings-row-copy {flex:1 1 12rem}
 #appUpdateFence {box-sizing:border-box;width:min(21rem,calc(100vw - 2rem));padding:var(--space-lg);border:1px solid var(--rule);border-radius:var(--radius-dialog);color:var(--ink);background:var(--paper)}
+#appUpdateFence:focus-visible {outline:2px solid var(--focus);outline-offset:-2px}
+@media(forced-colors:active) {#appUpdateFence:focus-visible {outline-color:Highlight}}
 #appUpdateFence h2 {margin:0;font-size:var(--type-section);line-height:var(--leading-heading)}
 .app-update-title {display:flex;align-items:center;gap:var(--space-sm)}
 .update-spinner {width:1.125em;height:1.125em;flex:none;border:2px solid var(--rule);border-top-color:var(--ink);border-radius:50%}
